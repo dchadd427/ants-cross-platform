@@ -1186,17 +1186,28 @@ struct PointerRig {
         e.motion.y = y;
         SDL_PushEvent(&e);
     }
-    // a left button event; `window_id` 0 is an event of no window (SDL had no mouse focus)
-    void button(Uint32 type, int x, int y, Uint32 which = 0, int64_t window_id = -1) const {
+    // a left button event; `window_id` 0 is an event of no window (SDL had no mouse focus); `clicks` is SDL's count of the click sequence (2: the second click of a double click)
+    void button(Uint32 type, int x, int y, Uint32 which = 0, int64_t window_id = -1, Uint8 clicks = 1) const {
         SDL_Event e{};
         e.type = type;
         e.button.windowID = window_id < 0 ? id : static_cast<Uint32>(window_id);
         e.button.which = which;
         e.button.button = SDL_BUTTON_LEFT;
         e.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
-        e.button.clicks = 1;
+        e.button.clicks = clicks;
         e.button.x = x;
         e.button.y = y;
+        SDL_PushEvent(&e);
+    }
+    // a key event; `repeat` is the auto-repeat of a held key
+    void key(Uint32 type, SDL_Keycode sym, bool repeat = false) const {
+        SDL_Event e{};
+        e.type = type;
+        e.key.windowID = id;
+        e.key.state = type == SDL_KEYDOWN ? SDL_PRESSED : SDL_RELEASED;
+        e.key.repeat = repeat ? 1 : 0;
+        e.key.keysym.sym = sym;
+        e.key.keysym.scancode = SDL_GetScancodeFromKey(sym);
         SDL_PushEvent(&e);
     }
     void window_event(Uint8 what) const {
@@ -2966,6 +2977,72 @@ void run_suite_9_gameplay_mechanics_and_options() {
         app.quick_help_key(SDLK_RETURN);
         ASSERT_EQ(app.state(), AppState::MapSelect);
         ASSERT_FALSE(app.map_select().start_button().hovered());
+    } TEST_END();
+
+    TEST_CASE("9.14c Quick Help To Setup Screen, The Original's Own Screens: The Second Click Of A Double Click On START! And A Held Enter Press The Local Game's START As Any Press Does (The Original Has No Double-Click Messages And Passes Key Repeats On); Releases That Began On The Quick Help Start Nothing") {
+        {   // the second click of a double click (SDL: clicks 2), over both START buttons: a press on the new screen, the game starts (a local game is the original's screen, not guarded)
+            Application app;
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            ASSERT_TRUE(app.init(cfg));
+            const PointerRig rig(app);
+            ASSERT_TRUE(rig.window != nullptr);
+            app.finish_loading();
+            ASSERT_EQ(app.state(), AppState::QuickHelp);
+            rig.button(SDL_MOUSEBUTTONDOWN, 1160, 900, 0, -1, 1);                  // picture (580, 450), the window is twice the picture
+            rig.button(SDL_MOUSEBUTTONUP, 1160, 900, 0, -1, 1);
+            rig.deliver();
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            ASSERT_EQ(app.mouse_screen_x(), 580);
+            ASSERT_EQ(app.mouse_screen_y(), 450);
+            ASSERT_FALSE(app.closing_click_pending());                              // nothing is held back on a local game's screen
+            rig.button(SDL_MOUSEBUTTONDOWN, 1160, 900, 0, -1, 2);
+            rig.button(SDL_MOUSEBUTTONUP, 1160, 900, 0, -1, 2);
+            rig.deliver();
+            ASSERT_EQ(app.state(), AppState::Playing);
+            app.shutdown();
+        }
+        {   // a held Enter: the press closes the quick help, its repeat presses START (the original's key handler does not tell them apart)
+            Application app;
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            ASSERT_TRUE(app.init(cfg));
+            const PointerRig rig(app);
+            app.finish_loading();
+            ASSERT_EQ(app.state(), AppState::QuickHelp);
+            rig.key(SDL_KEYDOWN, SDLK_RETURN, false);
+            rig.deliver();
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            rig.key(SDL_KEYDOWN, SDLK_RETURN, true);
+            rig.deliver();
+            ASSERT_EQ(app.state(), AppState::Playing);
+            app.shutdown();
+        }
+        {   // a press that began on the quick help and is released after the quick help was closed by a key (the button held, Enter pressed): the release finds nothing pressed on the
+            // new START, whatever the machine is, and does nothing; the quick help's own button is let go of
+            Application app;
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            ASSERT_TRUE(app.init(cfg));
+            const PointerRig rig(app);
+            app.finish_loading();
+            rig.button(SDL_MOUSEBUTTONDOWN, 1160, 900);
+            rig.deliver();
+            ASSERT_TRUE(app.quick_help_start_button().pressed());
+            rig.key(SDL_KEYDOWN, SDLK_RETURN, false);
+            rig.deliver();
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            ASSERT_FALSE(app.quick_help_start_button().pressed());                  // (the window is gone: nothing stays pressed in it)
+            ASSERT_FALSE(app.map_select().start_button().pressed());
+            rig.button(SDL_MOUSEBUTTONUP, 1160, 900);
+            rig.deliver();
+            ASSERT_EQ(app.state(), AppState::MapSelect);                            // nothing started
+            ASSERT_FALSE(app.map_select().start_button().pressed());
+            app.shutdown();
+        }
     } TEST_END();
 
     TEST_CASE("9.7 The Chat Box Is Always Active; Enter, [All] And [Team] Send; Hotkey Modifier Isolation") {
@@ -7962,10 +8039,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
 
     TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
         // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.0.92");
+        ASSERT_EQ(ants::VERSION_STRING, "v0.0.93");
         ASSERT_EQ(ants::VERSION_MAJOR, 0);
         ASSERT_EQ(ants::VERSION_MINOR, 0);
-        ASSERT_EQ(ants::VERSION_PATCH, 92);
+        ASSERT_EQ(ants::VERSION_PATCH, 93);
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

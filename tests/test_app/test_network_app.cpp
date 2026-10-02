@@ -1575,6 +1575,185 @@ void run_leader_tests() {
         hall.step(3000);
         ASSERT_TRUE(hall.identical(app.sim(), bob.sim) && hall.identical(app.sim(), cat.sim));
     } TEST_END();
+
+    // The quick help and the leader's START (the quick help's START! lies under it). Events go through the application's own loop, one frame per delivery (a headless application
+    // stops after ten frames): the headless window is twice the picture, so a picture point (580, 450), on both START buttons, is the window point (1160, 900).
+    const auto button_event = [](Uint32 type, Uint8 clicks) {
+        SDL_Event e{};
+        e.type = type;
+        e.button.windowID = SDL_GetWindowID(SDL_GetWindowFromID(1));
+        e.button.button = SDL_BUTTON_LEFT;
+        e.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+        e.button.clicks = clicks;
+        e.button.x = 1160;
+        e.button.y = 900;
+        SDL_PushEvent(&e);
+    };
+    const auto key_event = [](SDL_Keycode sym, bool repeat) {
+        SDL_Event e{};
+        e.type = SDL_KEYDOWN;
+        e.key.windowID = SDL_GetWindowID(SDL_GetWindowFromID(1));
+        e.key.state = SDL_PRESSED;
+        e.key.repeat = repeat ? 1 : 0;
+        e.key.keysym.sym = sym;
+        e.key.keysym.scancode = SDL_GetScancodeFromKey(sym);
+        SDL_PushEvent(&e);
+    };
+
+    TEST_CASE("N5.23 Leader: The Quick Help Does Not Press The Leader's START: The Presses That Continue The Click That Closed It (A Second And A Third Click That SDL Counts, A Quick Click That It Does Not Count, Within The Double-Click Time) Close Nothing And Start Nothing; A Click That Begins After That Time Does Start The Match") {
+        Server server;
+        ASSERT_TRUE(server.make_room("LEAD-QH", 4));
+        Application app;
+        ASSERT_TRUE(app.init(join_config(server, "LEAD-QH", "Leader")));
+        Peer bob;
+        Hall hall{server, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "LEAD-QH"));
+        ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
+        // two players are in: a request of the leader now starts the match, so whatever reaches START shows
+        app.finish_loading();
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+        button_event(SDL_MOUSEBUTTONDOWN, 1);                                       // the click on START! of the quick help
+        button_event(SDL_MOUSEBUTTONUP, 1);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_EQ(app.mouse_screen_x(), 580);                                       // (the window point is the picture point (580, 450): on both buttons)
+        ASSERT_EQ(app.mouse_screen_y(), 450);
+        ASSERT_TRUE(app.map_select().leads_server_room() && app.closing_click_pending());
+        ASSERT_FALSE(app.quick_help_start_button().pressed());
+        button_event(SDL_MOUSEBUTTONDOWN, 2);                                       // the second click of the double click (SDL counts it): it would press the leader's START
+        button_event(SDL_MOUSEBUTTONUP, 2);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_FALSE(app.map_select().start_button().pressed());
+        ASSERT_TRUE(app.map_select().start_button().hovered());                     // (the pointer is on it: a hover, nothing pressed)
+        button_event(SDL_MOUSEBUTTONDOWN, 3);                                       // and a third
+        button_event(SDL_MOUSEBUTTONUP, 3);
+        app.run_frame_with_delta(0.001f);
+        SDL_Delay(150);
+        button_event(SDL_MOUSEBUTTONDOWN, 1);                                       // a click that SDL does not count as part of the sequence (a hand moves the pointer more than a pixel
+        button_event(SDL_MOUSEBUTTONUP, 1);                                         // between the clicks of a double click), 150 ms later: still within the double-click time
+        app.run_frame_with_delta(0.001f);
+        ASSERT_FALSE(app.map_select().start_button().pressed());
+        hall.step(800);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.map_select().is_locked());
+        ASSERT_TRUE(app.closing_click_pending());                                   // (no new click has begun)
+        {
+            const server::RoomStatus s = server.status("LEAD-QH");
+            ASSERT_TRUE(s.state == server::RoomState::Waiting && s.ignored_start_requests == 0 && s.joined == 2);      // nothing was asked of the server
+        }
+        SDL_Delay(600);                                                             // the double-click time is over
+        button_event(SDL_MOUSEBUTTONDOWN, 2);                                       // (a press that SDL counts as part of a sequence is swallowed whenever it comes: SDL decides that)
+        button_event(SDL_MOUSEBUTTONUP, 2);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_FALSE(app.map_select().start_button().pressed());
+        ASSERT_TRUE(app.closing_click_pending());
+        button_event(SDL_MOUSEBUTTONDOWN, 1);                                       // a click that begins now: the screen's. START asks, and the server starts the match with the two of them
+        button_event(SDL_MOUSEBUTTONUP, 1);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_FALSE(app.closing_click_pending());
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_TRUE(server.status("LEAD-QH").state == server::RoomState::Running && server.status("LEAD-QH").joined == 2);
+        ASSERT_TRUE(app.map_select().is_locked());
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.24 Leader: A Held Key Does Not Press The Leader's START Either: The Enter That Closed The Quick Help (Or S) Repeats Without Effect, A Fresh Click Starts The Match (A Key Leaves No Memory Of A Click); A Click That Began On The Quick Help And Ended After A Key Closed It Starts Nothing") {
+        Server server;
+        ASSERT_TRUE(server.make_room("LEAD-KEY", 4));
+        Application app;
+        ASSERT_TRUE(app.init(join_config(server, "LEAD-KEY", "Leader")));
+        Peer bob;
+        Hall hall{server, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "LEAD-KEY"));
+        ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
+        app.finish_loading();
+        ASSERT_EQ(app.state(), AppState::QuickHelp);
+        button_event(SDL_MOUSEBUTTONDOWN, 1);                                       // a press on START! of the quick help that is still held when a key closes the quick help
+        app.run_frame_with_delta(0.001f);
+        ASSERT_TRUE(app.quick_help_start_button().pressed());
+        key_event(SDLK_RETURN, false);                                              // Enter closes it ...
+        app.run_frame_with_delta(0.001f);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.quick_help_start_button().pressed());                      // (the quick help's button is let go of)
+        ASSERT_TRUE(app.map_select().leads_server_room());
+        key_event(SDLK_RETURN, true);                                               // ... and is held: its repeats, and the repeats of S
+        key_event(SDLK_RETURN, true);
+        key_event(SDLK_KP_ENTER, true);
+        key_event(SDLK_s, true);
+        key_event(SDLK_RETURN, true);
+        button_event(SDL_MOUSEBUTTONUP, 1);                                         // and the mouse button of the press that began on the quick help is released over START
+        app.run_frame_with_delta(0.001f);
+        hall.step(800);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.map_select().is_locked());
+        {
+            const server::RoomStatus s = server.status("LEAD-KEY");
+            ASSERT_TRUE(s.state == server::RoomState::Waiting && s.ignored_start_requests == 0 && s.joined == 2);
+        }
+        ASSERT_FALSE(app.closing_click_pending());                                  // a key that closes the quick help leaves no memory of a click behind
+        button_event(SDL_MOUSEBUTTONDOWN, 1);                                       // so a fresh click, here a moment after the key (inside the double-click time), is the screen's:
+        button_event(SDL_MOUSEBUTTONUP, 1);                                         // START asks, and the server starts the match
+        app.run_frame_with_delta(0.001f);
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_TRUE(server.status("LEAD-KEY").state == server::RoomState::Running && server.status("LEAD-KEY").joined == 2);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.25 Leader: What The Quick Help Left Behind Does Not Outlive The Setup Screen It Led To: A Click That Closed It Is Remembered Only Until A New Click Begins Or The Setup Screen Is Created Again") {
+        Server server;
+        ASSERT_TRUE(server.make_room("LEAD-STALE", 4));
+        Application app;
+        ASSERT_TRUE(app.init(join_config(server, "LEAD-STALE", "Leader")));
+        Peer bob;
+        Hall hall{server, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "LEAD-STALE"));
+        ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
+        ASSERT_FALSE(app.closing_click_pending());
+        app.finish_loading();
+        button_event(SDL_MOUSEBUTTONDOWN, 1);
+        button_event(SDL_MOUSEBUTTONUP, 1);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_TRUE(app.closing_click_pending());
+        key_event(SDLK_RETURN, false);                                              // the match is started with the key: no click comes, the memory of the old one stays
+        app.run_frame_with_delta(0.001f);
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_TRUE(app.closing_click_pending());
+        app.return_to_map_select();                                                 // the match is left: the setup screen is created again, and nothing of the quick help is left on it
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.closing_click_pending());
+    } TEST_END();
+
+    TEST_CASE("N5.26 LAN Host: The Original's Own Host Screen Is Not Guarded, Because The Original Is Not: The Second Click Of A Double Click On START! Presses The Host's START And Starts The Match, As A Held Enter Does") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active() && app.net()->is_host());
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start(); }, 8000));
+        app.finish_loading();
+        button_event(SDL_MOUSEBUTTONDOWN, 1);
+        button_event(SDL_MOUSEBUTTONUP, 1);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.closing_click_pending());                                  // a host is not a machine that joined a room: nothing is held back
+        button_event(SDL_MOUSEBUTTONDOWN, 2);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_TRUE(app.map_select().start_button().pressed());                     // the second click presses the host's START
+        button_event(SDL_MOUSEBUTTONUP, 2);
+        app.run_frame_with_delta(0.001f);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+    } TEST_END();
 }
 
 void run_window_tests() {

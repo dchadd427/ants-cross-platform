@@ -266,6 +266,24 @@ struct ServerMatch {
     }
 };
 
+// A connection that counts the messages that are taken from it: what a host polls in one update
+class CountingConnection final : public Connection {
+public:
+    explicit CountingConnection(Connection* inner) : inner_(inner) {}
+    bool send(const std::vector<uint8_t>& m) override { return inner_->send(m); }
+    bool poll(std::vector<uint8_t>& m) override {
+        if (!inner_->poll(m)) return false;
+        ++taken;
+        return true;
+    }
+    State state() const override { return inner_->state(); }
+    void close() override { inner_->close(); }
+    uint32_t taken{0};
+
+private:
+    Connection* inner_;
+};
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 // True when any decoder of the protocol accepts the bytes
@@ -812,6 +830,72 @@ void run_sequencer_tests() {
     } TEST_END();
 }
 
+void run_flood_budget_tests() {
+    TEST_CASE("N2.37 Flood Control: The Message Budget Is A Token Bucket (1000 A Second, A Burst Of 1000) That Is Exact To The Millisecond, Also Across The Wrap Of The 32-Bit Clock; Honest Rates Never Meet It And Floods Always Do") {
+        {   // the burst, then nothing at the same instant; one millisecond gives one message back; a long pause fills it to the burst and no further
+            MessageBudget b;
+            for (uint32_t i = 0; i < kMessageBurst; ++i) ASSERT_TRUE(b.take(5000));
+            ASSERT_FALSE(b.take(5000));
+            ASSERT_FALSE(b.take(5000));
+            ASSERT_TRUE(b.take(5001));
+            ASSERT_FALSE(b.take(5001));
+            ASSERT_TRUE(b.take(5002));
+            ASSERT_FALSE(b.take(5002));
+            for (uint32_t i = 0; i < kMessageBurst; ++i) ASSERT_TRUE(b.take(60000));
+            ASSERT_FALSE(b.take(60000));
+            ASSERT_FALSE(b.take(60000));
+        }
+        {   // the first message finds a full bucket whatever the clock says (a server that has just started, the signed half of the clock, the wrap), and 500 ms give back 500
+            for (uint32_t start : {0u, 1u, 999u, 0x7FFFFFFFu, 0x80000000u, 0xFFFFFC00u, 0xFFFFFFFFu}) {
+                MessageBudget b;
+                for (uint32_t i = 0; i < kMessageBurst; ++i) ASSERT_TRUE(b.take(start));
+                ASSERT_FALSE(b.take(start));
+                const uint32_t later = start + 500u;                        // (wraps for the last two)
+                for (uint32_t i = 0; i < 500; ++i) ASSERT_TRUE(b.take(later));
+                ASSERT_FALSE(b.take(later));
+            }
+        }
+        {   // other settings: a burst of 3, 10 a second (100 ms for one message; 99 ms are not enough)
+            MessageBudget b;
+            for (int i = 0; i < 3; ++i) ASSERT_TRUE(b.take(100, 3, 10));
+            ASSERT_FALSE(b.take(100, 3, 10));
+            ASSERT_FALSE(b.take(199, 3, 10));
+            ASSERT_TRUE(b.take(200, 3, 10));
+            ASSERT_FALSE(b.take(200, 3, 10));
+        }
+        {   // an hour at 60 (a person), 400, 900 and 1000 messages a second, spread evenly: never refused; at 1100 and 2000 a second the surplus is refused, nothing else
+            for (uint32_t rate : {60u, 400u, 900u, 1000u, 1100u, 2000u}) {
+                MessageBudget b;
+                uint64_t refused = 0;
+                uint32_t acc = 0;
+                uint32_t now = 123456;
+                for (uint32_t ms = 0; ms < 3600u * 1000u; ++ms) {
+                    ++now;
+                    acc += rate;
+                    while (acc >= 1000) {
+                        acc -= 1000;
+                        if (!b.take(now)) ++refused;
+                    }
+                }
+                if (rate <= kMessagesPerSecond) {
+                    ASSERT_EQ(refused, 0u);
+                } else {
+                    const uint64_t offered = uint64_t{rate} * 3600u;
+                    const uint64_t allowed = kMessageBurst + uint64_t{kMessagesPerSecond} * 3600u;
+                    ASSERT_TRUE(refused + allowed >= offered - 2000u && refused + allowed <= offered + 2000u);
+                }
+            }
+        }
+        {   // three hours of silence give back no more than the burst
+            MessageBudget b;
+            for (uint32_t i = 0; i < kMessageBurst; ++i) ASSERT_TRUE(b.take(1000));
+            const uint32_t later = 1000u + 3u * 3600u * 1000u;
+            for (uint32_t i = 0; i < kMessageBurst; ++i) ASSERT_TRUE(b.take(later));
+            ASSERT_FALSE(b.take(later));
+        }
+    } TEST_END();
+}
+
 void run_runner_tests() {
     TEST_CASE("N2.8 Lock-Step Runner: Buffers Before Starting, Ticks Every 50 ms, Applies A Turn's Commands Before Its First Tick, Stalls And Catches Up") {
         sim::SimulationEngine sim;
@@ -1091,14 +1175,15 @@ void run_failure_tests() {
         for (uint8_t p = 1; p < 3; ++p) ASSERT_TRUE(m.sims[p]->is_player_dropped(0));
     } TEST_END();
 
-    TEST_CASE("S2.5 Dedicated Server: A StartRequest That Reaches A Running Match (The Leader's Second Click Crossed The Start) Is Ignored And Costs Nothing; With A Payload It Is Garbage; A Host That Holds A Seat Has No Leader And Counts It As A Violation") {
+    TEST_CASE("S2.5 Dedicated Server: A StartRequest That Reaches A Running Match (The Leader's Second Click Crossed The Start) Is Ignored And Costs Nothing (Up To The 16 That A Person Could Send, S2.6 Has The Flood); With A Payload It Is Garbage; A Host That Holds A Seat Has No Leader And Counts It As A Violation") {
         {
             ServerMatch m(1, 3, {20, 5});
             m.run(1000);
-            for (int i = 0; i < 50; ++i) m.client_ends[0]->send(encode(StartRequestMsg{}));          // fifty late clicks: far over the eight violations that throw a client out
+            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) m.client_ends[0]->send(encode(StartRequestMsg{}));          // sixteen late clicks: more than the eight violations that throw a client out
             m.run(500);
             ASSERT_TRUE(m.host->client_present(0));
             ASSERT_EQ(m.host->violations(0), 0u);
+            ASSERT_EQ(m.host->ignored_start_requests(), kIgnoredStartRequestsAllowed);
             m.client_ends[1]->send({static_cast<uint8_t>(MsgType::StartRequest), 1});               // with a payload: garbage like any other
             m.run(300);
             ASSERT_EQ(m.host->violations(1), 1u);
@@ -1117,6 +1202,119 @@ void run_failure_tests() {
             m.run(300);
             ASSERT_FALSE(m.host->client_present(2));                                                 // thrown out after eight
             ASSERT_TRUE(m.host->client_present(1));
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.6 Dedicated Server: Flood Control In The Running Match: A Client That Floods Valid Messages (Acknowledgements, Hashes Of Turns That Were Never Sealed, Pings, Chat Lines, Late StartRequests) Is Thrown Out After About A Second's Worth And Cannot Hurt The Others; At Most 256 Messages Of A Client Are Taken Per Update; Honest Rates Never Meet A Limit") {
+        const auto message_of = [](const std::string& kind, uint32_t i) -> std::vector<uint8_t> {
+            if (kind == "ack") return encode(AckMsg{0});
+            if (kind == "hash") {
+                HashMsg h;
+                h.turn = 0xFFFFFFF0u;                                                  // a turn that was never sealed: valid, and nothing happens
+                return encode(h);
+            }
+            if (kind == "ping") return encode_ping(PingMsg{i + 1, 0});
+            if (kind == "chat") {
+                ChatMsg c;
+                c.text = "spam";
+                return encode(c);
+            }
+            return encode(StartRequestMsg{});                                           // "startreq"
+        };
+        for (const std::string kind : {"ack", "hash", "ping", "chat", "startreq"}) {
+            ServerMatch m(1, 3, {20, 5});
+            uint32_t chats = 0;
+            m.clients[1]->set_on_chat([&](const ChatMsg&) { ++chats; });
+            m.run(1000);
+            for (uint32_t i = 0; i < 3000; ++i) m.client_ends[0]->send(message_of(kind, i));
+            m.run(1000, false);
+            ASSERT_FALSE(m.host->client_present(0));                                    // thrown out
+            ASSERT_EQ(m.host->violations(0), 8u);
+            ASSERT_FALSE(m.client_ends[0]->is_open());
+            if (kind == "startreq") ASSERT_EQ(m.host->ignored_start_requests(), kIgnoredStartRequestsAllowed + 8u);      // the 24th is the eighth violation: the rest is never looked at
+            if (kind == "chat") ASSERT_TRUE(chats >= kMessageBurst && chats <= kMessageBurst + 300);                       // a second's worth was relayed, not 3000 lines
+            ASSERT_TRUE(m.host->client_present(1) && m.host->client_present(2));         // nobody else notices
+            m.settle();
+            ASSERT_TRUE(m.sims[1]->state_hash() == m.referee.state_hash() && m.sims[2]->state_hash() == m.referee.state_hash());
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.host->turns_sealed() > 20);
+        }
+        {   // at most 256 messages of a client are taken per update; the rest waits for the next (the budget is made too big to matter here)
+            LoopbackNetwork net{3};
+            sim::SimulationEngine referee;
+            build_world(referee, 1);
+            HostSession::Config hc;
+            hc.host_player = kNoSeat;
+            hc.message_burst = 1000000;
+            hc.messages_per_second = 1000000;
+            HostSession host(referee, hc);
+            auto ends = net.connect({0, 0});
+            CountingConnection counted(ends.first);
+            host.add_client(0, &counted);
+            host.start(0);
+            for (uint32_t i = 1; i <= 1000; ++i) ends.second->send(encode_ping(PingMsg{i, 0}));
+            net.set_time(10);
+            counted.taken = 0;
+            host.update(10);
+            ASSERT_EQ(counted.taken, 256u);
+            host.update(11);
+            ASSERT_EQ(counted.taken, 512u);
+            host.update(12);
+            ASSERT_EQ(counted.taken, 768u);
+            host.update(13);
+            ASSERT_EQ(counted.taken, 1000u);                                            // (what was left)
+            ASSERT_TRUE(host.client_present(0));
+        }
+        {   // honest rates: 800 a second for twenty seconds, and a burst of 900 after five quiet seconds: the client stays; 1500 a second: it is out within a few seconds
+            ServerMatch m(1, 3, {20, 5});
+            m.run(1000);
+            uint32_t n = 0;
+            for (int step = 0; step < 2000; ++step) {
+                for (int i = 0; i < 8; ++i) m.client_ends[0]->send(encode_ping(PingMsg{++n, 0}));
+                m.run(10);
+            }
+            ASSERT_TRUE(m.host->client_present(0));
+            m.run(5000);
+            for (int i = 0; i < 900; ++i) m.client_ends[0]->send(encode_ping(PingMsg{++n, 0}));
+            m.run(1000);
+            ASSERT_TRUE(m.host->client_present(0) && m.host->violations(0) == 0u);
+            const uint32_t before = m.now;
+            int steps = 0;
+            for (; steps < 1000 && m.host->client_present(0); ++steps) {
+                for (int i = 0; i < 15; ++i) m.client_ends[0]->send(encode_ping(PingMsg{++n, 0}));
+                m.run(10);
+            }
+            ASSERT_FALSE(m.host->client_present(0));
+            ASSERT_TRUE(m.now - before >= 1500 && m.now - before <= 3500);
+            ASSERT_TRUE(m.host->client_present(1) && m.host->client_present(2));
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.38 Flood Control In A Match Whose Host Holds A Seat (A LAN Game): A Guest That Floods Valid Messages Is Thrown Out, The Host And The Other Guest Play On Bit-Identically") {
+        for (const std::string kind : {"ack", "ping", "chat", "hash"}) {
+            Match m(1, 3, {20, 0});
+            m.run(1000);
+            for (uint32_t i = 0; i < 3000; ++i) {
+                if (kind == "ack") m.client_ends[2]->send(encode(AckMsg{0}));
+                else if (kind == "ping") m.client_ends[2]->send(encode_ping(PingMsg{i + 1, 0}));
+                else if (kind == "chat") {
+                    ChatMsg c;
+                    c.text = "spam";
+                    m.client_ends[2]->send(encode(c));
+                } else {
+                    HashMsg h;
+                    h.turn = 0xFFFFFFF0u;
+                    m.client_ends[2]->send(encode(h));
+                }
+            }
+            m.run(1000, false);
+            ASSERT_FALSE(m.host->client_present(2));
+            ASSERT_EQ(m.host->violations(2), 8u);
+            ASSERT_TRUE(m.host->client_present(1));
+            m.settle();
+            ASSERT_TRUE(m.sims[1]->state_hash() == m.sims[0]->state_hash());
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.host->turns_sealed() > 20);
         }
     } TEST_END();
 
@@ -1979,6 +2177,7 @@ int main() {
     run_protocol_tests();
     run_network_tests();
     run_sequencer_tests();
+    run_flood_budget_tests();
     run_runner_tests();
     run_match_tests();
     run_failure_tests();

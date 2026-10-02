@@ -110,6 +110,24 @@ struct Room {
     }
 };
 
+// A connection that counts the messages that are taken from it: what a host polls in one update
+class CountingConnection final : public Connection {
+public:
+    explicit CountingConnection(Connection* inner) : inner_(inner) {}
+    bool send(const std::vector<uint8_t>& m) override { return inner_->send(m); }
+    bool poll(std::vector<uint8_t>& m) override {
+        if (!inner_->poll(m)) return false;
+        ++taken;
+        return true;
+    }
+    State state() const override { return inner_->state(); }
+    void close() override { inner_->close(); }
+    uint32_t taken{0};
+
+private:
+    Connection* inner_;
+};
+
 }  // namespace
 
 int main() {
@@ -937,7 +955,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.11 StartRequest In The Room: Only The Leader Is Heard, Only While The Room Can Start; Everything Else Is Ignored And Counted And Costs The Sender Nothing; A Payload Is Garbage; A Host With A Seat Ignores It") {
+    TEST_CASE("N4.11 StartRequest In The Room: Only The Leader Is Heard, Only While The Room Can Start; Everything Else Is Ignored And Counted And Costs The Sender Nothing (Up To The 16 That A Person Could Send, N4.13 Has The Flood); A Payload Is Garbage; A Host With A Seat Ignores It") {
         const auto asked = [](HostLobby& host) {                                    // the LeaderStart events: the seats that asked
             std::vector<uint8_t> seats;
             for (const auto& e : host.take_events()) {
@@ -964,10 +982,10 @@ int main() {
             ASSERT_FALSE(room.guests[bob].lobby->request_start());                  // a guest knows it does not lead: nothing is sent
             room.run(100);
             ASSERT_EQ(room.host.ignored_start_requests(), 1u);
-            for (int i = 0; i < 50; ++i) room.guests[bob].client_end->send(encode(StartRequestMsg{}));      // a client that is not the game's sends it anyway
+            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) room.guests[bob].client_end->send(encode(StartRequestMsg{}));      // a client that is not the game's sends it anyway
             room.run(300);
             ASSERT_TRUE(asked(room.host).empty());                                  // never heard
-            ASSERT_EQ(room.host.ignored_start_requests(), 51u);                     // but counted
+            ASSERT_EQ(room.host.ignored_start_requests(), 17u);                     // but counted (Ann's one that found the room alone, and Bob's 16)
             ASSERT_TRUE(room.host.occupied(bob_seat) && room.guests[bob].lobby->phase() == ClientLobby::Phase::InRoom);       // and no offence: Bob is still here
             // two players: the leader's request is passed on, once, with the leader's seat; the lobby does not start by itself, its owner decides
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
@@ -975,14 +993,14 @@ int main() {
             const std::vector<uint8_t> heard = asked(room.host);
             ASSERT_TRUE(heard.size() == 1 && heard[0] == ann_seat);
             ASSERT_EQ(room.host.phase(), HostLobby::Phase::Room);
-            ASSERT_EQ(room.host.ignored_start_requests(), 51u);
+            ASSERT_EQ(room.host.ignored_start_requests(), 17u);
             // the owner starts the match; the leader's second click arrives when the room is loading: ignored, counted, no offence
             ASSERT_TRUE(room.host.start(5, 5, room.now));
             room.run(100);
-            for (int i = 0; i < 20; ++i) room.guests[ann].client_end->send(encode(StartRequestMsg{}));
+            for (int i = 0; i < 3; ++i) room.guests[ann].client_end->send(encode(StartRequestMsg{}));      // (a triple click)
             room.run(300);
             ASSERT_TRUE(asked(room.host).empty());
-            ASSERT_EQ(room.host.ignored_start_requests(), 71u);
+            ASSERT_EQ(room.host.ignored_start_requests(), 20u);
             ASSERT_TRUE(room.host.occupied(ann_seat) && room.host.phase() == HostLobby::Phase::Loading);
             // the cancelled start is back in the room, and the leader may ask again
             room.host.cancel();
@@ -1053,10 +1071,10 @@ int main() {
             lan.join_seat("Ann");
             const size_t bob = lan.join_seat("Bob");
             asked(lan.host);
-            for (int i = 0; i < 100; ++i) lan.guests[bob].client_end->send(encode(StartRequestMsg{}));
+            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) lan.guests[bob].client_end->send(encode(StartRequestMsg{}));
             lan.run(300);
             ASSERT_TRUE(asked(lan.host).empty());
-            ASSERT_EQ(lan.host.ignored_start_requests(), 100u);
+            ASSERT_EQ(lan.host.ignored_start_requests(), kIgnoredStartRequestsAllowed);
             ASSERT_TRUE(lan.host.occupied(lan.guests[bob].lobby->my_seat()) && lan.host.phase() == HostLobby::Phase::Room);
         }
     } TEST_END();
@@ -1127,6 +1145,180 @@ int main() {
         lobby.leave();
         ASSERT_FALSE(lobby.request_start());
         ASSERT_FALSE(lobby.is_leader());
+    } TEST_END();
+
+    TEST_CASE("N4.13 Flood Control In The Room: More Ignored StartRequests Than A Person Could Send (16) Cost A Guest Its Seat; Every Other Message Has A Budget Of 1000 A Second, So A Flood Of Pings Or Pongs Ends The Same Way; At Most 64 Messages Of A Guest Are Taken Per Update; Nobody Else Notices, And Honest Traffic Never Meets A Limit") {
+        HostLobby::Config hc;
+        hc.host_seat = 255;
+        hc.min_players = 2;
+        const auto send_requests = [](Connection* end, uint32_t n) {
+            for (uint32_t i = 0; i < n; ++i) end->send(encode(StartRequestMsg{}));
+        };
+        {   // a guest that does not lead: 16 ignored requests are free, each of the next seven is a violation, the 24th throws it out; the rest is never looked at
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            send_requests(room.guests[bob].client_end, kIgnoredStartRequestsAllowed);
+            room.run(200);
+            ASSERT_TRUE(room.host.occupied(bob_seat));
+            send_requests(room.guests[bob].client_end, 7);                          // violations one to seven
+            room.run(200);
+            ASSERT_TRUE(room.host.occupied(bob_seat));
+            ASSERT_EQ(room.host.ignored_start_requests(), 23u);
+            send_requests(room.guests[bob].client_end, 100);                        // the first of them is the eighth violation: out; the other 99 are never read
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(bob_seat));
+            ASSERT_EQ(room.host.ignored_start_requests(), 24u);
+            ASSERT_TRUE(room.guests[bob].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[bob].lobby->reject_reason() == RejectReason::BadRequest);
+            // nobody else notices: Ann still leads, the room is open and the seat is free for the next player
+            ASSERT_TRUE(room.host.occupied(ann_seat) && room.host.leader() == ann_seat && room.host.phase() == HostLobby::Phase::Room);
+            const size_t cat = room.join_seat("Cat");
+            ASSERT_EQ(room.guests[cat].lobby->phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(room.host.players(), 2u);
+        }
+        {   // the leader's own clicks that arrive after the Start: the same count; a leader who is thrown out cancels the loading like any leaver, and the next one leads
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(room.host.start(5, 5, room.now));
+            room.run(100);
+            send_requests(room.guests[ann].client_end, 200);
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(ann_seat));
+            ASSERT_EQ(room.host.ignored_start_requests(), 24u);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Room);
+            ASSERT_EQ(room.host.leader(), bob_seat);
+        }
+        {   // a host that holds a seat (a LAN game): a guest's StartRequests are ignored, with the same allowance
+            Room lan;
+            lan.join_seat("Ann");
+            const size_t bob = lan.join_seat("Bob");
+            const uint8_t bob_seat = lan.guests[bob].lobby->my_seat();
+            send_requests(lan.guests[bob].client_end, 200);
+            lan.run(300);
+            ASSERT_FALSE(lan.host.occupied(bob_seat));
+            ASSERT_EQ(lan.host.ignored_start_requests(), 24u);
+            ASSERT_TRUE(lan.host.occupied(lan.guests[0].lobby->my_seat()) && lan.host.phase() == HostLobby::Phase::Room);
+        }
+        {   // the allowance belongs to a connection, not to the room: two guests send 16 each (the room wants three players, so even the leader's request is ignored), both stay
+            HostLobby::Config three = hc;
+            three.min_players = 3;
+            Room room(three);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            send_requests(room.guests[ann].client_end, kIgnoredStartRequestsAllowed);
+            send_requests(room.guests[bob].client_end, kIgnoredStartRequestsAllowed);
+            room.run(300);
+            ASSERT_EQ(room.host.ignored_start_requests(), 2 * kIgnoredStartRequestsAllowed);
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()) && room.host.occupied(room.guests[bob].lobby->my_seat()));
+            send_requests(room.guests[ann].client_end, 1);                          // one more is a violation for Ann: one of eight, she stays
+            room.run(100);
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));
+        }
+        {   // a flood of valid pings from a raw guest: a second's worth is answered, then it is out (the 3000 were not all answered)
+            Room room(hc);
+            room.join_seat("Ann");
+            auto ends = room.net.connect({10, 0});
+            room.host.add_connection(ends.first, room.now);
+            HelloMsg hello;
+            hello.name = "Raw";
+            ends.second->send(encode(hello));
+            room.run(100);
+            std::vector<uint8_t> m;
+            uint8_t raw_seat = 255;
+            while (ends.second->poll(m)) {
+                WelcomeMsg w;
+                if (peek_type(m) == MsgType::Welcome && decode(m, w)) raw_seat = w.player;
+            }
+            ASSERT_TRUE(raw_seat < sim::MAX_PLAYERS && room.host.occupied(raw_seat));
+            for (uint32_t i = 1; i <= 3000; ++i) ends.second->send(encode_ping(PingMsg{i, 0}));
+            room.run(1000);
+            ASSERT_FALSE(room.host.occupied(raw_seat));
+            uint32_t pongs = 0;
+            while (ends.second->poll(m)) pongs += peek_type(m) == MsgType::Pong ? 1u : 0u;
+            ASSERT_TRUE(pongs >= kMessageBurst && pongs <= kMessageBurst + 300);   // the burst, and what the bucket gave back while the host took 64 messages per update
+        }
+        {   // a flood of valid pongs (the host believes none of them, so they are no offence by themselves): the budget ends it too
+            Room room(hc);
+            room.join_seat("Ann");
+            auto ends = room.net.connect({10, 0});
+            room.host.add_connection(ends.first, room.now);
+            HelloMsg hello;
+            hello.name = "Raw";
+            ends.second->send(encode(hello));
+            room.run(100);
+            std::vector<uint8_t> m;
+            uint8_t raw_seat = 255;
+            while (ends.second->poll(m)) {
+                WelcomeMsg w;
+                if (peek_type(m) == MsgType::Welcome && decode(m, w)) raw_seat = w.player;
+            }
+            ASSERT_TRUE(raw_seat < sim::MAX_PLAYERS && room.host.occupied(raw_seat));
+            for (int i = 0; i < 3000; ++i) ends.second->send(encode_pong(PingMsg{1, 0}));
+            room.run(1000);
+            ASSERT_FALSE(room.host.occupied(raw_seat));
+        }
+        {   // at most 64 messages of a guest are taken per update: the rest of a flood waits (and does not cost the host more in one update than in the next)
+            LoopbackNetwork net{9};
+            auto ends = net.connect({0, 0});
+            CountingConnection counted(ends.first);
+            HostLobby host(hc);
+            host.set_map("TINY.LVL");
+            host.add_connection(&counted, 0);
+            HelloMsg hello;
+            hello.name = "Raw";
+            ends.second->send(encode(hello));
+            net.set_time(10);
+            host.update(10);
+            ASSERT_EQ(host.players(), 1u);
+            for (uint32_t i = 1; i <= 500; ++i) ends.second->send(encode_ping(PingMsg{i, 0}));
+            net.set_time(20);
+            counted.taken = 0;
+            host.update(20);
+            ASSERT_EQ(counted.taken, 64u);
+            host.update(21);
+            ASSERT_EQ(counted.taken, 128u);
+            host.update(22);
+            ASSERT_EQ(counted.taken, 192u);
+        }
+        {   // honest traffic never meets a limit: ten pings a second for a minute and a burst of 500 at once; 900 a second for twenty seconds (under the refill of 1000)
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            for (int second = 0; second < 60; ++second) {
+                for (int i = 0; i < 10; ++i) room.guests[bob].client_end->send(encode_ping(PingMsg{static_cast<uint32_t>(second * 10 + i + 1), 0}));
+                if (second == 30) {
+                    for (uint32_t i = 0; i < 500; ++i) room.guests[bob].client_end->send(encode_ping(PingMsg{5000 + i, 0}));
+                }
+                room.run(1000);
+            }
+            ASSERT_TRUE(room.host.occupied(room.guests[bob].lobby->my_seat()) && room.host.occupied(room.guests[ann].lobby->my_seat()));
+            for (int step = 0; step < 2000; ++step) {
+                for (uint32_t i = 0; i < 9; ++i) room.guests[bob].client_end->send(encode_ping(PingMsg{100000u + static_cast<uint32_t>(step) * 9u + i, 0}));
+                room.run(10);
+            }
+            ASSERT_TRUE(room.host.occupied(room.guests[bob].lobby->my_seat()));
+        }
+        {   // 1500 a second is above it: the bucket empties in about two seconds (it gives back 1000 and takes 1500) and the sender is out
+            Room room(hc);
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            const uint32_t start = room.now;
+            int steps = 0;
+            for (; steps < 1000 && room.host.occupied(bob_seat); ++steps) {
+                for (uint32_t i = 0; i < 15; ++i) room.guests[bob].client_end->send(encode_ping(PingMsg{static_cast<uint32_t>(steps) * 15u + i + 1u, 0}));
+                room.run(10);
+            }
+            ASSERT_FALSE(room.host.occupied(bob_seat));
+            ASSERT_TRUE(room.now - start >= 1500 && room.now - start <= 3500);
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

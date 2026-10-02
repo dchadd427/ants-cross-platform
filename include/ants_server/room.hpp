@@ -68,7 +68,7 @@ struct RoomStatus {
     uint8_t expected{0};
     bool early_start{true};                 // the room allows the leader's early start
     uint8_t leader{255};                    // the seat of the leader while the room waits or loads (255: none: nobody has joined yet, the room does not allow an early start, or the match runs)
-    uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start)
+    uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start, a late click of a match that runs)
     RoomState state{RoomState::Waiting};
     std::string reason;                     // why a room failed, or how it ended ("" while it runs)
     uint8_t joined{0};

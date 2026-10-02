@@ -325,10 +325,15 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
         case MsgType::StartRequest: {
             StartRequestMsg m;
             if (!decode(msg, m)) return violation(seat);                  // it has no payload: anything else is garbage
-            // Only the leader of a server's room is heard, and only while the room is open and could start now. A request that cannot be honoured is no offence (the leader's
-            // second click on START arrives when the match is loading already; a host that holds a seat has no leader; a player is told who leads): it is ignored and counted.
-            if (phase_ == Phase::Room && seat == room_.leader && can_start()) events_.push_back(Event{Event::Type::LeaderStart, seat});
-            else ++ignored_start_requests_;
+            // Only the leader of a server's room is heard, and only while the room is open and could start now. A request that cannot be honoured is no offence at first (the leader's
+            // second click on START arrives when the match is loading already; a host that holds a seat has no leader; a player is told who leads): it is ignored and counted. A
+            // connection that sends more of them than a person ever could (kIgnoredStartRequestsAllowed) is flooding: every one after those is a violation.
+            if (phase_ == Phase::Room && seat == room_.leader && can_start()) {
+                events_.push_back(Event{Event::Type::LeaderStart, seat});
+            } else {
+                ++ignored_start_requests_;
+                if (++guests_[seat].ignored_start_requests > kIgnoredStartRequestsAllowed) violation(seat);
+            }
             return;
         }
         case MsgType::Loaded: {
@@ -380,9 +385,10 @@ void HostLobby::update(uint32_t now_ms) {
             g.next_ping_ms = now_ms + cfg_.ping_every_ms;
         }
         std::vector<uint8_t> msg;
-        int budget = 64;
+        int budget = 64;                                       // at most this many messages of one guest per update: the rest waits (a flood is held back in the connection)
         while (budget-- > 0 && guests_[s].conn != nullptr && guests_[s].conn->poll(msg)) {
             if (msg.size() > kMaxMessageBytes) violation(s);
+            else if (!guests_[s].talk.take(now_ms, cfg_.message_burst, cfg_.messages_per_second)) violation(s);       // more than a client can have to say: not even looked at
             else handle_guest_message(s, msg);
         }
         if (guests_[s].conn != nullptr && !guests_[s].conn->is_open()) remove_guest(s, false, RejectReason::Kicked);

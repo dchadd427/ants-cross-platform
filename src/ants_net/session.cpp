@@ -183,6 +183,8 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
         case MsgType::StartRequest: {                // a dedicated server's leader pressed START a second time: this one crossed the Start on the wire, the match runs already
             StartRequestMsg m;
             if (!decode(msg, m) || !seatless()) return violation(player);      // (a host that holds a seat has no leader: nobody sends it one)
+            // no offence at first (a second or third click), but a connection that sends more of them than a person could is flooding: each one after those is a violation
+            if (++clients_[player].ignored_start_requests > kIgnoredStartRequestsAllowed) violation(player);
             return;
         }
         case MsgType::Chat: {
@@ -203,10 +205,14 @@ void HostSession::poll_clients() {
         Client& c = clients_[p];
         if (!c.present || c.conn == nullptr) continue;
         std::vector<uint8_t> msg;
-        int budget = 256;                            // a chatty client cannot starve the rest
+        int budget = 256;                            // a chatty client cannot starve the rest: the rest of what it sent waits for the next update
         while (budget-- > 0 && c.present && c.conn->poll(msg)) {
             c.last_heard_ms = last_ms_;
             if (msg.size() > kMaxMessageBytes) {
+                violation(p);
+                continue;
+            }
+            if (!c.talk.take(last_ms_, cfg_.message_burst, cfg_.messages_per_second)) {      // more than a client can have to say: not even looked at
                 violation(p);
                 continue;
             }

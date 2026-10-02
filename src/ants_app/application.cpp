@@ -850,6 +850,7 @@ void Application::quit() {
 // The setup screen is created (again): its labels stay empty until its refresh, 500 ms later
 void Application::enter_map_select() {
     state_ = AppState::MapSelect;
+    closing_click_pending_ = false;                          // (close_quick_help() sets it after this call)
     map_select_.enter();
     // The new screen's buttons are fresh objects in the up state; the INPUT task of the original sends the pointer to the top window in the very input run that
     // follows (FUN_0102653f), so a button under the pointer shows its hover picture before the first frame. Nothing is reset or moved: the pointer is one global.
@@ -1052,7 +1053,7 @@ void Application::handle_events() {
         if (state_ == AppState::MapSelect) {
             switch (event.type) {
                 case SDL_KEYDOWN:
-                    map_select_.handle_key_down(event.key.keysym.sym);
+                    map_select_.handle_key_down(event.key.keysym.sym, event.key.repeat != 0);
                     break;
                 case SDL_MOUSEMOTION:
                     mouse_screen_x_ = event.motion.x;
@@ -1066,6 +1067,10 @@ void Application::handle_events() {
                     mouse_screen_y_ = event.button.y;
                     mouse_has_moved_ = true;
                     pointer_outside_ = false;
+                    if (event.button.button == SDL_BUTTON_LEFT && swallow_closing_click(event.button.clicks, event.button.timestamp)) {
+                        map_select_.handle_mouse_motion(event.button.x, event.button.y);       // the pointer is there (a hover); nothing is pressed
+                        break;
+                    }
                     map_select_.handle_mouse_down(event.button.x, event.button.y, event.button.button);
                     break;
                 case SDL_MOUSEBUTTONUP:
@@ -1812,13 +1817,34 @@ void Application::quick_help_press(int32_t x, int32_t y) {
 }
 void Application::quick_help_release(int32_t x, int32_t y) {
     note_pointer(x, y);
-    if (quick_help_start_.on_release(x, y)) enter_map_select();
+    if (quick_help_start_.on_release(x, y)) close_quick_help(true);
+}
+
+// The quick help is over. Its button is let go of (a key can close the window while the button is held: nothing stays pressed in a window that is gone), and the setup
+// screen takes over with fresh buttons: a release of a press that began on the quick help finds no pressed button there and does nothing. A click that closed the window may
+// be the first of a double click (see closing_click_pending()).
+void Application::close_quick_help(bool by_click) {
+    quick_help_start_.reset();
+    enter_map_select();
+    closing_click_pending_ = by_click && joined_a_room();
+    closing_click_ms_ = SDL_GetTicks();
+}
+
+// A left press on the setup screen. After a click closed the quick help of a machine that joined a room, a press that continues that click is not for the screen: the second
+// click of a double click on START!, which SDL counts (`clicks` above 1) or which comes within SDL's double-click time of the click that closed the quick help (a press that was
+// queued before that click was handled has a time before it, which counts as within). The first press that does neither begins a new click and ends the rule.
+bool Application::swallow_closing_click(uint8_t clicks, uint32_t timestamp_ms) {
+    if (!closing_click_pending_) return false;
+    const bool within = static_cast<int32_t>(timestamp_ms - closing_click_ms_) <= static_cast<int32_t>(kDoubleClickMs);
+    if (clicks > 1 || within) return true;
+    closing_click_pending_ = false;
+    return false;
 }
 
 // FUN_010147c2: Enter (0x18), Esc (0x1a), C (0x43), X (0x58), c (0x63) and x (0x78) run the same callback; M and m open the More Help dialog (not built); no other key does anything
 void Application::quick_help_key(SDL_Keycode sym) {
     if (state_ != AppState::QuickHelp) return;
-    if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER || sym == SDLK_ESCAPE || sym == SDLK_c || sym == SDLK_x) enter_map_select();
+    if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER || sym == SDLK_ESCAPE || sym == SDLK_c || sym == SDLK_x) close_quick_help(false);
 }
 
 void Application::play_startup_sound() {

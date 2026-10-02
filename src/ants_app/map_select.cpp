@@ -198,7 +198,7 @@ void MapSelectScreen::handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_
 }
 
 // FUN_01014076: the keys are Up (0xe) and Down (0xf), Enter (0x18), 'S' and 's' (start), 'Q', 'q', 'X' and 'x' (leave); nothing else does anything, Esc included
-void MapSelectScreen::handle_key_down(SDL_Keycode key) {
+void MapSelectScreen::handle_key_down(SDL_Keycode key, bool repeat) {
     switch (key) {
         case SDLK_UP:
             step_map(-1);
@@ -209,6 +209,7 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key) {
         case SDLK_RETURN:
         case SDLK_KP_ENTER:
         case SDLK_s:
+            if (repeat && leads_server_room()) break;                         // (a held key is no new press for the leader's START; the original's own screens act on it)
             start();
             break;
         case SDLK_q:

@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "ants_net/flood.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/transport.hpp"
 
@@ -41,6 +42,9 @@ public:
         /// (RoomMsg::leader) and its StartRequest is passed on to the room (Event::LeaderStart) when the room can start. False: the room has no leader and every StartRequest
         /// is ignored (the server's `early_start` option of a room).
         bool early_start{true};
+        /// Flood control (flood.hpp): the messages that one guest may send, a token bucket. A message beyond it is not handled and is a violation (eight throw the guest out).
+        uint32_t message_burst{kMessageBurst};
+        uint32_t messages_per_second{kMessagesPerSecond};
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
@@ -60,7 +64,8 @@ public:
     /// The seat of the room's leader (kNoLeader when there is none: a host that holds a seat, a room without early start, nobody has joined yet)
     uint8_t leader() const noexcept { return room_.leader; }
     /// How many StartRequest messages were heard and not acted on: from a guest that is not the leader (every guest of a host that holds a seat), after the room started loading,
-    /// from a room that cannot start (too few players). A request is no offence (the leader's second click on START arrives after the Start), a malformed one is (a violation).
+    /// from a room that cannot start (too few players). A request is no offence (the leader's second click on START arrives after the Start) as long as a guest does not send more
+    /// than kIgnoredStartRequestsAllowed of them: each one after those is a violation. A malformed one is a violation at once.
     uint32_t ignored_start_requests() const noexcept { return ignored_start_requests_; }
 
     /// A connection that the listener accepted; it becomes a seat when its Hello is accepted. `address` is where the connection came from (the host
@@ -118,6 +123,8 @@ private:
         std::string address;                     // where the guest's connection came from
         uint16_t listen_port{0};                 // the port on which it accepts the other guests during the match (0: none)
         uint32_t join_order{0};                  // 1, 2, 3, ... in the order of the Welcomes: the earliest guest still here leads a server's room
+        MessageBudget talk;                      // flood control: every message that the guest sends takes one from it
+        uint32_t ignored_start_requests{0};      // the StartRequests of this guest that were ignored (the first kIgnoredStartRequestsAllowed are free)
     };
     struct Pending {
         Connection* conn;

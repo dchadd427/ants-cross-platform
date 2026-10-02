@@ -2,7 +2,9 @@
 # The dedicated server with REAL programs: ants_server (TCP game port, control interface with a bearer secret) and two headless game clients that join a room by its
 # code. Checks: the control interface refuses a missing or a wrong secret, makes a room with the right one, the two clients join, the match starts by itself (nobody
 # presses START), runs, and both clients finish their frames without an error; a room for four whose leader (the first client to join, --start-when 2: a test hook that
-# presses START for a headless client) starts it with the two players who are there; the server stops cleanly on SIGTERM and writes the result file of a room that was closed.
+# presses START for a headless client) starts it with the two players who are there; a raw client (no game) that floods the server with valid messages (StartRequests, Pings) is
+# dropped within seconds while a match in another room keeps its clock, the control interface answers, and the process neither grows nor stays busy; the server stops cleanly on
+# SIGTERM and writes the result file of a room that was closed.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD="${BUILD_DIR:-build}"
 SERVER="$ROOT/$BUILD/src/ants_server/ants_server"
@@ -29,7 +31,7 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ants_e2e.XXXXXX")"
 cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
-    for p in $CLIENT_PIDS; do kill "$p" 2> /dev/null; done
+    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS; do kill "$p" 2> /dev/null; done
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -43,6 +45,33 @@ CTL="http://127.0.0.1:$CTL_PORT"
 cd "$ROOT"
 # the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
 check "web/four.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/four.html")" -ge 3 ]; echo $?)"
+# AGENTS.md rule 6: the game files of the beta site (.wasm, .data, .html, .css, .js) are revalidated, not stored away and not downloaded again: exactly Cache-Control "no-cache, must-revalidate",
+# ETags on (no `etag off`), no `no-store` (a response that may not be stored cannot be revalidated: every reload fetched 9 MB) and no `expires -1` (nginx would add a second Cache-Control
+# line and an Expires date); the cross-origin headers stay in each of the three blocks. (A real answer from the built web image is checked by hand: curl -I twice, the second with If-None-Match: 304.)
+nginx_blocks_ok() {
+    python3 - "$ROOT/docker/nginx.conf" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding='utf-8').read()
+problems = []
+for name, pattern in (('.wasm', r'location ~\* \\\.wasm\$ \{'), ('.data', r'location ~\* \\\.data\$ \{'), ('.html/.css/.js', r'location ~\* \\\.\(html\|css\|js\)\$ \{')):
+    m = re.search(pattern, text)
+    if not m:
+        problems.append(name + ': no block')
+        continue
+    end = text.index('\n    }', m.end())
+    block = '\n'.join(l for l in text[m.end():end].split('\n') if not l.strip().startswith('#'))
+    if block.count('add_header Cache-Control') != 1 or 'add_header Cache-Control "no-cache, must-revalidate" always;' not in block:
+        problems.append(name + ': Cache-Control is not exactly "no-cache, must-revalidate"')
+    for bad in ('etag off', 'no-store', 'expires'):
+        if bad in block:
+            problems.append(name + ': has ' + bad)
+    for needed in ('Cross-Origin-Opener-Policy', 'Cross-Origin-Embedder-Policy'):
+        if needed not in block:
+            problems.append(name + ': lost ' + needed)
+print('; '.join(problems) if problems else 'ok')
+PY
+}
+check "docker/nginx.conf: .wasm, .data and .html / .css / .js carry exactly 'Cache-Control: no-cache, must-revalidate' with ETags on (no etag off, no no-store, no expires -1) and keep COOP / COEP: $(nginx_blocks_ok)" "$([ "$(nginx_blocks_ok)" = "ok" ]; echo $?)"
 # the command line: a bad demo-room option is refused at once with status 2 (a server that did start would be stopped by the alarm: status 142)
 exit_of() { perl -e 'alarm 5; exec @ARGV' env ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" "$@" > /dev/null 2>&1; echo $?; }
 check "--demo-rooms without --demo-map is refused" "$([ "$(exit_of --demo-rooms 2)" = "2" ]; echo $?)"
@@ -141,6 +170,118 @@ check "the room did not fail (no desync)" "$(curl -s -m 2 -H "Authorization: Bea
 for p in $LEAD_PIDS; do kill "$p" 2> /dev/null; done
 for p in $LEAD_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" > /dev/null
+
+# flood control (v0.0.93): a raw client that is no game sends valid messages as fast as its line allows (a StartRequest that is ignored, a Ping), in a room of its own while two real
+# clients play in another. Before the TCP inbox was bounded and the messages counted, the server read and parsed everything into memory (the process grew by gigabytes in seconds,
+# one thread busy, the referee of the other room late, the control interface slow) and never dropped the sender; now the sender is dropped after a second's worth at the most.
+rss_kb() { ps -o rss= -p "$SERVER_PID" 2> /dev/null | tr -d ' '; }
+cpu_secs() { ps -o time= -p "$SERVER_PID" 2> /dev/null | python3 -c 'import sys; t = sys.stdin.read().strip().replace("-", ":"); s = 0.0
+for part in t.split(":"): s = s * 60 + float(part)
+print(s)'; }
+ticks_of() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))' 2> /dev/null; }
+field_of() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get(sys.argv[1], ""))' "$2" 2> /dev/null; }
+VICTIM="E2E-VICTIM-$RANDOM"
+curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$VICTIM\",\"seed\":11}" "$CTL/rooms"
+VICTIM_PIDS=""
+for i in 1 2; do
+    "$GAME" --headless --no-lan --name "Victim$i" --join "127.0.0.1:$GAME_PORT" --room "$VICTIM" --screenshot "$WORK/v$i.png" --frames 4000000 > "$WORK/v$i.log" 2>&1 &
+    VICTIM_PIDS="$VICTIM_PIDS $!"
+done
+VICTIM_UP=1
+for _ in $(seq 1 100); do
+    [ "$(field_of "$VICTIM" state)" = "running" ] && { VICTIM_UP=0; break; }
+    sleep 0.2
+done
+check "two clients play in a room next to the flood room (the match runs)" "$VICTIM_UP"
+rate_of_victim() { local a b; a="$(ticks_of "$VICTIM")"; sleep "$1"; b="$(ticks_of "$VICTIM")"; python3 -c "print(($b - $a) / $1)"; }
+QUIET_RATE="$(rate_of_victim 3)"
+check "the referee of that match ticks about 20 times a second without a flood ($QUIET_RATE)" "$(python3 -c "print(0 if 15 < $QUIET_RATE < 25 else 1)")"
+flood() {      # flood KIND ROOM SECONDS: a raw client says Hello for ROOM, then writes frames of KIND as fast as it can for SECONDS; prints how many Pongs it got back
+    python3 - "$GAME_PORT" "$2" "$1" "$3" <<'PY'
+import socket, struct, sys, time
+port, room, kind, secs = int(sys.argv[1]), sys.argv[2], sys.argv[3], float(sys.argv[4])
+def frame(p): return struct.pack('<I', len(p)) + p
+def str8(t):
+    b = t.encode()
+    return bytes([len(b)]) + b
+hello = bytes([1]) + struct.pack('<H', 7) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('')
+message = bytes([24]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)
+sock = socket.create_connection(('127.0.0.1', port), timeout=5)
+sock.sendall(frame(hello))
+sock.setblocking(False)
+blob = frame(message) * 20000
+offset = 0
+received = b''
+pongs = 0
+end = time.time() + secs
+while time.time() < end:
+    try:
+        offset = (offset + sock.send(blob[offset:])) % len(blob)           # (frames stay whole: it goes on where it stopped)
+    except BlockingIOError:
+        time.sleep(0.001)
+    except OSError:
+        break
+    try:
+        data = sock.recv(65536)
+        if not data:
+            break
+        received += data
+    except BlockingIOError:
+        pass
+    except OSError:
+        break
+    pos = 0
+    while len(received) - pos >= 4:
+        n = struct.unpack_from('<I', received, pos)[0]
+        if len(received) - pos - 4 < n:
+            break
+        if n >= 1 and received[pos + 4] == 11:
+            pongs += 1
+        pos += 4 + n
+    received = received[pos:]
+print(pongs)
+PY
+}
+for KIND in startreq ping; do
+    FLOODROOM="E2E-FLOOD-$KIND-$RANDOM"
+    curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$FLOODROOM\",\"seed\":5}" "$CTL/rooms"
+    RSS_BEFORE="$(rss_kb)"
+    TICKS_A="$(ticks_of "$VICTIM")"
+    FLOOD_START="$(python3 -c 'import time; print(time.time())')"
+    flood "$KIND" "$FLOODROOM" 4 > "$WORK/flood_$KIND.out" &
+    FLOOD_PID=$!
+    WORST=0
+    JOINED_AT_2S=""
+    for I in $(seq 1 8); do                                  # the control interface answers while the flood goes on
+        T="$(curl -s -o /dev/null -w '%{time_total}' -m 5 -H "Authorization: Bearer $SECRET" "$CTL/rooms")"
+        WORST="$(python3 -c "print(max($WORST, $T))")"
+        [ "$I" = "6" ] && JOINED_AT_2S="$(field_of "$FLOODROOM" joined)"       # about two seconds into the flood, which still goes on
+        sleep 0.4
+    done
+    wait "$FLOOD_PID"
+    FLOOD_SECS="$(python3 -c "import time; print(time.time() - $FLOOD_START)")"
+    TICKS_B="$(ticks_of "$VICTIM")"
+    RSS_AFTER="$(rss_kb)"
+    check "$KIND flood: about two seconds into the flood, which still goes on, the flooder is no longer in its room (the server dropped it), the room is still open" "$([ "$JOINED_AT_2S" = "0" ] && [ "$(field_of "$FLOODROOM" state)" = "waiting" ]; echo $?)"
+    if [ "$KIND" = "startreq" ]; then
+        check "startreq flood: it had a seat and was out at its 24th request (16 are free, each of the next eight is a violation): the rest was never read" "$([ "$(field_of "$FLOODROOM" ignored_start_requests)" = "24" ]; echo $?)"
+    else
+        PONGS="$(cat "$WORK/flood_$KIND.out")"
+        check "ping flood: the server answered a second's worth of pings and no more ($PONGS pongs of millions of pings)" "$([ "${PONGS:-0}" -ge 1000 ] && [ "${PONGS:-0}" -le 1300 ]; echo $?)"
+    fi
+    check "$KIND flood: the control interface answered within a second all the time (worst: ${WORST} s)" "$(python3 -c "print(0 if $WORST < 1.0 else 1)")"
+    check "$KIND flood: the match in the other room kept its clock (ticks a second: $(python3 -c "print(round(($TICKS_B - $TICKS_A) / $FLOOD_SECS, 1))"); it was 8.6 on a loaded machine before)" "$(python3 -c "print(0 if ($TICKS_B - $TICKS_A) / $FLOOD_SECS > 14 else 1)")"
+    check "$KIND flood: the server did not grow by more than 200 MB (it grew by gigabytes: $(( (RSS_AFTER - RSS_BEFORE) / 1024 )) MB)" "$([ $(( (RSS_AFTER - RSS_BEFORE) / 1024 )) -lt 200 ]; echo $?)"
+    CPU_A="$(cpu_secs)"
+    sleep 3
+    CPU_B="$(cpu_secs)"
+    check "$KIND flood: afterwards the server is idle again (CPU used in the next 3 s: $(python3 -c "print(round($CPU_B - $CPU_A, 2))") s)" "$(python3 -c "print(0 if $CPU_B - $CPU_A < 1.0 else 1)")"
+    code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FLOODROOM" > /dev/null
+done
+check "the match next to the floods is still running and its clients saw no error" "$([ "$(field_of "$VICTIM" state)" = "running" ] && ! grep -qiE 'out of sync|failed|error' "$WORK/v1.log" "$WORK/v2.log"; echo $?)"
+for p in $VICTIM_PIDS; do kill "$p" 2> /dev/null; done
+for p in $VICTIM_PIDS; do wait "$p" 2> /dev/null; done
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$VICTIM" > /dev/null
 
 # closing the room writes its result; SIGTERM stops the server
 check "the owner closes the room: 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE")" = "200" ]; echo $?)"

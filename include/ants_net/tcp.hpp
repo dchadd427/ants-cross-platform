@@ -2,7 +2,8 @@
 
 // Framed, non-blocking TCP for LAN and development (native builds only: a browser cannot open raw sockets and uses WebRTC / WebSocket).
 // A message travels as u32 length (little endian) + payload; a length above kMaxMessageBytes fails the connection, so a hostile peer cannot make the
-// receiver allocate or read without bound. Nothing blocks: connect, send and receive make progress whenever the game polls.
+// receiver allocate or read without bound. Nothing blocks: connect, send and receive make progress whenever the game polls. The messages that wait to be polled are bounded as
+// well (kMaxInboxMessages, kMaxInboxBytes): when the game does not take them as fast as a peer sends them, the socket is not read, and TCP holds the sender back.
 
 #include <cstdint>
 #include <deque>
@@ -27,12 +28,20 @@ public:
     bool send(const std::vector<uint8_t>& message) override;
     bool poll(std::vector<uint8_t>& message) override;
     State state() const override { return state_; }
+    /// Closes this side. What was received and not polled is dropped with it (nobody reads it any more); what a peer sent before IT closed is delivered, as before.
     void close() override;
 
     /// The peer's address as text (diagnostics)
     const std::string& peer() const noexcept { return peer_; }
     /// Bytes waiting to be written (diagnostics)
     size_t backlog() const noexcept { return out_.size(); }
+    /// Received messages that wait to be polled, and the bytes that were read but are not parsed into messages yet (diagnostics and the tests of the bound)
+    size_t inbox() const noexcept { return messages_.size(); }
+    size_t buffered() const noexcept { return in_.size(); }
+    /// The most messages (and bytes of them) that wait to be polled. At half of either the socket is not read any more until the game has taken what is here; at the full
+    /// size not even the bytes that were read are parsed. A flooding peer is held back by TCP instead of growing this process (the WebSocket connection has the same bound).
+    static constexpr size_t kMaxInboxMessages = 4096;
+    static constexpr size_t kMaxInboxBytes = 1024 * 1024;
 
 private:
     friend class TcpListener;
@@ -46,6 +55,7 @@ private:
     std::vector<uint8_t> in_;                   // received bytes not yet parsed into messages
     std::vector<uint8_t> out_;                  // framed bytes not yet written
     std::deque<std::vector<uint8_t>> messages_;
+    size_t inbox_bytes_{0};                     // the payload bytes of messages_
 };
 
 class TcpListener final {

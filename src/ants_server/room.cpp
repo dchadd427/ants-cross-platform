@@ -213,7 +213,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.expected = spec_.players;
     s.early_start = spec_.early_start;
     s.leader = state_ == RoomState::Waiting || state_ == RoomState::Loading ? lobby_.leader() : uint8_t{255};      // (the lead means something until the match runs)
-    s.ignored_start_requests = lobby_.ignored_start_requests();
+    s.ignored_start_requests = lobby_.ignored_start_requests() + (session_ ? session_->ignored_start_requests() : 0u);       // (the late ones of a running match are the session's)
     s.state = state_;
     s.reason = reason_;
     s.joined = static_cast<uint8_t>(lobby_.players());

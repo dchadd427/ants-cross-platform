@@ -7,6 +7,7 @@
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -102,6 +103,76 @@ std::vector<uint8_t> blob(size_t n, uint8_t seed) {
     for (size_t i = 0; i < n; ++i) v[i] = static_cast<uint8_t>(seed + i * 31u);
     return v;
 }
+
+#ifndef _WIN32
+// A peer that is no game: a raw socket and a thread that writes frames as fast as the kernel takes them. Frame number n is a 4-byte message (its number), except that
+// every 100000th is a message of kMaxMessageBytes (its number, then a pattern); `hostile_after` frames, when not 0, end with a length prefix that no frame may have;
+// `payload`, when not 0, makes every frame that long (its number, then a pattern).
+struct RawFlooder {
+    int sock{-1};
+    std::thread thread;
+    std::atomic<bool> stop{false};
+
+    RawFlooder(uint16_t port, uint32_t frames, uint32_t hostile_after = 0, uint32_t payload = 0) {
+        sock = ::socket(AF_INET, SOCK_STREAM, 0);
+        sockaddr_in a;
+        std::memset(&a, 0, sizeof(a));
+        a.sin_family = AF_INET;
+        a.sin_port = htons(port);
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (::connect(sock, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) {
+            ::close(sock);
+            sock = -1;
+            return;
+        }
+#ifdef SO_NOSIGPIPE
+        int one = 1;
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));       // (a write to a connection that the receiver closed must be an error here, not a signal)
+#endif
+        thread = std::thread([this, frames, hostile_after, payload]() {
+            const auto put32 = [](std::vector<uint8_t>& v, uint32_t x) {
+                for (int i = 0; i < 4; ++i) v.push_back(static_cast<uint8_t>((x >> (8 * i)) & 0xFFu));
+            };
+            std::vector<uint8_t> chunk;
+            uint32_t seq = 0;
+            while (!stop && (seq < frames || (hostile_after != 0 && seq == frames))) {
+                chunk.clear();
+                for (int i = 0; i < 20000 && (seq < frames || (hostile_after != 0 && seq == frames)); ++i, ++seq) {
+                    if (seq == frames) {                                   // the hostile prefix: 4 GB
+                        put32(chunk, 0xFFFFFFFFu);
+                        put32(chunk, 0);
+                        continue;
+                    }
+                    const bool big = payload != 0 || (hostile_after == 0 && seq % 100000u == 99999u);
+                    const uint32_t len = payload != 0 ? payload : (big ? static_cast<uint32_t>(kMaxMessageBytes) : 4u);
+                    put32(chunk, len);
+                    put32(chunk, seq);
+                    if (big) {
+                        for (size_t k = 4; k < len; ++k) chunk.push_back(static_cast<uint8_t>(seq + k * 31u));
+                    }
+                }
+                size_t off = 0;
+                while (off < chunk.size() && !stop) {
+#ifdef MSG_NOSIGNAL
+                    const int flags = MSG_NOSIGNAL;
+#else
+                    const int flags = 0;
+#endif
+                    const auto n = ::send(sock, chunk.data() + off, chunk.size() - off, flags);
+                    if (n <= 0) return;                                    // the receiver went away
+                    off += static_cast<size_t>(n);
+                }
+            }
+        });
+    }
+    ~RawFlooder() {
+        stop = true;
+        if (sock >= 0) ::shutdown(sock, SHUT_RDWR);                         // (a send that is blocked on a receiver that does not read ends)
+        if (thread.joinable()) thread.join();
+        if (sock >= 0) ::close(sock);
+    }
+};
+#endif
 
 struct Lcg {
     uint32_t s;
@@ -428,6 +499,170 @@ int main() {
         for (int i = 0; i < 300; ++i) step();
         for (auto& l : lobbies) ASSERT_EQ(l->phase(), ClientLobby::Phase::Begun);
     } TEST_END();
+
+#ifndef _WIN32
+    TEST_CASE("N3.7 TCP: A Flood Of Tiny Messages Is Held Back By TCP Instead Of Piling Up In The Receiver: The Inbox Never Holds More Than 4096 Messages However Little The Game Takes, Nothing Is Lost Or Reordered, A 64 KB Message In The Middle Arrives Whole, And A Hostile Length Behind The Flood Still Fails The Connection") {
+        ASSERT_EQ(TcpConnection::kMaxInboxMessages, size_t{4096});
+        ASSERT_EQ(TcpConnection::kMaxInboxBytes, size_t{1024 * 1024});
+        {
+            auto listener = TcpListener::listen(0, true);
+            ASSERT_TRUE(listener != nullptr);
+            const uint32_t kFrames = 1000000;
+            RawFlooder flood(listener->port(), kFrames);
+            ASSERT_TRUE(flood.sock >= 0);
+            std::unique_ptr<TcpConnection> srv;
+            for (int i = 0; i < 2000 && !srv; ++i) {
+                srv = listener->accept();
+                if (!srv) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            ASSERT_TRUE(srv != nullptr);
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));       // the sender has filled every buffer on the way: a receiver that polled at once would see a trickle
+            uint32_t expected = 0;
+            size_t peak = 0;
+            size_t polls = 0;
+            bool in_order = true;
+            bool bigs_whole = true;
+            int idle = 0;
+            std::vector<uint8_t> got;
+            while (expected < kFrames && idle < 5000) {
+                int taken = 0;
+                for (int i = 0; i < 64 && srv->poll(got); ++i) {              // one update of a host: it takes at most 64 messages of a connection
+                    ++taken;
+                    ++polls;
+                    uint32_t n = 0;
+                    if (got.size() >= 4) n = static_cast<uint32_t>(got[0]) | (static_cast<uint32_t>(got[1]) << 8) | (static_cast<uint32_t>(got[2]) << 16) | (static_cast<uint32_t>(got[3]) << 24);
+                    if (n != expected) in_order = false;
+                    const bool big = expected % 100000u == 99999u;
+                    if (got.size() != (big ? kMaxMessageBytes : size_t{4})) in_order = false;
+                    if (big && got.size() == kMaxMessageBytes) {
+                        for (size_t k = 4; k < got.size(); ++k) {
+                            if (got[k] != static_cast<uint8_t>(expected + k * 31u)) bigs_whole = false;
+                        }
+                    }
+                    ++expected;
+                }
+                peak = std::max(peak, srv->inbox());
+                if (taken == 0) {
+                    ++idle;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                } else {
+                    idle = 0;
+                }
+            }
+            ASSERT_EQ(expected, kFrames);                                       // not one message lost
+            ASSERT_TRUE(in_order);
+            ASSERT_TRUE(bigs_whole);
+            ASSERT_TRUE(peak <= 4096);                                          // (it used to be 30000 after the first poll, and growing)
+            ASSERT_TRUE(peak >= 2048);                                          // the flood did queue up: the test measures something
+            ASSERT_EQ(polls, size_t{kFrames});
+            ASSERT_TRUE(srv->is_open());
+        }
+        {   // a hostile length behind a flood: the frames before it are all delivered, then the connection fails (the check is made when the parser gets there)
+            auto listener = TcpListener::listen(0, true);
+            ASSERT_TRUE(listener != nullptr);
+            RawFlooder flood(listener->port(), 10000, 10000);                  // 10000 good frames, then 0xFFFFFFFF
+            ASSERT_TRUE(flood.sock >= 0);
+            std::unique_ptr<TcpConnection> srv;
+            for (int i = 0; i < 2000 && !srv; ++i) {
+                srv = listener->accept();
+                if (!srv) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            ASSERT_TRUE(srv != nullptr);
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            uint32_t expected = 0;
+            std::vector<uint8_t> got;
+            for (int guard = 0; guard < 4000 && srv->state() != Connection::State::Failed; ++guard) {
+                for (int i = 0; i < 64 && srv->poll(got); ++i) {
+                    ASSERT_TRUE(got.size() == 4 && got[0] == static_cast<uint8_t>(expected & 0xFFu));
+                    ++expected;
+                }
+                if (srv->state() != Connection::State::Failed) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            while (srv->poll(got)) ++expected;                                  // what is left in the inbox
+            ASSERT_EQ(srv->state(), Connection::State::Failed);
+            ASSERT_EQ(expected, 10000u);
+        }
+        {   // a flood of BIG messages (60,000 bytes each, 6 MB): the bytes bound the inbox before the count does (about 1 MiB: 17 messages), and what was read and not parsed is
+            // bounded too (a whole message and one read), however often the game polls
+            auto listener = TcpListener::listen(0, true);
+            ASSERT_TRUE(listener != nullptr);
+            RawFlooder flood(listener->port(), 100, 0, 60000);
+            ASSERT_TRUE(flood.sock >= 0);
+            std::unique_ptr<TcpConnection> srv;
+            for (int i = 0; i < 2000 && !srv; ++i) {
+                srv = listener->accept();
+                if (!srv) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            ASSERT_TRUE(srv != nullptr);
+            std::this_thread::sleep_for(std::chrono::milliseconds(400));         // the kernel holds as much of the 6 MB as it can
+            std::vector<uint8_t> got;
+            size_t peak_messages = 0;
+            size_t peak_buffered = 0;
+            for (int i = 0; i < 40; ++i) {                                          // forty polls that take nothing (the game is busy), then the game takes everything
+                srv->poll(got);                                                     // (a poll takes one message: put it back in the count)
+                peak_messages = std::max(peak_messages, srv->inbox() + 1);
+                peak_buffered = std::max(peak_buffered, srv->buffered());
+            }
+            ASSERT_TRUE(peak_messages <= 18);                                       // 1 MiB of 60,000-byte messages: 17, and the one just taken
+            ASSERT_TRUE(peak_buffered <= kMaxMessageBytes + 4 + 16384);
+            uint32_t n = 40;                                                        // (forty were taken above)
+            for (int guard = 0; guard < 20000 && n < 100; ++guard) {
+                if (srv->poll(got)) {
+                    ASSERT_EQ(got.size(), size_t{60000});
+                    ++n;
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                peak_messages = std::max(peak_messages, srv->inbox() + 1);
+                peak_buffered = std::max(peak_buffered, srv->buffered());
+            }
+            ASSERT_EQ(n, 100u);                                                     // all 100 arrived, whole
+            ASSERT_TRUE(peak_messages <= 18 && peak_buffered <= kMaxMessageBytes + 4 + 16384);
+        }
+        {   // a server that drops a flooder closes the connection and keeps the object: what the flooder had sent and nobody read is let go of at once, not held until the room ends
+            auto listener = TcpListener::listen(0, true);
+            ASSERT_TRUE(listener != nullptr);
+            RawFlooder flood(listener->port(), 1000000);
+            ASSERT_TRUE(flood.sock >= 0);
+            std::unique_ptr<TcpConnection> srv;
+            for (int i = 0; i < 2000 && !srv; ++i) {
+                srv = listener->accept();
+                if (!srv) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            ASSERT_TRUE(srv != nullptr);
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            std::vector<uint8_t> got;
+            ASSERT_TRUE(srv->poll(got));                                        // one poll: the inbox fills up to its bound
+            ASSERT_TRUE(srv->inbox() >= 2048);
+            srv->close();
+            ASSERT_EQ(srv->inbox(), size_t{0});
+            ASSERT_FALSE(srv->poll(got));
+            ASSERT_EQ(srv->state(), Connection::State::Closed);
+        }
+        {   // what a PEER sent before it closed is still delivered (a close that was seen, not made): N3.2, here with a few thousand messages
+            Pair p;
+            ASSERT_TRUE(make_pair(p));
+            for (uint32_t i = 0; i < 3000; ++i) ASSERT_TRUE(p.client->send({static_cast<uint8_t>(i & 0xFF), static_cast<uint8_t>((i >> 8) & 0xFF)}));
+            for (int i = 0; i < 50 && p.client->backlog() > 0; ++i) {
+                std::vector<uint8_t> dummy;
+                p.client->poll(dummy);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            p.client->close();
+            uint32_t n = 0;
+            std::vector<uint8_t> got;
+            for (int guard = 0; guard < 20000 && n < 3000; ++guard) {                 // (a pass that takes a message is not a pass that waits)
+                if (p.server->poll(got)) {
+                    ASSERT_TRUE(got.size() == 2 && got[0] == static_cast<uint8_t>(n & 0xFF) && got[1] == static_cast<uint8_t>((n >> 8) & 0xFF));
+                    ++n;
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            }
+            ASSERT_EQ(n, 3000u);
+        }
+    } TEST_END();
+#endif
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

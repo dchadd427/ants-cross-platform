@@ -184,6 +184,16 @@ public:
     void quick_help_release(int32_t x, int32_t y);
     void quick_help_key(SDL_Keycode sym);
     const ScreenButton& quick_help_start_button() const noexcept { return quick_help_start_; }
+    /// A machine that joined a room (a server's room: its first player is the leader, whose START starts the match of everybody) takes the rest of the gesture that closed the quick
+    /// help away from the setup screen. START! of the quick help lies under the setup screen's START, so a double click on START! has a second click that would press the new
+    /// START. A left press that continues the click is swallowed (the screen never sees it; the release of a press that began on the quick help then finds nothing pressed, as it
+    /// always does: the new screen's buttons start fresh): one that SDL counts as part of the sequence (`clicks` above 1), and one that comes within SDL's double-click time
+    /// (kDoubleClickMs) of the click that closed the quick help, because SDL gives up the count when the pointer moved more than a pixel between the clicks, which a hand does.
+    /// A press after that time that SDL counts as a first click (`clicks` 1) begins a new sequence: it is the screen's, and it ends the rule. (The held key that closed the quick
+    /// help is the screen's business: the leader's START ignores a key repeat, see MapSelectScreen::handle_key_down.) The original's own screens, the local game and a LAN host, are
+    /// not touched: its window class has no double-click messages, so its second click was a press like any other.
+    static constexpr uint32_t kDoubleClickMs = 500;
+    bool closing_click_pending() const noexcept { return closing_click_pending_; }
 
     void handle_key_down(const SDL_KeyboardEvent& key);
     void handle_mouse_motion(const SDL_MouseMotionEvent& motion);
@@ -296,10 +306,15 @@ private:
     void play_startup_sound();
     void render_loading_screen();
     void render_quick_help_screen();
+    void close_quick_help(bool by_click);                  // the quick help is over (a click on START! or a key): its button is let go of, the setup screen follows
+    bool swallow_closing_click(uint8_t clicks, uint32_t timestamp_ms);   // a left press on the setup screen (SDL's count and time of it): is it the rest of the click that closed the quick help?
+    bool joined_a_room() const noexcept { return net_ != nullptr && !net_->is_host(); }   // (stable from the start: the room view of the screen follows the first Room message)
 
     // Intro & Loading state
     uint32_t intro_ticks_{0};
     ScreenButton quick_help_start_{ButtonRect{529, 437, 98, 27}, ButtonRect{528, 438, 97, 24}};   // START!: the pictures qh_start1 / 2 and qh_start3 (the hit test is the rectangle of the picture that shows)
+    bool closing_click_pending_{false};                    // the quick help was closed by a click, on a machine that joined a room: the rest of that click sequence is not for the screen
+    uint32_t closing_click_ms_{0};                         // ... closed at this time (SDL's ticks)
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_frame_time_{0};

@@ -128,8 +128,12 @@ public:
     void handle_mouse_down(int32_t screen_x, int32_t screen_y, uint8_t button);
     void handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_t button);
     void handle_mouse_motion(int32_t screen_x, int32_t screen_y);
-    /// FUN_01014076: Up / Down step the map list (wrapping), Enter, S and s start, Q, q, X and x leave, every other key does nothing (Esc included)
-    void handle_key_down(SDL_Keycode key);
+    /// FUN_01014076: Up / Down step the map list (wrapping), Enter, S and s start, Q, q, X and x leave, every other key does nothing (Esc included). `repeat` is the auto-repeat
+    /// of a held key (SDL_KeyboardEvent::repeat). The original does not tell a repeat from a press (its key translation, FUN_01031bbd, never reads the repeat bit of a key message;
+    /// the input queue only thins them to one per 50 ms), so on its own screens (the local game, a LAN host) a repeat acts like a press. The LEADER of a server's room, whose
+    /// START starts the match of every player there, ignores the repeat of START (Enter, the keypad's Enter, S, s): a key that closed the quick help and is still held must not
+    /// press the new screen's START. Every other key acts on a repeat everywhere (Up and Down scroll the list while they are held).
+    void handle_key_down(SDL_Keycode key, bool repeat = false);
 
     void render(IRenderer& renderer, const ants::assets::AssetArchive& archive);
 

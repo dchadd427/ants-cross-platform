@@ -2085,6 +2085,92 @@ void test_leader_screen(const assets::AssetArchive& arc) {
         click(bare, MS::BTN_START_X + 5, MS::BTN_START_Y + 5);
         check(!bare.is_locked(), "leader: START without a callback does nothing at all");
     }
+    {   // a HELD key: the repeat of START (Enter, the keypad's Enter, S, s) does not ask; a press does; the other keys act on a repeat (Leave, Up and Down scroll the list while held)
+        MS h;
+        h.init();
+        MS::RoomView v;
+        v.networked = true;
+        v.is_host = false;
+        v.leader = true;
+        v.my_seat = 0;
+        v.seats[0] = {true, "Alice", MS::Thumb::Good};
+        v.seats[1] = {true, "Bob", MS::Thumb::Good};
+        v.map_file = "TINY.LVL";
+        h.set_room(v);
+        int asked = 0, left = 0;
+        h.set_on_request_start([&]() { ++asked; });
+        h.set_on_quit([&]() { ++left; });
+        for (const SDL_Keycode key : {SDLK_RETURN, SDLK_KP_ENTER, SDLK_s}) h.handle_key_down(key, true);
+        check(asked == 0, "leader: a held Enter, keypad Enter or S (the repeat of a key) does not ask: START needs a press");
+        for (const SDL_Keycode key : {SDLK_RETURN, SDLK_KP_ENTER, SDLK_s}) h.handle_key_down(key, false);
+        check(asked == 3, "leader: the press of each of them asks");
+        h.handle_key_down(SDLK_RETURN);                                             // (the default is a press)
+        check(asked == 4, "leader: handle_key_down(key) is a press");
+        h.handle_key_down(SDLK_RETURN, false);
+        for (int i = 0; i < 30; ++i) h.handle_key_down(SDLK_RETURN, true);          // the key is held down: one press, thirty repeats
+        check(asked == 5, "leader: a press and a key that stays down ask once");
+        h.handle_key_down(SDLK_x, true);
+        h.handle_key_down(SDLK_q, true);
+        check(left == 2, "leader: Leave (Q, X) acts on a repeat as on a press");
+        h.lock();                                                                   // (a locked screen asks nobody, with or without a repeat)
+        h.handle_key_down(SDLK_s, false);
+        check(asked == 5, "leader: a locked screen asks nobody");
+    }
+}
+
+// What the original's own setup screens do with a held key: the same as with a press. Its key translation (FUN_01031bbd) never reads the repeat bit of a key message, its input
+// queue admits one key event per 50 ms for a key (FUN_0103078d), and the screen's key handler (FUN_01014076) does not look at it either. So the repeat of START starts a local
+// game and a LAN host's match exactly as the press does, and Up and Down scroll while they are held; only the leader's screen of a server's room (the remake's) ignores it.
+void test_held_keys_on_original_screens() {
+    std::printf("[held keys] the original's setup screens act on a key repeat as on a press (only the leader's START ignores it)\n");
+    using MS = MapSelectScreen;
+    {   // the local screen
+        MS local;
+        local.init();
+        int started = 0;
+        local.set_on_start([&](const std::string&) { ++started; });
+        local.handle_key_down(SDLK_RETURN, true);
+        local.handle_key_down(SDLK_KP_ENTER, true);
+        local.handle_key_down(SDLK_s, true);
+        check(started == 3, "local screen: the repeat of Enter, the keypad's Enter and S starts the game, as the press does");
+        const int32_t index = local.get_selected_index();
+        local.handle_key_down(SDLK_DOWN, true);
+        local.handle_key_down(SDLK_DOWN, true);
+        check(local.get_selected_index() == (index + 2) % static_cast<int32_t>(local.get_maps().size()), "local screen: Down held steps the list on every repeat");
+    }
+    {   // a LAN host (a networked screen whose machine hosts)
+        MS host;
+        host.init();
+        MS::RoomView v;
+        v.networked = true;
+        v.is_host = true;
+        v.my_seat = 0;
+        v.seats[0] = {true, "Alice", MS::Thumb::Good};
+        host.set_room(v);
+        int started = 0;
+        host.set_on_start([&](const std::string&) { ++started; });
+        host.handle_key_down(SDLK_RETURN, true);
+        host.handle_key_down(SDLK_s, true);
+        check(started == 2, "LAN host: the repeat of START starts the match, as the press does");
+    }
+    {   // a guest of a server's room that is not its leader has no START at all, with or without a repeat
+        MS guest;
+        guest.init();
+        MS::RoomView v;
+        v.networked = true;
+        v.is_host = false;
+        v.leader = false;
+        v.my_seat = 1;
+        v.seats[0] = {true, "Alice", MS::Thumb::Good};
+        v.seats[1] = {true, "Bob", MS::Thumb::Good};
+        guest.set_room(v);
+        int started = 0, asked = 0;
+        guest.set_on_start([&](const std::string&) { ++started; });
+        guest.set_on_request_start([&]() { ++asked; });
+        guest.handle_key_down(SDLK_RETURN, true);
+        guest.handle_key_down(SDLK_RETURN, false);
+        check(started == 0 && asked == 0, "guest: no START, press or repeat");
+    }
 }
 
 // The original's button class tests the rectangle of the picture that shows (docs 5.52): the START! buttons of the quick help and of the setup screen, the zones
@@ -2863,6 +2949,7 @@ int main() {
     test_screens(arc);
     test_room_screen(arc);
     test_leader_screen(arc);
+    test_held_keys_on_original_screens();
     test_button_zones(arc);
     test_more_button_zones(arc);
     test_pedestal_chains(arc);

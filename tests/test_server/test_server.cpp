@@ -34,12 +34,16 @@
 #include <vector>
 
 #ifndef _WIN32
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
+#include <cstring>
 
 using namespace ants;
 using namespace ants::server;
@@ -231,6 +235,110 @@ RoomSpec spec_of(const std::string& code, uint8_t players = 2, const char* map =
     s.seed = 4242;
     return s;
 }
+
+#ifndef _WIN32
+// A raw client that is no game: it says Hello for a room and then writes frames of one message as fast as the kernel takes them, until a write fails or it is stopped. It never
+// reads, except in server_closed().
+struct FloodPeer {
+    int sock{-1};
+    std::thread thread;
+    std::atomic<bool> stop{false};
+
+    FloodPeer(uint16_t port, const std::string& room, const std::vector<uint8_t>& message) {
+        sock = ::socket(AF_INET, SOCK_STREAM, 0);
+        sockaddr_in a;
+        std::memset(&a, 0, sizeof(a));
+        a.sin_family = AF_INET;
+        a.sin_port = htons(port);
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (::connect(sock, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) {
+            ::close(sock);
+            sock = -1;
+            return;
+        }
+#ifdef SO_NOSIGPIPE
+        int one = 1;
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#endif
+        const auto frame = [](const std::vector<uint8_t>& m) {
+            std::vector<uint8_t> f;
+            const uint32_t n = static_cast<uint32_t>(m.size());
+            for (int i = 0; i < 4; ++i) f.push_back(static_cast<uint8_t>((n >> (8 * i)) & 0xFFu));
+            f.insert(f.end(), m.begin(), m.end());
+            return f;
+        };
+        net::HelloMsg hello;
+        hello.name = "Evil";
+        hello.room = room;
+        std::vector<uint8_t> first = frame(net::encode(hello));
+        std::vector<uint8_t> blob;
+        const std::vector<uint8_t> one_frame = frame(message);
+        for (int i = 0; i < 20000; ++i) blob.insert(blob.end(), one_frame.begin(), one_frame.end());
+        thread = std::thread([this, first, blob]() {
+#ifdef MSG_NOSIGNAL
+            const int flags = MSG_NOSIGNAL;
+#else
+            const int flags = 0;
+#endif
+            const auto write_all = [&](const std::vector<uint8_t>& data) {
+                size_t off = 0;
+                while (off < data.size() && !stop) {
+                    const auto n = ::send(sock, data.data() + off, data.size() - off, flags);
+                    if (n <= 0) return false;
+                    off += static_cast<size_t>(n);
+                }
+                return !stop;
+            };
+            if (!write_all(first)) return;
+            while (!stop) {
+                if (!write_all(blob)) return;                        // (a write to a connection that the server closed need not fail at once: see server_closed())
+            }
+        });
+    }
+    // What the server has sent so far, counted: the Pongs (a flooder that reads nothing would stall its own connection). Nothing here depends on a close being seen: a connection
+    // that the server closed while the peer kept writing can stay half open in the kernel for a long time (macOS shows it ESTABLISHED), the server has forgotten it.
+    void read_server(uint32_t& pongs) {
+        uint8_t buf[4096];
+        for (int i = 0; i < 1000; ++i) {
+            const auto n = ::recv(sock, buf, sizeof(buf), MSG_DONTWAIT);
+            if (n <= 0) break;
+            received.insert(received.end(), buf, buf + n);
+        }
+        size_t pos = 0;
+        while (received.size() - pos >= 4) {
+            const uint32_t len = static_cast<uint32_t>(received[pos]) | (static_cast<uint32_t>(received[pos + 1]) << 8) | (static_cast<uint32_t>(received[pos + 2]) << 16) |
+                                 (static_cast<uint32_t>(received[pos + 3]) << 24);
+            if (received.size() - pos - 4 < len) break;
+            if (len >= 1 && received[pos + 4] == static_cast<uint8_t>(net::MsgType::Pong)) ++pongs;
+            pos += 4 + len;
+        }
+        received.erase(received.begin(), received.begin() + static_cast<std::ptrdiff_t>(pos));
+    }
+    std::vector<uint8_t> received;
+    ~FloodPeer() {
+        stop = true;
+        if (sock >= 0) ::shutdown(sock, SHUT_RDWR);
+        if (thread.joinable()) thread.join();
+        if (sock >= 0) ::close(sock);
+    }
+};
+
+// CPU seconds (user and system) of this process so far, and the most memory it has held, in MB
+double process_cpu_seconds() {
+    rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+    return static_cast<double>(ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) + static_cast<double>(ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1.0e6;
+}
+double peak_memory_mb() {
+    rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+#ifdef __APPLE__
+    return static_cast<double>(ru.ru_maxrss) / (1024.0 * 1024.0);      // (bytes on macOS)
+#else
+    return static_cast<double>(ru.ru_maxrss) / 1024.0;                  // (kilobytes elsewhere)
+#endif
+}
+#endif
 
 std::string temp_dir_for(const char* tag) {
     const fs::path p = fs::temp_directory_path() / (std::string("ants_server_test_") + tag);
@@ -912,6 +1020,10 @@ void run_leader_tests() {
         ASSERT_EQ(s.joined, 2);                                                           // who is there
         ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bob" && s.names[2].empty() && s.names[3].empty());
         ASSERT_EQ(s.ignored_start_requests, 1u);                                          // (Ann's was honoured, not ignored)
+        for (int i = 0; i < 3; ++i) ann.end->send(net::encode(net::StartRequestMsg{}));   // the leader's second, third and fourth click cross the Start: the running match counts them too
+        w.run(500);
+        ASSERT_EQ(w.status("LEAD-1").ignored_start_requests, 4u);
+        ASSERT_TRUE(w.status("LEAD-1").state == RoomState::Running && ann.session != nullptr && !ann.lost);
         ASSERT_TRUE(ann.session != nullptr && bob.session != nullptr);
         ASSERT_TRUE(ann.sim.roster_mask() == 0x03 && bob.sim.roster_mask() == 0x03);      // the roster is the seats that are taken
         Client& late = w.connect("Late", "LEAD-1");                                      // a running match takes nobody new
@@ -1368,6 +1480,112 @@ void run_socket_tests() {
         }
         ASSERT_TRUE(compared);
     } TEST_END();
+
+#ifndef _WIN32
+    TEST_CASE("S3.32 Over Real Sockets: A Raw Client That Floods The Server With Valid Messages (StartRequests, Pings) Is Dropped Within Two Seconds; The Server Does Not Grow, Never Stalls, Falls Back To Idle, And A Match In Another Room Keeps Its Clock Of 20 Ticks A Second") {
+        std::signal(SIGPIPE, SIG_IGN);
+        for (const std::string kind : {"startreq", "ping"}) {
+            RoomManager mgr{MapStore(maps_dir())};
+            auto listener = net::TcpListener::listen(0, true);
+            ASSERT_TRUE(listener != nullptr);
+            const auto t0 = std::chrono::steady_clock::now();
+            const auto clock_ms = [&]() { return 1000u + static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count()); };
+            uint32_t now = clock_ms();
+            ASSERT_TRUE(mgr.create_room(spec_of("VICTIM", 2), now).ok);
+            ASSERT_TRUE(mgr.create_room(spec_of("FLOOD", 4), now).ok);
+            std::vector<std::unique_ptr<Client>> clients;
+            std::vector<std::unique_ptr<net::TcpConnection>> links;
+            for (const char* name : {"Ann", "Bob"}) {
+                links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
+                ASSERT_TRUE(links.back() != nullptr);
+                clients.push_back(std::make_unique<Client>());
+                clients.back()->name = name;
+                clients.back()->room = "VICTIM";
+                clients.back()->start(links.back().get(), 91u);
+            }
+            double max_iteration_ms = 0;
+            const auto pump = [&]() {                                                   // the server's main loop: one pass, then the 2 ms nap of ants_server
+                const auto begin = std::chrono::steady_clock::now();
+                now = clock_ms();
+                for (int k = 0; k < 4; ++k) {
+                    auto c = listener->accept();
+                    if (!c) break;
+                    mgr.add_connection(std::move(c), "127.0.0.1", now);
+                }
+                mgr.update(now);
+                for (auto& c : clients) c->update(now, maps_dir());
+                max_iteration_ms = std::max(max_iteration_ms, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin).count());
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            };
+            const auto ticks_of_victim = [&]() {
+                RoomStatus v;
+                mgr.status("VICTIM", v, now);
+                return v.ticks;
+            };
+            RoomStatus s;
+            for (int i = 0; i < 4000; ++i) {
+                pump();
+                mgr.status("VICTIM", s, now);
+                if (s.state == RoomState::Running && s.ticks > 60) break;
+            }
+            ASSERT_TRUE(s.state == RoomState::Running && s.ticks > 60);
+            // the clock of the victim's referee without a flood: 20 ticks a second
+            uint32_t ticks_a = ticks_of_victim();
+            const auto timer_a = std::chrono::steady_clock::now();
+            while (std::chrono::steady_clock::now() - timer_a < std::chrono::milliseconds(1500)) pump();
+            const double quiet_rate = (ticks_of_victim() - ticks_a) / std::chrono::duration<double>(std::chrono::steady_clock::now() - timer_a).count();
+            ASSERT_TRUE(quiet_rate > 17.0 && quiet_rate < 23.0);
+            // the flood: a raw client in the other room
+            max_iteration_ms = 0;
+            const double memory_before = peak_memory_mb();
+            ticks_a = ticks_of_victim();
+            const auto timer_b = std::chrono::steady_clock::now();
+            const std::vector<uint8_t> message = kind == "startreq" ? net::encode(net::StartRequestMsg{}) : net::encode_ping(net::PingMsg{1, 0});
+            FloodPeer flood(listener->port(), "FLOOD", message);
+            ASSERT_TRUE(flood.sock >= 0);
+            double dropped_after = -1.0;                                                // when the room lost the flooder it had seated, seconds after the flood began
+            bool seated = false;
+            uint32_t pongs = 0;
+            while (std::chrono::steady_clock::now() - timer_b < std::chrono::milliseconds(2500)) {       // (a fixed window: the flooder is gone long before it ends)
+                pump();
+                flood.read_server(pongs);
+                RoomStatus r;
+                mgr.status("FLOOD", r, now);
+                seated = seated || r.joined > 0;
+                if (seated && r.joined == 0 && dropped_after < 0.0) dropped_after = std::chrono::duration<double>(std::chrono::steady_clock::now() - timer_b).count();
+            }
+            const double flood_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - timer_b).count();
+            ASSERT_EQ(mgr.connections_refused(), uint64_t{0});                          // (the flooder's Hello was taken: it had a seat)
+            if (kind == "ping") {
+                // the pings need at least 16 updates (64 of a connection per update) to use up the budget, so the seat is seen, and then the drop: within two seconds
+                ASSERT_TRUE(seated);
+                ASSERT_TRUE(dropped_after >= 0.0 && dropped_after < 2.0);
+                ASSERT_TRUE(pongs >= net::kMessageBurst && pongs <= net::kMessageBurst + 300);        // a second's worth was answered, not the millions that were sent
+            }
+            const double flood_rate = (ticks_of_victim() - ticks_a) / flood_seconds;
+            // after the drop the loop has nothing to digest: it is idle again, the victim keeps its clock, and nothing grew
+            const double cpu_before = process_cpu_seconds();
+            const uint32_t ticks_c = ticks_of_victim();
+            const auto timer_c = std::chrono::steady_clock::now();
+            while (std::chrono::steady_clock::now() - timer_c < std::chrono::milliseconds(1500)) pump();
+            const double idle_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - timer_c).count();
+            const double idle_cpu = (process_cpu_seconds() - cpu_before) / idle_seconds;
+            const double after_rate = (ticks_of_victim() - ticks_c) / idle_seconds;
+            const double memory_growth = peak_memory_mb() - memory_before;
+            RoomStatus f;
+            ASSERT_TRUE(mgr.status("FLOOD", f, now));
+            ASSERT_TRUE(f.state == RoomState::Waiting && f.joined == 0);                // it left the room (a flooder's seat is free again)
+            ASSERT_EQ(f.ignored_start_requests, kind == "startreq" ? net::kIgnoredStartRequestsAllowed + 8u : 0u);   // it had a seat, and was out at its 24th request: the rest was not even read
+            ASSERT_TRUE(flood_rate > 16.0);                                             // the other room kept its clock while the flood lasted (the loop never stalled)
+            ASSERT_TRUE(after_rate > 17.0 && after_rate < 23.0);
+            ASSERT_TRUE(max_iteration_ms < 400.0);                                      // no pass of the main loop took long, with the flood on
+            ASSERT_TRUE(idle_cpu < 0.5);                                                // the process does not stay busy digesting a backlog (it had one of gigabytes)
+            ASSERT_TRUE(memory_growth < 200.0);                                         // and did not grow by the flood (gigabytes, before the inbox was bounded)
+            ASSERT_TRUE(mgr.status("VICTIM", s, now) && s.state == RoomState::Running);
+            ASSERT_FALSE(clients[0]->session->desynced() || clients[1]->session->desynced());
+        }
+    } TEST_END();
+#endif
 }
 
 namespace {

@@ -140,6 +140,12 @@ void TcpConnection::close() {
         fd_ = -1;
     }
     if (state_ != State::Failed) state_ = State::Closed;
+    // This side closed: nobody will read what the peer had sent. A server keeps the object of a connection it dropped for as long as its room lives, so a flooder's backlog (up to the
+    // inbox bound) is let go of now. (What a PEER sent before it closed is still delivered: that is a close that was seen, not made.)
+    messages_.clear();
+    inbox_bytes_ = 0;
+    in_.clear();
+    in_.shrink_to_fit();
 }
 
 void TcpConnection::pump() {
@@ -178,9 +184,13 @@ void TcpConnection::pump() {
             return fail();
         }
     }
-    // read what is there (bounded per pump so that a flooding peer cannot stall the game)
+    // Read what is there. Bounded per pump so that a flooding peer cannot stall the game, and only while the game has room for what it reads: when half of the inbox is full
+    // (kMaxInboxMessages, kMaxInboxBytes) or a whole message is waiting unparsed, nothing is read until the game has taken what is here. The bytes stay in the kernel and TCP holds
+    // the sender back. (Every poll() used to read and parse up to 256 KB however few messages the game took, and the parsed messages piled up without a limit: one peer that sent
+    // tiny messages as fast as it could grew this process by gigabytes in seconds.)
     uint8_t buf[16384];
     for (int rounds = 0; rounds < 16; ++rounds) {
+        if (messages_.size() >= kMaxInboxMessages / 2 || inbox_bytes_ >= kMaxInboxBytes / 2 || in_.size() >= kMaxMessageBytes + 4) break;
         const auto n = ::recv(s, reinterpret_cast<char*>(buf), static_cast<iolen_t>(sizeof(buf)), 0);
         if (n > 0) {
             in_.insert(in_.end(), buf, buf + static_cast<size_t>(n));
@@ -195,14 +205,15 @@ void TcpConnection::pump() {
             return fail();
         }
     }
-    // parse frames: u32 length, payload
+    // parse frames: u32 length, payload (as many as the inbox takes: the rest stays in in_, which is bounded above)
     size_t pos = 0;
-    while (in_.size() - pos >= 4) {
+    while (in_.size() - pos >= 4 && messages_.size() < kMaxInboxMessages && inbox_bytes_ < kMaxInboxBytes) {
         const uint32_t len = static_cast<uint32_t>(in_[pos]) | (static_cast<uint32_t>(in_[pos + 1]) << 8) | (static_cast<uint32_t>(in_[pos + 2]) << 16) |
                              (static_cast<uint32_t>(in_[pos + 3]) << 24);
         if (len > kMaxMessageBytes) return fail();                  // a hostile length: never allocate for it
         if (in_.size() - pos - 4 < len) break;                      // the rest has not arrived yet
         messages_.emplace_back(in_.begin() + static_cast<std::ptrdiff_t>(pos + 4), in_.begin() + static_cast<std::ptrdiff_t>(pos + 4 + len));
+        inbox_bytes_ += len;
         pos += 4 + len;
     }
     if (pos > 0) in_.erase(in_.begin(), in_.begin() + static_cast<std::ptrdiff_t>(pos));
@@ -231,6 +242,7 @@ bool TcpConnection::poll(std::vector<uint8_t>& message) {
     if (messages_.empty()) return false;
     message = std::move(messages_.front());
     messages_.pop_front();
+    inbox_bytes_ -= message.size();
     return true;
 }
 

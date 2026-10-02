@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "ants_net/flood.hpp"
 #include "ants_net/lockstep.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/sequencer.hpp"
@@ -55,6 +56,8 @@ public:
         uint32_t silence_timeout_ms{60000}; // a client that sends nothing for this long is dropped (the original's 60 s drop-out)
         uint32_t laggard_drop_ms{0};        // a seat that has held the match up this long (sealing stopped because it does not execute the turns) is dropped; 0 = never:
                                             // a game between friends waits for a slow machine, a dedicated server cannot let one seat hold a room for ever
+        uint32_t message_burst{kMessageBurst};                  // flood control (flood.hpp): the messages that one client may send, a token bucket; a message beyond it is not
+        uint32_t messages_per_second{kMessagesPerSecond};       // handled and is a violation
     };
 
     HostSession(sim::SimulationEngine& sim, Config config);
@@ -102,6 +105,12 @@ public:
     uint8_t laggard() const noexcept { return sequencer_.laggard(); }
     bool client_present(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS && clients_[player].present; }
     uint32_t violations(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? clients_[player].violations : 0; }
+    /// The StartRequests that reached the running match of a dedicated server (the leader's second click crossed the Start): heard and ignored, all clients together
+    uint32_t ignored_start_requests() const noexcept {
+        uint32_t n = 0;
+        for (const Client& c : clients_) n += c.ignored_start_requests;
+        return n;
+    }
     LockstepRunner& runner() noexcept { return *runner_; }
     uint8_t epoch() const noexcept { return cfg_.epoch; }
     uint8_t host_player() const noexcept { return cfg_.host_player; }
@@ -112,6 +121,8 @@ private:
         bool present{false};
         uint32_t violations{0};
         uint32_t last_heard_ms{0};          // when the client last sent anything
+        MessageBudget talk;                 // flood control: every message that the client sends takes one from it
+        uint32_t ignored_start_requests{0}; // its StartRequests that arrived in the running match (the first kIgnoredStartRequestsAllowed are free)
     };
     void poll_clients();
     void handle_message(uint8_t player, const std::vector<uint8_t>& msg);
