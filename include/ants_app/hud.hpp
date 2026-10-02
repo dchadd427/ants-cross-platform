@@ -225,6 +225,13 @@ public:
     }
     /// The left button is captured by the map (a rubber band), the minimap or a button (`[5534]` != 0): no edge scrolling then.
     bool is_input_captured() const noexcept;
+    /// The step of the edge scroll at a pointer position (edge_scroll.hpp), in SCREEN pixels, for the camera's zoom: the same distance on the screen at every zoom (the camera moves by
+    /// step / zoom world pixels). `rate` is the scroll setting 0 .. 99; the map is map_tiles_w x map_tiles_h tiles. At the zoom 1 it is edge_scroll_step with the camera's world origin.
+    EdgeScroll edge_step(const ViewportCamera& camera, int32_t x, int32_t y, int32_t rate, int32_t map_tiles_w, int32_t map_tiles_h) const noexcept;
+    /// May the wheel or the middle button change the zoom of the view now? Not while a dialog or a page is open (options, quick help, quit, alliance, "get ready"), not while a press holds
+    /// the mouse (a rubber band, the minimap, a button, the right button, the chat log's drag): a zoom in the middle of a drag would move the world under it. The position is the
+    /// caller's (over_map: the pointer must be over the map view, not over a panel).
+    bool view_zoom_allowed() const noexcept { return !is_modal_open() && !is_input_captured() && !chat_dragging_; }
 
     // Status line (Ants.exe PostStatus): one slot, 5 s life, flash flag; see status_line.hpp
     void post_status(const std::string& text, bool flash = false) { status_line_.post(text, flash); }

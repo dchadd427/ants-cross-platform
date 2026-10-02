@@ -41,6 +41,7 @@
 #include "ants_app/room_chat.hpp"
 #include "ants_app/setup_layout.hpp"
 #include "ants_app/screen_layout.hpp"
+#include "ants_app/view_zoom.hpp"
 #include "ants_app/window_layout.hpp"
 
 namespace ants::app {
@@ -69,6 +70,11 @@ struct ApplicationConfig {
     /// by hand keeps the 4:3 that it is built with. `aspect_given` is true when the command line said it (the settings key then does not count).
     Aspect aspect{Aspect::Classic4x3};
     bool aspect_given{false};
+    /// --zoom 0.5 | 1 | 2 (the settings key `zoom` when the command line does not say): the zoom of the map view that a match starts with (view_zoom.hpp; the mouse wheel changes it and the
+    /// new level is remembered). 1 is the original's picture. In a match of the network a zoom-out is not allowed (it would show more of the map than the other players see): the match
+    /// starts at 1 then, and the remembered level stays for the next local game. `zoom_given` is true when the command line said it (the settings key then does not count).
+    float zoom{zoom::kNormal};
+    bool zoom_given{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -224,6 +230,25 @@ public:
     Aspect aspect() const noexcept { return aspect_; }
     CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
     const LayoutRect& picture() const noexcept { return picture_; }
+    /// THE ZOOM OF THE MAP VIEW (milestone M4; view_zoom.hpp, Renderer::zoomed): one of 0.5, 1 (the original's picture) and 2. The mouse wheel up zooms in, down zooms out, towards the pointer
+    /// (the world point under it stays under it as far as the map's edges allow); the middle button goes back to 1. They act only over the map view, and not while a dialog or a page is
+    /// open (options, quick help, quit, alliance, "get ready"), a rubber band or a button holds the mouse, or the results are up (`view_zoom_allowed`). The level is remembered in the
+    /// settings (key `zoom`). THE API THAT OTHER INPUT USES (a touch screen's pinch calls it): `zoom_levels()` says what is offered now, `set_zoom(level, anchor)` goes to one of them (the anchor is a
+    /// point of the picture, the pointer's own coordinates: the screen pixel that keeps its world point), `step_zoom(direction, anchor)` goes one level in or out.
+    /// FAIRNESS: in a match of the network (a server's room or a LAN game, host or guest) the zoom-out is not offered (the level 0.5 shows more of the map than the others see; zooming in is always
+    /// fair); a local game and a game with bots offer it. A level is also not offered when the level above it already shows the whole map (it would add only black).
+    float zoom() const noexcept { return renderer_ ? renderer_->camera().zoom : zoom::kNormal; }
+    zoom::Limits zoom_limits() const noexcept { return network_active() ? zoom::Limits::no_zoom_out() : zoom::Limits::any(); }
+    std::vector<float> zoom_levels() const;
+    bool set_zoom(float level, int32_t anchor_x, int32_t anchor_y);
+    bool step_zoom(int direction, int32_t anchor_x, int32_t anchor_y);
+    /// Is the pointer position one where the wheel and the middle button may zoom now? (A match is on, over the map view, no dialog, no captured press, no results screen.)
+    bool view_zoom_allowed(int32_t x, int32_t y) const;
+    /// The wheel (SDL_MOUSEWHEEL): the precise deltas add up to whole steps (zoom::WheelAccumulator), one step is one level; public for the tests
+    void handle_mouse_wheel(const SDL_MouseWheelEvent& wheel);
+    /// The level that the player chose last (what the next match starts with when it is offered); the match's own level is `zoom()`
+    float remembered_zoom() const noexcept { return zoom_wanted_; }
+
     /// Alt+Enter (native builds): the window leaves fullscreen or enters it (SDL's desktop fullscreen, the same as --fullscreen); true when it is fullscreen afterwards. The web
     /// build has the page's own button and never does; a macOS fullscreen Space (the green button) is left with the operating system's own controls.
     bool toggle_fullscreen();
@@ -398,6 +423,8 @@ private:
     ApplicationConfig config_{};
     ScreenLayout layout_{ScreenLayout::classic()};       // the picture that the match screen is: the HUD, the renderer's view, the edge scroll, the pointer's limits
     Aspect aspect_{Aspect::Classic4x3};
+    float zoom_wanted_{zoom::kNormal};                    // the level the player chose last: remembered in the settings (key `zoom`), what the next match starts with
+    zoom::WheelAccumulator wheel_;                        // the wheel's precise deltas
     LayoutRect picture_{0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight};     // where the picture that is on screen sits in the canvas (picture_for_state: the match is the whole canvas, a page of the original's is centred)
     AppState state_{AppState::MapSelect};
     bool is_running_{false};
@@ -526,6 +553,8 @@ private:
     void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
+    void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered
+    void apply_match_zoom();                              // a match starts: the camera takes the remembered level if the kind of match and the map offer it, else 1
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile

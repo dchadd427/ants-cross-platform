@@ -11,11 +11,17 @@
 // Every function exists twice: one for the original's 640 x 480 screen (the signatures that were always here) and one that takes a ScreenLayout (screen_layout.hpp), which
 // gives the picture's size, the view's rectangle and the minimap's: the strips run along the edges of the picture, the quiet area is its middle, the view and the square around
 // the pointer have the view's size. The classic overloads are the layout versions with ScreenLayout::classic() and give exactly what they always gave.
+//
+// THE ZOOM (view_zoom.hpp). Every number of the original's model is in screen pixels (the 12 and 5 px strips, the step of "scroll rate + 10" around the target point, the square of half
+// the view around a point of the minimap), so at a zoom the same model runs in screen pixels with the origin and the map scaled by the zoom: the `_px` functions take the view's origin
+// and the map's size in SCREEN pixels at the zoom (world pixels times the zoom; the camera gives them, ViewportCamera::origin_screen_x) and return a step in screen pixels, which is the
+// same distance on the screen at every zoom (the camera moves by step / zoom world pixels). At the zoom 1 they are the functions that were always here, whose `tiles` forms call them.
 
 #include <algorithm>
 #include <cstdint>
 
 #include "ants_app/screen_layout.hpp"
+#include "ants_app/view_zoom.hpp"
 
 namespace ants::app {
 
@@ -80,15 +86,13 @@ inline void scroll_to_show(int32_t l, int32_t t, int32_t r, int32_t b, int32_t o
 
 }  // namespace detail
 
-/// One input tick of the edge scrolling. (mx, my) is the pointer on the picture, `rate` the scroll setting 0..99, (ox, oy) the view origin in map pixels and the map
-/// `map_tiles_w` x `map_tiles_h` tiles. A strip only counts when the view can move that way (CanScroll 0x10270d2); only the 5 px inner strip of the same index scrolls.
-inline EdgeScroll edge_scroll_step(int32_t mx, int32_t my, int32_t rate, int32_t ox, int32_t oy, int32_t map_tiles_w, int32_t map_tiles_h, const ScreenLayout& layout) {
+/// One input tick of the edge scrolling. (mx, my) is the pointer on the picture, `rate` the scroll setting 0..99, (ox, oy) the view origin and map_w x map_h the map, both in SCREEN
+/// pixels (the world's own pixels at the zoom 1). A strip only counts when the view can move that way (CanScroll 0x10270d2); only the 5 px inner strip of the same index scrolls.
+inline EdgeScroll edge_scroll_step_px(int32_t mx, int32_t my, int32_t rate, int32_t ox, int32_t oy, int32_t map_w, int32_t map_h, const ScreenLayout& layout) {
     using namespace detail;
     const int32_t sw = layout.width;
     const int32_t sh = layout.height;
     const LayoutRect view = layout.view();
-    const int32_t map_w = map_tiles_w * 32;
-    const int32_t map_h = map_tiles_h * 32;
     const int32_t max_x = map_w - view.w;
     const int32_t max_y = map_h - view.h;
     if (mx >= kQuietMargin && mx < sw - kQuietMargin && my >= kQuietMargin && my < sh - kQuietMargin) return EdgeScroll{};      // the pre-test of 0x1026b02: inside the quiet area
@@ -116,19 +120,29 @@ inline EdgeScroll edge_scroll_step(int32_t mx, int32_t my, int32_t rate, int32_t
     return EdgeScroll{};
 }
 
+/// ... for a map of map_tiles_w x map_tiles_h tiles at the zoom 1 (the view origin (ox, oy) in map pixels)
+inline EdgeScroll edge_scroll_step(int32_t mx, int32_t my, int32_t rate, int32_t ox, int32_t oy, int32_t map_tiles_w, int32_t map_tiles_h, const ScreenLayout& layout) {
+    return edge_scroll_step_px(mx, my, rate, ox, oy, map_tiles_w * 32, map_tiles_h * 32, layout);
+}
+
 /// ... on the original's 640 x 480 screen
 inline EdgeScroll edge_scroll_step(int32_t mx, int32_t my, int32_t rate, int32_t ox, int32_t oy, int32_t map_tiles_w, int32_t map_tiles_h) {
     return edge_scroll_step(mx, my, rate, ox, oy, map_tiles_w, map_tiles_h, ScreenLayout::classic());
 }
 
-/// The world point under the pointer on the minimap (the layout's minimap rect, (480, 35) - (599, 126) in the original, FUN_01009850): the offset in the rect times
-/// map pixels / 119 and / 91, truncated, without a clamp.
-inline void minimap_point(int32_t px, int32_t py, int32_t map_tiles_w, int32_t map_tiles_h, int32_t& wx, int32_t& wy, const ScreenLayout& layout) {
+/// The point under the pointer on the minimap (the layout's minimap rect, (480, 35) - (599, 126) in the original, FUN_01009850): the offset in the rect times map pixels / 119 and / 91,
+/// truncated, without a clamp. The map's size is in whatever pixels the caller works in (world pixels; screen pixels at a zoom).
+inline void minimap_point_px(int32_t px, int32_t py, int32_t map_w, int32_t map_h, int32_t& wx, int32_t& wy, const ScreenLayout& layout) {
     const LayoutRect mini = layout.minimap();
-    const double scale_x = static_cast<double>(map_tiles_w * 32) / static_cast<double>(mini.w);
-    const double scale_y = static_cast<double>(map_tiles_h * 32) / static_cast<double>(mini.h);
+    const double scale_x = static_cast<double>(map_w) / static_cast<double>(mini.w);
+    const double scale_y = static_cast<double>(map_h) / static_cast<double>(mini.h);
     wx = static_cast<int32_t>((px - mini.x) * scale_x);
     wy = static_cast<int32_t>((py - mini.y) * scale_y);
+}
+
+/// The world point under the pointer on the minimap, for a map of map_tiles_w x map_tiles_h tiles
+inline void minimap_point(int32_t px, int32_t py, int32_t map_tiles_w, int32_t map_tiles_h, int32_t& wx, int32_t& wy, const ScreenLayout& layout) {
+    minimap_point_px(px, py, map_tiles_w * 32, map_tiles_h * 32, wx, wy, layout);
 }
 
 /// ... on the original's screen
@@ -137,16 +151,15 @@ inline void minimap_point(int32_t px, int32_t py, int32_t map_tiles_w, int32_t m
 }
 
 /// One input tick with the left button held on the minimap: the view scrolls to show the square (221, 220) (half the view's size each way) around the point,
-/// clipped to the map (ScrollToShow), so it ends up centred on the point and clamped at the map's edges.
-inline EdgeScroll minimap_scroll_step(int32_t px, int32_t py, int32_t ox, int32_t oy, int32_t map_tiles_w, int32_t map_tiles_h, const ScreenLayout& layout) {
+/// clipped to the map (ScrollToShow), so it ends up centred on the point and clamped at the map's edges. The origin and the map are in screen pixels (see the top of this file):
+/// the square is half the VIEW, so at a zoom the view ends up centred on the point whatever the zoom is.
+inline EdgeScroll minimap_scroll_step_px(int32_t px, int32_t py, int32_t ox, int32_t oy, int32_t map_w, int32_t map_h, const ScreenLayout& layout) {
     int32_t wx = 0;
     int32_t wy = 0;
-    minimap_point(px, py, map_tiles_w, map_tiles_h, wx, wy, layout);
+    minimap_point_px(px, py, map_w, map_h, wx, wy, layout);
     const LayoutRect view = layout.view();
     const int32_t half_w = view.w / 2;
     const int32_t half_h = view.h / 2;
-    const int32_t map_w = map_tiles_w * 32;
-    const int32_t map_h = map_tiles_h * 32;
     const int32_t l = std::max(wx - half_w, 0);
     const int32_t t = std::max(wy - half_h, 0);
     const int32_t r = std::min(wx + half_w, map_w);
@@ -154,6 +167,11 @@ inline EdgeScroll minimap_scroll_step(int32_t px, int32_t py, int32_t ox, int32_
     EdgeScroll out;
     detail::scroll_to_show(l, t, r, b, ox, oy, out.dx, out.dy, view.w, view.h);
     return out;
+}
+
+/// ... for a map of map_tiles_w x map_tiles_h tiles at the zoom 1
+inline EdgeScroll minimap_scroll_step(int32_t px, int32_t py, int32_t ox, int32_t oy, int32_t map_tiles_w, int32_t map_tiles_h, const ScreenLayout& layout) {
+    return minimap_scroll_step_px(px, py, ox, oy, map_tiles_w * 32, map_tiles_h * 32, layout);
 }
 
 /// ... on the original's screen
@@ -164,8 +182,9 @@ inline EdgeScroll minimap_scroll_step(int32_t px, int32_t py, int32_t ox, int32_
 /// The view at the start of a match (the end of the HUD's constructor, Ants.exe 0x100e458 - 0x100e4b1 into FUN_01027197): the fresh view, whose origin is (0, 0), scrolls just far enough
 /// to show the square (ax - 160, ay - 160) - (ax + 192, ay + 192) around the pixel centre (ax, ay) = (32 tx + 16, 32 ty + 16) of the ANCHOR tile (tx, ty) of the local team's hill
 /// (the tile that the level's layer 2 flags as the hill object's anchor: one tile in from the corner of the 4 x 4 footprint), clipped to the map. It does not centre the hill: the
-/// view only moves right / down until the square's right / bottom edge is in view. Returns the origin. (The square is the same in every layout; only the view's size differs.)
-inline void start_view_origin(int32_t anchor_tx, int32_t anchor_ty, int32_t map_tiles_w, int32_t map_tiles_h, int32_t& ox, int32_t& oy, const ScreenLayout& layout) {
+/// view only moves right / down until the square's right / bottom edge is in view. Returns the origin (world pixels). The square is the same in every layout; only the world that the view
+/// shows differs: the view's size over the zoom (`zoom`, view_zoom.hpp: the square is in world pixels and the hill stays in view at every zoom).
+inline void start_view_origin(int32_t anchor_tx, int32_t anchor_ty, int32_t map_tiles_w, int32_t map_tiles_h, int32_t& ox, int32_t& oy, const ScreenLayout& layout, float zoom) {
     const int32_t ax = anchor_tx * 32 + 16;
     const int32_t ay = anchor_ty * 32 + 16;
     const int32_t l = std::max(ax - 160, 0);
@@ -173,7 +192,12 @@ inline void start_view_origin(int32_t anchor_tx, int32_t anchor_ty, int32_t map_
     const int32_t r = std::min(ax + 192, map_tiles_w * 32);
     const int32_t b = std::min(ay + 192, map_tiles_h * 32);
     const LayoutRect view = layout.view();
-    detail::scroll_to_show(l, t, r, b, 0, 0, ox, oy, view.w, view.h);
+    detail::scroll_to_show(l, t, r, b, 0, 0, ox, oy, zoom::visible(view.w, zoom), zoom::visible(view.h, zoom));
+}
+
+/// ... at the zoom 1
+inline void start_view_origin(int32_t anchor_tx, int32_t anchor_ty, int32_t map_tiles_w, int32_t map_tiles_h, int32_t& ox, int32_t& oy, const ScreenLayout& layout) {
+    start_view_origin(anchor_tx, anchor_ty, map_tiles_w, map_tiles_h, ox, oy, layout, zoom::kNormal);
 }
 
 /// ... on the original's screen

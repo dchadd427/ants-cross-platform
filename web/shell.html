@@ -802,7 +802,8 @@
                         <li><strong>Edge scrolling:</strong>&#8197;move the pointer to the edge of the map: an arrow shows and the map scrolls. Options &rarr; Map Scroll Rate sets the speed.</li>
                         <li><strong>Minimap:</strong>&#8197;hold the left button on it and the view follows the pointer.</li>
                         <li><strong>Jump to an ant:</strong>&#8197;<kbd>Ctrl</kbd>+<kbd>N</kbd>&#8197;/&#8197;<kbd>Ctrl</kbd>+<kbd>P</kbd>&#8197;select the next / previous ant and scroll to it;&#8197;<kbd>Ctrl</kbd>+<kbd>H</kbd>&#8197;selects your anthill.</li>
-                        <li class="note">As in the original, nothing scrolls with the keyboard or the wheel: arrows, WASD and the wheel do nothing.</li>
+                        <li><strong>Zoom:</strong>&#8197;the mouse wheel (a trackpad's two-finger scroll or pinch) over the map zooms in and out towards the pointer: 0.5&times;, 1&times; (the original's picture) and 2&times;; the middle button goes back to 1&times;. In an online match you can zoom in but not out: it would show more of the map than the other players see.</li>
+                        <li class="note">As in the original, nothing scrolls with the keyboard: arrows and WASD do nothing.</li>
                     </ul>
                 </div>
             </details>
@@ -1552,6 +1553,26 @@
         // Ctrl+P prints, Ctrl+H opens the history, Ctrl+A selects the page, F1 opens the browser's help, the arrows and Page Up / Down scroll the page) are switched off.
         // The game still receives every key: only the default action is cancelled (never for Space or letters: they type into the chat box). Keys that a
         // browser reserves (Ctrl+N, Ctrl+T, Ctrl+W) cannot be reached.
+        // The wheel and a trackpad's pinch (the browser's ctrl + wheel) over the game zoom the GAME and never scroll or zoom the page. SDL's own listener takes the wheel for the game (the
+        // deltas arrive as its notches); this one is not passive, so it can cancel the page's own reaction (the scroll, and the browser's page zoom of ctrl + wheel) in every browser. Only over
+        // the game's canvas: elsewhere on the page the browser behaves as usual. Safari reports a pinch as gesture events: they are turned into wheel events (a pinch of 25 % is one notch,
+        // the unit of the zoom's levels) for the game, and cancelled for the page.
+        canvas.addEventListener('wheel', function(e) { e.preventDefault(); }, {passive: false});
+        (function() {
+            var lastScale = 1;
+            canvas.addEventListener('gesturestart', function(e) { e.preventDefault(); lastScale = e.scale || 1; }, {passive: false});
+            canvas.addEventListener('gesturechange', function(e) {
+                e.preventDefault();
+                var scale = e.scale || 1;
+                var notches = Math.log(scale / lastScale) / Math.log(1.25);
+                lastScale = scale;
+                if (notches && typeof WheelEvent === 'function') {
+                    canvas.dispatchEvent(new WheelEvent('wheel', {deltaY: -notches * 100, deltaMode: 0, ctrlKey: true, clientX: e.clientX, clientY: e.clientY, bubbles: true, cancelable: true}));
+                }
+            }, {passive: false});
+            canvas.addEventListener('gestureend', function(e) { e.preventDefault(); }, {passive: false});
+        })();
+
         window.addEventListener('keydown', function(e) {
             if (!isReadyToPlay) return;                                      // before the game is ready the page behaves as usual
             var key = (e.key || '').toLowerCase();

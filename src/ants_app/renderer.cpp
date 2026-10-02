@@ -121,30 +121,65 @@ static const Glyph5x7 FONT_5X7[95] = {
 // ============================================================================
 
 void ViewportCamera::center_on(int32_t world_px, int32_t world_py, uint32_t map_w, uint32_t map_h) {
-    x = static_cast<float>(world_px - viewport_w / 2);
-    y = static_cast<float>(world_py - viewport_h / 2);
+    if (zoom == zoom::kNormal) {
+        x = static_cast<float>(world_px - viewport_w / 2);
+        y = static_cast<float>(world_py - viewport_h / 2);
+    } else {                                                   // the middle of what the view shows at this zoom
+        x = static_cast<float>(static_cast<double>(world_px) - zoom::visible_exact(viewport_w, zoom) / 2.0);
+        y = static_cast<float>(static_cast<double>(world_py) - zoom::visible_exact(viewport_h, zoom) / 2.0);
+    }
     clamp_to_bounds(map_w, map_h);
 }
 
-// The view never shows beyond the map: the origin stays in [0, map - view]. A map that is smaller than the view on an axis has no such range (a 16 x 16 map is 512 pixels wide, the
-// 16:9 view is 762): the camera is fixed on that axis, at the origin that centres the map in the view when `centre_small_maps` (a negative one: the world pixel 0 is right of the
-// view's left edge; what the map does not cover stays the colour that the frame starts with, black) and at 0 otherwise
+// The view never shows beyond the map: the origin stays in [0, map - the world that the view shows]. A map that is smaller than that on an axis has no such range (a 16 x 16 map is 512
+// pixels wide, the 16:9 view is 762): the camera is fixed on that axis, at the origin that centres the map in the view when `centre_small_maps` (a negative one: the world pixel 0 is right
+// of the view's left edge; what the map does not cover stays the colour that the frame starts with, black) and at 0 otherwise. At the zoom 1 this is the camera's own arithmetic as it always
+// was; at another zoom the origin is put on the grid of one screen pixel (view_zoom.hpp) and held by the same rule over the world that the view shows then.
 void ViewportCamera::clamp_to_bounds(uint32_t map_w, uint32_t map_h) {
     const int32_t map_px_w = static_cast<int32_t>(map_w * TILE_SIZE);
     const int32_t map_px_h = static_cast<int32_t>(map_h * TILE_SIZE);
-    if (map_px_w > viewport_w) x = std::clamp(x, 0.0f, static_cast<float>(map_px_w - viewport_w));
-    else x = centre_small_maps ? static_cast<float>((map_px_w - viewport_w) / 2) : 0.0f;
-    if (map_px_h > viewport_h) y = std::clamp(y, 0.0f, static_cast<float>(map_px_h - viewport_h));
-    else y = centre_small_maps ? static_cast<float>((map_px_h - viewport_h) / 2) : 0.0f;
-    world_x = static_cast<int32_t>(x);
-    world_y = static_cast<int32_t>(y);
+    if (zoom == zoom::kNormal) {
+        if (map_px_w > viewport_w) x = std::clamp(x, 0.0f, static_cast<float>(map_px_w - viewport_w));
+        else x = centre_small_maps ? static_cast<float>((map_px_w - viewport_w) / 2) : 0.0f;
+        if (map_px_h > viewport_h) y = std::clamp(y, 0.0f, static_cast<float>(map_px_h - viewport_h));
+        else y = centre_small_maps ? static_cast<float>((map_px_h - viewport_h) / 2) : 0.0f;
+        world_x = static_cast<int32_t>(x);
+        world_y = static_cast<int32_t>(y);
+        return;
+    }
+    x = static_cast<float>(zoom::clamp_origin(zoom::snap(static_cast<double>(x), zoom), zoom, viewport_w, map_px_w, centre_small_maps));
+    y = static_cast<float>(zoom::clamp_origin(zoom::snap(static_cast<double>(y), zoom), zoom, viewport_h, map_px_h, centre_small_maps));
+    world_x = static_cast<int32_t>(std::floor(x));
+    world_y = static_cast<int32_t>(std::floor(y));
+}
+
+void ViewportCamera::set_zoom(float level, int32_t anchor_dx, int32_t anchor_dy, uint32_t map_w, uint32_t map_h) {
+    if (!zoom::is_level(level)) return;
+    zoom::Camera from;
+    from.x = static_cast<double>(zoom == zoom::kNormal ? static_cast<float>(world_x) : x);        // (at the zoom 1 the origin that the input code reads is world_x)
+    from.y = static_cast<double>(zoom == zoom::kNormal ? static_cast<float>(world_y) : y);
+    from.zoom = zoom;
+    const zoom::Camera to = zoom::zoomed(from, level, anchor_dx, anchor_dy, viewport_w, viewport_h, static_cast<int64_t>(map_w) * TILE_SIZE, static_cast<int64_t>(map_h) * TILE_SIZE, centre_small_maps);
+    zoom = level;
+    x = static_cast<float>(to.x);
+    y = static_cast<float>(to.y);
+    world_x = static_cast<int32_t>(std::floor(x));
+    world_y = static_cast<int32_t>(std::floor(y));
 }
 
 bool ViewportCamera::world_to_screen(int32_t wx, int32_t wy, int32_t& sx, int32_t& sy) const noexcept {
-    sx = view_x + (wx - static_cast<int32_t>(x));
-    sy = view_y + (wy - static_cast<int32_t>(y));
-    return (sx >= view_x - TILE_SIZE && sx <= view_x + viewport_w &&
-            sy >= view_y - TILE_SIZE && sy <= view_y + viewport_h);
+    if (zoom == zoom::kNormal) {
+        sx = view_x + (wx - static_cast<int32_t>(x));
+        sy = view_y + (wy - static_cast<int32_t>(y));
+        return (sx >= view_x - TILE_SIZE && sx <= view_x + viewport_w &&
+                sy >= view_y - TILE_SIZE && sy <= view_y + viewport_h);
+    }
+    const double z = static_cast<double>(zoom);
+    sx = view_x + static_cast<int32_t>(std::floor((static_cast<double>(wx) - static_cast<double>(x)) * z));
+    sy = view_y + static_cast<int32_t>(std::floor((static_cast<double>(wy) - static_cast<double>(y)) * z));
+    const int32_t margin = static_cast<int32_t>(static_cast<double>(TILE_SIZE) * z);
+    return (sx >= view_x - margin && sx <= view_x + viewport_w &&
+            sy >= view_y - margin && sy <= view_y + viewport_h);
 }
 
 bool ViewportCamera::screen_to_world(int32_t sx, int32_t sy, int32_t& wx, int32_t& wy) const noexcept {
@@ -152,8 +187,13 @@ bool ViewportCamera::screen_to_world(int32_t sx, int32_t sy, int32_t& wx, int32_
         sy < view_y || sy >= view_y + viewport_h) {
         return false;
     }
-    wx = static_cast<int32_t>(x) + (sx - view_x);
-    wy = static_cast<int32_t>(y) + (sy - view_y);
+    if (zoom == zoom::kNormal) {
+        wx = static_cast<int32_t>(x) + (sx - view_x);
+        wy = static_cast<int32_t>(y) + (sy - view_y);
+    } else {
+        wx = zoom::world_at(static_cast<double>(x), zoom, sx - view_x);
+        wy = zoom::world_at(static_cast<double>(y), zoom, sy - view_y);
+    }
     return true;
 }
 
@@ -418,6 +458,18 @@ void Renderer::shutdown() {
         SDL_DestroyTexture(rgba_texture_);
         rgba_texture_ = nullptr;
     }
+    if (world_target_) {
+        SDL_DestroyTexture(world_target_);
+        world_target_ = nullptr;
+        world_target_w_ = 0;
+        world_target_h_ = 0;
+    }
+    if (scaled_target_) {
+        SDL_DestroyTexture(scaled_target_);
+        scaled_target_ = nullptr;
+        scaled_target_w_ = 0;
+        scaled_target_h_ = 0;
+    }
     for (auto& glyph : fixed_glyphs_) {
         if (glyph) SDL_DestroyTexture(glyph);
         glyph = nullptr;
@@ -655,17 +707,155 @@ void Renderer::begin_frame() {
 
 // The part of the map view that the map covers. A map that is smaller than the view on an axis is centred in it with black around (the camera's origin is negative there): what hangs
 // over the map's edge (an ant, an effect, a tall sprite of an object at the edge) is cut at the edge and does not draw onto the black. For every map that is at least as big as the view
-// (all of the original's, in its own picture) this is the view itself.
+// (all of the original's, in its own picture) this is the view itself. At a zoom the map's rectangle on the screen is the map scaled by it (inside the world pass the camera has the zoom 1
+// and the view is the target: the rectangle is in texels).
 LayoutRect Renderer::map_view_rect(uint32_t map_w, uint32_t map_h) const {
-    const LayoutRect view = layout_.view();
+    const LayoutRect view = world_view();
     if (map_w == 0 || map_h == 0) return view;
-    const int32_t left = view.x - static_cast<int32_t>(camera_.x);                          // where the world pixel (0, 0) is on the screen (ViewportCamera::world_to_screen)
-    const int32_t top = view.y - static_cast<int32_t>(camera_.y);
+    int32_t left = 0;
+    int32_t top = 0;
+    int32_t map_screen_w = 0;
+    int32_t map_screen_h = 0;
+    if (camera_.zoom == zoom::kNormal) {
+        left = view.x - static_cast<int32_t>(camera_.x);                          // where the world pixel (0, 0) is on the screen (ViewportCamera::world_to_screen)
+        top = view.y - static_cast<int32_t>(camera_.y);
+        map_screen_w = static_cast<int32_t>(map_w) * TILE_SIZE;
+        map_screen_h = static_cast<int32_t>(map_h) * TILE_SIZE;
+    } else {
+        const double z = static_cast<double>(camera_.zoom);
+        left = view.x + static_cast<int32_t>(std::floor(-static_cast<double>(camera_.x) * z));
+        top = view.y + static_cast<int32_t>(std::floor(-static_cast<double>(camera_.y) * z));
+        map_screen_w = static_cast<int32_t>(std::lround(static_cast<double>(map_w) * TILE_SIZE * z));
+        map_screen_h = static_cast<int32_t>(std::lround(static_cast<double>(map_h) * TILE_SIZE * z));
+    }
     const int32_t x0 = std::max(view.x, left);
     const int32_t y0 = std::max(view.y, top);
-    const int32_t x1 = std::min(view.right(), left + static_cast<int32_t>(map_w) * TILE_SIZE);
-    const int32_t y1 = std::min(view.bottom(), top + static_cast<int32_t>(map_h) * TILE_SIZE);
+    const int32_t x1 = std::min(view.right(), left + map_screen_w);
+    const int32_t y1 = std::min(view.bottom(), top + map_screen_h);
     return LayoutRect{x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0)};
+}
+
+// ----------------------------------------------------------------------------
+// The world pass at a zoom: the world is drawn at one texel per world pixel into an offscreen target, which is then copied into the view
+// ----------------------------------------------------------------------------
+
+bool Renderer::begin_world_target() {
+    if (!renderer_ || in_world_target_ || fail_world_target_) return false;
+    const LayoutRect view = layout_.view();
+    const float z = camera_.zoom;
+    // The target covers the world from the whole pixel (cx, cy) on: the world that the view shows at this zoom, and one texel more (the origin of the zoom 2 lies half a pixel inside a texel;
+    // the copy then starts one screen pixel left of / above the view)
+    const double ox = static_cast<double>(camera_.x);
+    const double oy = static_cast<double>(camera_.y);
+    const int32_t cx = static_cast<int32_t>(std::floor(ox));
+    const int32_t cy = static_cast<int32_t>(std::floor(oy));
+    const int32_t tw = zoom::visible(view.w, z) + 1;
+    const int32_t th = zoom::visible(view.h, z) + 1;
+    if (world_target_ == nullptr || world_target_w_ != tw || world_target_h_ != th) {
+        if (world_target_ != nullptr) SDL_DestroyTexture(world_target_);
+        world_target_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, tw, th);
+        world_target_w_ = world_target_ != nullptr ? tw : 0;
+        world_target_h_ = world_target_ != nullptr ? th : 0;
+        if (world_target_ == nullptr) {
+            std::cerr << "[Renderer] Cannot make the offscreen target of the zoom: " << SDL_GetError() << std::endl;
+            return false;
+        }
+        SDL_SetTextureBlendMode(world_target_, SDL_BLENDMODE_NONE);
+    }
+    if (SDL_SetRenderTarget(renderer_, world_target_) != 0) {
+        std::cerr << "[Renderer] Cannot draw into the offscreen target of the zoom: " << SDL_GetError() << std::endl;
+        return false;
+    }
+    // The pass's own state: what is replaced is kept in pass_ and put back by end_world_target
+    pass_.camera = camera_;
+    pass_.picture = picture_;
+    pass_.picture_inset = picture_inset_;
+    pass_.origin = origin_;
+    pass_.cx = cx;
+    pass_.cy = cy;
+    pass_.shift_x = static_cast<int32_t>(std::lround((ox - static_cast<double>(cx)) * static_cast<double>(z)));
+    pass_.shift_y = static_cast<int32_t>(std::lround((oy - static_cast<double>(cy)) * static_cast<double>(z)));
+    camera_.zoom = zoom::kNormal;                              // (a camera of the zoom 1 whose view is the target: the world code's numbers are texels)
+    camera_.x = static_cast<float>(cx);
+    camera_.y = static_cast<float>(cy);
+    camera_.world_x = cx;
+    camera_.world_y = cy;
+    camera_.set_view(LayoutRect{0, 0, tw, th});
+    target_view_ = LayoutRect{0, 0, tw, th};
+    picture_ = target_view_;
+    picture_inset_ = false;
+    origin_ = LayoutPoint{};
+    in_world_target_ = true;
+    ++world_target_passes_;
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);           // (the black that the frame starts with: what the map does not cover)
+    SDL_RenderClear(renderer_);
+    return true;
+}
+
+void Renderer::end_world_target() {
+    if (!in_world_target_) return;
+    in_world_target_ = false;
+    const float z = pass_.camera.zoom;
+    camera_ = pass_.camera;
+    picture_ = pass_.picture;
+    picture_inset_ = pass_.picture_inset;
+    origin_ = pass_.origin;
+    // The copy: the target's texels are z screen pixels wide. The copy that is wanted starts shift_x / shift_y screen pixels before the view (so that the zoom 2 may show the half-pixel origin) and
+    // covers copy_w x copy_h pixels, which is the source (whole texels) times the zoom: a zoom 2 over an odd width takes one texel more.
+    const LayoutRect view = layout_.view();
+    const int32_t dst_w = view.w + pass_.shift_x;
+    const int32_t dst_h = view.h + pass_.shift_y;
+    const int32_t src_w = std::min(world_target_w_, zoom::visible(dst_w, z));
+    const int32_t src_h = std::min(world_target_h_, zoom::visible(dst_h, z));
+    const SDL_Rect src{0, 0, src_w, src_h};
+    const int32_t copy_w = static_cast<int32_t>(std::lround(static_cast<double>(src_w) * static_cast<double>(z)));
+    const int32_t copy_h = static_cast<int32_t>(std::lround(static_cast<double>(src_h) * static_cast<double>(z)));
+    SDL_SetTextureScaleMode(world_target_, z < zoom::kNormal ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+    SDL_Texture* from = world_target_;
+    SDL_Rect from_src = src;
+    SDL_Rect dst{};
+    if (pass_.shift_x == 0 && pass_.shift_y == 0 && copy_w == view.w && copy_h == view.h) {
+        // the copy is exactly the view: one step (the 0.5, the 1 of the test hook, the 2 over an even size from a whole origin)
+        SDL_SetRenderTarget(renderer_, nullptr);
+        dst = placed(view.x, view.y, copy_w, copy_h);
+    } else {
+        // The copy is not the view (a half-pixel origin starts one screen pixel before it, an odd size ends one after it): a scaled copy that a clip cuts is cut by SDL's software renderer
+        // with a rounding of the source, and the picture is not what the nearest enlargement gives. So the enlargement goes into a texture of its own, whole, and the view is cropped
+        // out of it by a copy of the same size (no scaling, no cut: exact in every renderer).
+        if (scaled_target_ == nullptr || scaled_target_w_ != copy_w || scaled_target_h_ != copy_h) {
+            if (scaled_target_ != nullptr) SDL_DestroyTexture(scaled_target_);
+            scaled_target_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, copy_w, copy_h);
+            scaled_target_w_ = scaled_target_ != nullptr ? copy_w : 0;
+            scaled_target_h_ = scaled_target_ != nullptr ? copy_h : 0;
+            if (scaled_target_ != nullptr) SDL_SetTextureBlendMode(scaled_target_, SDL_BLENDMODE_NONE);
+        }
+        if (scaled_target_ != nullptr && SDL_SetRenderTarget(renderer_, scaled_target_) == 0) {
+            const SDL_Rect whole{0, 0, copy_w, copy_h};
+            SDL_RenderCopy(renderer_, world_target_, &src, &whole);
+            SDL_SetRenderTarget(renderer_, nullptr);
+            from = scaled_target_;
+            from_src = SDL_Rect{pass_.shift_x, pass_.shift_y, std::min(view.w, copy_w - pass_.shift_x), std::min(view.h, copy_h - pass_.shift_y)};
+            dst = placed(view.x, view.y, from_src.w, from_src.h);
+        } else {                                                     // (no second target: the cut copy, as good as the renderer makes it)
+            SDL_SetRenderTarget(renderer_, nullptr);
+            dst = placed(view.x - pass_.shift_x, view.y - pass_.shift_y, copy_w, copy_h);
+        }
+    }
+    const SDL_Rect clip = placed(view.x, view.y, view.w, view.h);
+    SDL_RenderSetClipRect(renderer_, &clip);
+    SDL_RenderCopy(renderer_, from, &from_src, &dst);
+}
+
+// What the pass leaves for the screen: the hit point digits (one size at every zoom: the numbers of Ctrl+L are text, not world art), at the screen position of the sprite's position
+void Renderer::draw_deferred_digits() {
+    const LayoutRect view = layout_.view();
+    const double z = static_cast<double>(camera_.zoom);
+    for (const DeferredDigits& d : deferred_digits_) {
+        const int32_t sx = view.x + static_cast<int32_t>(std::floor((static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * z));
+        const int32_t sy = view.y + static_cast<int32_t>(std::floor((static_cast<double>(d.wy) - static_cast<double>(camera_.y)) * z));
+        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255});
+    }
+    deferred_digits_.clear();
 }
 
 void Renderer::render_world(const ants::sim::WorldState& world,
@@ -682,6 +872,13 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     sub_tick_ms_ = static_cast<uint32_t>(std::clamp(sub_tick_time, 0.0f, 0.0499f) * 1000.0f);
     render_queue_.clear();
     overlay_queue_.clear();
+    deferred_digits_.clear();
+
+    // At a zoom the world is drawn into the offscreen target (begin_world_target); at the zoom 1 straight into the view, exactly as it always was. A renderer that cannot make the target
+    // (none that SDL has: every one supports targets) draws the zoom 1 picture of the same origin instead of a broken one.
+    const float zoom_kept = camera_.zoom;
+    const bool target = (zoomed() || force_world_target_) && begin_world_target();
+    if (!target && zoomed()) camera_.zoom = zoom::kNormal;
 
     // 1. Clip exclusively to the part of the playfield that the map covers (the whole view, unless the map is smaller than it)
     const LayoutRect covered = map_view_rect(grid.width(), grid.height());
@@ -717,13 +914,21 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     collect_score_bubbles(world);
     draw_overlay_queue();
 
-    // 5. Tile Grid Overlay (if enabled)
-    if (show_tile_grid) {
+    // 5. Tile Grid Overlay (if enabled): on the screen, after the copy of a zoomed world
+    if (show_tile_grid && !target) {
         render_tile_grid(grid, mouse_x, mouse_y);
     }
 
     // 6. Unset clipping for full-picture chrome
     restore_clip();
+
+    if (target) {
+        end_world_target();                       // the copy into the view (clipped to it)
+        draw_deferred_digits();
+        if (show_tile_grid) render_tile_grid(grid, mouse_x, mouse_y);
+        restore_clip();
+    }
+    camera_.zoom = zoom_kept;
 }
 
 // ============================================================================
@@ -793,7 +998,7 @@ void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t wor
     if (!b.valid) return;
     const int32_t cam_x = static_cast<int32_t>(camera_.x);
     const int32_t cam_y = static_cast<int32_t>(camera_.y);
-    const LayoutRect view = layout_.view();
+    const LayoutRect view = world_view();
     if (world_x + b.x1 <= cam_x || world_x + b.x0 >= cam_x + view.w ||
         world_y + b.y1 <= cam_y || world_y + b.y0 >= cam_y + view.h) {
         return;
@@ -807,16 +1012,24 @@ void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t wor
 
 void Renderer::render_map_layers(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
     if (!renderer_) return;
+    const float zoom_kept = camera_.zoom;
+    const bool target = (zoomed() || force_world_target_) && begin_world_target();
+    if (!target && zoomed()) camera_.zoom = zoom::kNormal;       // (as in render_world: the zoom 1 picture rather than a broken one)
     const LayoutRect covered = map_view_rect(grid.width(), grid.height());
     const SDL_Rect clip_rect = placed(covered.x, covered.y, covered.w, covered.h);
     SDL_RenderSetClipRect(renderer_, &clip_rect);
     render_terrain_layer1(grid);
     render_terrain_layer2_structures(grid, world);
     restore_clip();
+    if (target) {
+        end_world_target();
+        restore_clip();
+    }
+    camera_.zoom = zoom_kept;
 }
 
 void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
-    const LayoutRect view = layout_.view();
+    const LayoutRect view = world_view();
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
     int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
                                  (static_cast<int32_t>(camera_.x) + view.w + 31) / TILE_SIZE);
@@ -916,7 +1129,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
     // One row-major pass over anchor cells (FUN_01008089 with mode 2): the rows from top / 32 - 3 up to (bottom / 32 + 3 + 1, exclusive) of the view rectangle, the columns
     // likewise, clipped to the map. An object whose anchor lies further out is not drawn even when its art reaches into the view (docs 5.54); each draw is rect-culled.
     constexpr int32_t kMargin = 3;
-    const LayoutRect view = layout_.view();
+    const LayoutRect view = world_view();
     const int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE - kMargin);
     const int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
                                        (static_cast<int32_t>(camera_.x) + view.w) / TILE_SIZE + kMargin);
@@ -1003,7 +1216,7 @@ void Renderer::collect_object_list_sprites() {
         if (!b.valid) continue;
         const int32_t cam_x = static_cast<int32_t>(camera_.x);
         const int32_t cam_y = static_cast<int32_t>(camera_.y);
-        const LayoutRect view = layout_.view();
+        const LayoutRect view = world_view();
         if (spr.px + b.x1 <= cam_x || spr.px + b.x0 >= cam_x + view.w ||
             spr.py + b.y1 <= cam_y || spr.py + b.y0 >= cam_y + view.h) {
             continue;
@@ -1054,7 +1267,7 @@ void Renderer::collect_flower_droppers(const ants::sim::WorldState& world) {
         RenderItem item{};
         item.sort_y = wy;
         item.draw_func = [this, drop_anim, frame, wx, wy](SDL_Renderer*, TextureCache&) {
-            const LayoutRect view = layout_.view();
+            const LayoutRect view = world_view();
             const int32_t sx = view.x + (wx - static_cast<int32_t>(camera_.x));
             const int32_t sy = view.y + (wy - static_cast<int32_t>(camera_.y));
             this->draw_frame_parts(drop_anim->subitems[static_cast<size_t>(frame)], sx, sy);
@@ -1068,7 +1281,7 @@ void Renderer::render_fog_of_war(const ants::sim::WorldState& world) {
         return;
     }
 
-    const LayoutRect view = layout_.view();
+    const LayoutRect view = world_view();
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
     int32_t end_col   = std::min(static_cast<int32_t>(world.width) - 1,
                                  (static_cast<int32_t>(camera_.x) + view.w + 31) / TILE_SIZE);
@@ -1163,7 +1376,7 @@ void Renderer::collect_visual_effects(const ants::sim::WorldState& world) {
         item.sort_y = (eff.y_key != 0) ? eff.y_key : eff.py;
         const int32_t px = eff.px, py = eff.py;
         item.draw_func = [this, anim, sub_idx, px, py](SDL_Renderer*, TextureCache&) {
-            const LayoutRect view = layout_.view();
+            const LayoutRect view = world_view();
             const int32_t sx = view.x + (px - static_cast<int32_t>(camera_.x));
             const int32_t sy = view.y + (py - static_cast<int32_t>(camera_.y));
             if (sx < view.x - 320 || sx > view.x + view.w + 320 ||
@@ -1237,7 +1450,7 @@ void Renderer::collect_transient_sprites() {
         item.created_ms = overlay_now_ms() - static_cast<int64_t>(elapsed_ms);   // the click marker is a view child
         const int32_t px = eff.px, py = eff.py;
         item.draw = [this, anim, sub_idx, px, py]() {
-            const LayoutRect view = layout_.view();
+            const LayoutRect view = world_view();
             const int32_t sx = view.x + (px - static_cast<int32_t>(camera_.x));
             const int32_t sy = view.y + (py - static_cast<int32_t>(camera_.y));
             this->draw_frame_parts(anim->subitems[sub_idx], sx, sy);
@@ -1356,7 +1569,7 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
     // it and a blown ant's art (aggb / bomb flights) up to ~155 px away from the anchor that jumped 128 px. Only an ant whose art
     // cannot reach the playfield is skipped.
     constexpr int32_t kArtMargin = 160;
-    const LayoutRect view = layout_.view();
+    const LayoutRect view = world_view();
     if (sx < view.x - kArtMargin || sx > view.x + view.w + kArtMargin ||
         sy < view.y - kArtMargin || sy > view.y + view.h + kArtMargin) return;
 
@@ -1466,9 +1679,13 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
             // FUN_0101b802 (which the display loop skips for a frozen ant) with [4b14] != 0: sprintf("%d", hp), white, at the sprite position (the predicted one: the sprite
             // moves when a frame ends), in the fixed system font
             if (show_hp_ && !a.frozen) {
-                const LayoutRect view = layout_.view();
-                this->draw_fixed_text(std::to_string(a.hp), view.x + (a.px + pred.dx - static_cast<int32_t>(camera_.x)),
-                                      view.y + (a.py + pred.dy - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
+                if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {              // a zoomed world: the digits are text, not world art; they are drawn after the copy at one size (draw_deferred_digits)
+                    deferred_digits_.push_back(DeferredDigits{std::to_string(a.hp), a.px + pred.dx, a.py + pred.dy});
+                } else {
+                    const LayoutRect view = world_view();
+                    this->draw_fixed_text(std::to_string(a.hp), view.x + (a.px + pred.dx - static_cast<int32_t>(camera_.x)),
+                                          view.y + (a.py + pred.dy - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
+                }
             }
         };
         render_queue_.push_back(std::move(item));
@@ -1547,7 +1764,7 @@ void Renderer::collect_hill_brackets(const ants::sim::Grid& grid, int32_t select
     item.created_ms = hill_marker_start_ms_;
     const int64_t start = hill_marker_start_ms_;
     item.draw = [this, ax, ay, start]() {
-        const LayoutRect view = layout_.view();
+        const LayoutRect view = world_view();
         const int32_t sx = view.x + (ax - static_cast<int32_t>(camera_.x));
         const int32_t sy = view.y + (ay - static_cast<int32_t>(camera_.y));
         if (sx >= view.x - 128 && sx <= view.x + view.w + 128 &&
@@ -1593,7 +1810,7 @@ void Renderer::collect_burn_overlays(const ants::sim::WorldState& world) {
         item.draw = [this, bu_seq, px, py, elapsed, colour]() {
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen(px, py, sx, sy);
-            const LayoutRect view = layout_.view();
+            const LayoutRect view = world_view();
             if (sx < view.x - 160 || sx > view.x + view.w + 160 || sy < view.y - 160 || sy > view.y + view.h + 160) return;
             this->draw_frame_parts(bu_seq->subitems[get_anim_subitem_by_time(*bu_seq, elapsed)], sx, sy, false, colour);
         };
@@ -1637,7 +1854,7 @@ void Renderer::collect_selection_markers(const ants::sim::WorldState& world, int
         item.draw = [this, &seq, px, py, start]() {
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen(px, py, sx, sy);
-            const LayoutRect view = layout_.view();
+            const LayoutRect view = world_view();
             if (sx < view.x - 160 || sx > view.x + view.w + 160 ||
                 sy < view.y - 160 || sy > view.y + view.h + 160) return;
             const size_t f = get_anim_subitem_by_time(seq, static_cast<uint32_t>(std::max<int64_t>(0, overlay_now_ms() - start)));
@@ -1658,25 +1875,29 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    const LayoutRect view = layout_.view();
+    // (a debug aid on the screen: at a zoom a tile is `ts` screen pixels and the view shows `vis_w` x `vis_h` world pixels; at the zoom 1 these are the numbers it always had)
+    const LayoutRect view = world_view();
+    const int32_t ts = static_cast<int32_t>(static_cast<double>(TILE_SIZE) * static_cast<double>(camera_.zoom));
+    const int32_t vis_w = zoom::visible(view.w, camera_.zoom);
+    const int32_t vis_h = zoom::visible(view.h, camera_.zoom);
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
     int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
-                                 (static_cast<int32_t>(camera_.x) + view.w + 31) / TILE_SIZE);
+                                 (static_cast<int32_t>(camera_.x) + vis_w + 31) / TILE_SIZE);
     int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE);
     int32_t end_row   = std::min(static_cast<int32_t>(grid.height()) - 1,
-                                 (static_cast<int32_t>(camera_.y) + view.h + 31) / TILE_SIZE);
+                                 (static_cast<int32_t>(camera_.y) + vis_h + 31) / TILE_SIZE);
 
     // Determine hovered tile under mouse
     int32_t hover_tx = -1;
     int32_t hover_ty = -1;
     if (view.contains(mouse_x, mouse_y)) {
-        int32_t world_x = camera_.world_x + (mouse_x - view.x);
-        int32_t world_y = camera_.world_y + (mouse_y - view.y);
+        int32_t world_x = camera_.world_x_at(mouse_x - view.x);
+        int32_t world_y = camera_.world_y_at(mouse_y - view.y);
         hover_tx = std::clamp(world_x / TILE_SIZE, 0, static_cast<int32_t>(grid.width()) - 1);
         hover_ty = std::clamp(world_y / TILE_SIZE, 0, static_cast<int32_t>(grid.height()) - 1);
     } else {
-        hover_tx = std::clamp((camera_.world_x + view.w / 2) / TILE_SIZE, 0, static_cast<int32_t>(grid.width()) - 1);
-        hover_ty = std::clamp((camera_.world_y + view.h / 2) / TILE_SIZE, 0, static_cast<int32_t>(grid.height()) - 1);
+        hover_tx = std::clamp(camera_.centre_world_x() / TILE_SIZE, 0, static_cast<int32_t>(grid.width()) - 1);
+        hover_ty = std::clamp(camera_.centre_world_y() / TILE_SIZE, 0, static_cast<int32_t>(grid.height()) - 1);
     }
 
     // 1. Draw tile outline for each tile and coordinates in bottom-left of each tile
@@ -1687,13 +1908,15 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
 
             // Subtle semi-transparent tile outline
             SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 75);
-            const SDL_Rect tile_rect = placed(sx, sy, TILE_SIZE, TILE_SIZE);
+            const SDL_Rect tile_rect = placed(sx, sy, ts, ts);
             SDL_RenderDrawRect(renderer_, &tile_rect);
 
-            // Coordinates inside bottom-left of tile
-            std::string c_str = std::to_string(c) + "," + std::to_string(r);
-            draw_text(c_str, sx + 3, sy + 24, ants::assets::ColorRGBA{0, 0, 0, 180});
-            draw_text(c_str, sx + 2, sy + 23, ants::assets::ColorRGBA{255, 255, 200, 220});
+            // Coordinates inside bottom-left of tile (a tile of half size has no room for them)
+            if (ts >= TILE_SIZE) {
+                std::string c_str = std::to_string(c) + "," + std::to_string(r);
+                draw_text(c_str, sx + 3, sy + ts - 8, ants::assets::ColorRGBA{0, 0, 0, 180});
+                draw_text(c_str, sx + 2, sy + ts - 9, ants::assets::ColorRGBA{255, 255, 200, 220});
+            }
         }
     }
 
@@ -1702,10 +1925,10 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
         int32_t hsx = 0, hsy = 0;
         camera_.world_to_screen(hover_tx * TILE_SIZE, hover_ty * TILE_SIZE, hsx, hsy);
         SDL_SetRenderDrawColor(renderer_, 0, 255, 255, 255);
-        const SDL_Rect h1 = placed(hsx, hsy, TILE_SIZE, TILE_SIZE);
+        const SDL_Rect h1 = placed(hsx, hsy, ts, ts);
         SDL_RenderDrawRect(renderer_, &h1);
         SDL_SetRenderDrawColor(renderer_, 255, 255, 0, 220);
-        const SDL_Rect h2 = placed(hsx + 1, hsy + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        const SDL_Rect h2 = placed(hsx + 1, hsy + 1, ts - 2, ts - 2);
         SDL_RenderDrawRect(renderer_, &h2);
     }
 
@@ -1731,7 +1954,7 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
         std::string food_badge = std::to_string(fo.remaining);
         int32_t f_bw = static_cast<int32_t>(food_badge.length()) * 8 + 8;
         int32_t f_bh = 14;
-        int32_t f_bx = fsx + TILE_SIZE - f_bw;
+        int32_t f_bx = fsx + ts - f_bw;
         int32_t f_by = fsy + 2;
 
         fill_rect(f_bx, f_by, f_bw, f_bh, ants::assets::ColorRGBA{0, 0, 0, 200});

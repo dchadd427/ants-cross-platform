@@ -750,21 +750,24 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     // inside the image when it would end beyond its right or bottom edge
     // (A view bigger than the map on an axis shows all of it there: the frame is the image's whole width / height then. The original's view is smaller than its smallest map;
     // the 16:9 view of 762 x 500 is bigger than a 16 x 16 map.)
+    // (At a zoom the view shows view / zoom world pixels: the frame is the world that is seen, 442 x 440 or 762 x 500 at the zoom 1, half as much at 2, twice as much at 0.5)
+    const int32_t seen_w = zoom::visible(layout_.view().w, camera.zoom);
+    const int32_t seen_h = zoom::visible(layout_.view().h, camera.zoom);
     int32_t fl, ft, fr, fb;
-    if (world_w_px <= layout_.view().w) {
+    if (world_w_px <= seen_w) {
         fl = rx;
         fr = rx + rw;
     } else {
-        const int32_t frame_w = to_image_x(layout_.view().w) + 1;
+        const int32_t frame_w = to_image_x(seen_w) + 1;
         fl = rx + to_image_x(static_cast<int32_t>(camera.x));
         fr = fl + frame_w;
         if (fr >= rx + rw) { fr = rx + rw; fl = fr - frame_w; }
     }
-    if (world_h_px <= layout_.view().h) {
+    if (world_h_px <= seen_h) {
         ft = ry;
         fb = ry + rh;
     } else {
-        const int32_t frame_h = to_image_y(layout_.view().h) + 1;
+        const int32_t frame_h = to_image_y(seen_h) + 1;
         ft = ry + to_image_y(static_cast<int32_t>(camera.y));
         fb = ft + frame_h;
         if (fb >= ry + rh) { fb = ry + rh; ft = fb - frame_h; }
@@ -1306,8 +1309,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     // arrow (mode 6); the strip test does not run while a button is captured
     if (input_lock_ticks_ > 0) return true;
     if (!is_input_captured() &&
-        edge_scroll_step(x, y, 0, camera.world_x, camera.world_y, static_cast<int32_t>(sim.grid().width()),
-                         static_cast<int32_t>(sim.grid().height()), layout_).dir >= 0) {
+        edge_step(camera, x, y, 0, static_cast<int32_t>(sim.grid().width()), static_cast<int32_t>(sim.grid().height())).dir >= 0) {
         return true;
     }
 
@@ -1456,8 +1458,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     }
     const bool no_edge = captured_before || (right && right_capture_ != 0);
     const bool in_strip = !no_edge &&
-        edge_scroll_step(x, y, 0, camera.world_x, camera.world_y, static_cast<int32_t>(sim.grid().width()),
-                         static_cast<int32_t>(sim.grid().height()), layout_).dir >= 0;
+        edge_step(camera, x, y, 0, static_cast<int32_t>(sim.grid().width()), static_cast<int32_t>(sim.grid().height())).dir >= 0;
 
     if (button == SDL_BUTTON_LEFT) {
         if (!in_strip) {
@@ -1554,19 +1555,30 @@ bool HUD::is_input_captured() const noexcept {
            quit_button_.is_pressed || send_to_button_.is_pressed || team_button_.is_pressed;
 }
 
+// The step of the edge scroll for the camera's zoom (edge_scroll.hpp): the origin and the map in SCREEN pixels at the zoom, the step in screen pixels. At the zoom 1 these are the
+// camera's world origin and the map's own size: the function that was always called.
+EdgeScroll HUD::edge_step(const ViewportCamera& camera, int32_t x, int32_t y, int32_t rate, int32_t map_tiles_w, int32_t map_tiles_h) const noexcept {
+    if (camera.zoom == zoom::kNormal) return edge_scroll_step(x, y, rate, camera.world_x, camera.world_y, map_tiles_w, map_tiles_h, layout_);
+    const double z = static_cast<double>(camera.zoom);
+    return edge_scroll_step_px(x, y, rate, camera.origin_screen_x(), camera.origin_screen_y(), static_cast<int32_t>(std::lround(map_tiles_w * 32 * z)),
+                               static_cast<int32_t>(std::lround(map_tiles_h * 32 * z)), layout_);
+}
+
 // The INPUT task (0x100ae26, every 50 ms) as far as the view is concerned: FUN_01026aa3 for the edge strips, or, while the left button
-// is held on the minimap, FUN_01009850.
+// is held on the minimap, FUN_01009850. The step is in screen pixels (the same distance on the screen at every zoom): the camera moves by step / zoom world pixels.
 bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y) {
     if (is_modal_open() || map_w == 0 || map_h == 0) return false;
     const int32_t rate = options_.state().scroll_speed;       // the profile's Scroll Speed 0 .. 99 (FUN_01027329: the half extent is rate + 10)
     EdgeScroll step;
     if (is_radar_dragging_) {
-        step = minimap_scroll_step(mouse_x, mouse_y, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h), layout_);
+        const double z = static_cast<double>(camera.zoom);
+        step = minimap_scroll_step_px(mouse_x, mouse_y, camera.origin_screen_x(), camera.origin_screen_y(), static_cast<int32_t>(std::lround(static_cast<double>(map_w) * 32.0 * z)),
+                                      static_cast<int32_t>(std::lround(static_cast<double>(map_h) * 32.0 * z)), layout_);
     } else if (!is_input_captured()) {
-        step = edge_scroll_step(mouse_x, mouse_y, rate, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h), layout_);
+        step = edge_step(camera, mouse_x, mouse_y, rate, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
     }
     if (step.dx == 0 && step.dy == 0) return false;
-    camera.scroll_pixels(step.dx, step.dy, map_w, map_h);
+    camera.scroll_screen(step.dx, step.dy, map_w, map_h);
     return true;
 }
 
@@ -1699,10 +1711,17 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             const int32_t map_h = static_cast<int32_t>(world.height) * 32;
             int32_t dx = 0;
             int32_t dy = 0;
+            // (at a zoom the view shows view / zoom world pixels, and its origin may lie half a pixel inside a world pixel: the scroll counts from the whole part, so the left / top edge of
+            // the square, a margin around the ant, may end up half a world pixel = one screen pixel outside the view)
+            const bool plain = camera.zoom == zoom::kNormal;
+            const int32_t ox = plain ? camera.world_x : static_cast<int32_t>(std::floor(camera.x));
+            const int32_t oy = plain ? camera.world_y : static_cast<int32_t>(std::floor(camera.y));
             detail::scroll_to_show(std::max(ant->px - 128, 0), std::max(ant->py - 128, 0), std::min(ant->px + 128, map_w), std::min(ant->py + 128, map_h),
-                                   camera.world_x, camera.world_y, dx, dy, layout_.view().w, layout_.view().h);
-            camera.x = static_cast<float>(camera.world_x);          // (both fields describe the same origin)
-            camera.y = static_cast<float>(camera.world_y);
+                                   ox, oy, dx, dy, zoom::visible(layout_.view().w, camera.zoom), zoom::visible(layout_.view().h, camera.zoom));
+            if (plain) {
+                camera.x = static_cast<float>(camera.world_x);          // (both fields describe the same origin)
+                camera.y = static_cast<float>(camera.world_y);
+            }
             camera.scroll_pixels(dx, dy, world.width, world.height);
             return true;
         }

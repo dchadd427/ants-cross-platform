@@ -119,8 +119,8 @@ bool HUD::special_target(const sim::SimulationEngine* query, const sim::WorldSta
 // The point is in the view and on the map: a map that is smaller than the view on an axis is centred in it (the camera's origin is negative there) and the view shows black around it
 bool HUD::over_ground(int32_t x, int32_t y, const ViewportCamera& camera, const sim::Grid& grid) const noexcept {
     if (!over_map(x, y)) return false;
-    const int32_t world_x = camera.world_x + (x - layout_.view().x);
-    const int32_t world_y = camera.world_y + (y - layout_.view().y);
+    const int32_t world_x = camera.world_x_at(x - layout_.view().x);
+    const int32_t world_y = camera.world_y_at(y - layout_.view().y);
     return world_x >= 0 && world_y >= 0 && world_x < static_cast<int32_t>(grid.width()) * 32 && world_y < static_cast<int32_t>(grid.height()) * 32;
 }
 
@@ -137,8 +137,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
 
     // 2. The eight edge strips (mode 6): the scroll arrows (edge_scroll.hpp); not while a button is captured
     if (!is_input_captured()) {
-        const EdgeScroll strip = edge_scroll_step(screen_x, screen_y, 0, camera.world_x, camera.world_y,
-                                                  static_cast<int32_t>(grid.width()), static_cast<int32_t>(grid.height()), layout_);
+        const EdgeScroll strip = edge_step(camera, screen_x, screen_y, 0, static_cast<int32_t>(grid.width()), static_cast<int32_t>(grid.height()));
         if (strip.dir >= 0) {
             static const CursorType kArrows[8] = {CursorType::ScrollN, CursorType::ScrollNE, CursorType::ScrollE, CursorType::ScrollSE,
                                                   CursorType::ScrollS, CursorType::ScrollSW, CursorType::ScrollW, CursorType::ScrollNW};
@@ -164,8 +163,8 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
     }
 
     // 5. By panel mode
-    const int32_t world_x = camera.world_x + (screen_x - layout_.view().x);
-    const int32_t world_y = camera.world_y + (screen_y - layout_.view().y);
+    const int32_t world_x = camera.world_x_at(screen_x - layout_.view().x);
+    const int32_t world_y = camera.world_y_at(screen_y - layout_.view().y);
     const int32_t tx = world_x / 32;
     const int32_t ty = world_y / 32;
     const PanelMode panel = panel_mode(world);
@@ -349,8 +348,8 @@ void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int3
     const auto& world = sim.get_world_state();
     if (!over_ground(x, y, camera, sim.grid())) return;     // the black around a small map is no ground: a click there does nothing at all (no deselect, no order, no marker)
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
-    const int32_t world_x = camera.world_x + (x - layout_.view().x);
-    const int32_t world_y = camera.world_y + (y - layout_.view().y);
+    const int32_t world_x = camera.world_x_at(x - layout_.view().x);
+    const int32_t world_y = camera.world_y_at(y - layout_.view().y);
     const sim::TileCoord tile{world_x / 32, world_y / 32};
     switch (mode) {
         case CursorType::Normal:                               // mode 1: deselect all, no marker
@@ -429,9 +428,11 @@ void HUD::pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, in
         pointer_click(sim, camera, x, y, shift);
         return;
     }
-    const int32_t ox = camera.world_x - layout_.view().x;
-    const int32_t oy = camera.world_y - layout_.view().y;
-    select_ants_in_rect(rect.left + ox, rect.top + oy, rect.right + ox, rect.bottom + oy, sim.get_world_state(), shift);
+    // the band is in screen pixels; the world that it covers: the left / top edges of its first pixels, the right / bottom edges of its last (rounded outward at a zoom: every world pixel
+    // that a pixel of the band covers is inside)
+    const LayoutRect view = layout_.view();
+    select_ants_in_rect(camera.world_x_at(rect.left - view.x), camera.world_y_at(rect.top - view.y), camera.world_x_edge(rect.right - view.x), camera.world_y_edge(rect.bottom - view.y),
+                        sim.get_world_state(), shift);
 }
 
 // FUN_01027b51: the right button executes at its release with the tile of the press point
@@ -455,15 +456,15 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
     if (mode == CursorType::Attack) {                           // mode 5: the ant under the pointer at the release (FUN_01026904)
         const LayoutRect view = layout_.view();
-        spawn_click_marker(camera.world_x + (press_x - view.x), camera.world_y + (press_y - view.y));
-        if (const sim::AntSnapshot* ant = pick_ant_at(world, camera.world_x + (x - view.x), camera.world_y + (y - view.y))) {
+        spawn_click_marker(camera.world_x_at(press_x - view.x), camera.world_y_at(press_y - view.y));
+        if (const sim::AntSnapshot* ant = pick_ant_at(world, camera.world_x_at(x - view.x), camera.world_y_at(y - view.y))) {
             order_selected(sim, sim::TileCoord{ant->tile_x, ant->tile_y}, false, true);
         }
         return;
     }
     if (mode != CursorType::Move && mode != CursorType::Food && mode != CursorType::Target) return;    // modes 1, 2 and 6 do nothing
-    const int32_t world_x = camera.world_x + (press_x - layout_.view().x);
-    const int32_t world_y = camera.world_y + (press_y - layout_.view().y);
+    const int32_t world_x = camera.world_x_at(press_x - layout_.view().x);
+    const int32_t world_y = camera.world_y_at(press_y - layout_.view().y);
     const sim::TileCoord tile{world_x / 32, world_y / 32};
     spawn_click_marker(world_x, world_y);                       // the marker is always spawned
     // modes 3, 4 and 7: a move for several ants and for a worker / combat ant (or a mixed group), otherwise the ability of the ant's type; the type is the one of flag 1

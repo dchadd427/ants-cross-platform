@@ -338,6 +338,15 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--aspect " + why;
             }
+        } else if (std::strcmp(argv[i], "--zoom") == 0) {                        // --zoom 0.5 | 1 | 2: the zoom of the map view that a match starts with (view_zoom.hpp)
+            std::string why;
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--zoom needs 0.5, 1 or 2";
+            } else if (zoom::parse_level(argv[++i], cfg.zoom, why)) {
+                cfg.zoom_given = true;
+            } else if (cfg.startup_error.empty()) {
+                cfg.startup_error = "--zoom " + why;
+            }
         } else if (std::strcmp(argv[i], "--bot") == 0) {                       // a computer player: --bot SEAT[:SPEC], repeatable (docs/BOTS.md)
             mode_given = true;
             ai::BotSpec spec;
@@ -455,6 +464,7 @@ bool Application::init(const ApplicationConfig& config) {
     config_store_.set_location(!config_.settings_path.empty() ? config_.settings_path : (config_.headless ? std::string() : ConfigStore::default_location()));
     config_store_.load();
     choose_aspect();
+    choose_zoom();
 
     // 6. Create Desktop Window
     uint32_t win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -498,6 +508,7 @@ bool Application::init(const ApplicationConfig& config) {
     renderer_->set_layout(layout_);
     renderer_->set_level(current_level_);
 
+    apply_match_zoom();
     show_start_view();
 
     // 8. Initialize HUD and Scorecard
@@ -772,6 +783,80 @@ void Application::choose_aspect() {
     }
 }
 
+// --zoom, else the settings' key `zoom` ("0.5", "1" or "2": the remake's own key, written when the player zooms), else 1. A settings file never stops the game: a value that is not a level
+// is reported and ignored.
+void Application::choose_zoom() {
+    zoom_wanted_ = zoom::kNormal;
+    if (config_.zoom_given) {
+        zoom_wanted_ = config_.zoom;
+    } else if (config_store_.has("zoom")) {
+        const std::string text = config_store_.get_string("zoom", "", 16);
+        std::string why;
+        float from_settings = zoom::kNormal;
+        if (zoom::parse_level(text, from_settings, why)) zoom_wanted_ = from_settings;
+        else std::cerr << "[Application] settings: zoom=" << why << " (ignored)" << std::endl;
+    }
+}
+
+// A match starts (the local game's START, the network's start, the first map of a game that starts at once): the camera takes the level that the player chose last when the kind of
+// match and this map offer it, else the level 1. A network match never starts zoomed out; the level that was chosen stays remembered for the next local game.
+void Application::apply_match_zoom() {
+    if (!renderer_) return;
+    const LayoutRect view = layout_.view();
+    renderer_->camera().zoom = zoom::level_for_match(zoom_wanted_, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE,
+                                                     static_cast<int64_t>(current_level_.height()) * TILE_SIZE);
+}
+
+std::vector<float> Application::zoom_levels() const {
+    std::vector<float> levels;
+    if (!renderer_) return levels;
+    const LayoutRect view = layout_.view();
+    for (const float level : zoom::kLevels) {
+        if (zoom::offered(level, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE, static_cast<int64_t>(current_level_.height()) * TILE_SIZE)) levels.push_back(level);
+    }
+    return levels;
+}
+
+// The zoom API (application.hpp): to one of the offered levels, keeping the world point under the screen pixel (anchor_x, anchor_y) of the picture under it as far as the map's edges allow
+bool Application::set_zoom(float level, int32_t anchor_x, int32_t anchor_y) {
+    if (!renderer_ || state_ != AppState::Playing) return false;
+    ViewportCamera& camera = renderer_->camera();
+    if (level == camera.zoom) return false;
+    const LayoutRect view = layout_.view();
+    if (!zoom::offered(level, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE, static_cast<int64_t>(current_level_.height()) * TILE_SIZE)) return false;
+    const int32_t dx = std::clamp(anchor_x - view.x, 0, std::max(0, view.w - 1));
+    const int32_t dy = std::clamp(anchor_y - view.y, 0, std::max(0, view.h - 1));
+    camera.set_zoom(level, dx, dy, current_level_.width(), current_level_.height());
+    zoom_wanted_ = level;                                                 // remembered: the next match starts with it
+    config_store_.set_string("zoom", zoom::level_name(level));
+    return true;
+}
+
+bool Application::step_zoom(int direction, int32_t anchor_x, int32_t anchor_y) {
+    if (!renderer_) return false;
+    const LayoutRect view = layout_.view();
+    const float next = zoom::step(renderer_->camera().zoom, direction, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE,
+                                  static_cast<int64_t>(current_level_.height()) * TILE_SIZE);
+    return set_zoom(next, anchor_x, anchor_y);
+}
+
+bool Application::view_zoom_allowed(int32_t x, int32_t y) const {
+    return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !pointer_outside_ && hud_.view_zoom_allowed() && hud_.over_map(x, y);
+}
+
+// SDL_MOUSEWHEEL over the map view: the wheel rolled away zooms in, towards the pointer, one level per notch (a trackpad's small deltas add up; zoom::wheel_amount undoes the system's
+// "natural scrolling" flip, so rolled away is in whatever the setting). The pointer is the last one that a motion, a press or a release gave.
+void Application::handle_mouse_wheel(const SDL_MouseWheelEvent& wheel) {
+    if (!view_zoom_allowed(mouse_screen_x_, mouse_screen_y_)) {
+        wheel_.reset();                                                   // (what the dialog or the panel gets is not half a notch for the map)
+        return;
+    }
+    const double amount = zoom::wheel_amount(wheel.y, wheel.preciseY, wheel.direction == SDL_MOUSEWHEEL_FLIPPED);
+    int steps = wheel_.feed(amount, wheel.timestamp);
+    for (; steps > 0; --steps) step_zoom(+1, mouse_screen_x_, mouse_screen_y_);
+    for (; steps < 0; ++steps) step_zoom(-1, mouse_screen_x_, mouse_screen_y_);
+}
+
 // 0x10122d4: the stamp is the C runtime's `_strdate` ("mm/dd/yy") and `_strtime` ("hh:mm:ss") joined by " @ " (the format string "%s @ %s\n\n")
 std::string Application::transcript_stamp(std::time_t time) {
     char date[16] = {0};
@@ -862,6 +947,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 
     if (renderer_) {
         renderer_->set_level(current_level_);
+        apply_match_zoom();                                                   // (a match of the network starts at 1: the zoom-out is not offered there)
         show_start_view();
     }
     uint8_t labelled = roster;                                                // the teams that get a score label
@@ -1482,6 +1568,9 @@ void Application::handle_events() {
             case SDL_MOUSEBUTTONUP:
                 handle_mouse_button(event.button);
                 break;
+            case SDL_MOUSEWHEEL:
+                handle_mouse_wheel(event.wheel);
+                break;
             default:
                 break;
         }
@@ -1704,6 +1793,11 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
         return;
     }
 
+    if (button.button == SDL_BUTTON_MIDDLE) {                            // the original has no use for it; the remake's: back to the zoom 1, towards the pointer (the release is nobody's)
+        if (button.type == SDL_MOUSEBUTTONDOWN && view_zoom_allowed(button.x, button.y)) set_zoom(zoom::kNormal, button.x, button.y);
+        return;
+    }
+
     uint16_t mod = static_cast<uint16_t>(SDL_GetModState());
     if (button.type == SDL_MOUSEBUTTONDOWN) {
         hud_.handle_mouse_down(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
@@ -1748,8 +1842,8 @@ void Application::update_simulation(float dt) {
     }
 
     // Update spatial audio listener position
-    audio_mixer_.set_listener_position(renderer_->camera().world_x + layout_.view().w / 2,
-                                       renderer_->camera().world_y + layout_.view().h / 2);
+    audio_mixer_.set_listener_position(renderer_->camera().world_x_at(layout_.view().w / 2),
+                                       renderer_->camera().world_y_at(layout_.view().h / 2));      // (the middle of the world that the view shows, at any zoom)
 
     if (renderer_) {
         renderer_->update_transient_effects(dt);
@@ -2496,13 +2590,13 @@ void Application::show_start_view() {
         tx = current_level_.anthill_spawns[0].x;
         ty = current_level_.anthill_spawns[0].y;
     }
+    ViewportCamera& camera = renderer_->camera();
     int32_t ox = 0;
     int32_t oy = 0;
-    start_view_origin(tx, ty, static_cast<int32_t>(current_level_.width()), static_cast<int32_t>(current_level_.height()), ox, oy, layout_);
-    ViewportCamera& camera = renderer_->camera();
+    start_view_origin(tx, ty, static_cast<int32_t>(current_level_.width()), static_cast<int32_t>(current_level_.height()), ox, oy, layout_, camera.zoom);      // (the world that the view shows at its zoom)
     camera.x = 0.0f;
     camera.y = 0.0f;
-    camera.scroll_pixels(ox, oy, current_level_.width(), current_level_.height());
+    camera.set_origin(static_cast<double>(ox), static_cast<double>(oy), current_level_.width(), current_level_.height());
 }
 
 } // namespace ants::app

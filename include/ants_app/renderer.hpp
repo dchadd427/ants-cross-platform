@@ -31,6 +31,7 @@
 #endif
 
 #include "ants_app/screen_layout.hpp"
+#include "ants_app/view_zoom.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -133,6 +134,10 @@ inline std::vector<size_t> frame_part_draw_order(size_t part_count) {
 
 /**
  * @brief Viewport Camera tracking world position with smooth scrolling and bounds clamping.
+ *
+ * `x`, `y` (and their whole parts `world_x`, `world_y`) are the WORLD point at the view's top left corner. The view is a rectangle of the screen (`view_x`, `view_y`, `viewport_w`,
+ * `viewport_h`) and the world it shows is `viewport / zoom` world pixels (view_zoom.hpp; the zoom is 1 unless the player used the wheel): a world pixel is `zoom` screen pixels.
+ * At the zoom 1 everything here is what it always was; the origin lies on a grid of one screen pixel at the zoom (half a world pixel at 2, two at 0.5).
  */
 struct ViewportCamera {
     float x{0.0f}; // Top-left world X in float pixels
@@ -141,12 +146,14 @@ struct ViewportCamera {
     int32_t world_y{0};
     int32_t view_x{PLAYFIELD_X};       // where the view is on the screen: the world pixel (x, y) is at the screen pixel (view_x, view_y)
     int32_t view_y{PLAYFIELD_Y};
-    int32_t viewport_w{PLAYFIELD_W};
+    int32_t viewport_w{PLAYFIELD_W};   // the view's size in SCREEN pixels
     int32_t viewport_h{PLAYFIELD_H};
     /// A map that is smaller than the view on an axis (a 16 x 16 map is 512 pixels wide, the 16:9 view 762): true centres the map in the view, with black around it, and the camera stays
     /// fixed on that axis; false (the default) puts it at the view's top left corner. The original's own view is smaller than its smallest map, so nothing of it ever shows there and the
     /// classic camera keeps the old rule (the fingerprints of the classic picture pin it); Renderer::set_layout sets this for every layout that is not the original's.
     bool centre_small_maps{false};
+    /// The zoom of the view: screen pixels per world pixel, one of zoom::kLevels (0.5, 1, 2). Everything that converts between the screen and the world reads it.
+    float zoom{zoom::kNormal};
 
     /// The view of a layout (ScreenLayout::view()): its origin on the screen and its size
     void set_view(const LayoutRect& view) noexcept {
@@ -156,12 +163,45 @@ struct ViewportCamera {
         viewport_h = view.h;
     }
 
-    /// Moves the view by whole pixels (the scroll steps of the original's input task) and keeps it inside the map.
+    /// The world that the view shows, in world pixels (rounded up)
+    int32_t visible_w() const noexcept { return zoom::visible(viewport_w, zoom); }
+    int32_t visible_h() const noexcept { return zoom::visible(viewport_h, zoom); }
+
+    /// The world pixel under the screen pixel that is `offset` screen pixels right of / below the view's corner. At the zoom 1 it is the whole origin plus the offset (the
+    /// input code has always done that sum with `world_x`, which is what the tests of the classic picture set); at another zoom it is the origin plus the offset over the zoom.
+    int32_t world_x_at(int32_t offset) const noexcept { return zoom == zoom::kNormal ? world_x + offset : zoom::world_at(static_cast<double>(x), zoom, offset); }
+    int32_t world_y_at(int32_t offset) const noexcept { return zoom == zoom::kNormal ? world_y + offset : zoom::world_at(static_cast<double>(y), zoom, offset); }
+    /// The world coordinate of the right / bottom EDGE of the screen pixel at the offset, rounded up (the end of a rubber band: every world pixel the screen pixels cover is in)
+    int32_t world_x_edge(int32_t offset) const noexcept { return zoom == zoom::kNormal ? world_x + offset : zoom::world_edge_up(static_cast<double>(x), zoom, offset); }
+    int32_t world_y_edge(int32_t offset) const noexcept { return zoom == zoom::kNormal ? world_y + offset : zoom::world_edge_up(static_cast<double>(y), zoom, offset); }
+    /// The origin in screen pixels at the zoom (world pixels times the zoom): the edge scroll's and the minimap's numbers (edge_scroll.hpp). At the zoom 1 it is world_x / world_y.
+    int32_t origin_screen_x() const noexcept { return zoom == zoom::kNormal ? world_x : static_cast<int32_t>(std::lround(static_cast<double>(x) * static_cast<double>(zoom))); }
+    int32_t origin_screen_y() const noexcept { return zoom == zoom::kNormal ? world_y : static_cast<int32_t>(std::lround(static_cast<double>(y) * static_cast<double>(zoom))); }
+    /// The world point in the middle of the view (the sound's listener)
+    int32_t centre_world_x() const noexcept { return zoom == zoom::kNormal ? world_x + viewport_w / 2 : static_cast<int32_t>(std::floor(static_cast<double>(x) + zoom::visible_exact(viewport_w, zoom) / 2.0)); }
+    int32_t centre_world_y() const noexcept { return zoom == zoom::kNormal ? world_y + viewport_h / 2 : static_cast<int32_t>(std::floor(static_cast<double>(y) + zoom::visible_exact(viewport_h, zoom) / 2.0)); }
+
+    /// Moves the view by whole WORLD pixels (the scroll steps of the original's input task at the zoom 1) and keeps it inside the map.
     void scroll_pixels(int32_t dx, int32_t dy, uint32_t map_w, uint32_t map_h) {
         x += static_cast<float>(dx);
         y += static_cast<float>(dy);
         clamp_to_bounds(map_w, map_h);
     }
+    /// Moves the view by whole SCREEN pixels: the edge scroll, the minimap and the keys move it by the same distance on the screen at every zoom (world pixels over the zoom)
+    void scroll_screen(int32_t dx, int32_t dy, uint32_t map_w, uint32_t map_h) {
+        x += static_cast<float>(dx) / zoom;
+        y += static_cast<float>(dy) / zoom;
+        clamp_to_bounds(map_w, map_h);
+    }
+    /// Puts the origin at a world point (on the grid of the zoom, inside the map): the start view, a test
+    void set_origin(double ox, double oy, uint32_t map_w, uint32_t map_h) {
+        x = static_cast<float>(ox);
+        y = static_cast<float>(oy);
+        clamp_to_bounds(map_w, map_h);
+    }
+    /// Changes the zoom to `level`, keeping the world point under the screen pixel that is (anchor_dx, anchor_dy) from the view's corner under it as far as the map's edges allow
+    /// (view_zoom.hpp zoomed). The level must be one of zoom::kLevels; nothing else changes it.
+    void set_zoom(float level, int32_t anchor_dx, int32_t anchor_dy, uint32_t map_w, uint32_t map_h);
     void center_on(int32_t world_px, int32_t world_py, uint32_t map_w = 60, uint32_t map_h = 60);
     void clamp_to_bounds(uint32_t map_w, uint32_t map_h);
 
@@ -347,6 +387,18 @@ public:
     /// The part of the map view that a map of map_w x map_h tiles covers with the camera where it is (view and map intersected, in picture pixels): the clip of the world. The whole view for
     /// a map that is as big as the view or bigger.
     LayoutRect map_view_rect(uint32_t map_w, uint32_t map_h) const;
+    /// THE ZOOM (milestone M4, view_zoom.hpp). The camera's `zoom` is 1 (the original's picture: the world is drawn straight into the view, exactly as it always was), 0.5 or 2. At another zoom
+    /// the world is drawn at ONE TEXEL PER WORLD PIXEL into an offscreen target that covers the world that the view shows (`visible_w()` x `visible_h()`, one texel more for the half-pixel
+    /// origin of the zoom 2), and that target is copied into the view at `zoom` screen pixels per texel: with the nearest filter at 2 (every world pixel a crisp 2 x 2 square), with the
+    /// linear filter at 0.5 (smoothed). Everything that is in screen space is drawn afterwards, on the canvas, at its own size: the hit point digits (Ctrl+L), the tile grid overlay,
+    /// and (by the HUD and the application) the frame, the cursor and the rubber band.
+    bool zoomed() const noexcept { return camera_.zoom != zoom::kNormal; }
+    /// A test hook: draw the world through the offscreen target at the zoom 1 too (the result must be the picture that the direct path draws, pixel for pixel)
+    void set_force_world_target(bool force) noexcept { force_world_target_ = force; }
+    /// A test hook: the offscreen target cannot be made (what the fall-back to the zoom 1 picture is for); and a count of the world passes that went through the target (the zoom 1
+    /// never does, unless it is forced: a test that compares the two paths can see that the pass really took the one it asks for)
+    void set_fail_world_target(bool fail) noexcept { fail_world_target_ = fail; }
+    uint64_t world_target_passes() const noexcept { return world_target_passes_; }
 
     void set_level(const ants::assets::LevelData& level);
 
@@ -585,6 +637,42 @@ private:
     /// A rectangle of the picture's own coordinates as SDL gets it (the picture's corner added, and the origin of a window)
     SDL_Rect placed(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept { return SDL_Rect{x + picture_.x + origin_.x, y + picture_.y + origin_.y, w, h}; }
     void restore_clip();
+
+    // The world pass (see zoomed()). While `in_world_target_` the renderer draws into the target: the camera is a camera of zoom 1 whose view is the target (so every position of the world
+    // code is a texel), the picture is the whole target, there is no origin, and world_view() is the target. begin_world_target() sets this up, end_world_target() puts everything back and
+    // copies the target into the view.
+    LayoutRect world_view() const noexcept { return in_world_target_ ? target_view_ : layout_.view(); }
+    bool begin_world_target();
+    void end_world_target();
+    bool in_world_target_{false};
+    bool force_world_target_{false};
+    bool fail_world_target_{false};
+    uint64_t world_target_passes_{0};
+    LayoutRect target_view_{};
+    SDL_Texture* world_target_{nullptr};
+    int32_t world_target_w_{0};
+    int32_t world_target_h_{0};
+    SDL_Texture* scaled_target_{nullptr};     // the enlarged picture of a zoom whose copy is not exactly the view (a half-pixel origin): see end_world_target
+    int32_t scaled_target_w_{0};
+    int32_t scaled_target_h_{0};
+    struct TargetPass {
+        ViewportCamera camera;                 // the camera that was replaced by the pass's own
+        LayoutRect picture{};
+        bool picture_inset{false};
+        LayoutPoint origin{};
+        int32_t cx{0};                         // the world pixel of the target's first texel
+        int32_t cy{0};
+        int32_t shift_x{0};                    // screen pixels that the copy starts left of / above the view (the half-pixel origin of the zoom 2)
+        int32_t shift_y{0};
+    } pass_;
+    /// The hit point digits of the pass: at a zoom they are drawn after the copy, on the canvas, at one size (a world position and the text)
+    struct DeferredDigits {
+        std::string text;
+        int32_t wx{0};
+        int32_t wy{0};
+    };
+    std::vector<DeferredDigits> deferred_digits_;
+    void draw_deferred_digits();
     std::vector<TransientEffect> transient_effects_{};
     uint32_t sub_tick_ms_{0};
 };
