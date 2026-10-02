@@ -9,8 +9,9 @@
 //
 // Where they stand depends on the room the screen leaves. Every screen's corner row is [version] [sparkline] [frame rate] from x = 514 to 632 (see fps_overlay.hpp), and
 // the row has the whole width of the screen to its left on the results screen and about 170 pixels on the setup screen, so there the two texts stand in the same row, to
-// the left of the version. In a match the bottom row of the screen is the score boxes of the other teams (up to x = 458) and the row's free part is 50 pixels, so the two
-// texts stand on two lines above the row, right aligned with the frame rate. (The area above the row is the "Send to: All" button, x 532 .. 575, and the chat box: the lines keep
+// the left of the version. In a match the bottom row of the screen is the score boxes of the other teams (up to x = 458 in the original's picture, ScreenLayout::score_row_right()
+// says where it ends in another one: the boxes are spread over a wider strip, the third one's cover ends at x = 778 at 960 x 540) and the row's free part is 50 pixels in the original's
+// picture and 48 at 960 x 540, so the two texts stand on two lines above the row, right aligned with the frame rate. (The area above the row is the "Send to: All" button, x 532 .. 575, and the chat box: the lines keep
 // to x >= 563 and only touch the right rim of the button's box, by 7 pixels for a three digit delay and by none for one or two digits.) A layout never changes with the numbers:
 // the choice is made with the widest possible texts.
 
@@ -47,14 +48,19 @@ enum class CornerScreen : uint8_t {
 };
 
 /// The leftmost x that the two texts may use in a row on each kind of screen (the x of the first pixel of the first text). The setup screen's bottom row begins with the
-/// prompt box (36 .. 329, its picture to 336); in a match the bottom row holds the score boxes up to the cover of the third slot (402 - 2 + 58 = 458); the results screen's
+/// prompt box (36 .. 329, its picture to 336); in a match the bottom row holds the score boxes up to the cover of the third slot (402 - 2 + 58 = 458), and in a wider picture
+/// up to where the layout's third box is (ScreenLayout::score_row_right(): the match's limit is the layout's, not a number of the original's picture); the results screen's
 /// lists end at row 465, nothing stands in the corner row.
 inline constexpr int32_t LATENCY_LEFT_LIMIT_SETUP = 340;
-inline constexpr int32_t LATENCY_LEFT_LIMIT_MATCH = 460;
+/// The original's picture's limit (the layout's own number for 640 x 480: ScreenLayout::classic().score_row_right())
+inline constexpr int32_t LATENCY_LEFT_LIMIT_MATCH = ScreenLayout::classic().score_row_right();
+static_assert(LATENCY_LEFT_LIMIT_MATCH == 460, "the original's picture keeps its limit of 460");
 inline constexpr int32_t LATENCY_LEFT_LIMIT_RESULTS = 8;
 
 /// Whether the corner shows the network's readout on `screen`, and the leftmost x of its row there: only in the room (Room, and Loading while the map loads) and the match of
 /// a network game, on the setup, match and results screens. Nothing for a game of one machine, a connection that is being made, one that failed or is over, or any other screen.
+/// The match's limit is the layout's (the row of score boxes ends further right in a wider picture); without a layout it is the original's picture's.
+std::optional<int32_t> latency_left_limit(bool network_active, net::NetGame::Phase phase, CornerScreen screen, const ScreenLayout& layout);
 std::optional<int32_t> latency_left_limit(bool network_active, net::NetGame::Phase phase, CornerScreen screen);
 
 /// The right end of both layouts: the right edge of the frame rate text (the corner's margin)
@@ -78,6 +84,10 @@ LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32
 /// ... in the corner of a canvas of another size (`corner`: where the frame rate text ends and where the plate begins); the version above is the original's 640 x 480 corner
 LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32_t widest_w, int32_t text_h, int32_t version_x, int32_t text_y, int32_t left_limit,
                                           const CornerPlate& corner);
+
+/// Where the readout's texts go for these numbers on this renderer (measured with it): what draw_latency_corner draws. The application keeps the last one it drew
+/// (Application::last_latency_layout), so that a test sees the choice that the running game made.
+LatencyCornerLayout latency_corner_layout(const IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit, const CornerPlate& corner);
 
 /// Draws the readout (the calls are the two texts and nothing else: no plate, no frame)
 void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit);

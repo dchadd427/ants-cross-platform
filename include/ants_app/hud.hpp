@@ -69,12 +69,18 @@ public:
     /// original's screen is placed from it by ONE function (apply_layout), which `init` (so every new match) and `set_layout` both run: a layout that was set earlier is not lost
     /// when the next match resets the HUD. The map view, the minimap, the chat log, the top bar's buttons, the pedestals, the [All] / [Team] buttons, the score slots, the status
     /// line and the chat input follow it, and so do the pointer's zones (over_map, over_minimap, in_chat_view). The dialogs (quit, alliance, the "get ready" modal) and the pages (options,
-    /// quick help) are pictures of the original's screen with their own numbers: render() draws them moved by layout().modal_offset() / page_offset() (IRenderer::set_origin) and the
-    /// pointer handlers take the pointer back to those numbers.
+    /// quick help) are pictures of the original's screen with their own numbers: render() draws them moved by layout().modal_offset() / options_offset() / quick_help_offset() (IRenderer::set_origin: over
+    /// the map view, the rest of the HUD visible around them) and the pointer handlers take the pointer back to those numbers.
     void set_layout(const ScreenLayout& layout);
     const ScreenLayout& layout() const noexcept { return layout_; }
     /// The map view and the minimap of the layout (a press there goes to the map / the minimap): in_map_rect and in_minimap_rect are the original's, these follow the layout
     bool over_map(int32_t x, int32_t y) const noexcept { return layout_.view().contains(x, y); }
+    /// The point is on the map's ground: in the view, and not on the black around a map that is smaller than the view (the camera's origin is negative there). Nothing on the black
+    /// acts: no order, no selection, no marker; the pointer over it is the plain arrow.
+    bool over_ground(int32_t x, int32_t y, const ViewportCamera& camera, const sim::Grid& grid) const noexcept;
+    /// Where the numbers of the open window (the options screen, the quick help) are moved to in this picture: layout().options_offset() / quick_help_offset(), (0, 0) in the
+    /// original's own picture. Every pointer handler, the 50 ms poll of update() and the drawing use this one place.
+    LayoutPoint open_window_offset() const noexcept { return show_quick_help_ ? layout_.quick_help_offset() : layout_.options_offset(); }
     bool over_minimap(int32_t x, int32_t y) const noexcept { return layout_.minimap().contains(x, y); }
     /// The rectangles that the layout places (for the widescreen work and the tests); the pedestal buttons are the pedestal slots' rectangles too
     const UIButton& help_button() const noexcept { return help_button_; }
@@ -370,8 +376,6 @@ private:
     /// clear) and the local team has not dropped out itself
     bool ally_pedestal_possible(const sim::WorldState& world) const;
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
-    /// What shows around a page of the original's 640 x 480 screen in a bigger picture
-    void render_page_margin(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);

@@ -16,16 +16,20 @@ std::string delay_text(const std::optional<uint32_t>& delay_ms) {
     return "delay " + std::to_string(std::min(*delay_ms, LATENCY_SHOWN_MAX_MS)) + " ms";
 }
 
-std::optional<int32_t> latency_left_limit(bool network_active, net::NetGame::Phase phase, CornerScreen screen) {
+std::optional<int32_t> latency_left_limit(bool network_active, net::NetGame::Phase phase, CornerScreen screen, const ScreenLayout& layout) {
     if (!network_active) return std::nullopt;                                          // a game of one machine draws nothing new
     if (phase != net::NetGame::Phase::Room && phase != net::NetGame::Phase::Loading && phase != net::NetGame::Phase::Playing) return std::nullopt;
     switch (screen) {
         case CornerScreen::Setup: return LATENCY_LEFT_LIMIT_SETUP;
-        case CornerScreen::Match: return LATENCY_LEFT_LIMIT_MATCH;
+        case CornerScreen::Match: return layout.score_row_right();
         case CornerScreen::Results: return LATENCY_LEFT_LIMIT_RESULTS;
         case CornerScreen::Other: break;
     }
     return std::nullopt;
+}
+
+std::optional<int32_t> latency_left_limit(bool network_active, net::NetGame::Phase phase, CornerScreen screen) {
+    return latency_left_limit(network_active, phase, screen, ScreenLayout::classic());
 }
 
 LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32_t widest_w, int32_t text_h, int32_t version_x, int32_t text_y, int32_t left_limit,
@@ -51,13 +55,19 @@ LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32
     return layout_latency_corner(ping_w, delay_w, widest_w, text_h, version_x, text_y, left_limit, CornerPlate::classic());
 }
 
-void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit, const CornerPlate& corner) {
+LatencyCornerLayout latency_corner_layout(const IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit, const CornerPlate& corner) {
     const std::string ping = ping_text(readout.ping_ms);
     const std::string delay = delay_text(readout.delay_ms);
     const int32_t widest = renderer.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP +
                            renderer.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
-    const LatencyCornerLayout layout = layout_latency_corner(renderer.get_text_width(ping, FontSize::Px12), renderer.get_text_width(delay, FontSize::Px12), widest,
-                                                             renderer.get_text_height(FontSize::Px12), version_x, text_y, left_limit, corner);
+    return layout_latency_corner(renderer.get_text_width(ping, FontSize::Px12), renderer.get_text_width(delay, FontSize::Px12), widest,
+                                 renderer.get_text_height(FontSize::Px12), version_x, text_y, left_limit, corner);
+}
+
+void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit, const CornerPlate& corner) {
+    const std::string ping = ping_text(readout.ping_ms);
+    const std::string delay = delay_text(readout.delay_ms);
+    const LatencyCornerLayout layout = latency_corner_layout(renderer, readout, version_x, text_y, left_limit, corner);
     const ants::assets::ColorRGBA white{255, 255, 255, 255};              // the frame rate's colour
     renderer.draw_text(ping, layout.ping_x, layout.ping_y, white, FontSize::Px12);
     renderer.draw_text(delay, layout.delay_x, layout.delay_y, white, FontSize::Px12);

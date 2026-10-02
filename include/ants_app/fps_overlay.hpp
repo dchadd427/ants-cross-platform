@@ -38,4 +38,26 @@ struct CornerPlate {
     }
 };
 
+/// Where the three parts of the corner's row stand, from the right: the frame rate text ends at the plate's right edge, the sparkline is `kRowGap` left of it and the version `kRowGap` left of the
+/// sparkline (the row of Application::render_frame; the network's ping and delay stand left of the version: latency_corner.hpp). `fps_w` / `ver_w` are the widths of the two texts,
+/// `spark_w` x `spark_h` the sparkline's size, `text_h` the height of the 12 px text.
+struct CornerRow {
+    static constexpr int32_t kRowGap = 6;
+    int32_t fps_x{0};                 // the frame rate text's left edge
+    int32_t spark_x{0};               // the sparkline's left edge
+    int32_t spark_y{0};               // the sparkline's and the texts' first row
+    int32_t text_y{0};                // the first row of the 12 px texts (centred on the sparkline)
+    int32_t version_x{0};             // the version text's left edge
+
+    static constexpr CornerRow of(const CornerPlate& plate, int32_t fps_w, int32_t ver_w, int32_t spark_w, int32_t spark_h, int32_t text_h) noexcept {
+        CornerRow row;
+        row.fps_x = plate.right_edge - fps_w;
+        row.spark_x = row.fps_x - spark_w - kRowGap;
+        row.spark_y = plate.spark_y;
+        row.text_y = row.spark_y + (spark_h - text_h) / 2;
+        row.version_x = row.spark_x - ver_w - kRowGap;
+        return row;
+    }
+};
+
 } // namespace ants::app

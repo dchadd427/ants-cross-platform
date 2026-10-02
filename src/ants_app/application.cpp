@@ -279,13 +279,18 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.title = argv[++i];
         } else if (std::strcmp(argv[i], "--window-pos") == 0 && i + 1 < argc) {
             cfg.has_window_pos = parse_pair(argv[++i], cfg.window_x, cfg.window_y);
-        } else if (std::strcmp(argv[i], "--window-size") == 0 && i + 1 < argc) {
+        } else if (std::strcmp(argv[i], "--window-size") == 0) {                    // --window-size WxH or W,H (at least 320x240); anything else is refused, as --aspect's is
             int32_t w = 0;
             int32_t h = 0;
-            if (parse_pair(argv[++i], w, h) && w >= kMinWindowWidth && h >= kMinWindowHeight) {
+            std::string why;
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--window-size needs WIDTHxHEIGHT or WIDTH,HEIGHT (for example 1280x720)";
+            } else if (parse_window_size(argv[++i], w, h, why)) {
                 cfg.has_window_size = true;
                 cfg.window_w = w;
                 cfg.window_h = h;
+            } else if (cfg.startup_error.empty()) {
+                cfg.startup_error = "--window-size " + why;
             }
         } else if (std::strcmp(argv[i], "--grid") == 0 && i + 1 < argc) {
             if (!parse_grid(argv[++i], cfg.grid_cols, cfg.grid_rows)) cfg.grid_cols = cfg.grid_rows = 0;
@@ -716,12 +721,13 @@ LayoutRect Application::picture_for_state() const {
 }
 
 // The picture changes when the screen does (a match starts, the results open, the setup screen comes back). The pointer stays where it is on the canvas, so its coordinates, which are the
-// picture's own, move with the corner.
+// picture's own, move with the corner; a pointer that was beside the new picture (on the clay of a page, left of x = 160) is at the picture's nearest edge pixel, which is where the
+// original's one-monitor pointer is when it is pushed against an edge (pointer_clamp.hpp), and not outside the picture, where the cursor would vanish.
 void Application::update_picture() {
     const LayoutRect want = picture_for_state();
     if (want == picture_) return;
-    mouse_screen_x_ += picture_.x - want.x;
-    mouse_screen_y_ += picture_.y - want.y;
+    mouse_screen_x_ = std::clamp(mouse_screen_x_ + picture_.x - want.x, 0, want.w - 1);
+    mouse_screen_y_ = std::clamp(mouse_screen_y_ + picture_.y - want.y, 0, want.h - 1);
     picture_ = want;
     if (renderer_) renderer_->set_picture(picture_);
 }
@@ -1571,8 +1577,9 @@ void Application::apply_window_layout() {
     }
     if (config_.has_window_size) {
         SDL_SetWindowSize(window_, config_.window_w, config_.window_h);
-    } else if (aspect_ != Aspect::Classic4x3 && !config_.fullscreen) {
-        // a game of another aspect opens at the largest whole-number multiple of its canvas that fits the usable area of the display (at least 1x), centred
+    } else if (aspect_ != Aspect::Classic4x3) {
+        // a game of another aspect opens at the largest scale in steps of 0.5 of its canvas that fits the usable area of the display (at least 1x), centred (window_layout.hpp). A game that
+        // starts in fullscreen gets the same size: it is the window that Alt+Enter (or the macOS fullscreen button) gives back, and it has the canvas's shape, not the config's 4:3 one
         int display = config_.display_index >= 0 ? config_.display_index : SDL_GetWindowDisplayIndex(window_);
         if (display < 0) display = 0;
         SDL_Rect area{0, 0, 0, 0};
@@ -1581,12 +1588,12 @@ void Application::apply_window_layout() {
             int left = 0;
             int bottom = 0;
             int right = 0;
-            if (!config_.headless && SDL_GetWindowBordersSize(window_, &top, &left, &bottom, &right) != 0) {      // a platform that cannot tell: assume a typical title bar
+            if (!config_.headless && (config_.fullscreen || SDL_GetWindowBordersSize(window_, &top, &left, &bottom, &right) != 0)) {      // a fullscreen window has no borders to measure, nor has a platform that cannot tell: assume a typical title bar
                 top = 28;
                 left = bottom = right = 0;
             }
-            const WindowRect r = largest_canvas_window(WindowRect{area.x, area.y, area.w, area.h}, canvas_width_of(aspect_), canvas_height_of(aspect_), top, left, bottom, right);
-            SDL_SetWindowSize(window_, r.w, r.h);
+            const WindowRect r = default_canvas_window(WindowRect{area.x, area.y, area.w, area.h}, canvas_width_of(aspect_), canvas_height_of(aspect_), top, left, bottom, right);
+            SDL_SetWindowSize(window_, r.w, r.h);                 // (in fullscreen SDL keeps it as the windowed size, for the way back)
             if (!config_.has_window_pos) SDL_SetWindowPosition(window_, r.x, r.y);
         }
     }
@@ -1983,16 +1990,18 @@ void Application::render_latency_corner(int32_t version_x, int32_t text_y, const
     const CornerScreen screen = state_ == AppState::MapSelect ? CornerScreen::Setup
                                 : state_ == AppState::Playing ? (scorecard_.is_open() ? CornerScreen::Results : CornerScreen::Match)
                                                               : CornerScreen::Other;
-    const std::optional<int32_t> left_limit = latency_left_limit(true, net_->phase(), screen);
+    const std::optional<int32_t> left_limit = latency_left_limit(true, net_->phase(), screen, layout_);
     if (!left_limit) return;
     LatencyReadout readout;
     readout.ping_ms = net_->ping_ms();
     readout.delay_ms = net_->command_delay_ms();
+    last_latency_layout_ = latency_corner_layout(*renderer_, readout, version_x, text_y, *left_limit, plate);
     draw_latency_corner(*renderer_, readout, version_x, text_y, *left_limit, plate);
 }
 
 void Application::render_frame() {
     renderer_->begin_frame();
+    last_latency_layout_.reset();                        // (set again when this frame draws the network's readout)
     update_picture();
     if (picture_ != canvas().rect()) {                   // a page of the original's own screen in a bigger canvas: the clay of its pages fills what is around it
         renderer_->set_picture(canvas().rect());
@@ -2030,19 +2039,20 @@ void Application::render_frame() {
     std::string fps_text = std::to_string(fps_val) + " FPS";
     int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Px12);
     int32_t text_h = renderer_->get_text_height(FontSize::Px12);
-    int32_t text_x = plate.right_edge - text_w;
     constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
     constexpr int32_t spark_h = FPS_OVERLAY_SPARK_H;
-    int32_t spark_x = text_x - spark_w - 6;
-    int32_t spark_y = plate.spark_y;
-    int32_t text_y = spark_y + (spark_h - text_h) / 2;
+    std::string ver_text(ants::VERSION_STRING);
+    int32_t ver_w = renderer_->get_text_width(ver_text, FontSize::Px12);
+    const CornerRow row = CornerRow::of(plate, text_w, ver_w, spark_w, spark_h, text_h);          // (the version, the sparkline and the frame rate: one row from the right edge)
+    const int32_t text_x = row.fps_x;
+    const int32_t spark_x = row.spark_x;
+    const int32_t spark_y = row.spark_y;
+    const int32_t text_y = row.text_y;
     renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Px12);
 
     // Version number display (bottom-right next to FPS sparkline)
-    std::string ver_text(ants::VERSION_STRING);
-    int32_t ver_w = renderer_->get_text_width(ver_text, FontSize::Px12);
-    int32_t ver_x = spark_x - ver_w - 6;
-    int32_t ver_y = text_y;
+    const int32_t ver_x = row.version_x;
+    const int32_t ver_y = text_y;
     renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Px12);
 
     // Dark translucent background plate + subtle border

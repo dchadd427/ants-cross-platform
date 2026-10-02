@@ -83,13 +83,16 @@ struct ScreenLayout {
     static constexpr int32_t kPanelH = 458;
     /// The score slots of the original: slot 0 is the local team's (the top bar), slots 1 .. 3 are the other teams' (the bottom strip)
     static constexpr size_t kClassicScoreSlots = 4;
-    /// A further bottom slot (a wider strip has room for them: milestone M3) is one pitch to the left of the box of the slot before it; the pitch is the distance of the original's
-    /// slots 2 and 3 (their boxes are at 254 and 402). Its label is 88 wide (the original's slot 2) and ends three pixels before its box (as slots 2 and 3). A label may not begin left
-    /// of the strip's plain band (the strip x17y461 starts at 17 and its first 18 columns are the end ornament and the band's start): 35.
-    static constexpr int32_t kSlotPitch = 148;
-    static constexpr int32_t kSlotLabelW = 88;
-    static constexpr int32_t kSlotLabelGap = 3;
-    static constexpr int32_t kBottomBandLeft = 35;
+    /// The bottom strip (x17y461) of a wider picture is widened at THREE plain cuts of its art (shell_layout.hpp: its piece columns 15, 188 and 346), one left of each score box, and the
+    /// extra width dx is shared between them in thirds (the leftmost takes the remainder), so that the three boxes are spread evenly over the strip instead of sitting together at its right
+    /// end (the owner: "can you expand between the scores so they're not all offset to the right?"). At 960 x 540 (dx = 320) the cuts add 108, 106 and 106 and the boxes sit at x 213, 468
+    /// and 722. A box and its label are anchored to each other: they move by what the cuts left of the box add. A strip with more score slots (later) would get one more cut for each, with
+    /// the extra width shared equally between them: the boxes stay evenly spaced.
+    static constexpr size_t kBottomSlots = 3;
+    /// How far the score row of the corner's texts is kept from the covers of the boxes (the original's corner row: the third box's cover ends at 458, the texts' limit is 460)
+    static constexpr int32_t kScoreRowMargin = 2;
+    /// The cover of a box (scorcovr, 58 x 17 at (box_left - 2, top - 1)) reaches this far right of the box's left edge
+    static constexpr int32_t kScoreCoverReach = 56;
     /// The dialog frame of the original (the animation std_dialg: the quit dialog, the alliance dialogs, the "get ready" modal), (100, 100) 320 x 224, and the original's pages (640 x 480)
     static constexpr int32_t kDialogX = 100;
     static constexpr int32_t kDialogY = 100;
@@ -134,46 +137,59 @@ struct ScreenLayout {
     /// The panel's backing fill: right anchored, and as tall as the screen below the top bar
     constexpr LayoutRect panel_fill() const noexcept { return LayoutRect{right(kPanelX), kPanelY, kPanelW, kPanelH + dy()}; }
 
-    /// The slot k of the score boxes: 0 is the local team's (the top bar; right anchored: it stays beside the buttons), 1 .. 3 are the original's bottom slots (right and bottom
-    /// anchored: the boxes sit at the right end of the strip, next to the panel), and a slot past them is one pitch further LEFT each, in the free band of a wider strip, as long as its
-    /// label fits right of kBottomBandLeft (a picture of 960 pixels holds five bottom slots, the original's 640 only three). A k past the last slot that exists gives the last one.
-    /// (The numbers of the original are 0x1002218 and 0x10021b8.)
+    /// What cut `index` (0 = the leftmost) of a piece with `cuts` cuts adds to the piece's width: dx shared in equal parts, the leftmost cut taking the remainder (no extra width, no share).
+    /// The frame (shell_layout.hpp) and the score slots read this one rule.
+    constexpr int32_t cut_share(size_t index, size_t cuts) const noexcept {
+        if (cuts == 0 || index >= cuts) return 0;
+        const int32_t each = dx() / static_cast<int32_t>(cuts);
+        return index == 0 ? dx() - each * static_cast<int32_t>(cuts - 1) : each;
+    }
+    /// How far the cuts 0 .. index of a piece with `cuts` cuts move what is right of cut `index`
+    constexpr int32_t cut_shift(size_t index, size_t cuts) const noexcept {
+        int32_t sum = 0;
+        for (size_t i = 0; i <= index && i < cuts; ++i) sum += cut_share(i, cuts);
+        return sum;
+    }
+
+    /// The slot k of the score boxes: 0 is the local team's (the top bar; right anchored: it stays beside the buttons), 1 .. 3 are the original's bottom slots (bottom anchored, and spread over
+    /// the strip: the box of bottom slot b moves right by what the strip's cuts left of it add, see kBottomSlots: all of dx for the last, a third less for the one before ...).
+    /// A k past the last slot gives the last one. (The numbers of the original are 0x1002218 and 0x10021b8.)
     constexpr ScoreSlot score_slot(size_t k) const noexcept {
         constexpr ScoreSlot local{312, 399, 4, 402};
-        constexpr ScoreSlot bottom_slots[3] = {{5, 101, 464, 105}, {163, 251, 464, 254}, {312, 399, 464, 402}};
+        constexpr ScoreSlot bottom_slots[kBottomSlots] = {{5, 101, 464, 105}, {163, 251, 464, 254}, {312, 399, 464, 402}};
         if (k == 0) return ScoreSlot{right(local.label_left), right(local.label_right), local.top, right(local.box_left)};
-        const size_t last = bottom_slot_count();
-        const size_t b = std::min(k, last);                              // 1 .. last
-        if (b <= 3) {
-            const ScoreSlot& s = bottom_slots[b - 1];
-            return ScoreSlot{right(s.label_left), right(s.label_right), bottom(s.top), right(s.box_left)};
-        }
-        return further_slot(b);
+        const size_t b = std::min(k, kBottomSlots);                      // 1 .. 3
+        const ScoreSlot& s = bottom_slots[b - 1];
+        const int32_t shift = cut_shift(b - 1, kBottomSlots);
+        return ScoreSlot{s.label_left + shift, s.label_right + shift, bottom(s.top), s.box_left + shift};
     }
 
-    /// How many bottom slots there are (1 .. n): the original's three, and one more for every pitch of room that the strip has to the left of the first (a layout that is not wider has three)
-    constexpr size_t bottom_slot_count() const noexcept {
-        size_t n = 3;
-        while (n < 64 && further_slot(n + 1).label_left >= kBottomBandLeft) ++n;
-        return n;
-    }
+    /// How many bottom slots there are (1 .. n): the original's three, in every picture
+    constexpr size_t bottom_slot_count() const noexcept { return kBottomSlots; }
 
-    /// Where a window of the original's 640 x 480 pages sits when the picture is bigger: centred (the original's own screen when it is not)
+    /// Where the row of the score boxes ends on the bottom strip: the right edge of the last bottom slot's cover and the margin that the texts of the corner keep (the network's ping and
+    /// delay stand right of it; the original's 640 x 480 picture: 460)
+    constexpr int32_t score_row_right() const noexcept { return score_slot(kBottomSlots).box_left + kScoreCoverReach + kScoreRowMargin; }
+
+    /// Where a page of the original's 640 x 480 screens sits when the picture is bigger and nothing of the match is around it (the loading screen, the quick help at the start, the setup
+    /// screen and the room, the results): centred, on the clay of its pages (the application's picture is centred in the canvas by the same numbers). The original's own screen when it is not.
     constexpr LayoutPoint page_offset() const noexcept { return LayoutPoint{dx() / 2, dy() / 2}; }
     /// What a dialog of the original (the frame at (100, 100) 320 x 224) is moved by during a match: its centre goes to the centre of the map view. The original's own
     /// place is the classic picture's (no move), so a layout without extra size gives (0, 0).
-    constexpr LayoutPoint modal_offset() const noexcept {
-        if (dx() == 0 && dy() == 0) return LayoutPoint{};
-        const LayoutRect v = view();
-        return LayoutPoint{v.x + v.w / 2 - (kDialogX + kDialogW / 2), v.y + v.h / 2 - (kDialogY + kDialogH / 2)};
-    }
+    constexpr LayoutPoint modal_offset() const noexcept { return centred_in_view(kDialogX, kDialogY, kDialogW, kDialogH); }
+
+    /// Where the windows of the original's own pages that open DURING a match are drawn in a bigger picture: over the map view, centred in it, the HUD staying visible around them (as in the
+    /// original's picture, where the options window sits over the map view and the panel is still there). The options window is the original's 442 x 440 card over its map view; the quick
+    /// help is the 640 x 480 page. The original's own picture has no move.
+    constexpr LayoutPoint options_offset() const noexcept { return centred_in_view(kClassicViewX, kClassicViewY, kClassicViewW, kClassicViewH); }
+    constexpr LayoutPoint quick_help_offset() const noexcept { return centred_in_view(0, 0, kClassicWidth, kClassicHeight); }
 
 private:
-    /// The bottom slot b >= 4: b - 3 pitches left of the first bottom slot's box
-    constexpr ScoreSlot further_slot(size_t b) const noexcept {
-        const int32_t box = right(105) - static_cast<int32_t>(b - 3) * kSlotPitch;
-        const int32_t label_right = box - kSlotLabelGap;
-        return ScoreSlot{label_right - kSlotLabelW, label_right, bottom(464), box};
+    /// The offset that puts the window (x, y, w, h) of the original's pages at the centre of the map view; none for the original's own picture
+    constexpr LayoutPoint centred_in_view(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept {
+        if (dx() == 0 && dy() == 0) return LayoutPoint{};
+        const LayoutRect v = view();
+        return LayoutPoint{v.x + v.w / 2 - (x + w / 2), v.y + v.h / 2 - (y + h / 2)};
     }
 };
 

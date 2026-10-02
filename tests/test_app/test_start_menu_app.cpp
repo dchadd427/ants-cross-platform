@@ -1711,7 +1711,8 @@ int main(int argc, char** argv) {
     TEST_CASE("A10.1 The command line --start-menu --headless --screenshot FILE draws the first panel and ends (the screenshots of the menu are made this way): the picture is the menu's (the orange of the original's Single / Multi screen fills most of it), not an empty frame") {
         TempDir temp;
         // (a .bmp: the game turns a .png into a PNG with Python's PIL, which a machine need not have; the bitmap is what the renderer reads back and is the same everywhere)
-        std::vector<std::string> args = {"ants", "--start-menu", "--headless", "--screenshot", temp.file("menu.bmp"), "--frames", "6", "--settings", temp.file("s.ini")};
+        // (a command line is the 16:9 picture on a desktop now, the widescreen work: this test is about the menu's own 640 x 480 picture, so it says --aspect 4:3; A10.1b is the 16:9 one)
+        std::vector<std::string> args = {"ants", "--start-menu", "--headless", "--aspect", "4:3", "--screenshot", temp.file("menu.bmp"), "--frames", "6", "--settings", temp.file("s.ini")};
         std::vector<char*> storage;
         const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
         ASSERT_TRUE(cfg.start_menu && cfg.headless && cfg.startup_error.empty());
@@ -1746,6 +1747,56 @@ int main(int argc, char** argv) {
         const size_t total = static_cast<size_t>(width) * static_cast<size_t>(height);
         ASSERT_TRUE(orange * 100 >= total * 35);                                              // the background of the Single / Multi screen
         ASSERT_TRUE(green * 100 >= total * 8);                                                // and the four buttons and the banner on it
+    } TEST_END();
+
+    TEST_CASE("A10.1b The same screenshot in the 16:9 picture (the default of a desktop): the 960 x 540 canvas with the menu's own 640 x 480 page centred at (160, 30) over the clay of the original's pages, the page pixel for pixel the 4:3 picture's") {
+        TempDir temp;
+        struct Shot {
+            int32_t width{0};
+            int32_t height{0};
+            bool bottom_up{true};
+            std::string bmp;
+            uint32_t offset{0};
+            std::array<uint8_t, 3> at(int32_t x, int32_t y) const {                           // the colour at the image's (x, y), top down
+                const int32_t row = bottom_up ? height - 1 - y : y;
+                const size_t i = offset + (static_cast<size_t>(row) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 4;
+                return {static_cast<uint8_t>(bmp[i + 2]), static_cast<uint8_t>(bmp[i + 1]), static_cast<uint8_t>(bmp[i])};
+            }
+        };
+        const auto take = [&](const char* aspect, const char* window, const char* name) {
+            std::vector<std::string> args = {"ants", "--start-menu", "--headless", "--aspect", aspect, "--window-size", window, "--screenshot", temp.file(name), "--frames", "6", "--settings", temp.file("s.ini")};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            Shot shot;
+            if (!cfg.start_menu || !cfg.startup_error.empty()) return shot;
+            Application app;
+            if (!app.init(cfg) || app.run() != 0) return shot;
+            shot.bmp = read_file(temp.file(name));
+            if (shot.bmp.size() < 54 || shot.bmp.substr(0, 2) != "BM") return shot;
+            const auto le32 = [&shot](size_t at) {
+                uint32_t v = 0;
+                for (size_t i = 4; i-- > 0;) v = (v << 8) | static_cast<uint8_t>(shot.bmp[at + i]);
+                return v;
+            };
+            shot.offset = le32(10);
+            shot.width = static_cast<int32_t>(le32(18));
+            const int32_t signed_height = static_cast<int32_t>(le32(22));
+            shot.bottom_up = signed_height > 0;
+            shot.height = std::abs(signed_height);
+            if (shot.bmp.size() < shot.offset + static_cast<size_t>(shot.width) * static_cast<size_t>(shot.height) * 4) shot.width = shot.height = 0;
+            return shot;
+        };
+        const Shot classic = take("4:3", "640,480", "classic.bmp");
+        const Shot wide = take("16:9", "960,540", "wide.bmp");
+        ASSERT_TRUE(classic.width == 640 && classic.height == 480);
+        ASSERT_TRUE(wide.width == 960 && wide.height == 540);
+        const std::array<uint8_t, 3> clay{219, 75, 19};
+        for (const std::pair<int, int>& p : {std::pair<int, int>{0, 0}, {159, 100}, {800, 100}, {400, 10}, {400, 29}, {959, 539 - 20}, {80, 300}}) ASSERT_TRUE(wide.at(p.first, p.second) == clay);   // the clay around the page
+        int64_t differ = 0;
+        for (int32_t y = 0; y < 465; ++y) {                                                    // (the rows of the frame rate's plate, which is the canvas's corner, are left out)
+            for (int32_t x = 0; x < 640; ++x) differ += wide.at(160 + x, 30 + y) != classic.at(x, y) ? 1 : 0;
+        }
+        ASSERT_EQ(differ, int64_t{0});
     } TEST_END();
 
     TEST_CASE("A10.2 --start-menu together with --bot SEAT:LEVEL (the way the tests and the screenshots show bots): the single-player rows start as the command line says, Continue offers exactly those bots, and a bot of another kind than the standard one is no row") {

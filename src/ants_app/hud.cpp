@@ -265,8 +265,10 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
     check_selected_pickups(world);
 
     // The INPUT task polls the pointer every 50 ms (FUN_0102653f dispatches the move to the top window): the pictures of the options' controls follow it
-    if (options_.is_open()) options_.on_move(mouse_x_, mouse_y_);
-    if (show_quick_help_) quick_help_return_.on_move(mouse_x_, mouse_y_);
+    // (the window's numbers are the original's own: the pointer is taken back to them, as the event handlers do)
+    const LayoutPoint window = open_window_offset();
+    if (options_.is_open()) options_.on_move(mouse_x_ - window.x, mouse_y_ - window.y);
+    if (show_quick_help_) quick_help_return_.on_move(mouse_x_ - window.x, mouse_y_ - window.y);
 
     // 3. Alliance team status
     is_on_team_ = (local_player_id_ < world.player_alliances.size() &&
@@ -587,16 +589,15 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         render_marquee_box(renderer);
     }
 
-    // 5. Overlays and Dialogs: the pages of the original (the quick help, the options) are its own 640 x 480 screens, centred in a bigger picture over a margin; the dialogs are
-    //    its dialog frame, moved so that it is centred over the map view. They are drawn with their own numbers, moved by the renderer's origin
-    //    (IRenderer::set_origin: nothing moves in the original's own picture)
-    const LayoutPoint page = layout_.page_offset();
+    // 5. Overlays and Dialogs: the options window and the quick help are the original's own pictures (their own numbers) and sit over the map view, centred in it, with the HUD visible
+    //    around them (as the options window does in the original's picture); the dialogs are its dialog frame, moved so that it is centred over the map view too. They are drawn with
+    //    their own numbers, moved by the renderer's origin (IRenderer::set_origin: nothing moves in the original's own picture)
     const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_ || options_.is_open()) {
-        const bool inset = page != LayoutPoint{};                       // (a page of the original's own picture is the whole picture: nothing to cut, nothing around it)
-        render_page_margin(renderer, assets);
-        renderer.set_origin(page.x, page.y);
-        if (inset) renderer.set_clip_rect(0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight);       // the pieces of a page reach beyond its 640 x 480 screen
+        const LayoutPoint window = open_window_offset();
+        const bool inset = window != LayoutPoint{};                     // (in the original's own picture the window is where it always was: nothing to cut)
+        renderer.set_origin(window.x, window.y);
+        if (inset) renderer.set_clip_rect(layout_.view().x - window.x, layout_.view().y - window.y, layout_.view().w, layout_.view().h);       // the pieces of a window reach beyond the map view: they stop at it
         if (show_quick_help_) render_quick_help(renderer, assets);
         else options_.render(renderer, assets, clock_ms());
         if (inset) renderer.clear_clip_rect();
@@ -608,14 +609,6 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         else render_match_start_modal(renderer, assets);
         renderer.set_origin(0, 0);
     }
-}
-
-// What surrounds a page of the original's own 640 x 480 screen in a bigger picture: nothing of the match shows around it (the pages of the original cover the whole screen), so the
-// margin is the clay of its pages, as on the screens outside a match (kPageMargin). The original's own picture has no margin.
-void HUD::render_page_margin(IRenderer& renderer, const assets::AssetArchive& assets) {
-    (void)assets;
-    if (layout_.page_offset() == LayoutPoint{}) return;
-    renderer.fill_rect(0, 0, layout_.width, layout_.height, kPageMargin);
 }
 
 // The frame of the match screen: the 14 pieces of the animation uishell, last stored piece first (the order the original draws them), each where its anchor puts it in this picture and,
@@ -1304,8 +1297,8 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     mouse_y_ = y;
 
     // 0. Overlays and Modals intercept clicks first
-    // (the pages and the dialogs have the original's own numbers, drawn moved by the layout's page / modal offset: the pointer is taken back to them)
-    const LayoutPoint page = layout_.page_offset();
+    // (the windows and the dialogs have the original's own numbers, drawn moved by the layout's window / modal offset: the pointer is taken back to them)
+    const LayoutPoint page = open_window_offset();
     const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
         if (button == SDL_BUTTON_LEFT) quick_help_return_.on_press(x - page.x, y - page.y);     // the Return button captures (qh_return3 carries no sound); nothing else reacts
@@ -1448,7 +1441,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     hatch_button_.is_pressed = false;
     team_up_button_.is_pressed = false;
     is_radar_dragging_ = false;
-    const LayoutPoint page = layout_.page_offset();                       // (the pages and the dialogs: see handle_mouse_down)
+    const LayoutPoint page = open_window_offset();                        // (the windows and the dialogs: see handle_mouse_down)
     const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
         if (button == SDL_BUTTON_LEFT && quick_help_return_.on_release(x - page.x, y - page.y)) close_quick_help();        // the callback runs at the release, on the button
@@ -1544,7 +1537,7 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
     options_button_.is_hovered = options_button_.contains(x, y);
     quit_button_.is_hovered = quit_button_.contains(x, y);
 
-    const LayoutPoint page = layout_.page_offset();                       // (the pages and the dialogs: see handle_mouse_down)
+    const LayoutPoint page = open_window_offset();                        // (the windows and the dialogs: see handle_mouse_down)
     const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
         quick_help_return_.on_move(x - page.x, y - page.y);

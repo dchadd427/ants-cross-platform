@@ -653,6 +653,21 @@ void Renderer::begin_frame() {
     restore_clip();                                  // (the picture, when it is smaller than the canvas: nothing is drawn beyond it)
 }
 
+// The part of the map view that the map covers. A map that is smaller than the view on an axis is centred in it with black around (the camera's origin is negative there): what hangs
+// over the map's edge (an ant, an effect, a tall sprite of an object at the edge) is cut at the edge and does not draw onto the black. For every map that is at least as big as the view
+// (all of the original's, in its own picture) this is the view itself.
+LayoutRect Renderer::map_view_rect(uint32_t map_w, uint32_t map_h) const {
+    const LayoutRect view = layout_.view();
+    if (map_w == 0 || map_h == 0) return view;
+    const int32_t left = view.x - static_cast<int32_t>(camera_.x);                          // where the world pixel (0, 0) is on the screen (ViewportCamera::world_to_screen)
+    const int32_t top = view.y - static_cast<int32_t>(camera_.y);
+    const int32_t x0 = std::max(view.x, left);
+    const int32_t y0 = std::max(view.y, top);
+    const int32_t x1 = std::min(view.right(), left + static_cast<int32_t>(map_w) * TILE_SIZE);
+    const int32_t y1 = std::min(view.bottom(), top + static_cast<int32_t>(map_h) * TILE_SIZE);
+    return LayoutRect{x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0)};
+}
+
 void Renderer::render_world(const ants::sim::WorldState& world,
                             const ants::sim::Grid& grid,
                             int32_t selected_unit_id,
@@ -668,9 +683,9 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     render_queue_.clear();
     overlay_queue_.clear();
 
-    // 1. Clip exclusively to playfield
-    const LayoutRect view = layout_.view();
-    const SDL_Rect clip_rect = placed(view.x, view.y, view.w, view.h);
+    // 1. Clip exclusively to the part of the playfield that the map covers (the whole view, unless the map is smaller than it)
+    const LayoutRect covered = map_view_rect(grid.width(), grid.height());
+    const SDL_Rect clip_rect = placed(covered.x, covered.y, covered.w, covered.h);
     SDL_RenderSetClipRect(renderer_, &clip_rect);
 
     // 2. Layer 1 Terrain
@@ -792,8 +807,8 @@ void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t wor
 
 void Renderer::render_map_layers(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
     if (!renderer_) return;
-    const LayoutRect view = layout_.view();
-    const SDL_Rect clip_rect = placed(view.x, view.y, view.w, view.h);
+    const LayoutRect covered = map_view_rect(grid.width(), grid.height());
+    const SDL_Rect clip_rect = placed(covered.x, covered.y, covered.w, covered.h);
     SDL_RenderSetClipRect(renderer_, &clip_rect);
     render_terrain_layer1(grid);
     render_terrain_layer2_structures(grid, world);

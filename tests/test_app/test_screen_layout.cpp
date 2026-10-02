@@ -146,11 +146,12 @@ void test_sized_layouts() {
     check_rect(w.chat_view(), LayoutRect{802, 299, 138, 161}, "the chat log is right anchored and takes the extra height");
     check_rect(w.panel_fill(), LayoutRect{800, 22, 160, 518}, "the panel's fill is right anchored and as tall as the screen below the top bar");
     check(w.panel_fill().right() == 960 && w.panel_fill().bottom() == 540, "... it ends at the screen's right and bottom edge");
-    const ScoreSlot expected[4] = {{632, 719, 4, 722}, {325, 421, 524, 425}, {483, 571, 524, 574}, {632, 719, 524, 722}};
-    for (size_t k = 0; k < 4; ++k) check(w.score_slot(k) == expected[k], "score slot " + std::to_string(k) + " of 960 x 540: the top bar's right anchored, the bottom strip's right and bottom anchored");
-    // (M3 rewrote this line: it said "a slot past the fourth is the fourth" for the wide layout too. A wide strip has room for more slots left of the first, so a slot past the fourth is
-    // a real one now, down to the last that fits (5 bottom slots at 960 wide); the original's picture, which has no room, keeps the old rule above, and test_wide_hud pins the new slots.)
-    check(w.bottom_slot_count() == 5 && w.score_slot(7) == w.score_slot(5) && w.score_slot(4) != w.score_slot(3), "a slot past the last that fits is the last (five bottom slots at 960 wide); slot 4 is a slot of its own");
+    // (the review fixes of M3 spread the three bottom boxes over the strip, the owner's request: the strip is widened at three cuts, 108, 106 and 106 px at 960 wide, so the boxes are at
+    // x 213, 468 and 722 and not together at the right end (425, 574 and 722); the top bar's slot stays right anchored; test_wide_hud pins the cuts and the art under the boxes)
+    const ScoreSlot expected[4] = {{632, 719, 4, 722}, {113, 209, 524, 213}, {377, 465, 524, 468}, {632, 719, 524, 722}};
+    for (size_t k = 0; k < 4; ++k) check(w.score_slot(k) == expected[k], "score slot " + std::to_string(k) + " of 960 x 540: the top bar's right anchored, the bottom strip's boxes bottom anchored and spread over the strip");
+    // (M3 rewrote this line: a wide strip had room for further slots left of the first, five bottom slots at 960 wide; the spread has none: the strip holds the original's three at every size)
+    check(w.bottom_slot_count() == 3 && w.score_slot(7) == w.score_slot(3) && w.score_slot(4) == w.score_slot(3), "a slot past the third is the third (three bottom slots at every width)");
 
     // a layout is never smaller than the original's screen
     check(ScreenLayout::with_size(600, 400) == ScreenLayout::classic() && ScreenLayout::with_size(639, 479).is_classic() && ScreenLayout::with_size(0, 0).is_classic(), "a smaller canvas gives the classic layout");
@@ -413,9 +414,13 @@ void test_plate_and_overlay() {
     check(old_layout.stacked && old_layout.ping_x == same_layout.ping_x && old_layout.delay_x == same_layout.delay_x && old_layout.ping_y == same_layout.ping_y && old_layout.delay_y == same_layout.delay_y,
           "the latency layout without a corner is the classic corner's");
     check(old_layout.ping_x == 632 - pw && old_layout.delay_x == 632 - dw && old_layout.delay_y == 467 - 1 - 14 && old_layout.ping_y == old_layout.delay_y - 14, "classic: both lines end at x = 632, the lower one a row above the plate");
-    const LatencyCornerLayout wide_layout = layout_latency_corner(pw, dw, widest, 14, 840, 530, LATENCY_LEFT_LIMIT_MATCH + 160, wide);
-    check(!wide_layout.stacked, "960 x 540: with the room that the wider canvas gives the two texts stand in one row left of the version");
-    const LatencyCornerLayout wide_stacked = layout_latency_corner(pw, dw, widest, 14, 650, 530, LATENCY_LEFT_LIMIT_MATCH + 160, wide);
+    // (rewritten with the review fixes of M3: the match's limit is the layout's, where the row of score boxes ends: 780 at 960 x 540 where the boxes are spread over the strip; the old
+    // lines took the original's 460 and added the 160 of dx / 2 by hand, which stood the row of texts on the third box)
+    const int32_t wide_limit = ScreenLayout::with_size(960, 540).score_row_right();
+    check(wide_limit == 780 && ScreenLayout::classic().score_row_right() == 460, "the score row ends at 780 at 960 x 540 (the third box 722 + 58) and at 460 in the original's picture");
+    const LatencyCornerLayout wide_layout = layout_latency_corner(pw, dw, widest, 14, 840, 530, LATENCY_LEFT_LIMIT_SETUP, wide);
+    check(!wide_layout.stacked && wide_layout.delay_x + dw == 840 - 6, "960 x 540, a page (the setup screen's limit): the room left of the version holds the two texts in one row, ending 6 px left of the version");
+    const LatencyCornerLayout wide_stacked = layout_latency_corner(pw, dw, widest, 14, 840, 530, wide_limit, wide);
     check(wide_stacked.stacked && wide_stacked.ping_x == 952 - pw && wide_stacked.delay_x == 952 - dw && wide_stacked.delay_y == 527 - 1 - 14, "960 x 540: stacked, they end at x = 952 and the lower one is a row above the plate (row 527)");
 
     // the network overlay's box (render_net_overlay): the original's (17 + (441 - w) / 2, 26)
@@ -1328,7 +1333,8 @@ void test_application() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    (void)argc; (void)argv;                                     // SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one
     ensure_sdl();
     assets::AssetArchive arc;
     if (!arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) {

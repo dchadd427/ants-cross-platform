@@ -116,6 +116,14 @@ bool HUD::special_target(const sim::SimulationEngine* query, const sim::WorldSta
     return panel == PanelMode::OneAnt && query->is_special_target_valid(type, tile, true, local_player_id_);
 }
 
+// The point is in the view and on the map: a map that is smaller than the view on an axis is centred in it (the camera's origin is negative there) and the view shows black around it
+bool HUD::over_ground(int32_t x, int32_t y, const ViewportCamera& camera, const sim::Grid& grid) const noexcept {
+    if (!over_map(x, y)) return false;
+    const int32_t world_x = camera.world_x + (x - layout_.view().x);
+    const int32_t world_y = camera.world_y + (y - layout_.view().y);
+    return world_x >= 0 && world_y >= 0 && world_x < static_cast<int32_t>(grid.width()) * 32 && world_y < static_cast<int32_t>(grid.height()) * 32;
+}
+
 CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::WorldState& world, const sim::Grid& grid,
                                 const ViewportCamera& camera) const {
     // 1. A dialog is open: the cursor code does not run (FUN_0102653f hands the pointer to the dialog), and every dialog window set cursor mode 1, the normal arrow, when it
@@ -139,8 +147,9 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
         }
     }
 
-    // 3. Outside the map rectangle (16, 21) - (458, 461) of the original: the plain pointer
-    if (!over_map(screen_x, screen_y)) {
+    // 3. Outside the map rectangle (16, 21) - (458, 461) of the original: the plain pointer. So it is over the black around a map that is smaller than the view (a 16 x 16 map in the
+    //    16:9 view is centred in it): there is no ground under the pointer there
+    if (!over_ground(screen_x, screen_y, camera, grid)) {
         current_cursor_ = CursorType::Normal;
         return current_cursor_;
     }
@@ -157,11 +166,6 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
     // 5. By panel mode
     const int32_t world_x = camera.world_x + (screen_x - layout_.view().x);
     const int32_t world_y = camera.world_y + (screen_y - layout_.view().y);
-    // A map that is smaller than the view (a 16 x 16 map in the 16:9 view) is centred in it with black around: there is no ground under the pointer there, it is the plain pointer
-    if (world_x < 0 || world_y < 0 || world_x >= static_cast<int32_t>(grid.width()) * 32 || world_y >= static_cast<int32_t>(grid.height()) * 32) {
-        current_cursor_ = CursorType::Normal;
-        return current_cursor_;
-    }
     const int32_t tx = world_x / 32;
     const int32_t ty = world_y / 32;
     const PanelMode panel = panel_mode(world);
@@ -343,6 +347,7 @@ void HUD::stop_selected(sim::SimulationEngine& sim) {
 // FUN_010277f4: the click at the release point, by the cursor mode found there
 void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift) {
     const auto& world = sim.get_world_state();
+    if (!over_ground(x, y, camera, sim.grid())) return;     // the black around a small map is no ground: a click there does nothing at all (no deselect, no order, no marker)
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
     const int32_t world_x = camera.world_x + (x - layout_.view().x);
     const int32_t world_y = camera.world_y + (y - layout_.view().y);
@@ -446,6 +451,7 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
         return;
     }
     if (capture != 1) return;
+    if (!over_ground(press_x, press_y, camera, sim.grid())) return;     // pressed on the black around a small map: no ground, no order, no marker
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
     if (mode == CursorType::Attack) {                           // mode 5: the ant under the pointer at the release (FUN_01026904)
         const LayoutRect view = layout_.view();

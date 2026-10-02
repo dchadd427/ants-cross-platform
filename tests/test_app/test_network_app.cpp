@@ -2109,6 +2109,47 @@ void run_latency_tests() {
             ASSERT_TRUE(m.ping_x >= 0 && m.delay_x >= 0 && m.delay_y + text_h <= 480 && m.ping_y >= 436);
         }
     } TEST_END();
+
+    TEST_CASE("N5.29b Latency Corner In The 16:9 Match: The Application's Readout Stands On Two Lines In The Corner, Right Of The Row Of Score Boxes That Are Spread Over The Wide Bottom Strip (The Match's Limit Is The Layout's, Not The Original's 460), And In The Original's Own Picture Still On Two Lines Right Of 460") {
+        for (const Aspect aspect : {Aspect::Wide16x9, Aspect::Classic4x3}) {
+            Peer host;
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            ApplicationConfig cfg = headless_config();
+            cfg.aspect = aspect;
+            cfg.aspect_given = true;
+            cfg.net_role = ApplicationConfig::NetRole::Join;
+            cfg.net_address = "127.0.0.1";
+            cfg.net_port = host.net.listen_port();
+            cfg.player_name = "Bob";
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            Duo duo{app, host};
+            ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
+            app.render_frame();
+            ASSERT_TRUE(app.last_latency_layout().has_value());                         // the room's corner: one row (a page; no match yet)
+            uint64_t hash = 0;
+            ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(4242, hash));
+            ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+            duo.step(300);
+            app.render_frame();
+            ASSERT_TRUE(app.last_latency_layout().has_value());
+            const LatencyCornerLayout l = *app.last_latency_layout();
+            const ScreenLayout& layout = app.layout();
+            ASSERT_EQ(layout.width, aspect == Aspect::Wide16x9 ? 960 : 640);
+            const int32_t row_right = layout.score_row_right();                         // 780 at 960 x 540 (the third box 722 + 58), 460 in the original's picture
+            ASSERT_EQ(row_right, aspect == Aspect::Wide16x9 ? 780 : 460);
+            ASSERT_TRUE(l.stacked);                                                     // a match's corner row has room for no row of texts, in either picture
+            ASSERT_TRUE(l.ping_x >= row_right && l.delay_x >= row_right);               // right of the last score box and its cover
+            ASSERT_EQ(l.delay_y + app.renderer().get_text_height(FontSize::Px12) + 1, layout.height - (480 - FPS_OVERLAY_TOP));     // the lower line is a row above the plate
+            ASSERT_TRUE(l.ping_y + app.renderer().get_text_height(FontSize::Px12) <= l.delay_y);
+            // a frame on a page of the original's (the results) is a row left of the version, and a frame of a match with no network draws nothing: checked where the screens are made
+            app.return_to_map_select();
+            app.render_frame();
+            ASSERT_FALSE(app.last_latency_layout().has_value());                        // the connection is closed with the match: nothing is drawn
+        }
+    } TEST_END();
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------------------

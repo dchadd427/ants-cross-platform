@@ -5,6 +5,7 @@
 #include <functional>
 #include <string>
 #include <memory>
+#include <optional>
 #include <array>
 #include <vector>
 
@@ -32,6 +33,7 @@
 #include "ants_app/canvas_layout.hpp"
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
+#include "ants_app/latency_corner.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/host_lookup.hpp"
@@ -56,9 +58,11 @@ struct ApplicationConfig {
     bool fullscreen{false};
     /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas; 16:9 is a fixed
     /// 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and the original's own pages
-    /// (the loading screen, the quick help, the setup screen and the room, the results, the options) are still its 640 x 480 pages, centred. SDL scales the canvas into the window by
-    /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest whole-number
-    /// multiple of the canvas that fits the display (--window-size and --grid still win), and fullscreen is the same canvas filling as much of the monitor as fits. A desktop game that is
+    /// (the loading screen, the quick help at the start, the setup screen and the room, the results) are still its 640 x 480 pages, centred over a clay margin; the options window and the quick help
+    /// of a match sit over the map view with the frame around them. SDL scales the canvas into the window by
+    /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest scale in steps of 0.5
+    /// of the canvas that fits the display's usable area, at least 1x (--window-size and --grid still win; a game that starts in fullscreen has this size for the way back, Alt+Enter),
+    /// and fullscreen is the same canvas filling as much of the monitor as fits. A desktop game that is
     /// started from the command line (parse_arguments) is 16:9 unless it says otherwise (kPlatformDefaultAspect: the web build is 4:3 until its page shows 16:9); a config that is made
     /// by hand keeps the 4:3 that it is built with. `aspect_given` is true when the command line said it (the settings key then does not count).
     Aspect aspect{Aspect::Classic4x3};
@@ -96,7 +100,7 @@ struct ApplicationConfig {
     /// A test hook (--start-when N, 2 .. 4; 0 = off, the default): a headless client has nobody to click START, so when it leads a server's room it presses START itself (the S key
     /// of the setup screen, the same path as a click) once N players are in the room, again every second until the match starts. A game that is played never uses it.
     uint8_t net_start_when{0};
-    /// Where the window goes (native builds): an explicit position and size (--window-pos X,Y, --window-size W,H), or a cell of a grid over the display's usable
+    /// Where the window goes (native builds): an explicit position and size (--window-pos X,Y, --window-size WxH or W,H), or a cell of a grid over the display's usable
     /// area (--grid CxR --cell N: the start scripts lay four games out as a 2 x 2 grid, each window the largest 4:3 rectangle of its cell); --display N picks the
     /// display (default: the one the window opens on). --title sets the window's title.
     bool has_window_pos{false};
@@ -315,6 +319,8 @@ public:
     /// The pointer is not over the window: the system cursor is shown (the game's own is not drawn) and the edge of the map does not scroll. Whatever the
     /// pointer does in the window (a motion, a press, a release) ends it.
     bool pointer_outside() const noexcept { return pointer_outside_; }
+    /// Where the last frame put the network's ping and delay (none when it drew none: a game of one machine, a screen without the readout); for the tests
+    const std::optional<LatencyCornerLayout>& last_latency_layout() const noexcept { return last_latency_layout_; }
     /// Where the window is now (client area, screen coordinates)
     WindowRect window_rect() const;
     void update_simulation(float dt);
@@ -454,6 +460,7 @@ private:
     void sync_room_view();
     void render_net_overlay();
     void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
+    std::optional<LatencyCornerLayout> last_latency_layout_;                                         // where the last frame put the network's readout (none: it drew none)
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
     // Computer players (docs/BOTS.md): a game without --bot never creates any of this

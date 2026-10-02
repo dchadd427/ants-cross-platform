@@ -2,7 +2,8 @@
 // 16:9 picture (`--aspect`, the settings key `aspect`), the window that opens for it, fullscreen (Alt+Enter) and the screenshot of a canvas that is not 4:3.
 //   * the model: the game draws into SDL's logical canvas, 640 x 480 (the original's, the default) or 960 x 540 (16:9), which SDL scales into the window by the largest scale that
 //     fits, centred, with bars: `CanvasLayout::fit` is that arithmetic (a table of window sizes: 1920 x 1080 is 2x exactly, 2560 x 1440 2.667x, 2880 x 1800 3x with bars above and
-//     below ...), checked against SDL itself; the window that opens is the largest whole-number multiple of the canvas that fits the display;
+//     below ...), checked against SDL itself; the window that opens is the largest scale in steps of 0.5 of the canvas that fits the display's usable area (at least 1x), also for a
+//     game that starts in fullscreen (the window that Alt+Enter gives back);
 //   * the application: `--aspect 16:9` / `4:3` and the key `aspect` (refusals say "only 16:9 and 4:3 for now"), the classic picture centred in the wide canvas (pixel for pixel
 //     what the 4:3 application draws, the plate in the canvas's corner), the pointer over the bars (it is the picture's nearest edge pixel, the map scrolls), Alt+Enter, the screenshot.
 // Usage: test_canvas_layout. Exit code 0 when every check passes.
@@ -251,26 +252,59 @@ void test_centred_picture() {
 // =====================================================================================================================================================
 
 void test_window_sizes() {
-    group("window", "the window of a canvas: the largest whole-number multiple that fits the display's usable area (at least 1x), centred; the grid's cells of the canvas's shape");
-    // 960 x 540
+    group("window", "the window of a canvas: the largest scale in steps of 0.5 that fits the display's usable area (at least 1x), centred; the grid's cells of the canvas's shape");
+    // (rewritten with the review fixes of M3: the first window was the largest WHOLE multiple of the canvas, which left a typical laptop at 1x, 960 x 540 points on a 1800 x 1130 area;
+    // the owner decided: steps of 0.5, which on a Retina display (two pixels to a point) is 3x in pixels at 1.5x in points, crisp)
     auto open = [](int32_t area_w, int32_t area_h, int32_t top = 0, int32_t canvas_w = 960, int32_t canvas_h = 540) {
-        return largest_canvas_window(WindowRect{0, 0, area_w, area_h}, canvas_w, canvas_h, top, 0, 0, 0);
+        return default_canvas_window(WindowRect{0, 0, area_w, area_h}, canvas_w, canvas_h, top, 0, 0, 0);
     };
-    check(open(1920, 1080) == WindowRect{0, 0, 1920, 1080}, "a 1920 x 1080 area: 2x, 1920 x 1080");
-    check(open(1920, 1050) == WindowRect{480, 255, 960, 540}, "a 1920 x 1050 area (a task bar): 1x, only the height decides, centred");
-    check(open(3840, 2160).w == 3840 && open(3840, 2160).h == 2160, "a 3840 x 2160 area: 4x");
-    check(open(2560, 1415, 28).w == 1920 && open(2560, 1415, 28).h == 1080, "a 2560 x 1415 area with a 28 px title bar: 2x (the height gives 2.57)");
-    check(open(1512, 944, 28).w == 960 && open(1512, 944, 28).h == 540, "a laptop's 1512 x 944 area: 1x");
+    // the table of display areas (usable bounds in points), with and without a 28 point title bar: the same scale
+    struct Row { int32_t w, h; int32_t scale_halves; const char* what; };
+    const Row table[] = {{1800, 1130, 3, "1800 x 1130 (a MacBook Pro 14 in its default mode): width limited, 1.875 -> 1.5x"},
+                         {1440, 875, 3, "1440 x 875 (a MacBook Air 13): 1.5x"},
+                         {1920, 1040, 3, "1920 x 1040 (a 1080p monitor with a task bar): height limited, 1.92 -> 1.5x"},
+                         {2560, 1400, 5, "2560 x 1400 (a 1440p monitor): 2.5x"},
+                         {3840, 2100, 7, "3840 x 2100 (a 4K monitor): height limited, 3.9 -> 3.5x"},
+                         {1366, 728, 2, "1366 x 728 (a small laptop): 1x (width 1.42, height 1.35)"}};
+    for (const Row& r : table) {
+        for (const int32_t top : {0, 28}) {
+            const WindowRect got = open(r.w, r.h, top);
+            const int32_t want_w = 480 * r.scale_halves, want_h = 270 * r.scale_halves;
+            check(got.w == want_w && got.h == want_h, std::string(r.what) + (top ? " (28 pt title bar)" : "") + ": " + std::to_string(got.w) + " x " + std::to_string(got.h) + ", wanted " + std::to_string(want_w) + " x " + std::to_string(want_h));
+            check(got.x >= 0 && got.y >= top && got.x + got.w <= r.w && got.y + got.h <= r.h, std::string("... and it fits the area (") + std::to_string(r.w) + " x " + std::to_string(r.h) + ")");
+        }
+    }
+    // the width limits (the review's survivor: the width's share ignored or counted one too many) and the height limits, one pixel either side of a step
+    check(open(1920, 4000).w == 1920 && open(1919, 4000).w == 1440 && open(1440, 4000).w == 1440 && open(1439, 4000).w == 960, "the width alone decides: 1920 -> 2x, 1919 -> 1.5x, 1440 -> 1.5x, 1439 -> 1x");
+    check(open(4000, 1080).h == 1080 && open(4000, 1079).h == 810 && open(4000, 810).h == 810 && open(4000, 809).h == 540, "the height alone decides: 1080 -> 2x, 1079 -> 1.5x, 810 -> 1.5x, 809 -> 1x");
+    check(open(1920, 1080).w == 1920 && open(1920, 1080).h == 1080 && open(3840, 2160).w == 3840 && open(3840, 2160).h == 2160, "1920 x 1080 and 3840 x 2160 areas: 2x and 4x exactly");
+    check(open(2400, 1350).w == 2400 && open(2400, 1349).w == 1920 && open(2399, 1350).w == 1920, "2.5x needs 2400 x 1350: one point less in either direction gives 2x");
+    check(open(1920, 1050).w == 1440 && open(1920, 1050).x == 240 && open(1920, 1050).y == 120, "a 1920 x 1050 area: 1.5x, 1440 x 810, centred at (240, 120)");
     check(open(800, 450).w == 960 && open(800, 450).h == 540, "an area smaller than the canvas: still 1x");
-    check(open(-5, -5).w == 960, "an area of no size: 1x");
+    check(open(-5, -5).w == 960 && open(0, 0).h == 540, "an area of no size: 1x");
+    // every size is whole canvas pixels in halves: a multiple of 480 x 270 (an even number of half steps is a whole scale)
+    {
+        bool shape = true;
+        for (int32_t w = 900; w <= 4000; w += 37) {
+            for (int32_t h = 500; h <= 2200; h += 41) {
+                const WindowRect r = open(w, h);
+                shape = shape && r.w % 480 == 0 && r.h % 270 == 0 && r.w / 480 == r.h / 270 && r.w >= 960;
+            }
+        }
+        check(shape, "every window of a few thousand areas is the canvas at a multiple of 0.5 (480 x 270 steps), 16:9, at least 1x");
+    }
+    // the 4:3 canvas (640 x 480) in halves too, and a canvas of another size
+    check(open(1800, 1130, 28, 640, 480).w == 1280 && open(1800, 1130, 28, 640, 480).h == 960, "(the 4:3 canvas in a 1800 x 1130 area with a title bar: 2x of 640 x 480, the height limits it)");
+    check(open(2560, 1415, 28).w == 2400 && open(2560, 1415, 28).h == 1350, "a 2560 x 1415 area with a 28 px title bar: 2.5x (the height gives 2.57)");
+    check(open(1512, 944, 28).w == 1440 && open(1512, 944, 28).h == 810, "a laptop's 1512 x 944 area: 1.5x");
     // centred in the area (the decoration on top)
-    const WindowRect r = largest_canvas_window(WindowRect{100, 50, 1920, 1100}, 960, 540, 28, 0, 0, 0);
-    check(r.w == 960 && r.h == 540, "a 1920 x 1100 area with a 28 px title bar: 1x (1072 rows are left)");
-    check(r.x == 100 + (1920 - 960) / 2 && r.y == 50 + 28 + (1072 - 540) / 2, "... centred in what the decoration leaves: x 580, y 344");
-    const WindowRect big = largest_canvas_window(WindowRect{0, 0, 3000, 2000}, 640, 480, 0, 0, 0, 0);
+    const WindowRect r = default_canvas_window(WindowRect{100, 50, 1920, 1100}, 960, 540, 28, 0, 0, 0);
+    check(r.w == 1440 && r.h == 810, "a 1920 x 1100 area with a 28 px title bar: 1.5x (1072 rows are left: 1.99)");
+    check(r.x == 100 + (1920 - 1440) / 2 && r.y == 50 + 28 + (1072 - 810) / 2, "... centred in what the decoration leaves: x 340, y 209");
+    const WindowRect big = default_canvas_window(WindowRect{0, 0, 3000, 2000}, 640, 480, 0, 0, 0, 0);
     check(big.w == 2560 && big.h == 1920 && big.x == 220 && big.y == 40, "a 640 x 480 canvas in 3000 x 2000: 4x, centred at (220, 40)");
     // borders on all sides
-    const WindowRect b = largest_canvas_window(WindowRect{0, 0, 1000, 600}, 320, 180, 20, 10, 30, 10);
+    const WindowRect b = default_canvas_window(WindowRect{0, 0, 1000, 600}, 320, 180, 20, 10, 30, 10);
     check(b.w == 960 && b.h == 540 && b.x == 10 + (980 - 960) / 2 && b.y == 20 + (550 - 540) / 2, "the left, right and bottom decoration count too: 3x of 320 x 180 in 980 x 550");
 
     // the grid: cells of the canvas's shape (4:3 unless the aspect is told)
@@ -339,6 +373,45 @@ void test_aspect_option() {
         Application app;
         ApplicationConfig bad = parse({"ants", "--headless", "--aspect", "21:9"});
         check(!app.init(bad), "init() refuses to start with a refused --aspect");
+    }
+}
+
+void test_window_size_option() {
+    group("window-size", "--window-size takes WxH or W,H (at least 320x240); anything else is refused with a message and the game does not start");
+    for (const char* good : {"1280,720", "1280x720", "1280X720", "320,240", "320x240", "100000,100000", "960x540"}) {
+        const ApplicationConfig c = parse({"ants", "--window-size", good});
+        const std::string text = good;
+        const size_t sep = text.find_first_of(",xX");
+        check(c.startup_error.empty() && c.has_window_size && c.window_w == std::atoi(text.substr(0, sep).c_str()) && c.window_h == std::atoi(text.substr(sep + 1).c_str()), std::string("--window-size ") + good + " is taken: " + std::to_string(c.window_w) + " x " + std::to_string(c.window_h));
+    }
+    for (const char* bad : {"1280", "1280x", "x720", ",720", "1280,", "1280;720", "1280 720", "1280x720x2", "1280,720,1", "1280x,720", "a,b", "axb", "-1280,720", "1280,-720", "+1280,720", "1280.5x720", " 1280x720", "1280x720 ", "319,240", "320,239",
+                            "319x480", "640x239", "0x0", "100001,720", "1280,100001", "1e3x720", "0x500", "99999999999x1", ""}) {
+        const ApplicationConfig c = parse({"ants", "--window-size", bad});
+        check(!c.has_window_size && c.startup_error.find("--window-size") != std::string::npos && c.startup_error.find(std::string("\"") + bad + "\"") != std::string::npos,
+              std::string("--window-size \"") + bad + "\" is refused with a message: \"" + c.startup_error + "\"");
+    }
+    ApplicationConfig c = parse({"ants", "--window-size"});
+    check(!c.has_window_size && c.startup_error.find("--window-size needs") != std::string::npos, "--window-size without a value is refused");
+    c = parse({"ants", "--window-size", "10x10", "--window-size", "1280x720"});
+    check(!c.has_window_size || c.window_w == 1280, "(a later good one still counts for the window)");
+    check(c.startup_error.find("10x10") != std::string::npos, "the first refusal stays the one that is reported");
+    c = parse({"ants", "--aspect", "21:9", "--window-size", "bad"});
+    check(c.startup_error.find("--aspect") != std::string::npos, "an earlier refusal of another option stays the one that is reported");
+    // the parser alone
+    int32_t w = 5, h = 6;
+    std::string why;
+    check(parse_window_size("800x600", w, h, why) && w == 800 && h == 600 && why.empty(), "parse_window_size: 800x600");
+    check(parse_window_size("800,600", w, h, why) && w == 800 && h == 600, "... 800,600");
+    w = 5;
+    h = 6;
+    check(!parse_window_size("800x6", w, h, why) && w == 5 && h == 6 && why.find("at least 320x240") != std::string::npos, "a window that is too small is refused with the minimum, and leaves the values alone");
+    check(!parse_window_size("800", w, h, why) && why.find("WIDTHxHEIGHT or WIDTH,HEIGHT") != std::string::npos && w == 5 && h == 6, "a text with no separator says what is expected");
+    // a refused command line stops the game before anything opens
+    {
+        const QuietStdout quiet;
+        Application app;
+        ApplicationConfig bad = parse({"ants", "--headless", "--window-size", "1280:720"});
+        check(!app.init(bad), "init() refuses to start with a refused --window-size");
     }
 }
 
@@ -456,7 +529,7 @@ void test_application_aspects() {
             check(ww == 1280 && wh == 720, "16:9: --window-size wins");
         }
     }
-    {   // the window that opens without --window-size: the largest multiple of the canvas that fits the display's usable area
+    {   // the window that opens without --window-size: the largest scale in steps of 0.5 of the canvas that fits the display's usable area
         AppFixture f("", config_of(Aspect::Wide16x9, true));
         check(f.ok, "16:9 without a window size starts");
         if (f.ok) {
@@ -464,9 +537,9 @@ void test_application_aspects() {
             f.window_size(ww, wh);
             SDL_Rect area{0, 0, 0, 0};
             const bool have_area = SDL_GetDisplayUsableBounds(0, &area) == 0 || SDL_GetDisplayBounds(0, &area) == 0;
-            const WindowRect expected = largest_canvas_window(WindowRect{area.x, area.y, area.w, area.h}, 960, 540, 0, 0, 0, 0);
-            check(have_area && ww == expected.w && wh == expected.h, "16:9: the window is the largest multiple of 960 x 540 in the display's area (" + std::to_string(ww) + " x " + std::to_string(wh) + ")");
-            check(ww % 960 == 0 && wh % 540 == 0 && ww / 960 == wh / 540 && ww >= 960, "... a whole-number multiple, at least 1x");
+            const WindowRect expected = default_canvas_window(WindowRect{area.x, area.y, area.w, area.h}, 960, 540, 0, 0, 0, 0);
+            check(have_area && ww == expected.w && wh == expected.h, "16:9: the window is the largest multiple of 480 x 270 in the display's area (" + std::to_string(ww) + " x " + std::to_string(wh) + ")");
+            check(ww % 480 == 0 && wh % 270 == 0 && ww / 480 == wh / 270 && ww >= 960, "... a step of 0.5, at least 1x");
         }
     }
     {   // the cells of the start scripts' grid are of the canvas's shape: 16:9 for --aspect 16:9, 4:3 as ever
@@ -494,11 +567,39 @@ void test_application_aspects() {
             }
         }
     }
-    {   // a fullscreen request keeps the default window (the canvas fills the monitor as far as it fits)
+    {   // a game that starts in fullscreen (the canvas fills the monitor as far as it fits) has the canvas's default window for the way back (Alt+Enter), not the config's 1280 x 960 of the
+        // original's shape (the headless window is not really fullscreen, so its size is the one that is stored)
         ApplicationConfig cfg = config_of(Aspect::Wide16x9, true);
         cfg.fullscreen = true;
-        AppFixture f("", cfg);
-        check(f.ok && f.app.aspect() == Aspect::Wide16x9 && f.app.canvas() == CanvasLayout{960, 540}, "16:9 with --fullscreen: the same canvas");
+        {
+            AppFixture f("", cfg);
+            check(f.ok && f.app.aspect() == Aspect::Wide16x9 && f.app.canvas() == CanvasLayout{960, 540}, "16:9 with --fullscreen: the same canvas");
+            if (f.ok) {
+                int32_t ww = 0, wh = 0;
+                f.window_size(ww, wh);
+                SDL_Rect area{0, 0, 0, 0};
+                const bool have_area = SDL_GetDisplayUsableBounds(0, &area) == 0 || SDL_GetDisplayBounds(0, &area) == 0;
+                const WindowRect expected = default_canvas_window(WindowRect{area.x, area.y, area.w, area.h}, 960, 540, 0, 0, 0, 0);
+                check(have_area && ww == expected.w && wh == expected.h && ww != 1280 && std::abs(wh * 16 - ww * 9) <= 16,
+                      "16:9 with --fullscreen: the window to go back to is the canvas's default (" + std::to_string(ww) + " x " + std::to_string(wh) + "), 16:9, not 1280 x 960");
+            }
+        }
+        {   // --window-size still wins
+            ApplicationConfig sized = config_of(Aspect::Wide16x9, true, 1024, 576);
+            sized.fullscreen = true;
+            AppFixture g("", sized);
+            int32_t gw = 0, gh = 0;
+            if (g.ok) g.window_size(gw, gh);
+            check(g.ok && gw == 1024 && gh == 576, "16:9 with --fullscreen and --window-size: the size that was asked for (" + std::to_string(gw) + " x " + std::to_string(gh) + ")");
+        }
+        {   // the original's own aspect keeps the config's size
+            ApplicationConfig classic = config_of(Aspect::Classic4x3, true);
+            classic.fullscreen = true;
+            AppFixture c("", classic);
+            int32_t cw = 0, ch = 0;
+            if (c.ok) c.window_size(cw, ch);
+            check(c.ok && cw == 1280 && ch == 960, "4:3 with --fullscreen: the config's 1280 x 960, as it always was (" + std::to_string(cw) + " x " + std::to_string(ch) + ")");
+        }
     }
 }
 
@@ -1002,7 +1103,8 @@ void test_renderer_picture(const assets::AssetArchive& arc) {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    (void)argc; (void)argv;                                     // SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one
     ensure_sdl();
     assets::AssetArchive arc;
     if (!arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) {
@@ -1017,6 +1119,7 @@ int main() {
     test_window_sizes();
     test_aspect_parsing();
     test_aspect_option();
+    test_window_size_option();
     test_renderer_picture(arc);
     test_screenshot(arc);
     test_application_aspects();

@@ -51,6 +51,40 @@ inline bool parse_pair(const std::string& text, int32_t& a, int32_t& b) {
     return true;
 }
 
+/// The value of --window-size: "W,H" or "WxH" (`x` or `X`), two whole numbers of at least kMinWindowWidth x kMinWindowHeight (the game is 640 x 480: a window never gets smaller than
+/// half of it) and at most 100000. False with a message that says what is wrong for anything else; the message is meant to follow "--window-size ".
+inline bool parse_window_size(const std::string& text, int32_t& w, int32_t& h, std::string& why) {
+    const size_t sep = text.find_first_of(",xX");                                                   // (a second separator is no digit: the number test refuses it)
+    if (sep == std::string::npos) {
+        why = "\"" + text + "\": needs WIDTHxHEIGHT or WIDTH,HEIGHT (for example 1280x720)";
+        return false;
+    }
+    const auto number = [](const std::string& s, int32_t& out) {
+        if (s.empty() || s.size() > 6) return false;
+        int64_t v = 0;
+        for (const char c : s) {                                                                  // digits only: no sign, no space, no plus
+            if (c < '0' || c > '9') return false;
+            v = v * 10 + (c - '0');
+        }
+        if (v > 100000) return false;
+        out = static_cast<int32_t>(v);
+        return true;
+    };
+    int32_t first = 0;
+    int32_t second = 0;
+    if (!number(text.substr(0, sep), first) || !number(text.substr(sep + 1), second)) {
+        why = "\"" + text + "\": needs WIDTHxHEIGHT or WIDTH,HEIGHT (for example 1280x720), two whole numbers of at most 100000";
+        return false;
+    }
+    if (first < kMinWindowWidth || second < kMinWindowHeight) {
+        why = "\"" + text + "\": at least " + std::to_string(kMinWindowWidth) + "x" + std::to_string(kMinWindowHeight);
+        return false;
+    }
+    w = first;
+    h = second;
+    return true;
+}
+
 /// The client area of the window for cell `cell` (row by row, 0 = top left) of a cols x rows grid laid over `area` (the usable part of a display: without the
 /// menu bar, the dock, the task bar). The decoration of the window (title bar and frame: `border_*`) has to fit into the cell as well; the client area is the
 /// largest rectangle of the game's own proportions (4:3, or `aspect_w` : `aspect_h` for another canvas: 16:9; nothing is letterboxed) that does, centred in the cell,
@@ -77,19 +111,21 @@ inline WindowRect grid_cell_window(const WindowRect& area, int32_t cols, int32_t
     return r;
 }
 
-/// The client area of the window that a game with a fixed canvas opens in: the LARGEST WHOLE-NUMBER MULTIPLE of the canvas (960 x 540 for 16:9) that fits `area` (the usable part of
-/// a display) with the decoration of the window (`border_*`), and at least 1x even where nothing fits; centred in the area. A multiple of the canvas shows every canvas pixel as a
-/// square of whole pixels (SDL's logical size scales by exactly that number).
-inline WindowRect largest_canvas_window(const WindowRect& area, int32_t canvas_w, int32_t canvas_h, int32_t border_top, int32_t border_left, int32_t border_bottom,
+/// The client area of the window that a game with a fixed canvas opens in: the LARGEST SCALE IN STEPS OF 0.5 (1, 1.5, 2, 2.5, ...) of the canvas (960 x 540 for 16:9) that fits `area` (the
+/// usable part of a display) with the decoration of the window (`border_*`), and at least 1x even where nothing fits; centred in the area. Sizes are in the window system's points, so
+/// on a Retina display (two pixels to a point) 1.5x is 3x in pixels: every canvas pixel a square of whole pixels. (A step of a whole number only left a typical laptop at 1x: a 1800 x 1130
+/// area is width limited, 1.875 x.) On a display of one pixel to a point an odd number of half steps is a fractional scale, which the fixed canvas shows with SDL's nearest-neighbour
+/// stretch (the seams of canvas_layout.hpp).
+inline WindowRect default_canvas_window(const WindowRect& area, int32_t canvas_w, int32_t canvas_h, int32_t border_top, int32_t border_left, int32_t border_bottom,
                                         int32_t border_right) {
     canvas_w = std::max<int32_t>(canvas_w, 1);
     canvas_h = std::max<int32_t>(canvas_h, 1);
     const int32_t avail_w = area.w - border_left - border_right;
     const int32_t avail_h = area.h - border_top - border_bottom;
-    const int32_t n = std::max<int32_t>(std::min<int32_t>(avail_w / canvas_w, avail_h / canvas_h), 1);
+    const int32_t half_steps = std::max<int32_t>(std::min<int32_t>(avail_w * 2 / canvas_w, avail_h * 2 / canvas_h), 2);       // in halves of the canvas: 2 is 1x
     WindowRect r;
-    r.w = canvas_w * n;
-    r.h = canvas_h * n;
+    r.w = canvas_w * half_steps / 2;
+    r.h = canvas_h * half_steps / 2;
     r.x = area.x + border_left + (avail_w - r.w) / 2;
     r.y = area.y + border_top + (avail_h - r.h) / 2;
     return r;

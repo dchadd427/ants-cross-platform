@@ -2,16 +2,18 @@
 //   * the anchoring model (include/ants_app/shell_layout.hpp): each of the 14 pieces of the original's frame animation `uishell` at 960 x 540 (and at other sizes): where it is, how big it
 //     is, which of them are stretched, and that the spans of a piece tile it without a gap or an overlap;
 //   * the cuts: for every stretched piece the repeated line lies inside a run of identical lines of the piece's own plain part (measured on the art of ants.chd: the top bar's columns
-//     138 - 143, the bottom strip's 13 - 17 and never the panel's own fill 458 - 482, the left strip's rows 294 - 314) and, for the right panel, the three pieces that span the
+//     138 - 143, the bottom strip's three cuts in 13 - 17, 186 - 190 and 345 - 348, each identical to its neighbours on all 19 rows, one in each gap between the recesses of the score boxes, and never the panel's own fill 458 - 482, the left strip's rows 294 - 314) and, for the right panel, the three pieces that span the
 //     owner's row (canvas y = 357) are plain there between their ant decorations; a cut where the art is not plain fails the same tests;
 //   * the picture: the frame composed from the spans is, pixel for pixel, the owner's mock-up semantics (one line repeated) written out independently, at several sizes, and with the
 //     original's picture the plain 14 pieces; the real renderer draws the spans exactly (draw_sprite_region, set_origin);
-//   * the HUD: it draws the frame first, offsets the panel's animations by the layout, puts the pages of the original (quick help, options) centred over a clay margin and its dialogs
-//     over the middle of the map view, and takes the pointer back to the numbers of those windows; the score boxes are slots (no 4 in the layout code), more of them fit the wide strip;
+//   * the HUD: it draws the frame first, offsets the panel's animations by the layout, puts the options window and the quick help of a match over the middle of the map view (the frame
+//     stays around them) like its dialogs, and takes the pointer back to the numbers of those windows in the events AND in the 50 ms poll of HUD::update (every control is clicked
+//     through it); the score boxes are slots (no 4 in the layout code), spread over the strip by its three cuts (columns 15, 188, 346: dx in thirds); the readout of a network match stays
+//     clear of them (the match's limit is the layout's);
 //   * the view: the camera clamps (a big map, a map smaller than the view: centred, black around), the edge strips of the whole picture, the start view, the minimap's frame, the cursor
-//     outside a small map, the listener;
-//   * the application: the picture of a match is the whole canvas, every other screen is the original's 640 x 480 page centred in it, the pointer follows the change; the default is 16:9
-//     on a desktop (`--aspect 4:3` and the settings key give the classic picture).
+//     outside a small map (a click there does nothing at all), nothing drawn onto the black around a small map (ants at the edges, levels cut from TINY.LVL), the listener;
+//   * the application: the picture of a match is the whole canvas, every other screen is the original's 640 x 480 page centred in it, the pointer follows the change (and is held at the
+//     page's nearest edge pixel when it was beside it); the default is 16:9 on a desktop (`--aspect 4:3` and the settings key give the classic picture).
 // Usage: test_wide_hud. Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -33,10 +35,13 @@
 #include "ants_app/application.hpp"
 #include "ants_app/canvas_layout.hpp"
 #include "ants_app/edge_scroll.hpp"
+#include "ants_app/fps_overlay.hpp"
 #include "ants_app/hud.hpp"
+#include "ants_app/latency_corner.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/shell_layout.hpp"
+#include "ants_app/version.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -143,24 +148,49 @@ struct RefPiece {
     const char* name;
     int32_t x, y;
     bool right, bottom;
-    int32_t col, row;        // the repeated line (-1: none)
+    std::array<int32_t, 3> cols;     // the repeated columns (-1: none); dW is shared between them in thirds, the leftmost taking the remainder
+    int32_t row;                     // the repeated row (-1: none)
 };
 constexpr RefPiece kReference[14] = {
-    {"x0y22.bmp", 0, 22, false, false, -1, 300},        // the left strip: taller below its horizontal rule
-    {"x458y22.bmp", 458, 22, true, false, -1, -1},      // the top of the right panel
-    {"x458y35.bmp", 458, 35, true, false, -1, 322},     // the strip between the map and the panel: taller at canvas row 357
-    {"x480y126.bmp", 480, 126, true, false, -1, -1},
-    {"x480y266.bmp", 480, 266, true, false, -1, -1},
-    {"x480y400.bmp", 480, 400, true, true, -1, -1},
-    {"x480y466.bmp", 480, 436, true, true, -1, -1},
-    {"x521y254.bmp", 621, 254, true, false, -1, 103},   // the right edge strip: taller at canvas row 357
-    {"x599y35.bmp", 599, 35, true, false, -1, -1},
-    {"wchat.bmp", 479, 298, true, false, -1, 59},       // the chat log's box: taller at canvas row 357
-    {"wtype.bmp", 479, 423, true, true, -1, -1},
-    {"wstatus.bmp", 479, 253, true, false, -1, -1},
-    {"x0y0.bmp", 0, 0, false, false, 140, -1},          // the top bar: wider at its plain green
-    {"x17y461.bmp", 17, 461, false, true, 15, -1},      // the bottom strip: wider at its plain band, down by dH
+    {"x0y22.bmp", 0, 22, false, false, {-1, -1, -1}, 300},        // the left strip: taller below its horizontal rule
+    {"x458y22.bmp", 458, 22, true, false, {-1, -1, -1}, -1},      // the top of the right panel
+    {"x458y35.bmp", 458, 35, true, false, {-1, -1, -1}, 322},     // the strip between the map and the panel: taller at canvas row 357
+    {"x480y126.bmp", 480, 126, true, false, {-1, -1, -1}, -1},
+    {"x480y266.bmp", 480, 266, true, false, {-1, -1, -1}, -1},
+    {"x480y400.bmp", 480, 400, true, true, {-1, -1, -1}, -1},
+    {"x480y466.bmp", 480, 436, true, true, {-1, -1, -1}, -1},
+    {"x521y254.bmp", 621, 254, true, false, {-1, -1, -1}, 103},   // the right edge strip: taller at canvas row 357
+    {"x599y35.bmp", 599, 35, true, false, {-1, -1, -1}, -1},
+    {"wchat.bmp", 479, 298, true, false, {-1, -1, -1}, 59},       // the chat log's box: taller at canvas row 357
+    {"wtype.bmp", 479, 423, true, true, {-1, -1, -1}, -1},
+    {"wstatus.bmp", 479, 253, true, false, {-1, -1, -1}, -1},
+    {"x0y0.bmp", 0, 0, false, false, {140, -1, -1}, -1},          // the top bar: wider at its plain green
+    {"x17y461.bmp", 17, 461, false, true, {15, 188, 346}, -1},    // the bottom strip: wider at three plain cuts (the score boxes are spread), down by dH
 };
+
+/// The mock-up's rule (the owner's reference tool, draw_multi): the extra width dW is shared between the cuts in thirds (a third each for three cuts; the leftmost takes the remainder), and
+/// every cut column is repeated by its share
+std::vector<int32_t> reference_shares(int32_t dw, size_t cuts) {
+    std::vector<int32_t> shares(cuts, cuts > 0 ? dw / static_cast<int32_t>(cuts) : 0);
+    if (cuts > 0) shares[0] = dw - (static_cast<int32_t>(cuts) - 1) * (dw / static_cast<int32_t>(cuts));
+    return shares;
+}
+
+/// The columns of a piece of `w` columns that is widened by dw at the cut columns `cuts` (ascending): (source column, destination column within the piece), the mock-up's draw_multi
+std::vector<std::pair<int32_t, int32_t>> reference_columns(int32_t w, const std::vector<int32_t>& cuts, int32_t dw) {
+    const std::vector<int32_t> shares = reference_shares(dw, cuts.size());
+    std::vector<std::pair<int32_t, int32_t>> columns;
+    int32_t shift = 0;
+    for (int32_t sx = 0; sx < w; ++sx) {
+        columns.emplace_back(sx, sx + shift);
+        for (size_t i = 0; i < cuts.size(); ++i) {
+            if (cuts[i] != sx) continue;
+            for (int32_t k = 1; k <= shares[i]; ++k) columns.emplace_back(sx, sx + shift + k);
+            shift += shares[i];
+        }
+    }
+    return columns;
+}
 
 Pic compose_reference(const assets::AssetArchive& arc, int32_t width, int32_t height) {
     Pic pic(width, height);
@@ -171,14 +201,18 @@ Pic compose_reference(const assets::AssetArchive& arc, int32_t width, int32_t he
         if (sprite == nullptr) continue;
         const int32_t ox = p.right ? dw : 0;
         const int32_t oy = p.bottom ? dh : 0;
-        const int32_t ew = p.col >= 0 ? dw : 0;
+        std::vector<int32_t> cuts;
+        for (const int32_t c : p.cols) {
+            if (c >= 0) cuts.push_back(c);
+        }
         const int32_t eh = p.row >= 0 ? dh : 0;
+        // the columns: a source column goes to its place, shifted by the shares of the cuts left of it, and a cut column is written 1 + its share times
+        const std::vector<std::pair<int32_t, int32_t>> columns = reference_columns(static_cast<int32_t>(sprite->width), cuts, dw);
         for (int32_t y = 0; y < static_cast<int32_t>(sprite->height) + eh; ++y) {
             const int32_t sy = (eh > 0 && y > p.row) ? (y <= p.row + eh ? p.row : y - eh) : y;
-            for (int32_t x = 0; x < static_cast<int32_t>(sprite->width) + ew; ++x) {
-                const int32_t sx = (ew > 0 && x > p.col) ? (x <= p.col + ew ? p.col : x - ew) : x;
-                const uint8_t v = sprite->get_pixel(static_cast<uint32_t>(sx), static_cast<uint32_t>(sy));
-                if (v != assets::CHD_COLOR_KEY_INDEX) pic.put(p.x + ox + x, p.y + oy + y, v);
+            for (const auto& col : columns) {
+                const uint8_t v = sprite->get_pixel(static_cast<uint32_t>(col.first), static_cast<uint32_t>(sy));
+                if (v != assets::CHD_COLOR_KEY_INDEX) pic.put(p.x + ox + col.second, p.y + oy + y, v);
             }
         }
     }
@@ -270,7 +304,7 @@ void test_anchoring(const assets::AssetArchive& arc) {
     // how many of them grow: the top bar and the bottom strip in width, the left strip, the strip beside the map, the chat box and the right edge strip in height
     int widened = 0, heightened = 0, moved_right = 0, moved_down = 0;
     for (size_t k = 0; k < 14; ++k) {
-        widened += kShellRules[k].cut_col >= 0 ? 1 : 0;
+        widened += kShellRules[k].cut_cols[0] >= 0 ? 1 : 0;
         heightened += kShellRules[k].cut_row >= 0 ? 1 : 0;
         moved_right += kShellRules[k].right ? 1 : 0;
         moved_down += kShellRules[k].bottom ? 1 : 0;
@@ -286,7 +320,7 @@ void test_anchoring(const assets::AssetArchive& arc) {
         bool ok = true;
         for (size_t k = 0; k < 14; ++k) {
             const LayoutRect c = kPieces[k].classic;
-            const LayoutRect want{c.x + (kShellRules[k].right ? dx : 0), c.y + (kShellRules[k].bottom ? dy : 0), c.w + (kShellRules[k].cut_col >= 0 ? dx : 0),
+            const LayoutRect want{c.x + (kShellRules[k].right ? dx : 0), c.y + (kShellRules[k].bottom ? dy : 0), c.w + (kShellRules[k].cut_cols[0] >= 0 ? dx : 0),
                                   c.h + (kShellRules[k].cut_row >= 0 ? dy : 0)};
             const ShellSpans spans = shell_spans(&kShellRules[k], c.x, c.y, c.w, c.h, l);
             ok = ok && tiles_without_gap(spans, want);
@@ -341,23 +375,44 @@ void test_cuts(const assets::AssetArchive& arc) {
     // --- the three runs of identical lines, measured on the art
     {   // the top bar: columns 138 - 143 (the clock box's right edge is column 129 - 132, the next decoration is far right)
         const assets::Sprite& s = sprite("x0y0.bmp");
-        const int32_t c = rule("x0y0.bmp").cut_col;
+        const int32_t c = rule("x0y0.bmp").cut_cols[0];
         const auto run = identical_run(s, false, c);
+        check(col_cut_count(rule("x0y0.bmp")) == 1 && rule("x0y0.bmp").cut_cols[1] < 0 && rule("x0y0.bmp").cut_cols[2] < 0, "x0y0: one cut");
         check(run.first == 138 && run.second == 143, "x0y0: the run of identical columns around the cut is 138 - 143 (it is " + std::to_string(run.first) + " - " + std::to_string(run.second) + ")");
         check(c >= run.first + 1 && c <= run.second - 1, "x0y0: the cut column " + std::to_string(c) + " has identical columns on both sides of it");
         check(c > 132, "x0y0: the cut is right of the black clock box (its edge is column 129 - 132)");
         check(line_diff(s, false, c - 1, c) == 0 && line_diff(s, false, c, c + 1) == 0, "x0y0: the neighbours of the cut continue it exactly");
     }
-    {   // the bottom strip: the plain band left of the first score box, columns 13 - 17 (52.P correction); NOT the panel's own fill, columns 458 - 482
+    {   // the bottom strip: THREE cuts, one left of each score box: the plain band left of the first box (columns 13 - 17: 52.P correction), the plain run 186 - 190 right of the first box
+        // and left of the second team's label, and the plain run 345 - 348 left of the third team's label; NOT the panel's own fill, columns 458 - 482
         const assets::Sprite& s = sprite("x17y461.bmp");
-        const int32_t c = rule("x17y461.bmp").cut_col;
-        const auto run = identical_run(s, false, c);
-        check(run.first == 13 && run.second == 17, "x17y461: the run of identical columns around the cut is 13 - 17 (it is " + std::to_string(run.first) + " - " + std::to_string(run.second) + ")");
-        check(c >= run.first + 1 && c <= run.second - 1, "x17y461: the cut column " + std::to_string(c) + " has identical columns on both sides");
-        check(c < 86, "x17y461: the cut is left of the first score box's recess (its edge is column 86): the strip, its black top line and the recesses stay one continuous strip");
+        const ShellRule& strip = rule("x17y461.bmp");
+        check(col_cut_count(strip) == 3 && strip.cut_cols[0] == 15 && strip.cut_cols[1] == 188 && strip.cut_cols[2] == 346, "x17y461: three cuts, at the columns 15, 188 and 346");
+        const struct { int32_t col, first, last; } runs[3] = {{15, 13, 17}, {188, 186, 190}, {346, 345, 348}};
+        const ScreenLayout classic = ScreenLayout::classic();
+        for (size_t i = 0; i < 3; ++i) {
+            const int32_t c = strip.cut_cols[i];
+            const std::string at = "x17y461 cut " + std::to_string(i) + " (column " + std::to_string(c) + "): ";
+            const auto run = identical_run(s, false, c);
+            check(run.first == runs[i].first && run.second == runs[i].last, at + "the run of identical columns around it is " + std::to_string(runs[i].first) + " - " + std::to_string(runs[i].last) + " (it is " + std::to_string(run.first) + " - " + std::to_string(run.second) + ")");
+            check(c >= run.first + 1 && c <= run.second - 1, at + "it has identical columns on both sides");
+            check(static_cast<int32_t>(s.height) == 19 && line_diff(s, false, c - 1, c) == 0 && line_diff(s, false, c, c + 1) == 0, at + "it is identical to its neighbours on all 19 rows");
+            int32_t transparent = 0;
+            for (int32_t y = 0; y < static_cast<int32_t>(s.height); ++y) transparent += s.get_pixel(static_cast<uint32_t>(c), static_cast<uint32_t>(y)) == assets::CHD_COLOR_KEY_INDEX ? 1 : 0;
+            check(transparent == 0, at + "no row of it is transparent: the repeated column is solid art");
+            // the cuts and the boxes: the recess of box b (54 wide) is at column box_left - 17; cut i is left of box i + 1 and right of the recess before it, so one cut sits in each gap
+            const int32_t recess_left = classic.score_slot(i + 1).box_left - 17;
+            check(c < recess_left - 1, at + "it is left of the recess of the box it moves (column " + std::to_string(recess_left) + ")");
+            if (i > 0) {
+                const int32_t before = classic.score_slot(i).box_left - 17;
+                check(c > before + 54, at + "and right of the recess of the box before it (columns " + std::to_string(before) + " - " + std::to_string(before + 53) + "): the recesses are never cut");
+            }
+        }
         const auto fill_run = identical_run(s, false, 470);
         check(fill_run.first >= 457 && fill_run.second >= 482, "x17y461: columns 458 - 482 are an identical run too (the control: identical alone is not enough)");
-        check(!(c >= 458 && c <= 482), "x17y461: ... but that run is the right panel's own fill, and the cut is not in it (a stretch there puts a flat block between the end ornament and the panel)");
+        for (size_t i = 0; i < 3; ++i) check(!(strip.cut_cols[i] >= 458 && strip.cut_cols[i] <= 482), "x17y461: ... but that run is the right panel's own fill, and no cut is in it (a stretch there puts a flat block between the end ornament and the panel)");
+        // the recesses themselves are long runs of identical columns too (the score boxes' flat inside): the control that a cut inside one would pass "identical" and has to fail the position test
+        check(identical_run(s, false, 100).first <= 90 && identical_run(s, false, 100).second >= 136, "x17y461: the first recess is a run of identical columns (control: cutting there would be 'identical' and is excluded by the recess test)");
     }
     {   // the left strip: rows 294 - 314, below the horizontal rule (rows 260 - 266: it stays level with the chat header)
         const assets::Sprite& s = sprite("x0y22.bmp");
@@ -410,7 +465,7 @@ void test_cuts(const assets::AssetArchive& arc) {
     // the cuts together: the model's anchors and cut lines are the ones the independent mock-up uses
     for (const RefPiece& p : kReference) {
         const ShellRule& r = rule(p.name);
-        check(r.cut_col == p.col && r.cut_row == p.row && r.right == p.right && r.bottom == p.bottom, std::string(p.name) + ": the model's anchors and cut agree with the mock-up (" + std::to_string(r.cut_col) + ", " + std::to_string(r.cut_row) + ")");
+        check(r.cut_cols == p.cols && r.cut_row == p.row && r.right == p.right && r.bottom == p.bottom, std::string(p.name) + ": the model's anchors and cuts agree with the mock-up (" + std::to_string(r.cut_cols[0]) + ", " + std::to_string(r.cut_row) + ")");
     }
 }
 
@@ -449,7 +504,7 @@ void test_composition(const assets::AssetArchive& arc) {
     // each stretched piece at its original size equals the original, and at the new size its added lines are the repeated one
     for (size_t k = 0; k < 14; ++k) {
         const ShellRule& rule = kShellRules[k];
-        if (rule.cut_col < 0 && rule.cut_row < 0) continue;
+        if (rule.cut_cols[0] < 0 && rule.cut_row < 0) continue;
         const assets::Sprite& s = *arc.find_sprite(rule.sprite);
         const LayoutRect c = kPieces[k].classic;
         // at the original's size: the spans are the whole piece, and drawing them gives the sprite
@@ -464,27 +519,44 @@ void test_composition(const assets::AssetArchive& arc) {
             }
         }
         check(equal, std::string(rule.sprite) + " drawn at its original size is the original");
-        // at 960 x 540: lines before the cut are the original's, the added lines are the cut line, the lines after are the original's, moved
+        // at 960 x 540: lines before a cut are the original's, the added lines are the cut line, the lines after are the original's, moved (a piece with several cuts: dx shared between them)
         const ScreenLayout wide = ScreenLayout::with_size(960, 540);
         const ShellSpans spans = shell_spans(&rule, c.x, c.y, c.w, c.h, wide);
         Pic two(960, 540);
         for (size_t i = 0; i < spans.count; ++i) blit_span(two, s, spans.span[i].dst, spans.span[i].src);
         const int32_t ox = rule.right ? wide.dx() : 0, oy = rule.bottom ? wide.dy() : 0;
         bool lines_ok = true;
-        const int32_t extra = rule.cut_col >= 0 ? wide.dx() : wide.dy();
-        const int32_t cut = rule.cut_col >= 0 ? rule.cut_col : rule.cut_row;
-        const int32_t length = rule.cut_col >= 0 ? c.w : c.h;
-        for (int32_t line = 0; line < length + extra; ++line) {
-            const int32_t src_line = line <= cut ? line : (line <= cut + extra ? cut : line - extra);       // the mock-up's rule
-            const int32_t across = rule.cut_col >= 0 ? c.h : c.w;
-            for (int32_t i = 0; i < across; ++i) {
-                const uint8_t v = rule.cut_col >= 0 ? s.get_pixel(static_cast<uint32_t>(src_line), static_cast<uint32_t>(i)) : s.get_pixel(static_cast<uint32_t>(i), static_cast<uint32_t>(src_line));
-                const int32_t px = rule.cut_col >= 0 ? c.x + ox + line : c.x + ox + i;
-                const int32_t py = rule.cut_col >= 0 ? c.y + oy + i : c.y + oy + line;
-                lines_ok = lines_ok && two.at(px, py) == (v == assets::CHD_COLOR_KEY_INDEX ? int16_t{-1} : static_cast<int16_t>(v));
+        std::string what;
+        if (rule.cut_cols[0] >= 0) {
+            std::vector<int32_t> cuts;
+            for (const int32_t col : rule.cut_cols) {
+                if (col >= 0) cuts.push_back(col);
             }
+            const std::vector<std::pair<int32_t, int32_t>> columns = reference_columns(c.w, cuts, wide.dx());
+            for (const auto& col : columns) {
+                for (int32_t y = 0; y < c.h; ++y) {
+                    const uint8_t v = s.get_pixel(static_cast<uint32_t>(col.first), static_cast<uint32_t>(y));
+                    lines_ok = lines_ok && two.at(c.x + ox + col.second, c.y + oy + y) == (v == assets::CHD_COLOR_KEY_INDEX ? int16_t{-1} : static_cast<int16_t>(v));
+                }
+            }
+            lines_ok = lines_ok && static_cast<int32_t>(columns.size()) == c.w + wide.dx();
+            const std::vector<int32_t> shares = reference_shares(wide.dx(), cuts.size());
+            what = "the columns before each cut, 1 + its share copies of the cut column (the shares:";
+            for (const int32_t share : shares) what += " " + std::to_string(share);
+            what += ") and the columns after it, in order";
+        } else {
+            const int32_t extra = wide.dy();
+            const int32_t cut = rule.cut_row;
+            for (int32_t line = 0; line < c.h + extra; ++line) {
+                const int32_t src_line = line <= cut ? line : (line <= cut + extra ? cut : line - extra);       // the mock-up's rule
+                for (int32_t i = 0; i < c.w; ++i) {
+                    const uint8_t v = s.get_pixel(static_cast<uint32_t>(i), static_cast<uint32_t>(src_line));
+                    lines_ok = lines_ok && two.at(c.x + ox + i, c.y + oy + line) == (v == assets::CHD_COLOR_KEY_INDEX ? int16_t{-1} : static_cast<int16_t>(v));
+                }
+            }
+            what = "the lines before the cut, " + std::to_string(extra + 1) + " copies of the cut line and the lines after it, in order";
         }
-        check(lines_ok, std::string(rule.sprite) + " at 960 x 540: the lines before the cut, " + std::to_string(extra + 1) + " copies of the cut line and the lines after it, in order");
+        check(lines_ok, std::string(rule.sprite) + " at 960 x 540: " + what);
     }
     // the original's picture is the plain 14 pieces drawn the way the original draws them (draw_animation_frame0 order)
     {
@@ -563,14 +635,18 @@ void test_renderer_draws_spans(const assets::AssetArchive& arc) {
             const int32_t dw = sz.first - 640, dh = sz.second - 480;
             for (const RefPiece& p : kReference) {
                 const assets::Sprite* sprite = arc.find_sprite(p.name);
-                const int32_t ox = p.right ? dw : 0, oy = p.bottom ? dh : 0, ew = p.col >= 0 ? dw : 0, eh = p.row >= 0 ? dh : 0;
+                const int32_t ox = p.right ? dw : 0, oy = p.bottom ? dh : 0, eh = p.row >= 0 ? dh : 0;
+                std::vector<int32_t> cuts;
+                for (const int32_t c : p.cols) {
+                    if (c >= 0) cuts.push_back(c);
+                }
+                const std::vector<std::pair<int32_t, int32_t>> columns = reference_columns(static_cast<int32_t>(sprite->width), cuts, dw);
                 for (int32_t y = 0; y < static_cast<int32_t>(sprite->height) + eh; ++y) {
                     const int32_t sy = (eh > 0 && y > p.row) ? (y <= p.row + eh ? p.row : y - eh) : y;
-                    for (int32_t x = 0; x < static_cast<int32_t>(sprite->width) + ew; ++x) {
-                        const int32_t sx = (ew > 0 && x > p.col) ? (x <= p.col + ew ? p.col : x - ew) : x;
-                        const uint8_t v = sprite->get_pixel(static_cast<uint32_t>(sx), static_cast<uint32_t>(sy));
+                    for (const auto& col : columns) {
+                        const uint8_t v = sprite->get_pixel(static_cast<uint32_t>(col.first), static_cast<uint32_t>(sy));
                         if (v == assets::CHD_COLOR_KEY_INDEX) continue;
-                        const int32_t px_x = p.x + ox + x, px_y = p.y + oy + y;
+                        const int32_t px_x = p.x + ox + col.second, px_y = p.y + oy + y;
                         if (px_x >= 0 && px_x < sz.first && px_y >= 0 && px_y < sz.second) want[static_cast<size_t>(px_y) * static_cast<size_t>(sz.first) + static_cast<size_t>(px_x)] = rgb_of(arc, p.name, v);
                     }
                 }
@@ -873,7 +949,7 @@ void test_hud_draws_the_frame(const assets::AssetArchive& arc) {
             }
         }
         check(same, at + "the first " + std::to_string(want.size()) + " calls are the frame's spans, the last stored piece first");
-        check(classic ? spy.count(Spy::Kind::Region) == 0 : spy.count(Spy::Kind::Region) == 18, at + (classic ? "no piece is drawn in parts" : "six pieces are drawn in three parts each (18 calls)"));
+        check(classic ? spy.count(Spy::Kind::Region) == 0 : spy.count(Spy::Kind::Region) == 22, at + (classic ? "no piece is drawn in parts" : "six pieces are drawn in parts: the bottom strip in seven (three cuts), the top bar and the four taller pieces in three each (22 calls)"));
         // the panel's backing fill comes before the frame, the whole panel
         const LayoutRect fill = layout.panel_fill();
         bool fill_first = false;
@@ -1009,26 +1085,58 @@ void test_hud_draws_the_frame(const assets::AssetArchive& arc) {
 }
 
 void test_score_slots(const assets::AssetArchive& arc) {
-    group("slots", "the score boxes are slots: the local team's in the top bar, the others' in the bottom strip, in the order of the teams; more slots fit the wide strip");
+    group("slots", "the score boxes are slots: the local team's in the top bar, the others' in the bottom strip, in the order of the teams; the bottom boxes are spread evenly over the strip");
     const ScreenLayout wide = ScreenLayout::with_size(960, 540);
     const ScreenLayout classic = ScreenLayout::classic();
-    // the model
-    check(classic.bottom_slot_count() == 3 && wide.bottom_slot_count() == 5, "the classic strip holds three bottom slots, the 960 wide one five");
-    check(wide.score_slot(4) == ScoreSlot{186, 274, 524, 277} && wide.score_slot(5) == ScoreSlot{38, 126, 524, 129}, "slots 4 and 5 are one and two pitches (148) left of the first bottom slot (box 425): boxes 277 and 129, labels 88 wide");
-    check(wide.score_slot(6) == wide.score_slot(5) && wide.score_slot(40) == wide.score_slot(5), "a slot past the last that fits is the last");
-    check(classic.score_slot(4) == classic.score_slot(3) && classic.score_slot(9) == classic.score_slot(3), "the classic strip has no room left of the first slot: a slot past the third is the third");
+    // the model: the bottom strip is widened at three cuts, dx shared in thirds (the left cut takes the remainder), a box and its label move by what the cuts left of the box add
+    check(classic.bottom_slot_count() == 3 && wide.bottom_slot_count() == 3 && ScreenLayout::with_size(1920, 1080).bottom_slot_count() == 3, "every picture holds three bottom slots (the original's)");
+    check(wide.cut_share(0, 3) == 108 && wide.cut_share(1, 3) == 106 && wide.cut_share(2, 3) == 106 && wide.cut_share(0, 1) == 320 && wide.cut_share(0, 3) + wide.cut_share(1, 3) + wide.cut_share(2, 3) == 320,
+          "960 x 540: the three cuts add 108, 106 and 106 (320 in all); a piece with one cut gets all of dx");
+    check(wide.score_slot(1) == ScoreSlot{113, 209, 524, 213} && wide.score_slot(2) == ScoreSlot{377, 465, 524, 468} && wide.score_slot(3) == ScoreSlot{632, 719, 524, 722},
+          "960 x 540: the boxes are at x 213, 468 and 722 (the labels anchored to them), 60 rows down");
+    check(wide.score_slot(2).box_left - wide.score_slot(1).box_left == 255 && wide.score_slot(3).box_left - wide.score_slot(2).box_left == 254, "... spaced 255 and 254 apart: even");
+    check(wide.score_slot(0) == ScoreSlot{632, 719, 4, 722}, "the local team's slot stays in the top bar, right anchored (box at 722)");
+    check(wide.score_slot(4) == wide.score_slot(3) && wide.score_slot(40) == wide.score_slot(3) && classic.score_slot(4) == classic.score_slot(3) && classic.score_slot(9) == classic.score_slot(3),
+          "a slot past the third is the third");
     {
-        bool ordered = true;
-        for (size_t k = 4; k <= wide.bottom_slot_count(); ++k) {
-            ordered = ordered && wide.score_slot(k).box_left < wide.score_slot(k - 1).box_left;
-            ordered = ordered && wide.score_slot(k).label_left >= ScreenLayout::kBottomBandLeft && wide.score_slot(k).label_right == wide.score_slot(k).box_left - 3;
+        // an independent rule for any width: the share of the leftmost cut is dx - 2 * (dx / 3), the others' dx / 3
+        bool all = true;
+        bool even = true;
+        for (const int32_t w : {640, 641, 642, 643, 644, 700, 854, 960, 1000, 1280, 1366, 1920, 2560, 3840}) {
+            const ScreenLayout l = ScreenLayout::with_size(w, 480);
+            const int32_t dx = w - 640;
+            const int32_t third = dx / 3;
+            const int32_t left = dx - 2 * third;
+            const int32_t shift[3] = {left, left + third, left + 2 * third};
+            const int32_t classic_box[3] = {105, 254, 402};
+            const int32_t classic_label_right[3] = {101, 251, 399};
+            const int32_t classic_label_w[3] = {96, 88, 87};                                   // the original's labels: [5, 101), [163, 251), [312, 399)
+            for (size_t b = 0; b < 3; ++b) {
+                const ScoreSlot s = l.score_slot(b + 1);
+                all = all && s.box_left == classic_box[b] + shift[b] && s.label_right == classic_label_right[b] + shift[b] && s.label_left == s.label_right - classic_label_w[b] && s.top == 464;
+            }
+            all = all && l.score_slot(3).box_left == 402 + dx;                               // the last box is where it always was relative to the panel: right anchored
+            even = even && (l.score_slot(2).box_left - l.score_slot(1).box_left) - (l.score_slot(3).box_left - l.score_slot(2).box_left) == 1;      // the original's own gaps are 149 and 148
         }
-        check(ordered, "every further slot is left of the one before and its label begins right of the band's start (35)");
-        const ScreenLayout huge = ScreenLayout::with_size(1920, 1080);
-        // independent count: boxes at 105 + 1280 - 148 * n, a label of 88 + 3 before each: the first n with box - 91 < 35 is the end
-        size_t expected = 3;
-        for (int32_t n = 1; (105 + 1280) - 148 * n - 91 >= 35; ++n) expected = 3 + static_cast<size_t>(n);
-        check(huge.bottom_slot_count() == expected && expected == 11, "1920 x 1080 has " + std::to_string(expected) + " bottom slots (an independent count)");
+        check(all, "the slots of fourteen picture widths follow the rule (left cut dx - 2 * (dx / 3), the others dx / 3): box and label move together, the last box is right anchored");
+        check(even, "... and the boxes stay evenly spaced: the first gap is exactly one pixel wider than the second, as the original's own (149 and 148), whatever the width");
+    }
+    // the art under the boxes: the recess of every box in the composed wide frame is the strip's own recess, so a box sits on its recess (and the labels' band stays plain)
+    {
+        const Pic frame = compose_from_spans(arc, wide);
+        const assets::Sprite& strip = *arc.find_sprite("x17y461.bmp");
+        for (size_t b = 1; b <= 3; ++b) {
+            const ScoreSlot cl = classic.score_slot(b);
+            const ScoreSlot ws = wide.score_slot(b);
+            bool same = true;
+            for (int32_t j = 0; j < 14; ++j) {
+                for (int32_t i = 0; i < 54; ++i) {
+                    const uint8_t v = strip.get_pixel(static_cast<uint32_t>(cl.box_left - 17 + i), static_cast<uint32_t>(cl.top + j - 461));
+                    same = same && frame.at(ws.box_left + i, ws.top + j) == static_cast<int16_t>(v);
+                }
+            }
+            check(same, "960 x 540: the recess under the box of slot " + std::to_string(b) + " (54 x 14 at " + std::to_string(ws.box_left) + ", " + std::to_string(ws.top) + ") is the strip's own recess, moved with its box");
+        }
     }
     // the HUD: which team has which slot, by the roster and the local team
     struct Case {
@@ -1081,6 +1189,75 @@ void test_score_slots(const assets::AssetArchive& arc) {
 }
 
 // =====================================================================================================================================================
+// The network's ping and delay stay clear of the score boxes
+// =====================================================================================================================================================
+
+/// The ping and delay of a network match (latency_corner.hpp) stand in the corner row left of the version when the row is free, and on two lines above the plate when it is not. "Free" is the
+/// match's limit: where the row of score boxes ends. It was the original's picture's number (460) in every layout: at 960 x 540, where the boxes are spread over the strip (the third one
+/// ends at 778), a row of texts at x 644 .. 828 stood on the third box.
+void test_latency_clear_of_scores(const assets::AssetArchive& arc) {
+    group("latency", "the ping / delay readout of a network match does not touch a score box or cover, with two, three and four teams, in both pictures");
+    using NP = net::NetGame::Phase;
+    RendererRig measure(arc, 960, 540);                                      // the application's own font metrics
+    check(measure.ok, "a renderer for the text metrics");
+    if (!measure.ok) return;
+    const assets::Sprite& cover = *arc.find_sprite("scorcovr.bmp");
+    struct Roster { const char* what; uint8_t mask; };
+    const Roster rosters[] = {{"two teams", 0x03}, {"three teams", 0x07}, {"four teams", 0x0F}};
+    for (const ScreenLayout& layout : {ScreenLayout::classic(), ScreenLayout::with_size(960, 540), ScreenLayout::with_size(1280, 720), ScreenLayout::with_size(1920, 1080)}) {
+        const std::string pic = std::to_string(layout.width) + " x " + std::to_string(layout.height) + ": ";
+        const CornerPlate plate = CornerPlate::for_canvas(layout.width, layout.height);
+        const int32_t text_h = measure.renderer.get_text_height(FontSize::Px12);
+        const int32_t fps_w = measure.renderer.get_text_width("60 FPS", FontSize::Px12);
+        const int32_t ver_w = measure.renderer.get_text_width(std::string(ants::VERSION_STRING), FontSize::Px12);
+        const CornerRow row = CornerRow::of(plate, fps_w, ver_w, 36, FPS_OVERLAY_SPARK_H, text_h);
+        const std::optional<int32_t> limit = latency_left_limit(true, NP::Playing, CornerScreen::Match, layout);
+        check(limit.has_value() && *limit == layout.score_row_right() && (!layout.is_classic() || *limit == 460), pic + "the match's limit is the layout's (" + std::to_string(limit ? *limit : -1) + ", and the original's 460 in its own picture)");
+        int32_t strip_right = 0;                                              // the right edge of what the bottom row holds, over every roster
+        for (const Roster& r : rosters) {
+            HudRig rig(arc, layout, 0);
+            rig.hud.set_roster_mask(r.mask);
+            const Spy spy = rig.frame();
+            std::vector<LayoutRect> row_items;                                // the boxes and the covers of the bottom row
+            const int32_t top = layout.score_slot(1).top;
+            for (const Spy::Ev& e : spy.events) {
+                if (e.kind == Spy::Kind::Fill && e.w == 54 && e.h == 14 && e.y == top) row_items.push_back(LayoutRect{e.x, e.y, 54, 14});
+                if (e.kind == Spy::Kind::Named && e.name == "scorcovr.bmp" && e.y == top - 1) row_items.push_back(LayoutRect{e.x, e.y, static_cast<int32_t>(cover.width), static_cast<int32_t>(cover.height)});
+            }
+            check(row_items.size() == 3, pic + r.what + ": the bottom row holds three boxes or covers (" + std::to_string(row_items.size()) + ")");
+            int32_t right_edge = 0;
+            for (const LayoutRect& it : row_items) right_edge = std::max(right_edge, it.right());
+            strip_right = std::max(strip_right, right_edge);
+            // the readout: nothing measured yet, a typical one and the widest, each laid out as the application does
+            const struct { const char* what; std::optional<uint32_t> ping, delay; } readouts[] = {{"nothing measured", std::nullopt, std::nullopt}, {"12 / 80 ms", 12u, 80u}, {"9999 / 9999 ms", 9999u, 9999u}};
+            for (const auto& ro : readouts) {
+                const int32_t pw = measure.renderer.get_text_width(ping_text(ro.ping), FontSize::Px12);
+                const int32_t dw = measure.renderer.get_text_width(delay_text(ro.delay), FontSize::Px12);
+                const int32_t widest = measure.renderer.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP + measure.renderer.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
+                const LatencyCornerLayout l = layout_latency_corner(pw, dw, widest, text_h, row.version_x, row.text_y, *limit, plate);
+                const LayoutRect ping_rect{l.ping_x, l.ping_y, pw, text_h};
+                const LayoutRect delay_rect{l.delay_x, l.delay_y, dw, text_h};
+                bool touches = false;
+                for (const LayoutRect& it : row_items) {
+                    touches = touches || (ping_rect.x < it.right() && it.x < ping_rect.right() && ping_rect.y < it.bottom() && it.y < ping_rect.bottom());
+                    touches = touches || (delay_rect.x < it.right() && it.x < delay_rect.right() && delay_rect.y < it.bottom() && it.y < delay_rect.bottom());
+                }
+                check(!touches, pic + r.what + ", " + ro.what + ": the texts (" + (l.stacked ? "stacked" : "in a row") + ", ping at x " + std::to_string(l.ping_x) + ") touch no box or cover");
+                check(l.ping_x >= right_edge, pic + r.what + ", " + ro.what + ": the texts begin right of the score row (" + std::to_string(right_edge) + ")");
+            }
+        }
+        check(*limit == strip_right + ScreenLayout::kScoreRowMargin, pic + "the limit is the right edge of the last cover (" + std::to_string(strip_right) + ") and the margin of " + std::to_string(ScreenLayout::kScoreRowMargin));
+        // the control: the original's number (460) in a wider picture, where the boxes are further right, puts the row of texts on the third box
+        if (!layout.is_classic()) {
+            const int32_t widest = measure.renderer.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP + measure.renderer.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
+            const LatencyCornerLayout old = layout_latency_corner(measure.renderer.get_text_width(ping_text(12u), FontSize::Px12), measure.renderer.get_text_width(delay_text(80u), FontSize::Px12), widest, text_h, row.version_x,
+                                                                  row.text_y, LATENCY_LEFT_LIMIT_MATCH, plate);
+            check(!old.stacked && old.ping_x < strip_right, pic + "the control: with the original's limit (460) the texts stand in a row at x " + std::to_string(old.ping_x) + ", on the boxes (they end at " + std::to_string(strip_right) + ")");
+        }
+    }
+}
+
+// =====================================================================================================================================================
 // 6. The pages of the original and its dialogs
 // =====================================================================================================================================================
 
@@ -1097,10 +1274,21 @@ struct AllianceTable {
 };
 
 void test_dialogs_and_pages(const assets::AssetArchive& arc) {
-    group("windows", "the dialogs sit over the middle of the map view, the pages of the original are centred over a clay margin, the pointer is taken back to their numbers");
+    group("windows", "the dialogs, the options window and the quick help sit over the middle of the map view with the HUD visible around them, the pointer is taken back to their numbers");
     const ScreenLayout wide = ScreenLayout::with_size(960, 540);
     const ScreenLayout classic = ScreenLayout::classic();
-    check(wide.page_offset() == LayoutPoint{160, 30} && classic.page_offset() == LayoutPoint{0, 0}, "the page offset is (160, 30) at 960 x 540 and (0, 0) in the original's picture");
+    check(wide.page_offset() == LayoutPoint{160, 30} && classic.page_offset() == LayoutPoint{0, 0}, "the page offset (the original's pages outside a match) is (160, 30) at 960 x 540 and (0, 0) in the original's picture");
+    check(wide.options_offset() == LayoutPoint{160, 30} && wide.quick_help_offset() == LayoutPoint{77, 31} && classic.options_offset() == LayoutPoint{0, 0} && classic.quick_help_offset() == LayoutPoint{0, 0},
+          "the options window's offset is (160, 30) and the quick help's (77, 31) at 960 x 540: the 442 x 440 card (16, 21) and the 640 x 480 page go to the middle (397, 271) of the view; (0, 0) in the original's picture");
+    for (const ScreenLayout& l : {wide, ScreenLayout::with_size(1280, 720), ScreenLayout::with_size(1920, 1080)}) {
+        const LayoutPoint o = l.options_offset();
+        const LayoutPoint q = l.quick_help_offset();
+        const LayoutRect v = l.view();
+        const std::string at = std::to_string(l.width) + " x " + std::to_string(l.height) + ": ";
+        check(16 + o.x + 221 == v.x + v.w / 2 && 21 + o.y + 220 == v.y + v.h / 2, at + "the options card's centre is the view's centre");
+        check(q.x + 320 == v.x + v.w / 2 && q.y + 240 == v.y + v.h / 2, at + "the quick help page's centre is the view's centre");
+        check(q.x >= v.x && q.y >= v.y && q.x + 640 <= v.right() && q.y + 480 <= v.bottom(), at + "the quick help page lies inside the map view: the HUD around it stays visible");
+    }
     check(wide.modal_offset() == LayoutPoint{137, 59} && classic.modal_offset() == LayoutPoint{0, 0}, "the dialog offset is (137, 59) at 960 x 540: the frame (100, 100) 320 x 224 goes to the middle (397, 271) of the view; (0, 0) in the original's picture");
     {
         const LayoutPoint m = wide.modal_offset();
@@ -1220,79 +1408,212 @@ void test_dialogs_and_pages(const assets::AssetArchive& arc) {
         check(t.sim.get_world_state().player_alliances[1] == 0 && t.sim.get_world_state().player_alliances[0] == 1, at + "a click at Accept's place on screen forms the team of Bob and Alice");
     }
 
-    // --- the pages: the options and the quick help of the original are 640 x 480 screens
+    // --- the options window and the quick help of the original during a match: its own pictures, drawn over the map view with the HUD around them
     for (const ScreenLayout& layout : {classic, wide}) {
-        const LayoutPoint p = layout.page_offset();
         const bool is_classic = layout.is_classic();
+        const LayoutPoint o = layout.options_offset();
+        const LayoutPoint q = layout.quick_help_offset();
         const std::string at = std::string(is_classic ? "classic" : "960 x 540") + ": ";
-        {   // the options: Return to Game is (351, 425) 98 x 26 of the page
+        {   // the options: Return to Game is (351, 425) 98 x 26 of the window's own numbers
             HudRig rig(arc, layout);
             rig.hud.open_options();
             const Spy spy = rig.frame();
+            // the HUD is drawn first, and still: the 14 pieces of the frame, then the window under its origin
+            size_t i_origin = spy.events.size(), i_reset = spy.events.size(), i_clip = spy.events.size(), i_unclip = spy.events.size();
+            bool clay = false;
+            for (size_t i = 0; i < spy.events.size(); ++i) {
+                const Spy::Ev& e = spy.events[i];
+                if (e.kind == Spy::Kind::Origin && e.x == o.x && e.y == o.y && i_origin == spy.events.size()) i_origin = i;
+                if (e.kind == Spy::Kind::Origin && e.x == 0 && e.y == 0 && i > i_origin && i_reset == spy.events.size()) i_reset = i;
+                if (e.kind == Spy::Kind::Clip && i > i_origin && i_clip == spy.events.size()) i_clip = i;
+                if (e.kind == Spy::Kind::ClearClip && i > i_clip && i_unclip == spy.events.size()) i_unclip = i;
+                clay = clay || (e.kind == Spy::Kind::Fill && e.colour.r == 219 && e.colour.g == 75 && e.colour.b == 19);
+            }
+            check(!clay, at + "no clay margin: the options window does not cover the match");
+            size_t pieces_before = 0;
+            for (size_t i = 0; i < i_origin && i < spy.events.size(); ++i) pieces_before += (spy.events[i].kind == Spy::Kind::Sprite || spy.events[i].kind == Spy::Kind::Region) ? size_t{1} : size_t{0};
+            check(pieces_before >= 14 && spy.has_sprite_at("x480y126.bmp", 480 + layout.dx(), 126), at + "the HUD is drawn before the window: the 14 pieces of the frame (the status card at its place) come first");
             if (is_classic) {
-                bool margin = false, clip = false;
-                for (const Spy::Ev& e : spy.events) {
-                    margin = margin || (e.kind == Spy::Kind::Fill && e.colour.r == 219 && e.colour.g == 75 && e.colour.b == 19);
-                    clip = clip || (e.kind == Spy::Kind::Clip && e.w == 640 && e.h == 480);
-                }
-                check(!margin && !clip, at + "the options page covers the whole picture: no margin, no clip");
+                check(i_clip == spy.events.size(), at + "the original's own picture needs no clip");
             } else {
-                // order: the margin fill (the whole picture, clay), the origin of the page, the clip of its 640 x 480 screen, the page, the clip off, the origin off
-                size_t i_fill = spy.events.size(), i_origin = spy.events.size(), i_clip = spy.events.size(), i_unclip = spy.events.size(), i_reset = spy.events.size();
-                for (size_t i = 0; i < spy.events.size(); ++i) {
-                    const Spy::Ev& e = spy.events[i];
-                    if (e.kind == Spy::Kind::Fill && e.w == 960 && e.h == 540 && e.colour.r == 219 && e.colour.g == 75 && e.colour.b == 19 && i_fill == spy.events.size()) i_fill = i;
-                    if (e.kind == Spy::Kind::Origin && e.x == 160 && e.y == 30) i_origin = i;
-                    if (e.kind == Spy::Kind::Clip && e.x == 0 && e.y == 0 && e.w == 640 && e.h == 480 && e.ox == 160 && e.oy == 30) i_clip = i;
-                    if (e.kind == Spy::Kind::ClearClip && i > i_clip && i_unclip == spy.events.size()) i_unclip = i;
-                    if (e.kind == Spy::Kind::Origin && e.x == 0 && e.y == 0 && i > i_origin) i_reset = i;
-                }
-                check(i_fill < i_origin && i_origin < i_clip && i_clip < i_unclip && i_unclip <= i_reset && i_reset < spy.events.size(),
-                      at + "the page: the clay margin, the origin (160, 30), the clip of its screen, the page, the clip off, the origin off");
-                bool fill_fill = false;
+                const LayoutRect v = layout.view();
+                bool clip_ok = false;
                 for (const Spy::Ev& e : spy.events) {
-                    if (e.kind == Spy::Kind::Fill && e.ox == 0 && e.oy == 0 && e.w == 960 && e.h == 540) fill_fill = e.colour.r == 219 && e.colour.g == 75 && e.colour.b == 19;
+                    if (e.kind == Spy::Kind::Clip && e.ox == o.x && e.oy == o.y) clip_ok = e.x == v.x - o.x && e.y == v.y - o.y && e.w == v.w && e.h == v.h;
                 }
-                check(fill_fill, at + "the margin is the clay of the pages: (219, 75, 19)");
+                check(i_origin < i_clip && i_clip < i_unclip && i_unclip <= i_reset && i_reset < spy.events.size() && clip_ok, at + "the window: its origin (160, 30), the clip of the map view (it stops at the view), the window, the clip off, the origin off");
             }
             // the hover picture of Return: the pointer on it at its place on screen
-            rig.hud.handle_mouse_motion(351 + p.x + 10, 425 + p.y + 10, rig.sim, rig.cam);
+            rig.hud.handle_mouse_motion(351 + o.x + 10, 425 + o.y + 10, rig.sim, rig.cam);
             check(rig.frame().has_sprite_at("breturn2.bmp", 351, 425), at + "the options' Return button shows its hover picture when the pointer is on it at its place on screen");
             if (!is_classic) {
                 rig.hud.handle_mouse_motion(351 + 10, 425 + 10, rig.sim, rig.cam);
                 check(!rig.frame().has_sprite_at("breturn2.bmp", 351, 425), at + "... and not when it is at Return's own numbers");
             }
-            // the pointer: Return at its place on screen closes the options; at the page's own numbers (without the move) it does not
+            // the pointer: Return at its place on screen closes the options; at the window's own numbers (without the move) it does not
             check(rig.hud.is_options_open(), at + "the options are open");
             if (!is_classic) {
                 rig.click(351 + 10, 425 + 10);
                 check(rig.hud.is_options_open(), at + "a click at Return's own numbers (351, 425) does nothing");
-                rig.click(351 + p.x - 20, 425 + p.y + 10);
+                rig.click(351 + o.x - 20, 425 + o.y + 10);
                 check(rig.hud.is_options_open(), at + "a click left of Return does nothing");
             }
-            rig.click(351 + p.x + 10, 425 + p.y + 10);
-            check(!rig.hud.is_options_open(), at + "a click on Return at its place on screen (" + std::to_string(351 + p.x + 10) + ", " + std::to_string(425 + p.y + 10) + ") closes the options");
+            rig.click(351 + o.x + 10, 425 + o.y + 10);
+            check(!rig.hud.is_options_open(), at + "a click on Return at its place on screen (" + std::to_string(351 + o.x + 10) + ", " + std::to_string(425 + o.y + 10) + ") closes the options");
         }
         {   // the quick help: Return is (529, 437) 98 x 26
             HudRig rig(arc, layout);
             rig.hud.open_quick_help();
             const Spy spy = rig.frame();
             check(rig.hud.is_quick_help_open(), at + "the quick help is open");
-            rig.hud.handle_mouse_motion(529 + p.x + 10, 437 + p.y + 10, rig.sim, rig.cam);
+            bool clay = false;
+            for (const Spy::Ev& e : spy.events) clay = clay || (e.kind == Spy::Kind::Fill && e.colour.r == 219 && e.colour.g == 75 && e.colour.b == 19);
+            check(!clay, at + "no clay margin: the quick help does not cover the match");
+            check(spy.has_sprite_at("x480y126.bmp", 480 + layout.dx(), 126), at + "the HUD is drawn under it (the status card at its place)");
+            rig.hud.handle_mouse_motion(529 + q.x + 10, 437 + q.y + 10, rig.sim, rig.cam);
             check(rig.frame().has_sprite_at("breturn2.bmp", 529, 437), at + "the quick help's Return button shows its hover picture when the pointer is on it at its place on screen");
             if (!is_classic) {
                 rig.hud.handle_mouse_motion(529 + 10, 437 + 10, rig.sim, rig.cam);
                 check(!rig.frame().has_sprite_at("breturn2.bmp", 529, 437), at + "... and not when it is at Return's own numbers");
-            }
-            if (!is_classic) {
+                rig.hud.handle_mouse_motion(529 + o.x + 90, 437 + o.y + 10, rig.sim, rig.cam);                // (the right end of the button at the options window's place: outside the quick help's own)
+                check(!rig.frame().has_sprite_at("breturn2.bmp", 529, 437), at + "... nor at the place of the options window's offset (the quick help has its own)");
                 rig.click(529 + 10, 437 + 10);
                 check(rig.hud.is_quick_help_open(), at + "a click at the Return button's own numbers does nothing");
                 bool one_origin = false;
-                for (const Spy::Ev& e : spy.events) one_origin = one_origin || (e.kind == Spy::Kind::Origin && e.x == 160 && e.y == 30);
-                check(one_origin, at + "the quick help is drawn under the page origin (160, 30)");
+                for (const Spy::Ev& e : spy.events) one_origin = one_origin || (e.kind == Spy::Kind::Origin && e.x == 77 && e.y == 31);
+                check(one_origin, at + "the quick help is drawn under the origin (77, 31)");
             }
-            rig.click(529 + p.x + 10, 437 + p.y + 10);
+            rig.click(529 + q.x + 10, 437 + q.y + 10);
             check(!rig.hud.is_quick_help_open(), at + "a click on Return at its place on screen closes the quick help");
+        }
+    }
+}
+
+/// The options window and the quick help take the pointer from the 50 ms poll of HUD::update as well as from the events (the INPUT task of the original): a control that is pressed and
+/// released while frames and ticks run in between must still be clicked (the poll once fed the window the raw position of the pointer, the original's own numbers moved by the window's
+/// offset: Return, the ON / OFF switches of the options and the quick help's Return could not be clicked in the 16:9 match, as the poll took the pointer off the control and cancelled the press)
+void test_window_controls_through_update(const assets::AssetArchive& arc) {
+    group("window-controls", "every control of the options window and of the quick help can be clicked through the HUD's 50 ms poll (press, update, release), at its place on screen only");
+    const ScreenLayout classic = ScreenLayout::classic();
+    const ScreenLayout wide = ScreenLayout::with_size(960, 540);
+    for (const ScreenLayout& layout : {classic, wide}) {
+        const LayoutPoint o = layout.options_offset();
+        const LayoutPoint q = layout.quick_help_offset();
+        const bool is_classic = layout.is_classic();
+        const std::string at = std::string(is_classic ? "classic" : "960 x 540") + ": ";
+        // press, run `polls` updates (the poll: HUD::update re-feeds the pointer to the window), release; `place` moves the control's own numbers to the screen
+        auto press_update_release = [](HudRig& rig, int32_t x, int32_t y, int polls) {
+            rig.hud.handle_mouse_motion(x, y, rig.sim, rig.cam);
+            rig.hud.handle_mouse_down(x, y, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            for (int i = 0; i < polls; ++i) rig.hud.update(rig.sim.get_world_state(), 1);
+            rig.hud.handle_mouse_up(x, y, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        };
+        // --- the options window
+        {
+            HudRig rig(arc, layout);
+            rig.hud.open_options();
+            auto at_screen = [&](int32_t x, int32_t y) { return std::make_pair(x + o.x, y + o.y); };
+            // Return to Game
+            {
+                const auto p = at_screen(351 + 40, 425 + 12);
+                press_update_release(rig, p.first, p.second, 3);
+                check(!rig.hud.is_options_open(), at + "Return to Game: press, three polls, release: the window closes");
+            }
+            rig.hud.open_options();
+            // Chat Off, Chat On, Quick Help Off, Quick Help On
+            struct Toggle { const char* name; int32_t x; bool OptionsState::*field; bool value; };
+            const Toggle toggles[] = {{"Chat Off", OptionsScreen::CHAT_OFF_X, &OptionsState::chat, false}, {"Chat On", OptionsScreen::CHAT_ON_X, &OptionsState::chat, true},
+                                      {"Quick Help Off", OptionsScreen::HELP_OFF_X, &OptionsState::quick_help, false}, {"Quick Help On", OptionsScreen::HELP_ON_X, &OptionsState::quick_help, true}};
+            for (const Toggle& t : toggles) {
+                const auto p = at_screen(t.x + 20, OptionsScreen::TOGGLE_Y + 10);
+                press_update_release(rig, p.first, p.second, 2);
+                check(rig.hud.options().*(t.field) == t.value && rig.hud.is_options_open(), at + std::string(t.name) + ": press, two polls, release: the switch changes");
+            }
+            // the switches at the window's own numbers (without the offset) do nothing in a 16:9 picture
+            if (!is_classic) {
+                rig.hud.options().chat = true;
+                press_update_release(rig, OptionsScreen::CHAT_OFF_X + 20, OptionsScreen::TOGGLE_Y + 10, 2);
+                check(rig.hud.options().chat, at + "Chat Off at the window's own numbers (not moved) does nothing");
+            }
+            // the sliders: press on the thumb, drag, poll, release: the value follows
+            const int32_t* values[3] = {&rig.hud.options().sound_volume, &rig.hud.options().music_volume, &rig.hud.options().scroll_speed};
+            for (int i = 0; i < 3; ++i) {
+                const int32_t before = *values[i];
+                const int32_t thumb_x = OptionsScreen::SLIDER_X + ScreenSlider::TRACK_LEFT_OFFSET + (ScreenSlider::TRACK_SPAN * before) / 99;
+                const int32_t y = OptionsScreen::SLIDER_Y[i] + 8;
+                const int32_t target_x = thumb_x + (before > 50 ? -60 : 60);
+                const auto from = at_screen(thumb_x, y);
+                const auto to = at_screen(target_x, y);
+                rig.hud.handle_mouse_motion(from.first, from.second, rig.sim, rig.cam);
+                rig.hud.handle_mouse_down(from.first, from.second, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+                rig.hud.handle_mouse_motion(to.first, to.second, rig.sim, rig.cam);
+                rig.hud.update(rig.sim.get_world_state(), 1);              // the poll re-feeds the same position: the drag goes on
+                rig.hud.handle_mouse_up(to.first, to.second, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+                check(before > 50 ? *values[i] < before - 20 : *values[i] > before + 20, at + "slider " + std::to_string(i) + ": press on the thumb, drag, poll, release: the value moved from " + std::to_string(before) + " to " + std::to_string(*values[i]));
+            }
+            // an edit field takes the focus and the typed text
+            {
+                const auto p = at_screen(OptionsScreen::EDIT_X[2] + 20, OptionsScreen::EDIT_Y[2] + 5);
+                press_update_release(rig, p.first, p.second, 1);
+                rig.hud.handle_text_input("Q");
+                check(!rig.hud.options().quick_chat[2].empty() && rig.hud.options().quick_chat[2].back() == 'Q', at + "the F11 field: a click at its place gives it the focus and it takes the typed letter");
+            }
+            check(rig.hud.is_options_open(), at + "(the window is still open: nothing but Return closes it)");
+        }
+        // --- the windows opened the way a player opens them: by CLICKING the HUD's own Options and Help buttons (press, release, an update between every event), then Return (the web build's
+        //     report: after the click on Options a click on Return did nothing, even a second one, in 16:9; Ctrl+O first did not show it)
+        {
+            HudRig rig(arc, layout);
+            auto step = [&](int32_t x, int32_t y, bool down_event, bool up_event) {
+                rig.hud.update(rig.sim.get_world_state(), 1);
+                rig.hud.handle_mouse_motion(x, y, rig.sim, rig.cam);
+                rig.hud.update(rig.sim.get_world_state(), 1);
+                if (down_event) {
+                    rig.hud.handle_mouse_down(x, y, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+                    rig.hud.update(rig.sim.get_world_state(), 1);
+                    rig.hud.update(rig.sim.get_world_state(), 1);
+                }
+                if (up_event) {
+                    rig.hud.handle_mouse_up(x, y, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+                    rig.hud.update(rig.sim.get_world_state(), 1);
+                }
+            };
+            const UIButton opt = rig.hud.options_button();
+            step(opt.x + opt.w / 2, opt.y + opt.h / 2, true, true);
+            check(rig.hud.is_options_open() && !rig.hud.options_button().is_pressed, at + "a click on the HUD's Options button opens the options window (updates between every event)");
+            // a few frames of the pointer resting on the window's Return, then the click
+            const int32_t rx = 351 + o.x + 40, ry = 425 + o.y + 12;
+            step(rx, ry, false, false);
+            check(rig.hud.is_options_open(), at + "(the window is still open while the pointer rests on Return)");
+            step(rx, ry, true, true);
+            check(!rig.hud.is_options_open(), at + "the first click on Return closes the window that the Options button opened");
+            const UIButton help = rig.hud.help_button();
+            step(help.x + help.w / 2, help.y + help.h / 2, true, true);
+            check(rig.hud.is_quick_help_open() && !rig.hud.help_button().is_pressed, at + "a click on the HUD's Help button opens the quick help");
+            const int32_t qx = 529 + q.x + 40, qy = 437 + q.y + 12;
+            step(qx, qy, false, false);
+            step(qx, qy, true, true);
+            check(!rig.hud.is_quick_help_open(), at + "the first click on its Return closes it");
+            // and again: the same buttons open them a second time and Return closes them a second time
+            step(opt.x + opt.w / 2, opt.y + opt.h / 2, true, true);
+            step(rx, ry, true, true);
+            check(!rig.hud.is_options_open(), at + "the Options button and Return a second time: closed");
+            // the click that closes a window does not act on the HUD under it: the pointer is over the map there, the selection and the pedestals stay as they were
+            check(!rig.hud.is_quick_help_open() && !rig.hud.is_options_open(), at + "no window is left open");
+        }
+        // --- the quick help
+        {
+            HudRig rig(arc, layout);
+            rig.hud.open_quick_help();
+            press_update_release(rig, 529 + q.x + 40, 437 + q.y + 12, 3);
+            check(!rig.hud.is_quick_help_open(), at + "the quick help's Return: press, three polls, release: it closes");
+            if (!is_classic) {
+                rig.hud.open_quick_help();
+                press_update_release(rig, 529 + o.x + 40, 437 + o.y + 12, 3);           // where the OPTIONS window's offset would put it
+                check(rig.hud.is_quick_help_open(), at + "the quick help's Return at the options window's offset does nothing (the quick help has its own place)");
+                press_update_release(rig, 529 + 40, 437 + 12, 3);
+                check(rig.hud.is_quick_help_open(), at + "... nor at its own numbers");
+            }
         }
     }
 }
@@ -1548,7 +1869,7 @@ void test_start_view_and_minimap(const assets::AssetArchive& arc) {
 }
 
 void test_small_map_pointer(const assets::AssetArchive& arc) {
-    group("small-map", "on a map smaller than the view the black around it is no ground: the plain pointer, a click there deselects and orders nothing; the map itself works");
+    group("small-map", "on a map smaller than the view the black around it is no ground: the plain pointer, a click there does nothing at all (no deselect, no order, no marker, no pedestal change); the map itself works");
     const ScreenLayout wide = ScreenLayout::with_size(960, 540);
     HudRig rig(arc, wide, 0, 16);                                    // 16 x 16 tiles: the camera is at (-125, 12 at most)
     const uint32_t ant = rig.sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{4, 4});
@@ -1571,11 +1892,23 @@ void test_small_map_pointer(const assets::AssetArchive& arc) {
     check(rig.hud.evaluate_cursor(653, y, world, rig.sim.grid(), rig.cam) == CursorType::Normal, "... and the black right of it (x = 653)");
     // the map's last row: world y 511 is at screen y 21 + 511 = 532 - ... the view ends at 521: the whole view is ground here (the map is taller than the view's 500 only by 12)
     check(rig.hud.evaluate_cursor(300, 21, world, rig.sim.grid(), rig.cam) == CursorType::Move && rig.hud.evaluate_cursor(300, 520, world, rig.sim.grid(), rig.cam) == CursorType::Move, "the top and the bottom row of the view are ground (the map is 12 px taller than the view)");
-    // a click on the black deselects and orders nothing; a click on the map orders
-    rig.click(100, y);
-    check(markers.empty() && rig.hud.get_selected_ant_ids().empty() && rig.hud.get_selected_ant_id() == 0, "a click on the black deselects the ant and orders nothing");
-    rig.hud.select_ant(ant);
-    rig.hud.update(world, 0);
+    // a click on the black does nothing at all: the selection stays, the latched pedestal stays, no marker, no order; a click on the map orders
+    {
+        const int32_t pedestal_x = wide.right(482) + 12, pedestal_y = 152 + 12;                 // the Move pedestal's slot (482, 152) 43 x 73 + (dx, 0)
+        rig.click(pedestal_x, pedestal_y);
+        check(rig.hud.is_move_latched(), "(the Move pedestal is latched by a click on it)");
+        rig.click(100, y);
+        check(markers.empty() && rig.hud.get_selected_ant_id() == ant && rig.hud.get_selected_ant_ids().size() == 1 && rig.hud.is_move_latched(), "a click on the black left of the map: the ant stays selected, the pedestal stays latched, no marker");
+        rig.click(700, y);
+        check(markers.empty() && rig.hud.get_selected_ant_id() == ant && rig.hud.is_move_latched(), "... and on the black right of it");
+        rig.click(100, y, SDL_BUTTON_RIGHT);
+        check(markers.empty() && rig.hud.get_selected_ant_id() == ant && rig.hud.is_move_latched(), "a right click on the black orders nothing (no marker either)");
+        // pressed on the black, released on the map: the order's tile would be the press point, which is no ground
+        rig.hud.handle_mouse_down(100, y, SDL_BUTTON_RIGHT, rig.sim, rig.cam);
+        rig.hud.handle_mouse_up(300, y, SDL_BUTTON_RIGHT, rig.sim, rig.cam);
+        check(markers.empty() && rig.hud.is_move_latched(), "a right press on the black released on the map orders nothing either");
+        rig.hud.unlatch_pedestals();
+    }
     rig.click(300, y);
     check(markers.size() == 1 && markers[0].first == 300 - 16 - 125 && markers[0].second == y - 21, "a click on the map orders the world point under the pointer (159, 279)");
     // a rubber band over the black selects the ants of the map under it and does not fail
@@ -1584,6 +1917,221 @@ void test_small_map_pointer(const assets::AssetArchive& arc) {
     rig.hud.handle_mouse_motion(700, 500, rig.sim, rig.cam);
     rig.hud.handle_mouse_up(700, 500, SDL_BUTTON_LEFT, rig.sim, rig.cam);
     check(rig.hud.get_selected_ant_id() == ant, "a rubber band from the black left of the map to the black right of it selects the own ant on the map");
+}
+
+/// A map that is smaller than the view in y as well as in x: the black is above and below the map, and the boundary rows decide the pointer
+void test_small_map_pointer_rows(const assets::AssetArchive& arc) {
+    group("small-map-rows", "a map smaller than the view on both axes (12 x 12): the pointer's boundary on all four sides, the black above and below is no ground");
+    const ScreenLayout wide = ScreenLayout::with_size(960, 540);
+    HudRig rig(arc, wide, 0, 12);                                     // 384 x 384 px: the camera is at (-189, -58)
+    const uint32_t ant = rig.sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{4, 4});
+    rig.sim.tick();
+    rig.cam.x = 0;
+    rig.cam.y = 0;
+    rig.cam.clamp_to_bounds(12, 12);
+    check(rig.cam.world_x == -189 && rig.cam.world_y == -58, "the camera of the 12 x 12 map is at (-189, -58)");
+    std::vector<std::pair<int32_t, int32_t>> markers;
+    rig.hud.set_on_spawn_click_marker([&markers](int32_t x, int32_t y) { markers.emplace_back(x, y); });
+    const sim::WorldState world = rig.sim.get_world_state();
+    rig.hud.select_ant(ant);
+    rig.hud.update(world, 0);
+    // the map covers the screen x 205 .. 588 and y 79 .. 462
+    const int32_t mid_x = 400, mid_y = 270;
+    auto cursor = [&](int32_t x, int32_t y) { return rig.hud.evaluate_cursor(x, y, world, rig.sim.grid(), rig.cam); };
+    check(cursor(mid_x, 78) == CursorType::Normal && cursor(mid_x, 40) == CursorType::Normal, "above the map (y = 78 and 40): the plain pointer");
+    check(cursor(mid_x, 79) == CursorType::Move && cursor(mid_x, 462) == CursorType::Move, "the map's first and last row (y = 79 and 462): ground");
+    check(cursor(mid_x, 463) == CursorType::Normal && cursor(mid_x, 500) == CursorType::Normal, "below the map (y = 463 and 500): the plain pointer");
+    check(cursor(204, mid_y) == CursorType::Normal && cursor(205, mid_y) == CursorType::Move && cursor(588, mid_y) == CursorType::Move && cursor(589, mid_y) == CursorType::Normal, "left and right of the map: the boundary is x = 204 | 205 and 588 | 589");
+    // the corners of the map
+    check(cursor(205, 79) == CursorType::Move && cursor(588, 462) == CursorType::Move && cursor(204, 78) == CursorType::Normal && cursor(589, 463) == CursorType::Normal, "the corners: (205, 79) and (588, 462) are ground, one pixel outside is not");
+    check(rig.hud.over_ground(mid_x, 79, rig.cam, rig.sim.grid()) && !rig.hud.over_ground(mid_x, 78, rig.cam, rig.sim.grid()) && !rig.hud.over_ground(mid_x, 463, rig.cam, rig.sim.grid()) && !rig.hud.over_ground(204, mid_y, rig.cam, rig.sim.grid()), "over_ground has the same boundary");
+    // a click one pixel above the map does nothing at all, one pixel inside it orders
+    rig.click(mid_x, 78);
+    check(markers.empty() && rig.hud.get_selected_ant_id() == ant, "a click at y = 78 (just above the map): no marker, the ant stays selected");
+    rig.click(mid_x, 463);
+    check(markers.empty() && rig.hud.get_selected_ant_id() == ant, "a click at y = 463 (just below it): nothing");
+    rig.click(mid_x, 79);
+    check(markers.size() == 1 && markers[0].second == 79 - 21 - 58, "a click at y = 79 (the map's first row): it orders the world point (211, 0)");
+}
+
+// --- a small level made from the bytes of TINY.LVL (nothing of the community is in the repository): the columns `cols` and the rows `rows` of its two layers and the records of blocks 1 and 2
+// that lie inside them, shifted; the file format is the loader's (header, dictionary, the two dimension dwords, two layers of 3 words a cell, block 1, block 2, block 3, block 4, the egg stock)
+struct LevelBytes {
+    std::vector<uint8_t> d;
+    size_t p{0};
+    uint16_t u16() { const uint16_t v = static_cast<uint16_t>(d[p] | (d[p + 1] << 8)); p += 2; return v; }
+    uint32_t u32() { const uint32_t lo = u16(); const uint32_t hi = u16(); return lo | (hi << 16); }
+};
+void put16(std::vector<uint8_t>& o, uint16_t v) { o.push_back(static_cast<uint8_t>(v & 0xFF)); o.push_back(static_cast<uint8_t>(v >> 8)); }
+void put32(std::vector<uint8_t>& o, uint32_t v) { put16(o, static_cast<uint16_t>(v & 0xFFFF)); put16(o, static_cast<uint16_t>(v >> 16)); }
+
+/// Writes a level of cols.size() x rows.size() tiles cut out of TINY.LVL to `path`; false if TINY.LVL cannot be read
+bool write_small_level(const std::string& path, const std::vector<int32_t>& cols, const std::vector<int32_t>& rows) {
+    LevelBytes in;
+    {
+        std::ifstream f(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL", std::ios::binary);
+        if (!f) return false;
+        in.d.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    }
+    std::vector<uint8_t> out;
+    const uint32_t version = in.u32(), mode = in.u32();
+    const uint16_t minutes = in.u16();
+    const size_t desc_at = in.p;
+    in.p += 30;
+    const uint16_t tcount = in.u16();
+    const size_t dict_at = in.p;
+    in.p += (static_cast<size_t>(tcount) + 1) * 11;
+    const uint32_t src_rows = in.u32(), src_cols = in.u32();
+    const size_t n = static_cast<size_t>(src_rows) * src_cols;
+    std::vector<std::array<uint16_t, 3>> l1(n), l2(n);
+    for (auto& c : l1) c = {in.u16(), in.u16(), in.u16()};
+    for (auto& c : l2) c = {in.u16(), in.u16(), in.u16()};
+    put32(out, version);
+    put32(out, mode);
+    put16(out, minutes);
+    out.insert(out.end(), in.d.begin() + static_cast<std::ptrdiff_t>(desc_at), in.d.begin() + static_cast<std::ptrdiff_t>(desc_at) + 30);
+    put16(out, tcount);
+    out.insert(out.end(), in.d.begin() + static_cast<std::ptrdiff_t>(dict_at), in.d.begin() + static_cast<std::ptrdiff_t>(dict_at) + static_cast<std::ptrdiff_t>((static_cast<size_t>(tcount) + 1) * 11));
+    put32(out, static_cast<uint32_t>(rows.size()));
+    put32(out, static_cast<uint32_t>(cols.size()));
+    for (const auto* layer : {&l1, &l2}) {
+        for (const int32_t r : rows) {
+            for (const int32_t c : cols) {
+                const auto& cell = (*layer)[static_cast<size_t>(r) * src_cols + static_cast<size_t>(c)];
+                put16(out, cell[0]);
+                put16(out, cell[1]);
+                put16(out, cell[2]);
+            }
+        }
+    }
+    auto index_of = [](const std::vector<int32_t>& v, int32_t x) -> int32_t {
+        for (size_t i = 0; i < v.size(); ++i) {
+            if (v[i] == x) return static_cast<int32_t>(i);
+        }
+        return -1;
+    };
+    // block 1: (tile, row, column)
+    const uint16_t b1_count = in.u16();
+    std::vector<std::array<uint16_t, 3>> b1;
+    for (uint16_t i = 0; i < b1_count; ++i) {
+        const uint16_t tile = in.u16(), row = in.u16(), col = in.u16();
+        const int32_t nr = index_of(rows, row), nc = index_of(cols, col);
+        if (nr >= 0 && nc >= 0) b1.push_back({tile, static_cast<uint16_t>(nr), static_cast<uint16_t>(nc)});
+    }
+    put16(out, static_cast<uint16_t>(b1.size()));
+    for (const auto& r : b1) for (const uint16_t v : r) put16(out, v);
+    // block 2: food (row, column, units, points, stage count, stages)
+    const uint16_t food_count = in.u16();
+    std::vector<std::vector<uint16_t>> food;
+    for (uint16_t i = 0; i < food_count; ++i) {
+        std::vector<uint16_t> rec = {in.u16(), in.u16(), in.u16(), in.u16(), in.u16()};
+        for (uint16_t k = 0; k < rec[4]; ++k) {
+            rec.push_back(in.u16());
+            rec.push_back(in.u16());
+        }
+        const int32_t nr = index_of(rows, rec[0]), nc = index_of(cols, rec[1]);
+        if (nr >= 0 && nc >= 0) {
+            rec[0] = static_cast<uint16_t>(nr);
+            rec[1] = static_cast<uint16_t>(nc);
+            food.push_back(rec);
+        }
+    }
+    put16(out, static_cast<uint16_t>(food.size()));
+    for (const auto& rec : food) for (const uint16_t v : rec) put16(out, v);
+    const uint16_t b3a = in.u16(), b3b = in.u16();                                   // block 3 (the default ant type): as TINY has it
+    put16(out, b3a);
+    put16(out, b3b);
+    put16(out, 0);                                                                    // block 4: no waypoints
+    put16(out, 3);                                                                    // the egg stock
+    std::ofstream f(path, std::ios::binary);
+    f.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size()));
+    return static_cast<bool>(f);
+}
+
+/// What hangs over the edge of a map that is smaller than the view is cut at the edge: the black around the map stays black (an ant, an effect or a tall sprite at the edge used to draw
+/// onto it: the clip was the view, not the view that the map covers)
+void test_small_map_clip(const assets::AssetArchive& arc) {
+    group("small-map-draw", "on a map smaller than the view nothing draws onto the black around it: the clip is the part of the view that the map covers");
+    const ScreenLayout wide = ScreenLayout::with_size(960, 540);
+    // the clip rectangle: view and map intersected
+    {
+        RendererRig rig(arc, 960, 540);
+        check(rig.ok, "the renderer rig is up");
+        if (!rig.ok) return;
+        rig.renderer.set_layout(wide);
+        const LayoutRect view = wide.view();
+        struct Case { uint32_t tiles; LayoutRect want; const char* what; };
+        const Case cases[] = {{15, LayoutRect{157, 31, 480, 480}, "15 x 15 (480 px: smaller than the view on both axes, camera (-141, -10))"},
+                              {12, LayoutRect{205, 79, 384, 384}, "12 x 12 (384 px: camera (-189, -58))"},
+                              {16, LayoutRect{141, 21, 512, 500}, "16 x 16 (512 px wide, 12 px taller than the view: only x is cut)"},
+                              {31, view, "31 x 31 (992 px: bigger than the view on both axes: the whole view)"},
+                              {60, view, "60 x 60: the whole view"}};
+        for (const Case& c : cases) {
+            rig.renderer.camera().x = 0.0f;
+            rig.renderer.camera().y = 0.0f;
+            rig.renderer.camera().clamp_to_bounds(c.tiles, c.tiles);
+            check_rect(rig.renderer.map_view_rect(c.tiles, c.tiles), c.want, c.what);
+        }
+        // a map as wide as the view or wider whose camera is scrolled to its far edge: the view still
+        rig.renderer.camera().x = 100000.0f;
+        rig.renderer.camera().y = 100000.0f;
+        rig.renderer.camera().clamp_to_bounds(60, 60);
+        check_rect(rig.renderer.map_view_rect(60, 60), view, "60 x 60 with the camera at its far corner: the whole view");
+        // the original's own picture: every map is bigger than its view, the clip is the view
+        RendererRig classic(arc, 640, 480);
+        if (classic.ok) {
+            classic.renderer.set_layout(ScreenLayout::classic());
+            classic.renderer.camera().clamp_to_bounds(31, 31);
+            check_rect(classic.renderer.map_view_rect(31, 31), ScreenLayout::classic().view(), "classic: a 31 x 31 map: the view (16, 21, 442 x 440)");
+        }
+    }
+    // the pixels: ants half out of a 15 x 15 map at its four edges and corners leave the black black, and are drawn on the map
+    {
+        RendererRig rig(arc, 960, 540);
+        if (!rig.ok) return;
+        rig.renderer.set_layout(wide);
+        rig.renderer.set_hud_team(0);
+        sim::SimulationEngine sim;
+        sim.init_test_world(15, 15, 1, 600000);
+        sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{7, 7});
+        sim.tick();
+        sim::WorldState world = sim.get_world_state();
+        check(!world.ants.empty(), "an ant is in the world");
+        if (world.ants.empty()) return;
+        const sim::AntSnapshot proto = world.ants.front();
+        world.ants.clear();
+        const std::pair<int32_t, int32_t> spots[] = {{0, 240}, {479, 240}, {240, 0}, {240, 479}, {0, 0}, {479, 0}, {0, 479}, {479, 479}};
+        uint32_t next = 1000;
+        for (const auto& spot : spots) {
+            sim::AntSnapshot a = proto;
+            a.id = next++;
+            a.px = spot.first;
+            a.py = spot.second;
+            a.tile_x = spot.first / 32;
+            a.tile_y = spot.second / 32;
+            world.ants.push_back(a);
+        }
+        rig.renderer.camera().x = 0.0f;
+        rig.renderer.camera().y = 0.0f;
+        rig.renderer.camera().clamp_to_bounds(15, 15);
+        rig.renderer.begin_frame();
+        rig.renderer.render_world(world, sim.grid(), 0, {}, false, false, 0, 0, -1, 0.0f);
+        const std::vector<uint8_t> px = rig.read();
+        const LayoutRect view = wide.view();
+        const LayoutRect map{157, 31, 480, 480};
+        int64_t stray = 0, ground_changed = 0;
+        for (int32_t y = 0; y < 540; ++y) {
+            for (int32_t x = 0; x < 960; ++x) {
+                const size_t i = (static_cast<size_t>(y) * 960 + static_cast<size_t>(x)) * 4;
+                const bool black = px[i] == 0 && px[i + 1] == 0 && px[i + 2] == 0;
+                if (!map.contains(x, y) && !black) ++stray;                          // nothing but black outside the map (the frame was cleared black and no HUD is drawn)
+                if (map.contains(x, y) && !(px[i] == 135 && px[i + 1] == 120 && px[i + 2] == 110)) ++ground_changed;
+            }
+        }
+        (void)view;
+        check(stray == 0, "nothing is drawn outside the map: " + std::to_string(stray) + " pixels of the black around it are not black");
+        check(ground_changed > 200, "the ants are drawn on the map (" + std::to_string(ground_changed) + " pixels are not plain ground)");
+    }
 }
 
 // =====================================================================================================================================================
@@ -1728,6 +2276,35 @@ void test_picture_per_screen() {
         check(f.app.scorecard().is_open(), "4:3: the results are open");
         check_rect(f.app.picture(), LayoutRect{0, 0, 640, 480}, "4:3: the results are the whole canvas");
     }
+    {   // a pointer beside the new page: on the clay of a page (left of x = 160, right of x = 800, above y = 30, below y = 510) it is held at the page's nearest edge pixel, not outside the page
+        // (where the cursor vanished and a click was nowhere): the shift by the corner left (-60, 240) for a pointer at (100, 270)
+        AppFixture f(Aspect::Wide16x9, true, 960, 540);
+        check(f.ok, "the 16:9 application runs a match (the pointer beside the page)");
+        if (f.ok) {
+            struct Case { int32_t x, y, want_x, want_y; const char* what; };
+            const Case cases[] = {{100, 270, 0, 240, "left of the page (100, 270): the page's left edge, level"}, {900, 270, 639, 240, "right of the page (900, 270): its right edge"},
+                                  {480, 10, 320, 0, "above the page (480, 10): its top edge"}, {480, 535, 320, 479, "below the page (480, 535): its bottom edge"},
+                                  {5, 5, 0, 0, "the corner (5, 5): the page's top left pixel"}, {955, 535, 639, 479, "the corner (955, 535): the page's bottom right pixel"},
+                                  {300, 200, 140, 170, "on the page (300, 200): moves with the corner, as before (140, 170)"}};
+            for (const Case& c : cases) {
+                AppFixture g(Aspect::Wide16x9, true, 960, 540);
+                g.app.note_pointer(c.x, c.y);
+                sim::MatchResult result;
+                result.is_over = true;
+                result.ally = {255, 255, 255, 255};
+                result.decide_winners();
+                g.app.scorecard().show(result, 0);
+                g.app.update_results(0.01f);
+                const bool inside = g.app.mouse_screen_x() >= 0 && g.app.mouse_screen_x() < g.app.picture().w && g.app.mouse_screen_y() >= 0 && g.app.mouse_screen_y() < g.app.picture().h;
+                check(g.app.mouse_screen_x() == c.want_x && g.app.mouse_screen_y() == c.want_y && inside, std::string("the results page, the pointer ") + c.what + ": (" + std::to_string(g.app.mouse_screen_x()) + ", " + std::to_string(g.app.mouse_screen_y()) + ")");
+            }
+            // the same way back to the match: the page's nearest edge pixel moves with the corner (it was clamped: it does not jump back to where it was)
+            f.app.note_pointer(100, 270);
+            f.app.return_to_map_select();
+            check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 240, "the setup screen (a page too), from a running match: the pointer at the page's left edge");
+            check(f.app.start_game("Original-Ants/Maps/SMALL.LVL") && f.app.mouse_screen_x() == 480 && f.app.mouse_screen_y() == 270, "a match starts: the pointer is in the middle of the picture, as always");
+        }
+    }
     {   // a match that starts at once (--map): the match screen from the first frame, the pointer in the middle of it
         AppFixture f(Aspect::Wide16x9, true, 960, 540, std::string(), true, false);
         check(f.ok && f.app.state() == AppState::Playing, "a 16:9 application that starts in its match");
@@ -1747,8 +2324,49 @@ void test_picture_per_screen() {
     }
 }
 
+void test_small_levels_in_the_application() {
+    group("small-levels", "whole application frames of matches on small levels cut from TINY.LVL: the black around the map stays black");
+    // the review's 15 x 15 level (columns and rows 6 - 23 of TINY.LVL without 12 - 14: a gummy worm hung 65 px over its edge) and an 18 x 31 one that is only narrow: a whole application frame
+    // of a match on each, the black around the map is black. (The HUD is drawn over the frame's edge, so only the part of the view that the map does not cover is looked at.)
+    for (int variant = 0; variant < 2; ++variant) {
+        std::vector<int32_t> cols, rows;
+        for (int32_t i = 6; i <= 23; ++i) {
+            if (variant == 0 && i >= 12 && i <= 14) continue;
+            cols.push_back(i);
+        }
+        if (variant == 0) rows = cols;
+        else for (int32_t i = 0; i <= 30; ++i) rows.push_back(i);
+        const std::filesystem::path level = std::filesystem::temp_directory_path() / ("ants_wide_small_" + std::to_string(static_cast<unsigned long long>(SDL_GetPerformanceCounter())) + "_" + std::to_string(variant) + ".lvl");
+        const std::string name = std::to_string(cols.size()) + " x " + std::to_string(rows.size()) + " level";
+        check(write_small_level(level.string(), cols, rows), "the " + name + " is written from TINY.LVL");
+        AppFixture f(Aspect::Wide16x9, false, 960, 540);
+        if (!f.ok) { check(false, "the application starts"); continue; }
+        check(f.app.start_game(level.string()), "a match on the " + name + " starts");
+        f.app.hud().update(f.app.sim().get_world_state(), 100);                                 // (the start dialog is gone)
+        f.app.renderer().pin_animation_clock(1500);
+        f.app.render_frame();
+        const std::vector<uint8_t> px = f.canvas_pixels();
+        const LayoutRect view = f.app.layout().view();
+        const int32_t map_w = static_cast<int32_t>(cols.size()) * 32, map_h = static_cast<int32_t>(rows.size()) * 32;
+        const LayoutRect map = f.app.renderer().map_view_rect(static_cast<uint32_t>(cols.size()), static_cast<uint32_t>(rows.size()));
+        check(map.w == std::min(map_w, view.w) && map.h == std::min(map_h, view.h), "the " + name + ": the map covers " + std::to_string(map.w) + " x " + std::to_string(map.h) + " of the view");
+        int64_t stray = 0, covered_dark = 0;
+        for (int32_t y = view.y; y < view.bottom(); ++y) {
+            for (int32_t x = view.x; x < view.right(); ++x) {
+                const bool black = pixel(px, 960, x, y) == std::array<uint8_t, 3>{0, 0, 0};
+                if (!map.contains(x, y) && !black) ++stray;
+                if (map.contains(x, y) && black) ++covered_dark;
+            }
+        }
+        check(stray == 0, "the " + name + ": the black around the map stays black (" + std::to_string(stray) + " pixels drawn on it)");
+        check(covered_dark < map.w * map.h / 4, "the " + name + ": the map itself is drawn");
+        std::error_code ignore;
+        std::filesystem::remove(level, ignore);
+    }
+}
+
 void test_margin_and_pages_in_match() {
-    group("margin", "the clay around the original's pages, in the screens and in a match; the match's frame is not clay");
+    group("margin", "the clay around the original's pages in the screens; in a match the options window and the quick help sit over the map view and the frame is not clay");
     const std::array<uint8_t, 3> clay{219, 75, 19};
     {
         AppFixture f(Aspect::Wide16x9, false, 960, 540);
@@ -1768,20 +2386,21 @@ void test_margin_and_pages_in_match() {
         f.app.render_frame();
         std::vector<uint8_t> px = f.canvas_pixels();
         check(pixel(px, 960, 5, 5) != clay && pixel(px, 960, 400, 5) != clay && pixel(px, 960, 900, 300) != clay, "the match: the frame fills the canvas, no clay at the corners and the sides");
-        // the options of the original over the match: a 640 x 480 page, centred, clay around it
+        // the options window of the original over the match: its card is centred over the map view and the HUD is around it (no clay margin)
         f.app.hud().open_options();
         f.app.render_frame();
         px = f.canvas_pixels();
-        bool margin = true;
-        for (const auto& p : {std::pair<int, int>{0, 0}, {159, 100}, {800, 100}, {400, 10}, {400, 29}, {400, 515}}) margin = margin && pixel(px, 960, p.first, p.second) == clay;
-        check(margin, "the options of the original over a match: clay left, right, above and below the page");
-        check(pixel(px, 960, 5, 5) == clay && pixel(px, 960, 940, 300) == clay, "... and the match's frame is gone behind it");
+        check(pixel(px, 960, 5, 5) != clay && pixel(px, 960, 400, 5) != clay && pixel(px, 960, 940, 300) != clay && pixel(px, 960, 5, 535) != clay && pixel(px, 960, 400, 535) != clay,
+              "the options window over a match: the frame is still there around it (the top bar, the left strip, the right panel, the bottom strip)");
+        check(pixel(px, 960, 186, 70) == clay && pixel(px, 960, 608, 70) == clay && pixel(px, 960, 190, 70) == clay && pixel(px, 960, 604, 70) == clay,
+              "... the card's orange is at the same distance from the view's edges on both sides: (186, 70) and (608, 70), (190, 70) and (604, 70) (the view's middle is x = 397)");
+        check(pixel(px, 960, 30, 300) != clay && pixel(px, 960, 30, 100) != clay && pixel(px, 960, 140, 100) != clay, "... and the map shows left of it (the window is no margin)");
         // the quick help
         f.app.hud().close_options();
         f.app.hud().open_quick_help();
         f.app.render_frame();
         px = f.canvas_pixels();
-        check(pixel(px, 960, 5, 5) == clay && pixel(px, 960, 940, 300) == clay, "the quick help over a match: clay around the page too");
+        check(pixel(px, 960, 5, 5) != clay && pixel(px, 960, 940, 300) != clay && pixel(px, 960, 400, 535) != clay, "the quick help over a match: the frame is around it too");
         f.app.hud().close_quick_help();
         f.app.render_frame();
         px = f.canvas_pixels();
@@ -1904,7 +2523,8 @@ void test_pointer_edges_in_match() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    (void)argc; (void)argv;                                     // SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one
     ensure_sdl();
     assets::AssetArchive arc;
     if (!arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) {
@@ -1918,11 +2538,16 @@ int main() {
     test_hud_draws_the_frame(arc);
     test_score_slots(arc);
     test_dialogs_and_pages(arc);
+    test_window_controls_through_update(arc);
+    test_latency_clear_of_scores(arc);
     test_camera_clamps();
     test_edge_strips();
     test_start_view_and_minimap(arc);
     test_small_map_pointer(arc);
+    test_small_map_pointer_rows(arc);
+    test_small_map_clip(arc);
     test_picture_per_screen();
+    test_small_levels_in_the_application();
     test_margin_and_pages_in_match();
     test_default_and_options();
     test_pointer_edges_in_match();

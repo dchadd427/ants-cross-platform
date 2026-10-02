@@ -101,7 +101,7 @@ constexpr int PLAYFIELD_H = ScreenLayout::kClassicViewH;
 
 constexpr int TILE_SIZE = 32;
 
-// What fills the canvas around a page of the original's own 640 x 480 screen (the loading screen, the quick help, the setup screen, the results, the options) when the canvas is bigger:
+// What fills the canvas around a page of the original's own 640 x 480 screen (the loading screen, the quick help at the start, the setup screen, the results) when the canvas is bigger (the options window and the quick help of a match are over the map view instead):
 // the clay of those pages, a flat fill of the colour that the loading screen is filled with (Ants.exe 0x4b13db, (219, 75, 19): the page's own frame stands out against it as a window
 // on a clay desktop). Only a colour of the original's art: nothing is drawn that the original has not.
 inline constexpr ants::assets::ColorRGBA kPageMargin{219, 75, 19, 255};
@@ -327,6 +327,9 @@ public:
     /// layout until it is told otherwise.
     void set_layout(const ScreenLayout& layout);
     const ScreenLayout& layout() const noexcept { return layout_; }
+    /// The part of the map view that a map of map_w x map_h tiles covers with the camera where it is (view and map intersected, in picture pixels): the clip of the world. The whole view for
+    /// a map that is as big as the view or bigger.
+    LayoutRect map_view_rect(uint32_t map_w, uint32_t map_h) const;
 
     void set_level(const ants::assets::LevelData& level);
 
