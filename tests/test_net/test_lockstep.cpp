@@ -9149,6 +9149,7 @@ void run_protocol11_tests() {
             }
         }
         ASSERT_TRUE(fill_bot_name(FillLevel::Easy) == "Bot (Easy)" && fill_bot_name(FillLevel::Medium) == "Bot (Medium)" && fill_bot_name(FillLevel::Hard) == "Bot (Hard)" && fill_bot_name(FillLevel::None).empty());
+        ASSERT_TRUE(fill_level_title(FillLevel::Easy) == "Easy" && fill_level_title(FillLevel::Medium) == "Medium" && fill_level_title(FillLevel::Hard) == "Hard" && fill_level_title(FillLevel::None).empty());     // (what a person is told: "Empty seats will be Medium bots.")
         FillLevel keep = FillLevel::Easy;
         for (const char* bad : {"", "none ", " easy", "med", "mediumm", "hard1", "2", "harder", "NONE\\0"}) ASSERT_FALSE(parse_fill_level(bad, keep));
         ASSERT_EQ(keep, FillLevel::Easy);                                // a refusal leaves the value alone

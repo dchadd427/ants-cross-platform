@@ -176,9 +176,16 @@
                 <option value="3">3</option>
                 <option value="4">4</option>
             </select>
+            <label for="fill">Empty seats at START</label>
+            <select id="fill">
+                <option value="">Leave empty</option>
+                <option value="easy">Easy bots</option>
+                <option value="medium">Medium bots</option>
+                <option value="hard">Hard bots</option>
+            </select>
             <button id="create" type="button" class="btn primary">Create the match</button>
         </div>
-        <div class="hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken (there are no computer players in these rooms yet), and a running match takes nobody new. The first player in the room can start early with START once at least 2 players are in. Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
+        <div class="hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken, and a running match takes nobody new. The first player in the room can start early with START (it is the room's leader): with at least 2 players in, and with <strong>Easy, Medium or Hard bots</strong> chosen above even alone, when every empty seat gets a bot of that level (bots do not play with Fog of War, and the leader's START is the only thing that seats them). Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
     </section>
 
     <section id="join" hidden>
@@ -209,6 +216,8 @@
         <div id="seat-rows"></div>
         <div class="hint" id="popup-hint" hidden>The browser blocked some of the windows: allow pop-ups for this site, or use the buttons of the seats.</div>
         <div class="hint">The first player to connect leads the room (not necessarily the green seat): its setup screen has the START button, and pressing it starts the match with the players who are in, once at least 2 are. Everybody else waits for the match to start.</div>
+        <div class="hint" id="fill-hint" hidden></div>
+        <div class="hint">In the waiting room, press <strong>T</strong> (or click the line at the bottom left of the setup screen) to say something to everybody in the room: Enter sends it, Esc closes the line; while it is open the screen's own keys (S, Q, X, Enter) do nothing.</div>
         <div class="hint">A window that is hidden or covered is not drawn (the browser stops drawing it), but its game goes on playing: it follows the messages of the game server. The match does not wait for it and nobody is told that it lags. Bring it to the front to see the game again. A computer that sleeps, or a phone that locks its screen, stops every page it has: the others play on, they are told after 3 seconds that the seat is lagging, and after 30 seconds without a sign of life it is dropped from the match and cannot come back; a tab that the browser freezes loses its connection when it wakes up, and its seat is lost.</div>
     </section>
 
@@ -251,6 +260,9 @@
             for (var i = 0; i < MAPS.length; i++) if (MAPS[i].key === key) return MAPS[i];
             return null;
         }
+        // The fill level of an address or of the settings: only these three words (anything else is no fill; it is never put into a link as it came)
+        function validFill(value) { return value === 'easy' || value === 'medium' || value === 'hard' ? value : ''; }
+        var FILL_NAMES = { easy: 'Easy bots', medium: 'Medium bots', hard: 'Hard bots' };
 
         // The shape of the games' pictures: ?aspect=16:9 or ?aspect=4:3 (anything else is ignored), else what the game page's selector remembered, else 16:9. Each game passes it on
         // (?aspect= of its address) and the frames of the games have that shape. Links made for other people carry it only when this address names it.
@@ -267,6 +279,7 @@
         })();
 
         var room = '';
+        var fill = '';                      // the bots that the leader's START seats in the empty seats: '', easy, medium or hard (every link of the room carries it: the page cannot know who connects first)
         var seatCount = 4;                  // the seats of this room (the code of a page-made room says how many: demo-<map>-<n>p-...)
         var roomMap = '';
         var inFrame = [false, false, false, false];
@@ -342,6 +355,7 @@
         // ---- the seats: on this page (a frame), in a window of its own, or a link for somebody else ----
         function gameUrl(seat, withAspect) {            // a link to the game page of this site (never taken from the path of this page: a path that starts with // would leave the site)
             var q = '?join=/ws&room=' + encodeURIComponent(room);
+            if (fill) q += '&fill=' + fill;                // (the game takes it as --fill-bots; it matters for the leader only)
             if (seat >= 0) q += '&seat=' + seat + '&name=' + encodeURIComponent(names[seat]);
             if (withAspect || aspectFromAddress) q += '&aspect=' + aspect;
             return new URL('./' + q, window.location.href).href;
@@ -425,8 +439,9 @@
             }, 0);
         });
 
-        function startRoom(code, mapName, play, n) {
+        function startRoom(code, mapName, play, n, fillLevel) {
             room = code;
+            fill = validFill(fillLevel);
             try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it
                 history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + (aspectFromAddress ? '&aspect=' + aspect : ''));
             } catch (e) { /* not essential */ }
@@ -440,6 +455,9 @@
             $('room-code').textContent = room;
             $('room-map').textContent = (mapName ? mapName + ' map' : 'a room made some other way') + ', ' + seatCount + ' players';
             $('subtitle').textContent = 'One match, ' + seatCount + ' seats (' + seats.map(function (x) { return x.name; }).join(', ') + '), all connected to the game server through /ws. Share the code or a link; the match starts when every seat is taken, or earlier: the first player in the room can start it with START once at least 2 players are in.';
+            var fillHint = $('fill-hint');
+            fillHint.hidden = !fill;
+            if (fill) fillHint.textContent = 'Empty seats at START: ' + FILL_NAMES[fill] + '. When the leader presses START, every seat that is still empty gets a ' + fill + ' bot (shown as "Bot (' + fill.charAt(0).toUpperCase() + fill.slice(1) + ')") and the match begins, even if the leader is alone. Every link of this room carries the choice; only the leader\'s START uses it.';
             $('any-link').value = gameUrl(-1);
             copyButton($('copy-any'), function () { return gameUrl(-1); });
             var holder = $('seat-rows');
@@ -476,7 +494,8 @@
 
         // ---- what the address says ----
         // ?room=<code>  a room that was made elsewhere (a shared code, the lobby, the control interface): its panel at once; a page-made code says its map and players
-        // ?map=<name>   host a match on that map at once (&players=2|3|4, default 4; &play=here plays every seat on this page, as the page used to do)
+        // ?map=<name>   host a match on that map at once (&players=2|3|4, default 4; &fill=easy|medium|hard seats bots in the empty seats at the leader's START; &play=here plays every seat on this page, as the page used to do)
+        // ?fill=...     with ?room=: the same choice for a room that was made elsewhere (its links carry it)
         // nothing       the setup: choose the map and the players, or join with a code
         var params = new URLSearchParams(window.location.search);
         var mapSelect = $('map');
@@ -490,13 +509,17 @@
         var playersSelect = $('players');
         var lastPlayers = recall('ants-four-players');
         playersSelect.value = lastPlayers === '2' || lastPlayers === '3' ? lastPlayers : '4';
+        var fillSelect = $('fill');
+        fillSelect.value = validFill(recall('ants-four-fill'));
         // The code carries the choice (the server reads it: demo-<map>-<n>p-<random>)
-        function create(mapKey, play, n) {
+        function create(mapKey, play, n, fillLevel) {
             var m = mapByKey(mapKey) || MAPS[0];
             var players = (n === 2 || n === 3 || n === 4) ? n : 4;
+            var level = validFill(fillLevel);
             remember('ants-four-map', m.key);
             remember('ants-four-players', String(players));
-            startRoom('demo-' + m.key + '-' + players + 'p-' + randomCode(), m.name, play, players);
+            remember('ants-four-fill', level);
+            startRoom('demo-' + m.key + '-' + players + 'p-' + randomCode(), m.name, play, players, level);
         }
         // What a page-made code says (only for the panel: the server decides)
         function describeCode(code) {
@@ -511,16 +534,17 @@
         var wantedMap = params.get('map');
         var wantedPlayersText = params.get('players');
         var wantedPlayers = (wantedPlayersText === '2' || wantedPlayersText === '3' || wantedPlayersText === '4') ? Number(wantedPlayersText) : 4;
+        var wantedFill = validFill(params.get('fill'));
         if (wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted)) {
             var d = describeCode(wanted);
-            startRoom(wanted, d.map, params.get('play') === 'here' ? 'here' : '', d.players);
+            startRoom(wanted, d.map, params.get('play') === 'here' ? 'here' : '', d.players, wantedFill);
         } else if (wantedMap && mapByKey(wantedMap.toLowerCase())) {
-            create(wantedMap.toLowerCase(), params.get('play') === 'here' ? 'here' : '', wantedPlayers);
+            create(wantedMap.toLowerCase(), params.get('play') === 'here' ? 'here' : '', wantedPlayers, wantedFill);
         } else {
             $('setup').hidden = false;
             $('join').hidden = false;
         }
-        $('create').addEventListener('click', function () { create(mapSelect.value, '', Number(playersSelect.value)); });
+        $('create').addEventListener('click', function () { create(mapSelect.value, '', Number(playersSelect.value), fillSelect.value); });
 
         // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat
         var joinName = $('join-name');

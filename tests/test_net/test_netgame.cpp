@@ -459,16 +459,20 @@ void run_match_tests() {
         ASSERT_TRUE(predicted_acks > orders / 2);                            // the click feedback is immediate for most orders
         // chat: a guest's text comes back to everybody, the host's too, the sender is stamped by the connection
         t.machines[1]->net.chat("hello from Bob", false);
-        host.net.chat("hello from Alice", true);
+        host.net.chat("hello from Alice", false);
+        host.net.chat("team line of Alice", true);                     // a line for the team goes to the sender and its ally only (nobody is allied here: Alice alone hears it)
         t.run(1000);
-        for (auto& m : t.machines) {
+        for (size_t i = 0; i < t.machines.size(); ++i) {
             bool bob = false;
             bool alice = false;
-            for (const auto& c : m->chats) {
+            bool team = false;
+            for (const auto& c : t.machines[i]->chats) {
                 if (c.text == "hello from Bob") bob = c.sender == 1 && !c.team;
-                if (c.text == "hello from Alice") alice = c.sender == 0 && c.team;
+                if (c.text == "hello from Alice") alice = c.sender == 0 && !c.team;
+                if (c.text == "team line of Alice") team = true;
             }
             ASSERT_TRUE(bob && alice);
+            ASSERT_EQ(team, i == 0);
         }
         // every machine ran the same number of ticks at 20 Hz (60 s + 1 s = about 1200 - 1220) and the match is still identical
         for (auto& m : t.machines) ASSERT_TRUE(m->ticks > 1150 && m->ticks < 1300);
@@ -740,15 +744,18 @@ void run_migration_tests() {
         ASSERT_EQ(carol.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
         // chat both ways, the sender stamped by the connection
         carol.net.chat("still here", false);
-        bob.net.chat("I host now", true);
+        bob.net.chat("I host now", false);
+        bob.net.chat("team of the new host", true);                    // (no alliance: only its sender hears a line for the team)
         t.run(1000);
         for (Machine* m : {&bob, &carol}) {
-            bool a = false, b = false;
+            bool a = false, b = false, t3 = false;
             for (const ChatMsg& c : m->chats) {
                 if (c.text == "still here") a = c.sender == 2 && !c.team;
-                if (c.text == "I host now") b = c.sender == 1 && c.team;
+                if (c.text == "I host now") b = c.sender == 1 && !c.team;
+                if (c.text == "team of the new host") t3 = true;
             }
             ASSERT_TRUE(a && b);
+            ASSERT_EQ(t3, m == &bob);
         }
         bob.net.freeze();
         t.run(3000);

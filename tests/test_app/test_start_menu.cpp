@@ -44,6 +44,10 @@ static int g_test_failures = 0;
 static int g_assert_count = 0;
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test and for mutation runs; the suite as run_tests.sh runs it has no filter)
+    if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
+        if (name.find(filter) == std::string::npos) return;
+    }
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(110) << name << " ... " << std::flush;
     const int prev = g_test_failures;
@@ -765,6 +769,9 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(r.element(MenuId::HostPlayers).value, std::string("4 players"));
         r.key(SDLK_LEFT);
         ASSERT_EQ(r.element(MenuId::HostPlayers).value, std::string("3 players"));
+        r.key(SDLK_DOWN);                                                                  // the empty seats at START (protocol 11: M4.3)
+        ASSERT_EQ(r.menu.selected(), MenuId::HostFill);
+        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Leave empty"));
         r.key(SDLK_DOWN);                                                                  // the name
         ASSERT_EQ(r.menu.selected(), MenuId::HostName);
         ASSERT_TRUE(r.element(MenuId::HostName).all_selected);
@@ -775,7 +782,7 @@ int main(int argc, char* argv[]) {
         r.key(SDLK_RETURN);
         const MenuRequest request = r.take();
         ASSERT_TRUE(request.type == MenuRequest::Type::Host);
-        ASSERT_TRUE(request.map == 0 && request.players == 3 && request.name == "Maya");
+        ASSERT_TRUE(request.map == 0 && request.players == 3 && request.name == "Maya" && request.fill == net::FillLevel::None);
         ASSERT_EQ(r.menu.panel(), MenuPanel::Connecting);
         ASSERT_EQ(r.menu.connect_origin(), MenuPanel::Host);
         r.menu.connection_failed("The server is busy.");
@@ -854,6 +861,105 @@ int main(int argc, char* argv[]) {
         none.show_room("code", 1, 2);
         none.on_key(SDLK_c, KMOD_GUI);
         ASSERT_FALSE(none.copied());
+    } TEST_END();
+
+    TEST_CASE("M4.3 Host: \"Empty seats at START\" goes round Leave empty, Easy bots, Medium bots, Hard bots (Left, Right, Enter, click) and is remembered; the request of Host carries it; the room's panel says what START will do; every control of both panels lies inside the screen and no two overlap") {
+        // the choice and its words
+        ASSERT_EQ(std::string(fill_choice_text(net::FillLevel::None)), std::string("Leave empty"));
+        ASSERT_EQ(std::string(fill_choice_text(net::FillLevel::Easy)), std::string("Easy bots"));
+        ASSERT_EQ(std::string(fill_choice_text(net::FillLevel::Medium)), std::string("Medium bots"));
+        ASSERT_EQ(std::string(fill_choice_text(net::FillLevel::Hard)), std::string("Hard bots"));
+        ASSERT_EQ(fill_choice_sentence(net::FillLevel::Medium), std::string("Empty seats will be Medium bots."));
+        ASSERT_EQ(fill_choice_sentence(net::FillLevel::Easy), std::string("Empty seats will be Easy bots."));
+        ASSERT_EQ(fill_choice_sentence(net::FillLevel::Hard), std::string("Empty seats will be Hard bots."));
+        ASSERT_EQ(fill_choice_sentence(net::FillLevel::None), std::string("Empty seats stay empty."));
+        Rig r;
+        r.to_panel(MenuId::HostOnline);
+        ASSERT_TRUE(has_text(r.menu.elements(), "Empty seats at START"));                 // the label of the choice
+        r.key(SDLK_DOWN);
+        r.key(SDLK_DOWN);
+        ASSERT_EQ(r.menu.selected(), MenuId::HostFill);
+        ASSERT_EQ(r.element(MenuId::HostFill).kind, MenuKind::Cycler);
+        const char* const words[4] = {"Leave empty", "Easy bots", "Medium bots", "Hard bots"};
+        for (int lap = 0; lap < 2; ++lap) {
+            for (const char* word : words) {
+                ASSERT_EQ(r.element(MenuId::HostFill).value, std::string(word));
+                r.key(SDLK_RIGHT);
+            }
+        }
+        r.key(SDLK_LEFT);
+        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Hard bots"));            // Left from the first goes to the last
+        r.key(SDLK_RETURN);
+        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Leave empty"));          // Enter goes on, round
+        r.click(MenuId::HostFill);
+        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Easy bots"));
+        ASSERT_TRUE(std::count(r.changes.begin(), r.changes.end(), MenuSetting::HostFill) >= 11);       // every change is reported for the settings file
+        r.key(SDLK_RIGHT);                                                                 // Medium bots
+        ASSERT_EQ(r.menu.settings().host_fill, net::FillLevel::Medium);
+        // the request carries it, and a failed attempt keeps it
+        r.key(SDLK_DOWN);                                                                  // the name
+        r.key(SDLK_RETURN);
+        const MenuRequest request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.fill == net::FillLevel::Medium);
+        r.menu.connection_failed("The server is busy.");
+        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Medium bots"));
+        // the room's panel says what START will do
+        r.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        ASSERT_TRUE(has_text(r.menu.elements(), "Empty seats will be Medium bots."));
+        ASSERT_FALSE(has_text(r.menu.elements(), "Empty seats stay empty."));
+        Rig none;
+        none.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        ASSERT_TRUE(has_text(none.menu.elements(), "Empty seats stay empty.") && !has_text(none.menu.elements(), "bots."));
+        // the settings file: written under `host_fill`, read back, and anything else is the default
+        {
+            TempDir temp;
+            ConfigStore store;
+            store.set_location(temp.file("settings.ini"));
+            MenuSettings s;
+            s.host_fill = net::FillLevel::Hard;
+            s.write(store, MenuSetting::HostFill);
+            ASSERT_EQ(store.get_string("host_fill", "", 99), std::string("hard"));
+            MenuSettings back;
+            back.load(store);
+            ASSERT_EQ(back.host_fill, net::FillLevel::Hard);
+            store.set_string("host_fill", "  MEDIUM ");
+            back.load(store);
+            ASSERT_EQ(back.host_fill, net::FillLevel::Medium);                             // (any case, blanks cut)
+            store.set_string("host_fill", "loud");
+            back.load(store);
+            ASSERT_EQ(back.host_fill, net::FillLevel::None);
+            store.set_string("host_fill", "");
+            back.load(store);
+            ASSERT_EQ(back.host_fill, net::FillLevel::None);
+            MenuSettings fresh;
+            ASSERT_EQ(fresh.host_fill, net::FillLevel::None);                              // nothing is seated unless the player chose it
+        }
+        // the geometry: every control and every line inside the screen, no two controls over each other, the label of the choice beside its control
+        for (const MenuPanel panel : {MenuPanel::Host, MenuPanel::Room}) {
+            Rig g;
+            if (panel == MenuPanel::Host) g.to_panel(MenuId::HostOnline);
+            else g.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+            const std::vector<MenuElement> all = g.menu.elements();
+            for (size_t i = 0; i < all.size(); ++i) {
+                ASSERT_TRUE(all[i].rect.x >= 16 && all[i].rect.y >= 16 && all[i].rect.x + all[i].rect.w <= 624 && all[i].rect.y + all[i].rect.h <= 464);
+                for (size_t j = i + 1; j < all.size(); ++j) {
+                    if (all[i].id != MenuId::None && all[j].id != MenuId::None) ASSERT_FALSE(intersects(all[i].rect, all[j].rect));
+                }
+            }
+        }
+        Rig g;
+        g.to_panel(MenuId::HostOnline);
+        MenuElement label;
+        for (const MenuElement& e : g.menu.elements()) {
+            if (e.text == "Empty seats at START") label = e;
+        }
+        const MenuElement fill = g.element(MenuId::HostFill);
+        ASSERT_TRUE(label.rect.x + label.rect.w <= fill.rect.x && label.rect.y < fill.rect.y + fill.rect.h && fill.rect.y < label.rect.y + label.rect.h);
+        Recorder rec;                                                                      // the label is drawn whole (a text that is cut would lose its end)
+        render_start_menu(rec, archive(), g.menu);
+        bool whole = false;
+        for (const Recorder::Text& t : rec.texts) whole = whole || t.text == "Empty seats at START";
+        ASSERT_TRUE(whole);
     } TEST_END();
 
     TEST_CASE("M5.1 Servers: HOST, HOST:PORT, IPv4, [IPv6] and [IPv6]:PORT are read (the port 4001 when none is given); anything else is refused with a reason; what the screen shows reads back") {
@@ -1671,6 +1777,7 @@ int main(int argc, char* argv[]) {
         h.to_panel(MenuId::HostOnline);
         h.key(SDLK_DOWN);
         h.key(SDLK_DOWN);
+        h.key(SDLK_DOWN);                                                                  // (map, players, empty seats, then the name)
         ASSERT_EQ(h.menu.selected(), MenuId::HostName);
         h.type("\xE6\x9D\x8E");
         ASSERT_EQ(h.menu.name(), std::string(""));
@@ -1778,5 +1885,9 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
     std::cout << "\nstart menu model: " << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
+    if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
+        std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite\n";
+        return 1;
+    }
     return g_test_failures == 0 ? 0 : 1;
 }

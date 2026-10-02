@@ -205,6 +205,21 @@ const char* seat_choice_text(SeatChoice choice) noexcept {
     return "";
 }
 
+const char* fill_choice_text(net::FillLevel level) noexcept {
+    switch (level) {
+        case net::FillLevel::None: return "Leave empty";
+        case net::FillLevel::Easy: return "Easy bots";
+        case net::FillLevel::Medium: return "Medium bots";
+        case net::FillLevel::Hard: return "Hard bots";
+    }
+    return "";
+}
+
+std::string fill_choice_sentence(net::FillLevel level) {
+    if (level == net::FillLevel::None) return "Empty seats stay empty.";
+    return "Empty seats will be " + net::fill_level_title(level) + " bots.";
+}
+
 const MenuMap& menu_map(size_t index) noexcept { return kMaps[index < kMenuMapCount ? index : 0]; }
 
 int menu_map_index(const std::string& key) noexcept {
@@ -295,6 +310,8 @@ void MenuSettings::load(const ConfigStore& store) {
     const int map = menu_map_index(store.get_string(kKeyHostMap, std::string(), 16));
     host_map = map >= 0 ? map : 0;
     host_players = store.get_int(kKeyHostPlayers, 4, 2, 5);                         // 2 <= value < 5
+    host_fill = net::FillLevel::None;                                               // (anything that is not one of the four words is the default)
+    net::parse_fill_level(trim_blanks(store.get_string(kKeyHostFill, std::string(), 16)), host_fill);
 }
 
 void MenuSettings::write(ConfigStore& store, MenuSetting setting) const {
@@ -313,6 +330,9 @@ void MenuSettings::write(ConfigStore& store, MenuSetting setting) const {
             break;
         case MenuSetting::HostPlayers:
             store.set_int(kKeyHostPlayers, std::clamp(host_players, 2, 4));
+            break;
+        case MenuSetting::HostFill:
+            store.set_string(kKeyHostFill, net::fill_level_name(host_fill));
             break;
     }
 }
@@ -592,23 +612,28 @@ std::vector<MenuElement> StartMenu::elements() const {
         }
         case MenuPanel::Host: {
             add_title(out, "Host an online match");
+            // (the labels are wide enough for "Empty seats at START"; every control stands in the column at x = 290)
             const MenuMap& map = menu_map(static_cast<size_t>(settings_.host_map));
-            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{100, 92 + 10, 120, 22}, "Map", FontSize::Px18));
-            MenuElement map_cycler = control(MenuId::HostMap, MenuKind::Cycler, ButtonRect{230, 92, 310, 42}, std::string(), FontSize::Px24);
+            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 84 + 9, 220, 22}, "Map", FontSize::Px18));
+            MenuElement map_cycler = control(MenuId::HostMap, MenuKind::Cycler, ButtonRect{290, 84, 250, 40}, std::string(), FontSize::Px24);
             map_cycler.value = map.name;
             out.push_back(map_cycler);
-            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{100, 142 + 10, 120, 22}, "Players", FontSize::Px18));
-            MenuElement players_cycler = control(MenuId::HostPlayers, MenuKind::Cycler, ButtonRect{230, 142, 310, 42}, std::string(), FontSize::Px24);
+            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 130 + 9, 220, 22}, "Players", FontSize::Px18));
+            MenuElement players_cycler = control(MenuId::HostPlayers, MenuKind::Cycler, ButtonRect{290, 130, 250, 40}, std::string(), FontSize::Px24);
             players_cycler.value = std::to_string(settings_.host_players) + " players";
             out.push_back(players_cycler);
-            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{100, 196 + 6, 120, 22}, "Your name", FontSize::Px18));
-            out.push_back(control(MenuId::HostName, MenuKind::Field, ButtonRect{230, 196, 310, 34}, name_, FontSize::Px18));
-            out.push_back(control(MenuId::Host, MenuKind::Button, centred_button(248), "Host"));
-            out.push_back(control(MenuId::Back, MenuKind::Button, centred_button(302, 40), "Back"));
+            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 176 + 9, 220, 22}, "Empty seats at START", FontSize::Px18));
+            MenuElement fill_cycler = control(MenuId::HostFill, MenuKind::Cycler, ButtonRect{290, 176, 250, 40}, std::string(), FontSize::Px24);
+            fill_cycler.value = fill_choice_text(settings_.host_fill);
+            out.push_back(fill_cycler);
+            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 222 + 6, 220, 22}, "Your name", FontSize::Px18));
+            out.push_back(control(MenuId::HostName, MenuKind::Field, ButtonRect{290, 222, 250, 34}, name_, FontSize::Px18));
+            out.push_back(control(MenuId::Host, MenuKind::Button, centred_button(266, 44), "Host"));
+            out.push_back(control(MenuId::Back, MenuKind::Button, centred_button(316, 38), "Back"));
             if (!message_.empty()) {
-                add_message(out, 356, 62);
+                add_message(out, 364, 56);
             } else {
-                MenuElement info = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 360, kTextW, 40}, "The server makes a room for you. You get a code to send to the other players.", FontSize::Px18);
+                MenuElement info = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 366, kTextW, 40}, "The server makes a room for you. You get a code to send to the other players.", FontSize::Px18);
                 info.centered = true;
                 out.push_back(info);
             }
@@ -633,15 +658,18 @@ std::vector<MenuElement> StartMenu::elements() const {
             MenuElement code = control(MenuId::None, MenuKind::Code, ButtonRect{80, 112, 480, 70}, room_code_, FontSize::Px35);
             code.centered = true;
             out.push_back(code);
-            MenuElement info = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 190, kTextW, 40},
+            MenuElement info = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 190, kTextW, 38},
                                        "Send this code to the players who should join. The match starts when the room is full, or when you press START in the room.", FontSize::Px18);
             info.centered = true;
             out.push_back(info);
-            MenuElement count = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 234, kTextW, 22},
+            MenuElement fill = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 228, kTextW, 22}, fill_choice_sentence(settings_.host_fill), FontSize::Px18);   // what START will do
+            fill.centered = true;
+            out.push_back(fill);
+            MenuElement count = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 250, kTextW, 22},
                                         "Players in the room: " + std::to_string(room_players_) + " of " + std::to_string(room_capacity_), FontSize::Px18);
             count.centered = true;
             out.push_back(count);
-            add_message(out, 260, 38);
+            add_message(out, 274, 26);
             out.push_back(control(MenuId::Copy, MenuKind::Button, centred_button(300, 44), copied() ? "Copied!" : "Copy"));
             out.push_back(control(MenuId::EnterRoom, MenuKind::Button, centred_button(350, 44), "Continue to the room"));
             out.push_back(control(MenuId::Back, MenuKind::Button, centred_button(400, 38), "Back"));
@@ -726,6 +754,10 @@ void StartMenu::cycle(MenuId id, int delta) {
     } else if (id == MenuId::HostPlayers) {
         settings_.host_players = 2 + (settings_.host_players - 2 + delta + 3) % 3;
         notify(MenuSetting::HostPlayers);
+    } else if (id == MenuId::HostFill) {
+        const int n = static_cast<int>(net::kFillLevelLast) + 1;
+        settings_.host_fill = static_cast<net::FillLevel>((static_cast<int>(settings_.host_fill) + delta + n) % n);
+        notify(MenuSetting::HostFill);
     }
 }
 
@@ -764,11 +796,13 @@ void StartMenu::try_host() {
     connecting_text_ = "Connecting to " + server_label(server_) + "...";
     const int map = settings_.host_map;
     const int players = settings_.host_players;
+    const net::FillLevel fill = settings_.host_fill;
     go(MenuPanel::Connecting);
     request(MenuRequest::Type::Host);
     request_.name = clean_name;
     request_.map = map;
     request_.players = players;
+    request_.fill = fill;
 }
 
 void StartMenu::copy_code() {
@@ -805,7 +839,8 @@ void StartMenu::activate(MenuId id) {
         case MenuId::Seat2:
         case MenuId::Seat3:
         case MenuId::HostMap:
-        case MenuId::HostPlayers: cycle(id, 1); break;
+        case MenuId::HostPlayers:
+        case MenuId::HostFill: cycle(id, 1); break;
         case MenuId::Continue:
             request(MenuRequest::Type::Single);
             request_.bots = bots();
@@ -943,11 +978,11 @@ void StartMenu::on_key(SDL_Keycode key, uint16_t modifiers, bool repeat) {
             break;
         case SDLK_LEFT:
             if (selected_ >= MenuId::Seat0 && selected_ <= MenuId::Seat3) cycle(selected_, -1);
-            else if (selected_ == MenuId::HostMap || selected_ == MenuId::HostPlayers) cycle(selected_, -1);
+            else if (selected_ == MenuId::HostMap || selected_ == MenuId::HostPlayers || selected_ == MenuId::HostFill) cycle(selected_, -1);
             break;
         case SDLK_RIGHT:
             if (selected_ >= MenuId::Seat0 && selected_ <= MenuId::Seat3) cycle(selected_, 1);
-            else if (selected_ == MenuId::HostMap || selected_ == MenuId::HostPlayers) cycle(selected_, 1);
+            else if (selected_ == MenuId::HostMap || selected_ == MenuId::HostPlayers || selected_ == MenuId::HostFill) cycle(selected_, 1);
             break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER:

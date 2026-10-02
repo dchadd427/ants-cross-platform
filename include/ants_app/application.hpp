@@ -38,6 +38,7 @@
 #include "ants_app/map_select.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
+#include "ants_app/room_chat.hpp"
 #include "ants_app/setup_layout.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/window_layout.hpp"
@@ -245,6 +246,19 @@ public:
     }
     net::FillLevel fill_bots() const noexcept { return config_.fill_bots; }
 
+    // ---- the setup screen of a room: keys, text and clicks as the event loop gets them (public so that the tests can drive them) ----
+    /// A key on the setup screen. On the screen of a ROOM (a network game in its waiting room or while the map loads) T opens the chat input (RoomChatInput); while the input is open every key
+    /// goes to it and the screen's own keys (S, Q, X, Enter, the arrows) do nothing; Enter sends the line to the room and closes the input, Esc closes it. Closed, the key is the screen's
+    /// (MapSelectScreen::handle_key_down). A local game's screen and a room whose connection is gone have no chat: T does nothing there.
+    void room_key_down(SDL_Keycode key, uint16_t modifiers, bool repeat);
+    /// Typed text (SDL_TEXTINPUT): goes into the chat input while it is open, else nowhere
+    void room_text_input(const std::string& text);
+    /// A left press on the setup screen: a click on the status line of a room opens the chat input (true: the click is that and nothing else); any other press is the screen's
+    bool room_mouse_down(int32_t x, int32_t y, uint8_t button);
+    const RoomChatInput& room_chat() const noexcept { return room_chat_; }
+    /// True when a chat line can be said from the setup screen now: a seated player of a room that is waiting or loading
+    bool room_chat_available() const noexcept;
+
     /// The network of a room or a match (nullptr unless started with --host / --join)
     net::NetGame* net() noexcept { return net_.get(); }
     /// True while a room or a network match exists
@@ -417,6 +431,7 @@ private:
     uint64_t hidden_line_at_{0};                           // when the console last got a line about a hidden period (performance counter; 0: never)
     std::string hidden_line_;                              // (the web build prints it when the page is shown again; see hidden_period_line)
     bool say_sent_{false};                                // --say: the line has been said
+    RoomChatInput room_chat_;                             // the waiting room's chat input (T or a click on the status line opens it)
     std::vector<ai::BotSpec> fill_specs_;                 // the bots that this machine's START seated in the empty seats of a room on the local network (taken out again when the start is cancelled)
     bool match_over_handled_{false};
     std::string net_notice_;

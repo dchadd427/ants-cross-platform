@@ -51,6 +51,7 @@ add_library(ants_app STATIC
     net_overlay.cpp
     start_menu.cpp
     start_menu_view.cpp
+    room_chat.cpp
     host_lookup.cpp
     application.cpp
     application_menu.cpp

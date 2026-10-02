@@ -31,6 +31,7 @@
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_button.hpp"
 #include "ants_assets/asset_archive.hpp"
+#include "ants_net/protocol.hpp"
 
 namespace ants::app {
 
@@ -69,6 +70,12 @@ const MenuMap& menu_map(size_t index) noexcept;
 /// The index of a key (any case), or -1
 int menu_map_index(const std::string& key) noexcept;
 
+/// What the Host panel's "Empty seats at START" holds: nothing (the match starts with the people who are there), or bots of a level that the server seats in the empty seats when this
+/// player, the room's leader, presses START (network protocol 11; the web page's `?fill=`): "Leave empty", "Easy bots", "Medium bots", "Hard bots"
+const char* fill_choice_text(net::FillLevel level) noexcept;
+/// What the room's panel tells the leader about START: "Empty seats will be Medium bots." / "Empty seats stay empty."
+std::string fill_choice_sentence(net::FillLevel level);
+
 /// The room code of a hosted match, made as web/four.html makes it: "demo-<map>-<n>p-<six characters>", the six from kRoomCodeAlphabet (lower case letters without i, l and o,
 /// and the digits 2 - 9: no look-alikes). `random` gives 32 random bits at each call. At most 23 characters, so it always fits the 32 that a room code may hold.
 inline constexpr const char* kRoomCodeAlphabet = "abcdefghjkmnpqrstuvwxyz23456789";
@@ -87,22 +94,24 @@ bool check_player_name(const std::string& raw, std::string& clean, std::string& 
 bool check_room_code(const std::string& raw, std::string& clean, std::string& why);
 
 /// Which of the remembered values changed (the owner stores that one: one file write per change)
-enum class MenuSetting : uint8_t { Name, Bots, HostMap, HostPlayers };
+enum class MenuSetting : uint8_t { Name, Bots, HostMap, HostPlayers, HostFill };
 
 /// The values of the menu that the program remembers in its settings file (config_store.hpp), under the remake's own keys (the original's nine entries keep their names): `name`,
-/// `bots` (four words by seat: off, easy, medium, hard), `host_map` (a map key), `host_players` (2 - 4), and `server` (host[:port]; written by hand, the menu shows it and never edits it)
+/// `bots` (four words by seat: off, easy, medium, hard), `host_map` (a map key), `host_players` (2 - 4), `host_fill` (none, easy, medium, hard: the empty seats at START), and `server` (host[:port]; written by hand, the menu shows it and never edits it)
 struct MenuSettings {
     std::string name;                                   // "" when none is stored (the menu then proposes the game's default)
     std::string server;                                 // "" when none is stored (the default server)
     std::array<SeatChoice, 4> seats{};                  // by seat: green, red, blue, black
     int host_map{0};                                    // index into the six maps
     int host_players{4};                                // 2 - 4
+    net::FillLevel host_fill{net::FillLevel::None};     // the bots that the leader's START seats in the empty seats (none: the match starts with the people who are there)
 
     static constexpr const char* kKeyName = "name";
     static constexpr const char* kKeyServer = "server";
     static constexpr const char* kKeyBots = "bots";
     static constexpr const char* kKeyHostMap = "host_map";
     static constexpr const char* kKeyHostPlayers = "host_players";
+    static constexpr const char* kKeyHostFill = "host_fill";
 
     /// Reads the stored values with the rules of the store (printable text cut to its maximum, numbers in their range, anything else is the default)
     void load(const ConfigStore& store);
@@ -120,7 +129,7 @@ enum class MenuId : uint8_t {
     Single, JoinWithCode, HostOnline, Quit,             // the first panel
     Seat0, Seat1, Seat2, Seat3, Continue,               // single player
     Name, Code, Join,                                   // join with a code
-    HostMap, HostPlayers, HostName, Host,               // host an online match
+    HostMap, HostPlayers, HostFill, HostName, Host,     // host an online match
     Cancel,                                             // connecting
     Copy, EnterRoom,                                    // the room's code
     Back                                                // every panel but the first (on the room's panel: leave the room)
@@ -164,6 +173,7 @@ struct MenuRequest {
     std::string room;                         // Join: the room code (cleaned)
     int map{0};                               // Host: the index of the map
     int players{4};                           // Host: 2 - 4
+    net::FillLevel fill{net::FillLevel::None};   // Host: the bots that START seats in the empty seats (Application::set_fill_bots before the connection is made)
     std::vector<ai::BotSpec> bots;            // Single: the computer players, by seat
 };
 

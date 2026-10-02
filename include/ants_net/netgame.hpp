@@ -151,12 +151,18 @@ public:
     /// them only if two people are there. Set it before the START (the application does from --fill-bots).
     void set_fill_bots(FillLevel level) noexcept { fill_ = level; }
     FillLevel fill_bots() const noexcept { return fill_; }
+    /// What the status line of the setup screen says to somebody who can START a room that has a fill level (the host of a room on the local network, the leader of a server's room), in
+    /// place of the original's "Press START when all players' thumbs have appeared.": "Press START: the empty seats get Medium bots." and, in a room with Fog of War (bots and fog never
+    /// mix), "Fog of War is on, so START seats no bots."
+    static std::string start_prompt(FillLevel level, bool fog);
 
     // ---- the waiting room's chat (protocol 11) ------------------------------------------------------------------------------------------------------
     /// Says a line to everybody in the room: in the waiting room and while the map loads (and, as ever, during the match: then `team` counts; before it nobody has a team and the flag is
     /// ignored). Printable ASCII, at most kMaxChatChars characters. The room relays it to everybody, this machine included, so the line comes back as an Event::Chat. True when the line was
     /// sent (false: not in a room or a match, nothing to say).
     bool chat(const std::string& text, bool team = false);
+    /// Shows `text` on the status line for five seconds (the line that this player has just said: the room's own copy of it is not shown to its sender); cut to what two lines hold
+    void show_notice(std::string text);
     /// The lines that arrived in the room since the last call (a guest's, the host's, and the room's own notices to this machine: ChatLine::notice())
     std::vector<ChatLine> take_pregame_chat();
     /// Every line of the waiting room (the last 200), kept after the match begins so that the match's chat log can start with them: the application decides

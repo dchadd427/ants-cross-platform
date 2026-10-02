@@ -252,7 +252,8 @@ void NetGame::refresh_status() {
             break;
         }
         case Phase::Room:
-            status_ = str::text(role_ == Role::Host || is_leader() ? str::kPressStart : str::kWaitingForHost);      // the leader of a server's room has START: the host's prompt
+            if ((role_ == Role::Host || is_leader()) && fill_ != FillLevel::None) status_ = start_prompt(fill_, room_.fog);        // (the bots make up the seats: no thumbs to wait for)
+            else status_ = str::text(role_ == Role::Host || is_leader() ? str::kPressStart : str::kWaitingForHost);      // the leader of a server's room has START: the host's prompt
             break;
         case Phase::Loading:
             status_ = str::text(loaded_reported_ ? str::kWaitingForOthers : str::kLoadingGame);
@@ -263,6 +264,12 @@ void NetGame::refresh_status() {
         default:
             break;                                             // Failed / Over keep the message of the transition
     }
+}
+
+std::string NetGame::start_prompt(FillLevel level, bool fog) {
+    if (level == FillLevel::None) return str::text(str::kPressStart);
+    if (fog) return "Fog of War is on, so START seats no bots.";
+    return "Press START: the empty seats get " + fill_level_title(level) + " bots.";
 }
 
 LinkQuality NetGame::seat_quality(uint8_t seat) const noexcept {
@@ -833,6 +840,11 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
         return sim::CommandResult{};                                                            // no host to send it to (a new one is being chosen): Ignored
     }
     return result;
+}
+
+void NetGame::show_notice(std::string text) {
+    if (text.size() > 84) text = text.substr(0, 81) + "...";                        // (the status label has two lines of 14 px text)
+    set_notice(std::move(text));
 }
 
 bool NetGame::chat(const std::string& text, bool team) {

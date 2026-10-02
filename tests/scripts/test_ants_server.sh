@@ -48,6 +48,20 @@ CTL="http://127.0.0.1:$CTL_PORT"
 cd "$ROOT"
 # the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
 check "web/four.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/four.html")" -ge 3 ]; echo $?)"
+# bots fill the empty seats (protocol 11): the "New match" form offers the choice, remembers it, and every link of the room carries it as ?fill=easy|medium|hard, validated; the game page
+# turns exactly those three words into --fill-bots (and nothing else: an address cannot put another word on the command line)
+FOUR_PAGE="$ROOT/web/four.html"
+SHELL_PAGE="$ROOT/web/shell.html"
+FILL_FORM=1
+if grep -qF 'id="fill"' "$FOUR_PAGE" && grep -qF '<option value="easy">Easy bots' "$FOUR_PAGE" && grep -qF '<option value="medium">Medium bots' "$FOUR_PAGE" && grep -qF '<option value="hard">Hard bots' "$FOUR_PAGE" \
+    && grep -qF '<option value="">Leave empty' "$FOUR_PAGE" && grep -qF 'ants-four-fill' "$FOUR_PAGE"; then FILL_FORM=0; fi
+check 'web/four.html offers "Empty seats at START" (Leave empty, Easy bots, Medium bots, Hard bots) in the New match form and remembers it' "$FILL_FORM"
+FILL_LINKS=1
+if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "value === 'easy' || value === 'medium' || value === 'hard'" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE"; then FILL_LINKS=0; fi
+check "web/four.html puts the choice into every game link as &fill=<word> and reads only easy, medium or hard (from the form, the settings and the address)" "$FILL_LINKS"
+FILL_SHELL=1
+if grep -qF "ANTS_ARGS.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF '/^(easy|medium|hard)$/.test(fill)' "$SHELL_PAGE"; then FILL_SHELL=0; fi
+check "web/shell.html gives the game --fill-bots for ?fill=easy|medium|hard only (a regular expression of exactly the three words)" "$FILL_SHELL"
 check "web/four.html tells what happens to a hidden or covered window (the match does not wait for it, a lagging notice after 3 s, dropped after 30 s without a sign of life, cannot come back) and no longer says that the match waits for it (it did not since v0.0.94)" "$([ "$(grep -c 'The match does not wait for it' "$ROOT/web/four.html")" -eq 1 ] && grep -q 'dropped from the match and cannot come back' "$ROOT/web/four.html" && ! grep -q 'and the match waits for it' "$ROOT/web/four.html"; echo $?)"
 # AGENTS.md rule 6: the game files of the beta site (.wasm, .data, .html, .css, .js) are revalidated, not stored away and not downloaded again: exactly Cache-Control "no-cache, must-revalidate",
 # ETags on (no `etag off`), no `no-store` (a response that may not be stored cannot be revalidated: every reload fetched 9 MB) and no `expires -1` (nginx would add a second Cache-Control

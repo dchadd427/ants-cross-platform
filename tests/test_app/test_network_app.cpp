@@ -1302,13 +1302,16 @@ void run_guest_tests() {
         ASSERT_EQ(app.hud().get_chat_line_colour(header), 2);
         ASSERT_TRUE(log_has(log, "we are allies"));
         ASSERT_FALSE(log_has(log, "secret plan"));
-        // the application's own team message goes to everybody through the host and is marked as a team message
+        // the application's own team message goes through the host to its ally (and nobody else: the host, Alice, is not an ally) and is marked as a team message
         app.hud().set_chat_input("hi Bob");
         app.hud().send_chat(true);
         trio.step(800);
         bool bob_got = false;
         for (const auto& c : bob.chats) bob_got = bob_got || (c.text == "hi Bob" && c.team && c.sender == 2);
         ASSERT_TRUE(bob_got);
+        bool alice_got = false;                                                           // (the host relays; it does not hear what it was not sent either)
+        for (const auto& c : host.chats) alice_got = alice_got || c.text == "hi Bob";
+        ASSERT_FALSE(alice_got);
         host.net.freeze();
         trio.step(3000);
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash() && app.sim().state_hash() == host.sim.state_hash());
@@ -3312,6 +3315,328 @@ void run_room_bot_tests() {
     } TEST_END();
 }
 
+// The chat input of a room's setup screen and what the screens say about START (protocol 11): T or a click on the status line opens the input, the focus rule, the match's chat log
+// that starts with the waiting room's lines, the status line's prompt for a START that seats bots
+void run_room_chat_ui_tests() {
+    const auto join_config = [](const Server& server, const std::string& room, const std::string& name) {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = server.port();
+        cfg.net_room = room;
+        cfg.player_name = name;
+        return cfg;
+    };
+    const auto lines = [](const std::vector<net::ChatLine>& v) {
+        std::vector<std::string> out;
+        for (const net::ChatLine& l : v) out.push_back(std::to_string(static_cast<unsigned>(l.seat)) + "|" + l.name + "|" + l.text);
+        return out;
+    };
+    // the leader, and a second player who has joined and been measured: START works
+    struct Duo2 {
+        Server server;
+        Application app;
+        Peer bob;
+        Hall hall{server, &app, {&bob}};
+    };
+
+    TEST_CASE("N5.49 The Chat Input Of A Room's Setup Screen: T Or A Click On The Status Line Opens It (The T Is Not Typed), Enter Sends The Line To The Room And Closes It, Esc Closes It; While It Is Open S, Q, X, Enter And The Arrows Do Nothing On The Screen (A Line Is Not A START Or A Leave), The Status Line Shows What Is Typed; Afterwards The Screen's Keys Work Again; Ctrl+T, A Held T And A Local Game's Screen Do Not Open It") {
+        Duo2 d;
+        ASSERT_TRUE(d.server.make_room("CHATUI-1", 4));
+        ASSERT_TRUE(d.app.init(join_config(d.server, "CHATUI-1", "Leader")));
+        ASSERT_TRUE(d.hall.until([&]() { return d.app.net()->phase() == net::NetGame::Phase::Room && d.app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(d.bob.net.join("127.0.0.1", d.server.port(), "Bob", 255, "CHATUI-1"));
+        ASSERT_TRUE(d.hall.until([&]() { return d.bob.net.phase() == net::NetGame::Phase::Room && d.app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        d.hall.step(700);                                                                     // (the setup screen has shown its labels: the refresh of 500 ms)
+        Application& app = d.app;
+        ASSERT_TRUE(app.room_chat_available() && !app.room_chat().is_open());
+        // the keys that must not open it
+        app.room_key_down(SDLK_t, KMOD_CTRL, false);
+        app.room_key_down(SDLK_t, KMOD_GUI, false);
+        app.room_key_down(SDLK_t, 0, true);                                                   // a held key's repeat
+        ASSERT_FALSE(app.room_chat().is_open());
+        // T opens it, and the text event of the same key press is not the first letter
+        app.room_key_down(SDLK_t, 0, false);
+        ASSERT_TRUE(app.room_chat().is_open());
+        app.room_text_input("t");
+        ASSERT_EQ(app.room_chat().text(), std::string());
+        app.room_text_input("hello bob");
+        ASSERT_EQ(app.room_chat().text(), std::string("hello bob"));
+        d.hall.step(30);
+        ASSERT_TRUE(app.map_select().room().status.rfind("Say: hello bob", 0) == 0);          // the status line shows the line (and a caret that blinks)
+        // the screen's keys do nothing while the line is typed: not START (S), not Leave (Q, X), not the map (the arrows), and they are not typed either
+        for (const SDL_Keycode k : {SDLK_s, SDLK_q, SDLK_x, SDLK_UP, SDLK_DOWN}) app.room_key_down(k, 0, false);
+        d.hall.step(600);
+        ASSERT_TRUE(app.room_chat().is_open() && app.room_chat().text() == "hello bob");
+        ASSERT_TRUE(!app.map_select().is_locked() && app.state() == AppState::MapSelect && app.is_running() && app.network_active());
+        ASSERT_TRUE(d.server.status("CHATUI-1").state == server::RoomState::Waiting);
+        // Enter sends it (it is not START), closes the input, and the line is shown as said
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_TRUE(d.hall.until([&]() { return !d.bob.net.pregame_chat().empty(); }, 8000));
+        ASSERT_EQ(lines(d.bob.net.pregame_chat()), (std::vector<std::string>{"0|Leader|hello bob"}));
+        d.hall.step(30);
+        ASSERT_EQ(app.map_select().room().status, std::string("You: hello bob"));
+        ASSERT_TRUE(!app.map_select().is_locked() && d.server.status("CHATUI-1").state == server::RoomState::Waiting);
+        // a click on the status line opens it; Esc closes it without sending anything
+        ASSERT_FALSE(app.room_mouse_down(MapSelectScreen::BTN_START_X + 5, MapSelectScreen::BTN_START_Y + 5, SDL_BUTTON_LEFT));      // START's own click is the screen's
+        ASSERT_FALSE(app.room_mouse_down(MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y - 2, SDL_BUTTON_LEFT));            // just above the label
+        ASSERT_FALSE(app.room_mouse_down(MapSelectScreen::LABEL_X + MapSelectScreen::STATUS_W, MapSelectScreen::STATUS_Y + 5, SDL_BUTTON_LEFT));   // just right of it
+        ASSERT_FALSE(app.room_mouse_down(MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y + MapSelectScreen::STATUS_H, SDL_BUTTON_LEFT));  // just under it
+        ASSERT_FALSE(app.room_mouse_down(MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y + 5, SDL_BUTTON_RIGHT));           // the right button is not a click
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_down(MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y + 5, SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_chat().is_open());
+        app.room_text_input("never sent");
+        app.room_key_down(SDLK_BACKSPACE, 0, false);
+        ASSERT_EQ(app.room_chat().text(), std::string("never sen"));
+        app.room_key_down(SDLK_BACKSPACE, KMOD_CTRL, false);                                  // Ctrl / Cmd with Backspace clears the line
+        ASSERT_EQ(app.room_chat().text(), std::string());
+        app.room_text_input("x");
+        app.room_key_down(SDLK_ESCAPE, 0, false);
+        ASSERT_FALSE(app.room_chat().is_open());
+        d.hall.step(300);
+        ASSERT_EQ(d.bob.net.pregame_chat().size(), size_t{1});                                // nothing was sent
+        // an empty line sends nothing and is no START
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_FALSE(app.room_chat().is_open());
+        d.hall.step(400);
+        ASSERT_TRUE(d.bob.net.pregame_chat().size() == 1 && !app.map_select().is_locked() && d.server.status("CHATUI-1").state == server::RoomState::Waiting);
+        // printable ASCII only, at most 100 characters; the status line shows the end of a long line
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_text_input(std::string("a\x01\x7f") + "b" + "\xC3\xA9" + "c");
+        ASSERT_EQ(app.room_chat().text(), std::string("abc"));
+        app.room_text_input(std::string(150, 'z'));
+        ASSERT_EQ(app.room_chat().text().size(), size_t{100});
+        ASSERT_TRUE(app.room_chat().display(0).size() <= std::string(RoomChatInput::kPrompt).size() + RoomChatInput::kShownChars + 1);
+        app.room_key_down(SDLK_ESCAPE, 0, false);
+        // the screen has its keys back: S starts the match for both
+        app.room_key_down(SDLK_s, 0, false);
+        ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.50 The Chat Input Through The Window's Own Event Loop: The Key, Text And Mouse Events That SDL Queues Reach It (T, The Typed Letters, Enter, A Click On The Status Line); A Local Game's Setup Screen And A Room That Is Gone Have No Chat, And An Input That Is Open When The Match Begins Closes") {
+        {   // a local game: T is nobody's key
+            Application local;
+            ASSERT_TRUE(local.init(headless_config()));
+            ASSERT_FALSE(local.room_chat_available());
+            local.room_key_down(SDLK_t, 0, false);
+            ASSERT_FALSE(local.room_chat().is_open());
+            ASSERT_FALSE(local.room_mouse_down(MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y + 5, SDL_BUTTON_LEFT));
+            local.quit();
+        }
+        Duo2 d;
+        ASSERT_TRUE(d.server.make_room("CHATUI-2", 4));
+        ASSERT_TRUE(d.app.init(join_config(d.server, "CHATUI-2", "Leader")));
+        ASSERT_TRUE(d.hall.until([&]() { return d.app.net()->phase() == net::NetGame::Phase::Room && d.app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(d.bob.net.join("127.0.0.1", d.server.port(), "Bob", 255, "CHATUI-2"));
+        ASSERT_TRUE(d.hall.until([&]() { return d.bob.net.phase() == net::NetGame::Phase::Room && d.app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        d.hall.step(700);
+        Application& app = d.app;
+        const auto push = [](SDL_Event e) { ASSERT_TRUE(SDL_PushEvent(&e) == 1); };
+        // the keyboard, as SDL delivers it: the key press and then the text of the same key, in one batch of events
+        SDL_Event t_key;
+        std::memset(&t_key, 0, sizeof(t_key));
+        t_key.type = SDL_KEYDOWN;
+        t_key.key.keysym.sym = SDLK_t;
+        push(t_key);
+        SDL_Event t_text;
+        std::memset(&t_text, 0, sizeof(t_text));
+        t_text.type = SDL_TEXTINPUT;
+        std::snprintf(t_text.text.text, sizeof(t_text.text.text), "t");
+        push(t_text);
+        SDL_Event hi;
+        std::memset(&hi, 0, sizeof(hi));
+        hi.type = SDL_TEXTINPUT;
+        std::snprintf(hi.text.text, sizeof(hi.text.text), "hi");
+        push(hi);
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_EQ(app.room_chat().text(), std::string("hi"));                                 // the T of the key is not in it (the frame took all three events)
+        SDL_Event s_key = t_key;
+        s_key.key.keysym.sym = SDLK_s;
+        push(s_key);                                                                          // an S while the line is typed: not a START
+        app.run_frame_with_delta(0.016f);
+        d.hall.step(500);
+        ASSERT_TRUE(app.room_chat().is_open() && !app.map_select().is_locked() && d.server.status("CHATUI-2").state == server::RoomState::Waiting);
+        SDL_Event enter = t_key;
+        enter.key.keysym.sym = SDLK_RETURN;
+        push(enter);
+        app.run_frame_with_delta(0.016f);
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_TRUE(d.hall.until([&]() { return !d.bob.net.pregame_chat().empty(); }, 8000));
+        ASSERT_EQ(lines(d.bob.net.pregame_chat()), (std::vector<std::string>{"0|Leader|hi"}));
+        // the mouse: a click on the status line (motion, press and release, as the window queues them)
+        SDL_Event motion;
+        std::memset(&motion, 0, sizeof(motion));
+        motion.type = SDL_MOUSEMOTION;
+        motion.motion.x = MapSelectScreen::LABEL_X + 20;
+        motion.motion.y = MapSelectScreen::STATUS_Y + 10;
+        push(motion);
+        SDL_Event press = motion;
+        press.type = SDL_MOUSEBUTTONDOWN;
+        press.button.x = motion.motion.x;
+        press.button.y = motion.motion.y;
+        press.button.button = SDL_BUTTON_LEFT;
+        press.button.clicks = 1;
+        push(press);
+        SDL_Event release = press;
+        release.type = SDL_MOUSEBUTTONUP;
+        push(release);
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.room_chat().is_open());
+        app.room_text_input("typing when the match begins");
+        // the match begins while the line is open (the leader's START by the button's click: the mouse works while the input is open): the input closes
+        const int32_t sx = MapSelectScreen::BTN_START_X + 5;
+        const int32_t sy = MapSelectScreen::BTN_START_Y + 5;
+        app.map_select().handle_mouse_motion(sx, sy);
+        app.map_select().handle_mouse_down(sx, sy, 1);
+        app.map_select().handle_mouse_up(sx, sy, 1);
+        ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_FALSE(app.room_chat_available());                                              // (a match has its own chat: the HUD's)
+        app.room_key_down(SDLK_t, 0, false);
+        ASSERT_FALSE(app.room_chat().is_open());
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.51 The Match's Chat Log Starts With The Waiting Room's Lines: What The Players Said Before START, Their Own Included, Is The First Of The Log At The Match (In Order, Under The Names Of The Players; The Room's Own Notices Are Not Repeated); A Line Of The Match Follows") {
+        Server server;
+        server::RoomSpec spec;
+        spec.code = "CHATUI-3";
+        spec.map = "TINY.LVL";
+        spec.players = 4;
+        ASSERT_TRUE(server.mgr.create_room(spec, server.now).ok);
+        Application app;
+        ASSERT_TRUE(app.init(join_config(server, "CHATUI-3", "Leader")));
+        Peer bob;
+        Hall hall{server, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "CHATUI-3"));
+        ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        hall.step(700);
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_text_input("ready when you are");
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_TRUE(hall.until([&]() { return bob.net.pregame_chat().size() == 1; }, 8000));
+        ASSERT_TRUE(bob.net.chat("one moment"));
+        ASSERT_TRUE(hall.until([&]() { return app.net()->pregame_chat().size() == 2; }, 8000));
+        ASSERT_EQ(lines(app.net()->pregame_chat()), (std::vector<std::string>{"0|Leader|ready when you are", "1|Bob|one moment"}));
+        app.room_key_down(SDLK_s, 0, false);
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        const std::string log = app.hud().chat_transcript("t");
+        const size_t first = log.find("Leader: ready when you are\n");
+        const size_t second = log.find("Bob: one moment\n");
+        ASSERT_TRUE(first != std::string::npos && second != std::string::npos && first < second);
+        ASSERT_TRUE(log.find("(room)") == std::string::npos);
+        // and the chat of the match goes on in the same log
+        ASSERT_TRUE(bob.net.chat("in the match"));
+        ASSERT_TRUE(hall.until([&]() { return app.hud().chat_transcript("t").find("Bob: in the match\n") != std::string::npos; }, 8000));
+        app.quit();
+        // the room's notices are not part of the log: a fill in a room with Fog of War is refused with a notice, the match then starts with the people who are there
+        Server fog_server;
+        server::RoomSpec fog_spec;
+        fog_spec.code = "CHATUI-4";
+        fog_spec.map = "TINY.LVL";
+        fog_spec.players = 4;
+        fog_spec.fog = true;
+        ASSERT_TRUE(fog_server.mgr.create_room(fog_spec, fog_server.now).ok);
+        ApplicationConfig cfg = join_config(fog_server, "CHATUI-4", "Leader");
+        cfg.fill_bots = net::FillLevel::Medium;
+        Application fog_app;
+        ASSERT_TRUE(fog_app.init(cfg));
+        Peer cat;
+        Hall fog_hall{fog_server, &fog_app, {&cat}};
+        ASSERT_TRUE(fog_hall.until([&]() { return fog_app.net()->phase() == net::NetGame::Phase::Room && fog_app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(cat.net.join("127.0.0.1", fog_server.port(), "Cat", 255, "CHATUI-4"));
+        ASSERT_TRUE(fog_hall.until([&]() { return cat.net.phase() == net::NetGame::Phase::Room && fog_app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        fog_hall.step(700);
+        fog_app.room_key_down(SDLK_s, 0, false);
+        ASSERT_TRUE(fog_hall.until([&]() { return fog_app.state() == AppState::Playing && cat.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_TRUE(!fog_app.net()->pregame_chat().empty() && fog_app.net()->pregame_chat()[0].notice());        // the room did say it
+        ASSERT_EQ(fog_app.hud().chat_transcript("t").find(net::kNoticeFillFog), std::string::npos);              // the match's log does not repeat it
+        ASSERT_EQ(fog_app.sim().roster_mask(), 0x03);
+        fog_app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.52 The Status Line Of A Setup Screen That Can START With Bots Says What START Will Do: \"Press START: the empty seats get Medium bots.\" For The Leader Of A Server's Room And The Host Of A Room On The Local Network With A Fill Level, The Original's Prompt Without One, \"Fog of War is on, so START seats no bots.\" In A Room With Fog; A Guest Keeps Its Own Line") {
+        // the text as a function
+        ASSERT_EQ(net::NetGame::start_prompt(net::FillLevel::Medium, false), std::string("Press START: the empty seats get Medium bots."));
+        ASSERT_EQ(net::NetGame::start_prompt(net::FillLevel::Easy, false), std::string("Press START: the empty seats get Easy bots."));
+        ASSERT_EQ(net::NetGame::start_prompt(net::FillLevel::Hard, false), std::string("Press START: the empty seats get Hard bots."));
+        ASSERT_EQ(net::NetGame::start_prompt(net::FillLevel::Hard, true), std::string("Fog of War is on, so START seats no bots."));
+        ASSERT_EQ(net::NetGame::start_prompt(net::FillLevel::None, false), std::string("Press START when all players' thumbs have appeared."));
+        {   // the leader of a server's room, and a guest of it
+            Server server;
+            ASSERT_TRUE(server.make_room("PROMPT-1", 4));
+            ApplicationConfig cfg = join_config(server, "PROMPT-1", "Leader");
+            cfg.fill_bots = net::FillLevel::Medium;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            Peer bob;
+            Hall hall{server, &app, {&bob}};
+            ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+            hall.step(100);
+            ASSERT_EQ(app.map_select().room().status, std::string("Press START: the empty seats get Medium bots."));
+            app.set_fill_bots(net::FillLevel::Hard);                                          // the screens' choice changes the line at the next frame
+            hall.step(30);
+            ASSERT_EQ(app.map_select().room().status, std::string("Press START: the empty seats get Hard bots."));
+            app.set_fill_bots(net::FillLevel::None);
+            hall.step(30);
+            ASSERT_EQ(app.map_select().room().status, std::string("Press START when all players' thumbs have appeared."));
+            app.set_fill_bots(net::FillLevel::Easy);
+            ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "PROMPT-1"));
+            ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, 8000));
+            hall.step(100);
+            ASSERT_EQ(bob.net.status_text(), std::string("Waiting for the host to start the game..."));       // (a guest with a fill level of its own: no START, no line about it)
+            bob.net.set_fill_bots(net::FillLevel::Hard);
+            hall.step(100);
+            ASSERT_FALSE(bob.net.status_text().find("START") != std::string::npos && bob.net.status_text().find("bots") != std::string::npos);
+            app.quit();
+        }
+        {   // a room with Fog of War
+            Server server;
+            server::RoomSpec spec;
+            spec.code = "PROMPT-2";
+            spec.map = "TINY.LVL";
+            spec.players = 4;
+            spec.fog = true;
+            ASSERT_TRUE(server.mgr.create_room(spec, server.now).ok);
+            ApplicationConfig cfg = join_config(server, "PROMPT-2", "Leader");
+            cfg.fill_bots = net::FillLevel::Hard;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            Hall hall{server, &app, {}};
+            ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+            hall.step(100);
+            ASSERT_EQ(app.map_select().room().status, std::string("Fog of War is on, so START seats no bots."));
+            app.quit();
+        }
+        {   // the host of a room on the local network
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            cfg.net_port = 0;
+            cfg.net_loopback_only = true;
+            cfg.player_name = "Alice";
+            cfg.fill_bots = net::FillLevel::Medium;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            for (int i = 0; i < 20; ++i) app.pump_network(0.010f);
+            ASSERT_EQ(app.map_select().room().status, std::string("Press START: the empty seats get Medium bots."));
+            app.set_fill_bots(net::FillLevel::None);
+            for (int i = 0; i < 20; ++i) app.pump_network(0.010f);
+            ASSERT_EQ(app.map_select().room().status, std::string("Press START when all players' thumbs have appeared."));
+            app.quit();
+        }
+    } TEST_END();
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -3329,6 +3654,7 @@ int main(int argc, char* argv[]) {
     run_latency_tests();
     run_hidden_page_tests();
     run_room_bot_tests();
+    run_room_chat_ui_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

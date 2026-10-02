@@ -59,6 +59,7 @@ public:
     static constexpr int32_t INFO_Y = 380;
     static constexpr int32_t STATUS_Y = 447;
     static constexpr int32_t STATUS_W = 293;
+    static constexpr int32_t STATUS_H = 35;       // the prompt label is 35 high (two lines of 14 px): a click on it opens a room's chat input
     static constexpr int32_t PLAYER_NAME_X = 415;
     static constexpr int32_t PLAYER_NAME_W = 120;
 

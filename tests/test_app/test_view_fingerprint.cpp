@@ -1188,6 +1188,19 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         m.show_room(std::string(32, 'W'), 1, 4);
         menu_frame("screen.menu.room.longest_code", m);
     }
+    {   // the empty seats at START (network protocol 11): the choice on the Host panel, and what the room's panel says START will do
+        StartMenu m = make(0);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RETURN);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);                                                                                       // map, players, then the empty seats
+        key(m, SDLK_RIGHT);
+        key(m, SDLK_RIGHT);
+        menu_frame("screen.menu.host.fill_medium", m);
+        m.show_room("demo-small-4p-b7x2qk", 1, 4);
+        menu_frame("screen.menu.room.fill_medium", m);
+    }
 }
 
 }  // namespace
@@ -3869,11 +3882,13 @@ const Golden kGoldens[] = {
     {"screen.menu.join.name_refused", 0x654e9cdadc7be96a, 160},
     {"screen.menu.connecting", 0xa95f45bb91fe2012, 114},
     {"screen.menu.join.error", 0x902ef842457399e8, 158},
-    {"screen.menu.host.default", 0x97e3b2dfd25a83a8, 185},
-    {"screen.menu.host.map_and_players", 0x38b8de70ac67d78d, 185},
-    {"screen.menu.room.code", 0xab14102277407908, 149},
-    {"screen.menu.room.full", 0x073718be4ddb297b, 149},
-    {"screen.menu.room.longest_code", 0x054cb5ecb543fd00, 149},
+    {"screen.menu.host.default", 0xe839f6492b172f76, 209},
+    {"screen.menu.host.map_and_players", 0x69a945896de44ad9, 209},
+    {"screen.menu.room.code", 0xb4b079b2a4d20074, 150},
+    {"screen.menu.room.full", 0x4b46383209d2e157, 150},
+    {"screen.menu.room.longest_code", 0x02e344112faca6ac, 150},
+    {"screen.menu.room.fill_medium", 0xc27d15c0f5fe2c7f, 150},
+    {"screen.menu.host.fill_medium", 0x646768c45c78bb87, 209},
     // ---- the wide match screen (milestone M3, 960 x 540), computed at the commit that introduced it (the classic numbers above did not move); regenerate only deliberately, see the notes at the top.
     //      The review fixes of M3 moved 105 of these deliberately (all of the wide ones that draw the bottom strip or the options window and quick help, none of the classic): the score boxes are
     //      spread over the strip (seven draw calls for the strip instead of three, the boxes at x 213, 468 and 722), and the in-match options window and quick help are drawn over the map view

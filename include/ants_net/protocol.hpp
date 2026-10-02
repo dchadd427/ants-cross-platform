@@ -221,6 +221,8 @@ inline constexpr uint8_t kFillLevelLast = 3;
 const char* fill_level_name(FillLevel level) noexcept;
 /// The words of fill_level_name, in either case; false (and `out` unchanged) for anything else
 bool parse_fill_level(std::string_view text, FillLevel& out) noexcept;
+/// "Easy", "Medium", "Hard" (the level as a person is told: "Empty seats will be Medium bots"); empty for None
+std::string fill_level_title(FillLevel level);
 /// What the room calls the bot that a fill seats: "Bot (Easy)", "Bot (Medium)", "Bot (Hard)" (the name of the standard bot of that level: ants_ai's bot_display_name says the same; a
 /// person can never take a name that starts with "Bot (": the lobby renames it). Empty for None.
 std::string fill_bot_name(FillLevel level);

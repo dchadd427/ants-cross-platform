@@ -54,6 +54,10 @@ static int g_test_failures = 0;
 static int g_assert_count = 0;
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
+    // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test and for mutation runs; the suite as run_tests.sh runs it has no filter)
+    if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
+        if (name.find(filter) == std::string::npos) return;
+    }
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(110) << name << " ... " << std::flush;
     const int prev = g_test_failures;
@@ -2498,6 +2502,100 @@ int main(int argc, char** argv) {
         }
     } TEST_END();
 
+    TEST_CASE("A14.1 Host an online match with \"Empty seats at START\" = Medium bots: the choice reaches the application and the room's network before the connection is made, the room's panel says what START will do, the leader's screen says it on the status line, one person alone starts the match with START and the server seats three \"Bot (Medium)\" (they play), and the choice is remembered for the next run") {
+        TempDir temp;
+        const std::string settings = ini(temp, "s.ini");
+        Server server;
+        std::string code;
+        {
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
+            ASSERT_EQ(app.fill_bots(), net::FillLevel::None);                                  // nothing is seated unless the player chose it
+            click(app, MenuId::HostOnline);
+            click(app, MenuId::HostFill);                                                      // Leave empty -> Easy bots
+            click(app, MenuId::HostFill);                                                      // -> Medium bots
+            fill(app, MenuId::HostName, "Solo");
+            click(app, MenuId::Host);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+            code = shown_code(app);
+            ASSERT_TRUE(app.fill_bots() == net::FillLevel::Medium && app.net() != nullptr && app.net()->fill_bots() == net::FillLevel::Medium);
+            bool says = false;
+            for (const MenuElement& e : app.start_menu().elements()) says = says || e.text == "Empty seats will be Medium bots.";
+            ASSERT_TRUE(says);                                                                 // the room's panel: what START will do
+            click(app, MenuId::EnterRoom);
+            hall.step(700);
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            ASSERT_TRUE(app.map_select().leads_server_room());
+            ASSERT_EQ(app.map_select().room().status, std::string("Press START: the empty seats get Medium bots."));
+            const size_t channels = app.audio_mixer().active_channel_count();
+            app.room_key_down(SDLK_s, 0, false);                                               // START, alone: one person is enough with a fill
+            ASSERT_EQ(app.audio_mixer().active_channel_count(), channels);                     // (no can't-go cue)
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
+            const server::RoomStatus s = server.status(code);
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.expected == 4 && s.bots.size() == 3);
+            ASSERT_TRUE(s.names[0] == "Solo" && s.names[1] == "Bot (Medium)" && s.names[2] == "Bot (Medium)" && s.names[3] == "Bot (Medium)");
+            ASSERT_TRUE(s.bots[0].fill && s.bots[0].level == "medium" && s.bots[0].kind == "standard");
+            ASSERT_EQ(app.sim().roster_mask(), 0x0F);
+            hall.step(4000);
+            ASSERT_FALSE(app.net()->desynced());
+            ASSERT_TRUE(server.status(code).ticks > 40);
+        }
+        ASSERT_HAS(read_file(settings), "host_fill=medium\n");                                  // written when the choice changed
+        {   // the next run: the Host panel shows it
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
+            ASSERT_EQ(app.start_menu().settings().host_fill, net::FillLevel::Medium);
+            click(app, MenuId::HostOnline);
+            MenuElement e;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::HostFill, e) && e.value == "Medium bots");
+        }
+    } TEST_END();
+
+    TEST_CASE("A14.2 The fill belongs to the Host panel: --start-menu --fill-bots hard makes the panel start at Hard bots (nothing is written until the player changes it); a player who JOINS fills nothing, whatever the panel said before (only the leader's START seats bots, and the choice is its host's)") {
+        TempDir temp;
+        const std::string settings = ini(temp, "s.ini");
+        {
+            std::vector<std::string> args = {"ants", "--headless", "--start-menu", "--fill-bots", "hard", "--settings", settings};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            ASSERT_TRUE(cfg.startup_error.empty() && cfg.start_menu && cfg.fill_bots == net::FillLevel::Hard);
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.start_menu().settings().host_fill, net::FillLevel::Hard);
+            click(app, MenuId::HostOnline);
+            MenuElement e;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::HostFill, e) && e.value == "Hard bots");
+        }
+        ASSERT_TRUE(read_file(settings).find("host_fill") == std::string::npos);
+        Server server;
+        ASSERT_TRUE(server.make_room("JOIN-FILL", 4));
+        Application app;
+        Hall hall{&server, &app, {}, nullptr, false};
+        ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
+        click(app, MenuId::HostOnline);
+        click(app, MenuId::HostFill);
+        click(app, MenuId::HostFill);
+        click(app, MenuId::HostFill);                                                          // Hard bots on the Host panel
+        ASSERT_EQ(app.start_menu().settings().host_fill, net::FillLevel::Hard);
+        press(app, SDLK_ESCAPE);
+        menu_join(app, "Joiner", "JOIN-FILL");                                                 // ... and then a join, the first player of a room: its leader
+        ASSERT_TRUE(hall.until([&]() { return app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(app.fill_bots() == net::FillLevel::None && app.net()->fill_bots() == net::FillLevel::None);
+        to_setup_screen(app);
+        hall.step(700);
+        ASSERT_EQ(app.map_select().room().status, std::string("Press START when all players' thumbs have appeared."));
+        const size_t channels = app.audio_mixer().active_channel_count();
+        app.room_key_down(SDLK_s, 0, false);                                                   // alone and without a fill: the can't-go cue, as ever
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), channels + 1);
+        hall.step(1000);
+        ASSERT_TRUE(server.status("JOIN-FILL").state == server::RoomState::Waiting && server.status("JOIN-FILL").bots.empty());
+    } TEST_END();
+
     std::cout << "\nstart menu in the application: " << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
+    if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
+        std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite\n";
+        return 1;
+    }
     return g_test_failures == 0 ? 0 : 1;
 }

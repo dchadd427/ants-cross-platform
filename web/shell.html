@@ -879,7 +879,7 @@
         //   fitBox  the picture's box: the largest whole number of canvas steps (16 x 9, or 4 x 3 for the classic picture) that fits an area, in device pixels
         //   limiter the frame cap (a rolling median of the display's gaps)
         //   snapOffset where the box must stand for an exact pointer
-        //   joinArguments the arguments of ?join= &room= &seat= &name= &embed=; badDownload whether a download is not the game data
+        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; badDownload whether a download is not the game data
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
 
@@ -987,7 +987,7 @@
             }
 
             // What the address says about joining a game server (docs/NETWORK_PORT.md): the arguments to give the game and whether the page is a frame of another page. `search` is the
-            // address's query, `secure` says https (wss), `host` is the site's host. Only a door on THIS site counts: /ws or a path below it, no //, no ..; a room code, a seat and a name
+            // address's query, `secure` says https (wss), `host` is the site's host. Only a door on THIS site counts: /ws or a path below it, no //, no ..; a room code, a seat, a fill level and a name
             // that do not fit their rule are left out (the game checks them too). Without a valid join nothing about a room, a seat or a name goes to the game.
             function joinArguments(search, secure, host) {
                 var out = { embed: false, args: [] };
@@ -997,12 +997,14 @@
                 var room = q.get('room');
                 var seat = q.get('seat');
                 var name = q.get('name');
+                var fill = q.get('fill');
                 out.embed = q.get('embed') === '1';
                 if (out.embed) out.args.push('--audio-focus');
                 if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
                     out.args.push('--join-url', (secure ? 'wss://' : 'ws://') + host + join);
                     if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) out.args.push('--room', room);
                     if (seat && /^[0-3]$/.test(seat)) out.args.push('--seat', seat);
+                    if (fill && /^(easy|medium|hard)$/.test(fill)) out.args.push('--fill-bots', fill);
                     if (name) {
                         name = name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
                         if (name) out.args.push('--name', name);
@@ -1042,9 +1044,10 @@
             return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, badDownload: badDownload, downloadWithRetries: downloadWithRetries };
         })();
 
-        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&embed=1] (ANTS_PAGE.joinArguments reads it)
+        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&fill=easy|medium|hard][&embed=1] (ANTS_PAGE.joinArguments reads it)
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
         //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
+        //   fill   the bots that this player's START seats in the empty seats of the room when this player is its leader (the first to connect): the game's --fill-bots; harmless for everybody else
         //   embed  the page is a frame of another page (four.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
         var ANTS_EMBED = false;

@@ -588,6 +588,16 @@ bool parse_fill_level(std::string_view text, FillLevel& out) noexcept {
     return false;
 }
 
+std::string fill_level_title(FillLevel level) {
+    switch (level) {
+        case FillLevel::Easy: return "Easy";
+        case FillLevel::Medium: return "Medium";
+        case FillLevel::Hard: return "Hard";
+        case FillLevel::None: break;
+    }
+    return std::string();
+}
+
 std::string fill_bot_name(FillLevel level) {
     switch (level) {
         case FillLevel::Easy: return "Bot (Easy)";
