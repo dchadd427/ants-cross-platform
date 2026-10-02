@@ -447,17 +447,19 @@ bool Application::init(const ApplicationConfig& config) {
 
     // 7. Initialize Renderer
     renderer_ = std::make_unique<Renderer>();
-    if (!renderer_->init(window_, assets_, config_.integer_scaling)) {
+    if (!renderer_->init(window_, assets_)) {
         std::cerr << "[Application] Failed to initialize Renderer" << std::endl;
         return false;
     }
 
+    renderer_->set_layout(layout_);
     renderer_->set_level(current_level_);
 
     show_start_view();
 
     // 8. Initialize HUD and Scorecard
     hud_.set_text_metrics(renderer_.get());
+    hud_.set_layout(layout_);
     hud_.init(0);
     // The settings that the program remembers (the original reads its profile in the world's constructor, FUN_0100a2c9): loaded before anything is applied;
     // a headless run keeps them in memory only unless --settings names a file
@@ -669,8 +671,8 @@ bool Application::init(const ApplicationConfig& config) {
     fps_display_value_ = 60.0f;
     fps_time_accumulator_ = 0.0f;
     fps_frame_counter_ = 0;
-    mouse_screen_x_ = 320;
-    mouse_screen_y_ = 240;
+    mouse_screen_x_ = layout_.width / 2;
+    mouse_screen_y_ = layout_.height / 2;
     mouse_has_moved_ = false;
 #if defined(__EMSCRIPTEN__)
     // The browser tells when the page is hidden or shown (visibilitychange); a page may also have been opened in a background tab, so ask once now
@@ -679,6 +681,12 @@ bool Application::init(const ApplicationConfig& config) {
     refresh_page_visibility();
 #endif
     return true;
+}
+
+void Application::set_layout(const ScreenLayout& layout) {
+    layout_ = layout;
+    if (renderer_) renderer_->set_layout(layout_);
+    hud_.set_layout(layout_);
 }
 
 // 0x10122d4: the stamp is the C runtime's `_strdate` ("mm/dd/yy") and `_strtime` ("hh:mm:ss") joined by " @ " (the format string "%s @ %s\n\n")
@@ -805,8 +813,8 @@ void Application::enter_match() {
     match_over_handled_ = false;
 
     // Reset simulated cursor to middle of screen until actually seen moving
-    mouse_screen_x_ = 320;
-    mouse_screen_y_ = 240;
+    mouse_screen_x_ = layout_.width / 2;
+    mouse_screen_y_ = layout_.height / 2;
     mouse_has_moved_ = false;
 
     if (config_.select_ant_id > 0) {
@@ -1253,7 +1261,7 @@ void Application::handle_events() {
         left_event_ms = left_event ? event.button.timestamp : 0u;
         if (pointer_gone) pointer_outside_ = true;           // ... marked once that event has been handled (its handlers clear the mark)
         pointer_gone = pointer_gone_after(event, event.type == SDL_MOUSEBUTTONUP && button_outside_window(event.button));   // the position before the clamp
-        clamp_pointer_event(event);                          // a pointer over a black bar of a wide window is the pointer on the edge of the picture (pointer_clamp.hpp)
+        clamp_pointer_event(event, layout_);                 // a pointer over a black bar of a wide window is the pointer on the edge of the picture (pointer_clamp.hpp)
         if (event.type == SDL_QUIT) {
             quit();
             return;
@@ -1418,10 +1426,8 @@ void Application::handle_window_event(const SDL_WindowEvent& we) {
     if (we.event == SDL_WINDOWEVENT_SIZE_CHANGED || we.event == SDL_WINDOWEVENT_RESIZED || we.event == SDL_WINDOWEVENT_MAXIMIZED ||
         we.event == SDL_WINDOWEVENT_RESTORED) {
         if (renderer_ && window_) {
-            uint32_t flags = SDL_GetWindowFlags(window_);
-            bool is_fs = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_MAXIMIZED)) != 0;
-            config_.fullscreen = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
-            renderer_->set_fullscreen(is_fs);
+            config_.fullscreen = (SDL_GetWindowFlags(window_) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
+            renderer_->refit_canvas();                           // SDL's logical size applied again for the window's size now: the picture is scaled to what fits, centred
         }
         update_mouse_grab();
     }
@@ -1495,7 +1501,7 @@ void Application::handle_camera_panning(float dt) {
     while (input_accumulator_ >= 0.050f) {
         input_accumulator_ -= 0.050f;
         if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_) continue;
-        if (mouse_screen_x_ < 0 || mouse_screen_x_ >= 640 || mouse_screen_y_ < 0 || mouse_screen_y_ >= 480) continue;
+        if (mouse_screen_x_ < 0 || mouse_screen_x_ >= layout_.width || mouse_screen_y_ < 0 || mouse_screen_y_ >= layout_.height) continue;
         hud_.input_tick(renderer_->camera(), current_level_.width(), current_level_.height(), mouse_screen_x_, mouse_screen_y_);
     }
 }
@@ -1596,8 +1602,8 @@ void Application::update_simulation(float dt) {
     }
 
     // Update spatial audio listener position
-    audio_mixer_.set_listener_position(renderer_->camera().world_x + PLAYFIELD_W / 2,
-                                       renderer_->camera().world_y + PLAYFIELD_H / 2);
+    audio_mixer_.set_listener_position(renderer_->camera().world_x + layout_.view().w / 2,
+                                       renderer_->camera().world_y + layout_.view().h / 2);
 
     if (renderer_) {
         renderer_->update_transient_effects(dt);
@@ -1862,15 +1868,14 @@ void Application::render_net_overlay() {
     if (text.empty()) return;
     const int32_t w = renderer_->get_text_width(text, FontSize::Px14);
     const int32_t h = renderer_->get_text_height(FontSize::Px14);
-    const int32_t x = 17 + (441 - w) / 2;
-    const int32_t y = 26;
-    renderer_->fill_rect(x - 6, y - 3, w + 12, h + 6, ants::assets::ColorRGBA{0, 0, 0, 170});
-    renderer_->draw_text(text, x, y, colour, FontSize::Px14);
+    const NetOverlayBox where = net_overlay_box(layout_.view(), w, h);   // centred in the map view, 5 rows below its top (the original's (17 + (441 - w) / 2, 26))
+    renderer_->fill_rect(where.box.x, where.box.y, where.box.w, where.box.h, ants::assets::ColorRGBA{0, 0, 0, 170});
+    renderer_->draw_text(text, where.text_x, where.text_y, colour, FontSize::Px14);
 }
 
 // The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" and "delay NN ms" while a room or a match of a network game is on screen. A game of one
 // machine, the loading and quick help screens, a connection that is being made, one that failed or is over draw nothing here.
-void Application::render_latency_corner(int32_t version_x, int32_t text_y) {
+void Application::render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate) {
     if (!network_active()) return;
     const CornerScreen screen = state_ == AppState::MapSelect ? CornerScreen::Setup
                                 : state_ == AppState::Playing ? (scorecard_.is_open() ? CornerScreen::Results : CornerScreen::Match)
@@ -1880,7 +1885,7 @@ void Application::render_latency_corner(int32_t version_x, int32_t text_y) {
     LatencyReadout readout;
     readout.ping_ms = net_->ping_ms();
     readout.delay_ms = net_->command_delay_ms();
-    draw_latency_corner(*renderer_, readout, version_x, text_y, *left_limit);
+    draw_latency_corner(*renderer_, readout, version_x, text_y, *left_limit, plate);
 }
 
 void Application::render_frame() {
@@ -1908,16 +1913,17 @@ void Application::render_frame() {
         render_net_overlay();
     }
 
-    // Frame rate counter and frametime sparkline in the bottom right hand corner
+    // Frame rate counter and frametime sparkline in the bottom right hand corner of the canvas (the viewport: the version stands next to the counter in every layout)
+    const CornerPlate plate = CornerPlate::for_canvas(renderer_->canvas_w(), renderer_->canvas_h());
     int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
     std::string fps_text = std::to_string(fps_val) + " FPS";
     int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Px12);
     int32_t text_h = renderer_->get_text_height(FontSize::Px12);
-    int32_t text_x = 632 - text_w;
+    int32_t text_x = plate.right_edge - text_w;
     constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
     constexpr int32_t spark_h = FPS_OVERLAY_SPARK_H;
     int32_t spark_x = text_x - spark_w - 6;
-    int32_t spark_y = FPS_OVERLAY_SPARK_Y;
+    int32_t spark_y = plate.spark_y;
     int32_t text_y = spark_y + (spark_h - text_h) / 2;
     renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Px12);
 
@@ -1929,8 +1935,8 @@ void Application::render_frame() {
     renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Px12);
 
     // Dark translucent background plate + subtle border
-    renderer_->fill_rect(spark_x - 1, FPS_OVERLAY_TOP, spark_w + 2, FPS_OVERLAY_BOTTOM - FPS_OVERLAY_TOP, ants::assets::ColorRGBA{0, 0, 0, 160});
-    renderer_->draw_rect(spark_x - 1, FPS_OVERLAY_TOP, spark_w + 2, FPS_OVERLAY_BOTTOM - FPS_OVERLAY_TOP, ants::assets::ColorRGBA{80, 85, 90, 180});
+    renderer_->fill_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{0, 0, 0, 160});
+    renderer_->draw_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{80, 85, 90, 180});
 
     // 60 FPS reference guide line (16.67ms -> 5 pixels from bottom)
     int32_t ref_line_y = spark_y + spark_h - 5;
@@ -1962,7 +1968,7 @@ void Application::render_frame() {
         renderer_->fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
     }
 
-    render_latency_corner(ver_x, text_y);
+    render_latency_corner(ver_x, text_y, plate);
 
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65)
     CursorType cur = CursorType::Normal;
@@ -2058,8 +2064,8 @@ void Application::hold_music(bool hold) {
 }
 
 void Application::render_loading_screen() {
-    // 1. Fill entire 640x480 canvas with authentic solid orange #DB4B13
-    renderer_->fill_rect(0, 0, 640, 480, ants::assets::ColorRGBA{219, 75, 19, 255});
+    // 1. Fill the entire page (the original's 640x480 screen) with authentic solid orange #DB4B13
+    renderer_->fill_rect(0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight, ants::assets::ColorRGBA{219, 75, 19, 255});
 
     // 2. Draw outer border frame tiles from antslogo sequence (excluding dclay tiles and content bitmaps)
     const auto* seq = assets_.find_animation("antslogo");
@@ -2187,7 +2193,7 @@ void Application::show_start_view() {
     }
     int32_t ox = 0;
     int32_t oy = 0;
-    start_view_origin(tx, ty, static_cast<int32_t>(current_level_.width()), static_cast<int32_t>(current_level_.height()), ox, oy);
+    start_view_origin(tx, ty, static_cast<int32_t>(current_level_.width()), static_cast<int32_t>(current_level_.height()), ox, oy, layout_);
     ViewportCamera& camera = renderer_->camera();
     camera.x = 0.0f;
     camera.y = 0.0f;

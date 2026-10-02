@@ -28,7 +28,8 @@ std::optional<int32_t> latency_left_limit(bool network_active, net::NetGame::Pha
     return std::nullopt;
 }
 
-LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32_t widest_w, int32_t text_h, int32_t version_x, int32_t text_y, int32_t left_limit) {
+LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32_t widest_w, int32_t text_h, int32_t version_x, int32_t text_y, int32_t left_limit,
+                                          const CornerPlate& corner) {
     LatencyCornerLayout layout;
     const int32_t row_right = version_x - LATENCY_VERSION_GAP;             // where a row of texts would end: just left of the version
     layout.stacked = row_right - widest_w < left_limit;                    // (decided with the widest texts: the layout does not move with the numbers)
@@ -38,24 +39,32 @@ LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32
         layout.ping_y = text_y;
         layout.delay_y = text_y;
     } else {
-        layout.ping_x = LATENCY_RIGHT_EDGE - ping_w;                       // two lines above the corner row, right aligned with the frame rate; the row's plate begins
-        layout.delay_x = LATENCY_RIGHT_EDGE - delay_w;                     // at FPS_OVERLAY_TOP and one clear row separates it from the text
-        layout.delay_y = FPS_OVERLAY_TOP - 1 - text_h;
+        layout.ping_x = corner.right_edge - ping_w;                        // two lines above the corner row, right aligned with the frame rate; the row's plate begins
+        layout.delay_x = corner.right_edge - delay_w;                      // at the plate's top and one clear row separates it from the text
+        layout.delay_y = corner.top - 1 - text_h;
         layout.ping_y = layout.delay_y - text_h;
     }
     return layout;
 }
 
-void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit) {
+LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32_t widest_w, int32_t text_h, int32_t version_x, int32_t text_y, int32_t left_limit) {
+    return layout_latency_corner(ping_w, delay_w, widest_w, text_h, version_x, text_y, left_limit, CornerPlate::classic());
+}
+
+void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit, const CornerPlate& corner) {
     const std::string ping = ping_text(readout.ping_ms);
     const std::string delay = delay_text(readout.delay_ms);
     const int32_t widest = renderer.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP +
                            renderer.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
     const LatencyCornerLayout layout = layout_latency_corner(renderer.get_text_width(ping, FontSize::Px12), renderer.get_text_width(delay, FontSize::Px12), widest,
-                                                             renderer.get_text_height(FontSize::Px12), version_x, text_y, left_limit);
+                                                             renderer.get_text_height(FontSize::Px12), version_x, text_y, left_limit, corner);
     const ants::assets::ColorRGBA white{255, 255, 255, 255};              // the frame rate's colour
     renderer.draw_text(ping, layout.ping_x, layout.ping_y, white, FontSize::Px12);
     renderer.draw_text(delay, layout.delay_x, layout.delay_y, white, FontSize::Px12);
+}
+
+void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit) {
+    draw_latency_corner(renderer, readout, version_x, text_y, left_limit, CornerPlate::classic());
 }
 
 }  // namespace ants::app

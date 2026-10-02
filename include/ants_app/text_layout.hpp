@@ -27,9 +27,10 @@ int32_t draw_label(IRenderer& renderer, const std::string& text, int32_t x, int3
 
 /// The one line of an edit field as the original's label draws it (FUN_0102b36a with FUN_01011c25, docs 5.51): the text is one line in a box `width` wide of which one
 /// caret (the width of "_") is kept free on the right. A text that fits is drawn from the left; one that does not is drawn right aligned when `tail_aligned` (its end shows,
-/// and the caret sits at the right end of the box), otherwise cut at the right edge. The caret is an underscore right behind the text. Both are drawn at (x, y) in `size`.
+/// and the caret sits at the right end of the box), otherwise cut at the right edge. The caret is an underscore right behind the text; it is not drawn when it would start
+/// beyond the right edge of the screen (`screen_w`: the picture's width, the original's 640 unless the layout says otherwise). Both are drawn at (x, y) in `size`.
 void draw_edit_line(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t width, bool tail_aligned, bool caret_visible, ants::assets::ColorRGBA color,
-                    FontSize size);
+                    FontSize size, int32_t screen_w = CANVAS_WIDTH);
 
 /// A one-line label that does not wrap (the original's label with the word-wrap flag clear, FUN_0102b36a): a text that fits is drawn from the left; one that does not is
 /// drawn right aligned when `tail_aligned` (the flag `+0x18`: its end shows, the front is clipped away) and cut at the right edge otherwise. Unlike an edit field's text

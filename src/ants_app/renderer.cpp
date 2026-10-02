@@ -135,19 +135,19 @@ void ViewportCamera::clamp_to_bounds(uint32_t map_w, uint32_t map_h) {
 }
 
 bool ViewportCamera::world_to_screen(int32_t wx, int32_t wy, int32_t& sx, int32_t& sy) const noexcept {
-    sx = PLAYFIELD_X + (wx - static_cast<int32_t>(x));
-    sy = PLAYFIELD_Y + (wy - static_cast<int32_t>(y));
-    return (sx >= PLAYFIELD_X - TILE_SIZE && sx <= PLAYFIELD_X + PLAYFIELD_W &&
-            sy >= PLAYFIELD_Y - TILE_SIZE && sy <= PLAYFIELD_Y + PLAYFIELD_H);
+    sx = view_x + (wx - static_cast<int32_t>(x));
+    sy = view_y + (wy - static_cast<int32_t>(y));
+    return (sx >= view_x - TILE_SIZE && sx <= view_x + viewport_w &&
+            sy >= view_y - TILE_SIZE && sy <= view_y + viewport_h);
 }
 
 bool ViewportCamera::screen_to_world(int32_t sx, int32_t sy, int32_t& wx, int32_t& wy) const noexcept {
-    if (sx < PLAYFIELD_X || sx >= PLAYFIELD_X + PLAYFIELD_W ||
-        sy < PLAYFIELD_Y || sy >= PLAYFIELD_Y + PLAYFIELD_H) {
+    if (sx < view_x || sx >= view_x + viewport_w ||
+        sy < view_y || sy >= view_y + viewport_h) {
         return false;
     }
-    wx = static_cast<int32_t>(x) + (sx - PLAYFIELD_X);
-    wy = static_cast<int32_t>(y) + (sy - PLAYFIELD_Y);
+    wx = static_cast<int32_t>(x) + (sx - view_x);
+    wy = static_cast<int32_t>(y) + (sy - view_y);
     return true;
 }
 
@@ -312,8 +312,7 @@ Renderer::~Renderer() {
 }
 
 bool Renderer::init(SDL_Window* window,
-                    const ants::assets::AssetArchive& archive,
-                    bool integer_scale) {
+                    const ants::assets::AssetArchive& archive) {
     archive_ = &archive;
 
     renderer_ = SDL_CreateRenderer(
@@ -332,9 +331,7 @@ bool Renderer::init(SDL_Window* window,
     // Nearest neighbor scaling ensures retro pixel art stays sharp and crisp when scaled
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 
-    integer_scale_ = integer_scale;
-    SDL_RenderSetLogicalSize(renderer_, CANVAS_WIDTH, CANVAS_HEIGHT);
-    SDL_RenderSetIntegerScale(renderer_, (integer_scale_ && !is_fullscreen_) ? SDL_TRUE : SDL_FALSE);
+    SDL_RenderSetLogicalSize(renderer_, canvas_w_, canvas_h_);      // the picture is scaled into the window by SDL: the largest scale that fits, centred, bars where the shapes differ
 
     texture_cache_ = std::make_unique<TextureCache>(renderer_, archive);
 
@@ -430,20 +427,21 @@ void Renderer::shutdown() {
     archive_ = nullptr;
 }
 
-void Renderer::set_fullscreen(bool fullscreen) {
-    is_fullscreen_ = fullscreen;
+void Renderer::set_canvas_size(int32_t w, int32_t h) {
+    canvas_w_ = std::max(w, 1);
+    canvas_h_ = std::max(h, 1);
+    refit_canvas();
+}
+
+void Renderer::refit_canvas() {
     if (!renderer_) return;
-    SDL_RenderSetLogicalSize(renderer_, CANVAS_WIDTH, CANVAS_HEIGHT);
-    if (is_fullscreen_) {
-        // Fullscreen: fit vertically to monitor height, preserve 4:3 aspect ratio with pillarboxing (no horizontal stretching)
-        SDL_RenderSetIntegerScale(renderer_, SDL_FALSE);
-    } else {
-        if (integer_scale_) {
-            SDL_RenderSetIntegerScale(renderer_, SDL_TRUE);
-        } else {
-            SDL_RenderSetIntegerScale(renderer_, SDL_FALSE);
-        }
-    }
+    SDL_RenderSetLogicalSize(renderer_, canvas_w_, canvas_h_);
+}
+
+void Renderer::set_layout(const ScreenLayout& layout) {
+    layout_ = layout;
+    camera_.set_view(layout_.view());
+    if (map_width_ > 0 && map_height_ > 0) camera_.clamp_to_bounds(map_width_, map_height_);       // a bigger view may not show more than the map has
 }
 
 void Renderer::set_level(const ants::assets::LevelData& level) {
@@ -642,7 +640,8 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     overlay_queue_.clear();
 
     // 1. Clip exclusively to playfield
-    SDL_Rect clip_rect = { PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H };
+    const LayoutRect view = layout_.view();
+    SDL_Rect clip_rect = { view.x, view.y, view.w, view.h };
     SDL_RenderSetClipRect(renderer_, &clip_rect);
 
     // 2. Layer 1 Terrain
@@ -750,11 +749,12 @@ void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t wor
     if (!b.valid) return;
     const int32_t cam_x = static_cast<int32_t>(camera_.x);
     const int32_t cam_y = static_cast<int32_t>(camera_.y);
-    if (world_x + b.x1 <= cam_x || world_x + b.x0 >= cam_x + PLAYFIELD_W ||
-        world_y + b.y1 <= cam_y || world_y + b.y0 >= cam_y + PLAYFIELD_H) {
+    const LayoutRect view = layout_.view();
+    if (world_x + b.x1 <= cam_x || world_x + b.x0 >= cam_x + view.w ||
+        world_y + b.y1 <= cam_y || world_y + b.y0 >= cam_y + view.h) {
         return;
     }
-    draw_template_screen(anim_id, PLAYFIELD_X + (world_x - cam_x), PLAYFIELD_Y + (world_y - cam_y), colour);
+    draw_template_screen(anim_id, view.x + (world_x - cam_x), view.y + (world_y - cam_y), colour);
 }
 
 // ============================================================================
@@ -763,7 +763,8 @@ void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t wor
 
 void Renderer::render_map_layers(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
     if (!renderer_) return;
-    SDL_Rect clip_rect = { PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H };
+    const LayoutRect view = layout_.view();
+    SDL_Rect clip_rect = { view.x, view.y, view.w, view.h };
     SDL_RenderSetClipRect(renderer_, &clip_rect);
     render_terrain_layer1(grid);
     render_terrain_layer2_structures(grid, world);
@@ -771,12 +772,13 @@ void Renderer::render_map_layers(const ants::sim::Grid& grid, const ants::sim::W
 }
 
 void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
+    const LayoutRect view = layout_.view();
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
     int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
-                                 (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE);
+                                 (static_cast<int32_t>(camera_.x) + view.w + 31) / TILE_SIZE);
     int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE);
     int32_t end_row   = std::min(static_cast<int32_t>(grid.height()) - 1,
-                                 (static_cast<int32_t>(camera_.y) + PLAYFIELD_H + 31) / TILE_SIZE);
+                                 (static_cast<int32_t>(camera_.y) + view.h + 31) / TILE_SIZE);
 
     for (int32_t r = start_row; r <= end_row; ++r) {
         for (int32_t c = start_col; c <= end_col; ++c) {
@@ -870,12 +872,13 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
     // One row-major pass over anchor cells (FUN_01008089 with mode 2): the rows from top / 32 - 3 up to (bottom / 32 + 3 + 1, exclusive) of the view rectangle, the columns
     // likewise, clipped to the map. An object whose anchor lies further out is not drawn even when its art reaches into the view (docs 5.54); each draw is rect-culled.
     constexpr int32_t kMargin = 3;
+    const LayoutRect view = layout_.view();
     const int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE - kMargin);
     const int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
-                                       (static_cast<int32_t>(camera_.x) + PLAYFIELD_W) / TILE_SIZE + kMargin);
+                                       (static_cast<int32_t>(camera_.x) + view.w) / TILE_SIZE + kMargin);
     const int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE - kMargin);
     const int32_t end_row   = std::min(static_cast<int32_t>(grid.height()) - 1,
-                                       (static_cast<int32_t>(camera_.y) + PLAYFIELD_H) / TILE_SIZE + kMargin);
+                                       (static_cast<int32_t>(camera_.y) + view.h) / TILE_SIZE + kMargin);
 
     const bool fog = world && world->fog_of_war_enabled;
     auto explored = [&](int32_t c, int32_t r) { return !fog || world->is_tile_revealed(c, r); };
@@ -956,8 +959,9 @@ void Renderer::collect_object_list_sprites() {
         if (!b.valid) continue;
         const int32_t cam_x = static_cast<int32_t>(camera_.x);
         const int32_t cam_y = static_cast<int32_t>(camera_.y);
-        if (spr.px + b.x1 <= cam_x || spr.px + b.x0 >= cam_x + PLAYFIELD_W ||
-            spr.py + b.y1 <= cam_y || spr.py + b.y0 >= cam_y + PLAYFIELD_H) {
+        const LayoutRect view = layout_.view();
+        if (spr.px + b.x1 <= cam_x || spr.px + b.x0 >= cam_x + view.w ||
+            spr.py + b.y1 <= cam_y || spr.py + b.y0 >= cam_y + view.h) {
             continue;
         }
         RenderItem item{};
@@ -1006,8 +1010,9 @@ void Renderer::collect_flower_droppers(const ants::sim::WorldState& world) {
         RenderItem item{};
         item.sort_y = wy;
         item.draw_func = [this, drop_anim, frame, wx, wy](SDL_Renderer*, TextureCache&) {
-            const int32_t sx = PLAYFIELD_X + (wx - static_cast<int32_t>(camera_.x));
-            const int32_t sy = PLAYFIELD_Y + (wy - static_cast<int32_t>(camera_.y));
+            const LayoutRect view = layout_.view();
+            const int32_t sx = view.x + (wx - static_cast<int32_t>(camera_.x));
+            const int32_t sy = view.y + (wy - static_cast<int32_t>(camera_.y));
             this->draw_frame_parts(drop_anim->subitems[static_cast<size_t>(frame)], sx, sy);
         };
         render_queue_.push_back(std::move(item));
@@ -1019,12 +1024,13 @@ void Renderer::render_fog_of_war(const ants::sim::WorldState& world) {
         return;
     }
 
+    const LayoutRect view = layout_.view();
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
     int32_t end_col   = std::min(static_cast<int32_t>(world.width) - 1,
-                                 (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE);
+                                 (static_cast<int32_t>(camera_.x) + view.w + 31) / TILE_SIZE);
     int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE);
     int32_t end_row   = std::min(static_cast<int32_t>(world.height) - 1,
-                                 (static_cast<int32_t>(camera_.y) + PLAYFIELD_H + 31) / TILE_SIZE);
+                                 (static_cast<int32_t>(camera_.y) + view.h + 31) / TILE_SIZE);
 
     // Authentic 1998 Ants.exe dither anim lookup table (Ants.exe VA 0x1001a7a & 0x10087c0..0x10087da)
     // Formula: idx = ((c0 * 2 + c1) * 2 + 2 + c2) * 2 + c3
@@ -1113,10 +1119,11 @@ void Renderer::collect_visual_effects(const ants::sim::WorldState& world) {
         item.sort_y = (eff.y_key != 0) ? eff.y_key : eff.py;
         const int32_t px = eff.px, py = eff.py;
         item.draw_func = [this, anim, sub_idx, px, py](SDL_Renderer*, TextureCache&) {
-            const int32_t sx = PLAYFIELD_X + (px - static_cast<int32_t>(camera_.x));
-            const int32_t sy = PLAYFIELD_Y + (py - static_cast<int32_t>(camera_.y));
-            if (sx < PLAYFIELD_X - 320 || sx > PLAYFIELD_X + PLAYFIELD_W + 320 ||
-                sy < PLAYFIELD_Y - 320 || sy > PLAYFIELD_Y + PLAYFIELD_H + 320) return;
+            const LayoutRect view = layout_.view();
+            const int32_t sx = view.x + (px - static_cast<int32_t>(camera_.x));
+            const int32_t sy = view.y + (py - static_cast<int32_t>(camera_.y));
+            if (sx < view.x - 320 || sx > view.x + view.w + 320 ||
+                sy < view.y - 320 || sy > view.y + view.h + 320) return;
             this->draw_frame_parts(anim->subitems[sub_idx], sx, sy);
         };
         render_queue_.push_back(std::move(item));
@@ -1186,8 +1193,9 @@ void Renderer::collect_transient_sprites() {
         item.created_ms = overlay_now_ms() - static_cast<int64_t>(elapsed_ms);   // the click marker is a view child
         const int32_t px = eff.px, py = eff.py;
         item.draw = [this, anim, sub_idx, px, py]() {
-            const int32_t sx = PLAYFIELD_X + (px - static_cast<int32_t>(camera_.x));
-            const int32_t sy = PLAYFIELD_Y + (py - static_cast<int32_t>(camera_.y));
+            const LayoutRect view = layout_.view();
+            const int32_t sx = view.x + (px - static_cast<int32_t>(camera_.x));
+            const int32_t sy = view.y + (py - static_cast<int32_t>(camera_.y));
             this->draw_frame_parts(anim->subitems[sub_idx], sx, sy);
         };
         overlay_queue_.push_back(std::move(item));
@@ -1304,8 +1312,9 @@ void Renderer::draw_single_ant(const ants::sim::AntSnapshot& ant) {
     // it and a blown ant's art (aggb / bomb flights) up to ~155 px away from the anchor that jumped 128 px. Only an ant whose art
     // cannot reach the playfield is skipped.
     constexpr int32_t kArtMargin = 160;
-    if (sx < PLAYFIELD_X - kArtMargin || sx > PLAYFIELD_X + PLAYFIELD_W + kArtMargin ||
-        sy < PLAYFIELD_Y - kArtMargin || sy > PLAYFIELD_Y + PLAYFIELD_H + kArtMargin) return;
+    const LayoutRect view = layout_.view();
+    if (sx < view.x - kArtMargin || sx > view.x + view.w + kArtMargin ||
+        sy < view.y - kArtMargin || sy > view.y + view.h + kArtMargin) return;
 
     // The original has neither a shadow nor a hop: a flight is the displacement baked into the aggb / aggh clips.
     const int32_t render_y = sy;
@@ -1413,8 +1422,9 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
             // FUN_0101b802 (which the display loop skips for a frozen ant) with [4b14] != 0: sprintf("%d", hp), white, at the sprite position (the predicted one: the sprite
             // moves when a frame ends), in the fixed system font
             if (show_hp_ && !a.frozen) {
-                this->draw_fixed_text(std::to_string(a.hp), PLAYFIELD_X + (a.px + pred.dx - static_cast<int32_t>(camera_.x)),
-                                      PLAYFIELD_Y + (a.py + pred.dy - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
+                const LayoutRect view = layout_.view();
+                this->draw_fixed_text(std::to_string(a.hp), view.x + (a.px + pred.dx - static_cast<int32_t>(camera_.x)),
+                                      view.y + (a.py + pred.dy - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255});
             }
         };
         render_queue_.push_back(std::move(item));
@@ -1493,10 +1503,11 @@ void Renderer::collect_hill_brackets(const ants::sim::Grid& grid, int32_t select
     item.created_ms = hill_marker_start_ms_;
     const int64_t start = hill_marker_start_ms_;
     item.draw = [this, ax, ay, start]() {
-        const int32_t sx = PLAYFIELD_X + (ax - static_cast<int32_t>(camera_.x));
-        const int32_t sy = PLAYFIELD_Y + (ay - static_cast<int32_t>(camera_.y));
-        if (sx >= PLAYFIELD_X - 128 && sx <= PLAYFIELD_X + PLAYFIELD_W + 128 &&
-            sy >= PLAYFIELD_Y - 128 && sy <= PLAYFIELD_Y + PLAYFIELD_H + 128) {
+        const LayoutRect view = layout_.view();
+        const int32_t sx = view.x + (ax - static_cast<int32_t>(camera_.x));
+        const int32_t sy = view.y + (ay - static_cast<int32_t>(camera_.y));
+        if (sx >= view.x - 128 && sx <= view.x + view.w + 128 &&
+            sy >= view.y - 128 && sy <= view.y + view.h + 128) {
             this->draw_anthill_selection_brackets(sx, sy, static_cast<uint32_t>(overlay_now_ms() - start));
         }
     };
@@ -1538,7 +1549,8 @@ void Renderer::collect_burn_overlays(const ants::sim::WorldState& world) {
         item.draw = [this, bu_seq, px, py, elapsed, colour]() {
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen(px, py, sx, sy);
-            if (sx < PLAYFIELD_X - 160 || sx > PLAYFIELD_X + PLAYFIELD_W + 160 || sy < PLAYFIELD_Y - 160 || sy > PLAYFIELD_Y + PLAYFIELD_H + 160) return;
+            const LayoutRect view = layout_.view();
+            if (sx < view.x - 160 || sx > view.x + view.w + 160 || sy < view.y - 160 || sy > view.y + view.h + 160) return;
             this->draw_frame_parts(bu_seq->subitems[get_anim_subitem_by_time(*bu_seq, elapsed)], sx, sy, false, colour);
         };
         overlay_queue_.push_back(std::move(item));
@@ -1581,8 +1593,9 @@ void Renderer::collect_selection_markers(const ants::sim::WorldState& world, int
         item.draw = [this, &seq, px, py, start]() {
             int32_t sx = 0, sy = 0;
             camera_.world_to_screen(px, py, sx, sy);
-            if (sx < PLAYFIELD_X - 160 || sx > PLAYFIELD_X + PLAYFIELD_W + 160 ||
-                sy < PLAYFIELD_Y - 160 || sy > PLAYFIELD_Y + PLAYFIELD_H + 160) return;
+            const LayoutRect view = layout_.view();
+            if (sx < view.x - 160 || sx > view.x + view.w + 160 ||
+                sy < view.y - 160 || sy > view.y + view.h + 160) return;
             const size_t f = get_anim_subitem_by_time(seq, static_cast<uint32_t>(std::max<int64_t>(0, overlay_now_ms() - start)));
             this->draw_frame_parts(seq.subitems[f], sx, sy);
         };
@@ -1601,25 +1614,25 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
+    const LayoutRect view = layout_.view();
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
     int32_t end_col   = std::min(static_cast<int32_t>(grid.width()) - 1,
-                                 (static_cast<int32_t>(camera_.x) + PLAYFIELD_W + 31) / TILE_SIZE);
+                                 (static_cast<int32_t>(camera_.x) + view.w + 31) / TILE_SIZE);
     int32_t start_row = std::max(0, static_cast<int32_t>(camera_.y) / TILE_SIZE);
     int32_t end_row   = std::min(static_cast<int32_t>(grid.height()) - 1,
-                                 (static_cast<int32_t>(camera_.y) + PLAYFIELD_H + 31) / TILE_SIZE);
+                                 (static_cast<int32_t>(camera_.y) + view.h + 31) / TILE_SIZE);
 
     // Determine hovered tile under mouse
     int32_t hover_tx = -1;
     int32_t hover_ty = -1;
-    if (mouse_x >= PLAYFIELD_X && mouse_x < PLAYFIELD_X + PLAYFIELD_W &&
-        mouse_y >= PLAYFIELD_Y && mouse_y < PLAYFIELD_Y + PLAYFIELD_H) {
-        int32_t world_x = camera_.world_x + (mouse_x - PLAYFIELD_X);
-        int32_t world_y = camera_.world_y + (mouse_y - PLAYFIELD_Y);
+    if (view.contains(mouse_x, mouse_y)) {
+        int32_t world_x = camera_.world_x + (mouse_x - view.x);
+        int32_t world_y = camera_.world_y + (mouse_y - view.y);
         hover_tx = std::clamp(world_x / TILE_SIZE, 0, static_cast<int32_t>(grid.width()) - 1);
         hover_ty = std::clamp(world_y / TILE_SIZE, 0, static_cast<int32_t>(grid.height()) - 1);
     } else {
-        hover_tx = std::clamp((camera_.world_x + PLAYFIELD_W / 2) / TILE_SIZE, 0, static_cast<int32_t>(grid.width()) - 1);
-        hover_ty = std::clamp((camera_.world_y + PLAYFIELD_H / 2) / TILE_SIZE, 0, static_cast<int32_t>(grid.height()) - 1);
+        hover_tx = std::clamp((camera_.world_x + view.w / 2) / TILE_SIZE, 0, static_cast<int32_t>(grid.width()) - 1);
+        hover_ty = std::clamp((camera_.world_y + view.h / 2) / TILE_SIZE, 0, static_cast<int32_t>(grid.height()) - 1);
     }
 
     // 1. Draw tile outline for each tile and coordinates in bottom-left of each tile
@@ -1653,8 +1666,8 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
     }
 
     // 3. Tile coordinates readout badge in the bottom left-hand corner of the playfield
-    int32_t badge_x = PLAYFIELD_X + 4;
-    int32_t badge_y = PLAYFIELD_Y + PLAYFIELD_H - 18;
+    int32_t badge_x = view.x + 4;
+    int32_t badge_y = view.y + view.h - 18;
     int32_t badge_w = 88;
     int32_t badge_h = 16;
 
@@ -1669,7 +1682,7 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
         if (fo.remaining == 0) continue;
         int32_t fsx = 0, fsy = 0;
         camera_.world_to_screen(static_cast<int32_t>(fo.col) * TILE_SIZE, static_cast<int32_t>(fo.row) * TILE_SIZE, fsx, fsy);
-        if (fsx < -64 || fsx > PLAYFIELD_W + 64 || fsy < -64 || fsy > PLAYFIELD_H + 64) continue;
+        if (fsx < -64 || fsx > view.w + 64 || fsy < -64 || fsy > view.h + 64) continue;
 
         std::string food_badge = std::to_string(fo.remaining);
         int32_t f_bw = static_cast<int32_t>(food_badge.length()) * 8 + 8;
@@ -1972,7 +1985,7 @@ bool Renderer::save_screenshot(const std::string& path) {
     if (!renderer_) return false;
     int w = 0, h = 0;
     SDL_GetRendererOutputSize(renderer_, &w, &h);
-    if (w <= 0 || h <= 0) { w = CANVAS_WIDTH; h = CANVAS_HEIGHT; }
+    if (w <= 0 || h <= 0) { w = canvas_w_; h = canvas_h_; }
 
     SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
     if (!surf) return false;

@@ -238,7 +238,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
             renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
         }
     } else {
-        renderer.fill_rect(0, 0, 640, 480, ColorRGBA{219, 75, 19, 255});
+        renderer.fill_rect(0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight, ColorRGBA{219, 75, 19, 255});
     }
 
     // 2. Leave Game button (both screens): animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates

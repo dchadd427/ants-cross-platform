@@ -30,6 +30,7 @@
   #endif
 #endif
 
+#include "ants_app/screen_layout.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -84,17 +85,18 @@ struct TransientEffect {
     bool is_screen_space{false};
 };
 
-// Authentic Virtual Canvas Constants
-constexpr int CANVAS_WIDTH  = 640;
-constexpr int CANVAS_HEIGHT = 480;
+// Authentic Virtual Canvas Constants: the original's screen (ScreenLayout::classic(); the renderer's own canvas is set with Renderer::set_canvas_size)
+constexpr int CANVAS_WIDTH  = ScreenLayout::kClassicWidth;
+constexpr int CANVAS_HEIGHT = ScreenLayout::kClassicHeight;
 
 // The map view of the original (Ants.exe: the view window's rectangle (16, 21) - (458, 461) set at 0x100a32b and given to the view at 0x100dcbf, docs 5.44): the world
 // pixel (camera.x, camera.y) is at the screen pixel (16, 21), the view is 442 x 440 (the camera's largest origin is the map's size less that). The UI shell drawn on top of it
 // has a black border at x = 16 / y = 21 and its hole starts at (17, 22), so the visible area is the same as before v0.0.67 (it used to be placed one pixel right and down).
-constexpr int PLAYFIELD_X = 16;
-constexpr int PLAYFIELD_Y = 21;
-constexpr int PLAYFIELD_W = 442;
-constexpr int PLAYFIELD_H = 440;
+// These are the CLASSIC view (ScreenLayout::classic().view()); what the renderer, the HUD and the pointer use is the layout they were given (Renderer::set_layout).
+constexpr int PLAYFIELD_X = ScreenLayout::kClassicViewX;
+constexpr int PLAYFIELD_Y = ScreenLayout::kClassicViewY;
+constexpr int PLAYFIELD_W = ScreenLayout::kClassicViewW;
+constexpr int PLAYFIELD_H = ScreenLayout::kClassicViewH;
 
 
 constexpr int TILE_SIZE = 32;
@@ -132,8 +134,18 @@ struct ViewportCamera {
     float y{0.0f}; // Top-left world Y in float pixels
     int32_t world_x{0};
     int32_t world_y{0};
+    int32_t view_x{PLAYFIELD_X};       // where the view is on the screen: the world pixel (x, y) is at the screen pixel (view_x, view_y)
+    int32_t view_y{PLAYFIELD_Y};
     int32_t viewport_w{PLAYFIELD_W};
     int32_t viewport_h{PLAYFIELD_H};
+
+    /// The view of a layout (ScreenLayout::view()): its origin on the screen and its size
+    void set_view(const LayoutRect& view) noexcept {
+        view_x = view.x;
+        view_y = view.y;
+        viewport_w = view.w;
+        viewport_h = view.h;
+    }
 
     /// Moves the view by whole pixels (the scroll steps of the original's input task) and keeps it inside the map.
     void scroll_pixels(int32_t dx, int32_t dy, uint32_t map_w, uint32_t map_h) {
@@ -275,10 +287,21 @@ public:
     Renderer& operator=(const Renderer&) = delete;
 
     bool init(SDL_Window* window,
-              const ants::assets::AssetArchive& archive,
-              bool integer_scale = true);
+              const ants::assets::AssetArchive& archive);
     void shutdown();
-    void set_fullscreen(bool fullscreen);
+
+    /// The size of the picture that the window shows (SDL's logical size: it scales to the window with the largest scale that fits, centred, bars where the shapes differ;
+    /// the scaling is SDL's, fractional unless the window is a multiple of the canvas, filtered "nearest"). The original's 640 x 480 until it is told otherwise.
+    void set_canvas_size(int32_t w, int32_t h);
+    /// SDL's logical size applied again (the window changed size: the application asks on every size event)
+    void refit_canvas();
+    int32_t canvas_w() const noexcept { return canvas_w_; }
+    int32_t canvas_h() const noexcept { return canvas_h_; }
+
+    /// The geometry of the picture (screen_layout.hpp): the map view, which the world is drawn into and clipped to, comes from it; the camera takes it too. The original's
+    /// layout until it is told otherwise.
+    void set_layout(const ScreenLayout& layout);
+    const ScreenLayout& layout() const noexcept { return layout_; }
 
     void set_level(const ants::assets::LevelData& level);
 
@@ -479,8 +502,9 @@ private:
     std::string pending_screenshot_;
     uint8_t hud_team_id_{0};
     bool show_hp_{false};
-    bool integer_scale_{true};
-    bool is_fullscreen_{false};
+    ScreenLayout layout_{ScreenLayout::classic()};
+    int32_t canvas_w_{CANVAS_WIDTH};
+    int32_t canvas_h_{CANVAS_HEIGHT};
     std::vector<TransientEffect> transient_effects_{};
     uint32_t sub_tick_ms_{0};
 };

@@ -12,14 +12,7 @@ namespace ants::app {
 
 namespace {
 
-// Pedestal slot rectangles (FUN_01028d30; half-open): slot 1 (Move / hatch / ally), slot 2 (ability), slot 3 (Stop)
-struct SlotRect { int32_t x0, y0, x1, y1; };
-constexpr SlotRect kSlot[3] = {{482, 152, 525, 225}, {539, 152, 582, 225}, {597, 189, 628, 227}};
-
-bool in_slot(int slot, int32_t x, int32_t y) {
-    const SlotRect& r = kSlot[slot];
-    return x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1;
-}
+// (The pedestal slot rectangles, FUN_01028d30, half-open, are the three pedestal buttons' rectangles that the layout places: HUD::in_slot, hud.cpp)
 
 const assets::AnthillSpawn* hill_at(const sim::WorldState& world, int32_t tx, int32_t ty) {
     for (const auto& base : world.anthills) {
@@ -104,9 +97,10 @@ const sim::AntSnapshot* HUD::pick_ant_at(const sim::WorldState& world, int32_t w
 // ------------------------------------------------------------------------------------------------
 
 HUD::BandRect HUD::band_rect() const noexcept {
-    // p0 is the press point, p1 the pointer kept 1 px inside the view (16, 21) - (458, 461): x in [17, 457], y in [22, 460]
-    const int32_t px = std::clamp(drag_curr_x_, MAP_LEFT + 1, MAP_RIGHT - 1);
-    const int32_t py = std::clamp(drag_curr_y_, MAP_TOP + 1, MAP_BOTTOM - 1);
+    // p0 is the press point, p1 the pointer kept 1 px inside the view (16, 21) - (458, 461) of the original: x in [17, 457], y in [22, 460]
+    const LayoutRect view = layout_.view();
+    const int32_t px = std::clamp(drag_curr_x_, view.x + 1, view.right() - 1);
+    const int32_t py = std::clamp(drag_curr_y_, view.y + 1, view.bottom() - 1);
     BandRect b{std::min(drag_start_x_, px), std::min(drag_start_y_, py), std::max(drag_start_x_, px), std::max(drag_start_y_, py)};
     if (b.right == b.left) { --b.left; ++b.right; }           // InflateRect(1, 0) / (0, 1): a stationary press is a 2 x 2 dot
     if (b.bottom == b.top) { --b.top; ++b.bottom; }
@@ -136,7 +130,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
     // 2. The eight edge strips (mode 6): the scroll arrows (edge_scroll.hpp); not while a button is captured
     if (!is_input_captured()) {
         const EdgeScroll strip = edge_scroll_step(screen_x, screen_y, 0, camera.world_x, camera.world_y,
-                                                  static_cast<int32_t>(grid.width()), static_cast<int32_t>(grid.height()));
+                                                  static_cast<int32_t>(grid.width()), static_cast<int32_t>(grid.height()), layout_);
         if (strip.dir >= 0) {
             static const CursorType kArrows[8] = {CursorType::ScrollN, CursorType::ScrollNE, CursorType::ScrollE, CursorType::ScrollSE,
                                                   CursorType::ScrollS, CursorType::ScrollSW, CursorType::ScrollW, CursorType::ScrollNW};
@@ -145,8 +139,8 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
         }
     }
 
-    // 3. Outside the map rectangle (16, 21) - (458, 461): the plain pointer
-    if (!in_map_rect(screen_x, screen_y)) {
+    // 3. Outside the map rectangle (16, 21) - (458, 461) of the original: the plain pointer
+    if (!over_map(screen_x, screen_y)) {
         current_cursor_ = CursorType::Normal;
         return current_cursor_;
     }
@@ -161,8 +155,8 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
     }
 
     // 5. By panel mode
-    const int32_t world_x = camera.world_x + (screen_x - PLAYFIELD_X);
-    const int32_t world_y = camera.world_y + (screen_y - PLAYFIELD_Y);
+    const int32_t world_x = camera.world_x + (screen_x - layout_.view().x);
+    const int32_t world_y = camera.world_y + (screen_y - layout_.view().y);
     const int32_t tx = world_x / 32;
     const int32_t ty = world_y / 32;
     const PanelMode panel = panel_mode(world);
@@ -345,8 +339,8 @@ void HUD::stop_selected(sim::SimulationEngine& sim) {
 void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift) {
     const auto& world = sim.get_world_state();
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
-    const int32_t world_x = camera.world_x + (x - PLAYFIELD_X);
-    const int32_t world_y = camera.world_y + (y - PLAYFIELD_Y);
+    const int32_t world_x = camera.world_x + (x - layout_.view().x);
+    const int32_t world_y = camera.world_y + (y - layout_.view().y);
     const sim::TileCoord tile{world_x / 32, world_y / 32};
     switch (mode) {
         case CursorType::Normal:                               // mode 1: deselect all, no marker
@@ -419,14 +413,14 @@ void HUD::pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, in
     const bool latched = slot_latched_[0] || slot_latched_[1];
     BandRect rect{};
     if (is_dragging_ && !latched) rect = band_rect();
-    else if (in_map_rect(x, y)) rect = BandRect{x, y, x + 1, y + 1};
+    else if (over_map(x, y)) rect = BandRect{x, y, x + 1, y + 1};
     else return;
     if (rect.right - rect.left <= 4 && rect.bottom - rect.top <= 4) {
         pointer_click(sim, camera, x, y, shift);
         return;
     }
-    const int32_t ox = camera.world_x - PLAYFIELD_X;
-    const int32_t oy = camera.world_y - PLAYFIELD_Y;
+    const int32_t ox = camera.world_x - layout_.view().x;
+    const int32_t oy = camera.world_y - layout_.view().y;
     select_ants_in_rect(rect.left + ox, rect.top + oy, rect.right + ox, rect.bottom + oy, sim.get_world_state(), shift);
 }
 
@@ -439,7 +433,7 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
         if (panel != PanelMode::OneAnt && panel != PanelMode::Ants) return;
         int32_t wx = 0;
         int32_t wy = 0;
-        minimap_point(press_x, press_y, static_cast<int32_t>(sim.grid().width()), static_cast<int32_t>(sim.grid().height()), wx, wy);
+        minimap_point(press_x, press_y, static_cast<int32_t>(sim.grid().width()), static_cast<int32_t>(sim.grid().height()), wx, wy, layout_);
         const sim::TileCoord tile{wx / 32, wy / 32};
         const bool special = panel == PanelMode::OneAnt && special_target(&sim, world, tile, panel);
         spawn_click_marker(wx, wy);
@@ -449,15 +443,16 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
     if (capture != 1) return;
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
     if (mode == CursorType::Attack) {                           // mode 5: the ant under the pointer at the release (FUN_01026904)
-        spawn_click_marker(camera.world_x + (press_x - PLAYFIELD_X), camera.world_y + (press_y - PLAYFIELD_Y));
-        if (const sim::AntSnapshot* ant = pick_ant_at(world, camera.world_x + (x - PLAYFIELD_X), camera.world_y + (y - PLAYFIELD_Y))) {
+        const LayoutRect view = layout_.view();
+        spawn_click_marker(camera.world_x + (press_x - view.x), camera.world_y + (press_y - view.y));
+        if (const sim::AntSnapshot* ant = pick_ant_at(world, camera.world_x + (x - view.x), camera.world_y + (y - view.y))) {
             order_selected(sim, sim::TileCoord{ant->tile_x, ant->tile_y}, false, true);
         }
         return;
     }
     if (mode != CursorType::Move && mode != CursorType::Food && mode != CursorType::Target) return;    // modes 1, 2 and 6 do nothing
-    const int32_t world_x = camera.world_x + (press_x - PLAYFIELD_X);
-    const int32_t world_y = camera.world_y + (press_y - PLAYFIELD_Y);
+    const int32_t world_x = camera.world_x + (press_x - layout_.view().x);
+    const int32_t world_y = camera.world_y + (press_y - layout_.view().y);
     const sim::TileCoord tile{world_x / 32, world_y / 32};
     spawn_click_marker(world_x, world_y);                       // the marker is always spawned
     // modes 3, 4 and 7: a move for several ants and for a worker / combat ant (or a mixed group), otherwise the ability of the ant's type; the type is the one of flag 1
@@ -473,7 +468,7 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
 // ------------------------------------------------------------------------------------------------
 
 bool HUD::pedestal_press(sim::SimulationEngine& sim, int32_t x, int32_t y) {
-    if (in_map_rect(x, y)) return false;
+    if (over_map(x, y)) return false;
     const auto& world = sim.get_world_state();
     const PanelMode panel = panel_mode(world);
 

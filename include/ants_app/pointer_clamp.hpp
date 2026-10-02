@@ -6,36 +6,57 @@
 // second monitor the original's pointer can leave the screen, and its input task then ignores it: FUN_0102653f, docs/GAME_REVERSE_ENGINEERING.md 5.43.)
 // The remake draws the same picture inside a bigger window (fullscreen on a wide monitor, a window of any shape); SDL maps the pointer over a black bar to
 // coordinates outside the picture (negative, or past 639 / 479), which the game used to ignore: no scrolling over a bar, no cursor. A pointer over a bar
-// is the pointer at the nearest edge pixel of the picture, which is what the one-monitor original shows.
+// is the pointer at the nearest edge pixel of the picture, which is what the one-monitor original shows. The picture's size is a ScreenLayout's (screen_layout.hpp), and
+// where it sits in the canvas is a rectangle; the functions without either are the original's 640 x 480 screen.
 #pragma once
 
 #include <cstdint>
 
 #include <SDL.h>
 
+#include "ants_app/screen_layout.hpp"
+
 namespace ants::app {
 
-inline constexpr int32_t kScreenWidth = 640;
-inline constexpr int32_t kScreenHeight = 480;
+inline constexpr int32_t kScreenWidth = ScreenLayout::kClassicWidth;
+inline constexpr int32_t kScreenHeight = ScreenLayout::kClassicHeight;
 
 inline int32_t clamp_to_screen_x(int32_t x) { return x < 0 ? 0 : (x >= kScreenWidth ? kScreenWidth - 1 : x); }
 inline int32_t clamp_to_screen_y(int32_t y) { return y < 0 ? 0 : (y >= kScreenHeight ? kScreenHeight - 1 : y); }
 
-/// Puts a pointer event's position (mouse motion, button down / up) on the picture; every other field and every other kind of event stays as it is.
-inline void clamp_pointer_event(SDL_Event& e) {
+/// The pointer's limits are the picture's: a picture of a layout is `layout.width` x `layout.height` pixels, so x is held to 0 .. width - 1 and y to 0 .. height - 1
+inline int32_t clamp_to_screen_x(int32_t x, const ScreenLayout& layout) { return x < 0 ? 0 : (x >= layout.width ? layout.width - 1 : x); }
+inline int32_t clamp_to_screen_y(int32_t y, const ScreenLayout& layout) { return y < 0 ? 0 : (y >= layout.height ? layout.height - 1 : y); }
+
+/// Puts a pointer event's position on the picture; every other field and every other kind of event stays as it is. The event's position is the canvas's (what SDL maps the
+/// window position to); `picture` is where the picture sits in the canvas (its top left corner and its size): the position becomes the picture's own (the corner subtracted)
+/// and is then held to the picture. A picture that is the whole canvas has its corner at (0, 0).
+inline void clamp_pointer_event(SDL_Event& e, const LayoutRect& picture) {
+    const auto place_x = [&picture](int32_t x) { x -= picture.x; return x < 0 ? 0 : (x >= picture.w ? picture.w - 1 : x); };
+    const auto place_y = [&picture](int32_t y) { y -= picture.y; return y < 0 ? 0 : (y >= picture.h ? picture.h - 1 : y); };
     switch (e.type) {
         case SDL_MOUSEMOTION:
-            e.motion.x = clamp_to_screen_x(e.motion.x);
-            e.motion.y = clamp_to_screen_y(e.motion.y);
+            e.motion.x = place_x(e.motion.x);
+            e.motion.y = place_y(e.motion.y);
             break;
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
-            e.button.x = clamp_to_screen_x(e.button.x);
-            e.button.y = clamp_to_screen_y(e.button.y);
+            e.button.x = place_x(e.button.x);
+            e.button.y = place_y(e.button.y);
             break;
         default:
             break;
     }
+}
+
+/// ... of a picture that is the whole canvas, of the layout's size
+inline void clamp_pointer_event(SDL_Event& e, const ScreenLayout& layout) {
+    clamp_pointer_event(e, LayoutRect{0, 0, layout.width, layout.height});
+}
+
+/// ... of the original's 640 x 480 screen
+inline void clamp_pointer_event(SDL_Event& e) {
+    clamp_pointer_event(e, ScreenLayout::classic());
 }
 
 /// After this event the pointer has gone, although SDL sends no LEAVE: the clamped position would otherwise stay on an edge and keep the map scrolling.

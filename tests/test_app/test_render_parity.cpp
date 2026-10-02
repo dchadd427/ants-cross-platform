@@ -1765,7 +1765,7 @@ int main(int argc, char* argv[]) {
         return 2;
     }
     Renderer r;
-    if (!r.init(win, arc, false)) {
+    if (!r.init(win, arc)) {
         std::fprintf(stderr, "renderer init failed\n");
         return 2;
     }

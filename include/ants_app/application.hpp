@@ -30,10 +30,12 @@
 #include "ants_app/screen_button.hpp"
 #include "ants_app/audio_mixer.hpp"
 #include "ants_app/config_store.hpp"
+#include "ants_app/fps_overlay.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
+#include "ants_app/screen_layout.hpp"
 #include "ants_app/window_layout.hpp"
 
 namespace ants::app {
@@ -51,7 +53,6 @@ struct ApplicationConfig {
     int window_width{1280};  // Default 2x integer scale
     int window_height{960};
     bool fullscreen{false};
-    bool integer_scaling{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -188,6 +189,11 @@ public:
 
     ants::sim::SimulationEngine& sim() noexcept { return sim_; }
     Renderer& renderer() noexcept { return *renderer_; }
+    /// The geometry of the picture that the HUD, the renderer, the edge scroll and the pointer work in (screen_layout.hpp)
+    const ScreenLayout& layout() const noexcept { return layout_; }
+    /// Gives every consumer a layout: the renderer's view and camera, the HUD's rectangles, and (through `layout()`) the edge scroll, the pointer's limits, the sound listener,
+    /// the network overlay and the start view. The original's picture until it is told otherwise; the canvas (`renderer().set_canvas_size`) is a separate choice.
+    void set_layout(const ScreenLayout& layout);
     HUD& hud() noexcept { return hud_; }
     ScorecardModal& scorecard() noexcept { return scorecard_; }
     MidiPlayer& midi_player() noexcept { return midi_player_; }
@@ -323,6 +329,7 @@ private:
     static constexpr uint32_t kUiPressOwner = 0x80000001u;      // the sound owner of the button that is being pressed (there is only one at a time)
 
     ApplicationConfig config_{};
+    ScreenLayout layout_{ScreenLayout::classic()};       // the picture that the match screen is: the HUD, the renderer's view, the edge scroll, the pointer's limits
     AppState state_{AppState::MapSelect};
     bool is_running_{false};
     bool match_started_{false};                           // a match screen was built (the original writes the chat transcript only then)
@@ -424,7 +431,7 @@ private:
     void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
     void sync_room_view();
     void render_net_overlay();
-    void render_latency_corner(int32_t version_x, int32_t text_y);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
+    void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
     // Computer players (docs/BOTS.md): a game without --bot never creates any of this

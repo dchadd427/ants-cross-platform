@@ -393,3 +393,39 @@ endif()
 
 add_test(NAME test_start_menu COMMAND test_start_menu)
 set_tests_properties(test_start_menu PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Screen layout (M1 of the widescreen work): the geometry of the picture as numbers (screen_layout.hpp) and every consumer of it (HUD rectangles and drawing, edge scroll, minimap, start view, pointer limits, the plate's corner, camera, renderer, application)
+add_executable(test_screen_layout
+    test_screen_layout.cpp
+)
+
+target_include_directories(test_screen_layout PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_screen_layout PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_screen_layout PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_screen_layout PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_screen_layout PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_screen_layout COMMAND test_screen_layout)
+set_tests_properties(test_screen_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

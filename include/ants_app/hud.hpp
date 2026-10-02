@@ -16,6 +16,7 @@
 #include "ants_app/options_screen.hpp"
 #include "ants_app/screen_button.hpp"
 #include "ants_app/pedestal.hpp"
+#include "ants_app/screen_layout.hpp"
 #include "ants_app/status_line.hpp"
 
 namespace ants::app {
@@ -43,9 +44,10 @@ struct UIButton {
  */
 class HUD {
 public:
+    // The CLASSIC picture's numbers (the original's 640x480 screen; the HUD itself works in the layout it was given, see set_layout below).
     // Where the map view is drawn on the virtual 640x480 screen (docs 5.44: the original's view is (16, 21) - (458, 461), see MAP_LEFT .. below)
-    static constexpr int32_t PLAYFIELD_X       = 16;
-    static constexpr int32_t PLAYFIELD_Y       = 21;
+    static constexpr int32_t PLAYFIELD_X       = ScreenLayout::kClassicViewX;
+    static constexpr int32_t PLAYFIELD_Y       = ScreenLayout::kClassicViewY;
 
     // The map view rectangle of the original (0x1026d6a), half-open: pointers outside it are a plain arrow and pedestals fire on presses there
     static constexpr int32_t MAP_LEFT   = 16;
@@ -61,6 +63,28 @@ public:
     ~HUD() = default;
     HUD(const HUD&) = delete;                     // the options screen calls back into its HUD
     HUD& operator=(const HUD&) = delete;
+
+    /// The geometry of the picture that the HUD works in (screen_layout.hpp; the original's 640 x 480 until it is told otherwise). Every rectangle that used to be a number of the
+    /// original's screen is placed from it by ONE function (apply_layout), which `init` (so every new match) and `set_layout` both run: a layout that was set earlier is not lost
+    /// when the next match resets the HUD. The map view, the minimap, the chat log, the top bar's buttons, the pedestals, the [All] / [Team] buttons, the score slots, the status
+    /// line and the chat input follow it, and so do the pointer's zones (over_map, over_minimap, in_chat_view). The dialogs and the pages (quit, alliance, options, quick help,
+    /// the "get ready" modal) are pictures of the original's screen and stay where they are.
+    void set_layout(const ScreenLayout& layout);
+    const ScreenLayout& layout() const noexcept { return layout_; }
+    /// The map view and the minimap of the layout (a press there goes to the map / the minimap): in_map_rect and in_minimap_rect are the original's, these follow the layout
+    bool over_map(int32_t x, int32_t y) const noexcept { return layout_.view().contains(x, y); }
+    bool over_minimap(int32_t x, int32_t y) const noexcept { return layout_.minimap().contains(x, y); }
+    /// The rectangles that the layout places (for the widescreen work and the tests); the pedestal buttons are the pedestal slots' rectangles too
+    const UIButton& help_button() const noexcept { return help_button_; }
+    const UIButton& options_button() const noexcept { return options_button_; }
+    const UIButton& quit_button() const noexcept { return quit_button_; }
+    const UIButton& stop_button() const noexcept { return stop_button_; }
+    const UIButton& send_to_button() const noexcept { return send_to_button_; }
+    const UIButton& team_button() const noexcept { return team_button_; }
+    const UIButton& hatch_button() const noexcept { return hatch_button_; }
+    const UIButton& team_up_button() const noexcept { return team_up_button_; }
+    const UIButton& quit_yes_button() const noexcept { return yes_button_; }
+    const UIButton& quit_no_button() const noexcept { return no_button_; }
 
     // Test hook: replaces the millisecond clock used by the pedestal transitions
     void set_ticks_function(uint32_t (*fn)()) noexcept { ticks_fn_ = fn; }
@@ -131,7 +155,7 @@ public:
 
     // The chat log window (object [W + 0x4acc], docs 5.56). The view is (482, 299) - (620, 400) = 138 x 101 px; an entry's header is at the view's left edge and its body
     // 10 px to the right; entry k starts one pixel below entry k - 1.
-    static constexpr int32_t kChatViewX = 482, kChatViewY = 299, kChatViewW = 138, kChatViewH = 101;
+    static constexpr int32_t kChatViewX = ScreenLayout::kChatViewX, kChatViewY = ScreenLayout::kChatViewY, kChatViewW = ScreenLayout::kChatViewW, kChatViewH = ScreenLayout::kChatViewH;
     static constexpr int32_t kChatBodyX = 10, kChatBodyW = 126;
     static constexpr uint32_t kChatFollowPeriodMs = 50;   // CHATAPPD (0x1025282): the follow step of 5 px
     static constexpr int32_t kChatFollowStep = 5;
@@ -147,7 +171,7 @@ public:
     int32_t chat_drag_offset() const noexcept { return chat_drag_offset_; }
     /// The top of the log as it is drawn now
     int32_t chat_view_offset() const noexcept { return chat_dragging_ ? chat_drag_offset_ : chat_follow_pos_; }
-    bool in_chat_view(int32_t x, int32_t y) const noexcept { return x >= kChatViewX && x < kChatViewX + kChatViewW && y >= kChatViewY && y < kChatViewY + kChatViewH; }
+    bool in_chat_view(int32_t x, int32_t y) const noexcept { return layout_.chat_view().contains(x, y); }
     /// The transcript the original writes to chat.txt when the program ends: "date @ time", a blank line, then "header body" per entry
     std::string chat_transcript(const std::string& date_time) const;
 
@@ -343,7 +367,12 @@ private:
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);
+    /// Places every rectangle of the layout (the buttons of the top bar and the panel, the pedestal slots); run by init() and set_layout()
+    void apply_layout();
+    /// Is the point on pedestal slot 0 (Move / hatch / ally), 1 (ability) or 2 (Stop)? The slots are the three pedestal buttons' rectangles (FUN_01028d30, half-open)
+    bool in_slot(int slot, int32_t x, int32_t y) const noexcept;
 
+    ScreenLayout layout_{ScreenLayout::classic()};
     uint8_t local_player_id_{0};
     uint32_t selected_ant_id_{0};
     std::vector<uint32_t> selected_ant_ids_{};

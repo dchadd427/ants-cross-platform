@@ -2020,7 +2020,7 @@ struct RendererRig {
         if (win == nullptr) return;
         if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + map + ".LVL")) return;
         engine.init(level, 1337);
-        if (!renderer.init(win, archive, false)) return;
+        if (!renderer.init(win, archive)) return;
         renderer.set_level(level);
         renderer.pin_animation_clock(1500);
         renderer.set_hud_team(0);

@@ -152,28 +152,21 @@ void HUD::init(uint8_t local_player_id) {
     post_status_id(sim::strings::kWelcome, "Ants");    // FUN_0100dbe2 0x100e173, once when the match screen is built
     add_news_flash(0, "Game started! Go get that food!");     // FUN_01022432: "[0:00] News Flash:", the start message
 
-    // Configure Top Header Buttons (x0y0.bmp)
-    help_button_ = {476, 7, 46, 23, false, false};
-    options_button_ = {525, 7, 52, 23, false, false};
-    quit_button_ = {579, 7, 46, 23, false, false};
-
-    // The three pedestal slots of the original (FUN_01028d30, half-open): slot 1 (Move / hatch / ally) (482, 152) - (525, 225),
-    // slot 2 (ability) (539, 152) - (582, 225), slot 3 (Stop) (597, 189) - (628, 227)
-    move_pedestal_button_ = {482, 152, 43, 73, false, false};
-    ability_pedestal_button_ = {539, 152, 43, 73, false, false};
-    stop_button_ = {597, 189, 31, 38, false, false};
-
-    // Configure Authentic Send-to Toggle Button at (532, 443, 44, 24)
-    send_to_button_ = {532, 443, 44, 24, false, false};
-    // Configure Authentic Team Toggle Button at (579, 443, 46, 24)
-    team_button_    = {579, 443, 46, 24, false, false};
+    // The buttons start with no state; where they are comes from the layout (apply_layout, at the end)
+    help_button_ = UIButton{};
+    options_button_ = UIButton{};
+    quit_button_ = UIButton{};
+    move_pedestal_button_ = UIButton{};
+    ability_pedestal_button_ = UIButton{};
+    stop_button_ = UIButton{};
+    send_to_button_ = UIButton{};
+    team_button_ = UIButton{};
     is_on_team_ = false;
     chat_input_.clear();
     chat_focus_ms_ = clock_ms();                         // the chat edit control is active from the moment the screen is built (FUN_0100dbe2)
 
-    // Configure Quit Confirmation Dialog Buttons
-    yes_button_ = {180, 260, 49, 24, false, false}; // dyn_byes1 part (80,160) + origin (100,100)
-    no_button_  = {292, 260, 49, 24, false, false}; // dyn_bno1 part (192,160) + origin (100,100)
+    yes_button_ = UIButton{};
+    no_button_ = UIButton{};
 
     show_match_start_modal_ = false;
     match_start_modal_ticks_ = 0;
@@ -185,18 +178,58 @@ void HUD::init(uint8_t local_player_id) {
     suppressed_invite_from_ = 255;
     suppressed_wait_for_ = 255;
 
-    // The hatch and ally pedestals are slot 1 as well
-    hatch_button_.x = 482;
-    hatch_button_.y = 152;
-    hatch_button_.w = 43;
-    hatch_button_.h = 73;
-
-    team_up_button_.x = 482;
-    team_up_button_.y = 152;
-    team_up_button_.w = 43;
-    team_up_button_.h = 73;
     team_up_button_.is_pressed = false;
     team_up_button_.is_active = false;
+
+    apply_layout();
+}
+
+void HUD::set_layout(const ScreenLayout& layout) {
+    layout_ = layout;
+    apply_layout();
+    relayout_chat();                                     // the chat view may have another height: the log's positions stay inside it
+}
+
+// The rectangles that the layout places, the one place that knows them: init() runs it at every new match and set_layout() when the layout changes, so a layout set earlier is
+// never lost. What is anchored to the right edge of the original's screen is `right(x)`, what is anchored to the bottom edge `bottom(y)` (screen_layout.hpp); a button that is
+// anchored to neither (the quit dialog's) is a part of a picture of the original's screen and stays.
+void HUD::apply_layout() {
+    const ScreenLayout& lay = layout_;
+    const auto place = [](UIButton& b, int32_t x, int32_t y, int32_t w, int32_t h) {
+        b.x = x;
+        b.y = y;
+        b.w = w;
+        b.h = h;
+    };
+    // Top header buttons (x0y0.bmp): the right part of the top bar
+    place(help_button_, lay.right(476), 7, 46, 23);
+    place(options_button_, lay.right(525), 7, 52, 23);
+    place(quit_button_, lay.right(579), 7, 46, 23);
+
+    // The three pedestal slots of the original (FUN_01028d30, half-open): slot 1 (Move / hatch / ally) (482, 152) - (525, 225),
+    // slot 2 (ability) (539, 152) - (582, 225), slot 3 (Stop) (597, 189) - (628, 227); the hatch and ally pedestals are slot 1 as well
+    place(move_pedestal_button_, lay.right(482), 152, 43, 73);
+    place(ability_pedestal_button_, lay.right(539), 152, 43, 73);
+    place(stop_button_, lay.right(597), 189, 31, 38);
+    place(hatch_button_, lay.right(482), 152, 43, 73);
+    place(team_up_button_, lay.right(482), 152, 43, 73);
+
+    // The authentic Send-to toggle button (532, 443, 44, 24) and the Team toggle button (579, 443, 46, 24): the bottom of the panel
+    place(send_to_button_, lay.right(532), lay.bottom(443), 44, 24);
+    place(team_button_, lay.right(579), lay.bottom(443), 46, 24);
+
+    // The quit confirmation dialog's buttons: dyn_byes1 part (80, 160) + origin (100, 100), dyn_bno1 part (192, 160) + origin (100, 100). A picture of the original's screen
+    place(yes_button_, 180, 260, 49, 24);
+    place(no_button_, 292, 260, 49, 24);
+}
+
+bool HUD::in_slot(int slot, int32_t x, int32_t y) const noexcept {
+    switch (slot) {
+        case 0: return move_pedestal_button_.contains(x, y);
+        case 1: return ability_pedestal_button_.contains(x, y);
+        case 2: return stop_button_.contains(x, y);
+        default: return false;
+    }
 }
 
 void HUD::reset() {
@@ -364,7 +397,7 @@ void HUD::render_status_line(IRenderer& renderer) const {
     if (!status_line_.visible()) return;
     std::string text = status_line_.text();
     while (text.size() > 1 && renderer.get_text_width(text, FontSize::Px12) > 139) text.pop_back();
-    renderer.draw_text(text, 481, 254, ants::assets::ColorRGBA{79, 0, 143, 255}, FontSize::Px12);
+    renderer.draw_text(text, layout_.right(481), 254, ants::assets::ColorRGBA{79, 0, 143, 255}, FontSize::Px12);
 }
 
 // =========================================================================
@@ -382,7 +415,8 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         { 51,  87, 163, 255},  // Blue  (Player 2) - Authentic index 10
         { 87,  87,  91, 255}   // Black (Player 3) - Authentic index 10
     };
-    renderer.fill_rect(480, 22, 160, 458, hud_bg_colors[local_player_id_ % 4]);
+    const LayoutRect panel = layout_.panel_fill();
+    renderer.fill_rect(panel.x, panel.y, panel.w, panel.h, hud_bg_colors[local_player_id_ % 4]);
 
     // 1. The static HUD shell: animation uishell = 14 parts (frame borders, top bar, banner, card, chat boxes, status
     //    box at (479,253)) drawn last part first, exactly as the original composes it. Nothing static is drawn twice.
@@ -524,7 +558,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     // not fit shows its end (the control always has the focus).
     if (options_.state().chat) {
         const bool caret = ((clock_ms() - chat_focus_ms_) / ScreenEdit::CARET_HALF_PERIOD_MS) % 2 == 0;
-        draw_edit_line(renderer, chat_input_, 481, 424, 139, true, caret, assets::ColorRGBA{7, 11, 15, 255}, FontSize::Px12);
+        draw_edit_line(renderer, chat_input_, layout_.right(481), layout_.bottom(424), 139, true, caret, assets::ColorRGBA{7, 11, 15, 255}, FontSize::Px12, layout_.width);
     }
     // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
     if (!options_.state().chat) {
@@ -610,8 +644,9 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
 void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
                        const sim::WorldState& world, const ViewportCamera& camera) {
     // The minimap frame (x599y35) is part of the uishell composite. The map image itself is 119x91 at (480,35).
-    const int32_t rx = 480, ry = 35;
-    const int32_t rw = 119, rh = 91;
+    const LayoutRect mini = layout_.minimap();
+    const int32_t rx = mini.x, ry = mini.y;
+    const int32_t rw = mini.w, rh = mini.h;
 
     if (world.width == 0 || world.height == 0 || world.cells.size() != static_cast<size_t>(world.width) * world.height) {
         renderer.fill_rect(rx, ry, rw, rh, {0, 0, 0, 255});
@@ -723,8 +758,8 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
 
     // The view frame (0x1009ae2 - 0x1009b6f, drawn last with GDI FrameRect in (251, 251, 255)): the size of the view scaled down plus one, at the view's origin scaled down, moved
     // inside the image when it would end beyond its right or bottom edge
-    const int32_t frame_w = to_image_x(PLAYFIELD_W) + 1;
-    const int32_t frame_h = to_image_y(PLAYFIELD_H) + 1;
+    const int32_t frame_w = to_image_x(layout_.view().w) + 1;
+    const int32_t frame_h = to_image_y(layout_.view().h) + 1;
     int32_t fl = rx + to_image_x(static_cast<int32_t>(camera.x));
     int32_t ft = ry + to_image_y(static_cast<int32_t>(camera.y));
     int32_t fr = fl + frame_w;
@@ -747,21 +782,13 @@ void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& as
 // The slots (FUN_0100dbe2 0x100e1f0 - 0x100e222): the local team gets the top bar's rectangles (0x1002218), every other team k the next of the three bottom rectangles
 // (0x10021b8 + 32 slot, slot = the number of other teams with a lower index), whether the team exists or not
 void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, uint8_t team) {
-    struct Slot {
-        int32_t label_left;
-        int32_t label_right;
-        int32_t top;
-        int32_t box_left;
-    };
-    static const Slot kBottom[3] = {{5, 101, 464, 105}, {163, 251, 464, 254}, {312, 399, 464, 402}};
-    static const Slot kLocal{312, 399, 4, 402};
-    Slot slot = kLocal;
+    ScoreSlot slot = layout_.score_slot(0);                                                   // the local team's slot: the top bar's
     if (team != local_player_id_) {
         size_t index = 0;
         for (uint8_t k = 0; k < team; ++k) {
             if (k != local_player_id_) ++index;
         }
-        slot = kBottom[std::min<size_t>(index, 2)];
+        slot = layout_.score_slot(1 + index);                                                 // the others': the bottom strip's slots (a slot past the third repeats it)
     }
     const bool exists = ((roster_mask_ >> team) & 1u) != 0;
 
@@ -1274,7 +1301,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     if (input_lock_ticks_ > 0) return true;
     if (!is_input_captured() &&
         edge_scroll_step(x, y, 0, camera.world_x, camera.world_y, static_cast<int32_t>(sim.grid().width()),
-                         static_cast<int32_t>(sim.grid().height())).dir >= 0) {
+                         static_cast<int32_t>(sim.grid().height()), layout_).dir >= 0) {
         return true;
     }
 
@@ -1288,7 +1315,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // The press saves its point and captures the view under it (FUN_01028751); the order is given at the release (FUN_01027b51)
         right_press_x_ = x;
         right_press_y_ = y;
-        right_capture_ = in_minimap_rect(x, y) ? 2 : (in_map_rect(x, y) ? 1 : 0);
+        right_capture_ = over_minimap(x, y) ? 2 : (over_map(x, y) ? 1 : 0);
         return right_capture_ != 0;
     }
 
@@ -1329,11 +1356,11 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
 
     // The press captures the view under it (FUN_01028751): the minimap (the view follows in the input ticks while the button is held),
     // then the map (a rubber band that is decided at the release)
-    if (in_minimap_rect(x, y)) {
+    if (over_minimap(x, y)) {
         is_radar_dragging_ = true;
         return true;
     }
-    if (in_map_rect(x, y)) {
+    if (over_map(x, y)) {
         is_dragging_ = true;
         drag_start_x_ = x;
         drag_start_y_ = y;
@@ -1422,7 +1449,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     const bool no_edge = captured_before || (right && right_capture_ != 0);
     const bool in_strip = !no_edge &&
         edge_scroll_step(x, y, 0, camera.world_x, camera.world_y, static_cast<int32_t>(sim.grid().width()),
-                         static_cast<int32_t>(sim.grid().height())).dir >= 0;
+                         static_cast<int32_t>(sim.grid().height()), layout_).dir >= 0;
 
     if (button == SDL_BUTTON_LEFT) {
         if (!in_strip) {
@@ -1439,7 +1466,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         }
         if (!in_strip) pointer_release(sim, camera, x, y, is_shift_held() || (mod & KMOD_SHIFT) != 0);
         is_dragging_ = false;
-        return was_dragging || in_map_rect(x, y);
+        return was_dragging || over_map(x, y);
     }
     if (right) {
         const int capture = right_capture_;
@@ -1520,9 +1547,9 @@ bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int
     const int32_t rate = options_.state().scroll_speed;       // the profile's Scroll Speed 0 .. 99 (FUN_01027329: the half extent is rate + 10)
     EdgeScroll step;
     if (is_radar_dragging_) {
-        step = minimap_scroll_step(mouse_x, mouse_y, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
+        step = minimap_scroll_step(mouse_x, mouse_y, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h), layout_);
     } else if (!is_input_captured()) {
-        step = edge_scroll_step(mouse_x, mouse_y, rate, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
+        step = edge_scroll_step(mouse_x, mouse_y, rate, camera.world_x, camera.world_y, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h), layout_);
     }
     if (step.dx == 0 && step.dy == 0) return false;
     camera.scroll_pixels(step.dx, step.dy, map_w, map_h);
@@ -1659,7 +1686,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             int32_t dx = 0;
             int32_t dy = 0;
             detail::scroll_to_show(std::max(ant->px - 128, 0), std::max(ant->py - 128, 0), std::min(ant->px + 128, map_w), std::min(ant->py + 128, map_h),
-                                   camera.world_x, camera.world_y, dx, dy);
+                                   camera.world_x, camera.world_y, dx, dy, layout_.view().w, layout_.view().h);
             camera.x = static_cast<float>(camera.world_x);          // (both fields describe the same origin)
             camera.y = static_cast<float>(camera.world_y);
             camera.scroll_pixels(dx, dy, world.width, world.height);
@@ -1787,7 +1814,7 @@ void HUD::relayout_chat() {
         top = entry.bottom() + 1;
     }
     chat_content_end_ = top;
-    const int32_t limit = std::max(0, chat_content_end_ - kChatViewH);
+    const int32_t limit = std::max(0, chat_content_end_ - layout_.chat_view().h);
     chat_follow_pos_ = std::min(chat_follow_pos_, limit);
     chat_follow_target_ = std::min(chat_follow_target_, limit);
     chat_drag_offset_ = std::min(chat_drag_offset_, limit);
@@ -1806,12 +1833,13 @@ void HUD::push_chat_entry(std::string header, const std::string& message, uint8_
     const int32_t bottom = entry.bottom();
     chat_content_end_ = bottom + 1;
     chat_entries_.push_back(std::move(entry));
-    if (kChatViewH < chat_content_end_ - chat_follow_pos_) {
+    const int32_t view_h = layout_.chat_view().h;
+    if (view_h < chat_content_end_ - chat_follow_pos_) {
         if (chat_follow_pos_ == chat_follow_target_) {
             chat_follow_task_ = true;
             chat_follow_due_ms_ = clock_ms();                   // AddTask(task, 0, 50 ms, 0): the first pass is the next one
         }
-        chat_follow_target_ = bottom - kChatViewH;
+        chat_follow_target_ = bottom - view_h;
     }
 }
 
@@ -1847,15 +1875,16 @@ void HUD::update_chat_tasks() {
     }
     if (chat_scroll_task_ && static_cast<int32_t>(now - chat_scroll_due_ms_) >= 0) {
         // the pointer of the last press or drag event: outside the view the log scrolls 15 px per pass (up while it is above the view, down from below)
-        if (!in_chat_view(chat_drag_x_, chat_drag_y_)) chat_scroll_by(chat_drag_y_ >= kChatViewY ? -kChatScrollStep : kChatScrollStep);
+        if (!in_chat_view(chat_drag_x_, chat_drag_y_)) chat_scroll_by(chat_drag_y_ >= layout_.chat_view().y ? -kChatScrollStep : kChatScrollStep);
         chat_scroll_due_ms_ = now + kChatScrollPeriodMs;
     }
 }
 
 // 0x101228a: the dragged position moves by `delta` inside the log (only when the log is at least as high as the view)
 void HUD::chat_scroll_by(int32_t delta) noexcept {
-    if (kChatViewH <= chat_content_end_) {
-        const int32_t room_below = (chat_content_end_ - kChatViewH) - chat_drag_offset_;
+    const int32_t view_h = layout_.chat_view().h;
+    if (view_h <= chat_content_end_) {
+        const int32_t room_below = (chat_content_end_ - view_h) - chat_drag_offset_;
         const int32_t room_above = -chat_drag_offset_;
         const int32_t d = std::min(std::max(delta, room_above), room_below);
         chat_drag_offset_ += d;
@@ -1895,15 +1924,16 @@ void HUD::render_chat_log(IRenderer& renderer) {
         {39, 39, 59, 255}, {43, 39, 107, 255}, {119, 0, 0, 255}, {7, 67, 47, 255}, {79, 0, 143, 255}, {7, 11, 15, 255}};
     const int32_t offset = chat_view_offset();
     const int32_t line = font_cell_height(FontSize::Px12);
-    renderer.set_clip_rect(kChatViewX, kChatViewY, kChatViewW, kChatViewH);
+    const LayoutRect view = layout_.chat_view();
+    renderer.set_clip_rect(view.x, view.y, view.w, view.h);
     for (const ChatEntry& entry : chat_entries_) {
         if (entry.bottom() <= offset) continue;
-        if (entry.top >= offset + kChatViewH) break;
-        const int32_t y = kChatViewY + entry.top - offset;
-        draw_single_line_label(renderer, entry.header, kChatViewX, y, kChatViewW, true, kChatColours[std::min<size_t>(entry.colour, 5)], FontSize::Px12);
+        if (entry.top >= offset + view.h) break;
+        const int32_t y = view.y + entry.top - offset;
+        draw_single_line_label(renderer, entry.header, view.x, y, view.w, true, kChatColours[std::min<size_t>(entry.colour, 5)], FontSize::Px12);
         int32_t body_y = y + entry.header_h;
         for (const std::string& body_line : entry.body_lines) {
-            renderer.draw_text(body_line, kChatViewX + kChatBodyX, body_y, kChatColours[5], FontSize::Px12);
+            renderer.draw_text(body_line, view.x + kChatBodyX, body_y, kChatColours[5], FontSize::Px12);
             body_y += line;
         }
     }

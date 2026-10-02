@@ -184,6 +184,7 @@ SERVER_STATUS=0
 AI_STATUS=0
 SERVER_E2E_STATUS=0
 VIEW_FINGERPRINT_STATUS=0
+SCREEN_LAYOUT_STATUS=0
 APP_STATUS=0
 E2E_STATUS=0
 START_TIME=$(date +%s)
@@ -524,6 +525,13 @@ if [ "$RUN_APP" -eq 1 ]; then
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
     "./$BUILD_DIR/tests/test_app/test_start_menu_app"
     START_MENU_APP_STATUS=$?
+
+    echo ""
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    echo -e "${BOLD}${BLUE}>>> 3.13 RUNNING SCREEN LAYOUT SUITE (the picture's geometry as numbers and every consumer of it: HUD, scroll, pointer, plate, renderer)...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    "./$BUILD_DIR/tests/test_app/test_screen_layout"
+    SCREEN_LAYOUT_STATUS=$?
 fi
 
 # 6. Execute E2E Opaque-Box Tests
@@ -875,6 +883,13 @@ if [ "$RUN_APP" -eq 1 ]; then
         echo -e " 3.12 Start Menu Application (test_start_menu_app):  ${GREEN}PASSED${RESET}"
     else
         echo -e " 3.12 Start Menu Application (test_start_menu_app):  ${RED}FAILED (exit code ${START_MENU_APP_STATUS})${RESET}"
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+
+    if [ "$SCREEN_LAYOUT_STATUS" -eq 0 ]; then
+        echo -e " 3.13 Screen Layout (test_screen_layout):            ${GREEN}PASSED${RESET}"
+    else
+        echo -e " 3.13 Screen Layout (test_screen_layout):            ${RED}FAILED (exit code ${SCREEN_LAYOUT_STATUS})${RESET}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
 fi

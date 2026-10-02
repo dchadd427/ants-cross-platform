@@ -18,6 +18,8 @@
 #include <cstdint>
 #include <string>
 
+#include "ants_app/screen_layout.hpp"
+
 namespace ants::app {
 
 struct NetOverlayInput {
@@ -42,5 +44,14 @@ struct NetOverlayLine {
 inline constexpr uint32_t NET_WAIT_MESSAGE_MS = 1000;
 
 NetOverlayLine net_overlay_line(const NetOverlayInput& in);
+
+/// Where the line is drawn: the text is centred in the map view `view`, 5 rows below its top, on a dark box with 6 px on the sides and 3 px above and below it. (For the original's
+/// view (16, 21, 442, 440) the text starts at (17 + (441 - w) / 2, 26).)
+struct NetOverlayBox {
+    int32_t text_x{0};
+    int32_t text_y{0};
+    LayoutRect box;
+};
+NetOverlayBox net_overlay_box(const LayoutRect& view, int32_t text_w, int32_t text_h);
 
 }  // namespace ants::app

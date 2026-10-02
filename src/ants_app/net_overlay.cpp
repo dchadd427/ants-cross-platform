@@ -24,4 +24,12 @@ NetOverlayLine net_overlay_line(const NetOverlayInput& in) {
     return line;
 }
 
+NetOverlayBox net_overlay_box(const LayoutRect& view, int32_t text_w, int32_t text_h) {
+    NetOverlayBox out;
+    out.text_x = view.x + 1 + (view.w - 1 - text_w) / 2;
+    out.text_y = view.y + 5;
+    out.box = LayoutRect{out.text_x - 6, out.text_y - 3, text_w + 12, text_h + 6};
+    return out;
+}
+
 }  // namespace ants::app

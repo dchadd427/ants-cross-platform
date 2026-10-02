@@ -121,7 +121,7 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
             renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
         }
     } else {
-        renderer.fill_rect(0, 0, 640, 480, assets::ColorRGBA{219, 75, 19, 255});
+        renderer.fill_rect(0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight, assets::ColorRGBA{219, 75, 19, 255});
     }
 
     // 2. While the scores are awaited: the label (100, 350) 385 x 50, 20 px high lines; nothing else

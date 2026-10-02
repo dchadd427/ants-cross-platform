@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 
+#include "ants_app/fps_overlay.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_net/netgame.hpp"
 
@@ -74,8 +75,13 @@ struct LatencyCornerLayout {
 /// delay_text(9999) and the gap between them: the choice of the layout is made with it, so that it never flips with the numbers), `text_h` the height of a 12 px text,
 /// `version_x` the left edge of the version text and `text_y` the top of the corner row's texts (the frame rate's), `left_limit` one of the LATENCY_LEFT_LIMIT_ values.
 LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32_t widest_w, int32_t text_h, int32_t version_x, int32_t text_y, int32_t left_limit);
+/// ... in the corner of a canvas of another size (`corner`: where the frame rate text ends and where the plate begins); the version above is the original's 640 x 480 corner
+LatencyCornerLayout layout_latency_corner(int32_t ping_w, int32_t delay_w, int32_t widest_w, int32_t text_h, int32_t version_x, int32_t text_y, int32_t left_limit,
+                                          const CornerPlate& corner);
 
 /// Draws the readout (the calls are the two texts and nothing else: no plate, no frame)
 void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit);
+/// ... in the corner of a canvas of another size
+void draw_latency_corner(IRenderer& renderer, const LatencyReadout& readout, int32_t version_x, int32_t text_y, int32_t left_limit, const CornerPlate& corner);
 
 }  // namespace ants::app
