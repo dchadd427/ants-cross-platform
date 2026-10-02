@@ -622,3 +622,210 @@ fingerprints did not move; four wide fingerprints did, on purpose (`hud.wide.opt
 **Two tests that pinned what the pieces change together**: `test_wide_hud` `[screens]` (the way back from a running match to the setup screen: the setup screen is the whole canvas
 of the wide picture and no page, so the pointer stays where it is; the results page, which is a page, still clamps it) and `test_start_menu_app` A2.2 (`click_fog` takes the fog button's own
 rectangle: a command line is the 16:9 picture by default, whose setup screen has its buttons elsewhere than the original's page).
+
+## M4: the mouse-wheel zoom (what it does, what is left for the touch work)
+
+Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel over the map view zooms between 0.5, 1 and 2 towards the pointer. **At the zoom 1 nothing changed**: the 551 fingerprints of suite 3.10 (classic, wide, start menu) did not move, and no existing test was rewritten. M0's list of the places that read the view's size (`The view size is read by` in M3 above) is what M4 separated: the view's rectangle ON THE SCREEN (`ScreenLayout::view()`, unchanged) from the WORLD that it shows (`view / zoom` world pixels).
+
+### What it does
+
+- **The model** (`include/ants_app/view_zoom.hpp`, pure, no SDL): `kLevels` 0.5 / 1 / 2 (powers of two: every number is exact in a float and a double), `visible(len, z)` (the world pixels that `len` screen pixels show, rounded up), `grid(z)` (the camera origin's grid, ONE SCREEN PIXEL: 2 world pixels at 0.5, 1 at 1, 0.5 at 2), `snap`, `world_at` / `world_edge_up` (screen offset to world pixel: the left / top edge rounds down, the right / bottom edge of a rubber band up), `Limits` (`any()` or `no_zoom_out()`), `offered` / `step` / `level_for_match`, `clamp_origin`, `zoomed` (the camera after a zoom that keeps the point under the pointer), `wheel_amount`, `WheelAccumulator`, `level_name`, `parse_level`.
+- **Anchoring.** `origin' = origin + anchor / zoom - anchor / zoom'`, snapped to the new zoom's grid and clamped. The snap is the only error: at most half a screen pixel; for 1 -> 2 it is exactly zero; for 1 -> 0.5 it is zero at an even offset and one world pixel off at an odd one (a 2-pixel grid); for 2 -> 1 from a half-pixel origin it is half a world pixel. The clamps come after the anchor, so at the edge of a map the point under the pointer moves (nothing beyond the map is shown). A map smaller than the view on an axis is centred and fixed there (M3's rule, now with the visible extent), truncated toward zero as the original's integer division does.
+- **Which levels are offered** (`zoom::offered`): level 1 always (it is the original's picture); level 2 when the limits allow; level 0.5 when the limits allow it AND the level above it does not already show the whole map (a 12 x 12 map in the classic view is 384 px: at 1 the view of 442 x 440 shows all of it, so 0.5 would only add black). Limits: a local game and a game with bots `any()`, a match of the network (`net()->active()`, a server's room or a LAN game, host or guest) `no_zoom_out()`: **0.5 would show more of the map than the other players see**. A match of the network that starts resets a remembered 0.5 to 1 (`apply_match_zoom`, called by `init` and `load_match`) without changing the remembered level, so the next local game gets it back.
+- **The wheel.** `Application::handle_mouse_wheel`: SDL's `y` / `precise_y`, `direction == SDL_MOUSEWHEEL_FLIPPED` undone (see below), added up by `WheelAccumulator` (a notch is a step; 0.4 + 0.4 + 0.4 is one step with 0.2 left; more than 500 ms of pause forgets the left-over; a reversal starts from nothing), then `step_zoom(direction, mouse_x, mouse_y)`. **Gate** (`view_zoom_allowed(x, y)`): a renderer, the state Playing, no results (scorecard) open, the pointer inside the window, `HUD::view_zoom_allowed()` (no dialog or page open: `!is_modal_open()`; no captured press: `!is_input_captured()`; no chat log drag), and the pointer over the map view (`HUD::over_map`). The **middle button** is swallowed by `handle_mouse_button` before the HUD sees it (the original has no use for it) and a press over the map view sets the zoom to 1 towards the pointer. Typing in the chat box is deliberately not a block: the chat box is always active in the original, and a player who types can still look around.
+- **Direction.** `wheel_amount(y, precise_y, flipped)`: up (rolled away from the user) is positive: zoom in. `SDL_MOUSEWHEEL_FLIPPED` says the system already inverted the numbers (macOS "natural scrolling", Windows and Linux touchpads set to it) and that a program that wants the physical direction multiplies by -1; the code does that, so the physical direction decides. This is a judgment call (the task said "SDL flipped direction is honoured"): the physical direction decides on a native build whatever the system's setting is. On the web the browser reports deltas that it has already adjusted to the user's setting, and the code cannot know the physical direction there; that part is reasoned, not tested in a browser. If the owner prefers the system's direction on native too, it is the one line `return flipped ? -amount : amount;` of `wheel_amount` (and the tests of the group "wheel", which spell out both).
+- **The camera.** `ViewportCamera` gained `zoom`, `visible_w / visible_h`, `world_x_at(offset)` / `world_x_edge(offset)` (and y), `origin_screen_x / y`, `centre_world_x / y`, `scroll_screen(dx, dy)` (the edge scroll's whole screen pixels), `set_origin`, `set_zoom`. `clamp_to_bounds` keeps the exact old arithmetic at zoom 1 (no change for the classic and wide pictures); `center_on`, `world_to_screen` and `screen_to_world` take the zoom into account. **`Renderer::world_view()`** replaced `layout_.view()` in all world code (culling of terrain, objects, ants, effects, fog, markers, bubbles; the clip), and `map_view_rect` is zoom-aware.
+- **Drawing** (`Renderer::begin_world_target`, `end_world_target`). At zoom 1 the world is drawn directly into the view, as before. At another zoom (or with the test hook `set_force_world_target(true)`) the pass camera is a camera of zoom 1 whose view is an offscreen target of `visible + 1` pixels (the extra row and column cover a half-pixel origin); the target is cleared to black, the world is drawn into it exactly as at zoom 1 (so every sprite, the fog's autotiles and the sorting are the original's), and it is copied into the view: nearest filter at 2, linear at 0.5. The copy is one step when the copy is exactly the view; when the origin is a half pixel or the size is odd it goes through `scaled_target_` and a 1:1 crop (SDL's software renderer rounds the source of a clipped scaled copy, which shifted the picture by a pixel). The hit point digits (Ctrl+L) are queued during the pass and drawn after the copy at one size (queued only when the real zoom is not 1, so the zoom 1 path is untouched); the tile grid overlay (a debug aid) is drawn on the screen after the copy and follows the zoom; the cursor, rubber band and the frame are screen items. If the target cannot be made, the zoom 1 picture is drawn and the camera is reset to 1 (the player never sees a zoom that is not drawn); `zoom_kept` is read before `begin_world_target` resets the pass camera.
+- **Edge scroll, arrows, minimap.** `edge_scroll_step_px` and `minimap_scroll_step_px` (screen pixels; the older functions are the same numbers times 32 for the tiles form), `minimap_point_px`, `start_view_origin(..., zoom)` (the visible extent); `HUD::edge_step(camera, ...)` and `HUD::input_tick` scroll with `camera.scroll_screen` so the same distance on the screen is covered at every zoom, the arrows (cursor choice) test what the camera can still do in screen pixels, `HUD::render_radar` draws the frame of the visible world, a minimap press centres the visible world, and `Ctrl+N` / `Ctrl+P` and the sound listener use the centre of the visible world. The cursor, clicks, orders, the rubber band and the hill brackets convert through `world_at` / `world_edge_up`.
+- **Settings and command line.** `ApplicationConfig::zoom` / `zoom_given`, `--zoom`, the key `zoom` (`choose_zoom`: the command line wins, then the settings file; a value that is not exactly 0.5, 1 or 2 is reported on stderr and ignored; the command line refuses it). `set_zoom` persists the level (`config_store_.set_string`) and `zoom_wanted_`; the reset of a network match is not persisted.
+- **The API for touch** (all public): `Application::set_zoom(level, anchor_x, anchor_y)` returns whether the level is offered now and sets the camera with the anchored origin; `step_zoom(direction, anchor_x, anchor_y)`; `zoom()`; `zoom_levels()` (the offered levels, ascending); `zoom_limits()`; `view_zoom_allowed(x, y)`; `remembered_zoom()`. A pinch calls `set_zoom` (or `step_zoom`) with the midpoint of the fingers in canvas pixels; the HUD's own gate is the same one that the wheel uses.
+- **The web page** (`web/shell.html`): `canvas.addEventListener('wheel', e => e.preventDefault(), {passive: false})` so that the wheel never scrolls the page; a trackpad's pinch arrives as ctrl + wheel events (Chrome, Firefox, Edge), which the same listener cancels (no browser page zoom); Safari's `gesturestart / gesturechange / gestureend` are cancelled and the scale change is turned into synthetic ctrl + wheel events (a change of 25 % in scale is one notch of 100 delta units). SDL's Emscripten handler for `wheel` already returns "handled". **Checked by reading** (the base page is 4:3 and M5 reshapes it); no browser was driven for M4.
+
+### Known limits
+
+- **0.5 at a fractional window scale.** The canvas is scaled into the window by SDL (M2); the half-size picture is smoothed by SDL's linear filter in the copy and then scaled again, so the seams of M2 and M3's "known limit" apply as they did (a software-renderer property of fractional scales).
+- **0.5 is a smoothed picture, not the original's art.** The world pass draws at zoom 1 and the copy halves it: sprites are blended with their neighbours. This is how a zoom-out of pixel art looks; the digits and the frame stay crisp.
+- **0.5 on the accelerated renderer is checked less closely than on the software renderer.** Suites 3.19 and 3.20 run the software renderer (SDL's dummy video driver) and compare the 0.5 picture with the 2 x 2 average within one level; the zoom 2 picture of the accelerated renderer (Metal, a hidden window of 3840 x 2160 pixels, a scratch tool that is not in the repository) was compared with the enlarged zoom 1 picture and equals it (0 of 6,096,000 window pixels differ, at a whole and a half-pixel origin), and its 0.5 picture was looked at (screenshots) and timed, not compared pixel by pixel.
+- **No keyboard zoom.** The original has no arrow-key or keyboard scroll and the remake none; M4 added only the wheel, the middle button and the API. A keyboard zoom, if wanted, is `step_zoom` from a key handler.
+- **Not zoomed**: the minimap (it shows the whole map), the frame and every window, the hit point digits' size, the cursors, the status line.
+
+### What is left (touch, M5)
+
+- **A pinch** calls the API above; the gestures (two-finger scroll, a long press for the right button) are not built.
+- **The web page**: verified by reading only; the 16:9 web page (M5) must keep the listeners.
+
+### Proof
+
+- **Suite 3.18 `test_zoom_model`** (176,551 checks), **3.19 `test_zoom_view`** (4,501 checks, about 4 s) and **3.20 `test_zoom_fingerprint`** (126 fingerprints, 259 checks): see the README's table of suites. The first is pure numbers with every expectation written out independently of the header; the second drives the real renderer (the software renderer under SDL's dummy video driver), HUD and application and compares the pictures **with each other** (the target path with the direct path, the zoom 2 picture with the enlarged zoom 1 picture, the zoom 0.5 picture with its 2 x 2 average); the third pins the pictures and the pointer at 0.5 and 2 as 64-bit numbers, the way suite 3.10 pins the zoom 1. Every other suite is unchanged and passes, **including all 551 fingerprints of 3.10 (zoom 1 is exactly today's picture)**. The same hashes come out on macOS (clang, SDL 2.32.10) and Debian 12 (GCC 12.2, SDL 2.26.5).
+- **A test hook for each path that cannot happen in the game**: `Renderer::set_force_world_target(true)` makes the zoom 1 pass go through the offscreen target (the equality test of the two paths), `set_fail_world_target(true)` makes the target impossible (the fall-back to the zoom 1 picture), and `world_target_passes()` counts the passes through the target (the zoom 1 never uses it; the forced and the zoomed pass use it once), so that a test that compares two paths can see that it really took the one it asks for (mutation RN29 found a comparison of the direct path with itself).
+- **Mutations** (one change at a time in a scratch copy, the three suites rebuilt and run, the file restored; the older suites 3.10, 3.13, 3.15, 3.4, 3.5 and 3.11 are run for a mutation that none of the three kills): 153 mutations of the model, the camera, the renderer, the HUD, the edge scroll and the application (a zoom that does not anchor, a clamp that is not applied, a grid of the wrong size, a flipped wheel that is not undone, a limit that does not apply in a network match, a filter swapped, the digits drawn at the zoom's size, a copy that drops the half pixel, a zoom-out offered on a map that fits, a middle button that reaches the HUD ...). **148 are killed by the three new suites, 1 by the older suites only (ES06: the tiles form of the minimap scroll, used by 3.10, 3.13 and 3.4), and 4 are equivalent** (explained in the table: a map exactly as large as the view is 0 either way, the whole part of the camera's origin is always the floor of it, `set_zoom` asks again what `step_zoom` asked, and the start view scrolls from an origin that was set to 0 one line before). How the table came about: the first run (148 mutations) left 14 that no suite killed; ten of them got tests (the right click on an ant at a zoom, Ctrl+N and Ctrl+P at half-pixel origins and where the view has to move right and down, an anchor outside the view in x and in y, `zoom_levels()` in a match of the network, the level 1 under any limits, the fall-back of the world pass and a pass counter: RN29, a hook that made a "forced pass" compare the direct path with itself, was found that way), four are the equivalents, and five mutations were added for the new hooks. **Then a flaw of the runner showed: it read the exit code of `tail`, not of `cmake`, so a mutation that did not compile (an unused variable or parameter is an error under -Werror) was run against the binaries of the mutation before it, and was counted as killed or as a survivor by those (AP28 "survived" twice and was "killed" once for that reason).** The runner now stops at a build error; the whole set of 153 was run again on the final tree, 11 mutations did not compile (VZ15, VZ18, VZ23, VZ24, CM08, RN10, RN20, AP12, ES02, ES04, RN36), they were rewritten to compile (an `(void)` for a variable that became unused, `true ||` for a condition that is bypassed) and run again: the table below is that run. The numbers under "killed by" count the FAIL lines that a suite prints (at most 80 per suite).
+
+| # | Mutation | Killed by (suite: failing checks) |
+|---|---|---|
+| M4-VZ01 | `view_zoom.hpp`: visible() rounds down | killed (3.18: 1, 3.19: 25, 3.20: 4) |
+| M4-VZ02 | `view_zoom.hpp`: the grid is a world pixel at every zoom | killed (3.18: 60, 3.19: 57, 3.20: 8) |
+| M4-VZ03 | `view_zoom.hpp`: snap rounds down | killed (3.18: 60) |
+| M4-VZ04 | `view_zoom.hpp`: snap_toward_zero floors | killed (3.18: 1) |
+| M4-VZ05 | `view_zoom.hpp`: world_at rounds up | killed (3.18: 60, 3.19: 80, 3.20: 12) |
+| M4-VZ06 | `view_zoom.hpp`: the edge of a pixel rounds down | killed (3.18: 60, 3.19: 2, 3.20: 2) |
+| M4-VZ07 | `view_zoom.hpp`: the lower limit is not enforced (a network match could zoom out) | killed (3.18: 56, 3.19: 11) |
+| M4-VZ08 | `view_zoom.hpp`: the upper limit is not enforced | killed (3.18: 4) |
+| M4-VZ09 | `view_zoom.hpp`: no zoom in is offered | killed (3.18: 60, 3.19: 80, 3.20: 4) |
+| M4-VZ10 | `view_zoom.hpp`: a zoom-out is offered only when the map exceeds BOTH axes | killed (3.18: 5) |
+| M4-VZ11 | `view_zoom.hpp`: the edge of the fit rule in x | killed (3.18: 1) |
+| M4-VZ12 | `view_zoom.hpp`: the edge of the fit rule in y | killed (3.18: 1) |
+| M4-VZ13 | `view_zoom.hpp`: the level above is the level itself | killed (3.18: 12, 3.19: 6, 3.20: 1) |
+| M4-VZ14 | `view_zoom.hpp`: step goes the other way | killed (3.18: 60, 3.19: 57) |
+| M4-VZ15 | `view_zoom.hpp`: step does not skip a level that is not offered | killed (3.18: 38) |
+| M4-VZ16 | `view_zoom.hpp`: a current level that is no level counts as 0.5 | killed (3.18: 24) |
+| M4-VZ17 | `view_zoom.hpp`: direction 0 steps out | killed (3.18: 24) |
+| M4-VZ18 | `view_zoom.hpp`: a match starts at the remembered level whatever is offered | killed (3.18: 58, 3.19: 9) |
+| M4-VZ19 | `view_zoom.hpp`: a map exactly as large as the view is clamped, not centred (equivalent: both give 0) | equivalent: a map exactly as large as the view gives 0 whether it is clamped to [0, 0] or centred |
+| M4-VZ20 | `view_zoom.hpp`: a small map is centred even without the flag | killed (3.18: 60, 3.20: 1) |
+| M4-VZ21 | `view_zoom.hpp`: the anchor ignores the old zoom | killed (3.18: 60, 3.19: 8) |
+| M4-VZ22 | `view_zoom.hpp`: the zoomed origin is not put on the grid | killed (3.18: 60) |
+| M4-VZ23 | `view_zoom.hpp`: the y anchor is the x anchor | killed (3.18: 60, 3.19: 10) |
+| M4-VZ24 | `view_zoom.hpp`: natural scrolling is not undone | killed (3.18: 1, 3.19: 80) |
+| M4-VZ25 | `view_zoom.hpp`: the whole amount beats the precise one | killed (3.18: 1) |
+| M4-VZ26 | `view_zoom.hpp`: a change of direction keeps the fraction | killed (3.18: 2, 3.19: 1) |
+| M4-VZ27 | `view_zoom.hpp`: a pause never forgets the fraction | killed (3.18: 1, 3.19: 18) |
+| M4-VZ28 | `view_zoom.hpp`: the stale time counts one ms early | killed (3.18: 1) |
+| M4-VZ29 | `view_zoom.hpp`: a step swallows the left-over fraction | killed (3.18: 10, 3.19: 4) |
+| M4-VZ30 | `view_zoom.hpp`: the steps of one event are not bounded | killed (3.18: 1) |
+| M4-VZ31 | `view_zoom.hpp`: a number that rounds to a level is a level | killed (3.18: 2) |
+| M4-VZ32 | `view_zoom.hpp`: any character is accepted in a level (1e0, 0x1) | killed (3.18: 5, 3.19: 1) |
+| M4-VZ33 | `view_zoom.hpp`: level_name of 0.5 | killed (3.18: 1, 3.20: 120) |
+| M4-VZ35 | `view_zoom.hpp`: the level 1 follows the limits (equivalent: min is 1 at most) | killed (3.18: 1) |
+| M4-CM01 | `renderer.cpp`: center_on centres by the screen size at a zoom (x) | killed (3.18: 8, 3.19: 14, 3.20: 8) |
+| M4-CM02 | `renderer.cpp`: center_on centres by the screen size at a zoom (y) | killed (3.18: 8, 3.19: 9, 3.20: 8) |
+| M4-CM03 | `renderer.cpp`: the camera clamp does not snap (x) | killed (3.18: 44, 3.19: 80) |
+| M4-CM04 | `renderer.cpp`: the camera clamp does not snap (y) | killed (3.18: 60) |
+| M4-CM05 | `renderer.cpp`: the camera clamp uses the wrong world size | killed (3.18: 60, 3.19: 80, 3.20: 67) |
+| M4-CM06 | `renderer.cpp`: world_x of the zoomed clamp rounds | killed (3.18: 60, 3.19: 8) |
+| M4-CM07 | `renderer.cpp`: the zoom 1 camera never centres a small map (x) | killed (3.18: 48, 3.19: 2) |
+| M4-CM08 | `renderer.cpp`: set_zoom ignores the anchor | killed (3.18: 2, 3.19: 10) |
+| M4-CM09 | `renderer.cpp`: world_to_screen does not scale (x) | killed (3.18: 60, 3.19: 2, 3.20: 4) |
+| M4-CM10 | `renderer.cpp`: the inside test of world_to_screen ignores the zoom | killed (3.18: 1, 3.20: 1) |
+| M4-CM11 | `renderer.cpp`: screen_to_world ignores the zoom (x) | killed (3.18: 60) |
+| M4-CM12 | `renderer.hpp`: world_x_at ignores the zoom | killed (3.18: 60, 3.19: 80, 3.20: 28) |
+| M4-CM13 | `renderer.hpp`: world_y_at ignores the zoom | killed (3.18: 60, 3.19: 80, 3.20: 30) |
+| M4-CM14 | `renderer.hpp`: the edge of the band rounds down (x) | killed (3.18: 1, 3.19: 2, 3.20: 2) |
+| M4-CM15 | `renderer.hpp`: the edge of the band ignores the zoom (y) | killed (3.19: 4, 3.20: 4) |
+| M4-CM16 | `renderer.hpp`: the origin in screen pixels ignores the zoom | killed (3.18: 4, 3.19: 12, 3.20: 16) |
+| M4-CM17 | `renderer.hpp`: the centre of the view ignores the zoom | killed (3.18: 2, 3.20: 4) |
+| M4-CM18 | `renderer.hpp`: scroll_screen moves world pixels | killed (3.18: 20, 3.19: 16) |
+| M4-CM19 | `renderer.hpp`: visible_w ignores the zoom | killed (3.18: 4) |
+| M4-CM20 | `renderer.cpp`: set_zoom accepts any number | killed (3.18: 3) |
+| M4-CM21 | `renderer.hpp`: the origin in screen pixels ignores the zoom (y) | killed (3.18: 4, 3.19: 12, 3.20: 24) |
+| M4-CM22 | `renderer.hpp`: the centre of the view ignores the zoom (y) | killed (3.18: 1, 3.20: 4) |
+| M4-RN01 | `renderer.cpp`: the target has no spare texel in x | killed (3.19: 17, 3.20: 4) |
+| M4-RN02 | `renderer.cpp`: the target has no spare texel in y | killed (3.19: 16, 3.20: 4) |
+| M4-RN03 | `renderer.cpp`: the target starts at the rounded origin (x) | killed (3.19: 22, 3.20: 10) |
+| M4-RN04 | `renderer.cpp`: no half-pixel shift in x | killed (3.19: 17, 3.20: 5) |
+| M4-RN05 | `renderer.cpp`: no half-pixel shift in y | killed (3.19: 16, 3.20: 5) |
+| M4-RN06 | `renderer.cpp`: the target is not cleared | killed (3.19: 1) |
+| M4-RN07 | `renderer.cpp`: the filters are swapped | killed (3.19: 42, 3.20: 54) |
+| M4-RN08 | `renderer.cpp`: the crop does not skip the shift | killed (3.19: 25, 3.20: 6) |
+| M4-RN09 | `renderer.cpp`: the copy is always one step | killed (3.19: 25, 3.20: 6) |
+| M4-RN10 | `renderer.cpp`: the source is the whole target in x | killed (3.19: 11, 3.20: 26) |
+| M4-RN11 | `renderer.cpp`: the copy ignores the shift in x | killed (3.19: 17, 3.20: 4) |
+| M4-RN12 | `renderer.cpp`: the digits are drawn in the pass (they scale) | killed (3.19: 8, 3.20: 48) |
+| M4-RN13 | `renderer.cpp`: the digits are deferred at the zoom 1 too | killed (3.19: 16) |
+| M4-RN14 | `renderer.cpp`: a digit is placed without the zoom (x) | killed (3.19: 8, 3.20: 48) |
+| M4-RN15 | `renderer.cpp`: a digit is placed without the zoom (y) | killed (3.19: 8, 3.20: 48) |
+| M4-RN16 | `renderer.cpp`: the map rectangle ignores the zoom (width) | killed (3.19: 2) |
+| M4-RN17 | `renderer.cpp`: the camera is not put back | killed (3.19: 77, 3.20: 48) |
+| M4-RN18 | `renderer.cpp`: the picture is not put back | killed (3.19: 4) |
+| M4-RN19 | `renderer.cpp`: the origin is not put back | killed (3.19: 2) |
+| M4-RN20 | `renderer.cpp`: the zoom is not restored after a frame | killed (3.19: 16) |
+| M4-RN21 | `renderer.cpp`: the zoom is kept after the pass has set it to 1 (the bug of the first screenshots) | killed (3.19: 47, 3.20: 8) |
+| M4-RN22 | `renderer.hpp`: the world code reads the screen view in the pass | killed (3.19: 76, 3.20: 54) |
+| M4-RN23 | `renderer.cpp`: the tile grid ignores the zoom | killed (3.19: 2) |
+| M4-RN24 | `renderer.cpp`: render_map_layers ignores the zoom | killed (3.19: 1) |
+| M4-RN25 | `renderer.cpp`: the tile grid is drawn in the pass too | killed (3.19: 2) |
+| M4-RN26 | `renderer.cpp`: the pass camera keeps the zoom | killed (3.19: 45, 3.20: 54) |
+| M4-RN27 | `renderer.cpp`: the pass camera keeps the screen view | killed (3.19: 76, 3.20: 54) |
+| M4-RN28 | `renderer.cpp`: the pass draws with the picture and the origin of the screen | killed (3.19: 1) |
+| M4-RN29 | `renderer.cpp`: the force hook does nothing in the world pass (a forced pass compares the direct path with itself) | killed (3.19: 16) |
+| M4-RN30 | `renderer.cpp`: no fallback (equivalent while the target can be made) | killed (3.19: 8) |
+| M4-RN31 | `renderer.cpp`: the copy has the width of the view | killed (3.19: 17, 3.20: 4) |
+| M4-RN32 | `renderer.cpp`: the map rectangle ignores the zoom (left) | killed (3.19: 3) |
+| M4-HD01 | `hud_input.cpp`: over_ground ignores the zoom | killed (3.19: 24, 3.20: 2) |
+| M4-HD02 | `hud_input.cpp`: the cursor ignores the zoom | killed (3.19: 80, 3.20: 25) |
+| M4-HD03 | `hud_input.cpp`: a click ignores the zoom | killed (3.19: 80, 3.20: 12) |
+| M4-HD04 | `hud_input.cpp`: the band edge rounds down | killed (3.19: 2) |
+| M4-HD05 | `hud_input.cpp`: the band start ignores the zoom | killed (3.19: 4) |
+| M4-HD06 | `hud_input.cpp`: the right click on an ant ignores the zoom | killed (3.19: 80) |
+| M4-HD07 | `hud_input.cpp`: the right click on ground ignores the zoom | killed (3.19: 80) |
+| M4-HD08 | `hud.cpp`: the edge scroll ignores the zoom | killed (3.19: 14, 3.20: 14) |
+| M4-HD09 | `hud.cpp`: the edge scroll uses the world origin at a zoom | killed (3.19: 14, 3.20: 31) |
+| M4-HD10 | `hud.cpp`: the edge scroll uses the unscaled map height | killed (3.19: 8, 3.20: 16) |
+| M4-HD11 | `hud.cpp`: the minimap uses the unscaled map width | killed (3.19: 4) |
+| M4-HD12 | `hud.cpp`: the scroll moves world pixels | killed (3.19: 16) |
+| M4-HD13 | `hud.cpp`: Ctrl+N uses the screen view as the world | killed (3.19: 12) |
+| M4-HD14 | `hud.cpp`: Ctrl+N starts from the whole part at a zoom | equivalent: `world_x` is always `floor(x)` (every setter of the camera keeps them together), so the whole part is the same number |
+| M4-HD15 | `hud.cpp`: the minimap frame ignores the zoom (width) | killed (3.19: 16, 3.20: 12) |
+| M4-HD16 | `hud.cpp`: the minimap frame ignores the zoom (height) | killed (3.19: 18, 3.20: 12) |
+| M4-HD17 | `hud.hpp`: the zoom ignores the dialogs | killed (3.19: 19) |
+| M4-HD18 | `hud.hpp`: the zoom ignores a held press | killed (3.19: 18) |
+| M4-HD19 | `hud.hpp`: the zoom ignores the chat log drag | killed (3.19: 1) |
+| M4-HD20 | `hud.cpp`: the edge scroll uses the unscaled map width | killed (3.19: 8, 3.20: 25) |
+| M4-HD21 | `hud.cpp`: Ctrl+N treats every zoom as the plain camera | killed (3.19: 8) |
+| M4-AP01 | `application.hpp`: a network match offers the zoom-out | killed (3.19: 11) |
+| M4-AP02 | `application.cpp`: a match does not take the remembered zoom | killed (3.19: 9) |
+| M4-AP03 | `application.cpp`: the first match does not take the remembered zoom | killed (3.19: 7) |
+| M4-AP04 | `application.cpp`: set_zoom does not check what is offered | killed (3.19: 5) |
+| M4-AP05 | `application.cpp`: the anchor is not held to the view (x) | killed (3.19: 2) |
+| M4-AP06 | `application.cpp`: the level is not remembered | killed (3.19: 3) |
+| M4-AP07 | `application.cpp`: the level is not written to the settings | killed (3.19: 5) |
+| M4-AP08 | `application.cpp`: the wheel acts outside a match | killed (3.19: 1) |
+| M4-AP09 | `application.cpp`: the wheel acts over the results | killed (3.19: 2) |
+| M4-AP10 | `application.cpp`: the wheel acts with the pointer outside the window | killed (3.19: 2) |
+| M4-AP11 | `application.cpp`: the wheel ignores the HUD state | killed (3.19: 24) |
+| M4-AP12 | `application.cpp`: the wheel acts over the panels | killed (3.19: 30) |
+| M4-AP13 | `application.cpp`: a refused wheel event does not reset the accumulator | killed (3.19: 4) |
+| M4-AP14 | `application.cpp`: natural scrolling is not honoured | killed (3.19: 80) |
+| M4-AP15 | `application.cpp`: the wheel away zooms out | killed (3.19: 80) |
+| M4-AP16 | `application.cpp`: the wheel toward zooms in | killed (3.19: 80) |
+| M4-AP17 | `application.cpp`: the middle button also reaches the HUD | killed (3.19: 2) |
+| M4-AP18 | `application.cpp`: the middle button ignores the rules of the wheel | killed (3.19: 10) |
+| M4-AP19 | `application.cpp`: the middle button goes to 2 | killed (3.19: 21) |
+| M4-AP20 | `application.cpp`: the wheel event is not handled | killed (3.19: 1) |
+| M4-AP21 | `application.cpp`: the settings key is not read | killed (3.19: 7) |
+| M4-AP22 | `application.cpp`: the key beats --zoom (and is ignored) | killed (3.19: 8) |
+| M4-AP23 | `application.cpp`: the start view ignores the zoom | killed (3.19: 80, 3.20: 6) |
+| M4-AP24 | `application.cpp`: the listener ignores the zoom (x) | killed (3.19: 80) |
+| M4-AP25 | `application.cpp`: the listener ignores the zoom (y) | killed (3.19: 80) |
+| M4-AP26 | `application.cpp`: --zoom is not an option | killed (3.19: 11) |
+| M4-AP27 | `application.cpp`: step_zoom ignores the kind of match | equivalent: `set_zoom` asks `offered` again, and the three levels are neighbours with 1 always offered, so a step that the limits would have skipped is refused there |
+| M4-AP28 | `application.cpp`: zoom_levels lists every level | killed (3.19: 2) |
+| M4-AP29 | `application.cpp`: set_zoom of the current level says yes | killed (3.19: 6) |
+| M4-AP30 | `application.cpp`: a match starts at the remembered level whatever the kind of match | killed (3.19: 9) |
+| M4-AP31 | `application.cpp`: the start view moves world pixels from the old origin | equivalent: the line before sets the origin to 0, `scroll_pixels` adds to it, and the clamp snaps the origin to the zoom's grid as `set_origin` does |
+| M4-AP32 | `application.cpp`: the anchor is not held to the view (y) | killed (3.19: 2) |
+| M4-ES01 | `edge_scroll.hpp`: the tiles form of the edge scroll has half the map | killed (3.18: 3) |
+| M4-ES02 | `edge_scroll.hpp`: the minimap x scale uses the height | killed (3.18: 2) |
+| M4-ES03 | `edge_scroll.hpp`: the minimap square is a third of the view | killed (3.18: 6, 3.19: 6) |
+| M4-ES04 | `edge_scroll.hpp`: the start view ignores the zoom | killed (3.18: 37, 3.19: 80, 3.20: 6) |
+| M4-ES05 | `edge_scroll.hpp`: the plain start view is the zoom 0.5 one | killed (3.18: 16) |
+| M4-ES06 | `edge_scroll.hpp`: the tiles form of the minimap scroll has half the height | killed by older suites only (3.10: 6, 3.13: 2, 3.4: 2) |
+| M4-ES07 | `edge_scroll.hpp`: the east edge of the scroll is one pixel early | killed (3.18: 2) |
+| M4-RN33 | `renderer.cpp`: the fail hook does nothing (the fall-back is never taken) | killed (3.19: 25) |
+| M4-RN34 | `renderer.cpp`: render_map_layers has no fall-back | killed (3.19: 1) |
+| M4-RN35 | `renderer.cpp`: the pass counter does not count | killed (3.19: 56) |
+| M4-RN36 | `renderer.cpp`: render_map_layers leaves the fall-back camera at the zoom 1 | killed (3.19: 1) |
+| M4-RN37 | `renderer.cpp`: the world pass has no fall-back (second look at RN30, with the test hook) | killed (3.19: 8) |
+
+- **Screenshots** (the `ants` binary, `--headless --map ... --screenshot ... --frames 12 --zoom Z --aspect ...`): GAUNTLET and TINY at 0.5, 1 and 2, in the 16:9 and the classic picture (12 PNGs, kept outside the repository): the hill is half the size / the size / twice the size of the original's, TINY at 0.5 is centred with black around it, the minimap's frame grows and shrinks with the zoom, the digits of Ctrl+L stay one size.
+- **Timings** (a frame is `begin_frame`, `render_world`, `HUD::render` and a one pixel read-back that makes the GPU finish; GAUNTLET, 160 ants with hit point digits, effects and selection markers; 300 frames each, the scratch tool is not in the repository):
+
+| Renderer and window | zoom 1 | zoom 0.5 | zoom 2 |
+|---|---|---|---|
+| software, wide, 960 x 540 window | 0.74 ms | 2.29 ms | 0.65 ms |
+| software, wide, 1920 x 1080 window | 7.31 ms | 4.19 ms | 2.72 ms |
+| Metal, wide, 1920 x 1080 points (3840 x 2160 pixels) | 1.40 ms | 1.44 ms | 1.12 ms |
+| software, classic, 640 x 480 window | 0.47 ms | 1.30 ms | 0.42 ms |
+| software, classic, 1280 x 960 window | 4.37 ms | 2.54 ms | 1.79 ms |
+| Metal, classic | 1.17 ms | 1.08 ms | 0.82 ms |
+
+  The accelerated renderer pays next to nothing for a zoom. The software renderer at 0.5 in a window the size of the canvas costs about 1.5 ms more than the zoom 1 frame (the target and one linear copy); in a window of twice the size, where SDL's software renderer scales every drawing call to the window at the zoom 1, the zoomed frames are cheaper than the zoom 1 frame, probably because the sprites go into a 1:1 target and only one scaled copy follows (not investigated). Metal at zoom 2, whole and half-pixel origin, equals the enlarged zoom 1 picture (0 of 6,096,000 window pixels differ).
