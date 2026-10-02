@@ -3,8 +3,8 @@
 _Updated 2026-10-01 · current release **v0.0.89** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- **v0.0.90 Play online**: host (map, 2–4 players), join by code, seats on the page, in windows or by link · in review
-- **Pointer fix**: the black bars of fullscreen scroll the map; fullscreen keeps the mouse in the window · in review
+- **v0.0.90 Play online**: host (map, 2–4 players), join by code, seats on the page, in windows or by link; desktop and web players in one match verified · in review
+- **Pointer fix**: the black bars of fullscreen scroll the map; fullscreen (incl. the macOS green button) keeps the mouse · fixing 9 review findings
 - **Original program out of the repo** (Ants.exe, its decompilation, the DirectDraw wrapper); tests keep full strength
 - **Widescreen M0**: drawing safety net before the 16:9 work
 
