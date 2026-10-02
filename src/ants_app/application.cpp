@@ -305,6 +305,15 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             }
         } else if (std::strcmp(argv[i], "--start-menu") == 0) {                // forces the start menu (also headless, with --screenshot: the tests and the screenshots)
             menu_forced = true;
+        } else if (std::strcmp(argv[i], "--aspect") == 0) {                      // --aspect 16:9 | 4:3 (nothing else exists yet)
+            std::string why;
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--aspect needs 16:9 or 4:3";
+            } else if (parse_aspect(argv[++i], cfg.aspect, why)) {
+                cfg.aspect_given = true;
+            } else if (cfg.startup_error.empty()) {
+                cfg.startup_error = "--aspect " + why;
+            }
         } else if (std::strcmp(argv[i], "--bot") == 0) {                       // a computer player: --bot SEAT[:SPEC], repeatable (docs/BOTS.md)
             mode_given = true;
             ai::BotSpec spec;
@@ -417,6 +426,12 @@ bool Application::init(const ApplicationConfig& config) {
     midi_player_.set_headless_mode(config_.headless);
     midi_player_.load_file(config_.midi_path);
 
+    // The settings that the program remembers (the original reads its profile in the world's constructor, FUN_0100a2c9): loaded before anything is applied, the aspect among them;
+    // a headless run keeps them in memory only unless --settings names a file
+    config_store_.set_location(!config_.settings_path.empty() ? config_.settings_path : (config_.headless ? std::string() : ConfigStore::default_location()));
+    config_store_.load();
+    choose_aspect();
+
     // 6. Create Desktop Window
     uint32_t win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
     if (config_.fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -452,6 +467,9 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
 
+    renderer_->set_canvas_size(canvas_width_of(aspect_), canvas_height_of(aspect_));         // SDL's logical size: the picture that the window shows
+    picture_ = canvas().centred(layout_.width, layout_.height);                              // the match screen and the pages are the 640 x 480 picture, centred
+    renderer_->set_picture(picture_);
     renderer_->set_layout(layout_);
     renderer_->set_level(current_level_);
 
@@ -461,10 +479,6 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_text_metrics(renderer_.get());
     hud_.set_layout(layout_);
     hud_.init(0);
-    // The settings that the program remembers (the original reads its profile in the world's constructor, FUN_0100a2c9): loaded before anything is applied;
-    // a headless run keeps them in memory only unless --settings names a file
-    config_store_.set_location(!config_.settings_path.empty() ? config_.settings_path : (config_.headless ? std::string() : ConfigStore::default_location()));
-    config_store_.load();
     hud_.options().load(config_store_);
     hud_.set_config_store(&config_store_);
     local_player_id_ = 0;
@@ -685,8 +699,29 @@ bool Application::init(const ApplicationConfig& config) {
 
 void Application::set_layout(const ScreenLayout& layout) {
     layout_ = layout;
-    if (renderer_) renderer_->set_layout(layout_);
+    picture_ = canvas().centred(layout_.width, layout_.height);
+    if (renderer_) {
+        renderer_->set_picture(picture_);
+        renderer_->set_layout(layout_);
+    }
     hud_.set_layout(layout_);
+}
+
+// --aspect, else the settings' key `aspect`, else 4:3. The web build is 4:3 until its page can show another shape (milestone M5). A settings file never stops the game: a
+// value that is not 16:9 or 4:3 is reported and ignored.
+void Application::choose_aspect() {
+    aspect_ = Aspect::Classic4x3;
+#if !defined(__EMSCRIPTEN__)
+    if (config_.aspect_given) {
+        aspect_ = config_.aspect;
+    } else if (config_store_.has("aspect")) {
+        const std::string text = config_store_.get_string("aspect", "", 16);
+        std::string why;
+        Aspect from_settings = Aspect::Classic4x3;
+        if (parse_aspect(text, from_settings, why)) aspect_ = from_settings;
+        else std::cerr << "[Application] settings: aspect=" << why << " (ignored)" << std::endl;
+    }
+#endif
 }
 
 // 0x10122d4: the stamp is the C runtime's `_strdate` ("mm/dd/yy") and `_strtime` ("hh:mm:ss") joined by " @ " (the format string "%s @ %s\n\n")
@@ -1261,7 +1296,8 @@ void Application::handle_events() {
         left_event_ms = left_event ? event.button.timestamp : 0u;
         if (pointer_gone) pointer_outside_ = true;           // ... marked once that event has been handled (its handlers clear the mark)
         pointer_gone = pointer_gone_after(event, event.type == SDL_MOUSEBUTTONUP && button_outside_window(event.button));   // the position before the clamp
-        clamp_pointer_event(event, layout_);                 // a pointer over a black bar of a wide window is the pointer on the edge of the picture (pointer_clamp.hpp)
+        clamp_pointer_event(event, picture_);                // a pointer over a black bar of a wide window is the pointer on the edge of the picture (pointer_clamp.hpp); the canvas's
+                                                             // position becomes the picture's own (the picture's corner subtracted): the 640 x 480 picture centred in a 960 x 540 canvas
         if (event.type == SDL_QUIT) {
             quit();
             return;
@@ -1272,6 +1308,12 @@ void Application::handle_events() {
 
         // Bypass Print Screen key so OS handles screenshots unimpeded
         if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_PRINTSCREEN) {
+            continue;
+        }
+
+        // Alt+Enter: fullscreen on / off (native builds). The key is the window's, not a screen's: no screen sees it (Enter would send the chat text), and a held key toggles once.
+        if (event.type == SDL_KEYDOWN && (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER) && (event.key.keysym.mod & KMOD_ALT) != 0) {
+            if (event.key.repeat == 0) toggle_fullscreen();
             continue;
         }
 
@@ -1456,6 +1498,21 @@ void Application::update_mouse_grab() {
 #endif
 }
 
+bool Application::toggle_fullscreen() {
+#if defined(__EMSCRIPTEN__)
+    return false;                                         // the page's own button does it (a browser asks for the fullscreen itself)
+#else
+    if (window_ == nullptr) return false;
+    const uint32_t flags = SDL_GetWindowFlags(window_);
+    const bool sdl_fullscreen = (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
+    if (!sdl_fullscreen && !config_.headless && os_fullscreen(window_)) return true;      // a macOS fullscreen Space: the operating system's controls leave it, not SDL's flags
+    SDL_SetWindowFullscreen(window_, sdl_fullscreen ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+    config_.fullscreen = !sdl_fullscreen;
+    update_mouse_grab();                                  // (the size events that follow do it again)
+    return !sdl_fullscreen;
+#endif
+}
+
 WindowRect Application::window_rect() const {
     WindowRect r;
     if (window_ != nullptr) {
@@ -1483,12 +1540,33 @@ void Application::apply_window_layout() {
             top = 28;
             left = bottom = right = 0;
         }
-        const WindowRect r = grid_cell_window(WindowRect{area.x, area.y, area.w, area.h}, config_.grid_cols, config_.grid_rows, config_.grid_cell, top, left, bottom, right);
+        const WindowRect r = grid_cell_window(WindowRect{area.x, area.y, area.w, area.h}, config_.grid_cols, config_.grid_rows, config_.grid_cell, top, left, bottom, right,
+                                              canvas_width_of(aspect_), canvas_height_of(aspect_));
         SDL_SetWindowSize(window_, r.w, r.h);
         SDL_SetWindowPosition(window_, r.x, r.y);
         return;
     }
-    if (config_.has_window_size) SDL_SetWindowSize(window_, config_.window_w, config_.window_h);
+    if (config_.has_window_size) {
+        SDL_SetWindowSize(window_, config_.window_w, config_.window_h);
+    } else if (aspect_ != Aspect::Classic4x3 && !config_.fullscreen) {
+        // a game of another aspect opens at the largest whole-number multiple of its canvas that fits the usable area of the display (at least 1x), centred
+        int display = config_.display_index >= 0 ? config_.display_index : SDL_GetWindowDisplayIndex(window_);
+        if (display < 0) display = 0;
+        SDL_Rect area{0, 0, 0, 0};
+        if (SDL_GetDisplayUsableBounds(display, &area) == 0 || SDL_GetDisplayBounds(display, &area) == 0) {
+            int top = 0;
+            int left = 0;
+            int bottom = 0;
+            int right = 0;
+            if (!config_.headless && SDL_GetWindowBordersSize(window_, &top, &left, &bottom, &right) != 0) {      // a platform that cannot tell: assume a typical title bar
+                top = 28;
+                left = bottom = right = 0;
+            }
+            const WindowRect r = largest_canvas_window(WindowRect{area.x, area.y, area.w, area.h}, canvas_width_of(aspect_), canvas_height_of(aspect_), top, left, bottom, right);
+            SDL_SetWindowSize(window_, r.w, r.h);
+            if (!config_.has_window_pos) SDL_SetWindowPosition(window_, r.x, r.y);
+        }
+    }
     if (config_.has_window_pos) SDL_SetWindowPosition(window_, config_.window_x, config_.window_y);
 #endif
 }
@@ -1890,6 +1968,7 @@ void Application::render_latency_corner(int32_t version_x, int32_t text_y, const
 
 void Application::render_frame() {
     renderer_->begin_frame();
+    renderer_->set_picture(picture_);                    // the screens are the picture (centred in the canvas; the canvas itself for 4:3)
 
     if (state_ == AppState::Loading) {
         render_loading_screen();
@@ -1913,7 +1992,9 @@ void Application::render_frame() {
         render_net_overlay();
     }
 
-    // Frame rate counter and frametime sparkline in the bottom right hand corner of the canvas (the viewport: the version stands next to the counter in every layout)
+    // Frame rate counter and frametime sparkline in the bottom right hand corner of the canvas (the viewport: the version stands next to the counter in every layout):
+    // the plate is the canvas's, not the picture's
+    renderer_->set_picture(canvas().rect());
     const CornerPlate plate = CornerPlate::for_canvas(renderer_->canvas_w(), renderer_->canvas_h());
     int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
     std::string fps_text = std::to_string(fps_val) + " FPS";
@@ -1970,7 +2051,8 @@ void Application::render_frame() {
 
     render_latency_corner(ver_x, text_y, plate);
 
-    // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65)
+    // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65): the pointer is the picture's
+    renderer_->set_picture(picture_);
     CursorType cur = CursorType::Normal;
     if (state_ == AppState::Playing && !scorecard_.is_open()) {
         cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, sim_.get_world_state(), sim_.grid(), renderer_->camera());

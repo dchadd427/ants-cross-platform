@@ -29,6 +29,7 @@
 #include "ants_app/scorecard.hpp"
 #include "ants_app/screen_button.hpp"
 #include "ants_app/audio_mixer.hpp"
+#include "ants_app/canvas_layout.hpp"
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/midi_player.hpp"
@@ -53,6 +54,13 @@ struct ApplicationConfig {
     int window_width{1280};  // Default 2x integer scale
     int window_height{960};
     bool fullscreen{false};
+    /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas (the default); 16:9
+    /// is a fixed 960 x 540 canvas, in which the match screen and the original's pages are still drawn as the 640 x 480 picture, centred. SDL scales the canvas into the window by
+    /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest whole-number
+    /// multiple of the canvas that fits the display (--window-size and --grid still win), and fullscreen is the same canvas filling as much of the monitor as fits. The web build
+    /// stays 4:3. `aspect_given` is true when the command line said it (the settings key then does not count).
+    Aspect aspect{Aspect::Classic4x3};
+    bool aspect_given{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -191,6 +199,14 @@ public:
     Renderer& renderer() noexcept { return *renderer_; }
     /// The geometry of the picture that the HUD, the renderer, the edge scroll and the pointer work in (screen_layout.hpp)
     const ScreenLayout& layout() const noexcept { return layout_; }
+    /// The aspect the game runs in (the command line's, else the settings', else 4:3), the canvas that the window shows (SDL's logical size) and where the picture of `layout()`
+    /// sits in it (centred: the pointer's coordinates are the picture's, the canvas's bars around it count as its nearest edge pixel)
+    Aspect aspect() const noexcept { return aspect_; }
+    CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
+    const LayoutRect& picture() const noexcept { return picture_; }
+    /// Alt+Enter (native builds): the window leaves fullscreen or enters it (SDL's desktop fullscreen, the same as --fullscreen); true when it is fullscreen afterwards. The web
+    /// build has the page's own button and never does; a macOS fullscreen Space (the green button) is left with the operating system's own controls.
+    bool toggle_fullscreen();
     /// Gives every consumer a layout: the renderer's view and camera, the HUD's rectangles, and (through `layout()`) the edge scroll, the pointer's limits, the sound listener,
     /// the network overlay and the start view. The original's picture until it is told otherwise; the canvas (`renderer().set_canvas_size`) is a separate choice.
     void set_layout(const ScreenLayout& layout);
@@ -330,6 +346,8 @@ private:
 
     ApplicationConfig config_{};
     ScreenLayout layout_{ScreenLayout::classic()};       // the picture that the match screen is: the HUD, the renderer's view, the edge scroll, the pointer's limits
+    Aspect aspect_{Aspect::Classic4x3};
+    LayoutRect picture_{0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight};     // where that picture sits in the canvas (centred; the whole canvas for 4:3)
     AppState state_{AppState::MapSelect};
     bool is_running_{false};
     bool match_started_{false};                           // a match screen was built (the original writes the chat transcript only then)
@@ -444,7 +462,8 @@ private:
     void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
     void stop_bots();
 
-    void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size (native builds)
+    void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
+    void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else 4:3 (4:3 always in the web build)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile

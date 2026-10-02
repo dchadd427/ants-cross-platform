@@ -53,10 +53,10 @@ inline bool parse_pair(const std::string& text, int32_t& a, int32_t& b) {
 
 /// The client area of the window for cell `cell` (row by row, 0 = top left) of a cols x rows grid laid over `area` (the usable part of a display: without the
 /// menu bar, the dock, the task bar). The decoration of the window (title bar and frame: `border_*`) has to fit into the cell as well; the client area is the
-/// largest 4:3 rectangle (the game's own proportions, nothing is letterboxed) that does, centred in the cell, and never smaller than kMinWindowWidth x Height.
-/// A cell number beyond the grid is the last cell.
+/// largest rectangle of the game's own proportions (4:3, or `aspect_w` : `aspect_h` for another canvas: 16:9; nothing is letterboxed) that does, centred in the cell,
+/// and never smaller than kMinWindowWidth x Height. A cell number beyond the grid is the last cell.
 inline WindowRect grid_cell_window(const WindowRect& area, int32_t cols, int32_t rows, int32_t cell, int32_t border_top, int32_t border_left,
-                                   int32_t border_bottom, int32_t border_right) {
+                                   int32_t border_bottom, int32_t border_right, int32_t aspect_w = 4, int32_t aspect_h = 3) {
     cols = std::max<int32_t>(cols, 1);
     rows = std::max<int32_t>(rows, 1);
     cell = std::min<int32_t>(std::max<int32_t>(cell, 0), cols * rows - 1);
@@ -66,14 +66,32 @@ inline WindowRect grid_cell_window(const WindowRect& area, int32_t cols, int32_t
     const int32_t cell_y = area.y + (cell / cols) * cell_h;
     const int32_t avail_w = std::max<int32_t>(cell_w - border_left - border_right, kMinWindowWidth);
     const int32_t avail_h = std::max<int32_t>(cell_h - border_top - border_bottom, kMinWindowHeight);
-    int32_t w = std::min<int32_t>(avail_w, avail_h * 4 / 3);
+    int32_t w = std::min<int32_t>(avail_w, avail_h * aspect_w / aspect_h);
     w = std::max<int32_t>(w, kMinWindowWidth);
-    const int32_t h = std::max<int32_t>(w * 3 / 4, kMinWindowHeight);
+    const int32_t h = std::max<int32_t>(w * aspect_h / aspect_w, kMinWindowHeight);
     WindowRect r;
     r.w = w;
     r.h = h;
     r.x = cell_x + border_left + (avail_w - w) / 2;
     r.y = cell_y + border_top + (avail_h - h) / 2;
+    return r;
+}
+
+/// The client area of the window that a game with a fixed canvas opens in: the LARGEST WHOLE-NUMBER MULTIPLE of the canvas (960 x 540 for 16:9) that fits `area` (the usable part of
+/// a display) with the decoration of the window (`border_*`), and at least 1x even where nothing fits; centred in the area. A multiple of the canvas shows every canvas pixel as a
+/// square of whole pixels (SDL's logical size scales by exactly that number).
+inline WindowRect largest_canvas_window(const WindowRect& area, int32_t canvas_w, int32_t canvas_h, int32_t border_top, int32_t border_left, int32_t border_bottom,
+                                        int32_t border_right) {
+    canvas_w = std::max<int32_t>(canvas_w, 1);
+    canvas_h = std::max<int32_t>(canvas_h, 1);
+    const int32_t avail_w = area.w - border_left - border_right;
+    const int32_t avail_h = area.h - border_top - border_bottom;
+    const int32_t n = std::max<int32_t>(std::min<int32_t>(avail_w / canvas_w, avail_h / canvas_h), 1);
+    WindowRect r;
+    r.w = canvas_w * n;
+    r.h = canvas_h * n;
+    r.x = area.x + border_left + (avail_w - r.w) / 2;
+    r.y = area.y + border_top + (avail_h - r.h) / 2;
     return r;
 }
 

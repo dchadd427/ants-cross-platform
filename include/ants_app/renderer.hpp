@@ -298,6 +298,13 @@ public:
     int32_t canvas_w() const noexcept { return canvas_w_; }
     int32_t canvas_h() const noexcept { return canvas_h_; }
 
+    /// Where the picture that the game draws sits in the canvas: its top left corner and its size. Everything the game draws (the HUD, the pages, the world) is in the
+    /// picture's own coordinates and lands at that corner plus them; nothing is drawn beyond the picture (the clip is the picture) and the bars around it stay black. The whole
+    /// canvas (no corner, no clip) until it is told otherwise, and again after `set_canvas_size`: the classic picture centred in a bigger canvas is
+    /// `CanvasLayout::centred(640, 480)`. The plate of the frame rate is the canvas's, not the picture's: it is drawn with the picture set to the whole canvas.
+    void set_picture(const LayoutRect& picture);
+    const LayoutRect& picture() const noexcept { return picture_; }
+
     /// The geometry of the picture (screen_layout.hpp): the map view, which the world is drawn into and clipped to, comes from it; the camera takes it too. The original's
     /// layout until it is told otherwise.
     void set_layout(const ScreenLayout& layout);
@@ -505,6 +512,11 @@ private:
     ScreenLayout layout_{ScreenLayout::classic()};
     int32_t canvas_w_{CANVAS_WIDTH};
     int32_t canvas_h_{CANVAS_HEIGHT};
+    LayoutRect picture_{0, 0, CANVAS_WIDTH, CANVAS_HEIGHT};
+    bool picture_inset_{false};            // the picture is smaller than the canvas: its corner is added to every position and it is the clip
+    /// A rectangle of the picture's own coordinates as SDL gets it (the picture's corner added)
+    SDL_Rect placed(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept { return SDL_Rect{x + picture_.x, y + picture_.y, w, h}; }
+    void restore_clip();
     std::vector<TransientEffect> transient_effects_{};
     uint32_t sub_tick_ms_{0};
 };

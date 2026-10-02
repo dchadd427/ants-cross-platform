@@ -1,4 +1,5 @@
 #include "ants_app/renderer.hpp"
+#include "ants_app/canvas_layout.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -430,7 +431,27 @@ void Renderer::shutdown() {
 void Renderer::set_canvas_size(int32_t w, int32_t h) {
     canvas_w_ = std::max(w, 1);
     canvas_h_ = std::max(h, 1);
+    picture_ = LayoutRect{0, 0, canvas_w_, canvas_h_};         // the picture is the whole canvas until it is told otherwise
+    picture_inset_ = false;
     refit_canvas();
+    restore_clip();
+}
+
+void Renderer::set_picture(const LayoutRect& picture) {
+    picture_ = picture;
+    picture_inset_ = picture_ != LayoutRect{0, 0, canvas_w_, canvas_h_};
+    restore_clip();
+}
+
+// What "no clip" means: the whole canvas when the picture is the canvas, the picture's rectangle when it sits inside a bigger canvas (the bars around it stay as they are)
+void Renderer::restore_clip() {
+    if (!renderer_) return;
+    if (picture_inset_) {
+        const SDL_Rect clip = {picture_.x, picture_.y, picture_.w, picture_.h};
+        SDL_RenderSetClipRect(renderer_, &clip);
+    } else {
+        SDL_RenderSetClipRect(renderer_, nullptr);
+    }
 }
 
 void Renderer::refit_canvas() {
@@ -622,6 +643,7 @@ void Renderer::begin_frame() {
                                                  : SDL_GetTicks() - map_epoch_ms_;
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255); // Black letterbox / background
     SDL_RenderClear(renderer_);
+    restore_clip();                                  // (the picture, when it is smaller than the canvas: nothing is drawn beyond it)
 }
 
 void Renderer::render_world(const ants::sim::WorldState& world,
@@ -641,7 +663,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
 
     // 1. Clip exclusively to playfield
     const LayoutRect view = layout_.view();
-    SDL_Rect clip_rect = { view.x, view.y, view.w, view.h };
+    const SDL_Rect clip_rect = placed(view.x, view.y, view.w, view.h);
     SDL_RenderSetClipRect(renderer_, &clip_rect);
 
     // 2. Layer 1 Terrain
@@ -678,8 +700,8 @@ void Renderer::render_world(const ants::sim::WorldState& world,
         render_tile_grid(grid, mouse_x, mouse_y);
     }
 
-    // 6. Unset clipping for full-canvas chrome
-    SDL_RenderSetClipRect(renderer_, nullptr);
+    // 6. Unset clipping for full-picture chrome
+    restore_clip();
 }
 
 // ============================================================================
@@ -700,7 +722,7 @@ void Renderer::draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32
         SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, colour);
         if (!tex) continue;
         const auto& sp = mirrored ? archive_->get_mirrored_sprite(sp_idx) : archive_->get_sprite(sp_idx);
-        SDL_Rect dst = { sx + f.dx + mirror_shift, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+        const SDL_Rect dst = placed(sx + f.dx + mirror_shift, sy + f.dy, static_cast<int>(sp.width), static_cast<int>(sp.height));
         SDL_RenderCopy(renderer_, tex, nullptr, &dst);
     }
 }
@@ -764,11 +786,11 @@ void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t wor
 void Renderer::render_map_layers(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
     if (!renderer_) return;
     const LayoutRect view = layout_.view();
-    SDL_Rect clip_rect = { view.x, view.y, view.w, view.h };
+    const SDL_Rect clip_rect = placed(view.x, view.y, view.w, view.h);
     SDL_RenderSetClipRect(renderer_, &clip_rect);
     render_terrain_layer1(grid);
     render_terrain_layer2_structures(grid, world);
-    SDL_RenderSetClipRect(renderer_, nullptr);
+    restore_clip();
 }
 
 void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
@@ -796,7 +818,7 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
             }
 
             // Synthetic grids without a loaded level: flat colours per terrain category
-            SDL_Rect dst = { sx, sy, TILE_SIZE, TILE_SIZE };
+            const SDL_Rect dst = placed(sx, sy, TILE_SIZE, TILE_SIZE);
             if (cell.terrain_type == ants::sim::TERRAIN_WATER) {
                 SDL_SetRenderDrawColor(renderer_, 23, 71, 151, 255); // Navy Water
             } else if (cell.terrain_type == ants::sim::TERRAIN_OBSTACLE) {
@@ -1365,7 +1387,7 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
 
     // Fallback: draw geometry lines around the 128x128 footprint
     const int32_t w = 128, h = 128;
-    const int32_t x = cx - w / 2, y = cy - h / 2;
+    const int32_t x = cx - w / 2 + picture_.x, y = cy - h / 2 + picture_.y;      // (drawn straight to SDL: the picture's corner is added here)
     // Fallback: draw geometry lines
     SDL_SetRenderDrawColor(renderer_, 50, 220, 50, 255);
     int32_t arm = 20;
@@ -1643,7 +1665,7 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
 
             // Subtle semi-transparent tile outline
             SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 75);
-            SDL_Rect tile_rect = { sx, sy, TILE_SIZE, TILE_SIZE };
+            const SDL_Rect tile_rect = placed(sx, sy, TILE_SIZE, TILE_SIZE);
             SDL_RenderDrawRect(renderer_, &tile_rect);
 
             // Coordinates inside bottom-left of tile
@@ -1658,10 +1680,10 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
         int32_t hsx = 0, hsy = 0;
         camera_.world_to_screen(hover_tx * TILE_SIZE, hover_ty * TILE_SIZE, hsx, hsy);
         SDL_SetRenderDrawColor(renderer_, 0, 255, 255, 255);
-        SDL_Rect h1 = { hsx, hsy, TILE_SIZE, TILE_SIZE };
+        const SDL_Rect h1 = placed(hsx, hsy, TILE_SIZE, TILE_SIZE);
         SDL_RenderDrawRect(renderer_, &h1);
         SDL_SetRenderDrawColor(renderer_, 255, 255, 0, 220);
-        SDL_Rect h2 = { hsx + 1, hsy + 1, TILE_SIZE - 2, TILE_SIZE - 2 };
+        const SDL_Rect h2 = placed(hsx + 1, hsy + 1, TILE_SIZE - 2, TILE_SIZE - 2);
         SDL_RenderDrawRect(renderer_, &h2);
     }
 
@@ -1736,11 +1758,11 @@ void Renderer::draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirror
         // Sprite 2599 (butdef3a.bmp): 3 padding rows of HUD green background index 11.
         // Clip top 3 rows and align at y = 163 to perfectly match butdef1a/2a without vertical jump or flash.
         SDL_Rect src = { 0, 3, static_cast<int>(sp.width), static_cast<int>(sp.height) - 3 };
-        SDL_Rect dst = { x, 163, static_cast<int>(sp.width), static_cast<int>(sp.height) - 3 };
+        const SDL_Rect dst = placed(x, 163, static_cast<int>(sp.width), static_cast<int>(sp.height) - 3);
         SDL_RenderCopy(renderer_, tex, &src, &dst);
         return;
     }
-    SDL_Rect dst = { x, y, static_cast<int>(sp.width), static_cast<int>(sp.height) };
+    const SDL_Rect dst = placed(x, y, static_cast<int>(sp.width), static_cast<int>(sp.height));
     SDL_RenderCopy(renderer_, tex, nullptr, &dst);
 }
 
@@ -1754,7 +1776,7 @@ void Renderer::draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const
     }
     if (!rgba_texture_) return;
     SDL_UpdateTexture(rgba_texture_, nullptr, rgba, w * 4);
-    SDL_Rect dst = { x, y, w, h };
+    const SDL_Rect dst = placed(x, y, w, h);
     SDL_RenderCopy(renderer_, rgba_texture_, nullptr, &dst);
 }
 
@@ -1773,7 +1795,7 @@ void Renderer::fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::asset
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     }
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
-    SDL_Rect rect = { x, y, w, h };
+    const SDL_Rect rect = placed(x, y, w, h);
     SDL_RenderFillRect(renderer_, &rect);
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -1782,13 +1804,13 @@ void Renderer::fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::asset
 
 void Renderer::set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) {
     if (!renderer_) return;
-    const SDL_Rect clip = { x, y, w, h };
+    const SDL_Rect clip = placed(x, y, w, h);
     SDL_RenderSetClipRect(renderer_, &clip);
 }
 
 void Renderer::clear_clip_rect() {
     if (!renderer_) return;
-    SDL_RenderSetClipRect(renderer_, nullptr);
+    restore_clip();
 }
 
 void Renderer::draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) {
@@ -1797,7 +1819,7 @@ void Renderer::draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::asset
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     }
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
-    SDL_Rect rect = { x, y, w, h };
+    const SDL_Rect rect = placed(x, y, w, h);
     SDL_RenderDrawRect(renderer_, &rect);
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -1859,7 +1881,7 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
         auto it = text_cache_.find(key);
         if (it != text_cache_.end()) {
             it->second.last_frame = text_frame_counter_;
-            SDL_Rect dst{x, y, it->second.width, it->second.height};
+            const SDL_Rect dst = placed(x, y, it->second.width, it->second.height);
             SDL_RenderCopy(renderer_, it->second.texture, nullptr, &dst);
             return;
         }
@@ -1875,7 +1897,7 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
                 int32_t lh = (surf->h + 1) / 2;
                 CachedTextEntry entry{tex, lw, lh, text_frame_counter_};
                 text_cache_[key] = entry;
-                SDL_Rect dst{x, y, lw, lh};
+                const SDL_Rect dst = placed(x, y, lw, lh);
                 SDL_RenderCopy(renderer_, tex, nullptr, &dst);
                 SDL_FreeSurface(surf);
                 return;
@@ -1902,9 +1924,9 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
             for (int col = 0; col < glyph.width; ++col) {
                 if (row_bits & (0x80 >> col)) {
                     if (scale == 1) {
-                        SDL_RenderDrawPoint(renderer_, cur_x + col, y + row);
+                        SDL_RenderDrawPoint(renderer_, cur_x + col + picture_.x, y + row + picture_.y);
                     } else {
-                        SDL_Rect dot{cur_x + col * scale, y + row * scale, scale, scale};
+                        const SDL_Rect dot = placed(cur_x + col * scale, y + row * scale, scale, scale);
                         SDL_RenderFillRect(renderer_, &dot);
                     }
                 }
@@ -1974,23 +1996,28 @@ void Renderer::draw_fixed_text(const std::string& text, int32_t x, int32_t y, an
         if (g >= 0 && fixed_glyphs_[static_cast<size_t>(g)] != nullptr) {
             SDL_SetTextureColorMod(fixed_glyphs_[static_cast<size_t>(g)], color.r, color.g, color.b);
             SDL_SetTextureAlphaMod(fixed_glyphs_[static_cast<size_t>(g)], color.a);
-            SDL_Rect dst{cur_x, y, kFixedCellW, kFixedCellH};
+            const SDL_Rect dst = placed(cur_x, y, kFixedCellW, kFixedCellH);
             SDL_RenderCopy(renderer_, fixed_glyphs_[static_cast<size_t>(g)], nullptr, &dst);
         }
         cur_x += kFixedCellW;                                  // a fixed font: every character takes a cell, drawn or not
     }
 }
 
+// The screenshot is the picture as the window shows it: the canvas scaled into the window by SDL's logical size (CanvasLayout::fit is that arithmetic), without the black bars
+// around it. (It used to be the size of the whole window with the picture at its top left corner, which is right only when the window has the canvas's shape.)
 bool Renderer::save_screenshot(const std::string& path) {
     if (!renderer_) return false;
-    int w = 0, h = 0;
-    SDL_GetRendererOutputSize(renderer_, &w, &h);
-    if (w <= 0 || h <= 0) { w = canvas_w_; h = canvas_h_; }
+    int out_w = 0, out_h = 0;
+    SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
+    if (out_w <= 0 || out_h <= 0) { out_w = canvas_w_; out_h = canvas_h_; }
+    const CanvasFit fit = CanvasLayout{canvas_w_, canvas_h_}.fit(out_w, out_h);
+    SDL_Rect area = { fit.viewport.x, fit.viewport.y, fit.viewport.w, fit.viewport.h };
+    if (area.w <= 0 || area.h <= 0) return false;
 
-    SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, area.w, area.h, 32, SDL_PIXELFORMAT_ARGB8888);
     if (!surf) return false;
 
-    if (SDL_RenderReadPixels(renderer_, nullptr, SDL_PIXELFORMAT_ARGB8888, surf->pixels, surf->pitch) != 0) {
+    if (SDL_RenderReadPixels(renderer_, &area, SDL_PIXELFORMAT_ARGB8888, surf->pixels, surf->pitch) != 0) {
         SDL_FreeSurface(surf);
         return false;
     }

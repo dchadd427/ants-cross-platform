@@ -429,3 +429,39 @@ target_compile_definitions(test_screen_layout PRIVATE
 
 add_test(NAME test_screen_layout COMMAND test_screen_layout)
 set_tests_properties(test_screen_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Canvas layout (M2 of the widescreen work): the logical canvas and how SDL fits it into the window (CanvasLayout), --aspect and the settings key, the window that opens for a 16:9 canvas, the classic picture centred in it, Alt+Enter, the screenshot
+add_executable(test_canvas_layout
+    test_canvas_layout.cpp
+)
+
+target_include_directories(test_canvas_layout PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_canvas_layout PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_canvas_layout PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_canvas_layout PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_canvas_layout PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_canvas_layout COMMAND test_canvas_layout)
+set_tests_properties(test_canvas_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

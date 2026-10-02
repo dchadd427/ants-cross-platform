@@ -242,3 +242,89 @@ Milestone M1 of the widescreen work: `include/ants_app/screen_layout.hpp` (pure,
 | M1-75 | `application.cpp`: Application::set_layout does not reach the renderer | 2 checks |
 | M1-76 | `application.cpp`: Application::set_layout does not reach the HUD | 3 checks |
 
+## M2: the 16:9 canvas behind `--aspect` (what it does, what is left for M3)
+
+Milestone M2 of the widescreen work. **The default is still the classic picture**: with no option and no settings key the game is what it was (the 307 fingerprints, every other suite and the new suite 3.13 pass with M2 in). The owner's decision for M2 (2026-10-02): the 16:9 picture is a FIXED logical canvas of **960 x 540**; everybody who asks for it sees exactly the same world area (no caps in online rooms), SDL scales the canvas into the window, the shape of the monitor is a later option. The new suite 3.14 is `tests/test_app/test_canvas_layout.cpp`.
+
+### What it does
+
+- **The canvas.** `include/ants_app/canvas_layout.hpp` (pure): `Aspect` (`Classic4x3` = 640 x 480, `Wide16x9` = 960 x 540), `CanvasLayout` (any size; `centred(w, h)` puts a picture in the middle, the classic picture in the wide canvas at (160, 30)) and `CanvasLayout::fit(window w, h)`: SDL's own arithmetic for a logical size (the largest scale that fits, centred, bars where the shapes differ; single precision floats and floor, as `UpdateLogicalSize` does), so that the program can say where the picture is without asking SDL. The table the tests pin: 1920 x 1080 shows 960 x 540 at 2x exactly, 3840 x 2160 at 4x, 2560 x 1440 at 2.667x, 1280 x 720 at 1.333x, 1366 x 768 at 1.422x (one column of bar), 1440 x 900 at 1.5x with bars of 45 rows, **2880 x 1800 at 3x with bars of 90 rows above and below (2880 x 1620)**, 2560 x 1080 at 2x with bars of 320 columns; the classic 640 x 480 canvas in 800 x 600 at 1.25x, in 1280 x 960 at 2x, in 1920 x 1080 at 2.25x with bars of 240 columns (uneven pixels: this is how the game has always been scaled), in 2560 x 1440 at 3x. The scale is a whole number exactly when the limiting side of the window is a multiple of the canvas's. The model is checked against a few thousand window sizes by rule and against SDL itself (the corners of the canvas in 32 real windows).
+- **The option.** `--aspect 16:9` or `--aspect 4:3`, and the settings key `aspect` (read at the start; the command line wins; a value that is neither is reported and ignored, so a settings file never stops the game). Anything else on the command line is refused with `only 16:9 and 4:3 for now` and the game does not start (`startup_error`, like a bad `--bot`). 4:3 is the original's canvas and the default. The web build stays 4:3 whatever it is given (M5 flips it with its page).
+- **SDL's logical size** is the canvas (`Renderer::set_canvas_size`; the window's size events apply it again, `refit_canvas`), not a size that follows the window: everybody with the same aspect has the same picture. Fullscreen is the same canvas as large as the monitor allows (bars on a 16:10 or 21:9 monitor).
+- **The window.** A window of the 16:9 aspect opens at the **largest whole-number multiple of 960 x 540 that fits the usable part of the display** (title bar and frame counted, at least 1x, centred: `largest_canvas_window`); `--window-size` and `--grid` still win, and the grid's cells are 16:9 then (`grid_cell_window` takes the canvas's shape; the default is 4:3).
+- **The picture inside the canvas.** In M2 the match screen and the original's pages are still the 640 x 480 picture: the application draws it centred (`picture_` = (160, 30, 640, 480) in the 16:9 canvas, the whole canvas in 4:3). `Renderer::set_picture(rect)` is the hook: every position the renderer hands to SDL has the picture's corner added (`placed()`: sprites, parts of the world, text, the digits, the RGBA image, fills, frames, clips) and `clear_clip_rect` / a new frame restore the PICTURE as the clip, so nothing is drawn beyond it and the bars stay black. The pointer: the canvas position becomes the picture's own (`clamp_pointer_event(e, picture_rect)` subtracts the corner, then holds it to the picture), so **a pointer over a bar is the picture's nearest edge pixel and the map scrolls** (the pillarbox rule of v0.0.92, for a canvas that has bars of its own). The frame-rate plate and the version are the CANVAS's, not the picture's (rule 7): `render_frame` sets the picture to the whole canvas for them and back for the cursor.
+- **Alt+Enter** (native builds) toggles fullscreen (`Application::toggle_fullscreen`, SDL's desktop fullscreen, as `--fullscreen`). The key belongs to the window: no screen sees it (Enter alone is still the setup screen's START and the chat's send), a held key toggles once; a macOS fullscreen Space is left with the operating system's controls; the web has its own button.
+- **`Renderer::save_screenshot`** writes the picture as the window shows it (the canvas scaled into the window, without the bars: `CanvasLayout::fit` gives the rectangle). It used to write a file of the window's size with the picture at its top left corner, which is right only when the window has the canvas's shape: a 16:9 canvas in a 1280 x 960 window gave 1280 x 960 with the bottom quarter empty. The headless `--screenshot` of a 4:3 window of the canvas's shape is the same file as before.
+
+### A known limit: seams at fractional scales (found while taking the screenshots)
+
+At a scale that is not a whole number SDL's SOFTWARE renderer (the one a headless run and the screenshot tool use) rounds the destination rectangle of every sprite to whole pixels, and two neighbouring tiles can leave a one-pixel gap between them: black seams in the terrain and in the pages' frames (a grid at 1.333x, a seam every few tiles at 2.667x; none at 2x or 4x). It is not new: the classic 4:3 picture does the same at any fractional scale (an 800 x 600 window, 1.25x, shows the seams in the setup screen: `docs/AUDIT_ONE_TO_ONE.md` already says "0 seams" holds for integer scales only). What M2 changes is how often a player meets it: the 16:9 canvas is a whole-number multiple on 1080p and 4K screens but fractional on 720p, 1366 x 768, 1600 x 900 and 1440p. Whether an accelerated renderer (Metal, OpenGL, WebGL) keeps the edges of adjacent quads watertight (it positions them in floating point) is to be checked on a real window; the remedies, if it does not, are in section 52.P of the plan: the picture drawn once into an offscreen target and that one texture scaled (seamless, uneven pixels as now, at the price of the text's sharpness unless the text is drawn afterwards at the window's resolution), or a whole-number-only scale with larger bars. The default stays the classic picture until this is decided.
+
+### What is left (for M3)
+
+M3 makes the match screen the wide picture itself: `ScreenLayout::with_size(960, 540)` (dx = 320, dy = 60) is the geometry (M1), the application gives it to `Application::set_layout`, and then the match picture is the whole canvas while the pages and the dialogs stay centred 640 x 480 pictures: `picture_` must become two rectangles (the match's and the pages'), the pointer clamp takes the one of the screen that is up, and the HUD draws its dialogs through a corner (an origin hook of the renderer, `Renderer::set_picture` is the concrete one and `IRenderer` has none yet). The HUD's art that has absolute coordinates inside the original's animations (listed in the M1 section) is M3's too. What M2 leaves in place for it: the layout is a value everywhere, the plate and the pointer already work on a canvas that is bigger than the picture.
+
+### Proof
+
+- The classic path: the 307 fingerprints and the suites 3 - 3.13 unchanged (the fingerprints of the classic picture, the M1 suite with the application's picture rectangle in the loop).
+- Suite 3.14 `test_canvas_layout` (the table above, the rules, SDL's own layout, the centred picture, the windows that open and the grid, the parsing and the refusals, the option and the key and their precedence, the application's canvas and picture, **the 16:9 application's match screen and setup screen are, pixel for pixel, the 4:3 application's frame (the plate masked) centred in the canvas**, the bars black, the plate in the canvas's corner and not in the picture's, the renderer's picture (origin, clip, text from the cache, the digits, an RGBA image), the pointer over every bar and far beyond the window, Alt+Enter, the screenshot of seven canvas / window pairs).
+- **Mutations** (one change at a time in a scratch copy, the suites 3.13 and 3.14 rebuilt and run, the file restored byte for byte): 55, all killed. The first run killed 50 and left five (M2-05 a letterboxed height that rounds up: no table case had a fraction, M2-24 `clear_clip_rect` that clears the clip altogether: the test filled exactly the picture, M2-46 a repeated Alt+Enter: two repeats toggle back, M2-51 the grid's cells ignoring the aspect: only the pure function was tested, M2-52 the frame not setting the picture: it is the previous frame's already, a frame must not depend on that); each got a test and is killed now. Not covered, and why: the 5 x 7 bitmap font's own placement (`SDL_RenderDrawPoint` of the fall-back used only when no TrueType font is found: the repository ships one), the debug tile grid and the dead brackets / synthetic terrain fall-backs of the renderer (they use `placed()` too and are not reachable in a game), and the web build's forced 4:3 (the Docker build compiles it).
+
+| # | Mutation | Killed by |
+|---|---|---|
+| M2-01 | `canvas_layout.hpp`: fit: the tolerance of equal shapes is 0.01 | 7 checks |
+| M2-02 | `canvas_layout.hpp`: fit: a canvas wider than the window is scaled by the heights | 24 checks |
+| M2-03 | `canvas_layout.hpp`: fit: no bar above (a wide canvas is not centred vertically) | 16 checks |
+| M2-04 | `canvas_layout.hpp`: fit: no bar at the left (a narrow canvas is not centred horizontally) | 17 checks |
+| M2-05 | `canvas_layout.hpp`: fit: the height of a letterboxed picture rounds up | 4 checks |
+| M2-06 | `canvas_layout.hpp`: fit: a narrow canvas is scaled by the widths | 34 checks |
+| M2-07 | `canvas_layout.hpp`: whole_scale() is always true | 12 checks |
+| M2-08 | `canvas_layout.hpp`: bar_right() is the left bar mirrored wrongly | 7 checks |
+| M2-09 | `canvas_layout.hpp`: centred() does not halve the margin | 12 checks |
+| M2-10 | `canvas_layout.hpp`: parse_aspect takes every shape that starts with 16: | 4 checks |
+| M2-11 | `canvas_layout.hpp`: parse_aspect takes 4:3 with anything after it | 2 checks |
+| M2-12 | `canvas_layout.hpp`: the refusal does not name the value | 18 checks |
+| M2-13 | `canvas_layout.hpp`: the wide canvas is 1024 wide | 57 checks |
+| M2-14 | `window_layout.hpp`: the window is the SMALLEST multiple that fits | 3 checks |
+| M2-15 | `window_layout.hpp`: the window may be smaller than 1x | 2 checks |
+| M2-16 | `window_layout.hpp`: the window is not centred horizontally | 4 checks |
+| M2-17 | `window_layout.hpp`: the decoration on top is ignored | 3 checks |
+| M2-18 | `window_layout.hpp`: the grid cell ignores the aspect | 3 checks |
+| M2-19 | `window_layout.hpp`: the grid cell is as high as 4:3 whatever the aspect | 3 checks |
+| M2-20 | `renderer.hpp`: nothing is placed: the picture has no origin | 12 checks |
+| M2-21 | `renderer.cpp`: the clip is never the picture | 1 checks |
+| M2-22 | `renderer.cpp`: set_picture does not restore the clip | 1 checks |
+| M2-23 | `renderer.cpp`: a new frame does not restore the clip | 1 checks |
+| M2-24 | `renderer.cpp`: clear_clip_rect clears the clip altogether | 1 checks |
+| M2-25 | `renderer.cpp`: set_canvas_size keeps the picture | 2 checks |
+| M2-26 | `renderer.cpp`: the screenshot is the whole window with the picture at its corner | 12 checks |
+| M2-27 | `renderer.cpp`: the screenshot is the canvas size | 10 checks |
+| M2-28 | `renderer.cpp`: the cached text is not placed | 1 checks |
+| M2-29 | `renderer.cpp`: a new text is not placed | 2 checks |
+| M2-30 | `renderer.cpp`: the digits are not placed | 2 checks |
+| M2-31 | `renderer.cpp`: an RGBA image is not placed | 2 checks |
+| M2-32 | `renderer.cpp`: a sprite is not placed | 2 checks |
+| M2-33 | `renderer.cpp`: a fill is not placed | 4 checks |
+| M2-34 | `renderer.cpp`: a frame is not placed | 2 checks |
+| M2-35 | `renderer.cpp`: a clip rectangle is not placed | 2 checks |
+| M2-36 | `renderer.cpp`: the parts of the world are not placed | 2 checks |
+| M2-37 | `renderer.cpp`: the world clip is not placed | 2 checks |
+| M2-38 | `application.cpp`: --aspect is not remembered as given | 3 checks |
+| M2-39 | `application.cpp`: the settings beat the command line | 19 checks |
+| M2-40 | `application.cpp`: the settings key is never read | 3 checks |
+| M2-41 | `application.cpp`: a bad settings value is taken as 16:9 | 3 checks |
+| M2-42 | `application.cpp`: the canvas is always 640 x 480 | 15 checks |
+| M2-43 | `application.cpp`: the picture is not centred in the canvas at the start | 15 checks |
+| M2-44 | `application.cpp`: the pointer is clamped to the layout, not the picture | 7 checks |
+| M2-45 | `application.cpp`: Alt is not needed for the fullscreen key | 3 checks |
+| M2-46 | `application.cpp`: a held Alt+Enter toggles on every repeat | 1 checks |
+| M2-47 | `application.cpp`: the screens see the Alt+Enter key too | 2 checks |
+| M2-48 | `application.cpp`: toggle_fullscreen does not leave fullscreen | 3 checks |
+| M2-49 | `application.cpp`: toggle_fullscreen says the old state | 3 checks |
+| M2-50 | `application.cpp`: the 16:9 window is not sized to the canvas | 2 checks |
+| M2-51 | `application.cpp`: the grid cells are 4:3 whatever the aspect | 2 checks |
+| M2-52 | `application.cpp`: the screens are not drawn into the picture | 2 checks |
+| M2-53 | `application.cpp`: the plate is drawn into the picture | 1 checks |
+| M2-54 | `application.cpp`: the cursor is drawn at the canvas, not into the picture | 2 checks |
+| M2-55 | `application.cpp`: set_layout does not move the picture | 4 checks |
+
