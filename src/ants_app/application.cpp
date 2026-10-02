@@ -713,8 +713,8 @@ void Application::set_layout(const ScreenLayout& layout) {
     hud_.set_layout(layout_);
 }
 
-// Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), everything else is a page of the original's own 640 x 480
-// screen (the loading screen, the quick help, the setup screen and the room, the results), centred
+// Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), and so is the setup screen and the room of a 960 x 540 canvas
+// (its own wide version), everything else is a page of the original's own 640 x 480 screen (the loading screen, the quick help, the results; the setup screen of another canvas), centred
 LayoutRect Application::picture_for_state() const {
     const bool match = state_ == AppState::Playing && !scorecard_.is_open();
     if (match) return canvas().centred(layout_.width, layout_.height);

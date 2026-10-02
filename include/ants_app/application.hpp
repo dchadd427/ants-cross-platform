@@ -59,8 +59,8 @@ struct ApplicationConfig {
     bool fullscreen{false};
     /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas; 16:9 is a fixed
     /// 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and the original's own pages
-    /// (the loading screen, the quick help at the start, the setup screen and the room, the results) are still its 640 x 480 pages, centred over a clay margin; the options window and the quick help
-    /// of a match sit over the map view with the frame around them. SDL scales the canvas into the window by
+    /// (the loading screen, the quick help at the start, the results) are still its 640 x 480 pages, centred over a clay margin, the setup screen and the room are the wide setup screen
+    /// (setup_layout.hpp: the whole canvas, with a map preview); the options window and the quick help of a match sit over the map view with the frame around them. SDL scales the canvas into the window by
     /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest scale in steps of 0.5
     /// of the canvas that fits the display's usable area, at least 1x (--window-size and --grid still win; a game that starts in fullscreen has this size for the way back, Alt+Enter),
     /// and fullscreen is the same canvas filling as much of the monitor as fits. A desktop game that is
@@ -208,8 +208,8 @@ public:
     const ScreenLayout& layout() const noexcept { return layout_; }
     /// The aspect the game runs in (the command line's, else the settings', else the platform's default: 16:9 on a desktop), the canvas that the window shows (SDL's logical size) and
     /// where the picture on screen sits in it (the pointer's coordinates are the picture's, the canvas's bars around it count as its nearest edge pixel): a match is the picture of
-    /// `layout()`, the whole canvas of its aspect; every other screen (the loading screen, the quick help, the setup screen and the room, the results) is the original's own 640 x 480
-    /// page, centred in the canvas
+    /// `layout()`, the whole canvas of its aspect, and so is the setup screen / room when the canvas is 960 x 540 (its own wide version); every other screen (the loading screen,
+    /// the quick help, the results, and the setup screen of any other canvas) is the original's own 640 x 480 page, centred in the canvas
     Aspect aspect() const noexcept { return aspect_; }
     CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
     const LayoutRect& picture() const noexcept { return picture_; }
@@ -475,7 +475,7 @@ private:
     void stop_bots();
 
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
-    LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture, every other screen the original's 640 x 480, centred
+    LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture, so is the setup screen of a 960 x 540 canvas, every other screen the original's 640 x 480, centred
     void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
