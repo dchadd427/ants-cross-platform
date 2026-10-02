@@ -3409,8 +3409,11 @@ void run_room_chat_ui_tests() {
         app.room_text_input("t");
         app.room_text_input(std::string("a\x01\x7f") + "b" + "\xC3\xA9" + "c");
         ASSERT_EQ(app.room_chat().text(), std::string("abc"));
+        app.room_text_input("start-marker");
         app.room_text_input(std::string(150, 'z'));
         ASSERT_EQ(app.room_chat().text().size(), size_t{100});
+        ASSERT_TRUE(app.room_chat().text().rfind("abcstart-marker", 0) == 0);                // the line keeps its start (up to 100 characters)
+        ASSERT_TRUE(app.room_chat().display(150).find("start-marker") == std::string::npos && app.room_chat().display(150).back() == 'z');   // the status line shows the END of what is typed
         ASSERT_TRUE(app.room_chat().display(0).size() <= std::string(RoomChatInput::kPrompt).size() + RoomChatInput::kShownChars + 1);
         app.room_key_down(SDLK_ESCAPE, 0, false);
         // the screen has its keys back: S starts the match for both

@@ -105,7 +105,7 @@ struct ApplicationConfig {
     uint8_t net_start_when{0};
     /// --fill-bots none|easy|medium|hard (protocol 11): the bots that this player's START seats in the empty seats of its room when it can start one: the leader of a server's room
     /// (the request goes to the server, which seats them and runs them) and the host of a room on the local network (this machine runs them, as for --bot). None, the default, is the START
-    /// of every earlier version. A game that is not a room ignores it. The setup screens of a later version choose it from a panel; the web page's address carries it.
+    /// of every earlier version. A game that is not a room ignores it. The start menu's Host panel ("Empty seats at START") sets it for the room that it makes (a Join sets none), `--start-menu --fill-bots hard` starts that panel at Hard, and the web page's address (`?fill=`, web/shell.html) gives it to the game of the room's leader.
     net::FillLevel fill_bots{net::FillLevel::None};
     /// A test hook (--say TEXT): this client says the line once in the waiting room, as soon as two players are in it (so that somebody hears it). The lines that arrive in the room go to the
     /// log of the program (stderr, "Room chat: Name: text") and to NetGame::take_pregame_chat().
@@ -238,8 +238,8 @@ public:
 
     /// The bots of the running game (nullptr without --bot, and on a guest's machine: only the machine that owns a bot runs it)
     const ai::BotController* bots() const noexcept { return bots_.get(); }
-    /// The bots that this player's START seats in the empty seats of its room (protocol 11; --fill-bots at the start): the setup screen's panel or the web page calls it when the player
-    /// chooses, any time before START. It takes effect for the next START of a leader (the request carries it) and of a LAN host (net_start_from_setup).
+    /// The bots that this player's START seats in the empty seats of its room (protocol 11; --fill-bots at the start): the start menu's Host panel calls it when the player hosts (and a Join with none),
+    /// and anything that lets the player choose later can call it any time before START. It takes effect for the next START of a leader (the request carries it) and of a LAN host (net_start_from_setup).
     void set_fill_bots(net::FillLevel level) {
         config_.fill_bots = level;
         if (net_) net_->set_fill_bots(level);

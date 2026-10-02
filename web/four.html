@@ -443,7 +443,7 @@
             room = code;
             fill = validFill(fillLevel);
             try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it
-                history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + (aspectFromAddress ? '&aspect=' + aspect : ''));
+                history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + (fill ? '&fill=' + fill : '') + (aspectFromAddress ? '&aspect=' + aspect : ''));
             } catch (e) { /* not essential */ }
             roomMap = mapName;
             seatCount = n >= 2 && n <= SEATS.length ? n : SEATS.length;

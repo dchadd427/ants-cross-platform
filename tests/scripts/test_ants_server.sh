@@ -54,11 +54,11 @@ FOUR_PAGE="$ROOT/web/four.html"
 SHELL_PAGE="$ROOT/web/shell.html"
 FILL_FORM=1
 if grep -qF 'id="fill"' "$FOUR_PAGE" && grep -qF '<option value="easy">Easy bots' "$FOUR_PAGE" && grep -qF '<option value="medium">Medium bots' "$FOUR_PAGE" && grep -qF '<option value="hard">Hard bots' "$FOUR_PAGE" \
-    && grep -qF '<option value="">Leave empty' "$FOUR_PAGE" && grep -qF 'ants-four-fill' "$FOUR_PAGE"; then FILL_FORM=0; fi
+    && grep -qF '<option value="">Leave empty' "$FOUR_PAGE" && grep -qF "remember('ants-four-fill', level)" "$FOUR_PAGE" && grep -qF "recall('ants-four-fill')" "$FOUR_PAGE"; then FILL_FORM=0; fi
 check 'web/four.html offers "Empty seats at START" (Leave empty, Easy bots, Medium bots, Hard bots) in the New match form and remembers it' "$FILL_FORM"
 FILL_LINKS=1
-if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "value === 'easy' || value === 'medium' || value === 'hard'" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE"; then FILL_LINKS=0; fi
-check "web/four.html puts the choice into every game link as &fill=<word> and reads only easy, medium or hard (from the form, the settings and the address)" "$FILL_LINKS"
+if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "value === 'easy' || value === 'medium' || value === 'hard'" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE" && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE"; then FILL_LINKS=0; fi
+check "web/four.html puts the choice into every game link and into its own address as &fill=<word> and reads only easy, medium or hard (from the form, the settings and the address)" "$FILL_LINKS"
 FILL_SHELL=1
 if grep -qF "ANTS_ARGS.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF '/^(easy|medium|hard)$/.test(fill)' "$SHELL_PAGE"; then FILL_SHELL=0; fi
 check "web/shell.html gives the game --fill-bots for ?fill=easy|medium|hard only (a regular expression of exactly the three words)" "$FILL_SHELL"

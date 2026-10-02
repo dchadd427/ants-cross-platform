@@ -7,6 +7,8 @@
 //   test_start_menu_app --shots DIR             writes the screenshots of every panel and state of the menu as DIR/*.png (they are what the menu looks like; nothing is compared)
 //   test_start_menu_app --real-server H:P       runs the host / join / START scenario against a game server that is already running (the gate "a real server": a native ants_server
 //                                               on localhost started with --demo-rooms 4 --demo-map TINY.LVL ...), then exits
+//   test_start_menu_app --real-fill H:P         hosts a room through the menu with "Empty seats at START" = Medium bots, starts it ALONE (the server seats three bots) and plays it
+//                                               for ten seconds of real time (the rate of the ticks is measured and printed: 20 a second), against a game server that is already running
 //   test_start_menu_app --probe H:P             one join attempt with a room code that does not exist, against any server (beta.playants.org:4001): it must answer, never hang
 #include "ants_app/application.hpp"
 #include "ants_app/host_lookup.hpp"
@@ -707,6 +709,59 @@ int run_real_server(const std::string& address) {
     return ok ? 0 : 1;
 }
 
+// The menu's Host panel with "Empty seats at START" = Medium bots against a server that is already running (the real check of the fill: a server of a docker image, on the network of
+// the machine): one person, alone, starts a room for four; the server seats three "Bot (Medium)" and the match runs at 20 ticks a second
+int run_real_fill(const std::string& address) {
+    ServerAddress server;
+    std::string why;
+    if (!parse_server(address, server, why)) {
+        std::cerr << why << "\n";
+        return 2;
+    }
+    TempDir temp;
+    write_no_quick_help(temp.file("settings.ini"));
+    Application app;
+    Hall hall{nullptr, &app, {}, nullptr, true};
+    if (!app.init(menu_config(address, temp.file("settings.ini")))) return 1;
+    const auto fail = [](const std::string& what) {
+        std::cout << "REAL FILL FAILED: " << what << "\n";
+        return 1;
+    };
+    click(app, MenuId::HostOnline);
+    click(app, MenuId::HostFill);                                                      // Leave empty -> Easy bots
+    click(app, MenuId::HostFill);                                                      // -> Medium bots
+    fill(app, MenuId::HostName, "Solo");
+    click(app, MenuId::Host);
+    if (!hall.until([&]() { return on_panel(app, MenuPanel::Room) || failed_on(app, MenuPanel::Host); }, 20000)) return fail("the room's panel did not come");
+    if (!on_panel(app, MenuPanel::Room)) return fail("the host attempt failed: " + app.start_menu().message());
+    const std::string code = shown_code(app);
+    bool says = false;
+    for (const MenuElement& e : app.start_menu().elements()) says = says || e.text == "Empty seats will be Medium bots.";
+    if (!says) return fail("the room's panel does not say what START will do");
+    click(app, MenuId::EnterRoom);
+    hall.step(20);
+    to_setup_screen(app);
+    hall.step(700);
+    if (app.state() != AppState::MapSelect || !app.map_select().leads_server_room()) return fail("the leader's screen did not come");
+    if (app.map_select().room().status != "Press START: the empty seats get Medium bots.") return fail("the status line says \"" + app.map_select().room().status + "\"");
+    app.room_key_down(SDLK_s, 0, false);                                               // START, alone
+    if (!hall.until([&]() { return app.state() == AppState::Playing; }, 30000)) return fail("the match did not start (the status line: \"" + app.map_select().room().status + "\")");
+    if (app.sim().roster_mask() != 0x0F) return fail("the roster is not all four seats");
+    for (uint8_t seat = 1; seat < 4; ++seat) {
+        if (app.sim().get_player_name(seat) != "Bot (Medium)") return fail("seat " + std::to_string(seat) + " is called \"" + app.sim().get_player_name(seat) + "\"");
+    }
+    hall.step(1000);                                                                   // (the first second: the match settles)
+    const uint64_t t0 = app.sim().current_tick();
+    const auto begin = std::chrono::steady_clock::now();
+    hall.step(10000);
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
+    const double rate = static_cast<double>(app.sim().current_tick() - t0) / seconds;
+    if (app.net()->desynced()) return fail("the match is out of sync");
+    std::cout << "REAL FILL " << (rate >= 17.0 && rate <= 23.0 ? "OK" : "FAILED") << ": room " << code << ", alone with three Bot (Medium), " << (app.sim().current_tick() - t0) << " ticks in "
+              << seconds << " s = " << rate << " ticks a second, no desync\n";
+    return rate >= 17.0 && rate <= 23.0 ? 0 : 1;
+}
+
 int run_probe(const std::string& address) {
     TempDir temp;
     Application app;
@@ -728,6 +783,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--shots") == 0) return make_shots(argv[i + 1]);
         if (std::strcmp(argv[i], "--real-server") == 0) return run_real_server(argv[i + 1]);
+        if (std::strcmp(argv[i], "--real-fill") == 0) return run_real_fill(argv[i + 1]);
         if (std::strcmp(argv[i], "--probe") == 0) return run_probe(argv[i + 1]);
     }
     std::cout << "=== Start menu in the application ===\n";
@@ -2578,6 +2634,11 @@ int main(int argc, char** argv) {
         click(app, MenuId::HostFill);
         click(app, MenuId::HostFill);                                                          // Hard bots on the Host panel
         ASSERT_EQ(app.start_menu().settings().host_fill, net::FillLevel::Hard);
+        click(app, MenuId::Host);                                                              // a room is made with it: the application's fill is Hard now
+        ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+        ASSERT_TRUE(app.fill_bots() == net::FillLevel::Hard && app.net() != nullptr && app.net()->fill_bots() == net::FillLevel::Hard);
+        click(app, MenuId::Back);                                                              // the room is left again
+        ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Host) && app.net() == nullptr; }, 8000));
         press(app, SDLK_ESCAPE);
         menu_join(app, "Joiner", "JOIN-FILL");                                                 // ... and then a join, the first player of a room: its leader
         ASSERT_TRUE(hall.until([&]() { return app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
