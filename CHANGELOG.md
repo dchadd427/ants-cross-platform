@@ -35,7 +35,7 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 - Test 12.108 no longer pins the value of the version. It checks the format; the value lives in the file `VERSION`, and a check run by `./run_tests.sh --fast` and by CI compares the top release heading of this file, "current release" in `STATUS.md` and the version line of the README with it.
 - The reverse-engineering notes said that the dialog lasts 6.0 seconds; the program keeps it up at least 5.0 s, which is what the game does, and the notes now say so.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...a7adf5d), [workflow](docs/WORKFLOW.md), [notes](docs/audit/B3_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...8a29f14), [workflow](docs/WORKFLOW.md), [notes](docs/audit/B3_notes.md)
 
 ## v0.1.0 - 2026-10-02 - Online rooms: bots fill the empty seats at START, chat in the waiting room, team chat only to allies, and mouse-wheel zoom
 
