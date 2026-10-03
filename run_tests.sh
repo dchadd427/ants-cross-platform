@@ -37,15 +37,23 @@ print_usage() {
     echo "Usage: ./run_tests.sh [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --all            Run all test suites (libants-assets + libants-sim + libants-app + E2E, default)"
+    echo "  --fast           The quick tier, for every change: the asset, simulation, network-core and application MODEL suites that need no window and finish in seconds,"
+    echo "                   plus the repository checks (version / changelog consistency, tool and script tests). No E2E, no script suites that start the game, no"
+    echo "                   sanitizer, none of the slow suites (lock-step soak, server, worker bot, network application): CI runs everything for every push"
+    echo "  --all            Run all test suites (libants-assets + libants-sim + libants-app + E2E + repository checks, default)"
     echo "  --assets         Run only asset decoder tests (test_assets)"
     echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker) and server suites)"
     echo "  --app            Run only application integration tests (test_app_integration)"
     echo "  --e2e            Run only opaque-box E2E test suites (e2e_runner)"
+    echo "  --tools          Run only the repository checks (tools/check_version_consistency.py, the python tests of tests/scripts)"
     echo "  --asan           Build and run with AddressSanitizer (build_asan)"
     echo "  --clean          Remove build directories and rebuild before testing"
+    echo "  --list           Print the suites that the other options select (id, tier, quick or full) and exit; nothing is built or run"
     echo "  -v, --verbose    Enable verbose assertions output in test suites"
     echo "  -h, --help       Display this help message and exit"
+    echo ""
+    echo "--fast filters whatever the tier options select to the quick suites (./run_tests.sh --sim --fast: only the quick simulation suites)."
+    echo "The summary prints the time of every suite and the slowest ones. Tiers and when each runs: docs/WORKFLOW.md."
     echo ""
 }
 
@@ -54,7 +62,10 @@ RUN_ASSETS=1
 RUN_SIM=1
 RUN_APP=1
 RUN_E2E=1
+RUN_TOOLS=1
 RUN_ASAN=0
+FAST=0
+LIST_ONLY=0
 CLEAN_BUILD=0
 VERBOSE=0
 
@@ -65,30 +76,48 @@ while [ "$#" -gt 0 ]; do
             RUN_SIM=1
             RUN_APP=1
             RUN_E2E=1
+            RUN_TOOLS=1
             ;;
         --assets)
             RUN_ASSETS=1
             RUN_SIM=0
             RUN_APP=0
             RUN_E2E=0
+            RUN_TOOLS=0
             ;;
         --sim)
             RUN_ASSETS=0
             RUN_SIM=1
             RUN_APP=0
             RUN_E2E=0
+            RUN_TOOLS=0
             ;;
         --app)
             RUN_ASSETS=0
             RUN_SIM=0
             RUN_APP=1
             RUN_E2E=0
+            RUN_TOOLS=0
             ;;
         --e2e)
             RUN_ASSETS=0
             RUN_SIM=0
             RUN_APP=0
             RUN_E2E=1
+            RUN_TOOLS=0
+            ;;
+        --tools)
+            RUN_ASSETS=0
+            RUN_SIM=0
+            RUN_APP=0
+            RUN_E2E=0
+            RUN_TOOLS=1
+            ;;
+        --fast)
+            FAST=1
+            ;;
+        --list)
+            LIST_ONLY=1
             ;;
         --asan)
             RUN_ASAN=1
@@ -112,14 +141,169 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 
-echo -e "${BOLD}${CYAN}======================================================================${RESET}"
-echo -e "${BOLD}${CYAN}                 ANTS ENGINE REMAKE - MASTER TEST RUNNER              ${RESET}"
-echo -e "${BOLD}${CYAN}======================================================================${RESET}"
-
 NCPU=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 BUILD_DIR="build"
 if [ "$RUN_ASAN" -eq 1 ]; then
     BUILD_DIR="build_asan"
+fi
+E2E_ARGS="--all"
+if [ "$VERBOSE" -eq 1 ]; then
+    E2E_ARGS="--all -v"
+fi
+
+# ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+# The suites, in the order they run. One `suite` line per suite:
+#   suite ID TIER QUICK TARGETS LABEL TITLE COMMAND
+#     ID       the number the summary prints (1 asset decoders, 2.x simulation / network / bots / server, 3.x application, 4 E2E, 5.x repository checks)
+#     TIER     assets | sim | app | e2e | tools: which option selects it (--assets, --sim, --app, --e2e, --tools)
+#     QUICK    1: part of --fast (finishes in seconds and covers what a typical change can break), 0: only the full run
+#     TARGETS  the CMake targets the suite needs (--fast builds exactly these; "-" for a suite that builds nothing)
+#     LABEL    the summary line; TITLE the heading printed before the suite runs
+#     COMMAND  run with eval ($BUILD_DIR is the build folder); its exit status is the suite's result
+# Measured on a Mac (Release, 10 cores): the quick suites together take about 60 s of test time (the whole of ./run_tests.sh --fast about 65 s with the build check and
+# the python tests). What --fast leaves out, and what each costs: 3.9 the server end-to-end script 143 s, 2.11 test_lockstep 58 s, 3.6 test_network_app 45 s,
+# 2.19 test_server 29 s, 2.22 test_ai_worker 18 s, 2.18 map_sweep 9 s, 3.12 test_start_menu_app 8 s, 2.13.1 test_ctl 7 s, the E2E runner and 3.8 the start script. The summary of every
+# run prints the real time of every suite.
+# ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+SUITE_IDS=()
+SUITE_TIERS=()
+SUITE_QUICK=()
+SUITE_TARGETS=()
+SUITE_LABELS=()
+SUITE_TITLES=()
+SUITE_CMDS=()
+
+suite() {
+    SUITE_IDS+=("$1")
+    SUITE_TIERS+=("$2")
+    SUITE_QUICK+=("$3")
+    SUITE_TARGETS+=("$4")
+    SUITE_LABELS+=("$5")
+    SUITE_TITLES+=("$6")
+    SUITE_CMDS+=("$7")
+}
+
+# The worker bot's pinned table is left out of the sanitizer pass. The test filters of a developer (W_ONLY, W_SKIP, ANTS_TEST_FILTER) must not leak into the master run:
+# a forgotten W_ONLY would run one test and print PASSED. Under ASan + UBSan (unoptimised) the 18-row pinned table (AI3.9, AI3.12) is about four fifths of the run time and
+# checks numbers, not memory: the sanitizer pass leaves those two out (docs/audit/B3_notes.md).
+run_worker_bot_suite() {
+    if [ "$RUN_ASAN" -eq 1 ]; then
+        env -u W_ONLY -u ANTS_TEST_FILTER W_SKIP=AI3.9,AI3.12 "./$BUILD_DIR/tests/test_ai/test_ai_worker"
+    else
+        env -u W_ONLY -u W_SKIP -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai_worker"
+    fi
+}
+
+define_suites() {
+    # 1. asset decoders
+    suite "1"      assets 1 "test_assets"                "Native Asset Decoder Tests (test_assets)"                  "ASSET DECODER SUITES (libants-assets)"                                             '"./$BUILD_DIR/tests/test_assets/test_assets"'
+    suite "1.1"    assets 1 "test_movement_tables"       "Movement Table Parity (test_movement_tables)"              "MOVEMENT TABLE PARITY (generated tables vs Ants.exe or its pinned digests / ants.chd)" '"./$BUILD_DIR/tests/test_assets/test_movement_tables"'
+    suite "1.2"    assets 1 "test_challenger_m1_1"       "Challenger M1_1 (test_challenger_m1_1)"                    "CHALLENGER M1_1 (adversarial asset decoding)"                                      '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_1"'
+    suite "1.3"    assets 1 "test_challenger_m1_2"       "Challenger M1_2 (test_challenger_m1_2)"                    "CHALLENGER M1_2 (asset decoding, second pass)"                                     '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_2"'
+    suite "1.4"    assets 1 "test_challenger_m1_it2"     "Challenger M1_IT2 (test_challenger_m1_it2)"                "CHALLENGER M1_IT2 (asset interface contract)"                                      '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2"'
+    suite "1.5"    assets 1 "test_challenger_m1_it2_2"   "Challenger M1_IT2_2 (test_challenger_m1_it2_2)"            "CHALLENGER M1_IT2_2 (asset interface contract, deep)"                              '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2_2"'
+
+    # 2. simulation rules, network core, bots, server
+    suite "2"      sim    1 "test_sim_rules"             "Simulation Rules Tests (test_sim_rules)"                   "SIMULATION RULES SUITES (libants-sim)"                                             '"./$BUILD_DIR/tests/test_sim/test_sim_rules"'
+    suite "2.1"    sim    1 "test_challenger_m2_1"       "Challenger M2_1 (test_challenger_m2_1)"                    "CHALLENGER M2_1 (Combat, Hazards, Physics)"                                        '"./$BUILD_DIR/tests/test_sim/test_challenger_m2_1"'
+    suite "2.2"    sim    1 "test_challenger_m2_2"       "Challenger M2_2 (test_challenger_m2_2)"                    "CHALLENGER M2_2 (Lifecycle, Economy, Alliances)"                                   '"./$BUILD_DIR/tests/test_sim/test_challenger_m2_2"'
+    suite "2.3"    sim    1 "test_path_planner"          "Path Planner (test_path_planner)"                          "ORIGINAL PATH PLANNER (PATHMGR A*) SUITE"                                          '"./$BUILD_DIR/tests/test_sim/test_path_planner"'
+    suite "2.4"    sim    1 "test_movement_golden"       "Movement Golden (test_movement_golden)"                    "ORIGINAL MOVEMENT GOLDEN SUITE (frame-exact locomotion)"                           '"./$BUILD_DIR/tests/test_sim/test_movement_golden"'
+    suite "2.5"    sim    1 "test_hill_actions"          "Hill Actions (test_hill_actions)"                          "ORIGINAL HILL ACTIONS SUITE (enter, ring, hatch, raid)"                            '"./$BUILD_DIR/tests/test_sim/test_hill_actions"'
+    suite "2.6"    sim    1 "test_combat_actions"        "Combat Actions (test_combat_actions)"                      "ORIGINAL COMBAT ACTIONS SUITE (contact, flights, blasts, death)"                   '"./$BUILD_DIR/tests/test_sim/test_combat_actions"'
+    suite "2.7"    sim    1 "test_ability_actions"       "Ability Actions (test_ability_actions)"                    "ORIGINAL ABILITY ACTIONS SUITE (bombs, fire walls, bridges)"                       '"./$BUILD_DIR/tests/test_sim/test_ability_actions"'
+    suite "2.8"    sim    1 "test_powerup_actions"       "Power-Up Actions (test_powerup_actions)"                   "ORIGINAL POWER-UP ACTIONS SUITE (pick-up, cancel window, immunity)"                '"./$BUILD_DIR/tests/test_sim/test_powerup_actions"'
+    suite "2.9"    sim    1 "test_food_actions"          "Food Actions (test_food_actions)"                          "ORIGINAL FOOD ACTIONS SUITE (food objects, grab clip, bite, stages)"               '"./$BUILD_DIR/tests/test_sim/test_food_actions"'
+    suite "2.9.1"  sim    1 "test_level_defaults"        "Level Defaults (test_level_defaults)"                      "LEVEL DEFAULTS SUITE (default ant type of a level, power-ups and droppers by tile id)" '"./$BUILD_DIR/tests/test_sim/test_level_defaults"'
+    suite "2.10"   sim    1 "test_commands"              "Commands + State Hash (test_commands)"                     "COMMAND LAYER SUITE (commands, validation, lock-step state hash)"                  '"./$BUILD_DIR/tests/test_sim/test_commands"'
+    suite "2.11"   sim    0 "test_lockstep"              "Lock-Step Network Core (test_lockstep)"                    "LOCK-STEP NETWORK CORE SUITE (protocol, sequencer, sessions, matches)"             'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lockstep"'
+    suite "2.12"   sim    1 "test_lobby"                 "Room / Start Barrier (test_lobby)"                         "ROOM SUITE (joining, roster, start barrier)"                                       'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lobby"'
+    suite "2.13"   sim    1 "test_tcp"                   "TCP Transport (test_tcp)"                                  "TCP TRANSPORT SUITE (framing, hostile frames, real-socket match)"                  '"./$BUILD_DIR/tests/test_net/test_tcp"'
+    suite "2.13.1" sim    0 "test_ctl"                   "Control Interface (test_ctl)"                              "CONTROL INTERFACE SUITE (strict JSON, authenticated HTTP over real sockets)"       '"./$BUILD_DIR/tests/test_ctl/test_ctl"'
+    suite "2.14"   sim    1 "test_netgame"               "NetGame (test_netgame)"                                    "NETGAME SUITE (room, start barrier, matches over real sockets)"                    'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_netgame"'
+    suite "2.15"   sim    1 "test_movement_differential" "Movement Differential (test_movement_differential)"        "MOVEMENT DIFFERENTIAL SUITE (independent walk and A* models)"                      '"./$BUILD_DIR/tests/test_sim/test_movement_differential"'
+    suite "2.16"   sim    1 "test_lan"                   "LAN Discovery (test_lan)"                                  "LAN DISCOVERY SUITE (room announcements, browser, datagram codec)"                 '"./$BUILD_DIR/tests/test_net/test_lan"'
+    suite "2.17"   sim    1 "test_ws"                    "WebSocket Transport (test_ws)"                             "WEBSOCKET TRANSPORT SUITE (RFC 6455 codec, handshake, real-socket echo)"           '"./$BUILD_DIR/tests/test_net/test_ws"'
+    suite "2.18"   sim    0 "map_sweep"                  "Map Sweep (map_sweep --selftest)"                          "MAP SWEEP SELF-TEST (six shipped maps: loads, determinism, faults)"                '"./$BUILD_DIR/map_sweep" --selftest'
+    suite "2.19"   sim    0 "test_server"                "Dedicated Server (test_server)"                            "DEDICATED SERVER SUITE (map store, rooms, the door, control calls, real sockets)"  'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_server/test_server"'
+    suite "2.20"   sim    1 "test_ai"                    "Computer Players (test_ai)"                                "COMPUTER PLAYERS SUITE (ants_ai controller, idle bot, bot seats in rooms)"         'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai"'
+    suite "2.21"   sim    1 "bot_arena"                  "Bot Arena (bot_arena --selftest)"                          "BOT ARENA SELF-TEST (headless matches: determinism, replay without a bot, report, threads)" '"./$BUILD_DIR/bot_arena" --selftest'
+    suite "2.22"   sim    0 "test_ai_worker"             "Worker Bot (test_ai_worker)"                               "WORKER BOT SUITE (the economy on every shipped map, learning, endgame, budget, pinned baselines)" 'run_worker_bot_suite'
+    suite "2.23"   sim    1 "test_latency"               "Ping, Delay, Waiting (test_latency)"                       "PING, DELAY AND WAITING SUITE (the meters, a simulated link, the buffer after a stall)" '"./$BUILD_DIR/tests/test_net/test_latency"'
+    suite "2.24"   sim    1 "test_jitter"                "Jitter Buffer (test_jitter)"                               "JITTER BUFFER SUITE (the rule, the runner's speed, stalls, hitches, hidden windows)" '"./$BUILD_DIR/tests/test_net/test_jitter"'
+
+    # 3. application
+    suite "3"      app    1 "test_app_integration"       "Application Integration Tests (test_app)"                  "APPLICATION INTEGRATION SUITES (libants-app)"                                      '"./$BUILD_DIR/tests/test_app/test_app_integration"'
+    suite "3.1"    app    1 "test_render_parity"         "Render Parity (test_render_parity)"                        "RENDER PARITY SUITE (renderer vs original draw rules)"                             '"./$BUILD_DIR/tests/test_app/test_render_parity"'
+    suite "3.2"    app    1 "test_hud_layout"            "HUD Layout (test_hud_layout)"                              "HUD LAYOUT SUITE (draw calls vs original coordinates)"                             '"./$BUILD_DIR/tests/test_app/test_hud_layout"'
+    suite "3.3"    app    1 "test_status_messages"       "Status Messages (test_status_messages)"                    "STATUS MESSAGES SUITE (status line, selection / order texts)"                      '"./$BUILD_DIR/tests/test_app/test_status_messages"'
+    suite "3.4"    app    1 "test_input_model"           "Input Model (test_input_model)"                            "INPUT MODEL SUITE (edge scrolling, minimap drag)"                                  '"./$BUILD_DIR/tests/test_app/test_input_model"'
+    suite "3.5"    app    1 "test_pointer_model"         "Pointer Model (test_pointer_model)"                        "POINTER MODEL SUITE (cursor table, clicks, band, pedestals)"                       '"./$BUILD_DIR/tests/test_app/test_pointer_model"'
+    suite "3.6"    app    0 "test_network_app"           "Network Application (test_network_app)"                    "NETWORK APPLICATION SUITE (names, room, thumbs, start, matches)"                   'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_network_app"'
+    suite "3.7"    app    1 "test_options"               "Options (test_options)"                                    "OPTIONS SUITE (slider, switches, edit fields, settings)"                           '"./$BUILD_DIR/tests/test_app/test_options"'
+    suite "3.8"    app    0 "ants"                       "Start Script (start_game.sh --dry-run)"                    "START SCRIPT SUITE (start_game.sh --dry-run: seats, colours, grid)"                '"./tests/scripts/test_start_game.sh"'
+    suite "3.9"    app    0 "ants ants_server"           "Server End-To-End (ants_server + 2 clients)"               "SERVER END-TO-END (ants_server + two headless clients: secret, room by code, automatic start)" 'BUILD_DIR="$BUILD_DIR" "./tests/scripts/test_ants_server.sh"'
+    suite "3.10"   app    1 "test_view_fingerprint"      "View Fingerprint (test_view_fingerprint)"                  "VIEW FINGERPRINT SUITE (the classic 640 x 480 picture and pointer pinned: draw calls, pixels, every pixel's cursor, scroll and click)" '"./$BUILD_DIR/tests/test_app/test_view_fingerprint"'
+    suite "3.11"   app    1 "test_start_menu"            "Start Menu Model (test_start_menu)"                        "START MENU MODEL SUITE (keys, mouse, fields, seats, servers, codes, settings, layout, drawing, command-line skip rules)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_start_menu"'
+    suite "3.12"   app    0 "test_start_menu_app"        "Start Menu Application (test_start_menu_app)"              "START MENU APPLICATION SUITE (single player, bots, join, host, every failure, cancel, back to the menu; a real room manager over TCP)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_start_menu_app"'
+    suite "3.13"   app    1 "test_screen_layout"         "Screen Layout (test_screen_layout)"                        "SCREEN LAYOUT SUITE (the picture's geometry as numbers and every consumer of it: HUD, scroll, pointer, plate, renderer)" '"./$BUILD_DIR/tests/test_app/test_screen_layout"'
+    suite "3.14"   app    1 "test_canvas_layout"         "Canvas Layout (test_canvas_layout)"                        "CANVAS LAYOUT SUITE (the 16:9 canvas in a window, --aspect, Alt+Enter, the screenshot)" '"./$BUILD_DIR/tests/test_app/test_canvas_layout"'
+    suite "3.15"   app    1 "test_wide_hud"              "Wide HUD (test_wide_hud)"                                  "WIDE HUD SUITE (the 16:9 match screen: the frame's pieces and cuts, the HUD at 960 x 540, the view, the pages and dialogs, the picture per screen, the default)" '"./$BUILD_DIR/tests/test_app/test_wide_hud"'
+    suite "3.16"   app    1 "test_wide_setup"            "Wide Setup (test_wide_setup)"                              "WIDE SETUP SUITE (the 16:9 setup screen with its map preview: layout, seams, the mock-ups pixel for pixel, the preview, the pointer, fingerprints)" '"./$BUILD_DIR/tests/test_app/test_wide_setup"'
+    suite "3.17"   app    1 "test_map_preview"           "Map Preview (test_map_preview)"                            "MAP PREVIEW SUITE (the preview is the game's own render of the map: the area filter against an oracle, the fit, the render, the cache, the fallback, the six maps)" '"./$BUILD_DIR/tests/test_app/test_map_preview"'
+    suite "3.18"   app    1 "test_zoom_model"            "Zoom Model (test_zoom_model)"                              "ZOOM MODEL SUITE (the wheel zoom's levels, anchoring, clamps, camera, edge scroll in screen pixels, start view, wheel accumulation, settings key)" '"./$BUILD_DIR/tests/test_app/test_zoom_model"'
+    suite "3.19"   app    1 "test_zoom_view"             "Zoom View (test_zoom_view)"                                "ZOOM VIEW SUITE (the world pass against the direct pass, the HUD at a zoom, the wheel, fairness, settings, a network match with a zoom)" '"./$BUILD_DIR/tests/test_app/test_zoom_view"'
+    suite "3.20"   app    1 "test_zoom_fingerprint"      "Zoom Fingerprint (test_zoom_fingerprint)"                  "ZOOM FINGERPRINT SUITE (the pictures and the pointer pinned at the zoom 0.5 and 2, classic and wide)" '"./$BUILD_DIR/tests/test_app/test_zoom_fingerprint"'
+
+    # 4. opaque-box E2E (its own build folder)
+    suite "4"      e2e    0 "-"                          "Opaque-Box E2E Tests (e2e_runner)"                         "E2E OPAQUE-BOX VERIFICATION SUITES"                                                './build_e2e/e2e_runner $E2E_ARGS'
+
+    # 5. repository checks (python3; no build)
+    suite "5.1"    tools  1 "-"                          "Version / Changelog / Status / README Consistency"         "VERSION CONSISTENCY (the file VERSION against CHANGELOG.md, STATUS.md and README.md)" 'python3 tools/check_version_consistency.py'
+    suite "5.2"    tools  1 "-"                          "Tool and Script Tests (python: tests/scripts/test_*.py)"   "TOOL AND SCRIPT TESTS (changelog pages, version tools, the generated header, the tiers of this script)" 'python3 -m unittest discover -s tests/scripts -p "test_*.py"'
+}
+
+# The suites come from define_suites, unless a test of this script gives its own table (tests/scripts/test_run_tests.py: ANTS_RUN_TESTS_TABLE=<file> that calls `suite`
+# the same way); such a table builds nothing.
+NO_BUILD=0
+if [ -n "${ANTS_RUN_TESTS_TABLE:-}" ]; then
+    NO_BUILD=1
+    # shellcheck disable=SC1090
+    . "$ANTS_RUN_TESTS_TABLE"
+else
+    define_suites
+fi
+
+# Which suites do the options select?
+SELECTED=()
+for ((i = 0; i < ${#SUITE_IDS[@]}; i++)); do
+    case "${SUITE_TIERS[$i]}" in
+        assets) [ "$RUN_ASSETS" -eq 1 ] || continue ;;
+        sim)    [ "$RUN_SIM" -eq 1 ] || continue ;;
+        app)    [ "$RUN_APP" -eq 1 ] || continue ;;
+        e2e)    [ "$RUN_E2E" -eq 1 ] || continue ;;
+        tools)  [ "$RUN_TOOLS" -eq 1 ] || continue ;;
+    esac
+    if [ "$FAST" -eq 1 ] && [ "${SUITE_QUICK[$i]}" -ne 1 ]; then
+        continue
+    fi
+    SELECTED+=("$i")
+done
+
+if [ "$LIST_ONLY" -eq 1 ]; then
+    for i in ${SELECTED[@]+"${SELECTED[@]}"}; do
+        quick="full"
+        [ "${SUITE_QUICK[$i]}" -eq 1 ] && quick="quick"
+        printf '%s\t%s\t%s\t%s\n' "${SUITE_IDS[$i]}" "${SUITE_TIERS[$i]}" "$quick" "${SUITE_LABELS[$i]}"
+    done
+    exit 0
+fi
+
+echo -e "${BOLD}${CYAN}======================================================================${RESET}"
+echo -e "${BOLD}${CYAN}                 ANTS ENGINE REMAKE - MASTER TEST RUNNER              ${RESET}"
+echo -e "${BOLD}${CYAN}======================================================================${RESET}"
+if [ "$FAST" -eq 1 ]; then
+    echo -e "${YELLOW}[FAST] The quick tier only: ${#SELECTED[@]} suites (the full run is ./run_tests.sh; tiers: docs/WORKFLOW.md)${RESET}"
 fi
 
 # Clean Build Directories if requested
@@ -128,8 +312,28 @@ if [ "$CLEAN_BUILD" -eq 1 ]; then
     rm -rf "$BUILD_DIR" build_e2e
 fi
 
+# Which builds do the selected suites need?
+NEED_MAIN=0
+NEED_SIM=0
+NEED_E2E=0
+FAST_TARGETS=""
+for i in ${SELECTED[@]+"${SELECTED[@]}"}; do
+    case "${SUITE_TIERS[$i]}" in
+        assets|app) NEED_MAIN=1 ;;
+        sim) NEED_MAIN=1; NEED_SIM=1 ;;
+        e2e) NEED_E2E=1 ;;
+    esac
+    for target in ${SUITE_TARGETS[$i]}; do
+        [ "$target" = "-" ] && continue
+        case " $FAST_TARGETS " in
+            *" $target "*) ;;
+            *) FAST_TARGETS="$FAST_TARGETS $target" ;;
+        esac
+    done
+done
+
 # 1. Build Asset, Simulation, and App Tests (libants-assets, libants-sim, libants-app)
-if [ "$RUN_ASSETS" -eq 1 ] || [ "$RUN_SIM" -eq 1 ] || [ "$RUN_APP" -eq 1 ]; then
+if [ "$NO_BUILD" -eq 0 ] && [ "$NEED_MAIN" -eq 1 ]; then
     if [ ! -d "$BUILD_DIR" ] || [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
         echo -e "${YELLOW}[BUILD] Configuring ${BUILD_DIR} (CMake)...${RESET}"
         if [ "$RUN_ASAN" -eq 1 ]; then
@@ -138,16 +342,23 @@ if [ "$RUN_ASSETS" -eq 1 ] || [ "$RUN_SIM" -eq 1 ] || [ "$RUN_APP" -eq 1 ]; then
             cmake -B "$BUILD_DIR" -S . -DANTS_WERROR=ON -DCMAKE_BUILD_TYPE=Release >/dev/null
         fi
     fi
-    echo -e "${YELLOW}[BUILD] Compiling libraries and test suites (-j${NCPU})...${RESET}"
-    cmake --build "$BUILD_DIR" -j"$NCPU"
-    if [ "$RUN_SIM" -eq 1 ]; then
-        # the map sweep and the bot arena are optional targets (not in the default build); their --selftest is run with the simulation suites
-        cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep bot_arena
+    if [ "$FAST" -eq 1 ]; then
+        # only what the quick suites run (an incremental build of the changed files); map_sweep and bot_arena are optional targets, named here like the rest
+        echo -e "${YELLOW}[BUILD] Compiling the targets of the quick suites (-j${NCPU})...${RESET}"
+        # shellcheck disable=SC2086
+        cmake --build "$BUILD_DIR" -j"$NCPU" --target $FAST_TARGETS
+    else
+        echo -e "${YELLOW}[BUILD] Compiling libraries and test suites (-j${NCPU})...${RESET}"
+        cmake --build "$BUILD_DIR" -j"$NCPU"
+        if [ "$NEED_SIM" -eq 1 ]; then
+            # the map sweep and the bot arena are optional targets (not in the default build); their --selftest is run with the simulation suites
+            cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep bot_arena
+        fi
     fi
 fi
 
 # 2. Build E2E Runner
-if [ "$RUN_E2E" -eq 1 ]; then
+if [ "$NO_BUILD" -eq 0 ] && [ "$NEED_E2E" -eq 1 ]; then
     if [ ! -d "build_e2e" ] || [ ! -f "build_e2e/CMakeCache.txt" ]; then
         echo -e "${YELLOW}[BUILD] Configuring build_e2e (CMake)...${RESET}"
         cmake -S tests/e2e -B build_e2e >/dev/null
@@ -158,859 +369,79 @@ fi
 
 # Disable exit-on-error to collect all test results for dashboard
 set +e
-ASSETS_STATUS=0
-MOVEMENT_TABLES_STATUS=0
-CHALLENGER_M1_1_STATUS=0
-CHALLENGER_M1_2_STATUS=0
-CHALLENGER_M1_IT2_STATUS=0
-CHALLENGER_M1_IT2_2_STATUS=0
-SIM_STATUS=0
-PATH_PLANNER_STATUS=0
-MOVEMENT_GOLDEN_STATUS=0
-HILL_ACTIONS_STATUS=0
-COMBAT_ACTIONS_STATUS=0
-ABILITY_ACTIONS_STATUS=0
-POWERUP_ACTIONS_STATUS=0
-FOOD_ACTIONS_STATUS=0
-LEVEL_DEFAULTS_STATUS=0
-CHALLENGER_M2_1_STATUS=0
-CHALLENGER_M2_2_STATUS=0
-MAP_SWEEP_STATUS=0
-BOT_ARENA_STATUS=0
-AI_WORKER_STATUS=0
-LATENCY_STATUS=0
-JITTER_STATUS=0
-SERVER_STATUS=0
-AI_STATUS=0
-SERVER_E2E_STATUS=0
-VIEW_FINGERPRINT_STATUS=0
-SCREEN_LAYOUT_STATUS=0
-CANVAS_LAYOUT_STATUS=0
-WIDE_HUD_STATUS=0
-WIDE_SETUP_STATUS=0
-MAP_PREVIEW_STATUS=0
-ZOOM_MODEL_STATUS=0
-ZOOM_VIEW_STATUS=0
-ZOOM_FINGERPRINT_STATUS=0
-APP_STATUS=0
-E2E_STATUS=0
+
+now_ms() {
+    if command -v perl >/dev/null 2>&1; then
+        perl -MTime::HiRes=time -e 'printf "%d", time() * 1000'
+    else
+        echo $(( $(date +%s) * 1000 ))
+    fi
+}
+
+format_ms() {
+    # 12345 -> 12.3s
+    local ms="$1"
+    printf '%d.%ds' $((ms / 1000)) $(((ms % 1000) / 100))
+}
+
+SUITE_STATUS=()
+SUITE_MS=()
 START_TIME=$(date +%s)
 
-# 3. Execute Asset Decoder Tests
-if [ "$RUN_ASSETS" -eq 1 ]; then
+# 3. Execute the selected suites, in order, and time each one
+for i in ${SELECTED[@]+"${SELECTED[@]}"}; do
     echo ""
     echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 1. RUNNING ASSET DECODER SUITES (libants-assets)...               ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_assets/test_assets"
-    ASSETS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 1.1 RUNNING MOVEMENT TABLE PARITY (generated tables vs Ants.exe or its pinned digests / ants.chd)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_assets/test_movement_tables"
-    MOVEMENT_TABLES_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 1.2 RUNNING CHALLENGER M1_1 (adversarial asset decoding)...        ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_assets/test_challenger_m1_1"
-    CHALLENGER_M1_1_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 1.3 RUNNING CHALLENGER M1_2 (asset decoding, second pass)...       ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_assets/test_challenger_m1_2"
-    CHALLENGER_M1_2_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 1.4 RUNNING CHALLENGER M1_IT2 (asset interface contract)...        ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2"
-    CHALLENGER_M1_IT2_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 1.5 RUNNING CHALLENGER M1_IT2_2 (asset interface contract, deep)... ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2_2"
-    CHALLENGER_M1_IT2_2_STATUS=$?
-fi
-
-# 4. Execute Simulation Rules Tests
-if [ "$RUN_SIM" -eq 1 ]; then
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2. RUNNING SIMULATION RULES SUITES (libants-sim)...               ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_sim_rules"
-    SIM_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.1 RUNNING CHALLENGER M2_1 (Combat, Hazards, Physics)...         ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_challenger_m2_1"
-    CHALLENGER_M2_1_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.2 RUNNING CHALLENGER M2_2 (Lifecycle, Economy, Alliances)...   ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_challenger_m2_2"
-    CHALLENGER_M2_2_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.3 RUNNING ORIGINAL PATH PLANNER (PATHMGR A*) SUITE...           ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_path_planner"
-    PATH_PLANNER_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.4 RUNNING ORIGINAL MOVEMENT GOLDEN SUITE (frame-exact locomotion)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_movement_golden"
-    MOVEMENT_GOLDEN_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.5 RUNNING ORIGINAL HILL ACTIONS SUITE (enter, ring, hatch, raid)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_hill_actions"
-    HILL_ACTIONS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.6 RUNNING ORIGINAL COMBAT ACTIONS SUITE (contact, flights, blasts, death)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_combat_actions"
-    COMBAT_ACTIONS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.7 RUNNING ORIGINAL ABILITY ACTIONS SUITE (bombs, fire walls, bridges)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_ability_actions"
-    ABILITY_ACTIONS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.8 RUNNING ORIGINAL POWER-UP ACTIONS SUITE (pick-up, cancel window, immunity)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_powerup_actions"
-    POWERUP_ACTIONS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.9 RUNNING ORIGINAL FOOD ACTIONS SUITE (food objects, grab clip, bite, stages)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_food_actions"
-    FOOD_ACTIONS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.9.1 RUNNING LEVEL DEFAULTS SUITE (default ant type of a level, power-ups and droppers by tile id)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_level_defaults"
-    LEVEL_DEFAULTS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.10 RUNNING COMMAND LAYER SUITE (commands, validation, lock-step state hash)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_commands"
-    COMMANDS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.11 RUNNING LOCK-STEP NETWORK CORE SUITE (protocol, sequencer, sessions, matches)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lockstep"
-    LOCKSTEP_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.12 RUNNING ROOM SUITE (joining, roster, start barrier)...      ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lobby"
-    LOBBY_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.13 RUNNING TCP TRANSPORT SUITE (framing, hostile frames, real-socket match)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_net/test_tcp"
-    TCP_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.13.1 RUNNING CONTROL INTERFACE SUITE (strict JSON, authenticated HTTP over real sockets)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_ctl/test_ctl"
-    CTL_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.14 RUNNING NETGAME SUITE (room, start barrier, matches over real sockets)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_netgame"
-    NETGAME_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.15 RUNNING MOVEMENT DIFFERENTIAL SUITE (independent walk and A* models)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_sim/test_movement_differential"
-    MOVEMENT_DIFFERENTIAL_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.16 RUNNING LAN DISCOVERY SUITE (room announcements, browser, datagram codec)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_net/test_lan"
-    LAN_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.17 RUNNING WEBSOCKET TRANSPORT SUITE (RFC 6455 codec, handshake, real-socket echo)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_net/test_ws"
-    WS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.18 RUNNING MAP SWEEP SELF-TEST (six shipped maps: loads, determinism, faults)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/map_sweep" --selftest
-    MAP_SWEEP_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.19 RUNNING DEDICATED SERVER SUITE (map store, rooms, the door, control calls, real sockets)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_server/test_server"
-    SERVER_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.20 RUNNING COMPUTER PLAYERS SUITE (ants_ai controller, idle bot, bot seats in rooms)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    # a developer's ANTS_TEST_FILTER (run only the cases whose title contains a text) must not leak into the master run, for the same reason as W_ONLY below
-    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai"
-    AI_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.21 RUNNING BOT ARENA SELF-TEST (headless matches: determinism, replay without a bot, report, threads)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/bot_arena" --selftest
-    BOT_ARENA_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.22 RUNNING WORKER BOT SUITE (the economy on every shipped map, learning, endgame, budget, pinned baselines)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    # The test filters of a developer (W_ONLY, W_SKIP, ANTS_TEST_FILTER) must not leak into the master run: a forgotten W_ONLY would run one test and print PASSED. Under ASan + UBSan
-    # (unoptimised) the 18-row pinned table (AI3.9, AI3.12) is about four fifths of the run time and checks numbers, not memory: the sanitizer pass leaves those two out (docs/audit/B3_notes.md).
-    if [ "$RUN_ASAN" -eq 1 ]; then
-        env -u W_ONLY -u ANTS_TEST_FILTER W_SKIP=AI3.9,AI3.12 "./$BUILD_DIR/tests/test_ai/test_ai_worker"
-    else
-        env -u W_ONLY -u W_SKIP -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai_worker"
-    fi
-    AI_WORKER_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.23 RUNNING PING, DELAY AND WAITING SUITE (the meters, a simulated link, the buffer after a stall)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_net/test_latency"
-    LATENCY_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 2.24 RUNNING JITTER BUFFER SUITE (the rule, the runner's speed, stalls, hitches, hidden windows)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_net/test_jitter"
-    JITTER_STATUS=$?
-fi
-
-# 5. Execute Application Integration Tests
-if [ "$RUN_APP" -eq 1 ]; then
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3. RUNNING APPLICATION INTEGRATION SUITES (libants-app)...       ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_app_integration"
-    APP_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.1 RUNNING RENDER PARITY SUITE (renderer vs original draw rules)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_render_parity"
-    RENDER_PARITY_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.2 RUNNING HUD LAYOUT SUITE (draw calls vs original coordinates)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_hud_layout"
-    HUD_LAYOUT_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.3 RUNNING STATUS MESSAGES SUITE (status line, selection / order texts)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_status_messages"
-    STATUS_MESSAGES_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.4 RUNNING INPUT MODEL SUITE (edge scrolling, minimap drag)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_input_model"
-    INPUT_MODEL_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.5 RUNNING POINTER MODEL SUITE (cursor table, clicks, band, pedestals)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_pointer_model"
-    POINTER_MODEL_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.6 RUNNING NETWORK APPLICATION SUITE (names, room, thumbs, start, matches)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_network_app"
-    NETWORK_APP_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.7 RUNNING OPTIONS SUITE (slider, switches, edit fields, settings)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_options"
-    OPTIONS_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.8 RUNNING START SCRIPT SUITE (start_game.sh --dry-run: seats, colours, grid)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./tests/scripts/test_start_game.sh"
-    START_SCRIPT_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.9 RUNNING SERVER END-TO-END (ants_server + two headless clients: secret, room by code, automatic start)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    BUILD_DIR="$BUILD_DIR" "./tests/scripts/test_ants_server.sh"
-    SERVER_E2E_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.10 RUNNING VIEW FINGERPRINT SUITE (the classic 640 x 480 picture and pointer pinned: draw calls, pixels, every pixel's cursor, scroll and click)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_view_fingerprint"
-    VIEW_FINGERPRINT_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.11 RUNNING START MENU MODEL SUITE (keys, mouse, fields, seats, servers, codes, settings, layout, drawing, command-line skip rules)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_start_menu"
-    START_MENU_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.12 RUNNING START MENU APPLICATION SUITE (single player, bots, join, host, every failure, cancel, back to the menu; a real room manager over TCP)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_start_menu_app"
-    START_MENU_APP_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.13 RUNNING SCREEN LAYOUT SUITE (the picture's geometry as numbers and every consumer of it: HUD, scroll, pointer, plate, renderer)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_screen_layout"
-    SCREEN_LAYOUT_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.14 RUNNING CANVAS LAYOUT SUITE (the 16:9 canvas in a window, --aspect, Alt+Enter, the screenshot)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_canvas_layout"
-    CANVAS_LAYOUT_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.15 RUNNING WIDE HUD SUITE (the 16:9 match screen: the frame's pieces and cuts, the HUD at 960 x 540, the view, the pages and dialogs, the picture per screen, the default)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_wide_hud"
-    WIDE_HUD_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.16 RUNNING WIDE SETUP SUITE (the 16:9 setup screen with its map preview: layout, seams, the mock-ups pixel for pixel, the preview, the pointer, fingerprints)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_wide_setup"
-    WIDE_SETUP_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.17 RUNNING MAP PREVIEW SUITE (the preview is the game's own render of the map: the area filter against an oracle, the fit, the render, the cache, the fallback, the six maps)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_map_preview"
-    MAP_PREVIEW_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.18 RUNNING ZOOM MODEL SUITE (the wheel zoom's levels, anchoring, clamps, camera, edge scroll in screen pixels, start view, wheel accumulation, settings key)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_zoom_model"
-    ZOOM_MODEL_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.19 RUNNING ZOOM VIEW SUITE (the world pass against the direct pass, the HUD at a zoom, the wheel, fairness, settings, a network match with a zoom)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_zoom_view"
-    ZOOM_VIEW_STATUS=$?
-
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 3.20 RUNNING ZOOM FINGERPRINT SUITE (the pictures and the pointer pinned at the zoom 0.5 and 2, classic and wide)...${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    "./$BUILD_DIR/tests/test_app/test_zoom_fingerprint"
-    ZOOM_FINGERPRINT_STATUS=$?
-fi
-
-# 6. Execute E2E Opaque-Box Tests
-if [ "$RUN_E2E" -eq 1 ]; then
-    echo ""
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    echo -e "${BOLD}${BLUE}>>> 4. RUNNING E2E OPAQUE-BOX VERIFICATION SUITES...                  ${RESET}"
-    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
-    E2E_ARGS="--all"
-    if [ "$VERBOSE" -eq 1 ]; then
-        E2E_ARGS="--all -v"
-    fi
-    ./build_e2e/e2e_runner $E2E_ARGS
-    E2E_STATUS=$?
-fi
+    echo -e "${BOLD}${BLUE}>>> ${SUITE_IDS[$i]}. RUNNING ${SUITE_TITLES[$i]}...${RESET}"
+    echo -e "${BOLD}${BLUE}======================================================================${RESET}"
+    suite_start=$(now_ms)
+    ( eval "${SUITE_CMDS[$i]}" )      # a subshell: a command that exits (or fails) ends the suite, never this script
+    SUITE_STATUS[$i]=$?
+    suite_end=$(now_ms)
+    SUITE_MS[$i]=$((suite_end - suite_start))
+done
 
 END_TIME=$(date +%s)
 ELAPSED_SEC=$((END_TIME - START_TIME))
 
-# 7. Master Summary Dashboard
+# 4. Master Summary Dashboard
 echo ""
 echo -e "${BOLD}${CYAN}======================================================================${RESET}"
 echo -e "${BOLD}${CYAN}                     OVERALL TEST RUN SUMMARY                         ${RESET}"
 echo -e "${BOLD}${CYAN}======================================================================${RESET}"
 
 TOTAL_FAILED=0
-
-if [ "$RUN_ASSETS" -eq 1 ]; then
-    if [ "$ASSETS_STATUS" -eq 0 ]; then
-        echo -e " 1. Native Asset Decoder Tests (test_assets):       ${GREEN}PASSED${RESET}"
+TOTAL_RUN=0
+SLOWEST_FILE=$(mktemp "${TMPDIR:-/tmp}/ants_suite_times.XXXXXX")
+for i in ${SELECTED[@]+"${SELECTED[@]}"}; do
+    TOTAL_RUN=$((TOTAL_RUN + 1))
+    secs=$(format_ms "${SUITE_MS[$i]}")
+    printf '%s\t%s %s\n' "${SUITE_MS[$i]}" "${SUITE_IDS[$i]}" "${SUITE_LABELS[$i]}" >> "$SLOWEST_FILE"
+    if [ "${SUITE_STATUS[$i]}" -eq 0 ]; then
+        printf ' %-7s %-62s ' "${SUITE_IDS[$i]}" "${SUITE_LABELS[$i]}:"
+        echo -e "${GREEN}PASSED${RESET}  ${secs}"
     else
-        echo -e " 1. Native Asset Decoder Tests (test_assets):       ${RED}FAILED (exit code ${ASSETS_STATUS})${RESET}"
+        printf ' %-7s %-62s ' "${SUITE_IDS[$i]}" "${SUITE_LABELS[$i]}:"
+        echo -e "${RED}FAILED (exit code ${SUITE_STATUS[$i]})${RESET}  ${secs}"
         TOTAL_FAILED=$((TOTAL_FAILED + 1))
     fi
-
-    if [ "$MOVEMENT_TABLES_STATUS" -eq 0 ]; then
-        echo -e " 1.1 Movement Table Parity (test_movement_tables):   ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 1.1 Movement Table Parity (test_movement_tables):   ${RED}FAILED (exit code ${MOVEMENT_TABLES_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$CHALLENGER_M1_1_STATUS" -eq 0 ]; then
-        echo -e " 1.2 Challenger M1_1 (test_challenger_m1_1):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 1.2 Challenger M1_1 (test_challenger_m1_1):         ${RED}FAILED (exit code ${CHALLENGER_M1_1_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$CHALLENGER_M1_2_STATUS" -eq 0 ]; then
-        echo -e " 1.3 Challenger M1_2 (test_challenger_m1_2):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 1.3 Challenger M1_2 (test_challenger_m1_2):         ${RED}FAILED (exit code ${CHALLENGER_M1_2_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$CHALLENGER_M1_IT2_STATUS" -eq 0 ]; then
-        echo -e " 1.4 Challenger M1_IT2 (test_challenger_m1_it2):     ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 1.4 Challenger M1_IT2 (test_challenger_m1_it2):     ${RED}FAILED (exit code ${CHALLENGER_M1_IT2_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$CHALLENGER_M1_IT2_2_STATUS" -eq 0 ]; then
-        echo -e " 1.5 Challenger M1_IT2_2 (test_challenger_m1_it2_2): ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 1.5 Challenger M1_IT2_2 (test_challenger_m1_it2_2): ${RED}FAILED (exit code ${CHALLENGER_M1_IT2_2_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-fi
-
-if [ "$RUN_SIM" -eq 1 ]; then
-    if [ "$SIM_STATUS" -eq 0 ]; then
-        echo -e " 2. Simulation Rules Tests (test_sim_rules):        ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2. Simulation Rules Tests (test_sim_rules):        ${RED}FAILED (exit code ${SIM_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$CHALLENGER_M2_1_STATUS" -eq 0 ]; then
-        echo -e " 2.1 Challenger M2_1 (test_challenger_m2_1):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.1 Challenger M2_1 (test_challenger_m2_1):         ${RED}FAILED (exit code ${CHALLENGER_M2_1_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$CHALLENGER_M2_2_STATUS" -eq 0 ]; then
-        echo -e " 2.2 Challenger M2_2 (test_challenger_m2_2):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.2 Challenger M2_2 (test_challenger_m2_2):         ${RED}FAILED (exit code ${CHALLENGER_M2_2_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$PATH_PLANNER_STATUS" -eq 0 ]; then
-        echo -e " 2.3 Path Planner (test_path_planner):               ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.3 Path Planner (test_path_planner):               ${RED}FAILED (exit code ${PATH_PLANNER_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$MOVEMENT_GOLDEN_STATUS" -eq 0 ]; then
-        echo -e " 2.4 Movement Golden (test_movement_golden):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.4 Movement Golden (test_movement_golden):         ${RED}FAILED (exit code ${MOVEMENT_GOLDEN_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$HILL_ACTIONS_STATUS" -eq 0 ]; then
-        echo -e " 2.5 Hill Actions (test_hill_actions):               ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.5 Hill Actions (test_hill_actions):               ${RED}FAILED (exit code ${HILL_ACTIONS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$COMBAT_ACTIONS_STATUS" -eq 0 ]; then
-        echo -e " 2.6 Combat Actions (test_combat_actions):           ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.6 Combat Actions (test_combat_actions):           ${RED}FAILED (exit code ${COMBAT_ACTIONS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$ABILITY_ACTIONS_STATUS" -eq 0 ]; then
-        echo -e " 2.7 Ability Actions (test_ability_actions):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.7 Ability Actions (test_ability_actions):         ${RED}FAILED (exit code ${ABILITY_ACTIONS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$POWERUP_ACTIONS_STATUS" -eq 0 ]; then
-        echo -e " 2.8 Power-Up Actions (test_powerup_actions):        ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.8 Power-Up Actions (test_powerup_actions):        ${RED}FAILED (exit code ${POWERUP_ACTIONS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$FOOD_ACTIONS_STATUS" -eq 0 ]; then
-        echo -e " 2.9 Food Actions (test_food_actions):               ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.9 Food Actions (test_food_actions):               ${RED}FAILED (exit code ${FOOD_ACTIONS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$LEVEL_DEFAULTS_STATUS" -eq 0 ]; then
-        echo -e " 2.9.1 Level Defaults (test_level_defaults):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.9.1 Level Defaults (test_level_defaults):         ${RED}FAILED (exit code ${LEVEL_DEFAULTS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$COMMANDS_STATUS" -eq 0 ]; then
-        echo -e " 2.10 Commands + State Hash (test_commands):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.10 Commands + State Hash (test_commands):         ${RED}FAILED (exit code ${COMMANDS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$LOCKSTEP_STATUS" -eq 0 ]; then
-        echo -e " 2.11 Lock-Step Network Core (test_lockstep):        ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.11 Lock-Step Network Core (test_lockstep):        ${RED}FAILED (exit code ${LOCKSTEP_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$LOBBY_STATUS" -eq 0 ]; then
-        echo -e " 2.12 Room / Start Barrier (test_lobby):             ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.12 Room / Start Barrier (test_lobby):             ${RED}FAILED (exit code ${LOBBY_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$TCP_STATUS" -eq 0 ]; then
-        echo -e " 2.13 TCP Transport (test_tcp):                      ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.13 TCP Transport (test_tcp):                      ${RED}FAILED (exit code ${TCP_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$CTL_STATUS" -eq 0 ]; then
-        echo -e " 2.13.1 Control Interface (test_ctl):                ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.13.1 Control Interface (test_ctl):                ${RED}FAILED (exit code ${CTL_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$NETGAME_STATUS" -eq 0 ]; then
-        echo -e " 2.14 NetGame (test_netgame):                        ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.14 NetGame (test_netgame):                        ${RED}FAILED (exit code ${NETGAME_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$MOVEMENT_DIFFERENTIAL_STATUS" -eq 0 ]; then
-        echo -e " 2.15 Movement Differential (test_movement_differential): ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.15 Movement Differential (test_movement_differential): ${RED}FAILED (exit code ${MOVEMENT_DIFFERENTIAL_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$LAN_STATUS" -eq 0 ]; then
-        echo -e " 2.16 LAN Discovery (test_lan):                      ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.16 LAN Discovery (test_lan):                      ${RED}FAILED (exit code ${LAN_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$WS_STATUS" -eq 0 ]; then
-        echo -e " 2.17 WebSocket Transport (test_ws):                 ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.17 WebSocket Transport (test_ws):                 ${RED}FAILED (exit code ${WS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$MAP_SWEEP_STATUS" -eq 0 ]; then
-        echo -e " 2.18 Map Sweep (map_sweep --selftest):              ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.18 Map Sweep (map_sweep --selftest):              ${RED}FAILED (exit code ${MAP_SWEEP_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$SERVER_STATUS" -eq 0 ]; then
-        echo -e " 2.19 Dedicated Server (test_server):                ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.19 Dedicated Server (test_server):                ${RED}FAILED (exit code ${SERVER_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$AI_STATUS" -eq 0 ]; then
-        echo -e " 2.20 Computer Players (test_ai):                    ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.20 Computer Players (test_ai):                    ${RED}FAILED (exit code ${AI_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$BOT_ARENA_STATUS" -eq 0 ]; then
-        echo -e " 2.21 Bot Arena (bot_arena --selftest):              ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.21 Bot Arena (bot_arena --selftest):              ${RED}FAILED (exit code ${BOT_ARENA_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$AI_WORKER_STATUS" -eq 0 ]; then
-        echo -e " 2.22 Worker Bot (test_ai_worker):                   ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.22 Worker Bot (test_ai_worker):                   ${RED}FAILED (exit code ${AI_WORKER_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$LATENCY_STATUS" -eq 0 ]; then
-        echo -e " 2.23 Ping, Delay, Waiting (test_latency):           ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.23 Ping, Delay, Waiting (test_latency):           ${RED}FAILED (exit code ${LATENCY_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$JITTER_STATUS" -eq 0 ]; then
-        echo -e " 2.24 Jitter Buffer (test_jitter):                   ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 2.24 Jitter Buffer (test_jitter):                   ${RED}FAILED (exit code ${JITTER_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-fi
-
-if [ "$RUN_APP" -eq 1 ]; then
-    if [ "$APP_STATUS" -eq 0 ]; then
-        echo -e " 3. Application Integration Tests (test_app):       ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3. Application Integration Tests (test_app):       ${RED}FAILED (exit code ${APP_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$RENDER_PARITY_STATUS" -eq 0 ]; then
-        echo -e " 3.1 Render Parity (test_render_parity):             ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.1 Render Parity (test_render_parity):             ${RED}FAILED (exit code ${RENDER_PARITY_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$HUD_LAYOUT_STATUS" -eq 0 ]; then
-        echo -e " 3.2 HUD Layout (test_hud_layout):                   ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.2 HUD Layout (test_hud_layout):                   ${RED}FAILED (exit code ${HUD_LAYOUT_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$STATUS_MESSAGES_STATUS" -eq 0 ]; then
-        echo -e " 3.3 Status Messages (test_status_messages):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.3 Status Messages (test_status_messages):         ${RED}FAILED (exit code ${STATUS_MESSAGES_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$INPUT_MODEL_STATUS" -eq 0 ]; then
-        echo -e " 3.4 Input Model (test_input_model):                 ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.4 Input Model (test_input_model):                 ${RED}FAILED (exit code ${INPUT_MODEL_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$POINTER_MODEL_STATUS" -eq 0 ]; then
-        echo -e " 3.5 Pointer Model (test_pointer_model):             ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.5 Pointer Model (test_pointer_model):             ${RED}FAILED (exit code ${POINTER_MODEL_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$NETWORK_APP_STATUS" -eq 0 ]; then
-        echo -e " 3.6 Network Application (test_network_app):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.6 Network Application (test_network_app):         ${RED}FAILED (exit code ${NETWORK_APP_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$OPTIONS_STATUS" -eq 0 ]; then
-        echo -e " 3.7 Options (test_options):                         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.7 Options (test_options):                         ${RED}FAILED (exit code ${OPTIONS_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$START_SCRIPT_STATUS" -eq 0 ]; then
-        echo -e " 3.8 Start Script (start_game.sh --dry-run):         ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.8 Start Script (start_game.sh --dry-run):         ${RED}FAILED (exit code ${START_SCRIPT_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$SERVER_E2E_STATUS" -eq 0 ]; then
-        echo -e " 3.9 Server End-To-End (ants_server + 2 clients):    ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.9 Server End-To-End (ants_server + 2 clients):    ${RED}FAILED (exit code ${SERVER_E2E_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$VIEW_FINGERPRINT_STATUS" -eq 0 ]; then
-        echo -e " 3.10 View Fingerprint (test_view_fingerprint):      ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.10 View Fingerprint (test_view_fingerprint):      ${RED}FAILED (exit code ${VIEW_FINGERPRINT_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$START_MENU_STATUS" -eq 0 ]; then
-        echo -e " 3.11 Start Menu Model (test_start_menu):            ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.11 Start Menu Model (test_start_menu):            ${RED}FAILED (exit code ${START_MENU_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$START_MENU_APP_STATUS" -eq 0 ]; then
-        echo -e " 3.12 Start Menu Application (test_start_menu_app):  ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.12 Start Menu Application (test_start_menu_app):  ${RED}FAILED (exit code ${START_MENU_APP_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$SCREEN_LAYOUT_STATUS" -eq 0 ]; then
-        echo -e " 3.13 Screen Layout (test_screen_layout):            ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.13 Screen Layout (test_screen_layout):            ${RED}FAILED (exit code ${SCREEN_LAYOUT_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$CANVAS_LAYOUT_STATUS" -eq 0 ]; then
-        echo -e " 3.14 Canvas Layout (test_canvas_layout):            ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.14 Canvas Layout (test_canvas_layout):            ${RED}FAILED (exit code ${CANVAS_LAYOUT_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$WIDE_HUD_STATUS" -eq 0 ]; then
-        echo -e " 3.15 Wide HUD (test_wide_hud):                      ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.15 Wide HUD (test_wide_hud):                      ${RED}FAILED (exit code ${WIDE_HUD_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$WIDE_SETUP_STATUS" -eq 0 ]; then
-        echo -e " 3.16 Wide Setup (test_wide_setup):                  ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.16 Wide Setup (test_wide_setup):                  ${RED}FAILED (exit code ${WIDE_SETUP_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$MAP_PREVIEW_STATUS" -eq 0 ]; then
-        echo -e " 3.17 Map Preview (test_map_preview):                ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.17 Map Preview (test_map_preview):                ${RED}FAILED (exit code ${MAP_PREVIEW_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$ZOOM_MODEL_STATUS" -eq 0 ]; then
-        echo -e " 3.18 Zoom Model (test_zoom_model):                  ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.18 Zoom Model (test_zoom_model):                  ${RED}FAILED (exit code ${ZOOM_MODEL_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$ZOOM_VIEW_STATUS" -eq 0 ]; then
-        echo -e " 3.19 Zoom View (test_zoom_view):                    ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.19 Zoom View (test_zoom_view):                    ${RED}FAILED (exit code ${ZOOM_VIEW_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-
-    if [ "$ZOOM_FINGERPRINT_STATUS" -eq 0 ]; then
-        echo -e " 3.20 Zoom Fingerprint (test_zoom_fingerprint):      ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 3.20 Zoom Fingerprint (test_zoom_fingerprint):      ${RED}FAILED (exit code ${ZOOM_FINGERPRINT_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-fi
-
-if [ "$RUN_E2E" -eq 1 ]; then
-    if [ "$E2E_STATUS" -eq 0 ]; then
-        echo -e " 4. Opaque-Box E2E Tests (e2e_runner):              ${GREEN}PASSED${RESET}"
-    else
-        echo -e " 4. Opaque-Box E2E Tests (e2e_runner):              ${RED}FAILED (exit code ${E2E_STATUS})${RESET}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
-fi
+done
 
 echo -e "${BOLD}${CYAN}----------------------------------------------------------------------${RESET}"
+if [ "$TOTAL_RUN" -gt 0 ]; then
+    echo " Slowest suites:"
+    sort -t "$(printf '\t')" -k1,1 -rn "$SLOWEST_FILE" | head -5 | while IFS="$(printf '\t')" read -r ms name; do
+        printf '   %8s  %s\n' "$(format_ms "$ms")" "$name"
+    done
+fi
+rm -f "$SLOWEST_FILE"
+echo -e " Suites run: ${TOTAL_RUN}, failed: ${TOTAL_FAILED}"
 echo -e " Total Test Execution Time: ${ELAPSED_SEC}s"
-if [ "$TOTAL_FAILED" -eq 0 ]; then
+if [ "$TOTAL_RUN" -eq 0 ]; then
+    echo -e "${BOLD}${RED} RESULT: NO TEST SUITE WAS SELECTED!                                  ${RESET}"
+    echo -e "${BOLD}${CYAN}======================================================================${RESET}"
+    exit 1
+elif [ "$TOTAL_FAILED" -eq 0 ]; then
     echo -e "${BOLD}${GREEN} RESULT: ALL EXECUTED TEST SUITES PASSED CLEANLY!                     ${RESET}"
     echo -e "${BOLD}${CYAN}======================================================================${RESET}"
     exit 0

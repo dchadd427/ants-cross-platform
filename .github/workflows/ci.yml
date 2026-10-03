@@ -4,8 +4,10 @@
 #
 # The suites are the ones run_tests.sh runs: ctest runs every test program that the CMake project registers (assets, simulation, network,
 # server, bots, application), then the self-tests of the two tools (map_sweep, bot_arena), the opaque-box E2E runner and, where bash and
-# python3 exist (macOS, Linux), the two script suites (start_game.sh --dry-run, ants_server with two headless clients). The Docker-based
-# and browser-based checks of the project are not run here (the browser checks are opt-in, see tests/TEST_INFRA.md).
+# python3 exist (macOS, Linux), the two script suites (start_game.sh --dry-run, ants_server with two headless clients) and the repository
+# checks (the version and changelog consistency check and the python tests of tests/scripts: the changelog pages, the version tools, the generated
+# version header, the tiers of run_tests.sh). The web job also builds the game server's image. The browser-based checks of the project are not run
+# here (they are opt-in, see tests/TEST_INFRA.md). The tiers of tests and the release procedure: docs/WORKFLOW.md.
 name: CI
 
 on:
@@ -93,6 +95,12 @@ jobs:
         run: |
           bash tests/scripts/test_start_game.sh
           BUILD_DIR=build bash tests/scripts/test_ants_server.sh
+
+      - name: Repository checks (version and changelog consistency, python tests of the tools and the tiers)
+        if: ${{ !cancelled() }}
+        run: |
+          python3 tools/check_version_consistency.py
+          python3 -m unittest discover -s tests/scripts -p 'test_*.py'
 
       - name: Keep the test logs of a failed run
         if: failure()
@@ -187,6 +195,12 @@ jobs:
           bash tests/scripts/test_start_game.sh
           BUILD_DIR=build bash tests/scripts/test_ants_server.sh
 
+      - name: Repository checks (version and changelog consistency, python tests of the tools and the tiers)
+        if: ${{ !cancelled() }}
+        run: |
+          python3 tools/check_version_consistency.py
+          python3 -m unittest discover -s tests/scripts -p 'test_*.py'
+
       - name: Keep the test logs of a failed run
         if: failure()
         uses: actions/upload-artifact@v7
@@ -267,7 +281,14 @@ jobs:
       - name: Build the web image
         run: docker build -t ants-beta .
 
-      - name: Check the image (nginx accepts its configuration, the game's files are in it)
+      - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html index.js index.wasm index.data four.html changelog.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html index.js index.wasm index.data four.html changelog.html changelog_archive.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && grep -o "id=\"game-version\">[^<]*<" index.html && grep -o "id=\"game-build-id\">[^<]*<" index.html && ! grep -q "@@" index.html'
+
+      # The game server's image (Dockerfile.server): built the same way as the stack's, and it must say which build it is.
+      - name: Build the game server image and run its --version
+        run: |
+          docker build -f Dockerfile.server -t ants-server .
+          docker run --rm --entrypoint /usr/local/bin/ants_server ants-server --version
