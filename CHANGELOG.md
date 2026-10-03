@@ -20,6 +20,16 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
 -->
 
+## v0.1.2 - 2026-10-03 - Treasure is the default map; the web page opens in 16:9
+
+**For players:**
+- Treasure, the map that is played most, is the default everywhere a map is chosen for you: the setup screen highlights it (the list and its order are the original's), the desktop start menu's Host panel opens on it, the web page's Play online form preselects it, and an online room whose code names no map is a Treasure room. A choice you made and saved still wins.
+- The web pages open in 16:9 again for everyone: a "Classic 4:3" choice that a browser remembered earlier is forgotten once. Pick Classic 4:3 again under the game to keep it (`?aspect=4:3` in the address still works).
+
+**Rules / network:** None: the rules and network protocol 11 are unchanged (v0.1.0 to v0.1.2 games play together).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ff52c2d...74c8085), [the setup screen's deviation](docs/AUDIT_ONE_TO_ONE.md)
+
 ## v0.1.1 - 2026-10-03 - Bots wait for the start dialog
 
 **For players:**
