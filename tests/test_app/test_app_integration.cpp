@@ -4004,6 +4004,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(app.write_chat_transcript(file.string()));
         std::ifstream in(file, std::ios::binary);
         const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();                                      // (Windows cannot delete a file that is still open: the remove below threw there)
         // "date @ time", a blank line, then one line per entry: its header, a space, its body (the body is not wrapped in the file)
         const size_t blank = text.find("\n\n");
         ASSERT_TRUE(blank != std::string::npos && blank == 19 && text[2] == '/' && text[5] == '/' && text.substr(8, 3) == " @ ");

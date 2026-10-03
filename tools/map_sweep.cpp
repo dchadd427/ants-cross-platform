@@ -2558,7 +2558,7 @@ int selftest(const std::string& exe) {
         std::vector<uint8_t> good;
         read_file(maps / "TINY.LVL", good);
         write_file(dir / "good.lvl", good);
-        write_file(dir / "too*short.LVL", std::vector<uint8_t>(good.begin(), good.begin() + 1000));       // ('*' cannot travel in a name)
+        write_file(dir / "tooshort.Lvl", std::vector<uint8_t>(good.begin(), good.begin() + 1000));        // (a name the protocol refuses, a mixed case extension; it used to be "too*short.LVL", and Windows has no file with a '*' in its name)
         write_file(dir / "empty.lvl", {});
         write_file(dir / "garbage.lvl", std::vector<uint8_t>(5000, 0xAB));
         write_file(dir / "notamap.txt", good);

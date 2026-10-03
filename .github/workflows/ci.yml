@@ -79,8 +79,10 @@ jobs:
       - name: Tool self-tests (map_sweep, bot_arena)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
-          build/map_sweep --selftest
-          build/bot_arena --selftest
+          status=0
+          build/map_sweep --selftest || status=1
+          build/bot_arena --selftest || status=1
+          exit $status
 
       - name: Opaque-box E2E runner
         if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
@@ -120,7 +122,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/sdl2
-          key: sdl2-${{ runner.os }}-${{ runner.arch }}-2.32.10-ttf-2.24.0-v1
+          key: sdl2-${{ runner.os }}-${{ runner.arch }}-2.32.10-ttf-2.24.0-harfbuzz-v2
 
       - name: Build SDL2 2.32.10 and SDL2_ttf 2.24.0 from source
         if: steps.sdl.outputs.cache-hit != 'true'
@@ -132,7 +134,7 @@ jobs:
           cmake -S SDL2-2.32.10 -B sdl2-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DSDL_TEST=OFF
           cmake --build sdl2-build
           cmake --install sdl2-build
-          cmake -S SDL2_ttf-2.24.0 -B ttf-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DCMAKE_PREFIX_PATH="$HOME/sdl2" -DSDL2TTF_VENDORED=ON -DSDL2TTF_SAMPLES=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake -S SDL2_ttf-2.24.0 -B ttf-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DCMAKE_PREFIX_PATH="$HOME/sdl2" -DSDL2TTF_VENDORED=ON -DSDL2TTF_HARFBUZZ=ON -DSDL2TTF_SAMPLES=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build ttf-build
           cmake --install ttf-build
 
@@ -169,8 +171,10 @@ jobs:
       - name: Tool self-tests (map_sweep, bot_arena)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
-          build/map_sweep --selftest
-          build/bot_arena --selftest
+          status=0
+          build/map_sweep --selftest || status=1
+          build/bot_arena --selftest || status=1
+          exit $status
 
       - name: Opaque-box E2E runner
         if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
@@ -234,8 +238,10 @@ jobs:
       - name: Tool self-tests (map_sweep, bot_arena)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
-          build/Release/map_sweep.exe --selftest
-          build/Release/bot_arena.exe --selftest
+          status=0
+          build/Release/map_sweep.exe --selftest || status=1
+          build/Release/bot_arena.exe --selftest || status=1
+          exit $status
 
       - name: Opaque-box E2E runner
         if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
