@@ -1,5 +1,7 @@
 # Ants (1998) — Modern Cross-Platform Engine Remake
 
+[![CI](https://github.com/dchadd427/ants-cross-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/dchadd427/ants-cross-platform/actions/workflows/ci.yml)
+
 A faithful, high-performance, deterministic C++17 native engine remake and port of the 1998 classic real-time strategy game **Ants**.
 
 The engine directly loads raw original binary assets (`ants.chd` and `Maps/*.LVL`) without pre-conversion, faithfully executing authentic gameplay mechanics, deterministic 20Hz simulation, 32-channel spatial audio, MIDI/MP3 score playback, TrueType font rendering, and an SDL2 hardware-accelerated 2D viewport.
@@ -560,6 +562,20 @@ cmake --build build_e2e
 ./build_e2e/e2e_runner --tier 3   # Tier 3: Cross-Feature Pairwise (10 tests)
 ./build_e2e/e2e_runner --tier 4   # Tier 4: Real-World Workloads (6 full matches)
 ```
+
+### Continuous Integration
+
+Every push (all branches) and every pull request is built and tested by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml); it needs no secrets and publishes or deploys nothing). A newer push to a branch cancels the run of the older one. Five jobs run side by side, each about 3 - 10 minutes:
+
+| Job | Runner and compiler | SDL2 | What runs |
+|---|---|---|---|
+| Linux (GCC) | `ubuntu-latest`, GCC 13, Ninja, Release, `-DANTS_WERROR=ON` | apt: `libsdl2-dev`, `libsdl2-ttf-dev` | build everything; `ctest` (every registered test program: 47 today); `map_sweep` and `bot_arena` self-tests; the 506 E2E tests; the two script suites (`start_game.sh --dry-run`, `ants_server` with two headless clients) |
+| macOS (Apple clang) | `macos-latest` (Apple silicon), Apple clang, Ninja, Release, `-DANTS_WERROR=ON` | SDL2 2.32.10 and SDL2_ttf 2.24.0 built from the release sources (cached) | the same as Linux |
+| Windows (MSVC 2022) | `windows-2022`, MSVC 19.44, Visual Studio 17 2022, Release, `/W4 /WX` (`-DANTS_WERROR=ON`) | the prebuilt Visual C++ packages that `CMakeLists.txt` downloads | build everything; `ctest -C Release`; the two self-tests; the E2E tests |
+| Windows (MSVC 2026) | `windows-latest`, MSVC 19.5x, Visual Studio 18 2026, the same flags | the same | the same |
+| Web (Emscripten) | `ubuntu-latest`, `docker build -t ants-beta .` (emsdk 3.1.58) | the Emscripten port | the beta site's image builds; `nginx -t` accepts its configuration; the game's files are in it |
+
+All tests run headless (SDL's dummy video and audio drivers). Not covered: the opt-in browser checks (`tests/scripts/test_web_*.sh`: a real browser against a running page), the script suites on Windows (they are bash and python), an AddressSanitizer job (`./run_tests.sh --asan` locally), and the 32-bit and ARM Windows builds. `ctest -N` in a build folder lists the test programs; `ctest -C Release --output-on-failure` runs them on Windows. A failed run keeps `Testing/Temporary` as an artifact. Two things that CI taught: Homebrew's `sdl2` is now sdl2-compat (the SDL2 interface on top of SDL3) and several test programs fail under it (pointer, window and layout checks), so the macOS job builds SDL2 itself; and the pinned pixel fingerprints must mask every TrueType text (SDL's alpha blit rounds differently on x86-64 and on ARM).
 
 ---
 

@@ -39,7 +39,7 @@ cmake --build build -j8
 ## Testing
 All test suites are run with `./run_tests.sh` (macOS, Apple clang). The suites, what each one checks and their current assertion counts are listed in the README under [Testing & Verification](../README.md#testing--verification).
 
-On Windows, `run_tests.bat` runs only part of them: the asset decoder suites, the first simulation suites (`test_sim_rules`, the two challengers), `test_app_integration` and the E2E runner. The other suites are built by the same CMake project; `ctest -N` in the build folder lists all of them and `ctest -C Release --output-on-failure` runs them (this route has not been tried on Windows yet).
+On Windows, `run_tests.bat` runs only part of them: the asset decoder suites, the first simulation suites (`test_sim_rules`, the two challengers), `test_app_integration` and the E2E runner. The other suites are built by the same CMake project; `ctest -N` in the build folder lists all of them and `ctest -C Release --output-on-failure` runs them (the Windows jobs of CI, `.github/workflows/ci.yml`, build with Visual Studio 2022 and 2026 and run exactly this on every push; the README's "Continuous Integration" lists what runs where).
 
 ## Running the Game
 To launch the interactive game window:
