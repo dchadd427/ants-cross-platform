@@ -235,8 +235,8 @@ public:
     /// Which variant of the wide screen the room shows: the local game's host screen, the host screen of a network game (a LAN host, the leader of a room) or a guest's screen
     SetupVariant setup_variant() const noexcept { return is_guest() ? SetupVariant::Guest : (room_.networked ? SetupVariant::Online : SetupVariant::Single); }
 
-    /// The chat column of the wide screen's Online and Guest variants (SetupLayout::chat) is RESERVED for the waiting-room chat of the online rooms: nothing is drawn there until the room's UI
-    /// turns it on (`visible`) and fills it. The black chat box (an efram box) holds the lines, the input box (statline's box) the typed text, the label "Chat" is TrueType in the engraved
+    /// The chat column of the wide screen's Online and Guest variants (SetupLayout::chat) is the waiting-room chat of the online rooms: nothing is drawn there until the room's UI
+    /// turns it on (`visible`) and fills it (the application does while a room is on the screen: Application::sync_room_view). The black chat box (an efram box) holds the lines, the input box (statline's box) the typed text, the label "Chat" is TrueType in the engraved
     /// labels' teal with their ink as shadow; the lines are in the font, size and colour of the players' names (18 px, the labels' cream), a notice (a line of the server: sender 255) in
     /// the colour and size of the screen's status text (14 px). Nothing here applies to the Single variant or the classic page.
     struct ChatPanel {
@@ -257,6 +257,7 @@ public:
         fill_footer_[0] = std::move(first_line);
         fill_footer_[1] = std::move(second_line);
     }
+    const std::array<std::string, 2>& fill_footer() const noexcept { return fill_footer_; }
 
 private:
     void render_wide(IRenderer& renderer, const ants::assets::AssetArchive& archive);        // map_select_wide.cpp

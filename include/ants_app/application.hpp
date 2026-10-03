@@ -253,7 +253,8 @@ public:
     void room_key_down(SDL_Keycode key, uint16_t modifiers, bool repeat);
     /// Typed text (SDL_TEXTINPUT): goes into the chat input while it is open, else nowhere
     void room_text_input(const std::string& text);
-    /// A left press on the setup screen: a click on the status line of a room opens the chat input (true: the click is that and nothing else); while the input is open ANY left press closes
+    /// A left press on the setup screen: a click on the status line of a room opens the chat input (true: the click is that and nothing else); on the 16:9 setup screen, which has a chat box
+    /// (room_chat_box), the places that open it are the box's INPUT box and its lines box, and the status line does not; while the input is open ANY left press closes
     /// it, sends nothing and is no click on the screen (true: a touch screen has no Esc, and a click on START must not start a match through an input that is open); any other press is the
     /// screen's
     bool room_mouse_down(int32_t x, int32_t y, uint8_t button);
@@ -262,6 +263,10 @@ public:
     const RoomChatInput& room_chat() const noexcept { return room_chat_; }
     /// True when a chat line can be said from the setup screen now: a seated player of a room that is waiting or loading
     bool room_chat_available() const noexcept;
+    /// The chat box of the 16:9 setup screen (SetupLayout::chat of the Online variant for the host of a room and the leader of a server's room, of the Guest variant for everybody else in a
+    /// room): where its lines, its input box and its label stand. nullptr when this screen has none: the classic 640 x 480 setup screen (its status line carries the chat), a game on
+    /// this machine, no room. While there is a box the status line shows the room's prompt only (the box shows the lines and the typed text; NetGame::set_chat_status_mirror is off).
+    const SetupChatLayout* room_chat_box() const noexcept;
 
     /// The network of a room or a match (nullptr unless started with --host / --join)
     net::NetGame* net() noexcept { return net_.get(); }

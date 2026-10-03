@@ -1,12 +1,12 @@
 #pragma once
 
-// The chat input of the waiting room (online rooms, protocol 11). The setup screen of the original has no chat; the remake's rooms do. The wide 16:9 setup screen's chat box (a later step)
-// will use this model too; until then the line that a player types is shown where the screen's status line is: "Say: hello there_" (MapSelectScreen draws it as a typed line, in the two lines
-// of 14 px that the label holds, and the end of a long line shows). This file is the MODEL of that input, with no window and no sockets (the application feeds it the keys and the clock), so
-// that the tests drive it directly.
+// The chat input of the waiting room (online rooms, protocol 11). The setup screen of the original has no chat; the remake's rooms do. On the 16:9 setup screen the line that a player types is in the
+// chat box's input box (MapSelectScreen::set_chat_panel: the lines of the room above it, the typed text and the caret in it); on the classic 640 x 480 page, which has no box, it is shown where the
+// screen's status line is: "Say: hello there_" (MapSelectScreen draws it as a typed line, in the two lines of 14 px that the label holds, and the end of a long line shows). This file is the MODEL
+// of that input, with no window and no sockets (the application feeds it the keys and the clock), so that the tests drive it directly.
 //
 // The focus rule. The setup screen's own keys (S and Enter start, Q and X leave, Up and Down choose the map) belong to the screen while the input is CLOSED. T, or a click on the status
-// line, OPENS the input; from then on every key goes to the input and NOTHING else: S, Q, X, Enter and the arrows do not act on the screen (a player who types "sorry, my queue" must
+// line (on the 16:9 screen: a click in the chat box's input box or its lines), OPENS the input; from then on every key goes to the input and NOTHING else: S, Q, X, Enter and the arrows do not act on the screen (a player who types "sorry, my queue" must
 // not start the match or leave the room). Enter sends the line (an empty line sends nothing) and closes the input; Esc closes it without sending; both give the screen its keys back, but not at
 // once: the application keeps START from a key that comes within kGuardMs of the closing (a second Enter, or the S of a habit, must not start the match that a line was just sent in).
 // A click while the input is open closes it (it sends nothing) and is no click on the screen: a touch screen has no Esc.

@@ -1110,6 +1110,29 @@ void run_room_chat_tests() {
             ASSERT_EQ(host.net.status_text(), std::string(kNoticeFillFog));
         }
     } TEST_END();
+    TEST_CASE("N3.21 The Status-Line Mirror Of The Waiting Room's Chat Can Be Turned Off (The 16:9 Setup Screen's Chat Box Shows The Lines): On By Default, A Guest's Status Shows The Latest Line Of Somebody Else's; Off, The Lines Still Arrive (Events, The Log, The Queue) And The Status Line Keeps The Standing Prompt; Switching It On Again Brings The Mirror Back For The Next Line") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& alice = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        ASSERT_TRUE(bob.net.chat_status_mirror());                                          // (the default: the classic screen's status line shows the lines)
+        const std::string prompt = std::string(sim::strings::text(sim::strings::kWaitingForHost));
+        bob.net.set_chat_status_mirror(false);
+        ASSERT_FALSE(bob.net.chat_status_mirror());
+        ASSERT_TRUE(alice.net.chat("said while the mirror is off"));
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.pregame_chat().size() == 1; }, 3000));
+        ASSERT_TRUE(bob.saw(NetGame::Event::Type::Chat));                                   // (the line arrived as ever)
+        ASSERT_EQ(room_lines(bob.net.take_pregame_chat()), (std::vector<std::string>{"0|Alice|said while the mirror is off"}));
+        ASSERT_EQ(bob.net.status_text(), prompt);                                           // ... and the status line did not take a copy
+        t.run(100);
+        ASSERT_EQ(bob.net.status_text(), prompt);
+        bob.net.set_chat_status_mirror(true);
+        ASSERT_TRUE(alice.net.chat("said with the mirror on"));
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.pregame_chat().size() == 2; }, 3000));
+        ASSERT_EQ(bob.net.status_text(), std::string("Alice: said with the mirror on"));
+        t.run(6000);
+        ASSERT_EQ(bob.net.status_text(), prompt);
+    } TEST_END();
 }
 
 }  // namespace

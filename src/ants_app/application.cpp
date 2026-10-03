@@ -63,6 +63,16 @@ namespace ants::app {
 
 namespace {
 
+/// How many of the newest lines of the waiting room the application hands the 16:9 setup screen's chat box: the box shows at most a handful of rows (its lines are wrapped to it and the newest stand
+/// at its bottom), so the screen is spared the wrapping of the 200 lines that the room keeps
+constexpr size_t kChatBoxLines = 16;
+
+/// The text of a line of the waiting room as the chat box shows it: "Name: text" (a seat that has no name yet: "Seat N"), a room's own notice (ChatLine::notice) is its text alone
+std::string chat_box_text(const net::ChatLine& line) {
+    if (line.notice()) return line.text;
+    return (line.name.empty() ? "Seat " + std::to_string(static_cast<unsigned>(line.seat) + 1u) : line.name) + ": " + line.text;
+}
+
 std::string get_system_username() {
 #if defined(__EMSCRIPTEN__)
     return "WebPlayer";
@@ -1824,6 +1834,7 @@ void Application::pump_network(float dt, double gap_seconds) {
     room_chat_.end_of_frame();                                   // (the text event of the T that opened the chat input has been dealt with: it came in the same batch of events)
     if (menu_enabled_) update_start_menu(dt);                    // the start menu's clock, what it asked for and its connection (application_menu.cpp)
     if (!net_ || !net_->active()) return;
+    net_->set_chat_status_mirror(room_chat_box() == nullptr);   // (the lines of the room go to the chat box of the 16:9 setup screen when it has one, to the status line otherwise)
     net_time_ms_ += static_cast<double>(dt) * 1000.0;
     net_->update(static_cast<uint32_t>(net_time_ms_));        // (the connection is read here: whatever waited counts as heard)
     if (gap_seconds > 0.0) net_->note_gap(static_cast<uint32_t>(std::min(gap_seconds * 1000.0, 4.0e9)));   // a host that said nothing has been silent for the gap too
@@ -1879,15 +1890,40 @@ void Application::sync_room_view() {
     }
     view.map_file = room.map_name;                                           // a guest (and the leader of a server's room) shows the host's / the room's choice (an empty name before the first message)
     if (room_chat_.is_open() && !room_chat_available()) close_room_chat();                      // (the room is gone, or the match has begun: nothing to say it to)
-    if (room_chat_.is_open()) {                                                                  // (while a line is typed the status line shows it, as a typed line: its end, in two lines)
+    const SetupChatLayout* chat_box = room_chat_box();
+    if (room_chat_.is_open() && chat_box == nullptr) {                                           // (the classic page: while a line is typed the status line shows it, as a typed line: its end, in two lines)
         view.status = room_chat_.text();
         view.status_prefix = RoomChatInput::kPrompt;
         view.status_input = true;
         view.status_caret = room_chat_.caret(static_cast<uint32_t>(net_time_ms_));
     } else {
-        view.status = net_->status_text();
+        view.status = net_->status_text();                                                       // (the 16:9 page: the status line keeps the prompt, the typed line is in the chat box)
     }
     map_select_.set_room(view);
+    net_->set_chat_status_mirror(chat_box == nullptr);
+    // The chat box of the 16:9 page (the Online and Guest variants): the newest lines of the waiting room (names in front, a room's notices as they are, styled by the screen), the line that is
+    // typed and the caret. And the foot of the leader's Players' Status box: what fills the empty seats at START (the choice of the host panel / --fill-bots; not with Fog of War, which seats no
+    // bots, and not for a guest, who cannot START).
+    MapSelectScreen::ChatPanel panel;
+    std::string fill_first;
+    std::string fill_second;
+    if (chat_box != nullptr) {
+        panel.visible = true;
+        const std::vector<net::ChatLine>& said = net_->pregame_chat();
+        for (size_t i = said.size() > kChatBoxLines ? said.size() - kChatBoxLines : 0u; i < said.size(); ++i) {
+            panel.lines.push_back(MapSelectScreen::ChatPanel::Line{chat_box_text(said[i]), said[i].notice()});
+        }
+        if (room_chat_.is_open()) {
+            panel.typed = room_chat_.text();
+            panel.caret = room_chat_.caret(static_cast<uint32_t>(net_time_ms_));
+        }
+        if (map_select_.setup_variant() == SetupVariant::Online && config_.fill_bots != net::FillLevel::None && !room.fog) {
+            fill_first = "Empty seats at START:";
+            fill_second = net::fill_level_title(config_.fill_bots) + " bots";
+        }
+    }
+    map_select_.set_chat_panel(std::move(panel));
+    map_select_.set_fill_footer(std::move(fill_first), std::move(fill_second));
     if (!net_->is_host() && net_->phase() == net::NetGame::Phase::Room) {
         map_select_.follow_host_choice(room.map_name, room.fog);
     }
@@ -1898,6 +1934,13 @@ void Application::sync_room_view() {
 bool Application::room_chat_available() const noexcept {
     return state_ == AppState::MapSelect && net_ && net_->active() && net_->my_seat() < 4 &&
            (net_->phase() == net::NetGame::Phase::Room || net_->phase() == net::NetGame::Phase::Loading);
+}
+
+// The chat box of the 16:9 setup screen: the Online variant (the host of a room, the leader of a server's room) and the Guest variant have one (setup_layout.hpp), the classic page has none
+const SetupChatLayout* Application::room_chat_box() const noexcept {
+    if (state_ != AppState::MapSelect || !net_ || !net_->active() || !wide_setup()) return nullptr;
+    const SetupChatLayout& chat = SetupLayout::of(net_->is_host() || net_->is_leader() ? SetupVariant::Online : SetupVariant::Guest).chat;
+    return chat.valid() ? &chat : nullptr;
 }
 
 void Application::close_room_chat() {
@@ -1914,7 +1957,7 @@ void Application::room_key_down(SDL_Keycode key, uint16_t modifiers, bool repeat
             if (result == RoomChatInput::Result::Send) {
                 const std::string line = room_chat_.take_line();
                 room_chat_closed_ms_ = net_time_ms_;
-                if (!line.empty() && net_ && net_->chat(line)) net_->show_notice("You: " + line);       // (the player sees that it went)
+                if (!line.empty() && net_ && net_->chat(line) && room_chat_box() == nullptr) net_->show_notice("You: " + line);       // (the classic page: the player sees on the status line that it went; the chat box shows the line when the room has relayed it)
             } else if (result == RoomChatInput::Result::Closed) {
                 room_chat_closed_ms_ = net_time_ms_;
             }
@@ -1945,7 +1988,11 @@ bool Application::room_mouse_down(int32_t x, int32_t y, uint8_t button) {
         return true;
     }
     if (!room_chat_available()) return false;
-    if (x < MapSelectScreen::LABEL_X || x >= MapSelectScreen::LABEL_X + MapSelectScreen::STATUS_W || y < MapSelectScreen::STATUS_Y || y >= MapSelectScreen::STATUS_Y + MapSelectScreen::STATUS_H) return false;
+    if (const SetupChatLayout* box = room_chat_box()) {                                // the 16:9 page: the chat box's input box opens the input, and so does a click in its lines
+        if (!box->input_box.contains(x, y) && !box->lines.contains(x, y)) return false;
+    } else if (x < MapSelectScreen::LABEL_X || x >= MapSelectScreen::LABEL_X + MapSelectScreen::STATUS_W || y < MapSelectScreen::STATUS_Y || y >= MapSelectScreen::STATUS_Y + MapSelectScreen::STATUS_H) {
+        return false;                                                                  // the classic page: the status line
+    }
     room_chat_.open(false);
     room_chat_press_taken_ = true;                                                     // (the release of the click that opened it is nobody's either)
     return true;
@@ -2085,6 +2132,8 @@ void Application::net_end_session(const std::string& notice) {
     MapSelectScreen::RoomView local;
     local.status = notice;                                    // a notice stays on the setup screen until the next action
     map_select_.set_room(local);
+    map_select_.set_chat_panel(MapSelectScreen::ChatPanel{});            // (the local game's screen has no chat box and no fill footer)
+    map_select_.set_fill_footer(std::string(), std::string());
     const uint8_t own_team = config_.local_player_id < 4 ? config_.local_player_id : static_cast<uint8_t>(0);      // the local game plays the configured team again, not the seat of the match
     local_player_id_ = own_team;
     map_select_.set_player_team(own_team);

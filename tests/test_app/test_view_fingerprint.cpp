@@ -1033,6 +1033,54 @@ void screen_scenarios(const assets::AssetArchive& arc) {
         guest_screen.set_room(server);
         frame("screen.room.guest.server_seat3", [&](FrameRecorder& r) { guest_screen.render(r, arc); });
     }
+
+    // The 16:9 setup screen of a room with its chat box (online rooms, protocol 11): the draw calls of the leader's screen (a server's room: the Online variant, the fill footer "Empty seats at START:" /
+    // "Medium bots") and of a guest's (the Guest variant) with the lines of a conversation (a notice among them, in the status text's size), the typed line and the caret on and off, and with
+    // an empty box; the text's places, sizes and colours are what these pin (the pixel fingerprints below mask the TrueType text). The map list holds the six original maps; ISLANDS is the room's.
+    {
+        const auto room_screen = [&](bool leader) {
+            MS screen = make_setup_screen();
+            screen.set_wide_layout(true);
+            screen.update(0.5f);
+            MS::RoomView view;
+            view.networked = true;
+            view.is_host = false;
+            view.leader = leader;
+            view.my_seat = leader ? 0 : 1;
+            view.seats[0] = {true, leader ? "Ana" : "Lea", MS::Thumb::Good};
+            view.seats[1] = {true, leader ? "Ben" : "Ben", leader ? MS::Thumb::Ok : MS::Thumb::Good};
+            view.map_file = "ISLANDS.LVL";
+            view.status = leader ? "Press START: the empty seats get Medium bots." : "Waiting for the host to start the game...";
+            screen.set_room(view);
+            return screen;
+        };
+        const auto conversation = [](bool typed, bool caret) {
+            MS::ChatPanel panel;
+            panel.visible = true;
+            panel.lines = {{"Fog of War is on, so START seats no bots.", true}, {"Ben: hi, which map?", false}, {"Ana: TINY first, then ISLANDS", false}, {"Ben: ok, ready when you are", false}};
+            if (typed) panel.typed = "ready in a minute";
+            panel.caret = caret;
+            return panel;
+        };
+        MS leader = room_screen(true);
+        MS::ChatPanel empty_box;
+        empty_box.visible = true;
+        leader.set_chat_panel(empty_box);
+        leader.set_fill_footer("Empty seats at START:", "Medium bots");
+        frame("screen.wide.room.leader_empty", [&](FrameRecorder& r) { leader.render(r, arc); });
+        leader.set_chat_panel(conversation(false, false));
+        frame("screen.wide.room.leader_lines", [&](FrameRecorder& r) { leader.render(r, arc); });
+        leader.set_chat_panel(conversation(true, true));
+        frame("screen.wide.room.leader_typed_caret", [&](FrameRecorder& r) { leader.render(r, arc); });
+        leader.set_chat_panel(conversation(true, false));
+        frame("screen.wide.room.leader_typed", [&](FrameRecorder& r) { leader.render(r, arc); });
+        MS guest = room_screen(false);
+        guest.set_chat_panel(empty_box);
+        frame("screen.wide.room.guest_empty", [&](FrameRecorder& r) { guest.render(r, arc); });
+        guest.set_chat_panel(conversation(true, true));
+        guest.set_fill_footer("Empty seats at START:", "Medium bots");                                        // (a guest has no such choice: nothing is drawn for it)
+        frame("screen.wide.room.guest_typed_caret", [&](FrameRecorder& r) { guest.render(r, arc); });
+    }
     {
         MS fresh = make_setup_screen();                                                                          // a room before the refresh: labels, portraits and thumbs are not shown yet
         MS::RoomView view;
@@ -3306,6 +3354,39 @@ void app_pixel_wide_scenarios() {
             rig.shot("px.wide.app.setup.cursor", wide_masks({&kWMaskSetup}));
         }
     }
+    // the setup screen of a room in the 16:9 picture with its chat box: the art of the box (the black chat box, the input box, the label's place), the fill footer's place and the players' box; the
+    // TrueType text (the chat's lines, the typed line, the label "Chat", the footer, the names) is masked, its draw calls are pinned by screen.wide.room.*
+    if (wanted_group("px.wide.app.setup.room")) {
+        for (const bool leader : {true, false}) {
+            WideAppRig rig;
+            if (!rig.ok) continue;
+            MapSelectScreen::RoomView view;
+            view.networked = true;
+            view.is_host = false;
+            view.leader = leader;
+            view.my_seat = leader ? 0 : 1;
+            view.seats[0] = {true, leader ? "Ana" : "Lea", MapSelectScreen::Thumb::Good};
+            view.seats[1] = {true, "Ben", leader ? MapSelectScreen::Thumb::Ok : MapSelectScreen::Thumb::Good};
+            view.map_file = "ISLANDS.LVL";
+            view.status = leader ? "Press START: the empty seats get Medium bots." : "Waiting for the host to start the game...";
+            rig.app.map_select().set_room(view);
+            MapSelectScreen::ChatPanel panel;
+            panel.visible = true;
+            panel.lines = {{"Fog of War is on, so START seats no bots.", true}, {"Ben: hi, which map?", false}, {"Ana: TINY first, then ISLANDS", false}};
+            panel.typed = "ready in a minute";
+            panel.caret = true;
+            rig.app.map_select().set_chat_panel(panel);
+            if (leader) rig.app.map_select().set_fill_footer("Empty seats at START:", "Medium bots");
+            rig.app.map_select().update(0.5f);
+            const SetupLayout& layout = SetupLayout::of(leader ? SetupVariant::Online : SetupVariant::Guest);
+            std::vector<MaskRect> text = kWMaskSetup;
+            text.push_back({layout.chat.label_x - 2, layout.chat.label_y - 2, layout.chat.label_x + 46, layout.chat.label_y + 24});                 // "Chat"
+            text.push_back({layout.chat.lines.x, layout.chat.lines.y, layout.chat.lines.x + layout.chat.lines.w, layout.chat.lines.y + layout.chat.lines.h});   // the lines
+            text.push_back({layout.chat.input_text.x - 2, layout.chat.input_text.y - 2, layout.chat.input_text.x + layout.chat.input_text.w, layout.chat.input_text.y + 24});   // the typed line
+            text.push_back({layout.footer_x - 2, layout.footer_y1 - 2, layout.footer_x + 200, layout.footer_y2 + 22});                                // the footer's two lines
+            rig.shot(leader ? "px.wide.app.setup.room_leader" : "px.wide.app.setup.room_guest", wide_masks({&text}));
+        }
+    }
     if (wanted_group("px.wide.app.quickhelp")) {
         WideAppRig rig;
         if (rig.ok) {
@@ -3685,6 +3766,12 @@ const Golden kGoldens[] = {
     {"screen.room.guest.hover_leave", 0xa31f3e746517183c, 145},
     {"screen.room.guest.connection_lost", 0x0137bf09dbd127d6, 129},
     {"screen.room.guest.server_seat3", 0x46f213e744fbf523, 144},
+    {"screen.wide.room.leader_empty", 0xb1d15745992ccdf1, 241},
+    {"screen.wide.room.leader_lines", 0xa55867b74f9e2d48, 246},
+    {"screen.wide.room.leader_typed_caret", 0x0973048a72fcf279, 248},
+    {"screen.wide.room.leader_typed", 0xa34b68aaff170ca9, 247},
+    {"screen.wide.room.guest_empty", 0x233a911b5a9ce3ed, 236},
+    {"screen.wide.room.guest_typed_caret", 0x135fde3e34ea4d5d, 243},
     {"screen.room.before_refresh", 0x42e853aa8cdf3bf2, 135},
     {"screen.results.2teams.waiting", 0xae029099741ec334, 150},
     {"screen.results.2teams.rows", 0x71ab975ee95bc185, 166},
@@ -4094,6 +4181,8 @@ const Golden kGoldens[] = {
     {"px.wide.app.setup.refreshed", 0x8177f35cb27351de, 518400},
     {"px.wide.app.setup.hover_start", 0xc91cdbb20a855a13, 518400},
     {"px.wide.app.setup.cursor", 0x821af42c439fcaf3, 518400},
+    {"px.wide.app.setup.room_leader", 0x584e971aba4bdb6d, 518400},
+    {"px.wide.app.setup.room_guest", 0x91b1e2a3f0147173, 518400},
     {"px.wide.app.quickhelp.rest", 0x174b067d6bc59e00, 518400},
     {"px.wide.app.quickhelp.hover_start", 0x76c3bbba45f90b9c, 518400},
     {"px.wide.app.results", 0x5e72ea394f3c73a0, 518400},

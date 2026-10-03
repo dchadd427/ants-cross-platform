@@ -306,7 +306,8 @@ std::vector<ChatLine> NetGame::take_pregame_chat() {
 }
 
 // The lines that the lobby has not handed over yet: queued for the application (bounded, like the log), announced as an event, and the latest of somebody else's shown on the status line
-// for a few seconds (the notice mechanism of the setup screen: "Ann: hello"; a room's own notice is its text). Nothing is shown for a line of this machine's own: the player knows it.
+// for a few seconds (the notice mechanism of the setup screen: "Ann: hello"; a room's own notice is its text) unless the mirror is off (set_chat_status_mirror: the 16:9 setup screen's chat
+// box shows the lines). Nothing is shown for a line of this machine's own: the player knows it.
 void NetGame::collect_room_chat() {
     std::vector<ChatLine> lines;
     if (host_lobby_) lines = host_lobby_->take_chat();
@@ -315,9 +316,11 @@ void NetGame::collect_room_chat() {
         if (!line.notice() && line.seat == seat_) {
             events_.push_back(Event{Event::Type::Chat, line.seat});
         } else {
-            std::string shown = line.notice() ? line.text : (line.name.empty() ? "Seat " + std::to_string(static_cast<unsigned>(line.seat) + 1u) : line.name) + ": " + line.text;
-            if (shown.size() > kStatusNoticeChars) shown = shown.substr(0, kStatusNoticeChars - 3) + "...";           // (a bound on what the notice keeps; the setup screen fits what it draws to the label's two lines by pixels)
-            set_notice(std::move(shown));
+            if (chat_status_mirror_) {                                                                         // (the 16:9 setup screen's chat box shows the line: no copy on the status line)
+                std::string shown = line.notice() ? line.text : (line.name.empty() ? "Seat " + std::to_string(static_cast<unsigned>(line.seat) + 1u) : line.name) + ": " + line.text;
+                if (shown.size() > kStatusNoticeChars) shown = shown.substr(0, kStatusNoticeChars - 3) + "...";       // (a bound on what the notice keeps; the setup screen fits what it draws to the label's two lines by pixels)
+                set_notice(std::move(shown));
+            }
             events_.push_back(Event{Event::Type::Chat, line.seat});
         }
         pending_chat_.push_back(std::move(line));

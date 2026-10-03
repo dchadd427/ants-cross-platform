@@ -2653,6 +2653,49 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(server.status("JOIN-FILL").state == server::RoomState::Waiting && server.status("JOIN-FILL").bots.empty());
     } TEST_END();
 
+    TEST_CASE("A14.3 Leave Game Takes The 16:9 Setup Screen's Chat Box And Fill Footer With It: A Leader In The Room (Host Panel, Medium Bots, A Line Typed) Presses Q, Is Back At The Menu, And The Next Screen Of This Run Has No Chat Panel, No Typed Line And No Footer; The Next Room Starts With An Empty Box") {
+        TempDir temp;
+        const std::string settings = ini(temp, "s.ini");
+        Server server;
+        Application app;
+        Hall hall{&server, &app, {}, nullptr, false};
+        ApplicationConfig cfg = menu_config(server.address(), settings);
+        cfg.aspect = Aspect::Wide16x9;
+        cfg.aspect_given = true;
+        ASSERT_TRUE(app.init(cfg));
+        for (int round = 0; round < 2; ++round) {
+            click(app, MenuId::HostOnline);
+            if (round == 0) {
+                click(app, MenuId::HostFill);                                                  // Leave empty -> Easy bots
+                click(app, MenuId::HostFill);                                                  // -> Medium bots
+                fill(app, MenuId::HostName, "Solo");
+            }
+            click(app, MenuId::Host);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+            click(app, MenuId::EnterRoom);
+            hall.step(700);
+            ASSERT_TRUE(app.state() == AppState::MapSelect && app.map_select().leads_server_room() && app.map_select().wide_layout());
+            ASSERT_TRUE(app.map_select().chat_panel().visible && app.map_select().chat_panel().lines.empty());     // (the second room starts with an empty box)
+            ASSERT_EQ(app.map_select().fill_footer()[1], std::string("Medium bots"));
+            app.room_key_down(SDLK_t, 0, false);
+            app.room_text_input("t");
+            app.room_text_input("half a line");
+            hall.step(30);
+            ASSERT_EQ(app.map_select().chat_panel().typed, std::string("half a line"));
+            app.room_key_down(SDLK_ESCAPE, 0, false);
+            ASSERT_TRUE(app.net()->chat("only the leader here"));
+            ASSERT_TRUE(hall.until([&]() { return app.map_select().chat_panel().lines.size() == 1; }, 8000));
+            hall.step(500);
+            app.room_key_down(SDLK_q, 0, false);                                               // Leave Game: back at the menu, the room is gone
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu && app.net() == nullptr; }, 8000));
+            ASSERT_FALSE(app.map_select().chat_panel().visible);
+            ASSERT_TRUE(app.map_select().chat_panel().lines.empty() && app.map_select().chat_panel().typed.empty() && !app.map_select().chat_panel().caret);
+            ASSERT_TRUE(app.map_select().fill_footer()[0].empty() && app.map_select().fill_footer()[1].empty());
+            ASSERT_FALSE(app.room_chat().is_open());
+            ASSERT_TRUE(app.room_chat_box() == nullptr);
+        }
+    } TEST_END();
+
     std::cout << "\nstart menu in the application: " << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
         std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite\n";

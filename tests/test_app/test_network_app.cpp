@@ -35,6 +35,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -4139,6 +4140,510 @@ void run_room_chat_ui_tests() {
     } TEST_END();
 }
 
+// ---- the chat box of the 16:9 setup screen (online rooms, protocol 11): the application feeds MapSelectScreen::set_chat_panel / set_fill_footer from the room (N5.60 - N5.68) ----
+void run_room_chat_box_tests() {
+    using SL = SetupLayout;
+    const auto centre_x = [](const LayoutRect& r) { return r.x + r.w / 2; };
+    const auto centre_y = [](const LayoutRect& r) { return r.y + r.h / 2; };
+    // The application of a test in the 16:9 picture (960 x 540, its window the same size so that the pixels are the picture's: a frame is run to be read back, so the headless
+    // application is told to take a screenshot that never comes instead of stopping after ten frames) or in the original's 4:3 one
+    const auto room_config = [](const Server& server, const std::string& room, const std::string& name, Aspect aspect, net::FillLevel fill) {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = server.port();
+        cfg.net_room = room;
+        cfg.player_name = name;
+        cfg.aspect = aspect;
+        cfg.aspect_given = true;
+        cfg.fill_bots = fill;
+        cfg.screenshot_path = (std::filesystem::temp_directory_path() / ("ants_box_" + room + ".png")).string();
+        cfg.screenshot_frames = 1000000000;
+        if (aspect == Aspect::Wide16x9) {
+            cfg.has_window_size = true;
+            cfg.window_w = 960;
+            cfg.window_h = 540;
+        }
+        return cfg;
+    };
+    // the application is the room's leader (the first to join), Bob a bare machine who joins second; the room is TINY, 4 seats, with Fog of War when `fog`
+    struct BoxRoom {
+        Server server;
+        Application app;
+        Peer peer;
+        Hall hall{server, &app, {&peer}};
+    };
+    const auto open_leader = [&](BoxRoom& d, const std::string& code, Aspect aspect, net::FillLevel fill, bool fog, bool with_bob) -> bool {
+        server::RoomSpec spec;
+        spec.code = code;
+        spec.map = "TINY.LVL";
+        spec.players = 4;
+        spec.fog = fog;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        if (d.server.listener == nullptr || !d.server.mgr.create_room(spec, d.server.now).ok) return false;
+        if (!d.app.init(room_config(d.server, code, "Ana", aspect, fill))) return false;
+        if (!d.hall.until([&]() { return d.app.net()->phase() == net::NetGame::Phase::Room && d.app.net()->is_leader(); }, 8000)) return false;
+        if (with_bob) {
+            if (!d.peer.net.join("127.0.0.1", d.server.port(), "Bob", 255, code)) return false;
+            if (!d.hall.until([&]() { return d.peer.net.phase() == net::NetGame::Phase::Room && d.app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000)) return false;
+        }
+        d.hall.step(700);                                                                    // (the setup screen has shown its labels: the refresh of 500 ms)
+        return true;
+    };
+    // the application is a GUEST: a bare machine (named Lea) joined first and leads the room, the application joins second
+    const auto open_guest = [&](BoxRoom& d, const std::string& code, Aspect aspect, net::FillLevel fill) -> bool {
+        server::RoomSpec spec;
+        spec.code = code;
+        spec.map = "TINY.LVL";
+        spec.players = 4;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        if (d.server.listener == nullptr || !d.server.mgr.create_room(spec, d.server.now).ok) return false;
+        Hall before{d.server, nullptr, {&d.peer}};
+        if (!d.peer.net.join("127.0.0.1", d.server.port(), "Lea", 255, code)) return false;
+        if (!before.until([&]() { return d.peer.net.phase() == net::NetGame::Phase::Room; }, 8000)) return false;
+        if (!d.app.init(room_config(d.server, code, "Ben", aspect, fill))) return false;
+        if (!d.hall.until([&]() { return d.app.net()->phase() == net::NetGame::Phase::Room && d.app.net()->my_seat() == 1 && d.peer.net.room().slots[1].rtt_ms != net::kRttUnknown; }, 8000)) return false;
+        d.hall.step(700);
+        return true;
+    };
+    const auto panel_lines = [](Application& app) {
+        std::vector<std::string> out;
+        for (const MapSelectScreen::ChatPanel::Line& l : app.map_select().chat_panel().lines) out.push_back((l.notice ? "! " : "") + l.text);
+        return out;
+    };
+    // the pixels of a rectangle of the picture (the renderer's canvas is the picture: the window is 960 x 540), as a hash
+    const auto region_hash = [](Application& app, const LayoutRect& r) {
+        SDL_Rect rect{r.x, r.y, r.w, r.h};
+        std::vector<uint8_t> px(static_cast<size_t>(r.w) * static_cast<size_t>(r.h) * 4u, 0);
+        if (SDL_RenderReadPixels(app.renderer().get_sdl_renderer(), &rect, SDL_PIXELFORMAT_RGBA32, px.data(), r.w * 4) != 0) return uint64_t{0};
+        uint64_t h = 1469598103934665603ull;
+        for (const uint8_t b : px) h = (h ^ b) * 1099511628211ull;
+        return h;
+    };
+    const auto lines = [](const std::vector<net::ChatLine>& v) {
+        std::vector<std::string> out;
+        for (const net::ChatLine& l : v) out.push_back(std::to_string(static_cast<unsigned>(l.seat)) + "|" + l.name + "|" + l.text);
+        return out;
+    };
+
+    TEST_CASE("N5.60 The 16:9 Setup Screen Of A Room's Leader Has A Chat Box Fed From The Room: The Lines With Their Names Arrive In It (Own Line Included, Oldest First, The Newest 16 At Most), The Typed Line And Its Caret Are In The Input Box, The Status Line Keeps The Prompt (No Copy Of The Chat, No \"Say:\", No \"You:\")") {
+        BoxRoom d;
+        ASSERT_TRUE(open_leader(d, "BOX-LEAD", Aspect::Wide16x9, net::FillLevel::None, false, true));
+        Application& app = d.app;
+        ASSERT_TRUE(app.map_select().wide_layout() && app.map_select().setup_variant() == SetupVariant::Online);
+        ASSERT_TRUE(app.room_chat_box() == &SL::of(SetupVariant::Online).chat);
+        ASSERT_TRUE(app.map_select().chat_panel().visible);                                     // (the box is drawn from the first frame of the room: its frame and label)
+        ASSERT_TRUE(app.map_select().chat_panel().lines.empty() && app.map_select().chat_panel().typed.empty() && !app.map_select().chat_panel().caret);
+        const std::string prompt = app.map_select().room().status;
+        ASSERT_EQ(prompt, std::string(sim::strings::text(sim::strings::kPressStart)));
+        // Bob speaks: the line is in the box with his name; the status line is not changed by it
+        ASSERT_TRUE(d.peer.net.chat("hello leader"));
+        ASSERT_TRUE(d.hall.until([&]() { return app.map_select().chat_panel().lines.size() == 1; }, 8000));
+        ASSERT_EQ(panel_lines(app), (std::vector<std::string>{"Bob: hello leader"}));
+        d.hall.step(30);
+        ASSERT_EQ(app.map_select().room().status, prompt);
+        ASSERT_EQ(app.net()->status_text(), prompt);
+        ASSERT_FALSE(app.map_select().room().status_input);
+        // T opens the input: what is typed is in the box (not on the status line), the caret blinks
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_text_input("my reply");
+        d.hall.step(30);
+        ASSERT_TRUE(app.map_select().chat_panel().typed == "my reply" && app.room_chat().is_open());
+        ASSERT_TRUE(app.map_select().room().status == prompt && !app.map_select().room().status_input && app.map_select().room().status_prefix.empty());
+        bool saw_on = false;
+        bool saw_off = false;
+        for (int i = 0; i < 80; ++i) {                                                           // (the caret's half period is 150 ms: in 800 ms it is seen on and off)
+            d.hall.step(10);
+            (app.map_select().chat_panel().caret ? saw_on : saw_off) = true;
+            ASSERT_EQ(app.map_select().chat_panel().caret, app.room_chat().caret(static_cast<uint32_t>(app.net_clock_ms())));
+        }
+        ASSERT_TRUE(saw_on && saw_off);
+        // Enter sends it: the room relays it back to its sender too, so it comes into the box with the sender's own name; the input is empty again; "You: ..." is nowhere
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_TRUE(d.hall.until([&]() { return app.map_select().chat_panel().lines.size() == 2; }, 8000));
+        ASSERT_EQ(panel_lines(app), (std::vector<std::string>{"Bob: hello leader", "Ana: my reply"}));
+        d.hall.step(30);
+        ASSERT_TRUE(app.map_select().chat_panel().typed.empty() && !app.map_select().chat_panel().caret && !app.room_chat().is_open());
+        ASSERT_TRUE(app.map_select().room().status == prompt && app.net()->status_text().find("You:") == std::string::npos);
+        ASSERT_EQ(lines(d.peer.net.pregame_chat()), (std::vector<std::string>{"1|Bob|hello leader", "0|Ana|my reply"}));
+        // the room's talk goes on: only the newest 16 lines are given to the box, the newest last (the box wraps what it gets and shows what fits)
+        for (int i = 1; i <= 20; ++i) {
+            ASSERT_TRUE(d.peer.net.chat("line " + std::to_string(i)));
+            d.hall.step(1100);                                                                  // (a player may say a line a second: the room's own rate limit)
+        }
+        ASSERT_TRUE(d.hall.until([&]() { return app.net()->pregame_chat().size() == 22; }, 8000));
+        d.hall.step(30);
+        const std::vector<std::string> shown = panel_lines(app);
+        ASSERT_EQ(shown.size(), size_t{16});
+        ASSERT_EQ(shown.front(), std::string("Bob: line 5"));
+        ASSERT_EQ(shown.back(), std::string("Bob: line 20"));
+        ASSERT_EQ(app.net()->pregame_chat().size(), size_t{22});                                // (the room keeps them all: the match's chat log starts with them)
+        ASSERT_TRUE(app.map_select().room().status == prompt);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.61 The Chat Box Styles A Room's Own Notice As A Notice (A Line Of The Server, Not Of A Player: No Name In Front, The Status Text's Smaller Size) And A Player's Line As A Message; The Status Line Has The Prompt Of The Fog Room, Not A Copy Of The Notice") {
+        BoxRoom d;
+        ASSERT_TRUE(open_leader(d, "BOX-NOTE", Aspect::Wide16x9, net::FillLevel::Easy, true, false));
+        Application& app = d.app;
+        ASSERT_TRUE(app.map_select().chat_panel().visible && app.map_select().chat_panel().lines.empty());
+        ASSERT_EQ(app.map_select().room().status, std::string("Fog of War is on, so START seats no bots."));
+        app.room_key_down(SDLK_s, 0, false);                                                    // START of a leader alone with a fill in a fog room: the server says that bots cannot play with fog
+        ASSERT_TRUE(d.hall.until([&]() { return app.map_select().chat_panel().lines.size() == 1; }, 8000));
+        ASSERT_EQ(panel_lines(app), (std::vector<std::string>{std::string("! ") + net::kNoticeFillFog}));
+        ASSERT_TRUE(app.map_select().chat_panel().lines[0].notice);
+        d.hall.step(30);
+        ASSERT_EQ(app.map_select().room().status, std::string("Fog of War is on, so START seats no bots."));      // (no copy of the notice on the status line)
+        ASSERT_TRUE(d.peer.net.join("127.0.0.1", d.server.port(), "Bob", 255, "BOX-NOTE"));
+        ASSERT_TRUE(d.hall.until([&]() { return d.peer.net.phase() == net::NetGame::Phase::Room; }, 8000));
+        ASSERT_TRUE(d.peer.net.chat("hi"));
+        ASSERT_TRUE(d.hall.until([&]() { return app.map_select().chat_panel().lines.size() == 2; }, 8000));
+        ASSERT_EQ(panel_lines(app), (std::vector<std::string>{std::string("! ") + net::kNoticeFillFog, "Bob: hi"}));
+        ASSERT_TRUE(app.map_select().chat_panel().lines[0].notice && !app.map_select().chat_panel().lines[1].notice);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.62 The Click Zones Of The 16:9 Screen: A Click In The Chat Box's Input Box Opens The Chat Input And So Does One In Its Lines Box, A Second Click Closes It (Sends Nothing), Any Other Click While It Is Open Closes It And Is Not The Screen's Click (START Starts Nothing); The Classic Page's Status-Line Zone And The Wide Status Box Open Nothing") {
+        BoxRoom d;
+        ASSERT_TRUE(open_leader(d, "BOX-CLICK", Aspect::Wide16x9, net::FillLevel::None, false, true));
+        Application& app = d.app;
+        const SetupLayout& layout = SL::of(SetupVariant::Online);
+        const LayoutRect input = layout.chat.input_box;
+        const LayoutRect lines_box = layout.chat.lines;
+        const auto quiet = [&]() { return d.server.status("BOX-CLICK").state == server::RoomState::Waiting && !app.map_select().is_locked() && app.state() == AppState::MapSelect; };
+        const auto click = [&](int32_t x, int32_t y) { return app.room_mouse_down(x, y, SDL_BUTTON_LEFT); };
+        // a click that is nobody's: just outside the input box on every side, just outside the lines box, between them, the classic status line's zone, the wide status box, the preview, the button
+        for (const auto& p : {std::pair<int32_t, int32_t>{input.x - 1, centre_y(input)}, {input.x + input.w, centre_y(input)}, {centre_x(input), input.y - 1}, {centre_x(input), input.y + input.h},
+                              {lines_box.x - 1, centre_y(lines_box)}, {lines_box.x + lines_box.w, centre_y(lines_box)}, {centre_x(lines_box), lines_box.y - 1},
+                              {MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y + 5}, {centre_x(layout.prompt_text), centre_y(layout.prompt_text)},
+                              {centre_x(layout.preview_box), centre_y(layout.preview_box)}, {centre_x(layout.start), centre_y(layout.start)}}) {
+            ASSERT_FALSE(click(p.first, p.second));
+            ASSERT_FALSE(app.room_chat().is_open());
+        }
+        ASSERT_FALSE(app.room_mouse_down(centre_x(input), centre_y(input), SDL_BUTTON_RIGHT));     // the right button is no click
+        ASSERT_FALSE(app.room_chat().is_open());
+        // the input box opens it; the release of that click is the input's
+        ASSERT_TRUE(click(centre_x(input), centre_y(input)));
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(centre_x(input), centre_y(input), SDL_BUTTON_LEFT));
+        app.room_text_input("typed with a finger");
+        d.hall.step(30);
+        ASSERT_EQ(app.map_select().chat_panel().typed, std::string("typed with a finger"));
+        // a second click on the input box closes it and sends nothing
+        ASSERT_TRUE(click(centre_x(input), centre_y(input)));
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(centre_x(input), centre_y(input), SDL_BUTTON_LEFT));
+        d.hall.step(500);
+        ASSERT_TRUE(d.peer.net.pregame_chat().empty() && quiet());
+        ASSERT_TRUE(app.map_select().chat_panel().typed.empty());
+        // the corners of both boxes are inside them
+        for (const LayoutRect& r : {input, lines_box}) {
+            for (const auto& p : {std::pair<int32_t, int32_t>{r.x, r.y}, {r.x + r.w - 1, r.y}, {r.x, r.y + r.h - 1}, {r.x + r.w - 1, r.y + r.h - 1}}) {
+                ASSERT_TRUE(click(p.first, p.second));
+                ASSERT_TRUE(app.room_chat().is_open());
+                ASSERT_TRUE(app.room_mouse_up(p.first, p.second, SDL_BUTTON_LEFT));
+                ASSERT_TRUE(click(p.first, p.second));                                            // (and closes it again)
+                ASSERT_FALSE(app.room_chat().is_open());
+                ASSERT_TRUE(app.room_mouse_up(p.first, p.second, SDL_BUTTON_LEFT));
+            }
+        }
+        // a click in the lines box opens it too
+        ASSERT_TRUE(click(centre_x(lines_box), centre_y(lines_box)));
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(centre_x(lines_box), centre_y(lines_box), SDL_BUTTON_LEFT));
+        ASSERT_TRUE(click(centre_x(lines_box), centre_y(lines_box)));                              // (a second click anywhere closes it)
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(centre_x(lines_box), centre_y(lines_box), SDL_BUTTON_LEFT));
+        // any other click while it is open closes it and is not the screen's: START (and the map list, the classic status zone, the empty clay) start and change nothing
+        const int32_t map_before = app.map_select().get_selected_index();
+        for (const auto& where : {std::pair<int32_t, int32_t>{centre_x(layout.start), centre_y(layout.start)}, {centre_x(layout.down), centre_y(layout.down)}, {centre_x(layout.prompt_text), centre_y(layout.prompt_text)}, {20, 200}}) {
+            ASSERT_TRUE(click(centre_x(input), centre_y(input)));
+            ASSERT_TRUE(app.room_chat().is_open());
+            ASSERT_TRUE(app.room_mouse_up(centre_x(input), centre_y(input), SDL_BUTTON_LEFT));
+            app.room_text_input("words");
+            ASSERT_TRUE(click(where.first, where.second));
+            ASSERT_FALSE(app.room_chat().is_open());
+            ASSERT_FALSE(app.map_select().start_button().pressed());
+            ASSERT_TRUE(app.room_mouse_up(where.first, where.second, SDL_BUTTON_LEFT));
+            d.hall.step(300);
+            ASSERT_TRUE(quiet() && d.peer.net.pregame_chat().empty());
+        }
+        ASSERT_EQ(app.map_select().get_selected_index(), map_before);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.63 The Focus Rule On The 16:9 Screen: While The Chat Input Is Open S, Q, X, Enter And The Arrows Do Nothing On The Screen And Are Not Typed (The Box Shows Exactly What Was Typed), Enter Sends And Closes, Esc Closes; After It Closes START's Keys Do Nothing For 400 ms; A Held START Key Starts Nothing On A Room's Screen") {
+        BoxRoom d;
+        ASSERT_TRUE(open_leader(d, "BOX-FOCUS", Aspect::Wide16x9, net::FillLevel::None, false, true));
+        Application& app = d.app;
+        const auto quiet = [&]() { return d.server.status("BOX-FOCUS").state == server::RoomState::Waiting && !app.map_select().is_locked() && app.state() == AppState::MapSelect && app.network_active(); };
+        // the keys that must not open it
+        app.room_key_down(SDLK_t, KMOD_CTRL, false);
+        app.room_key_down(SDLK_t, KMOD_GUI, false);
+        app.room_key_down(SDLK_t, 0, true);
+        ASSERT_FALSE(app.room_chat().is_open());
+        // T opens it and is not typed; the keys of the screen do nothing and do not enter the line
+        app.room_key_down(SDLK_t, 0, false);
+        ASSERT_TRUE(app.room_chat().is_open());
+        app.room_text_input("t");
+        app.room_text_input("hello");
+        for (const SDL_Keycode k : {SDLK_s, SDLK_q, SDLK_x, SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT, SDLK_TAB}) app.room_key_down(k, 0, false);
+        d.hall.step(600);
+        ASSERT_TRUE(quiet() && app.room_chat().is_open());
+        ASSERT_EQ(app.room_chat().text(), std::string("hello"));
+        ASSERT_EQ(app.map_select().chat_panel().typed, std::string("hello"));
+        // Esc closes it without sending anything; the box is empty again
+        app.room_key_down(SDLK_ESCAPE, 0, false);
+        d.hall.step(30);
+        ASSERT_TRUE(!app.room_chat().is_open() && app.map_select().chat_panel().typed.empty() && d.peer.net.pregame_chat().empty());
+        // Enter sends and closes; a second Enter (and the S of a habit) within 400 ms starts nothing
+        d.hall.step(500);
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_text_input("ready");
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_FALSE(app.room_chat().is_open());
+        d.hall.step(20);
+        app.room_key_down(SDLK_RETURN, 0, false);
+        app.room_key_down(SDLK_s, 0, false);
+        d.hall.step(300);
+        ASSERT_TRUE(quiet());
+        ASSERT_TRUE(d.hall.until([&]() { return !d.peer.net.pregame_chat().empty(); }, 8000));
+        ASSERT_EQ(lines(d.peer.net.pregame_chat()), (std::vector<std::string>{"0|Ana|ready"}));
+        // a held START key (the auto-repeat of Enter, the keypad's Enter, S) is no press on a room's screen, however long it has been held
+        d.hall.step(500);
+        for (const SDL_Keycode k : {SDLK_RETURN, SDLK_KP_ENTER, SDLK_s}) {
+            for (int i = 0; i < 5; ++i) app.room_key_down(k, 0, true);
+        }
+        d.hall.step(1500);
+        ASSERT_TRUE(quiet());
+        // and the press of S, 400 ms or more after the input closed, starts the match
+        app.room_key_down(SDLK_s, 0, false);
+        ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.peer.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.64 The Fill Footer Of The Leader's Players' Status Box (\"Empty seats at START:\" / \"Medium bots\"): The Leader Sees The Level Of Its Fill (Follows A Change At Once), A Room Without A Fill, A Fog Room (No Bots Can Be Seated), A Guest Whatever Its Own Setting, And The Classic Page Have None") {
+        const auto footer = [](Application& app) { return std::vector<std::string>{app.map_select().fill_footer()[0], app.map_select().fill_footer()[1]}; };
+        const std::vector<std::string> none{"", ""};
+        {
+            BoxRoom d;
+            ASSERT_TRUE(open_leader(d, "BOX-FILL", Aspect::Wide16x9, net::FillLevel::Medium, false, true));
+            Application& app = d.app;
+            ASSERT_EQ(footer(app), (std::vector<std::string>{"Empty seats at START:", "Medium bots"}));
+            app.set_fill_bots(net::FillLevel::Easy);
+            d.hall.step(30);
+            ASSERT_EQ(footer(app), (std::vector<std::string>{"Empty seats at START:", "Easy bots"}));
+            app.set_fill_bots(net::FillLevel::Hard);
+            d.hall.step(30);
+            ASSERT_EQ(footer(app), (std::vector<std::string>{"Empty seats at START:", "Hard bots"}));
+            app.set_fill_bots(net::FillLevel::None);
+            d.hall.step(30);
+            ASSERT_EQ(footer(app), none);
+            app.quit();
+        }
+        {   // a fog room seats no bots: the footer would promise what START does not do
+            BoxRoom d;
+            ASSERT_TRUE(open_leader(d, "BOX-FILL-FOG", Aspect::Wide16x9, net::FillLevel::Medium, true, true));
+            ASSERT_EQ(footer(d.app), none);
+            d.app.quit();
+        }
+        {   // a guest cannot START: nothing, whatever its own --fill-bots says
+            BoxRoom d;
+            ASSERT_TRUE(open_guest(d, "BOX-FILL-GUEST", Aspect::Wide16x9, net::FillLevel::Medium));
+            ASSERT_EQ(d.app.fill_bots(), net::FillLevel::Medium);
+            ASSERT_EQ(footer(d.app), none);
+            d.app.quit();
+        }
+        {   // the classic page has no chat box and no footer
+            BoxRoom d;
+            ASSERT_TRUE(open_leader(d, "BOX-FILL-CLASSIC", Aspect::Classic4x3, net::FillLevel::Medium, false, true));
+            ASSERT_EQ(footer(d.app), none);
+            d.app.quit();
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.65 A Guest's 16:9 Screen Has The Same Chat Box (The Guest Layout's): The Lines Of The Room Arrive In It, A Click In Its Input Box Or Its Lines And T Open The Input, The Line Reaches The Room, The Status Line Keeps \"Waiting For The Host To Start The Game...\"; The Guest's Keys Start Nothing") {
+        BoxRoom d;
+        ASSERT_TRUE(open_guest(d, "BOX-GUEST", Aspect::Wide16x9, net::FillLevel::None));
+        Application& app = d.app;
+        ASSERT_TRUE(app.map_select().setup_variant() == SetupVariant::Guest && app.map_select().is_guest());
+        ASSERT_TRUE(app.room_chat_box() == &SL::of(SetupVariant::Guest).chat);
+        ASSERT_TRUE(app.map_select().chat_panel().visible && app.map_select().chat_panel().lines.empty());
+        const std::string prompt = std::string(sim::strings::text(sim::strings::kWaitingForHost));
+        ASSERT_EQ(app.map_select().room().status, prompt);
+        ASSERT_TRUE(d.peer.net.chat("welcome, Ben"));
+        ASSERT_TRUE(d.hall.until([&]() { return app.map_select().chat_panel().lines.size() == 1; }, 8000));
+        ASSERT_EQ(panel_lines(app), (std::vector<std::string>{"Lea: welcome, Ben"}));
+        d.hall.step(30);
+        ASSERT_EQ(app.map_select().room().status, prompt);
+        // the clicks: the Guest layout's boxes
+        const SetupChatLayout& chat = SL::of(SetupVariant::Guest).chat;
+        ASSERT_FALSE(app.room_mouse_down(chat.input_box.x - 1, centre_y(chat.input_box), SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_mouse_down(centre_x(chat.input_box), centre_y(chat.input_box), SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(centre_x(chat.input_box), centre_y(chat.input_box), SDL_BUTTON_LEFT));
+        app.room_text_input("thanks");
+        d.hall.step(30);
+        ASSERT_EQ(app.map_select().chat_panel().typed, std::string("thanks"));
+        for (const SDL_Keycode k : {SDLK_s, SDLK_q, SDLK_x}) app.room_key_down(k, 0, false);        // (a guest has no START, and Leave is not for a line that is typed)
+        d.hall.step(30);
+        ASSERT_TRUE(app.room_chat().is_open() && app.network_active() && app.map_select().chat_panel().typed == "thanks");
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_TRUE(d.hall.until([&]() { return app.map_select().chat_panel().lines.size() == 2; }, 8000));
+        ASSERT_EQ(panel_lines(app), (std::vector<std::string>{"Lea: welcome, Ben", "Ben: thanks"}));
+        ASSERT_EQ(lines(d.peer.net.pregame_chat()), (std::vector<std::string>{"0|Lea|welcome, Ben", "1|Ben|thanks"}));
+        ASSERT_EQ(app.map_select().room().status, prompt);
+        // T opens it for a guest too
+        d.hall.step(500);
+        app.room_key_down(SDLK_t, 0, false);
+        ASSERT_TRUE(app.room_chat().is_open());
+        app.room_key_down(SDLK_ESCAPE, 0, false);
+        d.hall.step(450);
+        for (const SDL_Keycode k : {SDLK_s, SDLK_RETURN}) app.room_key_down(k, 0, false);
+        d.hall.step(1000);
+        ASSERT_TRUE(d.server.status("BOX-GUEST").state == server::RoomState::Waiting && app.state() == AppState::MapSelect);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.66 The Classic 640 x 480 Setup Screen Is Unchanged: No Chat Box (None Drawn, None Fed, No Fill Footer, No Box Zones), The Status Line Shows The Room's Lines For Five Seconds, \"You: ...\" After A Line Is Said, \"Say: ...\" While It Is Typed, And A Click On It Opens The Input") {
+        BoxRoom d;
+        ASSERT_TRUE(open_leader(d, "BOX-CLASSIC", Aspect::Classic4x3, net::FillLevel::Medium, false, true));
+        Application& app = d.app;
+        ASSERT_FALSE(app.map_select().wide_layout());
+        ASSERT_TRUE(app.room_chat_box() == nullptr);
+        ASSERT_FALSE(app.map_select().chat_panel().visible);
+        ASSERT_TRUE(d.peer.net.chat("hello classic"));
+        ASSERT_TRUE(d.hall.until([&]() { return !app.net()->pregame_chat().empty(); }, 8000));
+        d.hall.step(30);
+        ASSERT_EQ(app.map_select().room().status, std::string("Bob: hello classic"));            // the mirror of the chat on the status line
+        ASSERT_TRUE(app.map_select().chat_panel().lines.empty() && !app.map_select().chat_panel().visible);
+        // the wide screen's zones are nothing here (a click at the wide input box's place: the classic page has the map's box and the players there)
+        const SetupChatLayout& wide = SL::of(SetupVariant::Online).chat;
+        ASSERT_FALSE(app.room_mouse_down(std::min(centre_x(wide.input_box), 600), std::min(centre_y(wide.input_box), 470), SDL_BUTTON_LEFT));
+        ASSERT_FALSE(app.room_chat().is_open());
+        // typing: the prompt "Say: ...", the caret; Enter: "You: ..."
+        ASSERT_TRUE(app.room_mouse_down(MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y + 5, SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y + 5, SDL_BUTTON_LEFT));
+        app.room_text_input("on the status line");
+        d.hall.step(30);
+        ASSERT_TRUE(app.map_select().room().status_input && app.map_select().room().status_prefix == "Say: " && app.map_select().room().status == "on the status line");
+        ASSERT_TRUE(app.map_select().chat_panel().typed.empty() && app.map_select().chat_panel().lines.empty());
+        app.room_key_down(SDLK_RETURN, 0, false);
+        d.hall.step(30);
+        ASSERT_EQ(app.map_select().room().status, std::string("You: on the status line"));
+        ASSERT_TRUE(app.map_select().fill_footer()[0].empty() && app.map_select().fill_footer()[1].empty());     // (the level of the fill is in the status line's own prompt there)
+        d.hall.step(6000);
+        ASSERT_EQ(app.map_select().room().status, std::string("Press START: the empty seats get Medium bots."));
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.67 Through The Window's Own Event Loop On The 16:9 Screen: T, The Typed Letters, A Click On The Input Box (Motion, Press, Release As SDL Queues Them) And Enter Reach The Chat Input; The Picture Of The Box Changes With The Lines, The Typed Text And The Caret, And Nothing Else Of The Setup Screen's Chat Column Moves") {
+        BoxRoom d;
+        ASSERT_TRUE(open_leader(d, "BOX-EVENTS", Aspect::Wide16x9, net::FillLevel::None, false, true));
+        Application& app = d.app;
+        const SetupChatLayout& chat = SL::of(SetupVariant::Online).chat;
+        const auto push = [](SDL_Event e) { return SDL_PushEvent(&e) == 1; };
+        const auto key = [&](SDL_Keycode sym) {
+            SDL_Event e;
+            std::memset(&e, 0, sizeof(e));
+            e.type = SDL_KEYDOWN;
+            e.key.keysym.sym = sym;
+            return push(e);
+        };
+        const auto text = [&](const char* s) {
+            SDL_Event e;
+            std::memset(&e, 0, sizeof(e));
+            e.type = SDL_TEXTINPUT;
+            std::snprintf(e.text.text, sizeof(e.text.text), "%s", s);
+            return push(e);
+        };
+        const auto click = [&](int32_t x, int32_t y) {
+            SDL_Event motion;
+            std::memset(&motion, 0, sizeof(motion));
+            motion.type = SDL_MOUSEMOTION;
+            motion.motion.x = x;
+            motion.motion.y = y;
+            SDL_Event press = motion;
+            press.type = SDL_MOUSEBUTTONDOWN;
+            press.button.x = x;
+            press.button.y = y;
+            press.button.button = SDL_BUTTON_LEFT;
+            press.button.clicks = 1;
+            SDL_Event release = press;
+            release.type = SDL_MOUSEBUTTONUP;
+            return push(motion) && push(press) && push(release);
+        };
+        const LayoutRect lines_box = chat.lines;
+        const LayoutRect input = chat.input_box;
+        const LayoutRect outside{0, 0, chat.box.x - 4, 540};                                       // (the left column of the screen: not the chat's)
+        const auto park = [&]() {                                                                  // (the pointer is drawn by the game: it is put on the clay, away from what is measured)
+            SDL_Event motion;
+            std::memset(&motion, 0, sizeof(motion));
+            motion.type = SDL_MOUSEMOTION;
+            motion.motion.x = 700;
+            motion.motion.y = 20;
+            return push(motion);
+        };
+        ASSERT_TRUE(park());
+        app.map_select().update(0.6f);                                                             // (the screen's labels, and the chat's lines, are drawn from 500 ms after it was created)
+        app.run_frame_with_delta(0.016f);
+        const uint64_t lines_empty = region_hash(app, lines_box);
+        const uint64_t input_empty = region_hash(app, input);
+        const uint64_t outside_before = region_hash(app, outside);
+        ASSERT_TRUE(lines_empty != 0 && input_empty != 0);
+        // a line of the room changes the lines box and nothing else of the column
+        ASSERT_TRUE(d.peer.net.chat("a line for the box"));
+        ASSERT_TRUE(d.hall.until([&]() { return app.map_select().chat_panel().lines.size() == 1; }, 8000));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(region_hash(app, lines_box) != lines_empty);
+        ASSERT_EQ(region_hash(app, input), input_empty);
+        // the click on the input box opens it (the picture is the canvas: window coordinates are the picture's)
+        ASSERT_TRUE(click(centre_x(input), centre_y(input)));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_TRUE(park());
+        ASSERT_TRUE(text("hi there"));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_EQ(app.room_chat().text(), std::string("hi there"));
+        ASSERT_EQ(app.map_select().chat_panel().typed, std::string("hi there"));
+        // the typed text is in the input box's picture, and the caret blinks in it: both states differ from each other and from the empty box
+        std::set<uint64_t> seen;
+        for (int i = 0; i < 40; ++i) {
+            d.hall.step(20);
+            app.run_frame_with_delta(0.001f);
+            seen.insert(region_hash(app, input));
+        }
+        ASSERT_EQ(seen.size(), size_t{2});
+        ASSERT_TRUE(seen.count(input_empty) == 0);
+        // an S while the line is typed is not START, Enter sends it, and the box that showed the typed text is empty again; the other lines of the screen did not move
+        ASSERT_TRUE(key(SDLK_s));
+        app.run_frame_with_delta(0.016f);
+        d.hall.step(500);
+        ASSERT_TRUE(app.room_chat().is_open() && !app.map_select().is_locked() && d.server.status("BOX-EVENTS").state == server::RoomState::Waiting);
+        ASSERT_TRUE(key(SDLK_RETURN));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_TRUE(d.hall.until([&]() { return d.peer.net.pregame_chat().size() == 2; }, 8000));
+        ASSERT_EQ(lines(d.peer.net.pregame_chat()), (std::vector<std::string>{"1|Bob|a line for the box", "0|Ana|hi there"}));
+        ASSERT_TRUE(d.hall.until([&]() { return app.map_select().chat_panel().lines.size() == 2; }, 8000));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_EQ(region_hash(app, input), input_empty);
+        ASSERT_EQ(region_hash(app, outside), outside_before);
+        // T from the keyboard opens it the same way
+        d.hall.step(500);
+        ASSERT_TRUE(key(SDLK_t));
+        ASSERT_TRUE(text("t"));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.room_chat().is_open() && app.room_chat().text().empty());
+        app.quit();
+    } TEST_END();
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -4157,6 +4662,7 @@ int main(int argc, char* argv[]) {
     run_hidden_page_tests();
     run_room_bot_tests();
     run_room_chat_ui_tests();
+    run_room_chat_box_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

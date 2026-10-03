@@ -166,6 +166,10 @@ public:
     void show_notice(std::string text);
     /// The longest text that a notice keeps (the rest is "..."): a line of 100 characters with the sender's name in front is cut here
     static constexpr size_t kStatusNoticeChars = 84;
+    /// Whether the lines that arrive in the room are also shown on the status line for five seconds, as the classic setup screen does (true, the default). The 16:9 setup screen has a chat box
+    /// that shows them (MapSelectScreen::set_chat_panel), so the application turns the mirror off while that box is on screen: the status line then keeps the prompt.
+    void set_chat_status_mirror(bool on) noexcept { chat_status_mirror_ = on; }
+    bool chat_status_mirror() const noexcept { return chat_status_mirror_; }
     /// The lines that arrived in the room since the last call (a guest's, the host's, and the room's own notices to this machine: ChatLine::notice())
     std::vector<ChatLine> take_pregame_chat();
     /// Every line of the waiting room (the last 200), kept after the match begins so that the match's chat log can start with them: the application decides
@@ -293,6 +297,7 @@ private:
     std::string game_version_;
     FillLevel fill_{FillLevel::None};       // the bots that this machine's START asks for (protocol 11)
     std::vector<ChatLine> pending_chat_;    // the waiting room's lines that take_pregame_chat() has not handed out
+    bool chat_status_mirror_{true};         // the lines of the room are shown on the status line too (set_chat_status_mirror)
 
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void()> on_wake_;
