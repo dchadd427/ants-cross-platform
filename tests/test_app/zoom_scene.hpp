@@ -480,4 +480,44 @@ struct AppRig {
 };
 
 
+/// The canvas of an application's renderer as it is now (RGBA)
+inline Picture read_canvas(Application& app, int32_t w, int32_t h) {
+    Picture p;
+    p.w = w;
+    p.h = h;
+    p.px.assign(static_cast<size_t>(w) * static_cast<size_t>(h) * 4u, 0);
+    if (SDL_RenderReadPixels(app.renderer().get_sdl_renderer(), nullptr, SDL_PIXELFORMAT_RGBA32, p.px.data(), w * 4) != 0) std::fprintf(stderr, "SDL_RenderReadPixels failed: %s\n", SDL_GetError());
+    return p;
+}
+
+/// A match of the application that is started and has TICKED: the start modal dismissed and `ticks` simulation ticks of 50 ms run. BEFORE the first tick an ant has no animation clip, so
+/// no sprite: the frame shows the hit point digits of the ants (Ctrl+L) and nothing else of them. (`ants --screenshot` takes its picture in that state; so did the application frames
+/// of suites 3.10 and 3.20 until the ants scenes were added.)
+inline bool start_ticked_match(Application& app, const std::string& map, int ticks = 6) {
+    if (!app.start_game(maps_dir() + map + ".LVL")) return false;
+    app.hud().dismiss_match_start_modal();
+    for (int i = 0; i < ticks; ++i) app.update_simulation(0.05f);
+    return true;
+}
+
+/// One frame of the application's own world pass over a copy of its world without the ants (and without their digits), read back: what the picture would be if no ant were drawn
+inline Picture world_without_ants(Application& app, int32_t w, int32_t h) {
+    sim::WorldState world = app.sim().get_world_state();
+    world.ants.clear();
+    app.renderer().set_show_hp(false);
+    app.renderer().begin_frame();
+    app.renderer().render_world(world, app.sim().grid(), -1, {}, false, false, -1, -1, 0, 0.0f);
+    return read_canvas(app, w, h);
+}
+
+/// ... and with the ants of the world, but also without their digits (so that only the sprites make the difference)
+inline Picture world_with_ants(Application& app, int32_t w, int32_t h) {
+    const sim::WorldState& world = app.sim().get_world_state();
+    app.renderer().set_show_hp(false);
+    app.renderer().begin_frame();
+    app.renderer().render_world(world, app.sim().grid(), -1, {}, false, false, -1, -1, 0, 0.0f);
+    return read_canvas(app, w, h);
+}
+
+
 }  // namespace zoomtest

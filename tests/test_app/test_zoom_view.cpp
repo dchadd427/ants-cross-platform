@@ -115,6 +115,14 @@ void test_world_pass(const assets::AssetArchive& arc) {
                     const Picture target = rig.shoot(static_cast<int32_t>(ids.front()), ids, 0, hp);
                     const uint64_t after_target = rig.renderer.world_target_passes();
                     rig.renderer.set_force_world_target(false);
+                    {
+                        // (the scene has ants and they are drawn: the pictures that follow compare something)
+                        const auto kept = rig.world.ants;
+                        rig.world.ants.clear();
+                        const Picture empty = rig.shoot(static_cast<int32_t>(ids.front()), ids, 0, hp);
+                        rig.world.ants = kept;
+                        check(differ(direct, empty, view) > 1000, where + "the ants of the scene are drawn at the zoom 1: " + std::to_string(differ(direct, empty, view)) + " pixels differ from the view without them");
+                    }
                     check(after_direct == before, where + "the world pass at the zoom 1 does not use the offscreen target (it draws straight into the view)");
                     check(after_target == after_direct + 1, where + "the forced pass went through the offscreen target once: " + std::to_string(after_target - after_direct) + " passes");
                     check(differ(direct, target, view) == 0, where + "at the zoom 1 the offscreen target gives the direct picture, pixel for pixel" + (fog ? " (fog)" : "") + (hp ? " (hit points)" : ""));
@@ -1437,6 +1445,72 @@ void test_app_settings() {
     std::filesystem::remove_all(dir, ec);
 }
 
+void test_app_ants() {
+    group("ants", "the ants of a real match are drawn at every zoom (after the first simulation ticks: before the first tick an ant has no clip, and only its hit point digits are drawn)");
+    for (const Aspect aspect : {Aspect::Classic4x3, Aspect::Wide16x9}) {
+        const bool wide = aspect == Aspect::Wide16x9;
+        const int32_t cw = wide ? kWideW : kClassicW;
+        const int32_t ch = wide ? kWideH : kClassicH;
+        for (const char* map : {"GAUNTLET", "TINY"}) {
+            const std::string at = std::string(wide ? "wide" : "classic") + " " + map + ": ";
+            AppRig rig(aspect, 1.0f, true);
+            check(rig.ok, at + "the application is up");
+            if (!rig.ok) continue;
+            Application& app = rig.app;
+            app.renderer().pin_animation_clock(1500);
+            check(start_ticked_match(app, map), at + "the match starts and ticks");
+            check(app.sim().current_tick() >= 3, at + "the simulation has ticked: " + std::to_string(app.sim().current_tick()));
+            bool own = false;
+            for (const auto& a : app.sim().get_world_state().ants) own = own || a.player_id == 0;
+            check(own, at + "the local player has ants");
+            const LayoutRect view = app.layout().view();
+            check(app.zoom() == 1.0f, at + "the match is at the zoom 1");
+            // the camera is put where one of the local player's ants stands (a whole pixel origin on the grid of every zoom: even numbers), so that the ants are in the view at every zoom
+            const sim::AntSnapshot* mine = nullptr;
+            for (const auto& a : app.sim().get_world_state().ants) {
+                if (a.player_id == 0 && mine == nullptr) mine = &a;
+            }
+            if (mine == nullptr) continue;
+            const double ox = static_cast<double>(std::max(0, mine->px - 100) & ~1);
+            const double oy = static_cast<double>(std::max(0, mine->py - 110) & ~1);
+            ViewportCamera& cam = app.renderer().camera();
+            const uint32_t tiles_w = app.sim().grid().width();
+            const uint32_t tiles_h = app.sim().grid().height();
+            const auto look = [&](float z) {
+                cam.zoom = z;
+                cam.set_origin(ox, oy, tiles_w, tiles_h);
+            };
+
+            // zoom 1: the sprites make a difference to the view that the same world without ants does not have
+            look(1.0f);
+            const double cx1 = static_cast<double>(cam.x);
+            const double cy1 = static_cast<double>(cam.y);
+            const Picture with1 = world_with_ants(app, cw, ch);
+            const Picture without1 = world_without_ants(app, cw, ch);
+            const int shown1 = differ(with1, without1, view);
+            check(shown1 > 500, at + "at the zoom 1 the ants are drawn: " + std::to_string(shown1) + " pixels of the view differ from the same world without them");
+
+            // zoom 2 from the same origin: the nearest enlargement of the zoom 1 picture, ants included, and the ants are in it
+            look(2.0f);
+            check(static_cast<double>(cam.x) == cx1 && static_cast<double>(cam.y) == cy1, at + "the same origin at the zoom 2");
+            const Picture with2 = world_with_ants(app, cw, ch);
+            const Picture without2 = world_without_ants(app, cw, ch);
+            const int bad2 = differ(with2, enlarge2(with1, view, false, false), view);
+            check(bad2 == 0, at + "at the zoom 2 the view is the nearest enlargement of the zoom 1 picture, ants included: " + std::to_string(bad2) + " pixels differ");
+            const int shown2 = differ(with2, without2, view);
+            check(shown2 > 500, at + "at the zoom 2 the ants are drawn: " + std::to_string(shown2));
+
+            // zoom 0.5: the ants are in the picture
+            look(0.5f);
+            const Picture with05 = world_with_ants(app, cw, ch);
+            const Picture without05 = world_without_ants(app, cw, ch);
+            const int shown05 = differ(with05, without05, view);
+            check(shown05 > 100, at + "at the zoom 0.5 the ants are drawn: " + std::to_string(shown05));
+            app.renderer().set_show_hp(true);
+        }
+    }
+}
+
 void test_app_start_view_and_listener() {
     group("start", "the start view keeps the hill in view and the sound listener is the middle of the world that is seen, at every zoom, on every map and for every player");
     const char* maps[6] = {"GAUNTLET", "ISLANDS", "MEDIUM", "SMALL", "TINY", "TREASURE"};
@@ -1802,7 +1876,17 @@ void test_network_match() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    (void)argc; (void)argv;                                     // SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one
+    // (SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one)
+    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, fair, settings, start, client, net)
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
+            only = argv[++i];
+        } else {
+            std::fprintf(stderr, "usage: test_zoom_view [--only NAME]\n");
+            return 2;
+        }
+    }
+    const auto run = [&only](const char* name) { return only.empty() || only == name; };
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);                      // (the environment survives SDL_Quit, which the end of an application calls; a hint does not): nothing is shown or heard
     SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     SDL_Init(SDL_INIT_VIDEO);
@@ -1811,24 +1895,25 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "cannot open ants.chd\n");
         return 2;
     }
-    test_world_pass(arc);
-    test_zoom_out_pass(arc);
-    test_pass_state(arc);
-    test_hud_cursor(arc);
-    test_hud_orders(arc);
-    test_hud_rubber_band(arc);
-    test_hud_minimap_and_scroll(arc);
-    test_hud_radar_frame(arc);
-    test_hud_gating(arc);
-    test_hud_ctrl_n(arc);
-    test_app_wheel();
-    test_app_middle_button();
-    test_app_zoom_api();
-    test_app_fairness_local();
-    test_app_settings();
-    test_app_start_view_and_listener();
-    test_local_determinism(arc);
-    test_network_match();
+    if (run("pass")) test_world_pass(arc);
+    if (run("out")) test_zoom_out_pass(arc);
+    if (run("state")) test_pass_state(arc);
+    if (run("cursor")) test_hud_cursor(arc);
+    if (run("orders")) test_hud_orders(arc);
+    if (run("band")) test_hud_rubber_band(arc);
+    if (run("scroll")) test_hud_minimap_and_scroll(arc);
+    if (run("radar")) test_hud_radar_frame(arc);
+    if (run("gating")) test_hud_gating(arc);
+    if (run("ctrln")) test_hud_ctrl_n(arc);
+    if (run("wheel")) test_app_wheel();
+    if (run("middle")) test_app_middle_button();
+    if (run("api")) test_app_zoom_api();
+    if (run("ants")) test_app_ants();
+    if (run("fair")) test_app_fairness_local();
+    if (run("settings")) test_app_settings();
+    if (run("start")) test_app_start_view_and_listener();
+    if (run("client")) test_local_determinism(arc);
+    if (run("net")) test_network_match();
     std::printf("\nzoom view: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
