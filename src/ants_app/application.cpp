@@ -1784,13 +1784,26 @@ WindowRect Application::window_rect() const {
 // that was created 4:3 (the config's 1280 x 960) and made 16:9 by apply_window_layout before the first frame was seen on screen as a 4:3 window for a moment at the start. An explicit
 // --window-size is that size; a canvas that is not the original's 4:3 is the size that apply_window_layout would give it (the largest scale in steps of 0.5 that fits the display's usable
 // area, with the title bar of a typical window system, as its own fallback assumes: the borders of a window that does not exist yet cannot be asked), the canvas itself at 1x when the display
-// cannot be asked; the original's own 4:3 (--aspect 4:3, the settings' key) is the config's 1280 x 960. Fullscreen and the cells of the start scripts' grid are as they always were (created at
-// the config's size, sized by apply_window_layout once the window exists), and so is the web build, whose window is the page's canvas.
+// cannot be asked; the original's own 4:3 (--aspect 4:3, the settings' key) is the config's 1280 x 960. A cell of the start scripts' grid (--grid CxR --cell N) is created AT ITS rectangle,
+// the one that apply_window_layout gives it (the largest rectangle of the canvas's shape that fits the cell, with the same assumed title bar): the four windows of start_game.sh used to be
+// created at the config's 4:3 and cut to their cell once they existed, so that a 4:3 window was there at the start, for good on a system that does not apply the cut at once. Fullscreen (the
+// config's size, the way back is sized by apply_window_layout) and the web build, whose window is the page's canvas, are as they always were.
 WindowRect Application::initial_window_rect() const {
     WindowRect r{SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, config_.window_width, config_.window_height};
 #if !defined(__EMSCRIPTEN__)
     const bool in_grid = config_.grid_cols > 0 && config_.grid_rows > 0;
-    if (!config_.fullscreen && !in_grid) {
+    if (in_grid && !config_.fullscreen) {                    // (as in apply_window_layout the cell wins over --window-size and --window-pos)
+        SDL_Rect area{0, 0, 0, 0};
+        const int display = std::max(0, config_.display_index);
+        if (SDL_GetDisplayUsableBounds(display, &area) == 0 || SDL_GetDisplayBounds(display, &area) == 0) {
+            r = grid_cell_window(WindowRect{area.x, area.y, area.w, area.h}, config_.grid_cols, config_.grid_rows, config_.grid_cell, 28, 0, 0, 0, canvas_width_of(aspect_), canvas_height_of(aspect_));
+        } else if (aspect_ != Aspect::Classic4x3) {          // (the display cannot be asked: the canvas at 1x, never the config's 4:3)
+            r.w = canvas_width_of(aspect_);
+            r.h = canvas_height_of(aspect_);
+        }
+        return r;
+    }
+    if (!config_.fullscreen) {
         if (config_.has_window_size) {
             r.w = config_.window_w;
             r.h = config_.window_h;

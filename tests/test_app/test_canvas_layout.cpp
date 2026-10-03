@@ -561,16 +561,54 @@ void test_application_aspects() {
             AppFixture f("", config_of(Aspect::Wide16x9, true, 1280, 720), false);
             check(f.ok && f.app.window_created_rect().w == 1280 && f.app.window_created_rect().h == 720, "--window-size: created at the size that was asked for");
         }
-        {   // fullscreen and the cells of a grid are as they always were: created at the config's size, sized by apply_window_layout once the window exists
+        {   // fullscreen is as it always was: created at the config's size, sized by apply_window_layout once the window exists
             ApplicationConfig full = config_of(Aspect::Wide16x9, true);
             full.fullscreen = true;
             AppFixture f("", full, false);
             check(f.ok && f.app.window_created_rect().w == 1280 && f.app.window_created_rect().h == 960, "--fullscreen: created at the config's size, as it always was");
-            ApplicationConfig grid = config_of(Aspect::Wide16x9, true);
-            grid.grid_cols = 2;
-            grid.grid_rows = 2;
-            AppFixture g("", grid, false);
-            check(g.ok && g.app.window_created_rect().w == 1280 && g.app.window_created_rect().h == 960, "--grid: created at the config's size, as it always was");
+            ApplicationConfig grid_full = config_of(Aspect::Wide16x9, true);
+            grid_full.grid_cols = 2;
+            grid_full.grid_rows = 2;
+            grid_full.fullscreen = true;
+            AppFixture gf("", grid_full, false);
+            check(gf.ok && gf.app.window_created_rect().w == 1280 && gf.app.window_created_rect().h == 960, "--grid with --fullscreen: created at the config's size too (the grid has no window in a fullscreen game)");
+        }
+        {   // the cells of the start scripts' grid (--grid 2x2 --cell N, no --aspect: the default 16:9) are CREATED at their cell's rectangle: the largest one of the picture's shape that fits the cell,
+            // at its place. The four windows of start_game.sh used to be created at the config's 1280 x 960 (4:3) and cut to the cell once they existed, so that a 4:3 window was there at the
+            // start (and stayed where a window system does not apply the cut at once). The title bar of a window that does not exist yet is assumed to be 28 rows, as apply_window_layout does where
+            // it cannot be told (the dummy video driver of this test: the same rectangle before and after); the real borders only trim it afterwards, the shape stays.
+            for (const Aspect aspect : {Aspect::Wide16x9, Aspect::Classic4x3}) {
+                for (int32_t cell = 0; cell < 4; ++cell) {
+                    const std::string what = std::string(aspect_name(aspect)) + ", cell " + std::to_string(cell);
+                    ApplicationConfig grid = config_of(aspect, true);
+                    grid.grid_cols = 2;
+                    grid.grid_rows = 2;
+                    grid.grid_cell = cell;
+                    AppFixture g("", grid, false);
+                    check(g.ok, what + ": a window in the grid starts");
+                    if (!g.ok) continue;
+                    SDL_Rect area{0, 0, 0, 0};                                                           // (asked while the application is up: that is when SDL's video is)
+                    const bool have_area = SDL_GetDisplayUsableBounds(0, &area) == 0 || SDL_GetDisplayBounds(0, &area) == 0;
+                    check(have_area && area.w > 0 && area.h > 0, what + ": a display to lay the grid on");
+                    const WindowRect first = g.app.window_created_rect();
+                    const WindowRect expected = grid_cell_window(WindowRect{area.x, area.y, area.w, area.h}, 2, 2, cell, 28, 0, 0, 0, canvas_width_of(aspect), canvas_height_of(aspect));
+                    check(first.w == expected.w && first.h == expected.h, what + ": created at the size of its cell's rectangle, " + std::to_string(first.w) + " x " + std::to_string(first.h));
+                    check(first.x == expected.x && first.y == expected.y, what + ": created at the place of its cell, not centred (" + std::to_string(first.x) + ", " + std::to_string(first.y) + ")");
+                    check(first.w >= 320 && std::abs(first.h * canvas_width_of(aspect) - first.w * canvas_height_of(aspect)) <= canvas_width_of(aspect), what + ": created in the shape of the picture, never the config's 4:3 (1280 x 960)");
+                    int32_t ww = 0, wh = 0;
+                    g.window_size(ww, wh);
+                    check(ww == first.w && wh == first.h, what + ": it is the size the window has now: nothing had to cut it");
+                }
+            }
+            ApplicationConfig sized = config_of(Aspect::Wide16x9, true, 1280, 720);                      // the cell wins over --window-size, here as in apply_window_layout
+            sized.grid_cols = 2;
+            sized.grid_rows = 2;
+            sized.grid_cell = 3;
+            AppFixture gs("", sized, false);
+            SDL_Rect area3{0, 0, 0, 0};
+            const bool have_area3 = gs.ok && (SDL_GetDisplayUsableBounds(0, &area3) == 0 || SDL_GetDisplayBounds(0, &area3) == 0);
+            const WindowRect cell3 = grid_cell_window(WindowRect{area3.x, area3.y, area3.w, area3.h}, 2, 2, 3, 28, 0, 0, 0, 960, 540);
+            check(have_area3 && gs.app.window_created_rect() == cell3, "--grid with --window-size: the cell decides, from the first moment");
         }
     }
     {   // the cells of the start scripts' grid are of the canvas's shape: 16:9 for --aspect 16:9, 4:3 as ever
