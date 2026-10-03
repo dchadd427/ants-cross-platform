@@ -7,19 +7,30 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
 
   * the page's own logic that needs no layout (`ANTS_PAGE` in web/shell.html): the address's `aspect` (only 16:9 and 4:3 count, anything else is ignored), the order address >
     remembered choice > portrait phone > default, the box that is the largest whole number of canvas steps for a given area and device ratio and whose CSS size makes the browser's
-    canvas exactly that many pixels even after the layout's rounding, and the frame cap (60, 75 and 90 Hz are not touched, 120 / 144 / 165 / 240 Hz are held to 60 a second);
+    canvas exactly that many pixels even after the layout's rounding, where the box must stand so that the game's pointer is exact (`snapOffset`), the frame cap (60, 75 and 90 Hz
+    are not touched, a jittery 60 Hz display is not capped, 120 / 144 / 165 / 240 Hz are held to 60 a second, decided by the median of the last 24 gaps: slow frames at the start do
+    not decide, and a window that moves to a display of another rate is measured again), the arguments of the address (`joinArguments`: the door of a game server on this site only,
+    a room code, a seat, a name, embed) and what is not the game's data (`badDownload`: a web page, a size that is not the package's);
   * the page at desktop sizes (1280 x 720, 1920 x 1080, 1440 x 900, a 21:9 window, a small one, a very narrow one) and on a phone, at device ratios 1, 2 and 3: the canvas the game
     makes has EXACTLY the shape of the picture (16:9, or 4:3 for the classic picture), fills the game's box, the box fits the window (no scrolling to see the whole picture and the bar
     under it) and is the largest that fits, the page has no sideways scroll;
   * the address and the selector: `?aspect=4:3`, `?aspect=16:9`, a bad value, the selector's click (remembered, reload with the parameter), a portrait phone gets the classic picture;
   * the picture follows the window when it is resized, and fullscreen (the browser's, and the page's own where there is no Fullscreen API: an iPhone) enters and leaves with the
     canvas the right shape;
-  * the pointer: the game draws its own cursor at the position that it reads from the browser; two screenshots with the pointer at two places show the cursor at those places;
+  * the pointer: the game draws its own cursor at the position that it reads from the browser; two screenshots with the pointer at two places show the cursor at those places; the box
+    stands where the pointer is exact (a whole pixel for a whole size, 1/64 short of one for any other), and the edges of the setup screen's START button, found by moving the real
+    mouse over it (a hover lights the button), are where the game's arithmetic puts them at six layouts (a fractional position or size used to put them up to a pixel off);
+  * the selector asks "Leave the match to change the picture?" in a running match (and not at the quick help or the setup screen), and answered No the match goes on;
   * the download of the game's data (index.data): the retry rule, a download that the browser fails once (injected with the DevTools Fetch domain) is retried and the game starts, a
-    download that fails for good shows the message with a Reload button, and (`--downloads N`, needs the game server behind /ws) N cold-cache runs of web/four.html with 2 and with
+    download that fails for good shows the message with a Reload button; the loading of the game itself: index.js or index.wasm that fail, a game that never starts (the watchdog), a
+    body that is a web page / too small / an error status / cut short / a byte short (each is a failed try, the game starts on the next good one), the package that is handed to the
+    file packager once and only for index.data, a promise that fails after the game runs (no card over it), and index.js asked for once with one ?v= (`--load-only`);
+    and (`--downloads N`, needs the game server behind /ws) N cold-cache runs of web/four.html with 2 and with
     4 games on the page, every frame of which must start (the browser's cache refuses one of several equal downloads at the same moment: net::ERR_CACHE_WRITE_FAILURE).
 
-Exit status 0: every check passed; 1: a check failed; 3: the check could not be made (no browser, the page did not come up); 2 is the status of a bad command line.
+Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down during the check (a page that hangs, a browser that crashes, a script that raises:
+a page that came up and then misbehaved is a failure, never a skip); 3: the check could not be made because the environment is not there (no browser, the browser did not start,
+nothing answers at the page's address); 2 is the status of a bad command line. `--exit-codes` checks these statuses themselves (a closed port, a page that hangs).
 """
 import argparse
 import base64
@@ -34,6 +45,14 @@ import tempfile
 import threading
 import time
 import zlib
+
+READY_TIMEOUT = 120                                                           # seconds to wait for a game to become ready (--ready-timeout)
+PAGE_REACHED = [False]                                                        # a page was loaded at least once (after that, a failure to load is a failure of the check)
+
+
+class NotReachable(Exception):
+    """The environment is not there: no browser, the browser did not start, nothing answers at the page's address. The only exception that ends the check as a skip (exit status 3)."""
+
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from web_hidden_check import DevTools, find_browser, free_port  # noqa: E402  (the DevTools client of the hidden-tab check)
@@ -148,7 +167,7 @@ PURE_CHECKS = r"""
         // or up, always the box's pixels; down, only where the size is exact (device ratios 1 and 2 promise that)
         [64, 60].forEach(function (q) {
           [Math.round, Math.ceil, Math.floor].forEach(function (rounding) {
-            if (rounding === Math.floor && !(dpr === 1 || dpr === 2)) return;
+            if (rounding === Math.floor && Math.abs(f.cssW * 64 - Math.round(f.cssW * 64)) > 1e-9) return;           // (a size that is not a multiple of 1/64 has its quarter pixel: it may be rounded to the nearest or up)
             var cw = rounding(f.cssW * q) / q, ch = rounding(f.cssH * q) / q;
             if (Math.floor(cw * dpr) !== f.bw || Math.floor(ch * dpr) !== f.bh) ok = false;
           });
@@ -161,6 +180,12 @@ PURE_CHECKS = r"""
   // dpr 1 and 2 give sizes that are exact (no extra quarter pixel)
   eq(P.fitBox(1280, 720, 1, '16:9'), { k: 80, bw: 1280, bh: 720, cssW: 1280, cssH: 720 }, '1280 x 720 at 1x is exact');
   eq(P.fitBox(1280, 720, 2, '16:9'), { k: 160, bw: 2560, bh: 1440, cssW: 1280, cssH: 720 }, '1280 x 720 at 2x is exact');
+  eq(P.fitBox(1280, 720, 1.25, '16:9'), { k: 100, bw: 1600, bh: 900, cssW: 1280, cssH: 720 }, '1280 x 720 at 1.25x is exact (the pointer scale is 1)');
+  eq(P.fitBox(1280, 720, 1.5, '16:9'), { k: 120, bw: 1920, bh: 1080, cssW: 1280, cssH: 720 }, '1280 x 720 at 1.5x is exact');
+  eq(P.fitBox(544.5, 306.5, 3, '16:9'), { k: 102, bw: 1632, bh: 918, cssW: 544, cssH: 306 }, '544 x 306 at 3x is exact');
+  eq(P.fitBox(1066.7, 700, 2.625, '16:9').cssW > 1066.7 - 6.2 && P.fitBox(1066.7, 700, 2.625, '16:9').cssW % 1 !== 0, true, 'a size that is not a multiple of 1/64 keeps its extra quarter device pixel (2.625x)');
+  eq(P.cssFor(1264, 1.25) > 1011.2, true, 'a ratio that makes no exact size (1264 / 1.25 = 1011.2) gets the quarter pixel');
+  eq(P.cssFor(1600, 1.100000023841858) > 1600 / 1.100000023841858, true, 'a ratio of the browser that is no short binary fraction (1.1) gets the quarter pixel');
   eq(P.fitBox(1066.67, 600, 1, '16:9').bw, 1056, '1066.67 x 600 at 1x: 1056 x 594');
   eq(P.fitBox(500, 300, 1, '4:3').bw, 400, 'the classic box in 500 x 300: 400 x 300');
   eq(P.fitBox(-5, 0, 1, '16:9').k, 1, 'no area: one step, never nothing');
@@ -200,9 +225,117 @@ PURE_CHECKS = r"""
   var gap = run(144, 20, 0.5, [6000, 12000]);                                  // a hidden page for six seconds: no burst after it, the cap goes on
   n++;
   if (!(gap.rate > 30 && gap.rate < 45)) bad.push('frame cap over a hidden gap: ' + JSON.stringify(gap));
+  // the cap is decided by the MEDIAN of the last 24 gaps: not by the smallest gap, not by the first frames, and again when the display changes
+  function trace(gaps, tail) {                                               // gaps: the display's gaps in ms, in order; the frames accepted among the last `tail` of them
+    var acc = P.makeFrameLimiter(1000 / 60), t = 1000, accepted = 0;
+    acc(t);
+    for (var i = 0; i < gaps.length; i++) { t += gaps[i]; var a = acc(t); if (i >= gaps.length - tail && a) accepted++; }
+    return { accepted: accepted, tail: tail, capped: acc.isCapped(), measured: acc.isMeasured() };
+  }
+  function seeded(seed) { return function () { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }; }
+  function series(count, mean, spread, rnd) { var out = []; for (var i = 0; i < count; i++) out.push(Math.max(1, mean + (rnd() - 0.5) * spread)); return out; }
+  var r1 = seeded(7);
+  var jitter60 = series(600, 1000 / 60, 16, r1);                              // a jittery 60 Hz display: gaps from 8.7 to 24.7 ms, many of them under the 10.3 ms that a 97 Hz display has
+  var shortest = jitter60.reduce(function (m, g) { return Math.min(m, g); }, 1e9);
+  n++;
+  if (!(shortest < 10.3)) bad.push('(setup) the jittery 60 Hz trace has a short gap: ' + shortest);
+  var res60 = trace(jitter60, 300);
+  eq(res60.capped === false && res60.accepted === 300, true, 'a jittery 60 Hz display is not capped, every frame is drawn: ' + JSON.stringify(res60));
+  var alt60 = []; for (var k = 0; k < 300; k++) alt60.push(k % 7 === 3 ? 4 : 18);   // a 60 Hz display whose compositor now and then delivers a frame early
+  var resAlt = trace(alt60, 150);
+  eq(resAlt.capped === false && resAlt.accepted === 150, true, 'a 60 Hz display with early frames is not capped: ' + JSON.stringify(resAlt));
+  var res120 = trace(series(600, 1000 / 120, 0, seeded(3)), 240);
+  eq(res120.capped === true && res120.accepted >= 112 && res120.accepted <= 125, true, 'a steady 120 Hz display is capped to about 60 a second: ' + JSON.stringify(res120));
+  var res120j = trace(series(1200, 1000 / 120, 3, seeded(5)), 480);
+  eq(res120j.capped === true && res120j.accepted >= 232 && res120j.accepted <= 250, true, 'a jittery 120 Hz display (3 ms) is capped to about 60 a second: ' + JSON.stringify(res120j));
+  var slowStart = []; for (var q = 0; q < 40; q++) slowStart.push(45); slowStart = slowStart.concat(series(1000, 1000 / 144, 0.6, seeded(11)));
+  var resSlow = trace(slowStart, 432);
+  eq(resSlow.capped === true && resSlow.accepted >= 160 && resSlow.accepted <= 185, true, 'slow frames at the start (the game loading) do not decide: a 144 Hz display is capped afterwards: ' + JSON.stringify(resSlow));
+  var change = series(400, 1000 / 144, 0.6, seeded(13)).concat(series(200, 1000 / 60, 1, seeded(17)));
+  var resChange = trace(change, 60);
+  eq(resChange.capped === false && resChange.accepted === 60, true, 'a window that moves from a 144 Hz display to a 60 Hz one is measured again: every frame is drawn: ' + JSON.stringify(resChange));
+  var change2 = series(200, 1000 / 60, 1, seeded(19)).concat(series(700, 1000 / 144, 0.6, seeded(23)));
+  var resChange2 = trace(change2, 288);
+  eq(resChange2.capped === true && resChange2.accepted >= 112 && resChange2.accepted <= 128, true, 'and from a 60 Hz display to a 144 Hz one it is capped: ' + JSON.stringify(resChange2));
+  // where the box stands for an exact pointer: a whole size on a whole pixel, any other size 1/64 short of a whole pixel; never moved by more than half a pixel
+  eq(P.snapOffset(68.984375, 594), 0.015625, 'a box of a whole height at 68.984 is moved to 69');
+  eq(P.snapOffset(66, 720), 0, 'a whole size on a whole pixel stays');
+  eq(P.snapOffset(127.90625, 1280.1875), 0.078125, 'a box of a fractional width at 127.906 stands at 127.984');
+  eq(P.snapOffset(66, 720.1875), -0.015625, 'a box of a fractional height on a whole pixel stands 1/64 short of it');
+  eq(P.snapOffset(65.984375, 720.1875), 0, 'and there it stays');
+  eq(P.snapOffset(100.5, 800), 0.5, 'half a pixel is moved by half a pixel (never more)');
+  (function () {
+    var wrong = 0, sample = '', total = 0;
+    for (var pos = 20; pos < 24; pos += 1 / 64) {
+      [594, 720, 540.09375, 600.09375, 306.078125, 1280.1875, 4.5 * 3, 720.5].forEach(function (size) {
+        total++;
+        var d = P.snapOffset(pos, size), at = pos + d, whole = Math.abs(size - Math.round(size)) < 1 / 128;
+        var ok = Math.abs(d) <= 0.5 + 1e-9 && (whole ? Math.abs(at - Math.round(at)) < 1e-9 : Math.abs((at + 1 / 64) - Math.round(at + 1 / 64)) < 1e-9);
+        if (!ok) { wrong++; if (!sample) sample = pos + ' / ' + size + ' -> ' + d; }
+      });
+    }
+    n++;
+    if (wrong) bad.push(wrong + ' of ' + total + ' positions are not snapped as the rule says, for example ' + sample);
+  })();
+  // the arguments of the address (?join= &room= &seat= &name= &embed=)
+  var J = P.joinArguments;
+  function ja(search, secure) { return J(search, !!secure, 'play.example').args; }
+  eq(J('', false, 'play.example'), { embed: false, args: [] }, 'no query: nothing is passed on');
+  eq(J('?join=/ws&room=abc&seat=2&name=Alice', false, 'play.example:8080'), { embed: false, args: ['--join-url', 'ws://play.example:8080/ws', '--room', 'abc', '--seat', '2', '--name', 'Alice'] }, 'a complete join');
+  eq(ja('?join=/ws', true), ['--join-url', 'wss://play.example/ws'], 'https: a secure WebSocket');
+  ['/ws', '/ws/', '/ws/room-1', '/ws/a/b.c_d~e'].forEach(function (v) { eq(ja('?join=' + encodeURIComponent(v)), ['--join-url', 'ws://play.example' + v], 'the door ' + v + ' is accepted'); });
+  ['/', '', '/w', '/wsx', '//ws', '//evil.example/ws', 'ws://evil.example/ws', 'http://evil.example/', 'evil.example/ws', '/ws//x', '/ws/../x', '/ws/..', '/ws?x=1', '/ws#f', '/ws/a b', '/ws\n', '/ws/%2e%2e/x', '/ws\\x', '/other/ws', '/WS'].forEach(function (v) {
+    eq(ja('?join=' + encodeURIComponent(v) + '&room=abc&seat=1&name=Bob'), [], 'the door ' + JSON.stringify(v) + ' is refused, and with it the room, the seat and the name');
+  });
+  eq(ja('?room=abc&seat=1&name=Bob'), [], 'a room, a seat and a name without a door are not passed on');
+  ['abc', 'A_b-9', 'x'.repeat(32)].forEach(function (v) { eq(ja('?join=/ws&room=' + v), ['--join-url', 'ws://play.example/ws', '--room', v], 'the room code ' + v + ' is accepted'); });
+  ['', 'x'.repeat(33), 'a b', 'a.b', '../x', 'a/b', 'a%2Fb', 'é', 'a;b', 'a\nb'].forEach(function (v) { eq(ja('?join=/ws&room=' + encodeURIComponent(v)), ['--join-url', 'ws://play.example/ws'], 'the room code ' + JSON.stringify(v) + ' is refused'); });
+  ['0', '1', '2', '3'].forEach(function (v) { eq(ja('?join=/ws&seat=' + v), ['--join-url', 'ws://play.example/ws', '--seat', v], 'seat ' + v + ' is accepted'); });
+  ['', '4', '9', '-1', '00', '01', '1 ', 'a', '1.5', '10'].forEach(function (v) { eq(ja('?join=/ws&seat=' + encodeURIComponent(v)), ['--join-url', 'ws://play.example/ws'], 'seat ' + JSON.stringify(v) + ' is refused'); });
+  eq(ja('?join=/ws&name=Alice'), ['--join-url', 'ws://play.example/ws', '--name', 'Alice'], 'a name');
+  eq(ja('?join=/ws&name=%20%20Bob%20%20'), ['--join-url', 'ws://play.example/ws', '--name', 'Bob'], 'a name is trimmed');
+  eq(ja('?join=/ws&name=Zo%C3%AB'), ['--join-url', 'ws://play.example/ws', '--name', 'Zo'], 'a name keeps printable ASCII only');
+  eq(ja('?join=/ws&name=a%09b%0Ac'), ['--join-url', 'ws://play.example/ws', '--name', 'abc'], 'control characters are dropped from a name');
+  eq(ja('?join=/ws&name=' + 'n'.repeat(40)), ['--join-url', 'ws://play.example/ws', '--name', 'n'.repeat(32)], 'a name is cut at 32 characters');
+  eq(ja('?join=/ws&name=%C3%AB%C3%AB'), ['--join-url', 'ws://play.example/ws'], 'a name with nothing printable left is left out');
+  eq(ja('?join=/ws&name=%20%20'), ['--join-url', 'ws://play.example/ws'], 'a name of blanks is left out');
+  eq(J('?embed=1', false, 'h'), { embed: true, args: ['--audio-focus'] }, 'embed=1: a frame of another page (the sound follows its focus)');
+  ['0', 'true', '', '2', 'yes'].forEach(function (v) { eq(J('?embed=' + v, false, 'h'), { embed: false, args: [] }, 'embed=' + v + ' is not a frame'); });
+  eq(ja('?embed=1&join=/ws&room=r'), ['--audio-focus', '--join-url', 'ws://play.example/ws', '--room', 'r'], 'embed and join together');
+  // is a download the game data? (a captive portal answers every address with "200 OK")
+  var B = P.badDownload, SIZE = 14650810;
+  eq(B('application/octet-stream', SIZE, SIZE), null, 'the data: accepted');
+  eq(B('application/octet-stream', SIZE, 0), null, 'the data, the build does not know its size: accepted');
+  eq(B(null, SIZE, 0), null, 'no type at all, a big body: accepted');
+  eq(B('text/plain', SIZE, SIZE), null, 'only a web page is refused by its type');
+  ['text/html', 'text/html; charset=utf-8', 'TEXT/HTML', ' text/html', 'Text/Html;charset=UTF-8'].forEach(function (t) { eq(typeof B(t, SIZE, SIZE), 'string', 'a web page (' + t + ') is not the data, however big'); eq(typeof B(t, null, SIZE), 'string', 'a web page (' + t + ') is refused before its body is read'); });
+  eq(B('application/octet-stream', null, SIZE), null, 'before the body is read only the type counts');
+  eq(typeof B('application/octet-stream', 60, SIZE), 'string', 'a body of 60 bytes is not the data');
+  eq(typeof B('application/octet-stream', SIZE - 1, SIZE), 'string', 'one byte short is not the data (the exact size is known)');
+  eq(typeof B('application/octet-stream', SIZE + 1, SIZE), 'string', 'one byte too many is not the data');
+  eq(typeof B('application/octet-stream', 0, SIZE), 'string', 'nothing is not the data');
+  eq(typeof B('application/octet-stream', 60, 0), 'string', 'a body of 60 bytes is not the data (the size is not known)');
+  eq(typeof B('application/octet-stream', 999999, 0), 'string', 'under a megabyte is not the data (the size is not known)');
+  eq(B('application/octet-stream', 1000000, 0), null, 'a megabyte may be (the size is not known)');
   return JSON.stringify({ checks: n, bad: bad });
 })()
 """
+
+
+def count_changed_pixels(a, b, x0, y0, x1, y1):
+    """How many pixels of the rectangle differ between two screenshots (read_png tuples of the same size)."""
+    w, h, ch, da = a
+    _, _, _, db = b
+    x0, y0, x1, y1 = max(0, int(x0)), max(0, int(y0)), min(w, int(x1)), min(h, int(y1))
+    changed = 0
+    for y in range(y0, y1):
+        ra = da[(y * w + x0) * ch:(y * w + x1) * ch]
+        rb = db[(y * w + x0) * ch:(y * w + x1) * ch]
+        if ra != rb:
+            for i in range(0, len(ra), ch):
+                if ra[i:i + 3] != rb[i:i + 3]:
+                    changed += 1
+    return changed
 
 
 def screen_of_canvas(g, lx, ly, canvas_w, canvas_h):
@@ -276,7 +409,7 @@ class Browser:
             except (OSError, ValueError, ConnectionError):
                 time.sleep(0.2)
         if self.devtools is None:
-            raise ConnectionError("the browser did not start")
+            raise NotReachable("the browser did not start")
         for t in self.devtools.call("Target.getTargets")["targetInfos"]:
             if t["type"] == "page":
                 self.devtools.close_tab(t["targetId"])
@@ -306,11 +439,16 @@ class Tab:
         self.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": height, "deviceScaleFactor": dpr, "mobile": mobile, "screenWidth": width, "screenHeight": height})
         self.call("Emulation.setTouchEmulationEnabled", {"enabled": bool(mobile), "maxTouchPoints": 5})
 
-    def open(self, url, wait=True, settle=1.5, timeout=120):
-        self.call("Page.navigate", {"url": url})
+    def open(self, url, wait=True, settle=1.5, timeout=None):
+        navigation = self.call("Page.navigate", {"url": url})
+        if navigation.get("errorText"):
+            if not PAGE_REACHED[0]:
+                raise NotReachable("nothing answers at %s (%s)" % (url, navigation["errorText"]))
+            raise ConnectionError("the page could not be loaded again at %s (%s)" % (url, navigation["errorText"]))
+        PAGE_REACHED[0] = True
         if not wait:
             return
-        deadline = time.time() + timeout
+        deadline = time.time() + (timeout if timeout else READY_TIMEOUT)
         while time.time() < deadline:
             time.sleep(0.5)
             try:
@@ -358,6 +496,50 @@ class Tab:
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+def exit_code_checks(args):
+    """The statuses of this script itself: a page that is not there is a skip (3), a page that loads and whose game never gets ready is a failure (1), whatever the browser reports. It runs
+    the script on a closed port and on a throwaway page of its own that never starts a game."""
+    import http.server
+    path = find_browser(args.browser)
+    if not path:
+        print("  SKIP: no Chromium-based browser found (give one with --browser or CHROME)")
+        return 3
+    print("[web aspect] the script's exit statuses: a page that is not there is a skip, a page that hangs is a failure")
+    bad = []
+
+    def check(ok, what):
+        print("  %s: %s" % ("ok  " if ok else "FAIL", what))
+        if not ok:
+            bad.append(what)
+
+    base = [sys.executable, os.path.abspath(__file__), "--browser", path, "--ready-timeout", "6", "--quick"]
+    closed = free_port()                                                     # (nothing listens there)
+    r = subprocess.run(base + ["--web", "http://127.0.0.1:%d/" % closed], capture_output=True, text=True, timeout=180)
+    check(r.returncode == 3 and "SKIP" in r.stdout, "a closed port: the check is skipped, exit status 3 (status %d)" % r.returncode)
+
+    class Hang(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"<!DOCTYPE html><html><body>this page never starts a game</body></html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Hang)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        r = subprocess.run(base + ["--web", "http://127.0.0.1:%d/" % server.server_address[1]], capture_output=True, text=True, timeout=180)
+        check(r.returncode == 1 and "FAIL" in r.stdout and "SKIP" not in r.stdout, "a page that loads and never gets its game ready: a failure, exit status 1 (status %d)" % r.returncode)
+    finally:
+        server.shutdown()
+    print("[web aspect] %d checks, %d failed" % (2, len(bad)))
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--web", required=True, help="the web page of the image, e.g. http://127.0.0.1:19980/")
@@ -367,9 +549,18 @@ def main():
     ap.add_argument("--logic-only", action="store_true", help="only the page's own logic (ANTS_PAGE): no game, no layout")
     ap.add_argument("--runs-only", action="store_true", help="only the cold-cache runs of four.html (with --downloads N)")
     ap.add_argument("--downloads-only", action="store_true", help="only the page's logic and the data download's faults (retry, failure for good)")
+    ap.add_argument("--pointer", action="store_true", help="also the exactness of the game's pointer at six layouts (the full run does it too; --pointer-only does nothing else)")
+    ap.add_argument("--pointer-only", action="store_true", help="only the exactness of the game's pointer (the game's START button's edges, found with the mouse, at six layouts)")
+    ap.add_argument("--load-only", action="store_true", help="only the page's logic and the faults of the loading of the game (index.js, index.wasm, a game that never starts, a body that is not the data)")
     ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of web/four.html with 2 and with 4 games on the page (needs the game server behind /ws)")
-    ap.add_argument("--four", action="store_true", help="also check web/four.html (the page that plays seats in frames); needs the game server behind /ws (the stack)")
+    ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
+    ap.add_argument("--exit-codes", action="store_true", help="only check this script's own exit statuses: a closed port is a skip (3), a page that hangs is a failure (1)")
+    ap.add_argument("--four", action="store_true", help="also check web/four.html (the page that plays seats in frames: the frames' shape, a bad ?aspect ignored, the remembered choice, frames of the picture's own size in a wide window); needs the game server behind /ws (the stack)")
     args = ap.parse_args()
+    global READY_TIMEOUT
+    READY_TIMEOUT = args.ready_timeout
+    if args.exit_codes:
+        return exit_code_checks(args)
 
     failures = []
     count = [0]
@@ -501,8 +692,268 @@ def main():
             check(ready, "the Reload button loads the page again and, the download working, the game starts")
 
 
+        def load_fault_checks():
+            """What the page does when the game's files, not only its data, do not come: index.js that fails, index.wasm that fails, a game that never starts (index.js held), the data that
+            is a web page / too small / an error status / cut short, and a promise that fails when the game already runs."""
+            print("[web aspect] the loading of the game: a file that fails, a game that never starts, a body that is not the data (faults injected with the DevTools Fetch domain)")
+            real = {}
+
+            def real_data():
+                if "bytes" not in real:
+                    import urllib.request
+                    with urllib.request.urlopen(web + "index.data", timeout=120) as r:
+                        real["bytes"] = r.read()
+                return real["bytes"]
+
+            def install(pattern, rule, init_script=None):
+                """Fetch.enable with `rule(state, params)` answering each paused request with ("fail",), ("continue",), ("hold",) or ("fulfill", code, content_type, body, headers)."""
+                state = {"seen": 0, "requests": [], "held": []}
+
+                def handler(msg):
+                    if msg.get("method") != "Fetch.requestPaused" or msg.get("sessionId") != tab.session:
+                        return
+                    p_ = msg["params"]
+                    state["seen"] += 1
+                    state["requests"].append({"url": p_["request"]["url"], "headers": p_["request"].get("headers", {})})
+                    action = rule(state, p_)
+                    try:
+                        if action[0] == "fail":
+                            tab.call("Fetch.failRequest", {"requestId": p_["requestId"], "errorReason": "Failed"})
+                        elif action[0] == "hold":
+                            state["held"].append(p_["requestId"])
+                        elif action[0] == "fulfill":
+                            headers = [{"name": "Content-Type", "value": action[2]}] + [{"name": k, "value": v} for k, v in (action[4] if len(action) > 4 else {}).items()]
+                            tab.call("Fetch.fulfillRequest", {"requestId": p_["requestId"], "responseCode": action[1], "responseHeaders": headers, "body": base64.b64encode(action[3]).decode()})
+                        else:
+                            tab.call("Fetch.continueRequest", {"requestId": p_["requestId"]})
+                    except (RuntimeError, TimeoutError):
+                        pass
+
+                tab.dt.handlers.append(handler)
+                script_id = None
+                if init_script:
+                    script_id = tab.call("Page.addScriptToEvaluateOnNewDocument", {"source": init_script})["identifier"]
+                tab.call("Fetch.enable", {"patterns": [{"urlPattern": pattern, "requestStage": "Request"}]})
+                return state, handler, script_id
+
+            def uninstall(handler, script_id):
+                tab.call("Fetch.disable")
+                tab.dt.handlers.remove(handler)
+                if script_id:
+                    tab.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": script_id})
+
+            def wait_for(expression, seconds):
+                deadline = time.time() + seconds
+                value = None
+                while time.time() < deadline:
+                    time.sleep(0.5)
+                    try:
+                        value = tab.ev(expression)
+                    except (RuntimeError, TimeoutError):
+                        value = None
+                    if value:
+                        return value
+                return value
+
+            CARD = "(function(){var b=document.getElementById('status-text').querySelector('button');return b?document.getElementById('status-text').innerText:null;})()"
+            tab.emulate(1280, 720, 1)
+
+            # index.js and index.wasm that fail: the card with the Reload button, not "Downloading data" for ever
+            for name, pattern, what in (("index.js", "*index.js*", "the script"), ("index.wasm", "*index.wasm*", "the program")):
+                state, handler, sid = install(pattern, lambda st, p_: ("fail",))
+                tab.open(web + "?aspect=16:9", wait=False)
+                shown = wait_for(CARD, 40)
+                check(shown is not None and "could not be started" in shown and "Reload" in shown, "%s fails: the card says the game could not be started and has a Reload button (%s)" % (name, repr(shown)[:110]))
+                check(tab.ev("window.isReadyToPlay") is not True, "%s fails: the game did not start" % name)
+                tab.save_shot(args.shots, "load_failed_" + name.replace(".", "_"))
+                uninstall(handler, sid)
+
+            # index.wasm that is a web page (a captive portal, a missing file answered with the site's page) or an error: Emscripten aborts (the cache message with its button), never the loading screen
+            for name, rule in (("a web page", lambda st, p_: ("fulfill", 200, "text/html", b"<html><body>Please log in</body></html>")), ("status 404", lambda st, p_: ("fulfill", 404, "text/plain", b"not found"))):
+                state, handler, sid = install("*index.wasm*", rule)
+                tab.open(web + "?aspect=16:9", wait=False)
+                shown = wait_for(CARD, 40)
+                check(shown is not None and "Reload" in shown or shown is not None and "Clear Cache" in shown, "index.wasm is %s: a card with a button is up, not the loading screen (%s)" % (name, repr(shown)[:100]))
+                check(tab.ev("window.isReadyToPlay") is not True, "index.wasm is %s: the game did not start" % name)
+                uninstall(handler, sid)
+
+            # a game that never starts (index.js is asked for and never answered): the watchdog says so, the package is handed to its own file only, and a late start takes the card away
+            state, handler, sid = install("*index.js*", lambda st, p_: ("hold",), "window.ANTS_START_TIMEOUT_MS = 3000;")
+            tab.open(web + "?aspect=16:9", wait=False)
+            shown = wait_for(CARD, 40)
+            check(shown is not None and "did not start" in shown and "Reload" in shown, "the game never starts (index.js is never answered): the watchdog puts the card up (%s)" % (repr(shown)[:110],))
+            tab.save_shot(args.shots, "load_hung")
+            size = tab.ev("ANTS_DATA_SIZE > 0 ? ANTS_DATA_SIZE : antsDataPackage ? antsDataPackage.byteLength : 0")
+            got = json.loads(tab.ev("""JSON.stringify((function(size){
+                var held = antsDataPackage ? antsDataPackage.byteLength : null;
+                var other = Module.getPreloadedPackage('other.data', size) === null;
+                var wrong = Module.getPreloadedPackage('index.data', size + 1) === null;
+                var still = antsDataPackage !== null;
+                var b = Module.getPreloadedPackage('index.data', size);
+                return { held: held, other: other, wrong: wrong, still: still, right: b ? b.byteLength : null, after: antsDataPackage };
+            })(%d))""" % (size or 0)))
+            check(got["held"] == size and got["other"] and got["wrong"] and got["still"], "the downloaded package is kept for index.data of the size that the packager says, and for nothing else (%s)" % got)
+            check(got["right"] == size and got["after"] is None, "... it is handed over once and then released (%s)" % got)
+            tab.call("Fetch.disable")                                      # (the held requests are let go: the game starts late)
+            for rid in state["held"]:
+                try:
+                    tab.call("Fetch.continueRequest", {"requestId": rid})
+                except (RuntimeError, TimeoutError):
+                    pass
+            ready = wait_for("!!window.isReadyToPlay", 60)
+            time.sleep(1.0)
+            hidden = tab.ev("(function(){var o=document.getElementById('splash-overlay');return getComputedStyle(o).display==='none'&&!o.classList.contains('failed');})()")
+            check(bool(ready) and bool(hidden), "a game that starts after the card was up takes the card away (ready %s, card gone %s)" % (ready, hidden))
+            tab.dt.handlers.remove(handler)
+            tab.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": sid})
+
+            # the data is a web page (a captive portal), too small, an error status with the real bytes, cut short, one byte short
+            page = b"<!DOCTYPE html><html><body>Please log in to the hotel wifi</body></html>"
+            for name, rule, want in (("a web page with status 200 (a captive portal)", lambda st, p_: ("fulfill", 200, "text/html; charset=utf-8", page), "web page"),
+                                     ("60 bytes of octet-stream with status 200", lambda st, p_: ("fulfill", 200, "application/octet-stream", b"x" * 60), "bytes")):
+                state, handler, sid = install("*index.data*", rule)
+                tab.open(web + "?aspect=16:9", wait=False)
+                shown = wait_for(CARD, 60)
+                log = json.loads(tab.ev("JSON.stringify(window.antsDownloadLog || [])"))
+                check(shown is not None and "could not be downloaded" in shown and "Reload" in shown, "%s: every try is refused and the card says so (%s)" % (name, repr(shown)[:90]))
+                check(state["seen"] == 4 and [e["ok"] for e in log] == [False] * 4 and all(want in e.get("error", "") for e in log), "%s: four tries, none accepted (%d requests; %s)" % (name, state["seen"], [e.get("error", "")[:50] for e in log]))
+                check(tab.ev("window.isReadyToPlay") is not True, "%s: the game did not start on it" % name)
+                tab.save_shot(args.shots, "load_" + ("html200" if "web page" in name else "small200"))
+                uninstall(handler, sid)
+
+            def first_bad(name, make_first, want, extra_check=None):
+                data = real_data()
+
+                def rule(st, p_):
+                    if st["seen"] == 1:
+                        return make_first(data)
+                    return ("continue",)
+
+                state, handler, sid = install("*index.data*", rule)
+                net = {"urls": {}, "extra": {}}
+
+                def watch_net(msg):
+                    if msg.get("sessionId") != tab.session:
+                        return
+                    method, params = msg.get("method"), msg.get("params", {})
+                    if method == "Network.requestWillBeSent":
+                        net["urls"][params["requestId"]] = params["request"]["url"]
+                    elif method == "Network.requestWillBeSentExtraInfo":
+                        net["extra"][params["requestId"]] = params.get("headers", {})
+
+                tab.dt.handlers.append(watch_net)
+                tab.call("Network.enable")
+                tab.open(web + "?aspect=16:9", settle=1.0)
+                log = json.loads(tab.ev("JSON.stringify(window.antsDownloadLog)"))
+                check([e["ok"] for e in log] == [False, True] and want in log[0].get("error", ""), "%s: the first try is refused (%s), the second works and the game starts (%s)" % (name, log[0].get("error", "")[:60] if log else None, [e["ok"] for e in log]))
+                if extra_check:
+                    time.sleep(0.5)
+                    extra_check(net)
+                tab.call("Network.disable")
+                tab.dt.handlers.remove(watch_net)
+                uninstall(handler, sid)
+
+            def retry_headers(net):
+                # the headers that the browser really sent (the first request was answered by the fault, never sent): the retry asks for no cache at all (fetch's cache: 'no-store')
+                sent = [{k.lower(): v for k, v in headers.items()} for rid, headers in net["extra"].items() if "index.data" in net["urls"].get(rid, "")]
+                check(len(sent) >= 1 and all("no-cache" in h.get("cache-control", "") and "if-none-match" not in h and "if-modified-since" not in h for h in sent),
+                      "the retry asks for no cache at all (the headers it sent: %s)" % [{k: h.get(k) for k in ("cache-control", "pragma", "if-none-match")} for h in sent])
+
+            first_bad("an error status with the real bytes (404)", lambda d: ("fulfill", 404, "application/octet-stream", d), "HTTP 404", retry_headers)
+            first_bad("a body cut short that says its full length", lambda d: ("fulfill", 200, "application/octet-stream", d[:len(d) // 3], {"Content-Length": str(len(d))}), "")
+            if tab.ev("ANTS_DATA_SIZE") > 0:
+                first_bad("one byte short (the exact size is known)", lambda d: ("fulfill", 200, "application/octet-stream", d[:-1], {"Content-Length": str(len(d) - 1)}), "bytes")
+            else:
+                print("  (this page does not know the exact size of the data: the one-byte-short check is skipped)")
+
+            # a promise that fails once the game runs is only logged: it must not cover the game with the card
+            tab.open(web + "?aspect=16:9", settle=1.0)
+            tab.ev("Promise.reject(new Error('a late failure')); 1")
+            time.sleep(1.0)
+            covered = tab.ev("(function(){var o=document.getElementById('splash-overlay');return getComputedStyle(o).display!=='none'||!!document.getElementById('load-failure')&&getComputedStyle(o).display!=='none';})()")
+            check(not covered and tab.ev("window.isReadyToPlay") is True, "a promise that fails when the game runs does not put the card over it")
+
+            # index.js is asked for once, with one ?v= (the Dockerfile adds the build's ?v= to every src=index.js of the page: a second one was added to the page's own)
+            tab.call("Network.enable")
+            seen = []
+
+            def watch(msg):
+                if msg.get("method") == "Network.requestWillBeSent" and msg.get("sessionId") == tab.session and "index.js" in msg["params"]["request"]["url"]:
+                    seen.append(msg["params"]["request"]["url"])
+
+            tab.dt.handlers.append(watch)
+            tab.open(web + "?aspect=16:9", settle=1.0)
+            tab.dt.handlers.remove(watch)
+            tab.call("Network.disable")
+            check(len(seen) == 1 and seen[0].count("?v=") == 1 and "?v=" in seen[0], "index.js is asked for once, with one ?v= (%s)" % seen)
+
+        def pointer_checks(cases):
+            """The game's pointer is EXACT: the edges of the setup screen's START button are found by moving the real mouse (a hover lights the button) and compared with the edges that the
+            game's own arithmetic gives (floor(whole CSS offset x device ratio / scale)). Before the box was placed (ANTS_PAGE.snapOffset) the reading was up to a whole CSS pixel off at
+            fractional layouts: a box at 68.98 read one pixel high, a box of a fractional size read one pixel low."""
+            print("[web aspect] the pointer is exact: the edges of START on the setup screen, found with the real mouse, against the game's own arithmetic")
+            edges = {"left": ("x", 846, True), "right": ("x", 944, False), "top": ("y", 499, True), "bottom": ("y", 526, False)}
+            for label, w, h, dpr, mobile in cases:
+                tab.emulate(w, h, dpr, mobile)
+                tab.open(web + "?aspect=16:9", settle=1.5)
+                tab.mouse("mouseMoved", 5, 5, button="none")
+                tab.call("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Enter", "code": "Enter", "text": "\r", "windowsVirtualKeyCode": 13})
+                tab.call("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+                time.sleep(1.5)
+                g = tab.geometry()
+                b = g["box"]
+                scale = g["backing"][0] / 960.0
+                tab.mouse("mouseMoved", 5, 5, button="none")
+                time.sleep(0.3)
+                ref = tab.shot()
+
+                def at(lx, ly):
+                    return b[0] + lx / 960 * b[2], b[1] + ly / 540 * b[3]
+
+                def hovered(ox, oy, left_probe):
+                    tab.mouse("mouseMoved", b[0] + ox, b[1] + oy, button="none")
+                    time.sleep(0.12)
+                    shot = tab.shot()
+                    a0, a1 = at(905, 504) if left_probe else at(852, 504)
+                    a2, a3 = at(940, 520) if left_probe else at(888, 520)
+                    return count_changed_pixels(ref, shot, a0 * dpr, a1 * dpr, a2 * dpr, a3 * dpr) > 150
+
+                worst = 0.0
+                detail = []
+                for name, (axis, edge, hover_high) in edges.items():
+                    want = math.ceil(edge * scale / dpr - 1e-9)                    # the first whole CSS offset whose reading reaches the edge
+                    while math.floor(want * dpr / scale + 1e-9) < edge:
+                        want += 1
+                    while want > 0 and math.floor((want - 1) * dpr / scale + 1e-9) >= edge:
+                        want -= 1
+                    lo, hi = float(want - 4), float(want + 4)
+                    for _ in range(6):
+                        mid = (lo + hi) / 2
+                        on = hovered(mid, 512 / 540 * b[3], name == "left") if axis == "x" else hovered(910 / 960 * b[2], mid, False)
+                        if on == hover_high:
+                            hi = mid
+                        else:
+                            lo = mid
+                    delta = (lo + hi) / 2 - want
+                    worst = max(worst, abs(delta))
+                    detail.append("%s %+.2f" % (name, delta))
+                check(worst <= 0.2, "%s: the START button's four edges are where the game's arithmetic puts them (box %s, canvas %d: %s CSS px off)" % (label, [round(v, 3) for v in b], g["backing"][0], ", ".join(detail)))
+
+        POINTER_CASES = [("1280x720@1", 1280, 720, 1, False), ("1000x640@1", 1000, 640, 1, False), ("1536x864@1.25", 1536, 864, 1.25, False), ("1500x844@1.5", 1500, 844, 1.5, False),
+                         ("1280x720@2.625", 1280, 720, 2.625, False), ("844x390@3 (phone)", 844, 390, 3, True)]
+        if args.pointer_only:
+            pointer_checks(POINTER_CASES)
+            tab.close()
+            print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
+            return 1 if failures else 0
+        if args.load_only:
+            load_fault_checks()
+            tab.close()
+            print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
+            return 1 if failures else 0
         if args.downloads_only:
             download_fault_checks()
+            load_fault_checks()
             tab.close()
             if args.downloads > 0:
                 cold_runs()
@@ -532,6 +983,12 @@ def main():
                 step_h = shape[1] / dpr
                 check(bx[2] + step_w > st[2] + 0.01 or bx[3] + step_h > st[3] + 0.01, "%s: the box is the largest that fits its slot (slot %.1f x %.1f, box %.2f x %.2f)" % (label, st[2], st[3], bx[2], bx[3]))
                 check(g["bar"][1] + g["bar"][3] <= g["inner"][1] + 1.0, "%s: the whole picture and the bar under it fit the window without scrolling (bar ends at %.0f of %d)" % (label, g["bar"][1] + g["bar"][3], g["inner"][1]))
+            # the pointer: a box whose CSS size is a whole number stands on a whole pixel, any other 1/64 px short of one (Emscripten cuts the box's position and SDL scales by floor(size) / size:
+            # web/shell.html, ANTS_PAGE.snapOffset)
+            for axis, pos, size in (("x", bx[0], bx[2]), ("y", bx[1], bx[3])):
+                whole_size = abs(size - round(size)) < 1.0 / 128
+                at = pos if whole_size else pos + 1.0 / 64
+                check(abs(at - round(at)) < 1e-6, "%s: the box's %s position %.4f is where the pointer is exact (size %.4f is %s)" % (label, axis, pos, size, "whole: a whole pixel" if whole_size else "not whole: 1/64 short of a whole pixel"))
             check(bx[0] >= -0.5 and bx[0] + bx[2] <= g["inner"][0] + 0.5, "%s: the box is inside the window's width" % label)
             check(g["scroll"][0] <= g["scroll"][1] + 1, "%s: no sideways scroll (%d of %d)" % (label, g["scroll"][0], g["scroll"][1]))
 
@@ -617,6 +1074,56 @@ def main():
         tab.ev("localStorage.setItem('ants.aspect', 'junk'); 1")
         tab.open(web)
         check(tab.geometry()["aspect"] == "16:9", "a remembered value that is no shape is ignored")
+        tab.ev("localStorage.removeItem('ants.aspect'); 1")
+
+        # the selector asks before it leaves a match that is being played (it restarts the game); at the quick help or the setup screen it does not ask
+        print("[web aspect] the selector and a running match: it asks first")
+        dialogs = []
+        answer = {"accept": False}
+
+        def on_dialog(msg):
+            if msg.get("method") == "Page.javascriptDialogOpening" and msg.get("sessionId") == tab.session:
+                dialogs.append(msg["params"].get("message", ""))
+                try:
+                    tab.call("Page.handleJavaScriptDialog", {"accept": answer["accept"]})
+                except (RuntimeError, TimeoutError):
+                    pass
+
+        tab.dt.handlers.append(on_dialog)
+        tab.emulate(1280, 720, 1)
+        tab.open(web + "?aspect=16:9", settle=2.0)
+        g = tab.geometry()
+        quick_start = screen_of_canvas(g, 160 + 576, 30 + 450, 960, 540)
+        tab.click(quick_start[0], quick_start[1])                          # the quick help's START: the setup screen
+        time.sleep(2.0)
+        check(tab.ev("Module._ants_match_running()") == 0, "on the setup screen no match is running")
+        button = json.loads(tab.ev("JSON.stringify((function(){var b=document.getElementById('aspect-4-3').getBoundingClientRect();return [b.x+b.width/2,b.y+b.height/2];})())"))
+        start = screen_of_canvas(g, 895, 512, 960, 540)                    # the setup screen's START (single player: 846 .. 944 x 499 .. 526)
+        tab.click(start[0], start[1])
+        deadline = time.time() + 15
+        while time.time() < deadline and tab.ev("Module._ants_match_running()") != 1:
+            time.sleep(0.5)
+        check(tab.ev("Module._ants_match_running()") == 1, "START begins a match and the game says one is running")
+        tab.save_shot(args.shots, "match_running")
+        tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
+        answer["accept"] = False
+        tab.click(button[0], button[1])
+        time.sleep(1.5)
+        check(len(dialogs) == 1 and "Leave the match to change the picture?" in dialogs[0], "the selector's click in a running match asks \"Leave the match to change the picture?\" (%s)" % dialogs)
+        check(tab.ev("location.search.indexOf('aspect=4:3')") == -1 and tab.ev("Module._ants_match_running()") == 1 and tab.ev("localStorage.getItem('ants.aspect')") is None,
+              "answered No, the match goes on, the address is the same and the choice is not remembered")
+        answer["accept"] = True
+        tab.click(button[0], button[1])
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            time.sleep(0.5)
+            try:
+                if tab.ev("!!window.isReadyToPlay && location.search.indexOf('aspect=4:3') !== -1"):
+                    break
+            except (RuntimeError, TimeoutError):
+                pass
+        check(len(dialogs) == 2 and tab.ev("location.search.indexOf('aspect=4:3')") != -1 and tab.geometry()["aspect"] == "4:3", "answered Yes, the page reloads with the classic picture (%d questions)" % len(dialogs))
+        tab.dt.handlers.remove(on_dialog)
         tab.ev("localStorage.removeItem('ants.aspect'); 1")
 
         print("[web aspect] resizing, fullscreen and the pointer (1280 x 720)")
@@ -739,31 +1246,64 @@ def main():
             time.sleep(0.8)
 
         download_fault_checks()
+        load_fault_checks()
+        if args.pointer or not args.quick:
+            pointer_checks(POINTER_CASES)
 
         if args.four:
             print("[web aspect] web/four.html: the games' frames (the game server must be behind /ws)")
-            for query, want, label in (("?map=tiny&players=2&play=here", "16:9", "default"), ("?map=tiny&players=2&play=here&aspect=4:3", "4:3", "?aspect=4:3")):
-                tab.emulate(1500, 900, 1)
+
+            def four_frames(query, w=1500, h=900, dpr=1, seconds=14):
+                tab.emulate(w, h, dpr)
                 tab.call("Page.navigate", {"url": web + "four.html" + query})
-                time.sleep(14)
-                frames = json.loads(tab.ev(r"""JSON.stringify(Array.prototype.map.call(document.querySelectorAll('iframe'), function (f) {
+                time.sleep(seconds)
+                return json.loads(tab.ev(r"""JSON.stringify(Array.prototype.map.call(document.querySelectorAll('iframe'), function (f) {
                     var d = f.contentDocument, c = d && d.getElementById('canvas'), b = d && d.getElementById('game-container');
                     var fr = f.getBoundingClientRect(), br = b && b.getBoundingClientRect();
-                    return { frame: [fr.width, fr.height], box: br && [br.width, br.height], backing: c && [c.width, c.height], aspect: d && d.getElementById('game-stage').getAttribute('data-aspect'), src: f.src };
+                    return { frame: [fr.width, fr.height], box: br && [br.width, br.height], backing: c && [c.width, c.height], aspect: d && d.getElementById('game-stage').getAttribute('data-aspect'), src: f.src,
+                             page: document.body.getAttribute('data-aspect'), select: document.getElementById('aspect-select').value };
                 }))"""))
+
+            def frames_check(label, frames, want, size=None):
                 check(len(frames) == 2, "%s: two games on the page (%d frames)" % (label, len(frames)))
                 shape = (16, 9) if want == "16:9" else (4, 3)
                 for f in frames:
-                    ok = f["backing"] is not None and f["backing"][0] * shape[1] == f["backing"][1] * shape[0] and f["aspect"] == want and ("aspect=" + want) in f["src"]
+                    ok = f["backing"] is not None and f["backing"][0] * shape[1] == f["backing"][1] * shape[0] and f["aspect"] == want and ("aspect=" + want) in f["src"] and "junk" not in f["src"]
                     ratio = f["frame"][0] / f["frame"][1]
-                    check(ok and abs(ratio - shape[0] / shape[1]) < 0.01, "%s: a frame of %.0f x %.0f holds a %s picture (canvas %s)" % (label, f["frame"][0], f["frame"][1], want, f["backing"]))
-                tab.save_shot(args.shots, "four_" + want.replace(":", "x"))
+                    check(ok and abs(ratio - shape[0] / shape[1]) < 0.01 and f["page"] == want and f["select"] == want,
+                          "%s: a frame of %.0f x %.0f holds a %s picture (canvas %s, the page says %s)" % (label, f["frame"][0], f["frame"][1], want, f["backing"], f["page"]))
+                    if size:
+                        check(abs(f["frame"][0] - size[0]) < 0.5 and abs(f["frame"][1] - size[1]) < 0.5 and f["backing"] == list(size),
+                              "%s: the frame is exactly %d x %d CSS pixels and so is the canvas, one canvas pixel for each pixel of the screen, sharp (frame %s, canvas %s)" % (label, size[0], size[1], f["frame"], f["backing"]))
+
+            tab.emulate(1500, 900, 1)
+            tab.open(web)                                                  # (the page's origin, to reach its localStorage)
+            tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
+            frames = four_frames("?map=tiny&players=2&play=here")
+            frames_check("default", frames, "16:9")
+            check(all(f["frame"][0] < 700 for f in frames), "default in a window of 1500: the frames fill their column, about 651 CSS pixels (%s)" % [f["frame"] for f in frames])
+            tab.save_shot(args.shots, "four_16x9")
+            frames_check("?aspect=4:3", four_frames("?map=tiny&players=2&play=here&aspect=4:3"), "4:3", (640, 480))
+            tab.save_shot(args.shots, "four_4x3")
+            frames_check("a window of 2560 x 1440", four_frames("?map=tiny&players=2&play=here", 2560, 1440), "16:9", (960, 540))
+            tab.save_shot(args.shots, "four_16x9_native")
+            frames_check("?aspect=junk (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=junk"), "16:9")
+            frames_check("?aspect=21:9 (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=21:9"), "16:9")
+            tab.ev("localStorage.setItem('ants.aspect', '4:3'); 1")
+            frames_check("the choice that the game page remembered (4:3), no parameter", four_frames("?map=tiny&players=2&play=here"), "4:3", (640, 480))
+            frames_check("... and ?aspect=16:9 beats it", four_frames("?map=tiny&players=2&play=here&aspect=16:9"), "16:9")
+            tab.ev("localStorage.setItem('ants.aspect', 'junk'); 1")
+            frames_check("a remembered value that is no shape is ignored", four_frames("?map=tiny&players=2&play=here"), "16:9")
+            tab.ev("localStorage.removeItem('ants.aspect'); 1")
         tab.close()
         if args.downloads > 0:
             cold_runs()
-    except (RuntimeError, TimeoutError, ConnectionError, OSError, ValueError, KeyError, AssertionError) as error:
-        print("  %s: the browser or the page could not be driven (%s: %s)" % ("FAIL" if failures else "SKIP", type(error).__name__, error))
+    except NotReachable as error:
+        print("  SKIP: the check could not be made (%s)" % error)
         return 1 if failures else 3
+    except Exception as error:                                                # (a hang, a crash, a script that raised: the page or the browser broke down while it was checked)
+        print("  FAIL: the browser or the page broke down during the check (%s: %s)" % (type(error).__name__, error))
+        return 1
     finally:
         if browser is not None:
             browser.close()

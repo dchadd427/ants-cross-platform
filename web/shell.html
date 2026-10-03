@@ -872,40 +872,14 @@
         var canvas = document.getElementById('canvas');
         var isReadyToPlay = false;
         var antsDataPackage = null;                                          // the bytes of index.data, once downloaded (handed to the game by Module.getPreloadedPackage)
-
-        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&embed=1]
-        //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
-        //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
-        //   embed  the page is a frame of another page (four.html): no header and no guide; sound only while this frame has the focus
-        var ANTS_ARGS = [];
-        var ANTS_EMBED = false;
-        (function () {
-            var q;
-            try { q = new URLSearchParams(window.location.search); } catch (e) { return; }
-            var join = q.get('join');
-            var room = q.get('room');
-            var seat = q.get('seat');
-            var name = q.get('name');
-            ANTS_EMBED = q.get('embed') === '1';
-            if (ANTS_EMBED) {
-                document.body.classList.add('embed');
-                ANTS_ARGS.push('--audio-focus');
-            }
-            if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
-                ANTS_ARGS.push('--join-url', (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + join);
-                if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) ANTS_ARGS.push('--room', room);
-                if (seat && /^[0-3]$/.test(seat)) ANTS_ARGS.push('--seat', seat);
-                if (name) {
-                    name = name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
-                    if (name) ANTS_ARGS.push('--name', name);
-                }
-            }
-        })();
+        var ANTS_DATA_SIZE = parseInt('@@DATA_SIZE@@', 10) || 0;             // the exact size of index.data in bytes (the Dockerfile writes it in after the build; 0 = not known: a build outside it)
 
         // The page's own logic that needs no browser (ANTS_PAGE; tests/scripts/web_aspect_check.py calls these in a real one).
         //   aspect  the shape of the picture: "16:9" (the game's fixed canvas of 960 x 540) or "4:3" (the original's 640 x 480); nothing else is a shape
         //   fitBox  the picture's box: the largest whole number of canvas steps (16 x 9, or 4 x 3 for the classic picture) that fits an area, in device pixels
-        //   limiter the frame cap
+        //   limiter the frame cap (a rolling median of the display's gaps)
+        //   snapOffset where the box must stand for an exact pointer
+        //   joinArguments the arguments of ?join= &room= &seat= &name= &embed=; badDownload whether a download is not the game data
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
 
@@ -924,11 +898,14 @@
             }
 
             // The CSS size that makes the browser's canvas device pixels exactly `px`. The game's window system (SDL) sets the canvas to floor(CSS size x devicePixelRatio) of the
-            // canvas's box, so a size that rounds to px - 1 in floating point would leave a black line of its own: sizes that are exact (a whole or half pixel at device ratios 1 and 2)
-            // stay exact, any other ratio gets a quarter of a device pixel more, which the floor drops and the layout's rounding (1/64 px, or 1/60 in Firefox) cannot take away.
+            // canvas's box, so a size that rounds to px - 1 in floating point would leave a black line of its own: a size that is exact stays exact (a ratio that has at most six binary
+            // places, 1, 1.25, 1.5, 2, 2.625, 3 ..., makes exact products with a size that is a multiple of 1/64: the floor cannot lose a pixel; such a size is a whole or a half pixel,
+            // so the layout's rounding, 1/64 px or 1/60 in Firefox, cannot move it), any other size gets a quarter of a device pixel more, which the floor drops and the rounding
+            // cannot take away. A whole size matters for the pointer too (snapOffset below): SDL's scale of the pointer is exactly 1 for it.
             function cssFor(px, dpr) {
                 var exact = px / dpr;
-                if ((dpr === 1 || dpr === 2) && Math.abs(exact * 64 - Math.round(exact * 64)) < 1e-9) return exact;
+                var binary = dpr * 64 === Math.round(dpr * 64);                      // (times 64 is exact in floating point: a ratio that is a multiple of 1/64, no nearer than that)
+                if (binary && exact * 64 === Math.round(exact * 64)) return exact;
                 return (px + 0.25) / dpr;
             }
 
@@ -944,31 +921,57 @@
                 return { k: k, bw: bw, bh: bh, cssW: cssFor(bw, ratio), cssH: cssFor(bh, ratio) };
             }
 
+            // Where the box must stand so that the game's pointer is exact. The browser's mouse position reaches the game through Emscripten's SDL, which computes
+            //     reading = trunc( trunc( clientX - trunc(box.left) ) x floor(box.width) / box.width )        (and the same for y)
+            // (library_html5.js: clientX - (rect.left | 0), stored as an integer; SDL_emscriptenevents.c: targetX x window->w / client_w, where window->w is the CSS width cut to a
+            // whole number). Two things in it move the reading by up to a whole pixel: the cut of the box's position (a box at 68.98 reads one pixel too high), and, for a box whose CSS
+            // size is not a whole number, the scale floor(width) / width, a hair under 1, which turns every whole number t into t - 1. So: a box whose size IS whole (scale 1 exactly)
+            // stands on a whole pixel (nothing is cut); a box whose size is not whole stands 1/64 of a pixel (the layout's step) short of a whole pixel, which puts back the pixel that
+            // the scale takes away (the reading is then right for every pointer position except the last 1/64 px of each pixel). snapOffset(pos, size) is the shift, in CSS pixels, from
+            // where the layout put the box (position `pos`, size `size`) to where it should stand; it is never more than half a pixel.
+            function snapOffset(pos, size) {
+                var whole = Math.abs(size - Math.round(size)) < 1 / 128;
+                var target = whole ? Math.round(pos) : Math.round(pos + 1 / 64) - 1 / 64;
+                return target - pos;
+            }
+
             // The frame cap (the original ran at 60 frames a second; a display of 120 Hz or more would draw the game two or more times as often for nothing, at the full
-            // resolution of the screen). accept(timestamp) says whether the frame at this display time is drawn. It measures the display first (the median gap of 24 frames):
-            // a display below about 100 Hz (60, 75, 90) is not capped at all, a faster one is held to 60 a second by a schedule that keeps its phase (144 Hz: every second or
-            // third frame, 60 on average), and a long frame (a page that was hidden) does not leave a burst behind.
+            // resolution of the screen). accept(timestamp) says whether the frame at this display time is drawn. It keeps measuring the display: the MEDIAN of the last 24 gaps
+            // between display frames (a median, not the smallest gap: a jittery 60 Hz display has a short gap now and then and must not be capped, and the slow frames of the
+            // game's start, or a page that was hidden, are outliers that cannot decide it). A display below about 100 Hz (60, 75, 90) is not capped at all, a faster one is held to
+            // 60 a second by a schedule that keeps its phase (144 Hz: every second or third frame, 60 on average), a long frame does not leave a burst behind, and a window that
+            // moves to a display of another rate is measured again within a dozen frames. (While it holds a frame back the loop asks again, so the gaps stay the display's.)
             function makeFrameLimiter(periodMs) {
+                var WINDOW = 24;
+                var gaps = [];
+                var next = 0;                                               // (the oldest gap, once the ring is full)
                 var last = 0;
                 var due = 0;
-                var gaps = [];
                 var capped = false;
                 var measured = false;
                 var lastTs = -1;
                 var lastAnswer = true;
+                function median() {
+                    var sorted = gaps.slice().sort(function (a, b) { return a - b; });
+                    return sorted[sorted.length >> 1];
+                }
                 function decide(ts) {
-                    if (!measured) {
-                        if (last) gaps.push(ts - last);
-                        last = ts;
-                        if (gaps.length >= 24) {
-                            gaps.sort(function (a, b) { return a - b; });
-                            capped = gaps[12] < periodMs * 0.62;
-                            measured = true;
-                            due = ts + periodMs;
+                    if (last) {
+                        if (gaps.length < WINDOW) gaps.push(ts - last);
+                        else { gaps[next] = ts - last; next = (next + 1) % WINDOW; }
+                        if (gaps.length >= WINDOW) {
+                            var fast = median() < periodMs * 0.62;
+                            if (!measured || fast !== capped) {
+                                measured = true;
+                                capped = fast;
+                                due = ts + periodMs;                        // (the frame that decides is drawn; the schedule starts from it)
+                                last = ts;
+                                return true;
+                            }
                         }
-                        return true;
                     }
-                    if (!capped) return true;
+                    last = ts;
+                    if (!measured || !capped) return true;
                     if (ts + 1.5 < due) return false;                       // not yet (the display's timestamps jitter by a millisecond or so)
                     due = (ts - due > periodMs) ? ts + periodMs : due + periodMs;
                     return true;
@@ -981,6 +984,42 @@
                 accept.isCapped = function () { return capped; };
                 accept.isMeasured = function () { return measured; };
                 return accept;
+            }
+
+            // What the address says about joining a game server (docs/NETWORK_PORT.md): the arguments to give the game and whether the page is a frame of another page. `search` is the
+            // address's query, `secure` says https (wss), `host` is the site's host. Only a door on THIS site counts: /ws or a path below it, no //, no ..; a room code, a seat and a name
+            // that do not fit their rule are left out (the game checks them too). Without a valid join nothing about a room, a seat or a name goes to the game.
+            function joinArguments(search, secure, host) {
+                var out = { embed: false, args: [] };
+                var q;
+                try { q = new URLSearchParams(search); } catch (e) { return out; }
+                var join = q.get('join');
+                var room = q.get('room');
+                var seat = q.get('seat');
+                var name = q.get('name');
+                out.embed = q.get('embed') === '1';
+                if (out.embed) out.args.push('--audio-focus');
+                if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
+                    out.args.push('--join-url', (secure ? 'wss://' : 'ws://') + host + join);
+                    if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) out.args.push('--room', room);
+                    if (seat && /^[0-3]$/.test(seat)) out.args.push('--seat', seat);
+                    if (name) {
+                        name = name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
+                        if (name) out.args.push('--name', name);
+                    }
+                }
+                return out;
+            }
+
+            // Is what came back for index.data the data? A captive portal or an error page is served with "200 OK" and a body that is not the package: its type is HTML and it is far
+            // smaller than the package. null: it is the data; else the reason. `expected` is the package's exact size in bytes when the build knows it (the Dockerfile writes it into
+            // the page; 0 when it does not), else anything under a megabyte (the package is 14.7 MB) is not it.
+            function badDownload(contentType, got, expected) {
+                if (/^\s*text\/html/i.test(contentType || '')) return 'the server sent a web page, not the game data';
+                if (typeof got !== 'number') return null;                   // (the size is not known yet: only the type was asked about)
+                if (expected > 0 && got !== expected) return 'the download has ' + got + ' bytes, the data package has ' + expected;
+                if (!(expected > 0) && got < 1000000) return 'the download is too small to be the game data (' + got + ' bytes)';
+                return null;
             }
 
             // The retry rule of the game's data download (the page downloads index.data itself, see "The game's data" below): fetchOnce(attempt) starts download number `attempt`
@@ -1000,7 +1039,20 @@
                 return go();
             }
 
-            return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, makeFrameLimiter: makeFrameLimiter, downloadWithRetries: downloadWithRetries };
+            return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, badDownload: badDownload, downloadWithRetries: downloadWithRetries };
+        })();
+
+        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&embed=1] (ANTS_PAGE.joinArguments reads it)
+        //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
+        //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
+        //   embed  the page is a frame of another page (four.html): no header and no guide; sound only while this frame has the focus
+        var ANTS_ARGS = [];
+        var ANTS_EMBED = false;
+        (function () {
+            var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
+            ANTS_EMBED = joined.embed;
+            if (ANTS_EMBED) document.body.classList.add('embed');
+            joined.args.forEach(function (a) { ANTS_ARGS.push(a); });
         })();
 
         // The shape of this page's picture, passed on to the game as --aspect (the game validates it too). The stage's data-aspect gives the box its shape in CSS.
@@ -1030,13 +1082,16 @@
                 // Game engine is initialized: the game is running already, so the loading screen goes away (nobody has to click anything to start; the sound follows the
                 // first press, see the audio block below)
                 isReadyToPlay = true;
+                clearTimeout(window.antsStartWatchdog);
                 progressContainer.style.display = 'none';
                 hideLoadingScreen();
             }],
             getPreloadedPackage: function(name, size) {
-                // The data package that the page downloaded itself (see "The game's data" below): the file packager of index.js asks for it, synchronously, when it starts
+                // The data package that the page downloaded itself (see "The game's data" below): the file packager of index.js asks for it, synchronously, when it starts. It gets
+                // it only for its own file and only when the bytes are exactly the size that the packager says the package has (anything else is not the package: it downloads
+                // the file by itself, as it always did)
                 var bytes = antsDataPackage;
-                if (bytes && String(name).indexOf('index.data') === 0) {
+                if (bytes && String(name).indexOf('index.data') === 0 && (!(size > 0) || bytes.byteLength === size)) {
                     antsDataPackage = null;                                  // (handed over: the page keeps no second copy of 15 MB)
                     return bytes;
                 }
@@ -1124,9 +1179,11 @@
             }
         }
 
-        // The download of the game's data failed for good: the card says so and has a button that loads the page again (v0.0.96 answered a failure of the file packager's own
-        // download with a card that said "Downloading data (0%)" for ever)
-        function showDownloadError(error) {
+        // The loading failed for good: the card says so and has a button that loads the page again (v0.0.96 answered a failure of the file packager's own download with a card
+        // that said "Downloading data (0%)" for ever, and v0.0.98's page the same for a program file, index.js or index.wasm, that could not be loaded). `what` is 'data' (index.data
+        // could not be downloaded) or 'program' (the game could not be loaded or started); a card that is up goes away by itself if the game does start after all (hideLoadingScreen)
+        function showDownloadError(error, what) {
+            if (isReadyToPlay) return;                                     // (the game runs: a late failure of something else must not cover it)
             if (progressContainer) progressContainer.style.display = 'none';
             if (splashOverlay) {
                 splashOverlay.classList.add('failed');                         // (the loading screen takes no clicks, but the button of this message needs them)
@@ -1135,14 +1192,17 @@
             }
             if (!statusElement) return;
             while (statusElement.firstChild) statusElement.removeChild(statusElement.firstChild);
+            var program = what === 'program';
             var box = document.createElement('div');
+            box.id = 'load-failure';
             box.style.cssText = 'background: rgba(220, 40, 40, 0.25); border: 1px solid #f87171; border-radius: 6px; padding: 14px; margin-top: 8px; text-align: center;';
             var title = document.createElement('div');
             title.style.cssText = 'color: #fca5a5; font-weight: bold; font-size: 0.95rem; margin-bottom: 6px;';
-            title.textContent = "The game's data could not be downloaded";
+            title.textContent = program ? 'The game could not be started' : "The game's data could not be downloaded";
             var detail = document.createElement('div');
             detail.style.cssText = 'font-size: 0.8rem; color: #cbd5e1; margin-bottom: 12px;';
-            detail.textContent = 'The connection failed or the browser could not keep the file' + (error && error.message ? ' (' + String(error.message).substring(0, 120) + ')' : '') + '. Loading the page again usually helps.';
+            detail.textContent = (program ? 'A file of the game could not be loaded or it did not start' : 'The connection failed or the browser could not keep the file') +
+                (error && error.message ? ' (' + String(error.message).substring(0, 120) + ')' : '') + '. Loading the page again usually helps.';
             var button = document.createElement('button');
             button.type = 'button';
             button.style.cssText = 'background:#22c55e;color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.9rem;box-shadow: 0 2px 8px rgba(34,197,94,0.4);';
@@ -1157,7 +1217,7 @@
         window.addEventListener('error', function(e) {
             var msg = (e && e.message) ? e.message : String(e);
             if (msg.indexOf('NetworkError for:') !== -1) {                      // the file packager's own download failed (where the page's own was not used)
-                showDownloadError(new Error('NetworkError'));
+                showDownloadError(new Error('NetworkError'), 'data');
                 return;
             }
             if (msg.indexOf('null function') !== -1 ||
@@ -1169,6 +1229,16 @@
             }
         });
 
+        // A promise that fails and that nobody catches is not an `error` event. The game's startup is made of promises (index.wasm is fetched and compiled in one: Emscripten leaves the
+        // failure of that to the promise `Module.ready`, which nobody listens to), so a failed index.wasm ended in nothing but a line in the console and a card that said "Downloading
+        // data" for ever. While the game is not running a failure like that is the game that cannot start: the card says so. (After it runs, such a failure is only logged.)
+        window.addEventListener('unhandledrejection', function(e) {
+            var reason = e && e.reason;
+            console.error('[page] a promise failed and nobody caught it:', reason);
+            if (isReadyToPlay || (splashOverlay && splashOverlay.classList.contains('failed'))) return;      // (a card that says what is wrong is already up: the cache message of an abort)
+            showDownloadError(reason && reason.message ? reason : new Error(String(reason)), 'program');
+        });
+
         Module.setStatus('Downloading game data package...');
 
         // The game starts by itself: when it is ready the loading screen goes away and the canvas takes the keyboard. The first press inside the game takes it again
@@ -1178,6 +1248,7 @@
             try { canvas.focus({preventScroll: true}); } catch (e) { /* nothing to focus */ }
         }
         function hideLoadingScreen() {
+            splashOverlay.classList.remove('failed');                       // (a failure card that was up before the game started after all goes away with the rest)
             splashOverlay.style.opacity = '0';
             setTimeout(function() { splashOverlay.style.display = 'none'; }, 300);
             if (!ANTS_EMBED) focusGame();
@@ -1308,7 +1379,25 @@
                 pageDispatching = true;
                 try { window.dispatchEvent(new Event('resize')); } finally { pageDispatching = false; }
             }
+            snapBox();
         }
+        // Put the box where the game's pointer is exact (ANTS_PAGE.snapOffset says where): the layout centres it, at whatever fraction of a pixel that gives, and a relative shift of
+        // at most half a pixel moves it. Done after every layout and whenever the page scrolls (the position is the box's place in the window).
+        function snapBox() {
+            boxElement.style.left = '0px';
+            boxElement.style.top = '0px';
+            var r = boxElement.getBoundingClientRect();
+            var dx = ANTS_PAGE.snapOffset(r.left, r.width);
+            var dy = ANTS_PAGE.snapOffset(r.top, r.height);
+            if (dx) boxElement.style.left = dx + 'px';
+            if (dy) boxElement.style.top = dy + 'px';
+        }
+        var snapPending = false;
+        window.addEventListener('scroll', function () {
+            if (snapPending) return;
+            snapPending = true;
+            window.requestAnimationFrame(function () { snapPending = false; snapBox(); });
+        }, { passive: true });
         function relayout(force) {
             measureChrome();
             layoutBox(force);
@@ -1385,8 +1474,12 @@
                 button.addEventListener('click', function () {
                     var value = button.getAttribute('data-aspect');
                     if (value === ANTS_ASPECT) { remember(value); return; }           // (the same picture: nothing to restart; the choice is remembered)
+                    // The game restarts to change its picture (it is made when the game starts): a match in a room (joined from the address, even before it starts: the seat is lost) or a
+                    // match that is being played here (the game says so: ants_match_running) asks first
                     var joined = ANTS_ARGS.indexOf('--join-url') !== -1;
-                    if (joined && !window.confirm('Changing the picture restarts the game: you leave the match you are in. Continue?')) return;
+                    var playing = false;
+                    try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (e) { /* the game does not answer: it is not running a match */ }
+                    if ((joined || playing) && !window.confirm('Leave the match to change the picture?')) return;
                     remember(value);
                     var url;
                     try {
@@ -1485,21 +1578,35 @@
         // page downloads the data itself, with fetch: the first try with the browser's cache (a repeat visit costs a 304), the retries (up to 3, after 0.4, 1.2 and 3 seconds)
         // without it, so that a cache entry that cannot be written cannot fail them again; progress is shown as before; the bytes are handed to the packager through
         // Module.getPreloadedPackage (which it calls synchronously when index.js starts, so index.js is loaded after the download; index.js and index.wasm are asked for at once, so
-        // that they are in the browser's cache by then). After the last failure the card says so and has a Reload button. A browser without fetch does what it always did.
+        // that they are in the browser's cache by then). What comes back must be the data: a body that is a web page (a captive portal answers every address with "200 OK") or
+        // that is not the size of the package is a failed try (ANTS_PAGE.badDownload). After the last failure the card says so and has a Reload button. A browser without fetch does
+        // what it always did.
+        // The loading of the program has its own failures: index.js that cannot be loaded (the script's `error`), index.wasm that cannot be fetched or compiled (a promise that nobody
+        // catches: the handler above) and a game that does not start (ANTS_START_TIMEOUT_MS after the data arrived, 60 s unless the page was given another); each puts the card
+        // with the Reload button up instead of leaving the loading screen at "Downloading data" for ever.
         (function() {
             var DATA_URL = Module.locateFile('index.data', '');
             var RETRY_DELAYS = [400, 1200, 3000];
             var DEFAULT_SIZE = 14650810;                                    // (only to scale the bar when the server compresses and says no length; the real size is remembered below)
+            var START_TIMEOUT_MS = (typeof window.ANTS_START_TIMEOUT_MS === 'number' && window.ANTS_START_TIMEOUT_MS > 0) ? window.ANTS_START_TIMEOUT_MS : 60000;
+            var SCRIPT_URL = 'index.js?v=' + ANTS_BUILD_VER;
 
             function startGame() {
                 var s = document.createElement('script');
                 s.async = true;
-                s.src = 'index.js?v=' + ANTS_BUILD_VER;
+                s.onerror = function() { showDownloadError(new Error('index.js could not be loaded'), 'program'); };
+                // (the address is set as an attribute: the Dockerfile adds the build's ?v= to every `src=index.js` of the built page, and a literal one here got a second ?v=)
+                s.setAttribute('src', SCRIPT_URL);
                 document.body.appendChild(s);
+                if (statusElement && !isReadyToPlay) statusElement.textContent = 'Starting the game...';
+                window.antsStartWatchdog = setTimeout(function() {
+                    if (!isReadyToPlay) showDownloadError(new Error('the game did not start within ' + Math.round(START_TIMEOUT_MS / 1000) + ' s'), 'program');
+                }, START_TIMEOUT_MS);
             }
             if (!window.fetch || !window.Promise || !window.Uint8Array) { startGame(); return; }
 
             function rememberedSize() {
+                if (ANTS_DATA_SIZE > 0) return ANTS_DATA_SIZE;
                 try {
                     var n = parseInt(window.localStorage.getItem('ants.datasize'), 10);
                     if (n > 1000000 && n < 400000000) return n;
@@ -1525,9 +1632,17 @@
                 // attempt 0: the browser's cache as usual; the retries: no cache at all (nothing is read from it or written to it)
                 return fetch(DATA_URL, { cache: attempt === 0 ? 'default' : 'no-store', credentials: 'same-origin' }).then(function(response) {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
+                    var contentType = response.headers.get('content-type') || '';
+                    var early = ANTS_PAGE.badDownload(contentType, null, ANTS_DATA_SIZE);      // (the type alone, before the body is read)
+                    if (early) throw new Error(early);
                     var declared = response.headers.get('content-encoding') ? 0 : (parseInt(response.headers.get('content-length'), 10) || 0);
                     var total = declared || rememberedSize();
-                    if (!response.body || !response.body.getReader) return response.arrayBuffer();
+                    function checked(bytes) {
+                        var bad = ANTS_PAGE.badDownload(contentType, bytes.byteLength, ANTS_DATA_SIZE);
+                        if (bad) throw new Error(bad);
+                        return bytes;
+                    }
+                    if (!response.body || !response.body.getReader) return response.arrayBuffer().then(checked);
                     var reader = response.body.getReader();
                     var chunks = [];
                     var got = 0;
@@ -1535,7 +1650,7 @@
                         return reader.read().then(function(r) {
                             if (r.done) {
                                 if (got === 0 || (declared && got !== declared)) throw new Error('the download ended early (' + got + ' bytes)');
-                                return join(chunks, got);
+                                return checked(join(chunks, got));
                             }
                             chunks.push(r.value);
                             got += r.value.length;
@@ -1550,9 +1665,19 @@
                 try { fetch(url, { credentials: 'same-origin' }).then(function(r) { return r.arrayBuffer(); }).catch(function() { /* it is asked for again */ }); } catch (e) { /* ditto */ }
             }
 
+            function preloadScript(url) {                                   // index.js is needed the moment the data is here: asking for it now as a preload, which the script that is added then takes over (one request, not two)
+                try {
+                    var link = document.createElement('link');
+                    link.rel = 'preload';
+                    link.as = 'script';
+                    link.href = url;
+                    document.head.appendChild(link);
+                } catch (e) { /* no preload: the script is asked for when it is needed */ }
+            }
+
             var log = window.antsDownloadLog = [];                          // what happened (for the tests: tests/scripts/web_aspect_check.py reads it)
             warm(Module.locateFile('index.wasm', ''));
-            warm('index.js?v=' + ANTS_BUILD_VER);
+            preloadScript(SCRIPT_URL);
             ANTS_PAGE.downloadWithRetries(
                 function(attempt) {
                     return fetchOnce(attempt).then(function(bytes) { log.push({ attempt: attempt, ok: true, bytes: bytes.byteLength }); return bytes; },
@@ -1572,7 +1697,7 @@
                 startGame();
             }, function(error) {
                 console.error('[download] the game data could not be downloaded:', error);
-                showDownloadError(error);
+                showDownloadError(error, 'data');
             });
         })();
     </script>

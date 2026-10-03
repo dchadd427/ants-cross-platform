@@ -716,8 +716,7 @@ void Application::set_layout(const ScreenLayout& layout) {
 // Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), and so is the setup screen and the room of a 960 x 540 canvas
 // (its own wide version), everything else is a page of the original's own 640 x 480 screen (the loading screen, the quick help, the results; the setup screen of another canvas), centred
 LayoutRect Application::picture_for_state() const {
-    const bool match = state_ == AppState::Playing && !scorecard_.is_open();
-    if (match) return canvas().centred(layout_.width, layout_.height);
+    if (match_running()) return canvas().centred(layout_.width, layout_.height);
     if (state_ == AppState::MapSelect && wide_setup()) return canvas().rect();            // the setup screen of a 960 x 540 canvas is composed for it (setup_layout.hpp)
     return canvas().centred(ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight);
 }
@@ -1260,6 +1259,12 @@ extern "C" void emscripten_main_loop_iter(void* arg) {
 // NetGame::set_on_wake). It does nothing in a page that is shown, and nothing while a step is already running.
 extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
     if (g_web_app != nullptr) g_web_app->background_pump();
+}
+
+// For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The selector of the picture under the game restarts the game
+// (the picture is made when the game starts), so it asks the player first when this says 1.
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
+    return (g_web_app != nullptr && g_web_app->match_running()) ? 1 : 0;
 }
 #endif
 

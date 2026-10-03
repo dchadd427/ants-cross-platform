@@ -176,7 +176,8 @@ class DevTools:
     def evaluate(self, session, expression):
         r = self.call("Runtime.evaluate", {"expression": expression, "returnByValue": True, "awaitPromise": True}, session=session)
         if "exceptionDetails" in r:
-            raise RuntimeError("the page raised: %s" % r["exceptionDetails"].get("text", r["exceptionDetails"]))
+            details = r["exceptionDetails"]
+            raise RuntimeError("the page raised: %s" % ((details.get("exception") or {}).get("description") or details.get("text", details)))
         return r["result"].get("value")
 
     def close_tab(self, target):

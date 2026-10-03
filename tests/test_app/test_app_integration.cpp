@@ -999,8 +999,11 @@ void run_suite_6_scorecard_and_audio_routing() {
         ASSERT_TRUE(app.is_running());
 
         // Trigger scorecard to show
+        ASSERT_EQ(app.state(), AppState::Playing);
+        ASSERT_TRUE(app.match_running());                                   // (the page's selector of the picture asks before it restarts a running match: ants_match_running)
         app.scorecard().show(app.sim().get_world_state().match_result, 0);
         ASSERT_TRUE(app.scorecard().is_open());
+        ASSERT_FALSE(app.match_running());                                  // the results are not a running match
         app.scorecard().update(0.25f);                                      // the rows (and the Leave button) appear after 250 ms
 
         // Click Leave Game button via Application input handler
@@ -1476,10 +1479,12 @@ void run_suite_7_input_controls() {
         std::filesystem::remove(unplayable, ignore);
         ASSERT_FALSE(started);
         ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.match_running());                                  // the setup screen is not a running match
 
         // the shipped map starts as ever
         ASSERT_TRUE(app.start_game("Original-Ants/Maps/TINY.LVL"));
         ASSERT_EQ(app.state(), AppState::Playing);
+        ASSERT_TRUE(app.match_running());
     } TEST_END();
 
     TEST_CASE("7.6c A Game That Starts Straight Into Its Match (--map) Refuses The Same Map: Application::init Asks LevelData::validate For All Four Teams; The Setup Screen Starts Without Asking (The Match Is Checked When It Starts)") {

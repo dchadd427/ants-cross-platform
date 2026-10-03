@@ -187,6 +187,8 @@ public:
     float get_current_fps() const noexcept { return current_fps_; }
 
     AppState state() const noexcept { return state_; }
+    /// A match is being played right now: the match screen is up and its results are not (the browser page asks before it restarts the game for another picture, see ants_match_running)
+    bool match_running() const noexcept { return state_ == AppState::Playing && !scorecard_.is_open(); }
     /// The desktop start menu: the model (the tests drive it with keys and the mouse like the window does), whether this run has one, and the window's title (a room's code is in it
     /// from the moment the player is in the room until the player is back at the menu)
     StartMenu& start_menu() noexcept { return start_menu_; }

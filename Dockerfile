@@ -24,9 +24,17 @@ RUN emcmake cmake -B build_web \
 
 RUN cmake --build build_web -j$(nproc)
 
-# Append dynamic build cache-buster to index.js script tag to prevent stale browser caching
+# Append dynamic build cache-buster to the index.js script tag (only a <script> tag: the page adds the ?v= to its own script address itself, and a sed over every `src=index.js`
+# gave that one a second ?v=) to prevent stale browser caching, and write the exact size of index.data into the page (the page refuses a download of another size: a captive portal's
+# web page that answers "200 OK"). The build stops if either did not work.
 RUN BUILD_TIME=$(date +%s) && \
-    sed -i -E 's/(src=)("?)index\.js("?)/\1\2index.js?v='"${BUILD_TIME}"'\3/g' /src/build_web/src/ants_app/index.html
+    PAGE=/src/build_web/src/ants_app/index.html && \
+    sed -i -E 's/(<script[^>]* src=)("?)index\.js("?)/\1\2index.js?v='"${BUILD_TIME}"'\3/g' "$PAGE" && \
+    DATA_SIZE=$(stat -c %s /src/build_web/src/ants_app/index.data) && \
+    sed -i "s/@@DATA_SIZE@@/${DATA_SIZE}/g" "$PAGE" && \
+    grep -q "index.js?v=${BUILD_TIME}" "$PAGE" && \
+    ! grep -q '@@DATA_SIZE@@' "$PAGE" && \
+    ! grep -Eq 'index\.js\?v=[0-9]+\?v=' "$PAGE"
 
 # Build the changelog page (CHANGELOG.md -> changelog.html, no dependencies) after the compile layers so that editing the changelog does not rebuild the game
 COPY CHANGELOG.md /src/changelog/CHANGELOG.md
