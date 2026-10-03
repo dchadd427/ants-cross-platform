@@ -61,6 +61,7 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 
 ### 10. Open Source Information Security & Leak Prevention Invariant
 - **Zero Information Leakage to GitHub**: This repository is a public open-source project. Strictly NEVER write, commit, or leak any private credentials, API keys, personal access tokens, secret URLs, personal identifiable information (PII), proprietary source code, internal hostnames, or local system paths to GitHub in any code, comments, commit messages, or documentation.
+- **Server Monitoring Stays Private**: What is read on the owner's servers to troubleshoot (the output of log viewers, process and resource monitors, container dashboards, deployment tools and a server's console: log lines, process and container lists, addresses, ports, resource figures, and the addresses and settings of those tools) is for troubleshooting only. None of it is written to GitHub: not in code, comments, tests, documents, the changelog, `STATUS.md`, commit messages, pull requests or issues. A fix that follows from it is described in general terms (what went wrong and what changed), without those details.
 
 ### 11. Process Tiers: Which Checks Run When
 - **Quick tier, per change**: `./run_tests.sh --fast` (about a minute: the sim, network-core and application model suites and the repository checks) before every commit. Agents run focused tests and the quick tier while working, not the full gates.
