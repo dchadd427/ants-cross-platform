@@ -4,8 +4,9 @@
 //     fits, centred, with bars: `CanvasLayout::fit` is that arithmetic (a table of window sizes: 1920 x 1080 is 2x exactly, 2560 x 1440 2.667x, 2880 x 1800 3x with bars above and
 //     below ...), checked against SDL itself; the window that opens is the largest scale in steps of 0.5 of the canvas that fits the display's usable area (at least 1x), also for a
 //     game that starts in fullscreen (the window that Alt+Enter gives back);
-//   * the application: `--aspect 16:9` / `4:3` and the key `aspect` (refusals say "only 16:9 and 4:3 for now"), the classic picture centred in the wide canvas (pixel for pixel
-//     what the 4:3 application draws, the plate in the canvas's corner), the pointer over the bars (it is the picture's nearest edge pixel, the map scrolls), Alt+Enter, the screenshot.
+//   * the application: `--aspect 16:9` / `4:3` and the key `aspect` (refusals say "only 16:9 and 4:3 for now"), the classic picture in the wide canvas (the quick help's two columns pixel for pixel
+//     what the 4:3 application draws, moved by (160, 30); every screen is composed for the whole canvas: test_wide_pages; the plate in the canvas's corner), the pointer over the bars (it is
+//     the picture's nearest edge pixel, the map scrolls), Alt+Enter, the screenshot.
 // Usage: test_canvas_layout. Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -521,8 +522,8 @@ void test_application_aspects() {
             int lw = 0, lh = 0;
             SDL_RenderGetLogicalSize(f.app.renderer().get_sdl_renderer(), &lw, &lh);
             check(f.app.aspect() == Aspect::Wide16x9 && f.app.canvas() == CanvasLayout{960, 540} && lw == 960 && lh == 540, "16:9: SDL's logical size is 960 x 540");
-            // (M3 rewrote these three: in M2 the match screen was still the classic picture, centred at (160, 30); it is the wide frame now and fills the canvas; the original's pages are still
-            // centred, which the pixels group checks on the setup screen)
+            // (M3 rewrote these three: in M2 the match screen was still the classic picture, centred at (160, 30); it is the wide frame now and fills the canvas; the original's pages are
+            // recomposed for the whole canvas too: test_wide_pages)
             check(f.app.layout() == ScreenLayout::with_size(960, 540) && f.app.renderer().layout() == f.app.layout() && f.app.hud().layout() == f.app.layout(), "16:9 (M3): the match screen is the wide 960 x 540 picture");
             check_rect(f.app.picture(), LayoutRect{0, 0, 960, 540}, "16:9: the match is the whole canvas");
             check_rect(f.app.renderer().picture(), LayoutRect{0, 0, 960, 540}, "16:9: the renderer has it too");
@@ -731,10 +732,12 @@ void test_centred_pixels() {
     check(bar_pixels(wide.app, 834, 527, 118, 13) > 20, "16:9: the sparkline is in the canvas's bottom right corner (rows 527 .. 539)");
     check(bar_pixels(wide.app, 514, 467, 118, 13) == 0, "16:9: and not where the 4:3 picture's corner is (the original's place of the plate)");
     check(bar_pixels(classic.app, 514, 467, 118, 13) > 20, "4:3: it is in the picture's corner, as it was");
-    // the quick help is a page of the original's: the same (the setup screen has its own wide version in a 960 x 540 canvas: tests/test_app/test_wide_setup.cpp)
+    // the quick help at the start: the 16:9 page is the whole canvas (the wide frame, flat clay: tests/test_app/test_wide_pages.cpp), and its two columns are the 4:3 page's own pixels, moved by
+    // (160, 30) (this used to compare the whole page, centred, with the 4:3 application's: the frame around the columns is the wide frame now). START! is left out: it is anchored to the
+    // bottom right corner of the wide page (+320, +60), not moved with the columns.
     AppFixture classic_setup("", config_of(Aspect::Classic4x3, true, 640, 480), false);
     AppFixture wide_setup("", config_of(Aspect::Wide16x9, true, 960, 540), false);
-    check(classic_setup.ok && wide_setup.ok, "both applications show a page of the original's");
+    check(classic_setup.ok && wide_setup.ok, "both applications show the quick help");
     if (classic_setup.ok && wide_setup.ok) {
         classic_setup.app.finish_loading();
         wide_setup.app.finish_loading();
@@ -742,9 +745,13 @@ void test_centred_pixels() {
         for (AppFixture* f : {&classic_setup, &wide_setup}) f->app.renderer().pin_animation_clock(1500);
         classic_setup.app.render_frame();
         wide_setup.app.render_frame();
-        const std::vector<uint8_t> sa = masked(read_canvas(classic_setup.app, 0, 0, 640, 480), 640, 440, 464, 200, 16);
-        const std::vector<uint8_t> sb = masked(read_canvas(wide_setup.app, 160, 30, 640, 480), 640, 440, 464, 200, 16);
-        check(sa == sb, "the quick help of the 16:9 canvas is the 4:3 application's, centred");
+        // the two columns of the 4:3 page: qh1 257 x 461 at (10, 9) and qh2 362 x 463 at (267, 10); qh2's slot of the START! button (x 521 .. 628, y 437 .. 472) is left out, the button is elsewhere in the
+        // wide page and the art under it shows
+        const auto columns = [&](Application& app, int32_t dx, int32_t dy, int32_t x, int32_t y, int32_t w, int32_t h) { return read_canvas(app, x + dx, y + dy, w, h); };
+        const bool left = columns(classic_setup.app, 0, 0, 10, 9, 257, 461) == columns(wide_setup.app, 160, 30, 10, 9, 257, 461);
+        const bool right_top = columns(classic_setup.app, 0, 0, 267, 10, 362, 427) == columns(wide_setup.app, 160, 30, 267, 10, 362, 427);
+        const bool right_left = columns(classic_setup.app, 0, 0, 267, 437, 254, 36) == columns(wide_setup.app, 160, 30, 267, 437, 254, 36);
+        check(left && right_top && right_left, "the quick help of the 16:9 canvas: the two columns are the 4:3 application's pixels, centred (moved by (160, 30))");
     }
 }
 
@@ -819,24 +826,26 @@ void test_pointer_over_bars() {
         f.scroll(12);
         check(f.app.renderer().camera().world_x > x1, "... and the map scrolls east");
     }
-    {   // a page of the original in the 16:9 canvas: a pointer over the margin is the page's nearest edge pixel (the quick help is centred at (160, 30))
+    {   // a screen outside a match in the 16:9 canvas (the quick help): the whole canvas, so a canvas point is the picture's own (this block used to pin the clamp of a pointer over the margin
+        // of a centred page to the page's nearest edge pixel: there is no page and no margin any more)
         AppFixture f("", config_of(Aspect::Wide16x9, true, 1920, 1080), false);
-        check(f.ok && f.window != nullptr, "the 16:9 application shows a page");
+        check(f.ok && f.window != nullptr, "the 16:9 application shows the quick help");
         if (!f.ok || f.window == nullptr) return;
         f.app.finish_loading();
         f.deliver();
-        f.motion_at_canvas(160 + 100, 30 + 100);
+        check(f.app.state() == AppState::QuickHelp && f.app.picture() == (LayoutRect{0, 0, 960, 540}), "the quick help is the whole canvas");
+        f.motion_at_canvas(260, 130);
         f.deliver();
-        check(f.app.mouse_screen_x() == 100 && f.app.mouse_screen_y() == 100, "the canvas point (260, 130) is the page's (100, 100)");
-        f.motion_at_canvas(160, 30);
+        check(f.app.mouse_screen_x() == 260 && f.app.mouse_screen_y() == 130, "the canvas point (260, 130) is the picture's (260, 130)");
+        f.motion_at_canvas(0, 0);
         f.deliver();
-        check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 0, "the page's first pixel is (0, 0)");
-        f.motion_at_canvas(799, 509);
+        check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 0, "the picture's first pixel is (0, 0)");
+        f.motion_at_canvas(959, 539);
         f.deliver();
-        check(f.app.mouse_screen_x() == 639 && f.app.mouse_screen_y() == 479, "the page's last pixel is (639, 479)");
+        check(f.app.mouse_screen_x() == 959 && f.app.mouse_screen_y() == 539, "the picture's last pixel is (959, 539)");
         f.motion_at_canvas(40, 270);
         f.deliver();
-        check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 240 && !f.app.pointer_outside(), "over the margin left of the page the pointer is on its left edge, level with the pointer");
+        check(f.app.mouse_screen_x() == 40 && f.app.mouse_screen_y() == 270 && !f.app.pointer_outside(), "left of the page's columns the pointer is where it is (on the wide frame's clay, not a margin)");
     }
 }
 

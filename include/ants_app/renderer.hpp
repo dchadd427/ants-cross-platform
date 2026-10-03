@@ -102,11 +102,6 @@ constexpr int PLAYFIELD_H = ScreenLayout::kClassicViewH;
 
 constexpr int TILE_SIZE = 32;
 
-// What fills the canvas around a page of the original's own 640 x 480 screen (the loading screen, the quick help at the start, the setup screen, the results) when the canvas is bigger (the options window and the quick help of a match are over the map view instead):
-// the clay of those pages, a flat fill of the colour that the loading screen is filled with (Ants.exe 0x4b13db, (219, 75, 19): the page's own frame stands out against it as a window
-// on a clay desktop). Only a colour of the original's art: nothing is drawn that the original has not.
-inline constexpr ants::assets::ColorRGBA kPageMargin{219, 75, 19, 255};
-
 // Colour modes accepted by TextureCache::get_sprite_texture (the `team_id` argument).
 //   0..3               legacy HUD path: per-team HUD table on palette indices 1..31 plus the +offset ramp shift
 //   TEAM_NONE          raw CHD palette. The original never remaps terrain, map objects, effects, plants or cursors.
@@ -242,6 +237,13 @@ public:
         (void)size;
         draw_text(text, x, y, color);
     }
+    /// The text as draw_text draws it, but never wider than `max_width` pixels: a text that is wider is squeezed horizontally to that width (its height stays). The original counts in the digits of its
+    /// own face, which are 8 pixels wide at the size of its labels (docs 5.49); the bundled face has wider ones, and this puts them into the same space. A renderer that cannot squeeze, and
+    /// every renderer that only records its calls, draws the text as draw_text does.
+    virtual void draw_text_squeezed(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size, int32_t max_width) {
+        (void)max_width;
+        draw_text(text, x, y, color, size);
+    }
     virtual int32_t get_text_width(const std::string& text, FontSize size = FontSize::Px12) const {
         (void)size;
         return static_cast<int32_t>(text.size()) * 6;
@@ -375,7 +377,7 @@ public:
 
     /// Where the picture that the game draws sits in the canvas: its top left corner and its size. Everything the game draws (the HUD, the pages, the world) is in the
     /// picture's own coordinates and lands at that corner plus them; nothing is drawn beyond the picture (the clip is the picture) and the bars around it stay black. The whole
-    /// canvas (no corner, no clip) until it is told otherwise, and again after `set_canvas_size`: the classic picture centred in a bigger canvas is
+    /// canvas (no corner, no clip) until it is told otherwise, and again after `set_canvas_size`: a match of the classic layout in a bigger canvas is
     /// `CanvasLayout::centred(640, 480)`. The plate of the frame rate is the canvas's, not the picture's: it is drawn with the picture set to the whole canvas.
     void set_picture(const LayoutRect& picture);
     const LayoutRect& picture() const noexcept { return picture_; }
@@ -448,6 +450,7 @@ public:
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) override;
     void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size) override;
+    void draw_text_squeezed(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size, int32_t max_width) override;
     int32_t get_text_width(const std::string& text, FontSize size = FontSize::Px12) const override;
     /// The cell height of the size: exactly the original's (the line distance of a label), with or without a TrueType font
     int32_t get_text_height(FontSize size = FontSize::Px12) const override;
@@ -649,6 +652,9 @@ private:
     LayoutPoint origin_{};                 // set_origin: what a window of the original's own screen is moved by (nothing, outside the HUD's pages and dialogs)
     /// A rectangle of the picture's own coordinates as SDL gets it (the picture's corner added, and the origin of a window)
     SDL_Rect placed(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept { return SDL_Rect{x + picture_.x + origin_.x, y + picture_.y + origin_.y, w, h}; }
+    /// The width that a text of `w` pixels is copied into while draw_text_squeezed draws it (its own width when no squeeze is asked for or it is narrower)
+    int32_t squeezed(int32_t w) const noexcept { return squeeze_width_ > 0 && w > squeeze_width_ ? squeeze_width_ : w; }
+    int32_t squeeze_width_{0};
     void restore_clip();
 
     // The world pass (see zoomed()). While `in_world_target_` the renderer draws into the target: the camera is a camera of zoom 1 whose view is the target (so every position of the world

@@ -83,7 +83,7 @@ struct CanvasLayout {
     constexpr bool operator!=(const CanvasLayout& o) const noexcept { return !(*this == o); }
     constexpr LayoutRect rect() const noexcept { return LayoutRect{0, 0, width, height}; }
 
-    /// Where a picture of w x h pixels sits when it is centred in the canvas: the original's 640 x 480 pages and the match screen in a 960 x 540 canvas are at (160, 30)
+    /// Where a picture of w x h pixels sits when it is centred in the canvas (a 640 x 480 picture in a 960 x 540 canvas is at (160, 30): the match of a classic layout; every screen outside a match is the whole canvas)
     constexpr LayoutRect centred(int32_t w, int32_t h) const noexcept { return LayoutRect{(width - w) / 2, (height - h) / 2, w, h}; }
 
     /// SDL's logical size, for a window of out_w x out_h pixels: the aspect ratios are compared with a tolerance of 0.0001 (equal: the canvas fills the window); the canvas is

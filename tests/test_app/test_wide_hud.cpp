@@ -12,8 +12,9 @@
 //     clear of them (the match's limit is the layout's);
 //   * the view: the camera clamps (a big map, a map smaller than the view: centred, black around), the edge strips of the whole picture, the start view, the minimap's frame, the cursor
 //     outside a small map (a click there does nothing at all), nothing drawn onto the black around a small map (ants at the edges, levels cut from TINY.LVL), the listener;
-//   * the application: the picture of a match is the whole canvas, every other screen is the original's 640 x 480 page centred in it, the pointer follows the change (and is held at the
-//     page's nearest edge pixel when it was beside it); the default is 16:9 on a desktop (`--aspect 4:3` and the settings key give the classic picture).
+//   * the application: the picture of a match is the whole canvas and so is every other screen (each has its own wide page: test_wide_pages), the pointer stays where it is; only a picture
+//     that is smaller than the canvas (a match of the original's layout, a test hook) holds a pointer that was beside it at its nearest edge pixel; the default is 16:9 on a desktop
+//     (`--aspect 4:3` and the settings key give the classic picture).
 // Usage: test_wide_hud. Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -1277,7 +1278,7 @@ void test_dialogs_and_pages(const assets::AssetArchive& arc) {
     group("windows", "the dialogs, the options window and the quick help sit over the middle of the map view with the HUD visible around them, the pointer is taken back to their numbers");
     const ScreenLayout wide = ScreenLayout::with_size(960, 540);
     const ScreenLayout classic = ScreenLayout::classic();
-    check(wide.page_offset() == LayoutPoint{160, 30} && classic.page_offset() == LayoutPoint{0, 0}, "the page offset (the original's pages outside a match) is (160, 30) at 960 x 540 and (0, 0) in the original's picture");
+    // (the page offset, (160, 30) at 960 x 540, is gone: no page of the original is centred over a margin any more, every screen outside a match is composed for the whole canvas: test_wide_pages)
     check(wide.options_offset() == LayoutPoint{160, 30} && wide.quick_help_offset() == LayoutPoint{77, 31} && classic.options_offset() == LayoutPoint{0, 0} && classic.quick_help_offset() == LayoutPoint{0, 0},
           "the options window's offset is (160, 30) and the quick help's (77, 31) at 960 x 540: the 442 x 440 card (16, 21) and the 640 x 480 page go to the middle (397, 271) of the view; (0, 0) in the original's picture");
     for (const ScreenLayout& l : {wide, ScreenLayout::with_size(1280, 720), ScreenLayout::with_size(1920, 1080)}) {
@@ -2215,16 +2216,16 @@ std::array<uint8_t, 3> pixel(const std::vector<uint8_t>& px, int32_t width, int3
 }
 
 void test_picture_per_screen() {
-    group("screens", "a match and the setup screen are the whole 960 x 540 canvas, every other screen is the original's 640 x 480 page centred in it; the pointer follows the change");
+    group("screens", "a match and every screen outside it (the setup screen, the loading screen, the quick help, the results, the start menu) are the whole 960 x 540 canvas; the pointer stays where it is");
     const LayoutRect whole{0, 0, 960, 540};
-    const LayoutRect page{160, 30, 640, 480};
+    const LayoutRect page{160, 30, 640, 480};      // (a match of the original's own layout in this canvas is centred: the only picture that is not the whole canvas)
     {
         AppFixture f(Aspect::Wide16x9, false, 960, 540);
         check(f.ok, "the 16:9 application starts on its setup screen");
         if (!f.ok) return;
         check(f.app.aspect() == Aspect::Wide16x9 && f.app.canvas() == CanvasLayout{960, 540}, "the canvas is 960 x 540");
         check(f.app.layout() == ScreenLayout::with_size(960, 540) && f.app.hud().layout() == f.app.layout() && f.app.renderer().layout() == f.app.layout(), "the application, the HUD and the renderer hold the wide layout (the match screen's) already on the setup screen");
-        check_rect(f.app.picture(), whole, "the setup screen has its own wide version: the whole canvas (the other screens are the original's pages; the wide setup screen is pinned in test_wide_setup)");
+        check_rect(f.app.picture(), whole, "the setup screen has its own wide version: the whole canvas (so has every other screen: test_wide_pages; the wide setup screen is pinned in test_wide_setup)");
         check_rect(f.app.renderer().picture(), whole, "... and the renderer draws it there");
         // the pointer: the match starts with it in the middle of its picture (the original puts it there until it is seen moving)
         f.app.note_pointer(100, 90);
@@ -2233,7 +2234,7 @@ void test_picture_per_screen() {
         check_rect(f.app.renderer().picture(), whole, "... in the renderer too");
         check(f.app.mouse_screen_x() == 480 && f.app.mouse_screen_y() == 270 && !f.app.mouse_has_moved(), "the pointer starts in the middle of the match's picture: (480, 270)");
         check(f.app.state() == AppState::Playing, "the application plays");
-        // the results are a page again: the pointer keeps its place on the canvas, so its numbers (the picture's own) move with the corner
+        // the results are the whole canvas too (the wide results page, results_layout.hpp): the picture does not change, so the pointer does not move (it used to move with the corner of a centred page)
         f.app.hud().update(f.app.sim().get_world_state(), 100);
         f.app.note_pointer(300, 200);
         sim::MatchResult result;
@@ -2243,21 +2244,22 @@ void test_picture_per_screen() {
         f.app.scorecard().show(result, 0);
         f.app.update_results(0.01f);
         check(f.app.scorecard().is_open(), "the results are open");
-        check_rect(f.app.picture(), page, "the results screen is the original's page, centred");
-        check(f.app.mouse_screen_x() == 300 - 160 && f.app.mouse_screen_y() == 200 - 30, "the pointer moved with the corner: the match's (300, 200) is the page's (140, 170)");
-        // back to the setup screen: the whole canvas, the pointer stays where it is on the canvas (the page's (140, 170) is the canvas's (300, 200))
+        check_rect(f.app.picture(), whole, "the results screen is the whole canvas (its wide page)");
+        check(f.app.scorecard().wide_layout(), "... and the results screen is told that it is the wide page");
+        check(f.app.mouse_screen_x() == 300 && f.app.mouse_screen_y() == 200, "the pointer stays: the match's (300, 200) is the results' (300, 200)");
+        // back to the setup screen: the whole canvas, the pointer stays where it is on the canvas
         f.app.return_to_map_select();
         check_rect(f.app.picture(), whole, "back on the setup screen: the whole canvas");
         check(f.app.mouse_screen_x() == 300 && f.app.mouse_screen_y() == 200 && !f.app.scorecard().is_open(), "the pointer stays");
-        // the way back from a match that is still running (not from its results): the setup screen is a page at once
+        // the way back from a match that is still running (not from its results): the setup screen is the whole canvas at once
         check(f.app.start_game("Original-Ants/Maps/SMALL.LVL"), "a second match starts");
         check_rect(f.app.picture(), whole, "the second match is the whole canvas");
         f.app.return_to_map_select();
         check_rect(f.app.picture(), whole, "back on the setup screen from a running match: the whole canvas, at once");
-        // and the loading screen / quick help: pages too
+        // and the loading screen / quick help: the whole canvas too
         f.app.finish_loading();
-        check(f.app.state() == AppState::QuickHelp || f.app.state() == AppState::MapSelect, "the loading screen ends in a page");
-        check_rect(f.app.picture(), page, "the quick help (or the setup screen) is a page");
+        check(f.app.state() == AppState::QuickHelp || f.app.state() == AppState::MapSelect, "the loading screen ends in the quick help or the setup screen");
+        check_rect(f.app.picture(), whole, "the quick help (or the setup screen) is the whole canvas");
     }
     {   // the original's own aspect: one picture, the whole canvas, in every screen
         AppFixture f(Aspect::Classic4x3, false, 640, 480);
@@ -2276,16 +2278,13 @@ void test_picture_per_screen() {
         check(f.app.scorecard().is_open(), "4:3: the results are open");
         check_rect(f.app.picture(), LayoutRect{0, 0, 640, 480}, "4:3: the results are the whole canvas");
     }
-    {   // a pointer beside the new page: on the clay of a page (left of x = 160, right of x = 800, above y = 30, below y = 510) it is held at the page's nearest edge pixel, not outside the page
-        // (where the cursor vanished and a click was nowhere): the shift by the corner left (-60, 240) for a pointer at (100, 270)
+    {   // the pointer anywhere on the canvas when the results open: the results are the whole canvas, so every canvas point is a point of the picture and nothing is held at a page's edge (the
+        // clamp to a centred page's nearest edge pixel, which this block used to pin, is only for a picture that is smaller than the canvas: the match of a classic layout, below)
         AppFixture f(Aspect::Wide16x9, true, 960, 540);
-        check(f.ok, "the 16:9 application runs a match (the pointer beside the page)");
+        check(f.ok, "the 16:9 application runs a match (the pointer where the results open)");
         if (f.ok) {
-            struct Case { int32_t x, y, want_x, want_y; const char* what; };
-            const Case cases[] = {{100, 270, 0, 240, "left of the page (100, 270): the page's left edge, level"}, {900, 270, 639, 240, "right of the page (900, 270): its right edge"},
-                                  {480, 10, 320, 0, "above the page (480, 10): its top edge"}, {480, 535, 320, 479, "below the page (480, 535): its bottom edge"},
-                                  {5, 5, 0, 0, "the corner (5, 5): the page's top left pixel"}, {955, 535, 639, 479, "the corner (955, 535): the page's bottom right pixel"},
-                                  {300, 200, 140, 170, "on the page (300, 200): moves with the corner, as before (140, 170)"}};
+            struct Case { int32_t x, y; const char* what; };
+            const Case cases[] = {{100, 270, "left (100, 270)"}, {900, 270, "right (900, 270)"}, {480, 10, "top (480, 10)"}, {480, 535, "bottom (480, 535)"}, {5, 5, "the corner (5, 5)"}, {955, 535, "the corner (955, 535)"}, {300, 200, "inside (300, 200)"}};
             for (const Case& c : cases) {
                 AppFixture g(Aspect::Wide16x9, true, 960, 540);
                 g.app.note_pointer(c.x, c.y);
@@ -2295,15 +2294,19 @@ void test_picture_per_screen() {
                 result.decide_winners();
                 g.app.scorecard().show(result, 0);
                 g.app.update_results(0.01f);
-                const bool inside = g.app.mouse_screen_x() >= 0 && g.app.mouse_screen_x() < g.app.picture().w && g.app.mouse_screen_y() >= 0 && g.app.mouse_screen_y() < g.app.picture().h;
-                check(g.app.mouse_screen_x() == c.want_x && g.app.mouse_screen_y() == c.want_y && inside, std::string("the results page, the pointer ") + c.what + ": (" + std::to_string(g.app.mouse_screen_x()) + ", " + std::to_string(g.app.mouse_screen_y()) + ")");
+                check(g.app.mouse_screen_x() == c.x && g.app.mouse_screen_y() == c.y && g.app.picture() == whole, std::string("the results screen, the pointer ") + c.what + " stays: (" + std::to_string(g.app.mouse_screen_x()) + ", " + std::to_string(g.app.mouse_screen_y()) + ")");
             }
-            // the way back from a match to the setup screen: that is the whole canvas of the wide picture (no page, no clay), so the pointer stays exactly where it is (the results above
-            // are the page that clamps it)
+            // the way back from a match to the setup screen: the whole canvas too, so the pointer stays exactly where it is
             f.app.note_pointer(100, 270);
             f.app.return_to_map_select();
-            check(f.app.mouse_screen_x() == 100 && f.app.mouse_screen_y() == 270, "the setup screen (the whole canvas, not a page), from a running match: the pointer stays where it is");
+            check(f.app.mouse_screen_x() == 100 && f.app.mouse_screen_y() == 270, "the setup screen (the whole canvas), from a running match: the pointer stays where it is");
             check(f.app.start_game("Original-Ants/Maps/SMALL.LVL") && f.app.mouse_screen_x() == 480 && f.app.mouse_screen_y() == 270, "a match starts: the pointer is in the middle of the picture, as always");
+            // a picture that is smaller than the canvas (a match of the original's layout, the test hook set_layout) still holds a pointer that was beside it at its nearest edge pixel
+            f.app.note_pointer(100, 270);
+            f.app.set_layout(ScreenLayout::classic());
+            check_rect(f.app.picture(), page, "set_layout(classic): the 640 x 480 picture, centred");
+            check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 240, "... a pointer left of it is held at its left edge, level with the pointer (the page's rule, for a picture smaller than the canvas)");
+            f.app.set_layout(ScreenLayout::with_size(960, 540));
         }
     }
     {   // a match that starts at once (--map): the match screen from the first frame, the pointer in the middle of it
@@ -2319,7 +2322,7 @@ void test_picture_per_screen() {
             check_rect(f.app.picture(), whole, "set_layout(960 x 540): the whole canvas again, at once");
         }
     }
-    {   // the pointer of a game that opens on a page starts in the middle of that page
+    {   // the pointer of a game that opens on a screen starts in the middle of the picture
         AppFixture f(Aspect::Wide16x9, false, 960, 540);
         check(f.ok && f.app.mouse_screen_x() == 480 && f.app.mouse_screen_y() == 270, "a 16:9 application on its setup screen: the pointer starts in the middle of the picture, (480, 270)");
     }
@@ -2367,19 +2370,23 @@ void test_small_levels_in_the_application() {
 }
 
 void test_margin_and_pages_in_match() {
-    group("margin", "the clay around the original's pages in the screens; in a match the options window and the quick help sit over the map view and the frame is not clay");
+    group("margin", "no screen of this canvas is a page over a margin of clay: the quick help is the whole canvas (the wide frame at its edge, flat clay beside the page); in a match the options window and the quick help sit over the map view and the frame is not clay");
     const std::array<uint8_t, 3> clay{219, 75, 19};
-    {   // a page of the original's: the quick help (the setup screen of this canvas is the wide screen, no page)
+    {   // the quick help at the start: its own wide page (page_layout.hpp), no margin of clay around a page any more (this block used to pin the clay margin around the centred page)
         AppFixture f(Aspect::Wide16x9, false, 960, 540);
         if (!f.ok) { check(false, "the application starts"); return; }
         f.app.finish_loading();
         f.app.renderer().pin_animation_clock(1500);
         f.app.render_frame();
         const std::vector<uint8_t> px = f.canvas_pixels();
-        bool margin = true;
-        for (const auto& p : {std::pair<int, int>{0, 0}, {159, 0}, {80, 270}, {0, 539}, {800, 100}, {959, 100}, {400, 10}, {400, 29}, {400, 510}, {400, 520}}) margin = margin && pixel(px, 960, p.first, p.second) == clay;
-        check(margin, "the quick help: the margin around the page is clay (219, 75, 19), left, right, above and below it");
-        check(pixel(px, 960, 160, 30) != clay || pixel(px, 960, 161, 31) != clay || pixel(px, 960, 300, 100) != clay, "... and the page's own art starts at (160, 30)");
+        check(f.app.state() == AppState::QuickHelp && f.app.picture() == (LayoutRect{0, 0, 960, 540}), "the quick help is the whole canvas");
+        bool frame = true;
+        for (const auto& p : {std::pair<int, int>{2, 2}, {957, 2}, {2, 537}, {957, 537}, {480, 2}, {2, 270}, {957, 270}, {600, 537}}) frame = frame && pixel(px, 960, p.first, p.second) != clay;
+        check(frame, "the quick help: the wide frame is at the canvas's corners and edges (no margin of clay around a page)");
+        bool flat = true;
+        for (const auto& p : {std::pair<int, int>{100, 270}, {60, 100}, {880, 100}, {880, 300}, {300, 25}, {600, 520}}) flat = flat && pixel(px, 960, p.first, p.second) == clay;
+        check(flat, "... the clay beside and around the page is flat (219, 75, 19), left, right, above and below it");
+        check(pixel(px, 960, 200, 130) != clay && pixel(px, 960, 600, 300) != clay, "... and the page's own art (the two columns, centred) is on it");
     }
     {   // the setup screen of this canvas is its wide version: no clay margin around a page, the frame of the screen is at the canvas's edge
         AppFixture f(Aspect::Wide16x9, false, 960, 540);

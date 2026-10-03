@@ -7,7 +7,8 @@
 // art is put where the owner chose in the mock-ups of 2026-10-02 (option C) and the pieces that have to be bigger are made bigger from the art itself, by repeating (or dropping) only lines
 // that are IDENTICAL in every piece that crosses them, so that no seam can show and nothing is scaled:
 //   * the clay is the tile dclay96 laid at its own pitch of 96; the frame is the pieces dfram1 ... dfram8 (corners, dfram296 / dfram796 strips with their 16 pixel pieces dfram2 / dfram7, the
-//     side strips dfram496 / dfram596 stacked as whole pieces and cut once, at a row that is identical to the piece's own neighbour);
+//     side strips dfram496 / dfram596 stacked as whole pieces and cut once, at a row that is identical to the piece's own neighbour): wide_page.hpp, which the loading screen, the quick help,
+//     the results and the start menu stand on too;
 //   * every black box is the original's own construction (the efram corners, the 1 x 4 top line efram1100, the dithered bottom edge efram4100 and the side strips efram2100 / efram3100 or
 //     efram2b / efram3b) at the size the screen wants: the Players' Status box (inner 200 x 260), the Map Info box (370 x 30), the map preview (248 x 248, or 300 x 300 when there is no chat),
 //     the chat box (209 x 99);
@@ -23,7 +24,7 @@
 //           waiting-room chat, a "Chat" label, the chat box and its input box; in the Players' Status box, at the foot, the two lines of the bot-fill choice ("Empty seats at START:" /
 //           "Medium bots"). This step draws nothing there unless asked to (MapSelectScreen::set_chat_panel / set_fill_footer);
 //   Guest   the screen of a player who is not the host (animation 107): the same column, the same reserved chat area, no controls but Leave Game.
-// The classic 640 x 480 screens are not touched by any of this: a canvas that is not 960 x 540 draws the original's page, centred, exactly as before.
+// The classic 640 x 480 screens are not touched by any of this: a canvas that is not 960 x 540 draws the original's page, exactly as before.
 //
 // All rectangles are half-open (LayoutRect). The geometry (SetupLayout, the strips' spans) is plain numbers; only draw_setup_art needs a renderer (the header includes renderer.hpp for its IRenderer).
 
@@ -32,6 +33,7 @@
 
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_layout.hpp"
+#include "ants_app/wide_page.hpp"
 #include "ants_assets/asset_archive.hpp"
 
 namespace ants::app {
@@ -42,30 +44,11 @@ enum class SetupVariant : uint8_t {
     Guest       // the screen of a player who is not the host
 };
 
-/// A run of lines of a piece of art as it is drawn along one axis: the `src_count` lines from `src` fill `dst_count` lines of the picture. Equal counts are a plain copy of that run; one
-/// source line (src_count 1) with a bigger dst_count is that one line repeated; a smaller dst_count is not used (a collapsed run is a plain copy of fewer lines: the run's other lines are
-/// skipped). A strip is a list of spans; the lines of the picture are the spans' dst_counts in order.
-struct LineSpan {
-    int16_t src;
-    int16_t src_count;
-    int16_t dst_count;
-};
+/// A strip of art drawn from line spans (LineSpan, PieceStrip: wide_page.hpp, where they began as this screen's own)
+using SetupStrip = PieceStrip;
 
-/// One strip of art drawn from line spans: the piece `sprite`, along its columns (`columns`) or rows, over the lines [cross_first, cross_first + cross_count) of the other axis
-/// (cross_count 0 = all of them); `length` is the number of lines of the picture that the spans make (the sum of their dst_counts).
-struct SetupStrip {
-    const char* id;
-    const char* sprite;
-    bool columns;
-    int32_t cross_first;
-    int32_t cross_count;
-    int32_t length;
-    const LineSpan* spans;
-    size_t span_count;
-};
-
-/// Every strip that the wide setup screen draws from spans (the frame's side strips, the bottom and side edges of the black boxes, the widened w_map and statline, the narrowed statline of
-/// the chat input), for the tests of the seams. `count` is set to their number.
+/// Every strip that the wide setup screen draws from spans (the bottom and side edges of the black boxes, the widened w_map and statline, the narrowed statline of the chat input; the frame's side
+/// strips are the shared background's: wide_page_strips), for the tests of the seams. `count` is set to their number.
 const SetupStrip* setup_strips(size_t& count) noexcept;
 
 /// The rectangles of the chat column of the Online and Guest screens (the area that the online-rooms UI fills): the label "Chat" (TrueType, the text's top left), the chat box (the black efram
@@ -92,7 +75,7 @@ struct SetupLayout {
     static constexpr int32_t kBoxInnerPlayersW = 200;
     static constexpr int32_t kBoxInnerPlayersH = 260;
 
-    /// A canvas that this screen is made for: 960 x 540 and nothing else (any other canvas draws the original's page centred)
+    /// A canvas that this screen is made for: 960 x 540 and nothing else (any other canvas draws the original's page)
     static constexpr bool supports(int32_t w, int32_t h) noexcept { return w == kWidth && h == kHeight; }
     static const SetupLayout& of(SetupVariant variant) noexcept;
 

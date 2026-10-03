@@ -530,6 +530,7 @@ MenuElement StartMenu::control(MenuId id, MenuKind kind, ButtonRect rect, const 
 void StartMenu::add_title(std::vector<MenuElement>& out, const std::string& text) const {
     MenuElement e = control(MenuId::None, MenuKind::Title, ButtonRect{120, kTitleY, 400, kTitleH}, text, FontSize::Px35);
     e.centered = true;
+    e.group = MenuGroup::Top;
     out.push_back(e);
 }
 
@@ -537,6 +538,7 @@ void StartMenu::add_hint(std::vector<MenuElement>& out, const std::string& text)
     MenuElement e = control(MenuId::None, MenuKind::Text, ButtonRect{40, kHintY, 560, kHintH}, text, FontSize::Px12);
     e.tone = MenuTone::Dim;
     e.centered = true;
+    e.group = MenuGroup::Bottom;
     out.push_back(e);
 }
 
@@ -551,10 +553,18 @@ void StartMenu::add_server_line(std::vector<MenuElement>& out, int32_t y) const 
     MenuElement e = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, y, kTextW, 14}, "Server: " + server_label(server_), FontSize::Px12);
     e.tone = MenuTone::Dim;
     e.centered = true;
+    e.group = MenuGroup::Bottom;
     out.push_back(e);
 }
 
 void StartMenu::finish(std::vector<MenuElement>& out) const {
+    if (wide_) {                                            // the 16:9 menu: every element goes to the middle (+160) and down by what its group says (the model's numbers are the original's page)
+        for (MenuElement& e : out) {
+            const int32_t dy = e.group == MenuGroup::Top ? kWideTopDy : (e.group == MenuGroup::Bottom ? kWideBottomDy : kWideMiddleDy);
+            e.rect.x += kWideDx;
+            e.rect.y += dy;
+        }
+    }
     const bool blink = ((static_cast<uint64_t>(std::max(0.0, elapsed_ms_ - caret_since_ms_))) / kCaretHalfPeriodMs) % 2 == 0;
     for (MenuElement& e : out) {
         if (e.id == MenuId::None) continue;

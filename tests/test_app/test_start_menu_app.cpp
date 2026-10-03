@@ -4,7 +4,7 @@
 // a join can fail, cancel, and the way back to the menu after a network game. One Application per test (SDL is initialised once per process).
 //
 //   test_start_menu_app                         runs the tests
-//   test_start_menu_app --shots DIR             writes the screenshots of every panel and state of the menu as DIR/*.png (they are what the menu looks like; nothing is compared)
+//   test_start_menu_app --shots DIR [--wide]    writes the screenshots of every panel and state of the menu as DIR/*.png (they are what the menu looks like; nothing is compared); --wide: the 16:9 picture (960 x 540)
 //   test_start_menu_app --real-server H:P       runs the host / join / START scenario against a game server that is already running (the gate "a real server": a native ants_server
 //                                               on localhost started with --demo-rooms 4 --demo-map TINY.LVL ...), then exits
 //   test_start_menu_app --real-fill H:P         hosts a room through the menu with "Empty seats at START" = Medium bots, starts it ALONE (the server seats three bots) and plays it
@@ -565,7 +565,7 @@ bool same(const Played& a, const Played& b) {
 
 // ---- the screenshots ---------------------------------------------------------------------------------------------------------------------------------------------------
 
-int make_shots(const std::string& dir) {
+int make_shots(const std::string& dir, bool wide) {
     std::error_code ec;
     fs::create_directories(dir, ec);
     TempDir temp;
@@ -574,6 +574,13 @@ int make_shots(const std::string& dir) {
     Hall hall{&server, &app, {}, nullptr, false};
     const auto slow = std::make_shared<Lookup>();                    // a name that is slow to resolve: the "Connecting" panel stays
     ApplicationConfig cfg = menu_config(server.address(), temp.file("settings.ini"));
+    if (wide) {                                                      // the 16:9 picture: the hand-made config is the original's 4:3 unless it says so
+        cfg.aspect = Aspect::Wide16x9;
+        cfg.aspect_given = true;
+        cfg.has_window_size = true;
+        cfg.window_w = 960;
+        cfg.window_h = 540;
+    }
     cfg.host_resolver = lookup_of(slow);
     cfg.clipboard_set = [](const std::string&) { return true; };
     if (!app.init(cfg)) return 1;
@@ -805,7 +812,11 @@ int run_probe(const std::string& address) {
 
 int main(int argc, char** argv) {
     for (int i = 1; i + 1 < argc; ++i) {
-        if (std::strcmp(argv[i], "--shots") == 0) return make_shots(argv[i + 1]);
+        if (std::strcmp(argv[i], "--shots") == 0) {
+            bool wide = false;
+            for (int k = 1; k < argc; ++k) wide = wide || std::strcmp(argv[k], "--wide") == 0;
+            return make_shots(argv[i + 1], wide);
+        }
         if (std::strcmp(argv[i], "--real-server") == 0) return run_real_server(argv[i + 1]);
         if (std::strcmp(argv[i], "--real-fill") == 0) return run_real_fill(argv[i + 1]);
         if (std::strcmp(argv[i], "--probe") == 0) return run_probe(argv[i + 1]);
@@ -1886,7 +1897,7 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(green * 100 >= total * 8);                                                // and the four buttons and the banner on it
     } TEST_END();
 
-    TEST_CASE("A10.1b The same screenshot in the 16:9 picture (the default of a desktop): the 960 x 540 canvas with the menu's own 640 x 480 page centred at (160, 30) over the clay of the original's pages, the page pixel for pixel the 4:3 picture's") {
+    TEST_CASE("A10.1b The same screenshot in the 16:9 picture (the default of a desktop): the 960 x 540 canvas is the menu's own wide page (the wide frame at its edge, tile clay, the controls centred: the title plate at the top, the buttons 30 lower), and the title plate and the four buttons are pixel for pixel the 4:3 picture's, moved") {
         TempDir temp;
         struct Shot {
             int32_t width{0};
@@ -1928,12 +1939,23 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(classic.width == 640 && classic.height == 480);
         ASSERT_TRUE(wide.width == 960 && wide.height == 540);
         const std::array<uint8_t, 3> clay{219, 75, 19};
-        for (const std::pair<int, int>& p : {std::pair<int, int>{0, 0}, {159, 100}, {800, 100}, {400, 10}, {400, 29}, {959, 539 - 20}, {80, 300}}) ASSERT_TRUE(wide.at(p.first, p.second) == clay);   // the clay around the page
-        int64_t differ = 0;
-        for (int32_t y = 0; y < 465; ++y) {                                                    // (the rows of the frame rate's plate, which is the canvas's corner, are left out)
-            for (int32_t x = 0; x < 640; ++x) differ += wide.at(160 + x, 30 + y) != classic.at(x, y) ? 1 : 0;
+        // (this used to compare the 640 x 480 page, centred at (160, 30) over a margin of flat clay, with the 4:3 picture; the page is the wide page now: the frame of the canvas, the tile clay)
+        for (const std::pair<int, int>& p : {std::pair<int, int>{2, 2}, {957, 2}, {2, 537}, {957, 537}, {480, 2}, {2, 270}, {957, 270}, {600, 537}}) ASSERT_TRUE(wide.at(p.first, p.second) != clay);    // the frame is at the canvas's edge
+        int64_t clay_pixels = 0;
+        const int64_t margin_pixels = int64_t{250} * 410;                                      // the clay left of the controls (x 20 .. 269, y 90 .. 499): the tile is 97 % flat clay with isolated speckles
+        for (int32_t y = 90; y < 500; ++y) {
+            for (int32_t x = 20; x < 270; ++x) clay_pixels += wide.at(x, y) == clay ? 1 : 0;
         }
-        ASSERT_EQ(differ, int64_t{0});
+        ASSERT_TRUE(clay_pixels * 100 >= margin_pixels * 95 && clay_pixels < margin_pixels);   // clay, and not flat: the tile's speckles are there
+        // the plates are the same pixels: the title plate (120, 28, 400 x 44) stays at the top (+160, +0), the four buttons (160, y, 320 x 50) move to the middle (+160, +30); the 1 pixel drop shadow is in
+        for (const ButtonRect& r : {ButtonRect{120, 28, 401, 45}, ButtonRect{160, 118, 321, 51}, ButtonRect{160, 184, 321, 51}, ButtonRect{160, 250, 321, 51}, ButtonRect{160, 316, 321, 51}}) {
+            const int32_t dy = r.y == 28 ? 0 : 30;
+            int64_t differ = 0;
+            for (int32_t y = 0; y < r.h; ++y) {
+                for (int32_t x = 0; x < r.w; ++x) differ += wide.at(r.x + 160 + x, r.y + dy + y) != classic.at(r.x + x, r.y + y) ? 1 : 0;
+            }
+            ASSERT_EQ(differ, int64_t{0});
+        }
     } TEST_END();
 
     TEST_CASE("A10.2 --start-menu together with --bot SEAT:LEVEL (the way the tests and the screenshots show bots): the single-player rows start as the command line says, Continue offers exactly those bots, and a bot of another kind than the standard one is no row") {

@@ -11,7 +11,7 @@
 //      pixels), a big synthetic level (sampled; an independent oracle), plants as dots, the caption;
 //   5. the screens' state: what is drawn where (labels, seats, thumbs, the chat column and the bot-fill footer, only when they are asked for), the "No preview" box;
 //   6. the pointer: through the application, every button of every variant answers at the rectangle of the layout (and only there), the classic page answers where it always did;
-//   7. the application: the picture of the setup screen is the whole 960 x 540 canvas, every other page is the original's, the classic 4:3 game is the original's;
+//   7. the application: the picture of the setup screen is the whole 960 x 540 canvas (and so is every other screen: test_wide_pages), the classic 4:3 game is the original's;
 //   8. fingerprints: the draw calls and the masked pixels of the wide screens in a dozen states, and what a click does at every pixel of the picture (golden numbers of this commit).
 // Usage: test_wide_setup [--print]   (--print writes the golden table of the fingerprints for regeneration; never to silence a failure). Exit code 0 when every check passes.
 #include <SDL.h>
@@ -414,8 +414,15 @@ constexpr ExpectedStrip kExpectedStrips[] = {
 
 void test_strips(const assets::AssetArchive& arc) {
     group("seams", "every strip of art: lengths, the seams between runs (identical lines only), the repeated lines (inside runs of identical lines), start and end");
-    size_t count = 0;
-    const SetupStrip* strips = setup_strips(count);
+    // the screen's own 16 strips and the two side strips of the frame, which the shared wide background draws (wide_page.hpp: the frame moved there so that the other wide pages stand on it too)
+    size_t own = 0, shared = 0;
+    const SetupStrip* own_strips = setup_strips(own);
+    const SetupStrip* shared_strips = wide_page_strips(shared);
+    std::vector<SetupStrip> all(own_strips, own_strips + own);
+    all.insert(all.end(), shared_strips, shared_strips + shared);
+    const SetupStrip* strips = all.data();
+    const size_t count = all.size();
+    check(own == 16 && shared == 2, "the screen has 16 strips of its own and shares the frame's two");
     check(count == sizeof(kExpectedStrips) / sizeof(kExpectedStrips[0]), "the screen draws " + std::to_string(sizeof(kExpectedStrips) / sizeof(kExpectedStrips[0])) + " strips (" + std::to_string(count) + ")");
     for (const ExpectedStrip& want : kExpectedStrips) {
         const SetupStrip* found = nullptr;
@@ -1692,9 +1699,8 @@ struct AppFixture {
 };
 
 void test_application() {
-    group("application", "the picture of the setup screen is the whole 960 x 540 canvas, every other page is the original's, the classic 4:3 game is the original's; clicks through the event loop");
+    group("application", "the picture of the setup screen is the whole 960 x 540 canvas, and so is every other screen (test_wide_pages), the classic 4:3 game is the original's; clicks through the event loop");
     const LayoutRect whole{0, 0, 960, 540};
-    const LayoutRect page{160, 30, 640, 480};
     {
         AppFixture f(Aspect::Wide16x9, false);
         check(f.ok && f.window != nullptr, "the 16:9 application starts");
@@ -1704,7 +1710,7 @@ void test_application() {
         f.app.finish_loading();
         f.deliver();
         check(f.app.state() == AppState::QuickHelp, "the quick help (the loading screen ends in it)");
-        check_rect(f.app.picture(), page, "the quick help is the original's page, centred");
+        check_rect(f.app.picture(), whole, "the quick help is the whole canvas too (its wide page: test_wide_pages; it was the original's page, centred)");
         f.app.quick_help_key(SDLK_RETURN);
         check(f.app.state() == AppState::MapSelect, "then the setup screen");
         check_rect(f.app.picture(), whole, "the setup screen is the whole 960 x 540 canvas");
@@ -1725,7 +1731,7 @@ void test_application() {
         f.app.scorecard().show(result, 0);
         f.app.update_results(0.01f);
         check(f.app.scorecard().is_open(), "the results are open");
-        check_rect(f.app.picture(), page, "the results screen is the original's page, centred");
+        check_rect(f.app.picture(), whole, "the results screen is the whole canvas too (its wide page; it was the original's page, centred)");
         f.app.scorecard().hide();
         f.app.return_to_map_select();
         check(f.app.state() == AppState::MapSelect, "back on the setup screen");

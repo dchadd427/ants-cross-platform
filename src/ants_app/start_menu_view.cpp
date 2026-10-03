@@ -8,6 +8,7 @@
 #include "ants_app/start_menu.hpp"
 #include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
+#include "ants_app/wide_page.hpp"
 
 namespace ants::app {
 
@@ -212,7 +213,8 @@ void draw_title(IRenderer& r, const MenuElement& e) {
 }  // anonymous namespace
 
 void render_start_menu(IRenderer& renderer, const assets::AssetArchive& archive, const StartMenu& menu) {
-    draw_background(renderer, archive);
+    if (menu.wide_layout()) draw_wide_background(renderer, archive, PageClay::Tiles);         // the 16:9 menu: the wide clay and frame (its elements are already where the layout puts them)
+    else draw_background(renderer, archive);
     for (const MenuElement& e : menu.elements()) {
         switch (e.kind) {
             case MenuKind::Title: draw_title(renderer, e); break;

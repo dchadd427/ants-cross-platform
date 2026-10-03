@@ -39,7 +39,10 @@ add_library(ants_app STATIC
     hud_input.cpp
     minimap_tables.cpp
     map_preview.cpp
+    wide_page.cpp
     setup_layout.cpp
+    page_layout.cpp
+    results_layout.cpp
     pedestal.cpp
     ui_anim.cpp
     scorecard.cpp

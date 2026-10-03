@@ -61,9 +61,10 @@ struct ApplicationConfig {
     int window_height{960};
     bool fullscreen{false};
     /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas; 16:9 is a fixed
-    /// 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and the original's own pages
-    /// (the loading screen, the quick help at the start, the results) are still its 640 x 480 pages, centred over a clay margin, the setup screen and the room are the wide setup screen
-    /// (setup_layout.hpp: the whole canvas, with a map preview); the options window and the quick help of a match sit over the map view with the frame around them. SDL scales the canvas into the window by
+    /// 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and every screen outside a match is
+    /// composed for the whole canvas from the original's own art: the setup screen and the room (setup_layout.hpp, with a map preview), the loading screen and the quick help at the start
+    /// (page_layout.hpp), the results (results_layout.hpp) and the desktop start menu (start_menu.hpp), all on the wide pages' clay and frame (wide_page.hpp); the options window and the quick help of
+    /// a match sit over the map view with the frame around them. SDL scales the canvas into the window by
     /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest scale in steps of 0.5
     /// of the canvas that fits the display's usable area, at least 1x (--window-size and --grid still win; a game that starts in fullscreen has this size for the way back, Alt+Enter),
     /// and fullscreen is the same canvas filling as much of the monitor as fits. A desktop game that is
@@ -226,8 +227,8 @@ public:
     const ScreenLayout& layout() const noexcept { return layout_; }
     /// The aspect the game runs in (the command line's, else the settings', else the platform's default: 16:9 on a desktop), the canvas that the window shows (SDL's logical size) and
     /// where the picture on screen sits in it (the pointer's coordinates are the picture's, the canvas's bars around it count as its nearest edge pixel): a match is the picture of
-    /// `layout()`, the whole canvas of its aspect, and so is the setup screen / room when the canvas is 960 x 540 (its own wide version); every other screen (the loading screen,
-    /// the quick help, the results, and the setup screen of any other canvas) is the original's own 640 x 480 page, centred in the canvas
+    /// `layout()`, the whole canvas of its aspect, and so is every other screen: in the 960 x 540 canvas each is composed for it (its own wide version), in the 640 x 480 canvas each is
+    /// the original's own page
     Aspect aspect() const noexcept { return aspect_; }
     CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
     const LayoutRect& picture() const noexcept { return picture_; }
@@ -437,7 +438,7 @@ private:
     Aspect aspect_{Aspect::Classic4x3};
     float zoom_wanted_{zoom::kNormal};                    // the level the player chose last: remembered in the settings (key `zoom`), what the next match starts with
     zoom::WheelAccumulator wheel_;                        // the wheel's precise deltas
-    LayoutRect picture_{0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight};     // where the picture that is on screen sits in the canvas (picture_for_state: the match is the whole canvas, a page of the original's is centred)
+    LayoutRect picture_{0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight};     // where the picture that is on screen sits in the canvas (picture_for_state: the whole canvas, in every screen)
     AppState state_{AppState::MapSelect};
     bool is_running_{false};
     bool match_started_{false};                           // a match screen was built (the original writes the chat transcript only then)
@@ -562,7 +563,8 @@ private:
     void stop_bots();
 
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
-    LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture, so is the setup screen of a 960 x 540 canvas, every other screen the original's 640 x 480, centred
+    bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same canvas: wide_page.hpp)
+    LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture (the whole canvas, the original's own 640 x 480 in a 4:3 canvas), and so is every other screen
     void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
     WindowRect initial_window_rect() const;                // what the window is created as: the picture's shape (see the definition)
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
@@ -593,6 +595,7 @@ private:
     // Intro & Loading state
     uint32_t intro_ticks_{0};
     ScreenButton quick_help_start_{ButtonRect{529, 437, 98, 27}, ButtonRect{528, 438, 97, 24}};   // START!: the pictures qh_start1 / 2 and qh_start3 (the hit test is the rectangle of the picture that shows)
+    bool quick_help_wide_{false};                          // ... at the wide page's place (page_layout.hpp: the bottom right corner), not the original's
     bool closing_click_pending_{false};                    // the quick help was closed by a click, on a machine that joined a room, or a click closed the chat input of a room: the rest of that click sequence is not for the screen
     uint32_t closing_click_ms_{0};                         // ... closed at this time (SDL's ticks)
     bool menu_gesture_pending_{false};                     // a click changed the screen of a run with a menu: the rest of that click sequence is not for the screen that is up now

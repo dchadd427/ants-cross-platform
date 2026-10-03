@@ -32,7 +32,7 @@
 //      score slots of 2, 3, 4 teams, the pages of the original centred over the clay and the dialogs over the middle of the map view as origins, maps smaller than the view), the pointer
 //      at every pixel of the 960 x 540 picture (edge strips from nine cameras and on small maps, the zones, the minimap, the cursor in 13 states, refined click sweeps), the camera of
 //      the 762 x 500 view (a map smaller than the view is centred) and the pixels of the real renderer on the 960 x 540 canvas (six maps, nine cameras of two of them, two synthetic small
-//      maps, and whole Application frames: the setup screen, the quick help and the results as centred pages, the match screen and its windows).
+//      maps, and whole Application frames: the setup screen, the quick help and the results, each composed for the whole canvas (their wide pages: the quick help and the results were centred pages of the original until then), the match screen and its windows).
 //
 // WHAT IS NOT COVERED (the blind spots; the places that hard-code 640 / 480 / 442 / 440 / the margins with a covered / not covered note: docs/audit/M0_notes.md)
 //   - the glyph pixels of TrueType text (the CALLS that draw it are fingerprinted: string, place, size, colour; the text boxes are masked in the pixel hashes);
@@ -3243,7 +3243,7 @@ const std::vector<MaskRect> kWMaskQuit = {{265, 237, 529, 401}};
 const std::vector<MaskRect> kWMaskSetup = {{35, 370, 287, 392}, {35, 438, 401, 460}, {34, 505, 402, 529}, {733, 93, 857, 115}, {733, 143, 857, 165}, {733, 193, 857, 215}, {733, 243, 857, 265}, {349, 359, 657, 381}};
 /// The options screen's edit fields and the results rows are text too: the whole page's text boxes are not known one by one, so the pages that carry TrueType text are masked as a
 /// whole where it appears (the results' rows, the options' four quick-chat fields)
-const std::vector<MaskRect> kWMaskResults = {{190, 230, 770, 500}};
+const std::vector<MaskRect> kWMaskResults = {{95, 262, 930, 290}, {95, 350, 930, 378}, {95, 400, 930, 428}};      // the three rows' text of the wide results page: the names (x 100) and the numbers (x 805 ...)
 const std::vector<MaskRect> kWMaskOptions = {{250, 398, 396, 418}, {250, 430, 396, 450}, {460, 398, 606, 418}, {460, 430, 606, 450}};
 
 std::vector<MaskRect> wide_masks(std::initializer_list<const std::vector<MaskRect>*> lists) {
@@ -3343,7 +3343,7 @@ struct WideAppRig {
 };
 
 void app_pixel_wide_scenarios() {
-    // the setup screen of the 16:9 canvas (its wide version: the whole canvas) and the quick help, a page of the original centred over the clay margin (the loading screen needs a window)
+    // the setup screen of the 16:9 canvas (its wide version: the whole canvas) and the quick help (its wide page: the whole canvas too; the loading screen needs a window)
     if (wanted_group("px.wide.app.setup")) {
         WideAppRig rig;
         check(rig.ok, "the wide application is up");
@@ -3398,7 +3398,7 @@ void app_pixel_wide_scenarios() {
             rig.app.finish_loading();
             check(rig.app.state() == AppState::QuickHelp, "the quick help follows the loading screen");
             rig.shot("px.wide.app.quickhelp.rest", wide_masks({}));
-            rig.app.quick_help_move(540, 445);
+            rig.app.quick_help_move(895, 510);                                          // START! of the wide page (849, 497, 98 x 27: the bottom right corner)
             rig.shot("px.wide.app.quickhelp.hover_start", wide_masks({}));
         }
     }
@@ -3780,15 +3780,15 @@ const Golden kGoldens[] = {
     {"screen.wide.room.guest_typed_caret", 0x135fde3e34ea4d5d, 243},
     {"screen.room.before_refresh", 0x42e853aa8cdf3bf2, 135},
     {"screen.results.2teams.waiting", 0xae029099741ec334, 150},
-    {"screen.results.2teams.rows", 0x71ab975ee95bc185, 166},
-    {"screen.results.2teams.rows.later", 0xc40a16d5b1dc8f0d, 166},
-    {"screen.results.2teams.hover_leave", 0x6381495b5bd93057, 166},
-    {"screen.results.2teams.pressed_leave", 0xa61fb101278b36f3, 166},
+    {"screen.results.2teams.rows", 0x6f89094de148c8c7, 182},
+    {"screen.results.2teams.rows.later", 0xd007fb5670a1dc07, 182},
+    {"screen.results.2teams.hover_leave", 0x32657987395aa25d, 182},
+    {"screen.results.2teams.pressed_leave", 0xe4d9222bdb8e2d79, 182},
     {"screen.results.4teams.waiting", 0xae029099741ec334, 150},
-    {"screen.results.4teams.rows", 0x170694de25d108ec, 177},
-    {"screen.results.4teams.rows.local3", 0x6e46f1f65615f24c, 177},
-    {"screen.results.4teams.quitter", 0x6dc7c014296a0c45, 182},
-    {"screen.results.3teams.gap", 0x088107c52d058c1e, 174},
+    {"screen.results.4teams.rows", 0xa7ab576d931964ce, 201},
+    {"screen.results.4teams.rows.local3", 0x7f2583f638f44226, 201},
+    {"screen.results.4teams.quitter", 0x3042da4471779bf7, 214},
+    {"screen.results.3teams.gap", 0xdc787da4ea6328d6, 198},
     {"ptr.edge.60x60.rate50.cam_tl", 0xf3b9a29a8192b052, 307200},
     {"ptr.edge.60x60.rate50.cam_t", 0x192ef46972c41e4a, 307200},
     {"ptr.edge.60x60.rate50.cam_tr", 0xa65f5dc2d2fb8e95, 307200},
@@ -3931,10 +3931,10 @@ const Golden kGoldens[] = {
     {"px.cursor.sw", 0xb902630ad3916a6c, 307200},
     {"px.cursor.w", 0x69a84740954105d3, 307200},
     {"px.cursor.nw", 0x05b9ca230fec312e, 307200},
-    {"px.app.loading.start", 0x510c572fe4d3ec5f, 307200},
-    {"px.app.loading.tick12", 0xd5f742799c7c6a83, 307200},
-    {"px.app.loading.tick25", 0xfbafed33f546398f, 307200},
-    {"px.app.loading.cursor", 0x33f4c144d481af76, 307200},
+    {"px.app.loading.start", 0x2a225b383fef7593, 307200},
+    {"px.app.loading.tick12", 0xb2148702c4ad6bef, 307200},
+    {"px.app.loading.tick25", 0x8875b5a2b0827923, 307200},
+    {"px.app.loading.cursor", 0xe8897a816f1dd05a, 307200},
     {"px.app.setup.before_refresh", 0x4fcb4343bae50ef3, 307200},
     {"px.app.setup.refreshed", 0x5a8f68f4ab4a40de, 307200},
     {"px.app.setup.hover_start", 0x2b68054ae9dea39b, 307200},
@@ -4189,9 +4189,9 @@ const Golden kGoldens[] = {
     {"px.wide.app.setup.cursor", 0xba4230e31aad5a3c, 518400},
     {"px.wide.app.setup.room_leader", 0xa06a1b577f93ec06, 518400},
     {"px.wide.app.setup.room_guest", 0xf8ed8630e8ced504, 518400},
-    {"px.wide.app.quickhelp.rest", 0x174b067d6bc59e00, 518400},
-    {"px.wide.app.quickhelp.hover_start", 0x76c3bbba45f90b9c, 518400},
-    {"px.wide.app.results", 0x5e72ea394f3c73a0, 518400},
+    {"px.wide.app.quickhelp.rest", 0x169fb94096dad790, 518400},
+    {"px.wide.app.quickhelp.hover_start", 0x2fa88736e7f1b0af, 518400},
+    {"px.wide.app.results", 0x8d6ae83a6750f4d7, 518400},
     {"px.wide.app.match.modal", 0x8d419e9f8501e52e, 518400},
     {"px.wide.app.match.start_view", 0xd765a4a26ad4016f, 518400},
     {"px.wide.app.match.cam_tl", 0xf19b355a5395c138, 518400},

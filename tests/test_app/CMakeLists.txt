@@ -539,6 +539,43 @@ target_compile_definitions(test_wide_setup PRIVATE
 add_test(NAME test_wide_setup COMMAND test_wide_setup)
 set_tests_properties(test_wide_setup PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# Wide pages (the loading screen, the quick help at the start, the results and the desktop start menu at 960 x 540): the layouts against the mock-ups, the seams of the results boxes against the art, the boxes
+# at the original's size, the loading screen's order, the composed screens pixel for pixel, the results' numbers, the pointer, the picture per screen, fingerprints
+add_executable(test_wide_pages
+    test_wide_pages.cpp
+)
+
+target_include_directories(test_wide_pages PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_wide_pages PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_wide_pages PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_wide_pages PRIVATE ws2_32 winmm)
+endif()
+
+target_compile_definitions(test_wide_pages PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
+)
+
+add_test(NAME test_wide_pages COMMAND test_wide_pages)
+set_tests_properties(test_wide_pages PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The map preview as the game's own picture of the map (the world drawn offscreen by the real renderer and reduced by an exact area filter): the filter against an independent oracle, the fit
 # of a non-square map, the render (the match screen's own pixels, the live renderer left as it was, tiles equal the whole), the engine, the cache, the fallback, the six shipped maps pinned
 add_executable(test_map_preview

@@ -154,6 +154,10 @@ enum class MenuKind : uint8_t {
 
 enum class MenuTone : uint8_t { Normal, Dim, Bad };
 
+/// Where an element hangs in the 16:9 picture (960 x 540): the title plate stays at the top, the hint and the server line are bottom pieces, everything between is one centred group.
+/// The model's numbers are the original's 640 x 480 page; a wide menu moves each group by the offsets of StartMenu::kWide* (nothing moves in the classic picture).
+enum class MenuGroup : uint8_t { Top, Middle, Bottom };
+
 /// One thing on the screen, as the drawing and the tests see it
 struct MenuElement {
     MenuId id{MenuId::None};                  // None for what cannot be selected
@@ -169,6 +173,7 @@ struct MenuElement {
     bool caret{false};                        // a field: the caret is in its blink phase
     bool all_selected{false};                 // a field: its text is selected (the next typed character replaces it)
     uint8_t team{0};                          // a portrait: the colour of the seat
+    MenuGroup group{MenuGroup::Middle};       // where it hangs when the menu is the 16:9 picture (its rect is already moved)
 };
 
 /// What the menu asks the application to do (take_request)
@@ -288,6 +293,16 @@ public:
     static constexpr int32_t kTitleY = 28;
     static constexpr int32_t kTitleH = 44;
 
+    /// THE 16:9 MENU. In a 960 x 540 picture the menu is composed for the whole canvas (the wide pages' clay and frame, wide_page.hpp) and its controls keep their size, look and order: the model
+    /// keeps the numbers of the original's 640 x 480 page and moves every element by what its group says: all of them to the middle (+160), the title plate stays at the top (+0), the hint and the
+    /// server line are anchored to the bottom (+60), everything between is centred (+30). The classic picture has no move. Clicks and the pointer use the moved rectangles.
+    static constexpr int32_t kWideDx = 160;
+    static constexpr int32_t kWideTopDy = 0;
+    static constexpr int32_t kWideMiddleDy = 30;
+    static constexpr int32_t kWideBottomDy = 60;
+    void set_wide_layout(bool wide) noexcept { wide_ = wide; }
+    bool wide_layout() const noexcept { return wide_; }
+
 private:
     std::vector<MenuId> controls() const;                  // the selectable controls of the panel, in Tab order
     void add_title(std::vector<MenuElement>& out, const std::string& text) const;
@@ -333,6 +348,7 @@ private:
     std::string room_code_;
     int room_players_{1};
     int room_capacity_{4};
+    bool wide_{false};                                      // the picture is the 16:9 one: the elements are moved (set_wide_layout)
     bool all_selected_{false};                              // the focused field's text is selected
     bool name_dirty_{false};                                // the name changed and is not written yet (flush)
     double panel_since_ms_{-1.0e9};                         // when the current panel appeared (the menu's clock)
@@ -346,8 +362,8 @@ private:
     std::function<bool(const std::string&)> clipboard_set_;
 };
 
-/// Draws the current panel: the `sm_screen` background of the original, then the elements (banners, buttons and fields in the colours of the original's buttons and boxes, the
-/// ants of the seats, text in the game's font). The frame-rate counter and the version are the application's, drawn over it as on every screen.
+/// Draws the current panel: the `sm_screen` background of the original (the 16:9 menu: the wide clay and frame instead), then the elements (banners, buttons and fields in the colours of the
+/// original's buttons and boxes, the ants of the seats, text in the game's font). The frame-rate counter and the version are the application's, drawn over it as on every screen.
 void render_start_menu(IRenderer& renderer, const assets::AssetArchive& archive, const StartMenu& menu);
 
 }  // namespace ants::app

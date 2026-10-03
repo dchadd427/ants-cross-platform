@@ -3,6 +3,7 @@
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/net_overlay.hpp"
+#include "ants_app/page_layout.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
@@ -505,7 +506,7 @@ bool Application::init(const ApplicationConfig& config) {
 
     renderer_->set_canvas_size(canvas_width_of(aspect_), canvas_height_of(aspect_));         // SDL's logical size: the picture that the window shows
     layout_ = ScreenLayout::with_size(canvas_width_of(aspect_), canvas_height_of(aspect_)); // the match screen is as big as the canvas (the original's own screen for 4:3, the wide frame for 16:9)
-    picture_ = picture_for_state();                                                          // the match screen is the whole canvas, the original's pages are its 640 x 480 picture, centred
+    picture_ = picture_for_state();                                                          // every screen is the whole canvas (a match of a smaller layout is centred in it)
     renderer_->set_picture(picture_);
     renderer_->set_layout(layout_);
     renderer_->set_level(current_level_);
@@ -744,25 +745,40 @@ void Application::set_layout(const ScreenLayout& layout) {
     hud_.set_layout(layout_);
 }
 
-// Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), and so is the setup screen and the room of a 960 x 540 canvas
-// (its own wide version), everything else is a page of the original's own 640 x 480 screen (the loading screen, the quick help, the results; the setup screen of another canvas), centred
+// Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), and so is every other screen: the setup screen and the room, the
+// loading screen, the quick help, the results and the start menu of a 960 x 540 canvas are composed for it (setup_layout.hpp, page_layout.hpp, results_layout.hpp, start_menu.hpp), and in the
+// 640 x 480 canvas the original's own pages are the whole canvas
 LayoutRect Application::picture_for_state() const {
     if (match_running()) return canvas().centred(layout_.width, layout_.height);
-    if (state_ == AppState::MapSelect && wide_setup()) return canvas().rect();            // the setup screen of a 960 x 540 canvas is composed for it (setup_layout.hpp)
-    return canvas().centred(ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight);
+    return canvas().rect();
 }
 
-// The setup screen has a wide version for the 16:9 canvas of 960 x 540 (and for no other size: any other canvas draws the original's page centred)
+// The setup screen has a wide version for the 16:9 canvas of 960 x 540 (and for no other size: any other canvas draws the original's page)
 bool Application::wide_setup() const {
     const CanvasLayout c = canvas();
     return SetupLayout::supports(c.width, c.height);
 }
 
-// The picture changes when the screen does (a match starts, the results open, the setup screen comes back). The pointer stays where it is on the canvas, so its coordinates, which are the
-// picture's own, move with the corner; a pointer that was beside the new picture (on the clay of a page, left of x = 160) is at the picture's nearest edge pixel, which is where the
-// original's one-monitor pointer is when it is pushed against an edge (pointer_clamp.hpp), and not outside the picture, where the cursor would vanish.
+// ... and so have the loading screen, the quick help at the start, the results and the start menu: the same canvas
+bool Application::wide_pages() const {
+    const CanvasLayout c = canvas();
+    return wide_pages_supported(c.width, c.height);
+}
+
+// The picture changes when the layout does (a match of another layout: the original's own 640 x 480 picture centred in a 960 x 540 canvas, a test hook; every screen is the whole canvas, so
+// no screen changes it). The pointer stays where it is on the canvas, so its coordinates, which are the picture's own, move with the corner; a pointer that was beside the new picture is at
+// the picture's nearest edge pixel, which is where the original's one-monitor pointer is when it is pushed against an edge (pointer_clamp.hpp), and not outside the picture, where the
+// cursor would vanish. The screens that have a wide version are told which version to be (the canvas decides: wide_pages).
 void Application::update_picture() {
     map_select_.set_wide_layout(wide_setup());                                              // (the screen is drawn and answers the pointer as its wide version when the canvas is 960 x 540)
+    const bool wide = wide_pages();
+    scorecard_.set_wide_layout(wide);                                                       // (so are the results, the start menu and the quick help's button: they stand where the wide pages put them)
+    start_menu_.set_wide_layout(wide);
+    if (wide != quick_help_wide_) {
+        quick_help_wide_ = wide;
+        const QuickHelpLayout& q = QuickHelpLayout::of(wide);
+        quick_help_start_ = ScreenButton(ButtonRect{q.start.x, q.start.y, q.start.w, q.start.h}, ButtonRect{q.start_pressed.x, q.start_pressed.y, q.start_pressed.w, q.start_pressed.h});
+    }
     const LayoutRect want = picture_for_state();
     if (want == picture_) return;
     mouse_screen_x_ = std::clamp(mouse_screen_x_ + picture_.x - want.x, 0, want.w - 1);
@@ -1154,7 +1170,7 @@ void Application::quit() {
 // The setup screen is created (again): its labels stay empty until its refresh, 500 ms later
 void Application::enter_map_select() {
     state_ = AppState::MapSelect;
-    update_picture();                                        // (a page of the original's: centred in the canvas)
+    update_picture();                                        // (the whole canvas, as every screen)
     closing_click_pending_ = false;                          // (close_quick_help() sets it after this call)
     map_select_.enter();
     // The new screen's buttons are fresh objects in the up state; the INPUT task of the original sends the pointer to the top window in the very input run that
@@ -1175,7 +1191,7 @@ void Application::finish_loading() {
 void Application::show_opening_screens() {
     if (hud_.is_quick_help_enabled()) {
         state_ = AppState::QuickHelp;
-        update_picture();                                    // (the quick help is a page of the original's, centred; the setup screen of a 960 x 540 canvas is not)
+        update_picture();                                    // (the quick help is the whole canvas too: its wide page, or the original's own page)
         quick_help_start_.reset();
         if (mouse_has_moved_ && !pointer_outside_) quick_help_start_.on_move(mouse_screen_x_, mouse_screen_y_);       // the pointer goes to the new window at once (see enter_map_select)
     } else {
@@ -1964,7 +1980,7 @@ void Application::check_match_over() {
     match_over_handled_ = true;
     const auto& world = sim_.get_world_state();
     scorecard_.show(world.match_result, local_player_id_);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
-    update_picture();                                            // the results are a page of the original's
+    update_picture();                                            // the results are the whole canvas (their wide page, or the original's own page)
     if (background_stepping_) pending_music_ = PendingMusic::Closed;     // (a hidden page changes no sound: the music closes when the page is shown)
     else close_music();                                          // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
     music_resume_on_activate_ = false;
@@ -1974,7 +1990,7 @@ void Application::check_match_over() {
 // Once per frame: a match that has ended without a tick of this application (a command, a drop-out) opens the results screen too; the screen's clock builds its
 // rows, and with them the one cue of the machine, 250 ms after it opened
 void Application::update_results(float dt) {
-    update_picture();                                            // (the results screen is a page of the original's, whoever opened it)
+    update_picture();                                            // (the results screen is the whole canvas, whoever opened it)
     if (state_ == AppState::Playing) check_match_over();
     if (!scorecard_.is_open()) return;
     scorecard_.update(dt);
@@ -2374,11 +2390,7 @@ void Application::render_frame() {
     renderer_->begin_frame();
     last_latency_layout_.reset();                        // (set again when this frame draws the network's readout)
     update_picture();
-    if (picture_ != canvas().rect()) {                   // a page of the original's own screen in a bigger canvas: the clay of its pages fills what is around it
-        renderer_->set_picture(canvas().rect());
-        renderer_->fill_rect(0, 0, renderer_->canvas_w(), renderer_->canvas_h(), kPageMargin);
-    }
-    renderer_->set_picture(picture_);                    // the screens are the picture (the match: the whole canvas; a page of the original's: centred in it)
+    renderer_->set_picture(picture_);                    // the screens are the picture (the whole canvas; a match of a smaller layout is centred in it)
 
     if (state_ == AppState::Loading) {
         render_loading_screen();
@@ -2557,42 +2569,12 @@ void Application::hold_music(bool hold) {
 }
 
 void Application::render_loading_screen() {
-    // 1. Fill the entire page (the original's 640x480 screen) with authentic solid orange #DB4B13
-    renderer_->fill_rect(0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight, ants::assets::ColorRGBA{219, 75, 19, 255});
-
-    // 2. Draw outer border frame tiles from antslogo sequence (excluding dclay tiles and content bitmaps)
-    const auto* seq = assets_.find_animation("antslogo");
-    if (seq && !seq->subitems.empty()) {
-        for (const auto& fr : seq->subitems[0].frames) {
-            // Exclude dclay48 (0), dclay96 (2), strip (160), credits (161), logo (162)
-            if (fr.sprite_index != 0 && fr.sprite_index != 2 &&
-                fr.sprite_index != 160 && fr.sprite_index != 161 && fr.sprite_index != 162) {
-                renderer_->draw_sprite(fr.sprite_index, fr.dx, fr.dy);
-            }
-        }
-    }
-
-    // 3. Draw authentic logo.bmp at (25, 23)
-    renderer_->draw_named_sprite("logo.bmp", 25, 23);
-
-    // 4. Draw credits.bmp at (32, 299)
-    renderer_->draw_named_sprite("credits.bmp", 32, 299);
-
-    // 5. Draw strip.bmp at (40, 315) on top of credits to authentically mask the subtitle line
-    renderer_->draw_named_sprite("strip.bmp", 40, 315);
-
-    // 6. Loading progress bar inside designated indicator slot at x=229, y=448, w=234, h=8 in authentic #1F1733
-    int32_t fill_w = std::min(234, static_cast<int32_t>((intro_ticks_ * 234) / 25));
-    if (fill_w > 0) {
-        renderer_->fill_rect(229, 448, fill_w, 8, ants::assets::ColorRGBA{31, 23, 51, 255});
-    }
+    draw_loading_screen(*renderer_, assets_, wide_pages(), static_cast<int32_t>(intro_ticks_));       // (page_layout.hpp: the original's page, or the wide one)
 }
 
 void Application::render_quick_help_screen() {
-    // qh_screen composite (last part first) and the START button animations qh_start1 / qh_start2 (hover) / qh_start3
-    // (pressed) with absolute coordinates
-    draw_animation_frame0(*renderer_, assets_, "qh_screen");
-    draw_animation_frame0(*renderer_, assets_, quick_help_start_.pressed() ? "qh_start3" : (quick_help_start_.hovered() ? "qh_start2" : "qh_start1"));
+    // qh_screen and the START button animations qh_start1 / qh_start2 (hover) / qh_start3 (pressed): the original's page, or the wide one (page_layout.hpp)
+    draw_quick_help_screen(*renderer_, assets_, wide_pages(), quick_help_start_.pressed() ? QuickHelpStart::Pressed : (quick_help_start_.hovered() ? QuickHelpStart::Hover : QuickHelpStart::Up));
 }
 
 // The pointer is one global in the original (GetCursorPos): every screen's events record it, and the next screen replays it into its buttons

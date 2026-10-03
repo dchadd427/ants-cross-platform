@@ -2014,8 +2014,9 @@ void run_leader_tests() {
         ASSERT_EQ(app.sim().roster_mask(), 0x03);
     } TEST_END();
 
-    // The same at 16:9: the setup screen is the wide screen (the whole 960 x 540 canvas, the headless window is that size: a window point is a canvas point). The quick help is a centred page, its
-    // START! at the canvas point (740, 480); the leader's START of the wide screen is at (846 .. 944, 499 .. 526) and does not lie under it.
+    // The same at 16:9: the setup screen is the wide screen (the whole 960 x 540 canvas, the headless window is that size: a window point is a canvas point). The quick help is the wide page too:
+    // its START! is anchored to the bottom right corner, (849 .. 947, 497 .. 524), and so lies over the leader's START of the wide screen, (846 .. 944, 499 .. 526), 3 px right and 2 px up as the
+    // original's own two buttons do (the quick help was a centred page here, with its START! at (740, 480), clear of the leader's START: the closing click is now a click ON that START).
     const auto wide_button = [](Uint32 type, int32_t x, int32_t y, Uint8 clicks) {
         SDL_Event e{};
         e.type = type;
@@ -2051,14 +2052,16 @@ void run_leader_tests() {
         app.finish_loading();
         app.run_frame_with_delta(0.001f);
         ASSERT_EQ(app.state(), AppState::QuickHelp);
-        ASSERT_TRUE(app.picture() == LayoutRect({160, 30, 640, 480}));              // (the quick help is a page)
-        wide_button(SDL_MOUSEBUTTONDOWN, 740, 480, 1);                              // the click on START! of the quick help
-        wide_button(SDL_MOUSEBUTTONUP, 740, 480, 1);
+        ASSERT_TRUE(app.picture() == LayoutRect({0, 0, 960, 540}));                 // (the quick help is the whole canvas: its wide page)
+        ASSERT_TRUE(app.quick_help_start_button().up_rect() == ButtonRect({849, 497, 98, 27}));
+        wide_button(SDL_MOUSEBUTTONDOWN, 895, 510, 1);                              // the click on START! of the quick help (in the bottom right corner)
+        wide_button(SDL_MOUSEBUTTONUP, 895, 510, 1);
         app.run_frame_with_delta(0.001f);
         ASSERT_EQ(app.state(), AppState::MapSelect);
         ASSERT_TRUE(app.picture() == LayoutRect({0, 0, 960, 540}));
         ASSERT_TRUE(app.closing_click_pending());
-        ASSERT_FALSE(app.map_select().start_button().hovered());                    // (the pointer is at (740, 480), nowhere near the wide START)
+        ASSERT_TRUE(app.map_select().start_button().hovered());                     // (the pointer is where the click was, over the wide START: a hover, nothing pressed)
+        ASSERT_FALSE(app.map_select().start_button().pressed());
         wide_button(SDL_MOUSEBUTTONDOWN, 895, 512, 1);                              // a quick click on the wide START: the rest of the gesture (within the double-click time), swallowed
         wide_button(SDL_MOUSEBUTTONUP, 895, 512, 1);
         app.run_frame_with_delta(0.001f);
