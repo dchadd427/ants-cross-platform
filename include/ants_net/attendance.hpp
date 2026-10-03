@@ -55,6 +55,14 @@
 // count toward the cap, nor toward a catch-up), and a seat that is lost during it cancels it (the pause rules apply, a new countdown follows that pause). A pause that is shorter (a blip) resumes
 // at once. resume_countdown_ms 0: no countdown.
 //
+// A RESTART OF THE SERVER (seat_restored; docs/NETWORK_PORT.md "Restart records"). A match that was brought back from its restart record has every seat of a person ABSENT from the moment it was
+// restored: the match is paused until the players come back, exactly as for a lost link, with two differences that are the point of a restart: the absence is nobody's fault, so (1) the vote about
+// such a seat opens only after restart_vote_after_ms (90 s by default, not the 30 s of a lost link: every player of the room has to notice the loss, wait for the server, reconnect and catch up, a
+// hidden browser tab wakes up late, and the first player who is back must not be able to vote out the neighbour who is a few seconds behind), and (2) the absence is EXCUSED: when the seat is back
+// it adds nothing to its away time, and it is no loss for the flapping rule, so a later loss of the same link is judged as if it was the seat's first. Everything else is as for any absent seat: the
+// key holder's budgets, the vote once it is open, and above all the cap: the restart's pause counts toward the match's total paused time (max_pause_ms), at the cap every seat that is not
+// present is dropped, and a room whose players never come back ends "everybody left" by that rule. A seat that had been dropped before the restart is Dropped again (final).
+//
 // All times are 32-bit milliseconds of the host's clock (clock.hpp: it wraps after 49.7 days): they are only ever used as DIFFERENCES, and a reading that is older than the event it is
 // compared with counts as no time. Every time that is stored is taken from the clock when the event happens, never left at 0.
 
@@ -82,11 +90,13 @@ inline constexpr uint32_t kFlapLosses = 3;                  // a seat that is lo
 inline constexpr uint32_t kFlapWindowMs = 60000;
 inline constexpr uint32_t kResumeCountdownMs = 10000;       // the match is held this long after a pause before it goes on (a room's default) ...
 inline constexpr uint32_t kResumeMinPauseMs = 3000;         // ... if the pause lasted at least this long
+inline constexpr uint32_t kRestartVoteAfterMs = 90000;      // after a restart of the server the others may vote on a seat that has not come back once it has been away this long (seat_restored)
 
 class Attendance {
 public:
     struct Config {
         uint32_t vote_after_ms = kVoteAfterMs;
+        uint32_t restart_vote_after_ms = kRestartVoteAfterMs;   // the same for a seat whose absence is a restart's (seat_restored): longer, a restart is nobody's fault
         uint32_t catch_up_stall_ms = kCatchUpStallMs;
         uint32_t min_absence_ms = kMinAbsenceMs;
         uint32_t max_pause_ms = kMaxPauseMs;
@@ -118,6 +128,11 @@ public:
 
     /// The match begins at `now_ms`: the seats of persons (bit s of `mask`: not a bot, not an empty seat) take their places, all present. Forgets everything that was before.
     void seat_humans(uint8_t mask, uint32_t now_ms);
+    /// The match is brought back after a restart of the server (see the head of this file): the seats of `humans` (bit s: a person's seat of the match) take their places; those in `dropped`
+    /// are Dropped (they left or were dropped before the restart: final, and no drop of this run: the counters stay 0), every other one is Absent from `now_ms` on with an EXCUSED absence:
+    /// the match is paused (the pause begins now), the vote about such a seat opens after Config::restart_vote_after_ms of absence, and when the seat is back its absence adds nothing to its away
+    /// time. The seat is no loss for the flapping rule. Forgets everything that was before, like seat_humans.
+    void seat_restored(uint8_t humans, uint8_t dropped, uint32_t now_ms);
     State state(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS ? seats_[seat].state : State::Empty; }
 
     /// A present seat's connection is lost: it is absent from now on, and the match is paused (the pause begins now when no other seat was away). False unless the seat was Present.
@@ -222,12 +237,14 @@ private:
         std::array<uint32_t, kMaxFlapLosses> losses{};  // when the seat was lost last, newest first (losses_n of them are valid)
         uint8_t losses_n{0};
         bool flap{false};                               // the seat flaps (and the vote about it is open until it stops)
+        bool excused{false};                            // the absence that goes on is a restart's (seat_restored): a longer wait before the vote, and it adds nothing to the away time
         std::vector<uint32_t> attempts;                 // when the Hellos that were accepted in the last rejoin_window_ms were
         std::vector<Charge> charges;                    // the bytes that were streamed to the seat in the last stream_window_ms (in groups of at most a minute)
     };
     static Config clamped(Config c) noexcept;
     void note_loss(Seat& s, uint32_t now_ms) noexcept;
     static bool away_state(State s) noexcept { return s == State::Absent || s == State::CatchingUp; }
+    bool vote_time_reached(const Seat& s, uint8_t seat, uint32_t now_ms) const noexcept;       // an Absent seat has been away long enough to be put to the vote (its restart's grace, when its absence is excused)
     void clear_votes(uint8_t seat, bool keep_about) noexcept;   // the votes the seat cast, and (not with keep_about) the votes about it
     void settle_pause(bool was_paused, uint32_t now_ms) noexcept;
     void drop_seat(uint8_t seat, uint32_t now_ms);

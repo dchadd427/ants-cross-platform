@@ -9714,6 +9714,412 @@ void run_protocol12_tests() {
     } TEST_END();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Restart records, the session's part (docs/NETWORK_PORT.md "Restart records"): the attendance of a match that was brought back after a restart of the server, the hooks that the record
+// is written from, and a host that is restored from the turns of its predecessor
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// The start message of a HoldMatch (what a machine that starts from nothing is sent first)
+StartMsg start_of_hold(const HoldMatch& m) {
+    StartMsg start;
+    start.seed = m.seed;
+    start.map_name = "TEST.LVL";
+    start.roster = static_cast<uint8_t>((1u << m.seats) - 1u);
+    for (uint8_t p = 0; p < m.seats; ++p) start.names[p] = "Seat " + std::to_string(p);
+    return start;
+}
+
+void run_restart_tests() {
+    TEST_CASE("N2.95 Attendance After A Restart Of The Server: Every Seat Of A Person Is Absent (Excused) From The Moment The Match Is Restored, The Seats That Were Dropped Stay Dropped; The Vote Opens After The Restart's Wait (90 s), Not A Lost Link's 30 s, And Nobody Can Win It While Nobody Is There; An Excused Absence Adds Nothing To The Away Time And Is No Loss For The Flapping Rule; The Pause Counts Toward The Cap And The Countdown Follows It; The Same Decisions From Four Clocks") {
+        const uint32_t origins[] = {0u, 123456u, 0x7FFFF000u, 0xFFFFF000u};              // (the clock wraps after 49.7 days: a restart's clock starts at 0, a long-lived server's is anywhere)
+        for (const uint32_t t0 : origins) {
+            Attendance::Config c;
+            c.vote_after_ms = 30000;
+            c.restart_vote_after_ms = 90000;
+            c.max_pause_ms = 400000;
+            c.resume_countdown_ms = 10000;
+            Attendance a(c);
+            a.seat_restored(0x0F, 0x08, t0);                                              // four persons, seat 3 had been dropped before the restart
+            ASSERT_TRUE(a.state(0) == Attendance::State::Absent && a.state(1) == Attendance::State::Absent && a.state(2) == Attendance::State::Absent);
+            ASSERT_EQ(a.state(3), Attendance::State::Dropped);
+            ASSERT_TRUE(a.paused() && !a.counting_down(t0));
+            ASSERT_TRUE(a.drops_by_vote() == 0 && a.drops_by_cap() == 0 && a.rejoins() == 0 && a.rejoins_refused() == 0);          // (a seat dropped before the restart is no drop of this run)
+            for (uint8_t seat = 0; seat < 3; ++seat) ASSERT_FALSE(a.flapping(seat, t0 + 1000));                                       // (no seat has lost its link: the restart is nobody's loss)
+            // the vote: a restart's wait, not a lost link's
+            ASSERT_EQ(a.vote_subject(t0 + 30000), 255);
+            ASSERT_EQ(a.vote_subject(t0 + 89999), 255);
+            ASSERT_EQ(a.vote_subject(t0 + 90000), 0);                                     // (of a tie the lowest seat)
+            ASSERT_TRUE(a.update(t0 + 95000).empty());                                    // nobody is there to vote: more than half of nobody is not a majority
+            ASSERT_EQ(a.connected_humans(0), 0);
+            // a control: a seat whose link is LOST is put to the vote at 30 s
+            Attendance control(c);
+            control.seat_humans(0x07, t0);
+            ASSERT_TRUE(control.lost(0, t0 + 1000));
+            ASSERT_EQ(control.vote_subject(t0 + 1000 + 29999), 255);
+            ASSERT_EQ(control.vote_subject(t0 + 1000 + 30000), 0);
+            // the pause counts as any pause does, and the presence tells it
+            const PresenceMsg p = a.presence_for(255, t0 + 30000);
+            ASSERT_EQ(p.missing.size(), size_t{3});
+            ASSERT_TRUE(p.missing[0].seat == 0 && p.missing[1].seat == 1 && p.missing[2].seat == 2 && p.missing[0].waited_s == 30 && p.missing[0].state == PresenceMsg::State::Absent);
+            ASSERT_TRUE(p.vote_seat == 255 && p.voters == 0 && p.cap_s == 370 && p.resume_s == 0);
+            PresenceMsg decoded;
+            ASSERT_TRUE(decode(encode(p), decoded) && decoded.missing.size() == 3 && decoded.cap_s == 370);                           // (the message is one that the decoder accepts)
+            ASSERT_EQ(a.pause_ms(t0 + 30000), 30000u);
+            // a seat comes back: its absence adds nothing to its away time, and a loss that follows is judged as the seat's first (30 s, no flapping)
+            ASSERT_TRUE(a.returning(0, t0 + 20000));
+            ASSERT_EQ(a.state(0), Attendance::State::CatchingUp);
+            ASSERT_TRUE(a.caught_up(0, t0 + 22000));
+            ASSERT_EQ(a.state(0), Attendance::State::Present);
+            ASSERT_EQ(a.away_ms(0, t0 + 25000), 0u);                                      // (an absence of 22 s that the seat was not to blame for)
+            ASSERT_TRUE(a.paused());                                                      // (seats 1 and 2 are still away)
+            ASSERT_TRUE(a.lost(0, t0 + 40000));
+            ASSERT_FALSE(a.flapping(0, t0 + 40000));
+            ASSERT_EQ(a.vote_subject(t0 + 69999), 255);                                   // 30 s after ITS loss, not 30 s of total away time (and the others wait for their 90 s)
+            ASSERT_EQ(a.vote_subject(t0 + 70000), 0);
+            ASSERT_EQ(a.away_ms(0, t0 + 70000), 30000u);
+            ASSERT_EQ(a.vote_subject(t0 + 90000), 1);                                     // (at 90 s the restart's seats are due too, and they have been away longer than seat 0's 50 s: the longest total is the subject, of a tie the lowest seat)
+            // the flapping rule: the restart is no loss, so three real losses are needed
+            Attendance f(c);
+            f.seat_restored(0x03, 0, t0);
+            ASSERT_TRUE(f.returning(0, t0 + 5000) && f.caught_up(0, t0 + 6000));
+            ASSERT_TRUE(f.lost(0, t0 + 10000));
+            ASSERT_TRUE(f.returning(0, t0 + 11000) && f.caught_up(0, t0 + 12000));
+            ASSERT_TRUE(f.lost(0, t0 + 14000));
+            ASSERT_FALSE(f.flapping(0, t0 + 14500));                                      // two losses: if the restart counted as one this would be the third
+            ASSERT_TRUE(f.returning(0, t0 + 15000) && f.caught_up(0, t0 + 16000));
+            ASSERT_TRUE(f.lost(0, t0 + 18000));
+            ASSERT_TRUE(f.flapping(0, t0 + 18500));                                       // the third real loss within a minute
+            // the cap: the restart's pause counts toward the match's total pause, and at the cap every seat that is not present is dropped
+            Attendance k(c);
+            k.seat_restored(0x07, 0, t0);
+            ASSERT_TRUE(k.update(t0 + 399999).empty());
+            ASSERT_EQ(k.cap_left_ms(t0 + 399999), 1u);
+            const std::vector<uint8_t> dropped = k.update(t0 + 400000);
+            ASSERT_EQ(dropped.size(), size_t{3});
+            ASSERT_TRUE(k.drops_by_cap() == 3 && k.drops_by_vote() == 0 && !k.paused());
+            ASSERT_TRUE(k.state(0) == Attendance::State::Dropped && k.state(1) == Attendance::State::Dropped && k.state(2) == Attendance::State::Dropped);
+            // the countdown that follows a pause of 3 s or more: when the last seat is back
+            Attendance r(c);
+            r.seat_restored(0x03, 0, t0);
+            ASSERT_TRUE(r.returning(0, t0 + 5000) && r.caught_up(0, t0 + 6000));
+            ASSERT_TRUE(r.paused());
+            ASSERT_TRUE(r.returning(1, t0 + 7000) && r.caught_up(1, t0 + 8000));
+            ASSERT_FALSE(r.paused());
+            ASSERT_TRUE(r.counting_down(t0 + 8000) && r.resume_s(t0 + 8000) == 10);
+            ASSERT_FALSE(r.counting_down(t0 + 18000));
+            // a seat that was dropped before the restart cannot come back: its key is told "dropped", nothing is counted against it
+            ASSERT_FALSE(a.returning(3, t0 + 1000));
+            ASSERT_EQ(a.rejoins_refused(), 0u);
+            ASSERT_FALSE(a.dropped(3, t0 + 2000));
+            // nothing to hold: no persons, or only seats that were dropped: nobody is waited for
+            Attendance none(c);
+            none.seat_restored(0, 0, t0);
+            ASSERT_FALSE(none.paused());
+            Attendance gone(c);
+            gone.seat_restored(0x03, 0x03, t0);
+            ASSERT_FALSE(gone.paused());
+            ASSERT_TRUE(gone.state(0) == Attendance::State::Dropped && gone.state(1) == Attendance::State::Dropped && gone.update(t0 + 1000000).empty());
+        }
+        // the restart's wait is a setting like the others: shorter than a lost link's it is still what it says (the room never sets less than its own: Room::build_session)
+        Attendance::Config quick;
+        quick.vote_after_ms = 30000;
+        quick.restart_vote_after_ms = 5000;
+        Attendance q(quick);
+        q.seat_restored(0x03, 0, 1000);
+        ASSERT_TRUE(q.vote_subject(5999) == 255 && q.vote_subject(6000) == 0);
+        ASSERT_EQ(kRestartVoteAfterMs, 90000u);                                            // the default: 90 s
+    } TEST_END();
+
+    TEST_CASE("N2.96 A Host Restored From The Sealed Turns Of Its Predecessor: The Restored Engine Has The State Hash The Uninterrupted One Had At The Restored Tick And At Every Later Tick When The Same Turns Follow; The Log Holds The Same Bytes; Every Seat Is Absent And The Match Is Paused; The Three Machines (Still In Memory, Their Links Gone) Come Back Through The Door With Their Keys, Are Compared With The Referee At The Restored Tick And The Match Goes On To The Same State Everywhere") {
+        HoldMatch m(3);
+        std::vector<TurnMsg> turns;
+        std::vector<std::pair<uint32_t, uint64_t>> checks;                              // the referee's own hash after every 20th turn, as the record would hold it
+        std::map<uint64_t, uint64_t> tick_hash;                                         // the referee's state after every tick of the uninterrupted match
+        m.host->set_on_seal([&](const TurnMsg& t) { turns.push_back(t); });
+        m.host->set_on_referee_hash([&](uint32_t turn, const sim::StateHash& h) { checks.emplace_back(turn, h.total); });
+        m.host->runner().set_on_tick([&]() { tick_hash[m.referee.current_tick()] = m.referee.state_hash().total; });
+        m.run(45000);                                                                   // 45 s of play: 900 turns, every kind of command (the script)
+        ASSERT_TRUE(turns.size() >= 880);
+        for (size_t i = 0; i < turns.size(); ++i) ASSERT_EQ(turns[i].turn, static_cast<uint32_t>(i));       // (the hook saw every turn once, in order)
+        ASSERT_TRUE(checks.size() >= 43);
+        for (size_t i = 0; i < checks.size(); ++i) ASSERT_EQ(checks[i].first, static_cast<uint32_t>(i * kHashEveryTurns + kHashEveryTurns - 1));     // (turn 19, 39, 59, ...)
+        std::vector<uint8_t> original_log;
+        for (uint32_t at = 0; at < m.host->log().turns();) {
+            const uint32_t got = m.host->log().read(at, 4096, 1u << 30, original_log);
+            ASSERT_TRUE(got > 0);
+            at += got;
+        }
+        ASSERT_EQ(m.host->log().turns(), static_cast<uint32_t>(turns.size()));
+        const uint64_t executed = m.referee.current_tick();                             // the referee runs a turn or two behind the sealing
+        ASSERT_TRUE(executed >= turns.size() - 4 && executed <= turns.size());
+        ASSERT_TRUE(tick_hash.count(executed) == 1);
+        // ---- the restored engine: the first `executed` turns, then one at a time ----------------------------------------------------------------------------------
+        {
+            sim::SimulationEngine b;
+            build_world(b, m.seed, m.match_ms);
+            HostSession hb(b, m.host_cfg);
+            hb.set_seat_keys(m.keys);
+            hb.set_rejoin_start(start_of_hold(m));
+            for (uint64_t i = 0; i < executed; ++i) ASSERT_TRUE(hb.restore_turn(turns[static_cast<size_t>(i)]));
+            ASSERT_EQ(hb.restored_turns(), static_cast<uint32_t>(executed));
+            ASSERT_EQ(hb.runner().fast_forward(static_cast<uint32_t>(hb.runner().queued())), static_cast<uint32_t>(executed));
+            ASSERT_TRUE(hb.runner().at_boundary() && hb.runner().queued() == 0 && hb.runner().next_turn_to_execute() == static_cast<uint32_t>(executed));
+            ASSERT_EQ(b.current_tick(), executed);
+            ASSERT_EQ(b.state_hash().total, tick_hash[executed]);                       // THE restored tick: the same state, hash for hash
+            for (uint64_t i = executed; i < turns.size(); ++i) {                        // and every tick after it, when the same turns follow
+                ASSERT_TRUE(hb.restore_turn(turns[static_cast<size_t>(i)]));
+                ASSERT_EQ(hb.runner().fast_forward(1), 1u);
+                const uint64_t tick = b.current_tick();
+                ASSERT_EQ(tick, i + 1);
+                if (tick_hash.count(tick) == 1) ASSERT_EQ(b.state_hash().total, tick_hash[tick]);
+            }
+            // the log is the match: the same bytes in the same order
+            std::vector<uint8_t> restored_log;
+            for (uint32_t at = 0; at < hb.log().turns();) {
+                const uint32_t got = hb.log().read(at, 4096, 1u << 30, restored_log);
+                ASSERT_TRUE(got > 0);
+                at += got;
+            }
+            ASSERT_EQ(hb.log().turns(), m.host->log().turns());
+            ASSERT_TRUE(restored_log == original_log);
+            // the replay of the first run's checkpoints agrees as well (the turns of 20 are a boundary of the replay: the room verifies exactly this)
+            {
+                sim::SimulationEngine c;
+                build_world(c, m.seed, m.match_ms);
+                HostSession hc(c, m.host_cfg);
+                size_t next_check = 0;
+                for (const TurnMsg& t : turns) {
+                    ASSERT_TRUE(hc.restore_turn(t));
+                    if ((t.turn + 1) % kHashEveryTurns != 0) continue;
+                    hc.runner().fast_forward(static_cast<uint32_t>(hc.runner().queued()));
+                    ASSERT_TRUE(next_check < checks.size() && checks[next_check].first == t.turn);
+                    ASSERT_EQ(c.state_hash().total, checks[next_check].second);
+                    ++next_check;
+                }
+            }
+            // begins the match: nothing is sealed, every seat is held
+            hb.start_restored(5000, 0x07, 0x00);
+            ASSERT_TRUE(hb.paused());
+            ASSERT_EQ(hb.turns_sealed(), static_cast<uint32_t>(turns.size()));
+            for (uint8_t seat = 0; seat < 3; ++seat) ASSERT_TRUE(hb.attendance().state(seat) == Attendance::State::Absent && hb.seat_held(seat) && !hb.client_present(seat));
+            hb.update(6000);
+            hb.update(60000);
+            ASSERT_EQ(hb.turns_sealed(), static_cast<uint32_t>(turns.size()));          // paused: nothing is sealed, however long it waits
+            ASSERT_TRUE(hb.desyncs().empty());
+        }
+        // ---- the machines come back: the same rig, its host replaced by one that was restored ---------------------------------------------------------------------
+        for (uint8_t seat = 0; seat < 3; ++seat) {
+            m.auto_reconnect[seat] = false;
+            m.cut(seat);                                                                // the old server is gone: every link is cut
+        }
+        m.host.reset();
+        const StartMsg start = start_of_hold(m);
+        build_world(m.referee, m.seed, m.match_ms);                                     // a fresh engine, the same object
+        m.host = std::make_unique<HostSession>(m.referee, m.host_cfg);
+        m.host->set_seat_keys(m.keys);
+        m.host->set_rejoin_start(start);
+        for (size_t i = 0; i < turns.size(); ++i) {
+            ASSERT_TRUE(m.host->restore_turn(turns[i]));
+            if ((i + 1) % kHashEveryTurns == 0) m.host->runner().fast_forward(static_cast<uint32_t>(m.host->runner().queued()));
+        }
+        m.host->runner().fast_forward(static_cast<uint32_t>(m.host->runner().queued()));
+        m.host->start_restored(m.now, 0x07, 0x00);
+        const uint32_t sealed_at_restore = m.sealed();
+        ASSERT_EQ(sealed_at_restore, static_cast<uint32_t>(turns.size()));
+        m.run(2000, false);
+        ASSERT_TRUE(m.host->paused() && m.sealed() == sealed_at_restore);               // the machines have no link yet (they are told to wait)
+        for (uint8_t seat = 0; seat < 3; ++seat) ASSERT_EQ(static_cast<int>(m.clients[seat]->mode()), static_cast<int>(ClientSession::Mode::Reconnecting));
+        for (uint8_t seat = 0; seat < 3; ++seat) m.auto_reconnect[seat] = true;
+        ASSERT_TRUE(m.until([&]() { return !m.host->paused(); }, 20000));               // all three said Hello with their keys, were given what they lacked and agreed with the referee at the restored tick
+        ASSERT_EQ(m.host->attendance().rejoins(), 3u);
+        for (uint8_t seat = 0; seat < 3; ++seat) ASSERT_TRUE(m.host->client_present(seat) && m.host->attendance().state(seat) == Attendance::State::Present);
+        m.run(15000);
+        ASSERT_TRUE(m.sealed() > sealed_at_restore + 200);                              // the match goes on (the schedule did not burst)
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        for (auto& c : m.clients) ASSERT_FALSE(c->desynced() || c->lost());
+        ASSERT_TRUE(m.all_equal());                                                     // the restored referee and the three machines: one state
+        ASSERT_EQ(m.host->attendance().drops_by_cap() + m.host->attendance().drops_by_vote(), 0u);
+    } TEST_END();
+
+    TEST_CASE("N2.97 The Hooks That The Record Is Written From: set_on_seal Runs For Every Turn, In Order, Once, After The Turn Is In The Log And BEFORE Any Client Has Been Sent It (A Process That Dies At Any Moment Leaves No Client With A Turn That The Record Lacks); It Runs For A Host That Does Not Hold Seats Too; set_on_referee_hash Runs For Turns 19, 39, ... With The Referee's Own State After That Turn, And Only For A Host Without A Seat") {
+        {   // a host that holds seats: the log has the turn, the clients have not been sent it yet
+            HoldMatch m(3);
+            std::vector<uint32_t> seen;
+            uint32_t late_in_log = 0;
+            uint32_t early_sends = 0;
+            m.host->set_on_seal([&](const TurnMsg& t) {
+                seen.push_back(t.turn);
+                if (m.host->log().turns() != t.turn + 1) ++late_in_log;                  // the log has this turn already (the hook is called after the append) ...
+                for (uint8_t p = 0; p < 3; ++p) {
+                    if (m.taps[p] && m.taps[p]->sent_of(MsgType::Turn) > t.turn) ++early_sends;      // ... and the turn has not been sent to anybody (the taps count the Turn messages that they were given)
+                }
+            });
+            std::map<uint64_t, uint64_t> tick_hash;
+            std::vector<std::pair<uint32_t, uint64_t>> hashes;
+            m.host->runner().set_on_tick([&]() { tick_hash[m.referee.current_tick()] = m.referee.state_hash().total; });
+            m.host->set_on_referee_hash([&](uint32_t turn, const sim::StateHash& h) { hashes.emplace_back(turn, h.total); });
+            m.run(30000);
+            ASSERT_TRUE(seen.size() >= 580);
+            for (size_t i = 0; i < seen.size(); ++i) ASSERT_EQ(seen[i], static_cast<uint32_t>(i));
+            ASSERT_EQ(seen.size(), static_cast<size_t>(m.sealed()));                     // once for every sealed turn
+            ASSERT_EQ(late_in_log, 0u);
+            ASSERT_EQ(early_sends, 0u);
+            ASSERT_TRUE(m.taps[0]->sent_of(MsgType::Turn) >= 580);                       // (the clients were sent the turns, of course: after the hook)
+            ASSERT_TRUE(hashes.size() >= 28);
+            for (size_t i = 0; i < hashes.size(); ++i) {
+                ASSERT_EQ(hashes[i].first, static_cast<uint32_t>(i * kHashEveryTurns + kHashEveryTurns - 1));
+                ASSERT_TRUE(tick_hash.count(hashes[i].first + 1) == 1);
+                ASSERT_EQ(hashes[i].second, tick_hash[hashes[i].first + 1]);             // the state after that turn: the hash that the runner took when it ran it, not the engine's state at the time of the call
+            }
+        }
+        {   // a host that does not hold seats: the seal hook still runs (the record is the room's business, not the log's), and it still has no log
+            HoldOptions o;
+            o.hold = false;
+            HoldMatch m(3, o);
+            uint32_t count = 0;
+            m.host->set_on_seal([&](const TurnMsg& t) { count += t.turn == count ? 1u : 0u; });
+            m.run(4000);
+            ASSERT_TRUE(count >= 75 && count == m.sealed());
+            ASSERT_EQ(m.host->log().turns(), 0u);
+        }
+        {   // a host with a seat reports its hashes through the sequencer like everybody and has no referee hook
+            Match m(1, 3, {30, 10});
+            uint32_t sealed = 0;
+            uint32_t referee_calls = 0;
+            m.host->set_on_seal([&](const TurnMsg& t) { sealed += t.turn == sealed ? 1u : 0u; });
+            m.host->set_on_referee_hash([&](uint32_t, const sim::StateHash&) { ++referee_calls; });
+            m.run(6000);
+            ASSERT_TRUE(sealed >= 115 && sealed == m.host->turns_sealed());
+            ASSERT_EQ(referee_calls, 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.98 What A Restored Host Refuses: A Session That Holds No Seats, A Turn That Is Not The Next, A Turn After start_restored, A Log That Cannot Hold The Match (Its Own Limit Or The Server's Budget); A Seat Without A Key Is Dropped At The Restart (Nobody Could Come Back To It) And Its Drop Is Sealed After The Pause; A Match Restored With No Turns (The Seconds Before Its First Turn) Waits For Its Players And Begins At Turn 0 Without Any Command Of The Pre-Start")  {
+        {
+            sim::SimulationEngine e;
+            build_world(e, 1);
+            HostSession::Config hc;
+            hc.host_player = kNoSeat;
+            hc.hold_seats = false;
+            HostSession h(e, hc);
+            ASSERT_FALSE(h.restore_turn(TurnMsg{}));                                      // a room that holds no seats has no log to hold the match in
+        }
+        {
+            sim::SimulationEngine e;
+            build_world(e, 1);
+            HostSession::Config hc;
+            hc.host_player = kNoSeat;
+            hc.hold_seats = true;
+            HostSession h(e, hc);
+            std::array<SeatKey, sim::MAX_PLAYERS> keys{};
+            keys[0] = key_with(1);
+            keys[1] = key_with(2);
+            h.set_seat_keys(keys);
+            TurnMsg t0;
+            t0.turn = 0;
+            TurnMsg t1;
+            t1.turn = 1;
+            ASSERT_FALSE(h.restore_turn(t1));                                             // not the next one
+            ASSERT_TRUE(h.restore_turn(t0));
+            ASSERT_FALSE(h.restore_turn(t0));                                             // a repeat
+            ASSERT_TRUE(h.restore_turn(t1));
+            ASSERT_EQ(h.restored_turns(), 2u);
+            h.runner().fast_forward(2);
+            h.start_restored(1000, 0x03, 0x00);
+            TurnMsg t2;
+            t2.turn = 2;
+            ASSERT_FALSE(h.restore_turn(t2));                                             // the match has begun
+            h.start_restored(2000, 0x03, 0x00);                                           // (a second start changes nothing)
+            ASSERT_TRUE(h.attendance().state(0) == Attendance::State::Absent && h.turns_sealed() == 2u);
+        }
+        {   // the log's own limit (its first allocation is 1.5 KB: a limit of 1 KB holds a few empty turns only) and the server's budget
+            sim::SimulationEngine e;
+            build_world(e, 1);
+            HostSession::Config hc;
+            hc.host_player = kNoSeat;
+            hc.hold_seats = true;
+            hc.max_log_bytes = 1024;
+            HostSession h(e, hc);
+            uint32_t taken = 0;
+            for (uint32_t i = 0; i < 400; ++i) {
+                TurnMsg t;
+                t.turn = i;
+                if (!h.restore_turn(t)) break;
+                ++taken;
+            }
+            ASSERT_TRUE(taken > 100 && taken < 400);                                      // refused when the log is full: the match does not fit
+            LogBudget budget(1000);                                                       // a budget of less than the first allocation keeps no log at all
+            sim::SimulationEngine e2;
+            build_world(e2, 1);
+            hc.max_log_bytes = TurnLog::kDefaultMaxBytes;
+            hc.log_budget = &budget;
+            HostSession h2(e2, hc);
+            ASSERT_FALSE(h2.restore_turn(TurnMsg{}));
+            ASSERT_EQ(budget.used(), 0u);
+        }
+        {   // a seat without a key (the maker failed for it): nobody can come back to it, so it is dropped, at the restart, and its Drop is sealed in the first turn after the pause
+            HoldMatch m(3);
+            std::vector<TurnMsg> turns;
+            m.host->set_on_seal([&](const TurnMsg& t) { turns.push_back(t); });
+            m.run(8000);
+            for (uint8_t seat = 0; seat < 3; ++seat) {
+                m.auto_reconnect[seat] = false;
+                m.cut(seat);
+            }
+            m.host.reset();
+            build_world(m.referee, m.seed, m.match_ms);
+            m.host = std::make_unique<HostSession>(m.referee, m.host_cfg);
+            std::array<SeatKey, sim::MAX_PLAYERS> keys = m.keys;
+            keys[1] = SeatKey{};                                                          // seat 1 never got a key
+            m.host->set_seat_keys(keys);
+            m.host->set_rejoin_start(start_of_hold(m));
+            for (const TurnMsg& t : turns) ASSERT_TRUE(m.host->restore_turn(t));
+            m.host->runner().fast_forward(static_cast<uint32_t>(m.host->runner().queued()));
+            m.host->start_restored(m.now, 0x07, 0x00);
+            ASSERT_EQ(m.host->attendance().state(1), Attendance::State::Dropped);         // (nobody could come back to it)
+            ASSERT_TRUE(m.host->attendance().state(0) == Attendance::State::Absent && m.host->attendance().state(2) == Attendance::State::Absent);
+            ASSERT_TRUE(m.host->paused());
+            for (uint8_t seat : {uint8_t{0}, uint8_t{2}}) m.auto_reconnect[seat] = true;
+            ASSERT_TRUE(m.until([&]() { return !m.host->paused(); }, 20000));
+            m.run(6000);
+            m.settle();
+            ASSERT_TRUE(m.referee.is_player_dropped(1) && !m.referee.is_player_dropped(0) && !m.referee.is_player_dropped(2));       // its Drop was sealed after the pause, on every machine
+            ASSERT_TRUE(m.sims[0]->is_player_dropped(1) && m.sims[2]->is_player_dropped(1));
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.sims[0]->state_hash() == m.referee.state_hash() && m.sims[2]->state_hash() == m.referee.state_hash());
+        }
+        {   // no turns at all: the match had begun and the server stopped within the seconds before its first turn (a restored match waits for its players and begins at turn 0)
+            HoldOptions o;
+            o.host.start_delay_ms = kMatchStartDelayMs;
+            HoldMatch m(3, o);
+            m.run(2500, false);                                                           // 2.5 s into the 5 s of the dialog: nothing is sealed yet, nobody has given a command that counts
+            ASSERT_EQ(m.sealed(), 0u);
+            for (uint8_t seat = 0; seat < 3; ++seat) {
+                m.auto_reconnect[seat] = false;
+                m.cut(seat);
+            }
+            m.host.reset();
+            build_world(m.referee, m.seed, m.match_ms);
+            HostSession::Config hc = m.host_cfg;
+            m.host = std::make_unique<HostSession>(m.referee, hc);
+            m.host->set_seat_keys(m.keys);
+            m.host->set_rejoin_start(start_of_hold(m));
+            m.host->start_restored(m.now, 0x07, 0x00);                                    // (no restore_turn: the record held none)
+            ASSERT_TRUE(m.host->paused() && m.host->turns_sealed() == 0u);
+            m.run(3000, false);
+            ASSERT_EQ(m.sealed(), 0u);
+            for (uint8_t seat = 0; seat < 3; ++seat) m.auto_reconnect[seat] = true;
+            ASSERT_TRUE(m.until([&]() { return !m.host->paused(); }, 20000));              // every machine says Hello with its key (it has executed no turn: have_turns 0 is its count, it is given the match from nothing)
+            m.run(4000, false);
+            ASSERT_TRUE(m.sealed() > 0u);                                                 // the first turn is sealed when the pause ends, as it is after any pause
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());
+        }
+    } TEST_END();
+}
+
 int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: lock-step core (protocol, sequencer, runner, sessions)\n"
                  "=======================================================\n";
@@ -9731,6 +10137,7 @@ int main() {
     run_protocol11_tests();
     run_team_chat_tests();
     run_protocol12_tests();
+    run_restart_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

@@ -52,6 +52,13 @@
 // key is not the end of the match (Mode::Reconnecting): it asks its owner for a new link (wants_connection / attach), says the Hello when the link is open, is given the match again
 // (Mode::Rejoining, Mode::CatchingUp) and goes on; a Reject (the seat was dropped, the room is gone, a newer window took the seat) ends it for good.
 
+// A restart of the server (docs/NETWORK_PORT.md "Restart records"). A room of the dedicated server writes every turn that this host seals to a RESTART RECORD, in set_on_seal's hook, which runs after the
+// turn was appended to the log and BEFORE it is sent to anybody: a process that dies at any moment therefore never leaves a player who has run a turn that the record does not hold. A server that starts
+// again rebuilds the match from the record: the engine is made as for a new match, the sealed turns are given to restore_turn() (they go into the log and into the host's own runner) and run with
+// the runner's fast_forward(), and start_restored() begins the match at the next turn with every seat of a person ABSENT (Attendance::seat_restored): the match is paused until the players come back
+// with their keys and are given the match again, exactly as for a lost link. set_on_referee_hash() reports the referee's own state hash after every kHashEveryTurns-th turn, which the room writes
+// to the record as a checkpoint that the replay of a restart is verified against.
+
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -253,6 +260,26 @@ public:
     const TurnLog& log() const noexcept { return log_; }
     /// The match is over: the log is freed and its bytes go back to the budget (the counters stay readable in attendance())
     void release_log() noexcept { log_.release(); }
+
+    // ---- restart records (see the head of this file) -----------------------------------------------------------------------------------------------------------
+    /// Called for every turn that this host seals, in order, AFTER the turn was appended to the log (when the session holds seats) and BEFORE it is sent to anybody or given to the host's own runner:
+    /// the room writes it to its restart record there (write() into the operating system: it survives the death of the process, which is all a crash needs), so that no client ever holds a turn that
+    /// the record lacks. Set it before the first turn is sealed (before start(), for the room). The hook must not change the session.
+    void set_on_seal(std::function<void(const TurnMsg&)> fn) { on_seal_ = std::move(fn); }
+    /// Called with the referee's own state hash after every kHashEveryTurns-th turn that this host's runner has executed (a host without a seat only: the dedicated server's referee): turn is the
+    /// number of that turn (the hash is the state after it). The room writes it to the record as a checkpoint. Set it before the first turn is executed.
+    void set_on_referee_hash(std::function<void(uint32_t turn, const sim::StateHash&)> fn) { on_referee_hash_ = std::move(fn); }
+    /// A sealed turn of a match that is being restored (before start_restored(); the turns must come in order, the first is 0): it goes into the log and into the host's own runner, which executes it
+    /// when the caller runs runner().fast_forward() (nothing is drawn or told to anybody). False, and the session is not to be used, when the session does not hold seats, the turn is not the next
+    /// one, the runner refuses it, or the log cannot hold it (its limit, the server's budget): the match cannot be restored.
+    bool restore_turn(const TurnMsg& turn);
+    /// How many turns restore_turn() has taken so far
+    uint32_t restored_turns() const noexcept { return restored_turns_; }
+    /// Begins a match that restore_turn() has been given the sealed turns of, and the runner has executed all of them (nothing queued, at a boundary): the next turn sealed is restored_turns(). The seats of
+    /// `humans` (bit s: a person's seat) are held: those in `dropped` are Dropped (they left before the restart), every other one is ABSENT from `now_ms` on (Attendance::seat_restored: its absence is a
+    /// restart's), and so is any person's seat that has no key (nobody could come back to it: it is dropped and its Drop sealed after the pause). The bots' seats (add_bot_seat) are level with the match.
+    /// The match is paused until the players are back; nothing is sealed meanwhile.
+    void start_restored(uint32_t now_ms, uint8_t humans, uint8_t dropped);
     /// The players that are coming back now (a connection that said Hello with a key and has not caught up)
     size_t rejoiners() const noexcept { return rejoiners_.size(); }
     /// True while this session still points at the connection: a present client's, or one that is coming back. Whoever owns the connections (the room) must not free one that this
@@ -326,6 +353,9 @@ private:
     std::vector<DesyncMsg> desyncs_;
     std::function<void(uint8_t)> on_left_;
     std::function<void(const ChatMsg&)> on_chat_;
+    std::function<void(const TurnMsg&)> on_seal_;                       // the restart record's turn (set_on_seal)
+    std::function<void(uint32_t, const sim::StateHash&)> on_referee_hash_;     // ... and its checkpoint (set_on_referee_hash)
+    uint32_t restored_turns_{0};            // the turns that restore_turn took
     bool started_{false};
     bool frozen_{false};
     uint32_t last_ms_{0};

@@ -47,6 +47,22 @@ void Attendance::seat_humans(uint8_t mask, uint32_t now_ms) {
     streamed_total_ = 0;
 }
 
+void Attendance::seat_restored(uint8_t humans, uint8_t dropped, uint32_t now_ms) {
+    seat_humans(humans, now_ms);
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if ((humans & (1u << s)) == 0) continue;
+        Seat& seat = seats_[s];
+        seat.since_ms = now_ms;
+        if ((dropped & (1u << s)) != 0) {
+            seat.state = State::Dropped;                              // (it left or was dropped before the restart: final, and no drop of this run: the counters stay 0)
+        } else {
+            seat.state = State::Absent;                               // its player has to find the server again: held, the key valid, the match paused
+            seat.excused = true;                                      // nobody's fault: a longer wait before the vote, no loss for the flapping rule, nothing added to the away time
+        }
+    }
+    // (the pause begins now when a seat is away: seat_humans set its start, and paused() is what the seats say)
+}
+
 bool Attendance::paused() const noexcept {
     for (const Seat& s : seats_) {
         if (away_state(s.state)) return true;
@@ -149,6 +165,7 @@ bool Attendance::lost(uint8_t seat, uint32_t now_ms) {
     s.since_ms = now_ms;
     s.percent = 0;
     s.catching_before_ms = 0;                                    // a new absence has all its catch-up time again
+    s.excused = false;                                           // (a lost link is the seat's own: the restart's grace is over for good)
     note_loss(s, now_ms);
     clear_votes(seat, s.flap);                                   // (the votes about a seat that flaps stay: the vote is open across its returns)
     settle_pause(was_paused, now_ms);
@@ -186,6 +203,7 @@ bool Attendance::returning(uint8_t seat, uint32_t now_ms, size_t planned_bytes, 
         if (s.state == State::Present) {                         // the old link was not known to be dead: the seat is away from now (Absent and CatchingUp keep counting from the loss), which is a loss for the flapping rule
             s.since_ms = now_ms;
             s.catching_before_ms = 0;
+            s.excused = false;
             note_loss(s, now_ms);
         }
         s.state = State::CatchingUp;
@@ -224,7 +242,8 @@ bool Attendance::caught_up(uint8_t seat, uint32_t now_ms) {
     if (seat >= sim::MAX_PLAYERS || seats_[seat].state != State::CatchingUp) return false;
     const bool was_paused = paused();
     Seat& s = seats_[seat];
-    s.away_before_ms = saturating_add(s.away_before_ms, std::max(elapsed(now_ms, s.since_ms), cfg_.min_absence_ms));        // an absence counts at least min_absence_ms
+    if (!s.excused) s.away_before_ms = saturating_add(s.away_before_ms, std::max(elapsed(now_ms, s.since_ms), cfg_.min_absence_ms));        // an absence counts at least min_absence_ms (a restart's counts nothing)
+    s.excused = false;
     s.state = State::Present;
     s.since_ms = now_ms;
     s.percent = 0;
@@ -247,7 +266,8 @@ bool Attendance::catch_up_failed(uint8_t seat, uint32_t now_ms) {
 void Attendance::drop_seat(uint8_t seat, uint32_t now_ms) {
     const bool was_paused = paused();
     Seat& s = seats_[seat];
-    if (away_state(s.state)) s.away_before_ms = saturating_add(s.away_before_ms, elapsed(now_ms, s.since_ms));      // (the absence that ends here counts as it was)
+    if (away_state(s.state) && !s.excused) s.away_before_ms = saturating_add(s.away_before_ms, elapsed(now_ms, s.since_ms));      // (the absence that ends here counts as it was)
+    s.excused = false;
     s.state = State::Dropped;
     s.since_ms = now_ms;
     s.percent = 0;
@@ -277,6 +297,13 @@ uint8_t Attendance::votes_for_continue(uint8_t subject) const noexcept {
     return n;
 }
 
+// An Absent seat is put to the vote when it has been away long enough: its total away time reaches vote_after_ms, or, when its absence is a restart's (seat_restored), the absence itself has
+// lasted restart_vote_after_ms (the total of the seat's earlier absences is not what a restart is judged by)
+bool Attendance::vote_time_reached(const Seat& s, uint8_t seat, uint32_t now_ms) const noexcept {
+    if (s.excused) return elapsed(now_ms, s.since_ms) >= cfg_.restart_vote_after_ms;
+    return away_ms(seat, now_ms) >= cfg_.vote_after_ms;
+}
+
 uint8_t Attendance::vote_subject(uint32_t now_ms) const noexcept {
     uint8_t best = 255;
     uint32_t best_away = 0;
@@ -284,7 +311,7 @@ uint8_t Attendance::vote_subject(uint32_t now_ms) const noexcept {
         const Seat& seat = seats_[s];
         const uint32_t away = away_ms(s, now_ms);
         bool candidate = false;
-        if (seat.state == State::Absent) candidate = away >= cfg_.vote_after_ms || flap_active(seat, now_ms);     // away long enough, or a seat that flaps
+        if (seat.state == State::Absent) candidate = vote_time_reached(seat, s, now_ms) || flap_active(seat, now_ms);     // away long enough, or a seat that flaps
         else if (seat.state == State::CatchingUp || seat.state == State::Present) candidate = flap_active(seat, now_ms);    // a seat that is catching up has come back: it is put to the vote only when it flaps
         if (candidate && (best == 255 || away > best_away)) {      // (strictly longer: of a tie the lowest seat)
             best = s;
@@ -316,7 +343,7 @@ std::vector<uint8_t> Attendance::update(uint32_t now_ms) {
         Seat& seat = seats_[s];
         if (seat.flap && !flap_active(seat, now_ms)) {
             seat.flap = false;
-            if (!(seat.state == State::Absent && away_ms(s, now_ms) >= cfg_.vote_after_ms)) seat.vote.fill(0);      // (a seat that has been away long enough stays the subject of its vote)
+            if (!(seat.state == State::Absent && vote_time_reached(seat, s, now_ms))) seat.vote.fill(0);      // (a seat that has been away long enough stays the subject of its vote)
         }
     }
     const uint8_t subject = vote_subject(now_ms);                 // a vote that is won drops its seat (the next seat's vote starts empty: one at a time)
