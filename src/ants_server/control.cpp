@@ -89,7 +89,7 @@ JsonValue status_to_json(const RoomStatus& s) {
         absent.push_back(std::move(row));
     }
     o.set("absent", std::move(absent));
-    if (s.vote_seat < 4) {
+    if (s.vote_seat < 4 && s.voters > 0) {                           // (a vote that nobody can cast, the persons being the ones who are gone and the rest bots, is no vote: null)
         JsonValue vote = JsonValue::make_object();
         vote.set("seat", JsonValue::make_int(s.vote_seat));
         vote.set("continue", JsonValue::make_int(s.votes_continue));

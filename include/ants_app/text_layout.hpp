@@ -25,6 +25,19 @@ std::string fit_text(const IRenderer& renderer, std::string text, int32_t width,
 int32_t draw_label(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t width, ants::assets::ColorRGBA color, FontSize size,
                    bool center);
 
+/// A label with a limit on its lines: what a box of a fixed height holds (the setup screen's prompt is 35 px high, two lines of 14 px; the original's texts there are short, the remake's
+/// room chat is not). The text is wrapped as wrap_label_text does; when it needs more than `max_lines` lines the first `max_lines` are kept and the end of the last is cut so that "..." fits
+/// behind what is left (within `width`). A text that fits is returned as wrapped, untouched.
+std::vector<std::string> wrap_label_fitted(const IRenderer& renderer, const std::string& text, int32_t width, FontSize size, size_t max_lines);
+
+/// The same for a line that is being TYPED: its END matters, not its beginning. The text is wrapped as wrap_label_text does and the LAST `max_lines` lines are kept (the box scrolls by a
+/// line when the text reaches another one, as every text box does). The caller puts the prompt and the caret into `text` (a caret that blinks is a blank while it is off, so that the
+/// wrapping does not change with the blink).
+std::vector<std::string> wrap_label_tail(const IRenderer& renderer, const std::string& text, int32_t width, FontSize size, size_t max_lines);
+
+/// Draws lines as draw_label does (from the top of the box at (x, y), one cell height apart, left aligned): lines that wrap_label_fitted or wrap_label_tail returned. Returns the height.
+int32_t draw_label_lines(IRenderer& renderer, const std::vector<std::string>& lines, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size);
+
 /// The one line of an edit field as the original's label draws it (FUN_0102b36a with FUN_01011c25, docs 5.51): the text is one line in a box `width` wide of which one
 /// caret (the width of "_") is kept free on the right. A text that fits is drawn from the left; one that does not is drawn right aligned when `tail_aligned` (its end shows,
 /// and the caret sits at the right end of the box), otherwise cut at the right edge. The caret is an underscore right behind the text; it is not drawn when it would start

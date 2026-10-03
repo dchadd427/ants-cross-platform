@@ -133,6 +133,8 @@
         #setup h2, #join h2, #room-panel h2 { font-size: 0.95rem; color: var(--accent-gold); margin-bottom: 8px; letter-spacing: 0.5px; }
         .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
         .row label { color: var(--text-dim); font-size: 0.85rem; }
+        .fillchoice { display: flex; flex-direction: column; gap: 3px; }
+        .fillline { display: flex; align-items: center; gap: 12px; }
         select, input[type=text] {
             background: var(--bg-color); color: var(--text-main); border: 1px solid var(--panel-border);
             border-radius: 6px; padding: 8px 10px; min-height: 38px; font-size: 0.9rem;
@@ -176,13 +178,18 @@
                 <option value="3">3</option>
                 <option value="4">4</option>
             </select>
-            <label for="fill">Empty seats at START</label>
-            <select id="fill">
-                <option value="">Leave empty</option>
-                <option value="easy">Easy bots</option>
-                <option value="medium">Medium bots</option>
-                <option value="hard">Hard bots</option>
-            </select>
+            <div class="fillchoice">
+                <div class="fillline">
+                    <label for="fill">Empty seats at START</label>
+                    <select id="fill">
+                        <option value="">Leave empty</option>
+                        <option value="easy">Easy bots</option>
+                        <option value="medium">Medium bots</option>
+                        <option value="hard">Hard bots</option>
+                    </select>
+                </div>
+                <div class="hint" id="fill-caption">Bots gather food; they do not fight yet.</div>
+            </div>
             <button id="create" type="button" class="btn primary">Create the match</button>
         </div>
         <div class="hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken, and a running match takes nobody new. The first player in the room can start early with START (it is the room's leader): with at least 2 players in, and with <strong>Easy, Medium or Hard bots</strong> chosen above even alone, when every empty seat gets a bot of that level (bots do not play with Fog of War, and the leader's START is the only thing that seats them). Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
@@ -260,8 +267,10 @@
             for (var i = 0; i < MAPS.length; i++) if (MAPS[i].key === key) return MAPS[i];
             return null;
         }
-        // The fill level of an address or of the settings: only these three words (anything else is no fill; it is never put into a link as it came)
-        function validFill(value) { return value === 'easy' || value === 'medium' || value === 'hard' ? value : ''; }
+        // The fill level of an address or of the settings: only these three words, in any case (anything else is no fill; what comes back is the lower case word that was tested, it is never put into a link as it came)
+        // FILL_BEGIN (tests/scripts/web_fill_check.js runs this function on a table of values)
+        function validFill(value) { var word = typeof value === 'string' ? value.toLowerCase() : ''; return word === 'easy' || word === 'medium' || word === 'hard' ? word : ''; }
+        // FILL_END
         var FILL_NAMES = { easy: 'Easy bots', medium: 'Medium bots', hard: 'Hard bots' };
 
         // The shape of the games' pictures: ?aspect=16:9 or ?aspect=4:3 (anything else is ignored), else what the game page's selector remembered, else 16:9. Each game passes it on

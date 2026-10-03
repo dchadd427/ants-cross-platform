@@ -3882,13 +3882,13 @@ const Golden kGoldens[] = {
     {"screen.menu.join.name_refused", 0x654e9cdadc7be96a, 160},
     {"screen.menu.connecting", 0xa95f45bb91fe2012, 114},
     {"screen.menu.join.error", 0x902ef842457399e8, 158},
-    {"screen.menu.host.default", 0xe839f6492b172f76, 209},
-    {"screen.menu.host.map_and_players", 0x69a945896de44ad9, 209},
+    {"screen.menu.host.default", 0x09df7f450f9efcd5, 210},
+    {"screen.menu.host.map_and_players", 0x4630bc9f4fdbb336, 210},
     {"screen.menu.room.code", 0xb4b079b2a4d20074, 150},
     {"screen.menu.room.full", 0x4b46383209d2e157, 150},
     {"screen.menu.room.longest_code", 0x02e344112faca6ac, 150},
     {"screen.menu.room.fill_medium", 0xc27d15c0f5fe2c7f, 150},
-    {"screen.menu.host.fill_medium", 0x646768c45c78bb87, 209},
+    {"screen.menu.host.fill_medium", 0xf305750845de8f58, 210},
     // ---- the wide match screen (milestone M3, 960 x 540), computed at the commit that introduced it (the classic numbers above did not move); regenerate only deliberately, see the notes at the top.
     //      The review fixes of M3 moved 105 of these deliberately (all of the wide ones that draw the bottom strip or the options window and quick help, none of the classic): the score boxes are
     //      spread over the strip (seven draw calls for the strip instead of three, the boxes at x 213, 468 and 722), and the in-match options window and quick help are drawn over the map view

@@ -1058,6 +1058,58 @@ void run_room_chat_tests() {
             ASSERT_FALSE(off.request_start());                                               // not a leader of anything
         }
     } TEST_END();
+
+    TEST_CASE("N3.20 The Waiting Room's Chat Queue Of A NetGame Is Bounded (A Consumer That Never Takes The Lines Does Not Make It Grow: 300 Lines Of The Host Leave The Last 200 In Order, Handed Out Once); A Long Line Is Cut To 84 Characters On The Status Line Of The One Who Hears It (The Text Ends In ...); The Host's Fog Refusal Is On Its Own Status Line At Once, Not With The Next Update") {
+        {   // 300 lines from the host (its own lines have no budget: it is no connection); the guest never takes them
+            Table t;
+            ASSERT_TRUE(make_room(t, 1));
+            Machine& alice = *t.machines[0];
+            Machine& bob = *t.machines[1];
+            for (int i = 0; i < 300; ++i) ASSERT_TRUE(alice.net.chat("line " + std::to_string(i)));
+            ASSERT_TRUE(t.run_until([&]() { return bob.net.pregame_chat().size() == ChatLog::kMaxLines && bob.net.pregame_chat().back().text == "line 299"; }, 5000));
+            t.run(300);
+            const std::vector<ChatLine> held = bob.net.take_pregame_chat();                  // what the NetGame kept for its owner: at most the last 200, in order
+            ASSERT_EQ(held.size(), ChatLog::kMaxLines);
+            ASSERT_EQ(held.front().text, std::string("line 100"));
+            ASSERT_EQ(held.back().text, std::string("line 299"));
+            for (size_t i = 1; i < held.size(); ++i) ASSERT_EQ(held[i].text, "line " + std::to_string(100 + i));
+            ASSERT_TRUE(bob.net.take_pregame_chat().empty());
+            const std::vector<ChatLine> hosts_own = alice.net.take_pregame_chat();           // the same for the host's own queue
+            ASSERT_TRUE(hosts_own.size() == ChatLog::kMaxLines && hosts_own.front().text == "line 100" && hosts_own.back().text == "line 299");
+        }
+        {   // a line of 100 characters from "Alice": the guest's status line keeps 84 characters and says that it is cut; the host's own line is not on its own status line
+            Table t;
+            ASSERT_TRUE(make_room(t, 1));
+            Machine& alice = *t.machines[0];
+            Machine& bob = *t.machines[1];
+            ASSERT_TRUE(alice.net.chat(std::string(100, 'w')));
+            ASSERT_TRUE(t.run_until([&]() { return bob.net.pregame_chat().size() == 1; }, 3000));
+            const std::string shown = bob.net.status_text();
+            ASSERT_EQ(shown.size(), NetGame::kStatusNoticeChars);
+            ASSERT_EQ(shown.substr(0, 7), std::string("Alice: "));
+            ASSERT_EQ(shown.substr(shown.size() - 3), std::string("..."));
+            ASSERT_EQ(NetGame::kStatusNoticeChars, size_t{84});
+            bob.net.show_notice("You: " + std::string(100, 'q'));                              // the notice of the line that the player said itself is cut the same way
+            t.run(20);                                                                         // (the status line follows at the next update)
+            ASSERT_TRUE(bob.net.status_text().size() == NetGame::kStatusNoticeChars && bob.net.status_text().substr(0, 5) == "You: " && bob.net.status_text().back() == '.');
+            bob.net.show_notice("short");
+            t.run(20);
+            ASSERT_EQ(bob.net.status_text(), std::string("short"));
+        }
+        {   // the fog refusal of the host's own fill: the status line has the notice the moment fill_bots said no, and the next update keeps it
+            Table t;
+            Machine& host = t.add("Alice");
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            host.net.set_fog(true);
+            t.run(200);
+            ASSERT_TRUE(host.net.status_text() != std::string(kNoticeFillFog));
+            ASSERT_EQ(host.net.fill_bots(FillLevel::Hard), size_t{0});
+            ASSERT_EQ(host.net.status_text(), std::string(kNoticeFillFog));                  // (no update between: the line is there at once)
+            t.run(100);
+            ASSERT_EQ(host.net.status_text(), std::string(kNoticeFillFog));
+        }
+    } TEST_END();
 }
 
 }  // namespace

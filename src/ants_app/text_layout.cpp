@@ -1,6 +1,7 @@
 #include "ants_app/text_layout.hpp"
 
 #include <algorithm>
+#include <cstddef>
 
 namespace ants::app {
 
@@ -59,6 +60,37 @@ int32_t draw_label(IRenderer& renderer, const std::string& text, int32_t x, int3
     for (const std::string& line : wrap_label_text(renderer, text, width, size)) {
         const int32_t line_x = center ? x + (width - renderer.get_text_width(line, size)) / 2 : x;
         renderer.draw_text(line, line_x, line_y, color, size);
+        line_y += pitch;
+    }
+    return line_y - y;
+}
+
+std::vector<std::string> wrap_label_fitted(const IRenderer& renderer, const std::string& text, int32_t width, FontSize size, size_t max_lines) {
+    std::vector<std::string> lines = wrap_label_text(renderer, text, width, size);
+    if (lines.size() <= max_lines || max_lines == 0) {
+        if (max_lines == 0) lines.clear();
+        return lines;
+    }
+    lines.resize(max_lines);
+    std::string& last = lines.back();
+    static const std::string kDots = "...";
+    while (!last.empty() && renderer.get_text_width(last + kDots, size) > width) last.pop_back();       // (what is left of the line, and the dots behind it, fit the box)
+    while (!last.empty() && last.back() == ' ') last.pop_back();
+    last += kDots;
+    return lines;
+}
+
+std::vector<std::string> wrap_label_tail(const IRenderer& renderer, const std::string& text, int32_t width, FontSize size, size_t max_lines) {
+    std::vector<std::string> lines = wrap_label_text(renderer, text, width, size);
+    if (lines.size() > max_lines) lines.erase(lines.begin(), lines.begin() + static_cast<std::ptrdiff_t>(lines.size() - max_lines));
+    return lines;
+}
+
+int32_t draw_label_lines(IRenderer& renderer, const std::vector<std::string>& lines, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size) {
+    const int32_t pitch = font_cell_height(size);
+    int32_t line_y = y;
+    for (const std::string& line : lines) {
+        renderer.draw_text(line, x, line_y, color, size);
         line_y += pitch;
     }
     return line_y - y;

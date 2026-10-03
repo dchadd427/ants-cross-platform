@@ -2273,7 +2273,8 @@ int main() {
             room.run(200);
             ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()) && room.host.chat_log().empty());
         }
-        {   // the flood budget: 1500 lines at once from one connection are 1000 lines and then violations; the sender is out within a few passes and the other guest heard at most the budget
+        {   // the flood: 1500 lines at once from one connection. The chat budget (N4.20) relays the first 5 and drops 20, then every line is a violation: the sender is out after eight of them
+            // (33 lines in all), within one pass, and the other guest heard no more than the burst
             Room room(hc);
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
@@ -2285,11 +2286,8 @@ int main() {
             room.run(1000);
             ASSERT_FALSE(room.host.occupied(ann_seat));
             ASSERT_TRUE(room.host.occupied(room.guests[bob].lobby->my_seat()));    // Bob is untouched
-            ASSERT_TRUE(room.host.chat_total() >= 1000 && room.host.chat_total() <= 1200);        // the burst of 1000 and what the 160 ms before the eighth violation refilled; not the 1500
-            const size_t relayed = room.guests[bob].lobby->chat_log().size();      // (the log keeps the last 200: the host's total says how many)
-            ASSERT_TRUE(room.host.chat_log().size() == ChatLog::kMaxLines);
-            ASSERT_TRUE(relayed == ChatLog::kMaxLines);
-            ASSERT_TRUE(room.guests[bob].lobby->take_chat().size() == ChatLog::kMaxLines);       // (a consumer that came late gets what the log kept, not more)
+            ASSERT_EQ(room.host.chat_total(), uint64_t{kChatBurst});                // the burst of 5 and nothing else: not 1000, not 1500
+            ASSERT_EQ(room.guests[bob].lobby->take_chat().size(), size_t{kChatBurst});
         }
         {   // the log keeps the last 200 lines and hands every new line on once
             ChatLog log;
@@ -2423,6 +2421,164 @@ int main() {
             ++on_wire;
         }
         ASSERT_EQ(on_wire, size_t{1});
+    } TEST_END();
+
+    TEST_CASE("N4.20 The Waiting Room's Chat Has A Budget Of Its Own (A Remake Protection: The Original Has No Limit On Chat): A Burst Of 5 Lines, Then One A Second; A Line Beyond It Is Dropped (Not Relayed, Not Logged, No Offence At First); A Connection That Goes On Beyond It For Long Is Thrown Out; Each Connection Has Its Own; An Honest Talker Is Never Touched; Empty Lines Cost Nothing Of It; A Seat Taken Over With Its Key Keeps What It Used") {
+        HostLobby::Config hc;
+        hc.host_seat = 255;
+        hc.min_players = 2;
+        const auto say = [](Room& room, size_t guest, const std::string& text) {
+            ChatMsg m;
+            m.text = text;
+            room.guests[guest].client_end->send(encode(m));
+        };
+        {   // a burst of 8 at once: 5 are relayed (in order), 3 are dropped, nobody is thrown out
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(200);
+            for (int i = 0; i < 8; ++i) say(room, ann, "line " + std::to_string(i));
+            room.run(100);
+            const std::vector<ChatLine> heard = room.guests[bob].lobby->take_chat();
+            ASSERT_EQ(heard.size(), size_t{5});
+            for (size_t i = 0; i < heard.size(); ++i) ASSERT_EQ(heard[i].text, "line " + std::to_string(i));
+            ASSERT_EQ(room.host.chat_total(), uint64_t{5});                         // (what was dropped is not in the room's log either)
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));
+            // one second later one more is allowed, not two
+            room.run(1000);
+            say(room, ann, "after one second");
+            say(room, ann, "and a second one right behind it");
+            room.run(100);
+            const std::vector<ChatLine> later = room.guests[bob].lobby->take_chat();
+            ASSERT_TRUE(later.size() == 1 && later[0].text == "after one second");
+            // five quiet seconds fill the burst again
+            room.run(6000);
+            for (int i = 0; i < 6; ++i) say(room, ann, "again " + std::to_string(i));
+            room.run(100);
+            ASSERT_EQ(room.guests[bob].lobby->take_chat().size(), size_t{5});
+        }
+        {   // an honest talker: a line every 1.2 s for a minute, all relayed, never an offence; and a busy one (a line a second for two minutes) is fine too
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(200);
+            for (int i = 0; i < 50; ++i) {
+                say(room, ann, "talk " + std::to_string(i));
+                room.run(1200);
+            }
+            ASSERT_EQ(room.guests[bob].lobby->take_chat().size(), size_t{50});
+            room.guests[ann].lobby->take_chat();                                    // (Ann hears her own lines from the room too)
+            for (int i = 0; i < 120; ++i) {
+                say(room, bob, "busy " + std::to_string(i));
+                room.run(1000);
+            }
+            ASSERT_EQ(room.guests[ann].lobby->take_chat().size(), size_t{120});
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()) && room.host.occupied(room.guests[bob].lobby->my_seat()));
+        }
+        {   // two lines a second for a minute: half of them are dropped (the excess refills as fast as it is used), nobody is thrown out; four a second for long: the excess runs out
+            // (3 a second are dropped, 20 lines of excess last about 10 s), then it is a violation each and eight throw the sender out
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(200);
+            size_t heard = 0;
+            for (int i = 0; i < 120; ++i) {
+                say(room, ann, "two a second " + std::to_string(i));
+                room.run(500);
+                heard += room.guests[bob].lobby->take_chat().size();
+            }
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));
+            ASSERT_TRUE(heard >= 60 && heard <= 70);                                // about a line a second, the budget's rate (and the burst)
+            room.run(6000);
+            heard = 0;
+            size_t sent = 0;
+            bool out = false;
+            while (!out && sent < 400) {
+                say(room, ann, "four a second " + std::to_string(sent));
+                ++sent;
+                room.run(250);
+                heard += room.guests[bob].lobby->take_chat().size();
+                out = !room.host.occupied(room.guests[ann].lobby->my_seat());
+            }
+            ASSERT_TRUE(out);                                                       // a talker at four times the rate for ten seconds is flooding
+            ASSERT_TRUE(sent >= 30 && sent <= 90);
+            ASSERT_TRUE(heard >= 10 && heard <= 30);                                // (it was heard at the budget's rate until then)
+            ASSERT_TRUE(room.host.occupied(room.guests[bob].lobby->my_seat()));
+        }
+        {   // a flood is thrown out within a pass, and a second connection says its lines as ever: each has its own budget
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            room.run(200);
+            for (int i = 0; i < 900; ++i) say(room, ann, "flood " + std::to_string(i));
+            say(room, bob, "an honest line");
+            room.run(100);
+            ASSERT_FALSE(room.host.occupied(room.guests[ann].lobby->my_seat()));
+            const std::vector<ChatLine> heard = room.guests[cat].lobby->take_chat();
+            size_t honest = 0, spam = 0;
+            for (const ChatLine& l : heard) (l.text == "an honest line" ? honest : spam) += 1;
+            ASSERT_TRUE(honest == 1 && spam == 5);                                  // Bob's line, and Ann's burst
+            for (int i = 0; i < 5; ++i) say(room, bob, "bob " + std::to_string(i));
+            room.run(100);
+            ASSERT_EQ(room.guests[cat].lobby->take_chat().size(), size_t{4});       // (Bob had used one of his 5)
+        }
+        {   // each connection has a budget of its own: two guests who each say five lines at once are both heard in full (ten lines), a third guest's budget is untouched by either
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            room.run(200);
+            for (int i = 0; i < 5; ++i) {
+                say(room, ann, "ann " + std::to_string(i));
+                say(room, bob, "bob " + std::to_string(i));
+            }
+            room.run(100);
+            ASSERT_EQ(room.guests[cat].lobby->take_chat().size(), size_t{10});
+            for (int i = 0; i < 5; ++i) say(room, cat, "cat " + std::to_string(i));
+            room.run(100);
+            ASSERT_EQ(room.guests[ann].lobby->take_chat().size(), size_t{15});                                     // (her own five, Bob's five and Cat's five: she never took them before)
+        }
+        {   // empty lines (valid, they say nothing) take nothing of the chat budget
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(200);
+            ChatMsg blank;
+            for (int i = 0; i < 100; ++i) room.guests[ann].client_end->send(encode(blank));
+            room.run(100);
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));
+            for (int i = 0; i < 5; ++i) say(room, ann, "real " + std::to_string(i));
+            room.run(100);
+            ASSERT_EQ(room.guests[bob].lobby->take_chat().size(), size_t{5});
+        }
+        {   // the budget is the seat's, not the connection's: a seat taken over with its key (a reload) does not get a fresh burst
+            HostLobby::Config kc = keyed_server_config(77);
+            Room room(kc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(200);
+            for (int i = 0; i < 5; ++i) say(room, ann, "used " + std::to_string(i));
+            room.run(100);
+            ASSERT_EQ(room.guests[bob].lobby->take_chat().size(), size_t{5});
+            const SeatKey key = room.host.key_of(room.guests[ann].lobby->my_seat());
+            auto ends = room.net.connect({10, 0});
+            room.guests.emplace_back();
+            Room::Guest& again = room.guests.back();
+            again.host_end = ends.first;
+            again.client_end = ends.second;
+            ClientLobby::Config cc;
+            cc.name = "Ann";
+            cc.key = key;
+            again.lobby = std::make_unique<ClientLobby>(ends.second, cc);
+            room.host.add_connection(ends.first, room.now);
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            const size_t back = room.guests.size() - 1;
+            for (int i = 0; i < 5; ++i) say(room, back, "after the reload " + std::to_string(i));
+            room.run(100);
+            ASSERT_EQ(room.guests[bob].lobby->take_chat().size(), size_t{0});       // the seat's burst was spent a moment ago
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

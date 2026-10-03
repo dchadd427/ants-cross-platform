@@ -1446,6 +1446,7 @@ void Application::handle_events() {
                     mouse_screen_y_ = event.button.y;
                     mouse_has_moved_ = true;
                     pointer_outside_ = false;
+                    if (room_mouse_up(event.button.x, event.button.y, event.button.button)) break;                      // (the release of a press that the chat input took)
                     map_select_.handle_mouse_up(event.button.x, event.button.y, event.button.button);
                     break;
                 default:
@@ -1877,8 +1878,15 @@ void Application::sync_room_view() {
         view.seats[own].thumb = MapSelectScreen::Thumb::Good;
     }
     view.map_file = room.map_name;                                           // a guest (and the leader of a server's room) shows the host's / the room's choice (an empty name before the first message)
-    if (room_chat_.is_open() && !room_chat_available()) room_chat_.close();                     // (the room is gone, or the match has begun: nothing to say it to)
-    view.status = room_chat_.is_open() ? room_chat_.display(static_cast<uint32_t>(net_time_ms_)) : net_->status_text();      // (while a line is typed the status line shows it)
+    if (room_chat_.is_open() && !room_chat_available()) close_room_chat();                      // (the room is gone, or the match has begun: nothing to say it to)
+    if (room_chat_.is_open()) {                                                                  // (while a line is typed the status line shows it, as a typed line: its end, in two lines)
+        view.status = room_chat_.text();
+        view.status_prefix = RoomChatInput::kPrompt;
+        view.status_input = true;
+        view.status_caret = room_chat_.caret(static_cast<uint32_t>(net_time_ms_));
+    } else {
+        view.status = net_->status_text();
+    }
     map_select_.set_room(view);
     if (!net_->is_host() && net_->phase() == net::NetGame::Phase::Room) {
         map_select_.follow_host_choice(room.map_name, room.fog);
@@ -1892,14 +1900,23 @@ bool Application::room_chat_available() const noexcept {
            (net_->phase() == net::NetGame::Phase::Room || net_->phase() == net::NetGame::Phase::Loading);
 }
 
+void Application::close_room_chat() {
+    room_chat_.close();
+    room_chat_closed_ms_ = net_time_ms_;                                               // (the guard of the screen's START keys starts here)
+}
+
 void Application::room_key_down(SDL_Keycode key, uint16_t modifiers, bool repeat) {
     if (room_chat_.is_open()) {
         if (!room_chat_available()) {
-            room_chat_.close();                                                        // (nobody to talk to any more: the screen has its keys back)
+            close_room_chat();                                                         // (nobody to talk to any more: the screen has its keys back)
         } else {
-            if (room_chat_.on_key(key, modifiers) == RoomChatInput::Result::Send) {
+            const RoomChatInput::Result result = room_chat_.on_key(key, modifiers);
+            if (result == RoomChatInput::Result::Send) {
                 const std::string line = room_chat_.take_line();
+                room_chat_closed_ms_ = net_time_ms_;
                 if (!line.empty() && net_ && net_->chat(line)) net_->show_notice("You: " + line);       // (the player sees that it went)
+            } else if (result == RoomChatInput::Result::Closed) {
+                room_chat_closed_ms_ = net_time_ms_;
             }
             return;                                                                    // while the input is open the screen's own keys (S, Q, X, Enter, the arrows) do nothing
         }
@@ -1908,6 +1925,10 @@ void Application::room_key_down(SDL_Keycode key, uint16_t modifiers, bool repeat
         room_chat_.open(true);
         return;
     }
+    // The key that closed the input is still under the player's finger, or its twin follows (a second Enter, the S of "ss" typed from habit): START is not for those. A key that comes
+    // 400 ms after the closing is a new decision. (Leave, the map and the other keys are not held back: they cannot start anything.)
+    const bool starts = key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_s;
+    if (starts && net_time_ms_ - room_chat_closed_ms_ < RoomChatInput::kGuardMs) return;
     map_select_.handle_key_down(key, repeat);
 }
 
@@ -1916,9 +1937,25 @@ void Application::room_text_input(const std::string& text) {
 }
 
 bool Application::room_mouse_down(int32_t x, int32_t y, uint8_t button) {
-    if (button != SDL_BUTTON_LEFT || room_chat_.is_open() || !room_chat_available()) return false;
+    if (button != SDL_BUTTON_LEFT) return false;
+    if (room_chat_.is_open()) {                                                        // a click while the input is open: closes it, sends nothing, and is not the screen's click
+        close_room_chat();
+        room_chat_press_taken_ = true;
+        map_select_.release_buttons();
+        return true;
+    }
+    if (!room_chat_available()) return false;
     if (x < MapSelectScreen::LABEL_X || x >= MapSelectScreen::LABEL_X + MapSelectScreen::STATUS_W || y < MapSelectScreen::STATUS_Y || y >= MapSelectScreen::STATUS_Y + MapSelectScreen::STATUS_H) return false;
     room_chat_.open(false);
+    room_chat_press_taken_ = true;                                                     // (the release of the click that opened it is nobody's either)
+    return true;
+}
+
+bool Application::room_mouse_up(int32_t /*x*/, int32_t /*y*/, uint8_t button) {
+    if (button != SDL_BUTTON_LEFT) return false;
+    if (!room_chat_press_taken_ && !room_chat_.is_open()) return false;
+    room_chat_press_taken_ = false;
+    map_select_.release_buttons();                                                     // (a button that was pressed before the input opened does not fire at this release either)
     return true;
 }
 
@@ -1957,6 +1994,7 @@ void Application::net_start_from_setup(const std::string& map_path) {
 
 void Application::handle_net_events() {
     if (!net_) return;
+    for (const std::string& text : room_chat_log_.take({}, static_cast<uint32_t>(net_time_ms_))) std::cerr << "[Application] Room chat: " << text << std::endl;      // (the count of the lines that the log left out, once the budget allows it)
     for (const net::NetGame::Event& ev : net_->take_events()) {
         switch (ev.type) {
             case net::NetGame::Event::Type::StartRequested:
@@ -1972,8 +2010,8 @@ void Application::handle_net_events() {
                 fill_specs_.clear();
                 break;
             case net::NetGame::Event::Type::Chat:                    // (protocol 11) a line in the waiting room: the log of the program has it; the status line shows it for a few seconds
-                for (const net::ChatLine& line : net_->take_pregame_chat()) {
-                    std::cerr << "[Application] Room chat: " << (line.notice() ? std::string("(room)") : line.name) << ": " << line.text << std::endl;
+                for (const std::string& text : room_chat_log_.take(net_->take_pregame_chat(), static_cast<uint32_t>(net_time_ms_))) {       // (a budget: a flooded room does not flood the log)
+                    std::cerr << "[Application] Room chat: " << text << std::endl;
                 }
                 break;
             case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over (or the server dropped this player for being away)
@@ -2021,14 +2059,15 @@ void Application::net_load_match() {
 void Application::net_begin_match() {
     local_player_id_ = net_->my_seat();
     hud_.set_command_sink(net_.get());
-    room_chat_.close();
+    close_room_chat();
     enter_match();
     // The match's chat log starts with what was said in the waiting room (protocol 11: the lobby kept the last 200 lines, this player's own among them): the people of a room who talked
     // before the START find their talk in the log of the match. The room's own notices ("Bots cannot play with Fog of War.") were for the setup screen and are not repeated.
     for (const net::ChatLine& line : net_->pregame_chat()) {
         if (line.notice()) continue;
-        const std::string name = line.seat < sim::MAX_PLAYERS ? sim_.get_player_name(line.seat) : line.name;
-        hud_.receive_chat_message(line.seat, name.empty() ? line.name : name, line.text, false, sim_.get_world_state());
+        // (under the name that the sender had when it spoke: the seat may have another player now, a player who left and a newcomer who took the seat)
+        const std::string name = !line.name.empty() ? line.name : (line.seat < sim::MAX_PLAYERS ? sim_.get_player_name(line.seat) : std::string());
+        hud_.receive_chat_message(line.seat, name, line.text, false, sim_.get_world_state());
     }
     start_net_bots();
 }
@@ -2037,6 +2076,7 @@ void Application::net_begin_match() {
 void Application::net_end_session(const std::string& notice) {
     stop_bots();
     room_chat_.close();
+    room_chat_press_taken_ = false;
     fill_specs_.clear();
     say_sent_ = false;
     if (net_) net_->leave();

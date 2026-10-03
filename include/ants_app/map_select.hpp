@@ -133,10 +133,13 @@ public:
     void handle_mouse_motion(int32_t screen_x, int32_t screen_y);
     /// FUN_01014076: Up / Down step the map list (wrapping), Enter, S and s start, Q, q, X and x leave, every other key does nothing (Esc included). `repeat` is the auto-repeat
     /// of a held key (SDL_KeyboardEvent::repeat). The original does not tell a repeat from a press (its key translation, FUN_01031bbd, never reads the repeat bit of a key message;
-    /// the input queue only thins them to one per 50 ms), so on its own screens (the local game, a LAN host) a repeat acts like a press. The LEADER of a server's room, whose
-    /// START starts the match of every player there, ignores the repeat of START (Enter, the keypad's Enter, S, s): a key that closed the quick help and is still held must not
-    /// press the new screen's START. Every other key acts on a repeat everywhere (Up and Down scroll the list while they are held).
+    /// the input queue only thins them to one per 50 ms), so on its own screens a repeat of START acted like a press. In the remake START needs a PRESS on every screen that has one
+    /// (the local game, a LAN host, the leader of a server's room; a deliberate difference from the original, after a review found a held Enter that started a match nobody meant to
+    /// start: a key that closed the quick help or the chat input and is still held, or pressed twice, must not press the new screen's START): the repeat of START (Enter, the
+    /// keypad's Enter, S, s) is ignored. Every other key acts on a repeat (Up and Down scroll the list while they are held).
     void handle_key_down(SDL_Keycode key, bool repeat = false);
+    /// Lets go of every button (nothing is pressed or captured any more): the application calls it when the press that was on a button is not the screen's (a click that closed the chat input)
+    void release_buttons();
 
     void render(IRenderer& renderer, const ants::assets::AssetArchive& archive);
 
@@ -184,7 +187,16 @@ public:
         std::array<RoomSeat, 4> seats{};
         std::string map_file;                  // the host's choice (its file name), what a guest shows ("" before the host's first message)
         std::string status;                    // replaces the prompt line while networked
+        /// A line that the player is TYPING (the room's chat input, room_chat.hpp): `status_prefix` ("Say: ") and `status` (what is typed) are drawn as a typed line, in the prompt's two lines, and
+        /// its END shows when it is longer; `status_caret` says whether the blinking caret is on. False: `status` is a text for the prompt, and what does not fit its box ends in "...".
+        bool status_input{false};
+        std::string status_prefix;
+        bool status_caret{false};
     };
+    /// The lines that the prompt label (36, 447) 293 x 35 draws for a room view: the original's label holds two lines of 14 px, so whatever the status says is fitted to them (a text that
+    /// needs more ends in "...", a typed line shows its end). Public so that the tests measure what is drawn with the real font.
+    static constexpr size_t STATUS_LINES = 2;
+    static std::vector<std::string> status_lines(const IRenderer& renderer, const RoomView& room);
     void set_room(const RoomView& room) { room_ = room; }
     const RoomView& room() const noexcept { return room_; }
     /// A player of a room who is not its host: the original shows him ANOTHER screen (FUN_01014228: nh_start, no Up / Down / START / Fog buttons, a fixed

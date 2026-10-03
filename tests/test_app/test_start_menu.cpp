@@ -960,6 +960,24 @@ int main(int argc, char* argv[]) {
         bool whole = false;
         for (const Recorder::Text& t : rec.texts) whole = whole || t.text == "Empty seats at START";
         ASSERT_TRUE(whole);
+        // the caption under the choice (the bots only harvest until B4b: the panel must not promise a fight): exact words, dim, between the choice and the name, drawn whole and 14 px
+        ASSERT_EQ(std::string(fill_choice_caption()), std::string("Bots gather food; they do not fight yet."));
+        MenuElement caption;
+        MenuElement name_label;
+        for (const MenuElement& e : g.menu.elements()) {
+            if (e.text == fill_choice_caption()) caption = e;
+            if (e.text == "Your name") name_label = e;
+        }
+        ASSERT_EQ(caption.text, std::string(fill_choice_caption()));
+        ASSERT_TRUE(caption.id == MenuId::None && caption.tone == MenuTone::Dim && caption.font == FontSize::Px14 && caption.centered);
+        ASSERT_TRUE(caption.rect.y >= fill.rect.y + fill.rect.h && caption.rect.y + caption.rect.h <= name_label.rect.y);            // under the choice, above the name
+        ASSERT_TRUE(caption.rect.x <= fill.rect.x && caption.rect.x + caption.rect.w >= fill.rect.x + fill.rect.w);                    // centred under the whole control
+        bool caption_drawn = false;
+        for (const Recorder::Text& t : rec.texts) caption_drawn = caption_drawn || (t.text == fill_choice_caption() && t.size == FontSize::Px14);
+        ASSERT_TRUE(caption_drawn);
+        Rig room_panel;
+        room_panel.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        ASSERT_FALSE(has_text(room_panel.menu.elements(), fill_choice_caption()));                                                       // (only the panel that has the choice)
     } TEST_END();
 
     TEST_CASE("M5.1 Servers: HOST, HOST:PORT, IPv4, [IPv6] and [IPv6]:PORT are read (the port 4001 when none is given); anything else is refused with a reason; what the screen shows reads back") {

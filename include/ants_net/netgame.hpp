@@ -161,8 +161,11 @@ public:
     /// ignored). Printable ASCII, at most kMaxChatChars characters. The room relays it to everybody, this machine included, so the line comes back as an Event::Chat. True when the line was
     /// sent (false: not in a room or a match, nothing to say).
     bool chat(const std::string& text, bool team = false);
-    /// Shows `text` on the status line for five seconds (the line that this player has just said: the room's own copy of it is not shown to its sender); cut to what two lines hold
+    /// Shows `text` on the status line for five seconds (the line that this player has just said: the room's own copy of it is not shown to its sender); cut to kStatusNoticeChars (a
+    /// bound: the setup screen draws two lines of 14 px and fits what it draws to them by pixels, MapSelectScreen::status_lines)
     void show_notice(std::string text);
+    /// The longest text that a notice keeps (the rest is "..."): a line of 100 characters with the sender's name in front is cut here
+    static constexpr size_t kStatusNoticeChars = 84;
     /// The lines that arrived in the room since the last call (a guest's, the host's, and the room's own notices to this machine: ChatLine::notice())
     std::vector<ChatLine> take_pregame_chat();
     /// Every line of the waiting room (the last 200), kept after the match begins so that the match's chat log can start with them: the application decides

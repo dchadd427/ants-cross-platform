@@ -73,6 +73,8 @@ int menu_map_index(const std::string& key) noexcept;
 /// What the Host panel's "Empty seats at START" holds: nothing (the match starts with the people who are there), or bots of a level that the server seats in the empty seats when this
 /// player, the room's leader, presses START (network protocol 11; the web page's `?fill=`): "Leave empty", "Easy bots", "Medium bots", "Hard bots"
 const char* fill_choice_text(net::FillLevel level) noexcept;
+/// The line under the choice on the Host panel (and under the choice on web/four.html): what the bots can do. "Bots gather food; they do not fight yet."
+const char* fill_choice_caption() noexcept;
 /// What the room's panel tells the leader about START: "Empty seats will be Medium bots." / "Empty seats stay empty."
 std::string fill_choice_sentence(net::FillLevel level);
 

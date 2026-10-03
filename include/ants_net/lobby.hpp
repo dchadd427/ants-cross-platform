@@ -22,7 +22,8 @@
 //
 // Chat and the fill (protocol 11, docs/NETWORK_PORT.md "Protocol 11"). Everybody who is in the room can talk before the match, while it waits for players and while the map loads: a Chat message
 // from a guest is relayed to EVERYBODY in the room (the sender included), with the seat of its connection stamped (a team does not exist yet: the team flag is cleared), under the same
-// flood budget as every other message of the connection; a line that cannot be decoded is a violation as in the match. A guest who joins later hears only what is said after it joined. Both
+// flood budget as every other message of the connection and under a chat budget of its own (ChatBudget: a burst of 5 lines, then one a second; a line beyond it is dropped, and a connection that
+// goes on beyond it for long is flooding: a violation each); a line that cannot be decoded is a violation as in the match. A guest who joins later hears only what is said after it joined. Both
 // lobbies keep the lines (ChatLog: the last 200) and hand the new ones to their owner (take_chat() and the Chat event), so that the application can show them and start the match's chat log with
 // them. The room itself can speak to one guest (HostLobby::notify: a Chat message from kRoomSender), which is how a server's room tells its leader why a fill was refused. The StartRequest of the
 // leader carries a fill level: with one, the room's owner may seat bots in the empty seats and start (Event::LeaderStart carries the level; HostLobby::can_start_filled says whether the room
@@ -194,6 +195,7 @@ private:
         uint32_t join_order{0};                  // 1, 2, 3, ... in the order of the Welcomes: the earliest guest still here leads a server's room
         SeatKey key{};                           // protocol 10: the key of the seat, handed out with the Welcome (all zero: none)
         MessageBudget talk;                      // flood control: every message that the guest sends takes one from it
+        ChatBudget chat;                         // ... and every line of chat takes one from this one as well (flood.hpp: a burst of 5, then one a second; a line beyond it is dropped)
         uint32_t ignored_start_requests{0};      // the StartRequests of this guest that were ignored (the first kIgnoredStartRequestsAllowed are free)
     };
     struct Pending {
@@ -209,7 +211,7 @@ private:
     SeatKey new_key() const;
     uint8_t seat_of_key(const SeatKey& key) const noexcept;
     void take_over(uint8_t seat, Pending& p, const HelloMsg& hello);
-    void handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg);
+    void handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg, uint32_t now_ms);
     void relay_chat(uint8_t sender, const std::string& text);
     void check_all_loaded();
     void cancel_with(CancelMsg::Reason reason, uint8_t player);

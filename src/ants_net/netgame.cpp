@@ -316,7 +316,7 @@ void NetGame::collect_room_chat() {
             events_.push_back(Event{Event::Type::Chat, line.seat});
         } else {
             std::string shown = line.notice() ? line.text : (line.name.empty() ? "Seat " + std::to_string(static_cast<unsigned>(line.seat) + 1u) : line.name) + ": " + line.text;
-            if (shown.size() > 84) shown = shown.substr(0, 81) + "...";                      // (the status label has two lines of 14 px text)
+            if (shown.size() > kStatusNoticeChars) shown = shown.substr(0, kStatusNoticeChars - 3) + "...";           // (a bound on what the notice keeps; the setup screen fits what it draws to the label's two lines by pixels)
             set_notice(std::move(shown));
             events_.push_back(Event{Event::Type::Chat, line.seat});
         }
@@ -843,7 +843,7 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
 }
 
 void NetGame::show_notice(std::string text) {
-    if (text.size() > 84) text = text.substr(0, 81) + "...";                        // (the status label has two lines of 14 px text)
+    if (text.size() > kStatusNoticeChars) text = text.substr(0, kStatusNoticeChars - 3) + "...";               // (see collect_room_chat)
     set_notice(std::move(text));
 }
 

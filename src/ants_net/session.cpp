@@ -292,8 +292,12 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             ChatMsg m;
             if (!decode(msg, m)) return violation(player);
             m.sender = player;                       // the connection speaks, not the payload
+            // The chat budget (flood.hpp; a remake protection, the original has no limit on chat): a line beyond it is dropped, and a client that keeps on beyond it is flooding
+            const ChatBudget::Verdict verdict = clients_[player].chat.take(last_ms_);
+            if (verdict == ChatBudget::Verdict::Offence) return violation(player);
+            if (verdict == ChatBudget::Verdict::Drop) return;
             relay_chat(m);
-            // the host's own screen is a receiver like the others: a host with a seat hears a team line of two others no more than a guest does; a host without a seat (the referee) logs every line
+            // the host's own screen is a receiver like the others: a host with a seat hears a team line of two others no more than a guest does; a host without a seat (the referee) hears every line (nothing installs a log for it yet)
             if (on_chat_ && (seatless() || hears_chat(m.sender, m.team, cfg_.host_player))) on_chat_(m);
             return;
         }

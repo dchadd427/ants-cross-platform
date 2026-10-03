@@ -57,11 +57,21 @@ if grep -qF 'id="fill"' "$FOUR_PAGE" && grep -qF '<option value="easy">Easy bots
     && grep -qF '<option value="">Leave empty' "$FOUR_PAGE" && grep -qF "remember('ants-four-fill', level)" "$FOUR_PAGE" && grep -qF "recall('ants-four-fill')" "$FOUR_PAGE"; then FILL_FORM=0; fi
 check 'web/four.html offers "Empty seats at START" (Leave empty, Easy bots, Medium bots, Hard bots) in the New match form and remembers it' "$FILL_FORM"
 FILL_LINKS=1
-if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "value === 'easy' || value === 'medium' || value === 'hard'" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE" && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE"; then FILL_LINKS=0; fi
-check "web/four.html puts the choice into every game link and into its own address as &fill=<word> and reads only easy, medium or hard (from the form, the settings and the address)" "$FILL_LINKS"
+if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE" && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF 'id="fill-caption">Bots gather food; they do not fight yet.' "$FOUR_PAGE"; then FILL_LINKS=0; fi
+check "web/four.html puts the choice into every game link and into its own address as &fill=<word>, reads the address through validFill, and says under the choice that the bots gather food and do not fight yet" "$FILL_LINKS"
 FILL_SHELL=1
-if grep -qF "ANTS_ARGS.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF '/^(easy|medium|hard)$/.test(fill)' "$SHELL_PAGE"; then FILL_SHELL=0; fi
-check "web/shell.html gives the game --fill-bots for ?fill=easy|medium|hard only (a regular expression of exactly the three words)" "$FILL_SHELL"
+if grep -qF "ANTS_ARGS.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillArg(q.get('fill'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
+check "web/shell.html gives the game --fill-bots from antsFillArg's answer and nothing else (the line that takes the address's word and the line that hands it to the game)" "$FILL_SHELL"
+# The validation itself is RUN, not read: the two functions are cut out of the pages and given a table of addresses' values (the three words in any case; empty, other words, spaces, line ends,
+# look-alikes, an argument smuggled behind a word, a very long text, values that are no text): shell.html's antsFillArg must answer the lower case word or nothing, four.html's validFill the same
+if command -v node > /dev/null 2>&1; then
+    FILL_RUN="$(node "$ROOT/tests/scripts/web_fill_check.js" "$SHELL_PAGE" "$FOUR_PAGE" 2>&1)"
+    FILL_RUN_RC=$?
+    [ "$FILL_RUN_RC" -ne 0 ] && echo "$FILL_RUN" | sed 's/^/    /'
+    check "the pages' own code for ?fill= (web/shell.html antsFillArg, web/four.html validFill), run with node on a table of values: easy, medium, hard in any case give the lower case word, everything else gives nothing" "$FILL_RUN_RC"
+else
+    echo "  SKIP: node is not installed: the validation code of ?fill= in web/shell.html and web/four.html was NOT run (tests/scripts/web_fill_check.js)"
+fi
 check "web/four.html tells what happens to a hidden or covered window (the match does not wait for it, a lagging notice after 3 s, dropped after 30 s without a sign of life, cannot come back) and no longer says that the match waits for it (it did not since v0.0.94)" "$([ "$(grep -c 'The match does not wait for it' "$ROOT/web/four.html")" -eq 1 ] && grep -q 'dropped from the match and cannot come back' "$ROOT/web/four.html" && ! grep -q 'and the match waits for it' "$ROOT/web/four.html"; echo $?)"
 # AGENTS.md rule 6: the game files of the beta site (.wasm, .data, .html, .css, .js) are revalidated, not stored away and not downloaded again: exactly Cache-Control "no-cache, must-revalidate",
 # ETags on (no `etag off`), no `no-store` (a response that may not be stored cannot be revalidated: every reload fetched 9 MB) and no `expires -1` (nginx would add a second Cache-Control

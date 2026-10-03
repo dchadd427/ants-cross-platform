@@ -4653,7 +4653,7 @@ void run_failure_tests() {
             ASSERT_EQ(m.host->violations(0), 8u);
             ASSERT_FALSE(m.client_ends[0]->is_open());
             if (kind == "startreq") ASSERT_EQ(m.host->ignored_start_requests(), kIgnoredStartRequestsAllowed + 8u);      // the 24th is the eighth violation: the rest is never looked at
-            if (kind == "chat") ASSERT_TRUE(chats >= kMessageBurst && chats <= kMessageBurst + 300);                       // a second's worth was relayed, not 3000 lines
+            if (kind == "chat") ASSERT_EQ(chats, kChatBurst);                                                              // the chat budget's burst was relayed (S2.10), not a second's worth of messages, not 3000 lines
             ASSERT_TRUE(m.host->client_present(1) && m.host->client_present(2));         // nobody else notices
             m.settle();
             ASSERT_TRUE(m.sims[1]->state_hash() == m.referee.state_hash() && m.sims[2]->state_hash() == m.referee.state_hash());
@@ -9411,6 +9411,98 @@ void run_team_chat_tests() {
         ASSERT_TRUE(has_line(m.host_heard, "all of you") && has_line(m.heard[1], "all of you") && has_line(m.heard[2], "all of you"));
         ASSERT_TRUE(has_line(m.heard[1], "host to all") && has_line(m.heard[2], "host to all"));
         ASSERT_TRUE(m.raw[3].size() == 2 && m.on_wire(3) == 2);
+    } TEST_END();
+
+    TEST_CASE("N2.93 The Match's Chat Has A Budget Of Its Own (A Remake Protection: The Original Has No Limit On Chat): A Client Says A Burst Of 5 Lines And Then One A Second; A Line Beyond It Is Dropped (Nobody Hears It, Nothing Is Logged, No Offence At First); A Client That Goes On Beyond It For Long Is Thrown Out; Team Lines Count The Same; Each Client Has Its Own; The Host's Own Player Is Not A Connection And Has No Budget; An Honest Talker Is Never Touched") {
+        {   // a burst of 8 from one client (seat 0): 5 reach the others (and itself), in order; the sender stays
+            TeamChatRig m(false, 3, 0);
+            for (int i = 0; i < 8; ++i) ASSERT_TRUE(m.say(0, "burst " + std::to_string(i), false));
+            m.step(400);
+            ASSERT_EQ(m.heard[1].size(), size_t{kChatBurst});
+            ASSERT_EQ(m.heard[0].size(), size_t{kChatBurst});
+            for (size_t i = 0; i < m.heard[1].size(); ++i) ASSERT_EQ(m.heard[1][i].text, "burst " + std::to_string(i));
+            ASSERT_EQ(m.host_heard.size(), size_t{kChatBurst});                          // (the referee's callback hears what was relayed, not what was dropped)
+            ASSERT_TRUE(m.host->client_present(0));
+            ASSERT_EQ(m.host->violations(0), 0u);
+            // a second later one more, not two; five quiet seconds fill the burst again
+            m.step(1000);
+            ASSERT_TRUE(m.say(0, "after a second", false) && m.say(0, "right behind it", false));
+            m.step(300);
+            ASSERT_EQ(m.heard[1].size(), size_t{kChatBurst + 1});
+            ASSERT_EQ(m.heard[1].back().text, std::string("after a second"));
+            m.step(6000);
+            for (int i = 0; i < 6; ++i) ASSERT_TRUE(m.say(0, "again " + std::to_string(i), false));
+            m.step(300);
+            ASSERT_EQ(m.heard[1].size(), size_t{kChatBurst + 1 + kChatBurst});
+        }
+        {   // a team line takes from the same budget; each client has its own; nothing else of the match is touched
+            TeamChatRig m(false, 3, 0);
+            ASSERT_TRUE(m.ally(0, 1));
+            for (int i = 0; i < 3; ++i) ASSERT_TRUE(m.say(0, "team " + std::to_string(i), true));
+            for (int i = 0; i < 3; ++i) ASSERT_TRUE(m.say(0, "all " + std::to_string(i), false));
+            for (int i = 0; i < 2; ++i) ASSERT_TRUE(m.say(2, "other " + std::to_string(i), false));
+            m.step(400);
+            size_t from_0 = 0, from_2 = 0;
+            for (const ChatMsg& c : m.heard[1]) (c.sender == 0 ? from_0 : from_2) += 1;
+            ASSERT_EQ(from_0, size_t{kChatBurst});                                       // 3 team + 3 all = 6 lines: the sixth is dropped
+            ASSERT_EQ(from_2, size_t{2});                                                // seat 2 has its own burst
+            ASSERT_TRUE(m.host->client_present(0) && m.host->client_present(2));
+        }
+        {   // an honest talker: a line every 1.2 s for a minute and a busy one, a line a second for two minutes: all heard, no offence
+            TeamChatRig m(false, 3, 0);
+            for (int i = 0; i < 50; ++i) {
+                ASSERT_TRUE(m.say(0, "talk " + std::to_string(i), false));
+                m.step(1200);
+            }
+            ASSERT_EQ(m.heard[1].size(), size_t{50});
+            for (int i = 0; i < 120; ++i) {
+                ASSERT_TRUE(m.say(2, "busy " + std::to_string(i), false));
+                m.step(1000);
+            }
+            ASSERT_EQ(m.heard[1].size(), size_t{170});
+            ASSERT_TRUE(m.host->client_present(0) && m.host->client_present(2));
+            ASSERT_TRUE(m.host->violations(0) == 0u && m.host->violations(2) == 0u);
+        }
+        {   // two lines a second for a minute: half are dropped (the excess refills as fast as it is used), nobody is thrown out; four a second for long: the excess (20 lines) runs out after
+            // about ten seconds, then each is a violation and eight throw the client out
+            TeamChatRig m(false, 3, 0);
+            for (int i = 0; i < 120; ++i) {
+                ASSERT_TRUE(m.say(0, "two a second " + std::to_string(i), false));
+                m.step(500);
+            }
+            ASSERT_TRUE(m.host->client_present(0));
+            ASSERT_TRUE(m.heard[1].size() >= 60 && m.heard[1].size() <= 70);
+            m.step(6000);
+            const size_t before = m.heard[1].size();
+            size_t sent = 0;
+            while (m.host->client_present(0) && sent < 400) {
+                ASSERT_TRUE(m.say(0, "four a second " + std::to_string(sent), false));
+                ++sent;
+                m.step(250);
+            }
+            ASSERT_FALSE(m.host->client_present(0));
+            ASSERT_TRUE(sent >= 30 && sent <= 90);
+            ASSERT_TRUE(m.heard[1].size() - before >= 10 && m.heard[1].size() - before <= 30);
+            ASSERT_TRUE(m.host->client_present(1) && m.host->client_present(2));
+        }
+        {   // a flood is out within a pass; the other client's honest line is heard as ever
+            TeamChatRig m(false, 3, 0);
+            for (int i = 0; i < 900; ++i) m.client_ends[0]->send(encode(ChatMsg{0, false, "flood " + std::to_string(i)}));
+            ASSERT_TRUE(m.say(1, "an honest line", false));
+            m.step(300);
+            ASSERT_FALSE(m.host->client_present(0));
+            size_t honest = 0, spam = 0;
+            for (const ChatMsg& c : m.heard[2]) (c.text == "an honest line" ? honest : spam) += 1;
+            ASSERT_TRUE(honest == 1 && spam == kChatBurst);
+        }
+        {   // the host's own player (a game on the local network) is no connection: twenty lines at once all go out
+            TeamChatRig m(true, 3, 0);
+            for (int i = 0; i < 20; ++i) ASSERT_TRUE(m.say(0, "host line " + std::to_string(i), false));
+            m.step(400);
+            ASSERT_EQ(m.heard[1].size(), size_t{20});
+            ASSERT_EQ(m.heard[2].size(), size_t{20});
+            ASSERT_EQ(m.host_heard.size(), size_t{20});
+        }
     } TEST_END();
 }
 

@@ -198,6 +198,10 @@ void MapSelectScreen::handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_
     if (fire_quit) trigger_quit();
 }
 
+void MapSelectScreen::release_buttons() {
+    for (ScreenButton* b : {&up_, &down_, &start_, &quit_, &fow_on_, &fow_off_}) b->reset();
+}
+
 // FUN_01014076: the keys are Up (0xe) and Down (0xf), Enter (0x18), 'S' and 's' (start), 'Q', 'q', 'X' and 'x' (leave); nothing else does anything, Esc included
 void MapSelectScreen::handle_key_down(SDL_Keycode key, bool repeat) {
     switch (key) {
@@ -210,7 +214,7 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key, bool repeat) {
         case SDLK_RETURN:
         case SDLK_KP_ENTER:
         case SDLK_s:
-            if (repeat && leads_server_room()) break;                         // (a held key is no new press for the leader's START; the original's own screens act on it)
+            if (repeat) break;                                                // (a held key is no new press for START, on any screen that has one; the original's own screens act on it)
             start();
             break;
         case SDLK_q:
@@ -220,6 +224,20 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key, bool repeat) {
         default:
             break;
     }
+}
+
+// The prompt label of the original is 293 x 35: two lines of 14 px (a third would hang out of the box). The original's own texts fit; the room's status can be anything (a line that was said
+// in the room, a typed line): a text that needs more ends in "...", and a line that is being typed shows its end, with the prompt and the caret as it scrolls (a blinking caret is a blank while
+// it is off, so the lines do not change with the blink).
+std::vector<std::string> MapSelectScreen::status_lines(const IRenderer& renderer, const RoomView& room) {
+    if (room.status_input) {
+        std::string typed = room.status_prefix + room.status + "_";
+        std::vector<std::string> lines = wrap_label_tail(renderer, typed, STATUS_W, FontSize::Px14, STATUS_LINES);
+        if (!room.status_caret && !lines.empty() && !lines.back().empty() && lines.back().back() == '_') lines.back().back() = ' ';
+        return lines;
+    }
+    const std::string prompt = !room.status.empty() ? room.status : std::string("Press START when all players' thumbs have appeared.");
+    return wrap_label_fitted(renderer, prompt, STATUS_W, FontSize::Px14, STATUS_LINES);
 }
 
 void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
@@ -293,8 +311,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     }
 
     // 6. The prompt: the label (36, 447) 293 x 35 with 14 px lines, wrapped at its width
-    const std::string prompt = !room_.status.empty() ? room_.status : std::string("Press START when all players' thumbs have appeared.");
-    draw_label(renderer, prompt, LABEL_X, STATUS_Y, STATUS_W, label_colour, FontSize::Px14, false);
+    draw_label_lines(renderer, status_lines(renderer, room_), LABEL_X, STATUS_Y, label_colour, FontSize::Px14);
 
     // 7. Players' Status, slot 0: the portrait animation agst301 (12 frames, 1650 ms loop, running since the screen was created) has its origin at (395,115) and
     // the thumbs-up sprite sits at (540,95); the sprite's own part offsets place the ant relative to that origin.

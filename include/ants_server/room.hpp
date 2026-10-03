@@ -125,6 +125,7 @@ struct RoomStatus {
         bool fill{false};                   // seated by the leader's START (false: by the room's specification)
     };
     std::vector<Bot> bots;
+    bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
     RoomState state{RoomState::Waiting};
     std::string reason;                     // why a room failed, or how it ended ("" while it runs)
     uint8_t joined{0};

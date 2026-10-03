@@ -4322,7 +4322,7 @@ void run_bot_tests() {
         w.run(200);
         ASSERT_EQ(said(cat.room_chat), (std::vector<std::string>{"0|Ann|welcome Cat"}));
         ASSERT_EQ(said(bob.room_chat).size(), size_t{3});
-        // a flood: 1500 lines at once from Bob; he is out (BadRequest), the room is still there for the others and the match can start
+        // a flood: 1500 lines at once from Bob; the chat budget (5 lines, then one a second) lets 5 through and then it is a violation each: he is out (BadRequest) at once
         net::ChatMsg spam;
         spam.text = "spam spam spam";
         const std::vector<uint8_t> bytes = net::encode(spam);
@@ -4332,7 +4332,7 @@ void run_bot_tests() {
         RoomStatus s = w.status("CHAT-1");
         ASSERT_TRUE(s.state == RoomState::Waiting && s.joined == 2 && s.names[1].empty());
         ASSERT_TRUE(ann.lobby->phase() == net::ClientLobby::Phase::InRoom && cat.lobby->phase() == net::ClientLobby::Phase::InRoom);
-        ASSERT_TRUE(ann.room_chat.size() > 3 && ann.room_chat.size() <= 3 + 1300);           // the burst of 1000 and what the passes refilled; not the 1500
+        ASSERT_EQ(ann.room_chat.size(), size_t{3 + net::kChatBurst - 1});                    // what was said before, and what was left of Bob's burst of 5 (he had said one line); not 1000, not 1500
         // chat while loading: Dan is on a slow link (400 ms each way), so the room waits for his Loaded for a second after the Start
         Client& dan = w.connect("Dan", "CHAT-1", 255, {400, 0});
         w.run(1500);
@@ -4351,7 +4351,7 @@ void run_bot_tests() {
         ASSERT_TRUE(!dan.room_chat.empty() && dan.room_chat.back().text == "loading, loading" && dan.room_chat.back().name == "Cat");      // Dan, on his slow link, heard it too (it came behind his Start)
         // the lines are still there when the match has begun (the application starts the match's chat log with them)
         ASSERT_TRUE(ann.lobby->chat_log().back().text == "loading, loading");
-        ASSERT_EQ(ann.lobby->chat_log().size(), net::ChatLog::kMaxLines);                    // (the flood filled the log: the last 200 lines are kept, not the 1000)
+        ASSERT_EQ(ann.lobby->chat_log().size(), size_t{3 + net::kChatBurst - 1 + 1});        // (every line of the room is kept: the three, what the flood got through, the one of the loading room)
         // and the chat of the match is the match's: it works as ever
         ASSERT_TRUE(ann.session != nullptr && cat.session != nullptr);
         ASSERT_TRUE(ann.session->chat("in the match", false));
@@ -4616,6 +4616,138 @@ void run_bot_tests() {
         ASSERT_TRUE(has(bob.chats, "late team line"));                                       // Bob hears itself
         ASSERT_EQ(ann.chats.size(), ann_heard);                                              // Ann nothing
         ASSERT_EQ(raw.size(), size_t{1});                                                    // and the raw client still only the line for all
+    } TEST_END();
+
+    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10 Or 12 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
+        {   // the door's own check of the protocol, for a code that no room has
+            World w;
+            for (const uint16_t version : {uint16_t{10}, uint16_t{12}, uint16_t{1}, uint16_t{0}}) {
+                auto ends = w.net.connect({20, 10});
+                w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
+                net::HelloMsg hello;
+                hello.version = version;
+                hello.name = "Old";
+                hello.room = "NO-SUCH-ROOM";
+                ends.second->send(net::encode(hello));
+                w.run(300);
+                ASSERT_EQ(reject_on(ends.second), static_cast<int>(net::RejectReason::VersionMismatch));
+            }
+            auto ends = w.net.connect({20, 10});
+            w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
+            net::HelloMsg hello;
+            hello.name = "Right";
+            hello.room = "NO-SUCH-ROOM";
+            ends.second->send(net::encode(hello));
+            w.run(300);
+            ASSERT_EQ(reject_on(ends.second), static_cast<int>(net::RejectReason::NoSuchRoom));       // (the protocol is right: the room is what is wrong)
+        }
+        {   // no bot code in a room without bots
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("NOBOT-1", 2), w.now).ok);
+            Client& ann = w.connect("Ann", "NOBOT-1");
+            w.connect("Bob", "NOBOT-1");
+            w.run(500);
+            ASSERT_FALSE(w.status("NOBOT-1").bot_controller);                                           // (waiting: nothing yet)
+            w.run(5000);
+            ASSERT_TRUE(w.status("NOBOT-1").state == RoomState::Running);
+            ASSERT_FALSE(w.status("NOBOT-1").bot_controller);                                           // a room that runs with two people has no controller
+            ASSERT_TRUE(ann.sim.roster_mask() == 0x03);
+            // a leader's START without a fill: the same
+            ASSERT_TRUE(w.mgr.create_room(spec_of("NOBOT-2", 4), w.now).ok);
+            Client& cat = w.connect("Cat", "NOBOT-2");
+            w.connect("Dan", "NOBOT-2");
+            w.run(500);
+            ASSERT_TRUE(cat.lobby->request_start(net::FillLevel::None));
+            w.run(3000);
+            ASSERT_TRUE(w.status("NOBOT-2").state == RoomState::Running && w.status("NOBOT-2").bots.empty());
+            ASSERT_FALSE(w.status("NOBOT-2").bot_controller);
+            // the fill builds one (and the room's own bot spec does too)
+            ASSERT_TRUE(w.mgr.create_room(spec_of("BOT-F", 3), w.now).ok);
+            Client& eve = w.connect("Eve", "BOT-F");
+            w.run(500);
+            ASSERT_TRUE(eve.lobby->request_start(net::FillLevel::Easy));
+            w.run(3000);
+            ASSERT_TRUE(w.status("BOT-F").state == RoomState::Running && w.status("BOT-F").bots.size() == 2);
+            ASSERT_TRUE(w.status("BOT-F").bot_controller);
+            RoomSpec own = spec_of("BOT-S", 2);
+            own.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+            ASSERT_TRUE(w.mgr.create_room(own, w.now).ok);
+            w.connect("Fay", "BOT-S");
+            w.run(6000);
+            ASSERT_TRUE(w.status("BOT-S").state == RoomState::Running && w.status("BOT-S").bot_controller);
+        }
+        {   // the map notice waits for the pause after a cancelled start (the request that falls into the pause is lost, and the room says nothing about it)
+            const std::string dir = temp_dir_for("fill_pause");
+            {
+                std::ifstream in(maps_dir() + "/TINY.LVL", std::ios::binary);
+                std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                assets::LevelData tiny;
+                ASSERT_TRUE(tiny.load_from_memory(bytes.data(), bytes.size()));
+                const assets::AnthillSpawn* green = nullptr;
+                for (const auto& sp : tiny.anthill_spawns) {
+                    if (sp.tile_id == 154) green = &sp;
+                }
+                ASSERT_TRUE(green != nullptr);
+                const uint8_t pattern[6] = {154, 0, static_cast<uint8_t>(green->y & 0xFF), static_cast<uint8_t>(green->y >> 8), static_cast<uint8_t>(green->x & 0xFF), static_cast<uint8_t>(green->x >> 8)};
+                size_t at = bytes.size();
+                for (size_t i = 0; i + 6 <= bytes.size() && at == bytes.size(); ++i) {
+                    if (std::equal(pattern, pattern + 6, bytes.begin() + static_cast<std::ptrdiff_t>(i))) at = i;
+                }
+                ASSERT_TRUE(at < bytes.size());
+                bytes[at + 2] = 200;
+                bytes[at + 3] = 0;
+                std::ofstream out(fs::path(dir) / "BAD.LVL", std::ios::binary | std::ios::trunc);
+                out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            }
+            World w(ServerLimits(), dir);
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PAUSE-1", 4, "BAD.LVL"), w.now).ok);
+            Client& ann = w.connect("Ann", "PAUSE-1", 1);              // red and blue are playable together (S3.64): the room starts with no fill
+            Client& bob = w.connect("Bob", "PAUSE-1", 2);
+            bob.fail_load = true;                                       // Bob's copy is no good: the start is cancelled and the room waits two seconds
+            const auto run_in = [&](uint32_t ms) {
+                for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {
+                    w.now += 10;
+                    w.net.set_time(w.now);
+                    w.mgr.update(w.now);
+                    for (auto& c : w.clients) c->update(w.now, dir);
+                }
+            };
+            run_in(500);
+            ASSERT_TRUE(ann.lobby->request_start(net::FillLevel::None));
+            run_in(300);                                                // the cancel has come: the pause (2 s) has begun
+            ASSERT_TRUE(w.status("PAUSE-1").state == RoomState::Waiting);
+            bob.fail_load = false;
+            ASSERT_TRUE(ann.lobby->request_start(net::FillLevel::Medium));      // the filled roster has green, which this map cannot play: but we are in the pause
+            run_in(600);
+            ASSERT_TRUE(ann.room_chat.empty());                         // the room says nothing during the pause (the request is lost, START again)
+            ASSERT_TRUE(w.status("PAUSE-1").state == RoomState::Waiting && w.status("PAUSE-1").bots.empty());
+            run_in(2500);                                               // the pause is over
+            ASSERT_TRUE(ann.lobby->request_start(net::FillLevel::Medium));
+            run_in(500);
+            ASSERT_EQ(said(ann.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeFillMap}));       // now it is answered
+            std::error_code ignore;
+            fs::remove_all(dir, ignore);
+        }
+        {   // a vote that nobody can cast: Ann, the only person, is cut; the two bots are not voters; the status says "vote: null" (and the C++ status has the seat and no voter)
+            RWorld w;
+            RoomSpec spec = held_spec("BV-9", 3);
+            spec.bots = {ai::BotSpec{1, "standard", ai::Level::Easy}, ai::BotSpec{2, "standard", ai::Level::Easy}};
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            RClient& ann = w.connect("Ann", "BV-9", 0);
+            w.run(6000);
+            ASSERT_TRUE(w.status("BV-9").state == RoomState::Running);
+            const uint8_t ann_seat = ann.lobby->my_seat();
+            ann.reconnects = false;
+            w.cut(ann);
+            w.run(1500);
+            ASSERT_TRUE(w.status("BV-9").paused);
+            w.run(32000);                                               // 30 s away in all: the vote is open for the people who are connected: there are none
+            RoomStatus s = w.status("BV-9");
+            ASSERT_TRUE(s.paused && s.vote_seat == ann_seat && s.voters == 0);
+            ctl::JsonValue v = status_to_json(s);
+            ASSERT_TRUE(v.get("paused").as_bool_or(false) && v.get("absent").size() == 1);
+            ASSERT_TRUE(v.get("vote").is_null());                       // nobody can vote: no vote to show (the status of a vote with voters 0 used to be {"seat": 0, "continue": 0, "voters": 0})
+        }
     } TEST_END();
 }
 

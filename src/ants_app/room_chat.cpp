@@ -51,11 +51,17 @@ std::string RoomChatInput::take_line() {
     return line;
 }
 
-std::string RoomChatInput::display(uint32_t now_ms) const {
-    if (!open_) return std::string();
-    std::string shown = text_.size() > kShownChars ? text_.substr(text_.size() - kShownChars) : text_;
-    const bool caret = (now_ms / kCaretHalfPeriodMs) % 2 == 0;
-    return std::string(kPrompt) + shown + (caret ? "_" : "");
+std::vector<std::string> RoomChatLog::take(const std::vector<net::ChatLine>& lines, uint32_t now_ms) {
+    std::vector<std::string> out;
+    for (const net::ChatLine& line : lines) {
+        if (budget_.take(now_ms, kBurst, kPerSecond)) out.push_back((line.notice() ? std::string("(room)") : line.name) + ": " + line.text);
+        else ++left_out_;
+    }
+    if (left_out_ > 0 && budget_.take(now_ms, kBurst, kPerSecond)) {
+        out.push_back("(" + std::to_string(left_out_) + " more lines were not logged)");
+        left_out_ = 0;
+    }
+    return out;
 }
 
 }  // namespace ants::app

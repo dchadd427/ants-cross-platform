@@ -7,6 +7,7 @@
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/lan_list.hpp"
 #include "ants_app/latency_corner.hpp"
+#include "ants_app/text_layout.hpp"
 #include "ants_app/version.hpp"
 #include "ants_net/lan.hpp"
 #include "ants_net/netgame.hpp"
@@ -1742,7 +1743,7 @@ void run_leader_tests() {
         ASSERT_FALSE(app.closing_click_pending());
     } TEST_END();
 
-    TEST_CASE("N5.26 LAN Host: The Original's Own Host Screen Is Not Guarded, Because The Original Is Not: The Second Click Of A Double Click On START! Presses The Host's START And Starts The Match, As A Held Enter Does") {
+    TEST_CASE("N5.26 LAN Host: The Original's Own Host Screen Is Not Guarded Against A Double Click, Because The Original Is Not: The Second Click Of A Double Click On START! Presses The Host's START And Starts The Match (A Held Enter Does Not: Its Repeat Is Not A Press, N5.53)") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;
         cfg.net_port = 0;
@@ -3363,7 +3364,7 @@ void run_room_chat_ui_tests() {
         app.room_text_input("hello bob");
         ASSERT_EQ(app.room_chat().text(), std::string("hello bob"));
         d.hall.step(30);
-        ASSERT_TRUE(app.map_select().room().status.rfind("Say: hello bob", 0) == 0);          // the status line shows the line (and a caret that blinks)
+        ASSERT_TRUE(app.map_select().room().status_input && app.map_select().room().status_prefix == "Say: " && app.map_select().room().status == "hello bob");   // the status line shows the line, typed (the screen draws the prompt, the end and a caret that blinks)
         // the screen's keys do nothing while the line is typed: not START (S), not Leave (Q, X), not the map (the arrows), and they are not typed either
         for (const SDL_Keycode k : {SDLK_s, SDLK_q, SDLK_x, SDLK_UP, SDLK_DOWN}) app.room_key_down(k, 0, false);
         d.hall.step(600);
@@ -3413,10 +3414,11 @@ void run_room_chat_ui_tests() {
         app.room_text_input(std::string(150, 'z'));
         ASSERT_EQ(app.room_chat().text().size(), size_t{100});
         ASSERT_TRUE(app.room_chat().text().rfind("abcstart-marker", 0) == 0);                // the line keeps its start (up to 100 characters)
-        ASSERT_TRUE(app.room_chat().display(150).find("start-marker") == std::string::npos && app.room_chat().display(150).back() == 'z');   // the status line shows the END of what is typed
-        ASSERT_TRUE(app.room_chat().display(0).size() <= std::string(RoomChatInput::kPrompt).size() + RoomChatInput::kShownChars + 1);
+        d.hall.step(30);
+        ASSERT_TRUE(app.map_select().room().status_input && app.map_select().room().status == app.room_chat().text());     // the status line has the whole line; the screen fits it to its box (N5.53)
         app.room_key_down(SDLK_ESCAPE, 0, false);
-        // the screen has its keys back: S starts the match for both
+        // the screen has its keys back (START's after the guard of 400 ms, N5.53): S starts the match for both
+        d.hall.step(450);
         app.room_key_down(SDLK_s, 0, false);
         ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
         ASSERT_EQ(app.sim().roster_mask(), 0x03);
@@ -3531,6 +3533,7 @@ void run_room_chat_ui_tests() {
         ASSERT_TRUE(bob.net.chat("one moment"));
         ASSERT_TRUE(hall.until([&]() { return app.net()->pregame_chat().size() == 2; }, 8000));
         ASSERT_EQ(lines(app.net()->pregame_chat()), (std::vector<std::string>{"0|Leader|ready when you are", "1|Bob|one moment"}));
+        hall.step(450);                                                                       // (START's guard after the input closed: N5.53)
         app.room_key_down(SDLK_s, 0, false);
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
         const std::string log = app.hud().chat_transcript("t");
@@ -3637,6 +3640,490 @@ void run_room_chat_ui_tests() {
             ASSERT_EQ(app.map_select().room().status, std::string("Press START when all players' thumbs have appeared."));
             app.quit();
         }
+    } TEST_END();
+
+    // SDL events for the tests that go through the window's own event loop
+    const auto push_key = [](SDL_Keycode sym, bool repeat) {
+        SDL_Event e;
+        std::memset(&e, 0, sizeof(e));
+        e.type = SDL_KEYDOWN;
+        e.key.keysym.sym = sym;
+        e.key.repeat = repeat ? 1 : 0;
+        return SDL_PushEvent(&e) == 1;
+    };
+    const auto push_button = [](Uint32 type, int32_t x, int32_t y) {
+        SDL_Event e;
+        std::memset(&e, 0, sizeof(e));
+        e.type = type;
+        e.button.x = x;
+        e.button.y = y;
+        e.button.button = SDL_BUTTON_LEFT;
+        e.button.clicks = 1;
+        return SDL_PushEvent(&e) == 1;
+    };
+    // a room of four with the application as its leader and Bob in it, the setup screen shown
+    const auto open_room = [&](Duo2& d, const std::string& code) {
+        if (!d.server.make_room(code, 4)) return false;
+        if (!d.app.init(join_config(d.server, code, "Leader"))) return false;
+        if (!d.hall.until([&]() { return d.app.net()->phase() == net::NetGame::Phase::Room && d.app.net()->is_leader(); }, 8000)) return false;
+        if (!d.bob.net.join("127.0.0.1", d.server.port(), "Bob", 255, code)) return false;
+        if (!d.hall.until([&]() { return d.bob.net.phase() == net::NetGame::Phase::Room && d.app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000)) return false;
+        d.hall.step(700);
+        return true;
+    };
+
+    TEST_CASE("N5.53 After The Chat Input Closes, START Is Not For The Next Key (A Review Fix): T, A Line, Enter, Enter (A Second Enter Right After) Starts Nothing; T, Enter, Enter Starts Nothing; Esc And Then S Starts Nothing; Neither Does The Keypad's Enter Or A Repeat; 350 ms After The Closing Still Nothing, 450 ms After It A Fresh Key Starts The Match; A Held Enter Starts Nothing On The Leader's, A LAN Host's And A Local Screen") {
+        Duo2 d;
+        ASSERT_TRUE(open_room(d, "GUARD-1"));
+        Application& app = d.app;
+        const auto room_state = [&]() { return d.server.status("GUARD-1").state; };
+        const auto still_waiting = [&]() { return room_state() == server::RoomState::Waiting && !app.map_select().is_locked() && app.state() == AppState::MapSelect; };
+        // RP1: T, a line, Enter (it sends and closes), a second Enter 20 ms later
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_text_input("hi bob");
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_FALSE(app.room_chat().is_open());
+        d.hall.step(20);
+        app.room_key_down(SDLK_RETURN, 0, false);
+        d.hall.step(1500);
+        ASSERT_TRUE(still_waiting());
+        ASSERT_EQ(d.bob.net.pregame_chat().size(), size_t{1});                                 // (the line did go: the second Enter was no line and no START)
+        // RP2: T, nothing typed, Enter (it closes, sends nothing), Enter
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_key_down(SDLK_RETURN, 0, false);
+        app.room_key_down(SDLK_RETURN, 0, false);
+        d.hall.step(1500);
+        ASSERT_TRUE(still_waiting());
+        // RP4: Esc, then S (the habit of typing "ss"), and the other START keys, a repeat among them
+        for (const SDL_Keycode key : {SDLK_s, SDLK_RETURN, SDLK_KP_ENTER}) {
+            app.room_key_down(SDLK_t, 0, false);
+            app.room_text_input("t");
+            app.room_text_input("oops");
+            app.room_key_down(SDLK_ESCAPE, 0, false);
+            app.room_key_down(key, 0, false);
+            app.room_key_down(key, 0, true);
+            d.hall.step(450);                                                                  // (the guard is over by the next round)
+            ASSERT_TRUE(still_waiting());
+        }
+        ASSERT_EQ(d.bob.net.pregame_chat().size(), size_t{1});                                 // (nothing of "oops" was sent)
+        // the other keys are not held back: Q leaves, but the map keys and the like are the screen's at once (here the Down key moves nothing for a leader, but it is not swallowed: T works at once)
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_key_down(SDLK_ESCAPE, 0, false);
+        app.room_key_down(SDLK_t, 0, false);                                                    // T right after the closing opens it again
+        ASSERT_TRUE(app.room_chat().is_open());
+        app.room_key_down(SDLK_ESCAPE, 0, false);
+        // a held Enter that was never a press starts nothing, now or later (the leader's screen)
+        d.hall.step(450);
+        for (int i = 0; i < 5; ++i) app.room_key_down(SDLK_RETURN, 0, true);
+        app.room_key_down(SDLK_s, 0, true);
+        d.hall.step(1000);
+        ASSERT_TRUE(still_waiting());
+        for (const SDL_Keycode key : {SDLK_RETURN, SDLK_KP_ENTER, SDLK_s}) ASSERT_TRUE(push_key(key, true));      // the same through the window's own event loop: SDL says repeat
+        app.run_frame_with_delta(0.016f);
+        d.hall.step(1000);
+        ASSERT_TRUE(still_waiting());
+        // the boundary: after Esc, 350 ms later the key is still held back, 450 ms after it is a fresh decision
+        app.room_key_down(SDLK_t, 0, false);
+        app.room_text_input("t");
+        app.room_key_down(SDLK_ESCAPE, 0, false);
+        d.hall.step(350);
+        app.room_key_down(SDLK_RETURN, 0, false);
+        d.hall.step(200);
+        ASSERT_TRUE(still_waiting());                                                           // (the Enter at 350 ms was swallowed; the clock has moved on to 550 ms)
+        // the guard is counted from the CLOSING, not from the last key: another Enter 100 ms after the swallowed one is still after more than 400 ms since the closing: it is a press
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+        app.quit();
+
+        {   // a LAN host: the room is the host's own, with a guest who is ready; a held Enter starts nothing, a press after the closing guard does
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            cfg.net_port = 0;
+            cfg.net_loopback_only = true;
+            cfg.player_name = "Alice";
+            Application host;
+            ASSERT_TRUE(host.init(cfg));
+            Peer guest;
+            ASSERT_TRUE(guest.net.join("127.0.0.1", host.net()->listen_port(), "Bob"));
+            Duo duo{host, guest};
+            ASSERT_TRUE(duo.until([&]() { return host.net()->room().slots[1].state == net::SlotState::Client && host.net()->can_start() && host.room_chat_available(); }, 8000));
+            duo.step(700);
+            for (int i = 0; i < 5; ++i) host.room_key_down(SDLK_RETURN, 0, true);
+            host.room_key_down(SDLK_s, 0, true);
+            host.room_key_down(SDLK_KP_ENTER, 0, true);
+            duo.step(1000);
+            ASSERT_TRUE(host.state() == AppState::MapSelect && !host.map_select().is_locked() && guest.net.phase() == net::NetGame::Phase::Room);     // nothing started
+            host.room_key_down(SDLK_t, 0, false);                                                // the same guard on a LAN host: a line, Enter, Enter
+            host.room_text_input("t");
+            host.room_text_input("ready?");
+            host.room_key_down(SDLK_RETURN, 0, false);
+            host.room_key_down(SDLK_RETURN, 0, false);
+            duo.step(600);
+            ASSERT_TRUE(host.state() == AppState::MapSelect && !host.map_select().is_locked() && guest.net.phase() == net::NetGame::Phase::Room);
+            host.room_key_down(SDLK_RETURN, 0, false);                                           // a fresh press, long after the closing: START
+            ASSERT_TRUE(duo.until([&]() { return host.state() == AppState::Playing && guest.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+            host.quit();
+        }
+        {   // a local game's screen: the repeat of Enter starts nothing, the press does (the guard is not in play: there is no chat there)
+            Application local;
+            ASSERT_TRUE(local.init(headless_config()));
+            ASSERT_EQ(local.state(), AppState::MapSelect);
+            for (int i = 0; i < 5; ++i) local.room_key_down(SDLK_RETURN, 0, true);
+            local.room_key_down(SDLK_s, 0, true);
+            ASSERT_EQ(local.state(), AppState::MapSelect);
+            local.room_key_down(SDLK_RETURN, 0, false);
+            ASSERT_EQ(local.state(), AppState::Playing);
+            local.quit();
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.54 A Player With No Keyboard Can Close The Chat Input (A Review Fix): A Second Click On The Status Line Closes It And Sends Nothing, A Click Anywhere Else Closes It Too (It Is Not The Screen's Click: A Click On START Does Not Start The Match Through An Open Input), The Release Of A Press That Began Before It Opened Fires Nothing; The Same Through The Window's Own Event Loop") {
+        Duo2 d;
+        ASSERT_TRUE(open_room(d, "GUARD-2"));
+        Application& app = d.app;
+        const int32_t line_x = MapSelectScreen::LABEL_X + 20;
+        const int32_t line_y = MapSelectScreen::STATUS_Y + 10;
+        const int32_t sx = MapSelectScreen::BTN_START_X + 5;
+        const int32_t sy = MapSelectScreen::BTN_START_Y + 5;
+        const auto quiet = [&]() { return d.server.status("GUARD-2").state == server::RoomState::Waiting && !app.map_select().is_locked() && app.state() == AppState::MapSelect; };
+        // a click opens it; its release is the input's (nothing for the screen)
+        ASSERT_TRUE(app.room_mouse_down(line_x, line_y, SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(line_x, line_y, SDL_BUTTON_LEFT));
+        app.room_text_input("typed with a finger");
+        ASSERT_FALSE(app.room_mouse_down(line_x, line_y, SDL_BUTTON_RIGHT));                  // the right button is no click
+        ASSERT_TRUE(app.room_chat().is_open());
+        // a second click on the status line closes it and sends nothing
+        ASSERT_TRUE(app.room_mouse_down(line_x, line_y, SDL_BUTTON_LEFT));
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(line_x, line_y, SDL_BUTTON_LEFT));
+        ASSERT_FALSE(app.room_mouse_up(line_x, line_y, SDL_BUTTON_LEFT));                     // (closed, and nothing pending: a release now is the screen's)
+        d.hall.step(500);
+        ASSERT_TRUE(d.bob.net.pregame_chat().empty() && quiet());
+        ASSERT_EQ(app.room_chat().text(), std::string());
+        // the closing click starts the guard of START's keys as Enter and Esc do: Enter right after a click that closed the input is no START
+        ASSERT_TRUE(app.room_mouse_down(line_x, line_y, SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_mouse_up(line_x, line_y, SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_mouse_down(line_x, line_y, SDL_BUTTON_LEFT));                  // (the second click closes it)
+        ASSERT_TRUE(app.room_mouse_up(line_x, line_y, SDL_BUTTON_LEFT));
+        ASSERT_FALSE(app.room_chat().is_open());
+        app.room_key_down(SDLK_RETURN, 0, false);
+        app.room_key_down(SDLK_s, 0, false);
+        d.hall.step(300);
+        ASSERT_TRUE(quiet());
+        d.hall.step(300);                                                                       // (more than 400 ms in all since the click: START keys are the screen's again, but not pressed here)
+        // a click elsewhere closes it too (the map's box, the empty middle of the screen)
+        for (const auto& where : {std::pair<int32_t, int32_t>{100, 320}, std::pair<int32_t, int32_t>{300, 150}, std::pair<int32_t, int32_t>{620, 470}}) {
+            ASSERT_TRUE(app.room_mouse_down(line_x, line_y, SDL_BUTTON_LEFT));
+            ASSERT_TRUE(app.room_mouse_up(line_x, line_y, SDL_BUTTON_LEFT));
+            app.room_text_input("words");
+            ASSERT_TRUE(app.room_mouse_down(where.first, where.second, SDL_BUTTON_LEFT));
+            ASSERT_FALSE(app.room_chat().is_open());
+            ASSERT_TRUE(app.room_mouse_up(where.first, where.second, SDL_BUTTON_LEFT));
+            ASSERT_TRUE(quiet());
+        }
+        // a click on START while the input is open: it closes the input, the match does not start; the release fires nothing either
+        ASSERT_TRUE(app.room_mouse_down(line_x, line_y, SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_mouse_up(line_x, line_y, SDL_BUTTON_LEFT));
+        app.room_text_input("a line");
+        ASSERT_TRUE(app.room_mouse_down(sx, sy, SDL_BUTTON_LEFT));
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_FALSE(app.map_select().start_button().pressed());
+        ASSERT_TRUE(app.room_mouse_up(sx, sy, SDL_BUTTON_LEFT));
+        d.hall.step(1500);
+        ASSERT_TRUE(quiet() && d.bob.net.pregame_chat().empty());
+        // a press that began on START BEFORE the input opened: T opens the input, the release is not START's click
+        app.map_select().handle_mouse_motion(sx, sy);
+        app.map_select().handle_mouse_down(sx, sy, SDL_BUTTON_LEFT);
+        ASSERT_TRUE(app.map_select().start_button().pressed());
+        app.room_key_down(SDLK_t, 0, false);
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_TRUE(app.room_mouse_up(sx, sy, SDL_BUTTON_LEFT));
+        ASSERT_FALSE(app.map_select().start_button().pressed());
+        d.hall.step(1500);
+        ASSERT_TRUE(quiet() && app.room_chat().is_open());                                      // (the input is still open: a release is no click on it)
+        app.room_key_down(SDLK_ESCAPE, 0, false);
+        // the same through the window's own event loop (motion, press, release as SDL queues them): a click on START with the input open starts nothing
+        ASSERT_TRUE(push_button(SDL_MOUSEBUTTONDOWN, line_x, line_y));
+        ASSERT_TRUE(push_button(SDL_MOUSEBUTTONUP, line_x, line_y));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.room_chat().is_open());
+        ASSERT_TRUE(push_button(SDL_MOUSEBUTTONDOWN, sx, sy));
+        ASSERT_TRUE(push_button(SDL_MOUSEBUTTONUP, sx, sy));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_FALSE(app.room_chat().is_open());
+        d.hall.step(1500);
+        ASSERT_TRUE(quiet());
+        // and with the input closed the same click is START: the match begins (the mouse has no guard: a click is a decision)
+        ASSERT_TRUE(push_button(SDL_MOUSEBUTTONDOWN, sx, sy));
+        ASSERT_TRUE(push_button(SDL_MOUSEBUTTONUP, sx, sy));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.55 The Match's Chat Log Gives A Seeded Line To The One Who Said It (A Review Fix): Bob Speaks In The Waiting Room And Leaves, Cat Takes His Seat: The Log Says Bob, Not Cat; A Line Whose Name Is Empty Falls Back To The Seat's Name") {
+        Server server;
+        server::RoomSpec spec;
+        spec.code = "SEED-1";
+        spec.map = "TINY.LVL";
+        spec.players = 4;
+        ASSERT_TRUE(server.mgr.create_room(spec, server.now).ok);
+        Application app;
+        ASSERT_TRUE(app.init(join_config(server, "SEED-1", "Leader")));
+        Peer bob, cat;
+        Hall hall{server, &app, {&bob, &cat}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "SEED-1"));
+        ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        ASSERT_TRUE(bob.net.chat("I am Bob and I have something to say"));
+        ASSERT_TRUE(hall.until([&]() { return app.net()->pregame_chat().size() == 1; }, 8000));
+        bob.net.leave();                                                                     // Bob goes, his seat is free again
+        hall.step(500);
+        ASSERT_TRUE(cat.net.join("127.0.0.1", server.port(), "Cat", 255, "SEED-1"));
+        ASSERT_TRUE(hall.until([&]() { return cat.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        ASSERT_EQ(cat.net.my_seat(), uint8_t{1});                                            // Cat sits where Bob sat
+        ASSERT_TRUE(cat.net.chat("Cat here"));
+        ASSERT_TRUE(hall.until([&]() { return app.net()->pregame_chat().size() == 2; }, 8000));
+        hall.step(700);
+        app.room_key_down(SDLK_s, 0, false);
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && cat.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_EQ(app.sim().get_player_name(1), std::string("Cat"));                         // (the seat has another player now)
+        const std::string log = app.hud().chat_transcript("t");
+        ASSERT_TRUE(log.find("Bob: I am Bob and I have something to say\n") != std::string::npos);
+        ASSERT_TRUE(log.find("Cat: I am Bob") == std::string::npos);
+        ASSERT_TRUE(log.find("Cat: Cat here\n") != std::string::npos);
+        ASSERT_TRUE(log.find("Bob: I am Bob") < log.find("Cat: Cat here"));
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.56 The Room's Chat Does Not Flood The Program's Log (A Review Fix): At Most 20 Lines At Once And 10 A Second, The Lines Beyond Are Counted And One Line Says How Many Were Not Logged; An Honest Room Is Logged In Full; The Application Prints Through It") {
+        {   // the model
+            RoomChatLog log;
+            std::vector<net::ChatLine> flood;
+            for (int i = 0; i < 300; ++i) flood.push_back(net::ChatLine{static_cast<uint8_t>(i % 4), "P" + std::to_string(i % 4), "line " + std::to_string(i)});
+            std::vector<std::string> out = log.take(flood, 1000);
+            ASSERT_EQ(out.size(), size_t{RoomChatLog::kBurst});                                // the burst, and nothing for the summary (the budget is empty)
+            ASSERT_EQ(out.front(), std::string("P0: line 0"));
+            ASSERT_EQ(out.back(), std::string("P3: line 19"));
+            ASSERT_EQ(log.left_out(), uint64_t{300 - RoomChatLog::kBurst + 0});
+            out = log.take({}, 1000);                                                          // no time has passed: still nothing
+            ASSERT_TRUE(out.empty());
+            out = log.take({}, 1300);                                                          // 300 ms: 3 tokens: the summary, once
+            ASSERT_EQ(out.size(), size_t{1});
+            ASSERT_EQ(out[0], std::string("(280 more lines were not logged)"));
+            ASSERT_EQ(log.left_out(), uint64_t{0});
+            ASSERT_TRUE(log.take({}, 1400).empty());                                           // (reported: nothing more to say)
+            // an honest room: 40 lines over 20 seconds are all there, no summary
+            RoomChatLog calm;
+            size_t printed = 0;
+            for (int i = 0; i < 40; ++i) {
+                const std::vector<std::string> one = calm.take({net::ChatLine{0, "Ann", "hello " + std::to_string(i)}}, 5000 + static_cast<uint32_t>(i) * 500u);
+                ASSERT_TRUE(one.size() == 1 && one[0] == "Ann: hello " + std::to_string(i));
+                printed += one.size();
+            }
+            ASSERT_EQ(printed, size_t{40});
+            ASSERT_EQ(calm.take({net::ChatLine{255, "", "Bots cannot play with Fog of War."}}, 30000)[0], std::string("(room): Bots cannot play with Fog of War."));
+        }
+        {   // the application, joined to a host that says 300 lines at once (its own lines have no budget): what reaches stderr is bounded
+            Peer host;
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Join;
+            cfg.net_address = "127.0.0.1";
+            cfg.net_port = host.net.listen_port();
+            cfg.player_name = "Guest";
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            Duo duo{app, host};
+            ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+            std::ostringstream captured;
+            std::streambuf* const saved = std::cerr.rdbuf(captured.rdbuf());
+            const double clock_before = app.net_clock_ms();
+            for (int i = 0; i < 300; ++i) host.net.chat("flood " + std::to_string(i));
+            duo.step(300);
+            const double elapsed_s = (app.net_clock_ms() - clock_before) / 1000.0;
+            std::cerr.rdbuf(saved);
+            size_t printed = 0;
+            bool summary = false;
+            std::istringstream in(captured.str());
+            for (std::string line; std::getline(in, line);) {
+                if (line.find("Room chat: Alice: flood ") != std::string::npos) ++printed;
+                if (line.find("more lines were not logged") != std::string::npos) summary = true;
+            }
+            ASSERT_TRUE(printed >= RoomChatLog::kBurst && printed <= RoomChatLog::kBurst + static_cast<size_t>(RoomChatLog::kPerSecond * elapsed_s) + 1);      // the burst and the rate: not 300
+            ASSERT_TRUE(summary);
+            app.quit();
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.57 Typing While The Map Loads: The Leader Presses START, The Room Is Loading (A Guest Has Not Reported Yet), T Still Opens The Input, The Line Reaches The Other Player, And The Input Closes When The Match Begins") {
+        Duo2 d;
+        ASSERT_TRUE(open_room(d, "LOAD-1"));
+        Application& app = d.app;
+        d.bob.hold_report = true;                                                             // Bob loads the map and does not report: the room stays in Loading
+        app.room_key_down(SDLK_s, 0, false);
+        ASSERT_TRUE(d.hall.until([&]() { return d.bob.report_pending; }, 8000));
+        ASSERT_TRUE(d.hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Loading; }, 8000));
+        ASSERT_TRUE(app.state() == AppState::MapSelect && app.room_chat_available());
+        app.room_key_down(SDLK_t, 0, false);
+        ASSERT_TRUE(app.room_chat().is_open());
+        app.room_text_input("t");
+        app.room_text_input("loading, loading");
+        app.room_key_down(SDLK_RETURN, 0, false);
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_TRUE(d.hall.until([&]() { return !d.bob.net.pregame_chat().empty(); }, 8000));
+        ASSERT_EQ(lines(d.bob.net.pregame_chat()), (std::vector<std::string>{"0|Leader|loading, loading"}));
+        ASSERT_EQ(app.map_select().room().status, std::string("You: loading, loading"));
+        // a click opens it while loading too, and the match beginning closes it
+        ASSERT_TRUE(app.room_mouse_down(MapSelectScreen::LABEL_X + 5, MapSelectScreen::STATUS_Y + 5, SDL_BUTTON_LEFT));
+        ASSERT_TRUE(app.room_chat().is_open());
+        app.room_text_input("still typing");
+        d.bob.report_pending = false;
+        d.bob.net.report_loaded(true);
+        ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        ASSERT_FALSE(app.room_chat().is_open());
+        ASSERT_FALSE(app.room_chat_available());
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.58 The Host Of A Room On The Local Network With A Fill Level And Fog Of War: START Seats No Bots And The Status Line Says Why (\"Bots cannot play with Fog of War.\"); With A Guest In The Room The Match Starts Without Bots, Alone It Is The Can't-Go Cue") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.fill_bots = net::FillLevel::Medium;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        for (int i = 0; i < 30; ++i) app.pump_network(0.010f);
+        app.map_select().set_selected_index(0);
+        app.net()->set_fog(true);                                                              // (what the Fog of War: On button does for a host)
+        for (int i = 0; i < 30; ++i) app.pump_network(0.010f);
+        ASSERT_EQ(app.map_select().room().status, std::string("Fog of War is on, so START seats no bots."));       // the prompt says it before anybody presses anything
+        app.map_select().handle_key_down(SDLK_RETURN);                                        // alone: no bots with fog, one person: the can't-go cue
+        for (int i = 0; i < 3; ++i) app.pump_network(0.010f);
+        ASSERT_EQ(app.map_select().room().status, std::string(net::kNoticeFillFog));          // the notice replaced the prompt at once: START said no, and why
+        for (uint8_t seat = 1; seat < 4; ++seat) ASSERT_TRUE(app.net()->room().slots[seat].state == net::SlotState::Empty);
+        ASSERT_FALSE(app.map_select().is_locked());
+        ASSERT_EQ(app.net()->phase(), net::NetGame::Phase::Room);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);                                              // two people, no bots
+        ASSERT_TRUE(app.bots() == nullptr);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.59 What The Setup Screen Draws For The Status Fits Its Box (A Review Fix): The Prompt Label Is 293 x 35, Two Lines Of 14 px: The Longest Typed Line (100 Wide Letters, 100 Narrow Ones, A Line Of Short Words), The \"You: ...\" Echo, A Received \"Name: ...\" And Any Other Text Never Needs A Third Line Or A Wider Line, With The Real Font; A Text That Is Cut Ends In \"...\", A Typed Line Shows Its End With The Prompt And The Caret; The Blink Does Not Move A Word") {
+        Application app;
+        ASSERT_TRUE(app.init(headless_config()));
+        Renderer& r = app.renderer();
+        using MS = MapSelectScreen;
+        const auto fits = [&](const std::vector<std::string>& got) {
+            if (got.size() > MS::STATUS_LINES) return false;
+            for (const std::string& l : got) {
+                if (r.get_text_width(l, FontSize::Px14) > MS::STATUS_W) return false;
+            }
+            return static_cast<int32_t>(got.size()) * font_cell_height(FontSize::Px14) <= MS::STATUS_H;
+        };
+        const std::vector<std::string> samples = {
+            std::string(100, 'W'), std::string(100, 'i'), std::string(100, 'm'), std::string(100, '8'), std::string(100, '_'), std::string(100, '.'),
+            "the quick brown fox jumps over the lazy dog and then does it again and again until the line has a hundred chars!!",
+            "a b c d e f g h i j k l m n o p q r s t u v w x y z a b c d e f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9",
+            "WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW",
+            "x", "", "supercalifragilisticexpialidocious-supercalifragilisticexpialidocious-supercalifragilisticexpialidocious",
+        };
+        for (const std::string& text : samples) {
+            // a typed line: the prompt, what is typed (up to 100 characters), the caret on and off
+            for (const bool caret : {true, false}) {
+                MS::RoomView v;
+                v.networked = true;
+                v.status_input = true;
+                v.status_prefix = "Say: ";
+                v.status = text.substr(0, 100);
+                v.status_caret = caret;
+                const std::vector<std::string> got = MS::status_lines(r, v);
+                ASSERT_TRUE(fits(got));
+                ASSERT_FALSE(got.empty());
+                std::string joined;
+                for (const std::string& l : got) joined += l;
+                ASSERT_TRUE(joined.find(caret ? "_" : " ") != std::string::npos);              // (the caret's place is in the last line, a blank when it blinks off)
+                if (!text.empty()) ASSERT_TRUE(v.status.size() <= 100);
+            }
+            // the end of a long typed line is on the screen: its last characters are in the last line
+            MS::RoomView typed;
+            typed.networked = true;
+            typed.status_input = true;
+            typed.status_prefix = "Say: ";
+            typed.status = text.substr(0, 100);
+            typed.status_caret = true;
+            const std::vector<std::string> typed_lines = MS::status_lines(r, typed);
+            std::string shown_text;
+            for (const std::string& l : typed_lines) shown_text += l;
+            if (text.size() >= 8) ASSERT_TRUE(shown_text.find(text.substr(text.size() > 100 ? 100 - 4 : text.size() - 4, 4) + "_") != std::string::npos);        // the last characters of the line, and the caret behind them, are on the screen
+            if (text.size() > 60) ASSERT_TRUE(shown_text.rfind("Say:", 0) != 0 || shown_text.size() > 20);                    // (a long line scrolls: the prompt may be gone, the end never is)
+            // the echo of what this player said, and what somebody else said (the status text, cut by the net at 84 characters), and a long notice of any kind
+            for (const std::string& shown : {"You: " + text.substr(0, 100), std::string("Name: ") + text.substr(0, 100), std::string("Bots cannot play with Fog of War. ") + text, text}) {
+                MS::RoomView v;
+                v.networked = true;
+                v.status = shown;
+                const std::vector<std::string> got = MS::status_lines(r, v);
+                ASSERT_TRUE(fits(got));
+            }
+        }
+        ASSERT_TRUE(r.get_text_width(fill_choice_caption(), FontSize::Px14) <= 350);                  // (the Host panel's caption fits its 350 px rectangle with the real font)
+        {   // the same texts as the net cuts them: 84 characters
+            const std::string net_cut = "Ann: " + std::string(100, 'W');
+            MS::RoomView v;
+            v.networked = true;
+            v.status = net_cut.substr(0, net::NetGame::kStatusNoticeChars - 3) + "...";
+            ASSERT_TRUE(fits(MS::status_lines(r, v)));
+        }
+        {   // a text that is cut ends in "..." and keeps its beginning; one that fits is untouched (and is what the original's prompt was)
+            MS::RoomView v;
+            v.networked = true;
+            v.status = "Bob: " + std::string(100, 'W');
+            const std::vector<std::string> got = MS::status_lines(r, v);
+            ASSERT_EQ(got.size(), size_t{2});
+            ASSERT_TRUE(got[0].rfind("Bob:", 0) == 0);
+            ASSERT_EQ(got[1].substr(got[1].size() - 3), std::string("..."));
+            v.status = "Press START when all players' thumbs have appeared.";
+            const std::vector<std::string> original = MS::status_lines(r, v);
+            ASSERT_TRUE(!original.empty() && original.size() <= 2 && original == wrap_label_text(r, v.status, MS::STATUS_W, FontSize::Px14));
+            v.status = "hi";
+            ASSERT_EQ(MS::status_lines(r, v), (std::vector<std::string>{"hi"}));
+            v.status.clear();
+            ASSERT_EQ(MS::status_lines(r, v), original);                                       // an empty status is the original's prompt
+        }
+        {   // the blink moves nothing: the got are the same on and off, apart from the caret's own character
+            MS::RoomView v;
+            v.networked = true;
+            v.status_input = true;
+            v.status_prefix = "Say: ";
+            for (const std::string& text : {std::string("hello"), std::string(37, 'a') + " " + std::string(31, 'b'), std::string(100, 'W'), std::string(76, 'x')}) {
+                v.status = text;
+                v.status_caret = true;
+                const std::vector<std::string> on = MS::status_lines(r, v);
+                v.status_caret = false;
+                const std::vector<std::string> off = MS::status_lines(r, v);
+                ASSERT_EQ(on.size(), off.size());
+                for (size_t i = 0; i < on.size(); ++i) {
+                    ASSERT_EQ(on[i].size(), off[i].size());
+                    if (i + 1 < on.size()) ASSERT_EQ(on[i], off[i]);
+                }
+                ASSERT_TRUE(on.back().back() == '_' && off.back().back() == ' ' && on.back().substr(0, on.back().size() - 1) == off.back().substr(0, off.back().size() - 1));
+            }
+        }
+        app.quit();
     } TEST_END();
 }
 

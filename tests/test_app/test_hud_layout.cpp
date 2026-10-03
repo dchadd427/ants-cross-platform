@@ -2120,11 +2120,12 @@ void test_leader_screen(const assets::AssetArchive& arc) {
     }
 }
 
-// What the original's own setup screens do with a held key: the same as with a press. Its key translation (FUN_01031bbd) never reads the repeat bit of a key message, its input
-// queue admits one key event per 50 ms for a key (FUN_0103078d), and the screen's key handler (FUN_01014076) does not look at it either. So the repeat of START starts a local
-// game and a LAN host's match exactly as the press does, and Up and Down scroll while they are held; only the leader's screen of a server's room (the remake's) ignores it.
+// What the setup screens do with a held key. The ORIGINAL's own screens act on a repeat as on a press: its key translation (FUN_01031bbd) never reads the repeat bit of a key message, its
+// input queue admits one key event per 50 ms for a key (FUN_0103078d), and the screen's key handler (FUN_01014076) does not look at it either; so the repeat of START started a local game
+// and a LAN host's match exactly as the press does. The remake does not (the review of the online rooms: an Enter that closed the chat input, or the quick help, and was still held
+// started a match that nobody meant to start): START needs a PRESS on every screen that has one, the local game and a LAN host included; Up and Down still scroll while they are held.
 void test_held_keys_on_original_screens() {
-    std::printf("[held keys] the original's setup screens act on a key repeat as on a press (only the leader's START ignores it)\n");
+    std::printf("[held keys] a key repeat never presses START, on any setup screen (the original's own screens did: a deliberate difference); Up and Down scroll while they are held\n");
     using MS = MapSelectScreen;
     {   // the local screen
         MS local;
@@ -2134,7 +2135,14 @@ void test_held_keys_on_original_screens() {
         local.handle_key_down(SDLK_RETURN, true);
         local.handle_key_down(SDLK_KP_ENTER, true);
         local.handle_key_down(SDLK_s, true);
-        check(started == 3, "local screen: the repeat of Enter, the keypad's Enter and S starts the game, as the press does");
+        check(started == 0, "local screen: the repeat of Enter, the keypad's Enter and S starts nothing");
+        local.handle_key_down(SDLK_RETURN, false);
+        check(started == 1, "local screen: the press of Enter starts the game");
+        for (const SDL_Keycode key : {SDLK_KP_ENTER, SDLK_s}) {
+            local.handle_key_down(key, false);
+            for (int i = 0; i < 30; ++i) local.handle_key_down(key, true);          // the key stays down: one press and thirty repeats
+        }
+        check(started == 3, "local screen: a press and a key that stays down start once each (the keypad's Enter, S)");
         const int32_t index = local.get_selected_index();
         local.handle_key_down(SDLK_DOWN, true);
         local.handle_key_down(SDLK_DOWN, true);
@@ -2153,7 +2161,10 @@ void test_held_keys_on_original_screens() {
         host.set_on_start([&](const std::string&) { ++started; });
         host.handle_key_down(SDLK_RETURN, true);
         host.handle_key_down(SDLK_s, true);
-        check(started == 2, "LAN host: the repeat of START starts the match, as the press does");
+        host.handle_key_down(SDLK_KP_ENTER, true);
+        check(started == 0, "LAN host: the repeat of START starts nothing");
+        host.handle_key_down(SDLK_s, false);
+        check(started == 1, "LAN host: the press of S starts the match");
     }
     {   // a guest of a server's room that is not its leader has no START at all, with or without a repeat
         MS guest;

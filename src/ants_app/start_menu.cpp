@@ -99,6 +99,7 @@ constexpr int32_t kHintY = 446;
 constexpr int32_t kHintH = 14;
 constexpr int32_t kTextX = 60;
 constexpr int32_t kTextW = 520;
+constexpr const char* kFillCaption = "Bots gather food; they do not fight yet.";     // (until the bots fight: B4b of docs/BOTS.md) under "Empty seats at START" here and on web/four.html
 
 ButtonRect centred_button(int32_t y, int32_t h = kButtonH) { return ButtonRect{kButtonX, y, kButtonW, h}; }
 
@@ -204,6 +205,8 @@ const char* seat_choice_text(SeatChoice choice) noexcept {
     }
     return "";
 }
+
+const char* fill_choice_caption() noexcept { return kFillCaption; }
 
 const char* fill_choice_text(net::FillLevel level) noexcept {
     switch (level) {
@@ -612,22 +615,28 @@ std::vector<MenuElement> StartMenu::elements() const {
         }
         case MenuPanel::Host: {
             add_title(out, "Host an online match");
-            // (the labels are wide enough for "Empty seats at START"; every control stands in the column at x = 290)
+            // (the labels are wide enough for "Empty seats at START"; every control stands in the column at x = 290; the three choices are 36 high so that the line under the last one fits
+            // above the name without moving Host and Back, whose places the click rules of the panels were tested with)
             const MenuMap& map = menu_map(static_cast<size_t>(settings_.host_map));
-            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 84 + 9, 220, 22}, "Map", FontSize::Px18));
-            MenuElement map_cycler = control(MenuId::HostMap, MenuKind::Cycler, ButtonRect{290, 84, 250, 40}, std::string(), FontSize::Px24);
+            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 78 + 7, 220, 22}, "Map", FontSize::Px18));
+            MenuElement map_cycler = control(MenuId::HostMap, MenuKind::Cycler, ButtonRect{290, 78, 250, 36}, std::string(), FontSize::Px24);
             map_cycler.value = map.name;
             out.push_back(map_cycler);
-            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 130 + 9, 220, 22}, "Players", FontSize::Px18));
-            MenuElement players_cycler = control(MenuId::HostPlayers, MenuKind::Cycler, ButtonRect{290, 130, 250, 40}, std::string(), FontSize::Px24);
+            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 118 + 7, 220, 22}, "Players", FontSize::Px18));
+            MenuElement players_cycler = control(MenuId::HostPlayers, MenuKind::Cycler, ButtonRect{290, 118, 250, 36}, std::string(), FontSize::Px24);
             players_cycler.value = std::to_string(settings_.host_players) + " players";
             out.push_back(players_cycler);
-            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 176 + 9, 220, 22}, "Empty seats at START", FontSize::Px18));
-            MenuElement fill_cycler = control(MenuId::HostFill, MenuKind::Cycler, ButtonRect{290, 176, 250, 40}, std::string(), FontSize::Px24);
+            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 158 + 7, 220, 22}, "Empty seats at START", FontSize::Px18));
+            MenuElement fill_cycler = control(MenuId::HostFill, MenuKind::Cycler, ButtonRect{290, 158, 250, 36}, std::string(), FontSize::Px24);
             fill_cycler.value = fill_choice_text(settings_.host_fill);
             out.push_back(fill_cycler);
-            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 222 + 6, 220, 22}, "Your name", FontSize::Px18));
-            out.push_back(control(MenuId::HostName, MenuKind::Field, ButtonRect{290, 222, 250, 34}, name_, FontSize::Px18));
+            // under the choice: what the bots do (the room's bots only harvest, until the bots learn to fight: docs/BOTS.md)
+            MenuElement caption = control(MenuId::None, MenuKind::Text, ButtonRect{240, 196, 350, 14}, kFillCaption, FontSize::Px14);
+            caption.tone = MenuTone::Dim;
+            caption.centered = true;
+            out.push_back(caption);
+            out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{60, 214 + 6, 220, 22}, "Your name", FontSize::Px18));
+            out.push_back(control(MenuId::HostName, MenuKind::Field, ButtonRect{290, 214, 250, 34}, name_, FontSize::Px18));
             out.push_back(control(MenuId::Host, MenuKind::Button, centred_button(266, 44), "Host"));
             out.push_back(control(MenuId::Back, MenuKind::Button, centred_button(316, 38), "Back"));
             if (!message_.empty()) {

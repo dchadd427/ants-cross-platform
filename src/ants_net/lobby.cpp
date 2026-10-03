@@ -403,7 +403,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     broadcast_room();
 }
 
-void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg) {
+void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg, uint32_t now_ms) {
     switch (peek_type(msg)) {
         case MsgType::Leave:
             if (msg.size() != 1) return violation(seat);
@@ -450,7 +450,13 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
         case MsgType::Chat: {                                             // (protocol 11) a line for the room: in the waiting room and while the map loads
             ChatMsg m;
             if (!decode(msg, m)) return violation(seat);                  // the match's rules: at most kMaxChatChars printable characters, a flag that is 0 or 1
-            if (!m.text.empty()) relay_chat(seat, m.text);               // (an empty line says nothing; it cost a message of the budget, like every other)
+            if (m.text.empty()) return;                                   // (an empty line says nothing; it cost a message of the budget, like every other)
+            // The chat budget (a remake protection, the original has none): a line within it is relayed to everybody; one beyond it is dropped, and a connection that keeps on beyond it is flooding
+            switch (guests_[seat].chat.take(now_ms)) {
+                case ChatBudget::Verdict::Relay: relay_chat(seat, m.text); break;
+                case ChatBudget::Verdict::Drop: break;
+                case ChatBudget::Verdict::Offence: violation(seat); break;
+            }
             return;
         }
         case MsgType::Loaded: {
@@ -506,7 +512,7 @@ void HostLobby::update(uint32_t now_ms) {
         while (budget-- > 0 && guests_[s].conn != nullptr && guests_[s].conn->poll(msg)) {
             if (msg.size() > kMaxMessageBytes) violation(s);
             else if (!guests_[s].talk.take(now_ms, cfg_.message_burst, cfg_.messages_per_second)) violation(s);       // more than a client can have to say: not even looked at
-            else handle_guest_message(s, msg);
+            else handle_guest_message(s, msg, now_ms);
         }
         if (guests_[s].conn != nullptr && !guests_[s].conn->is_open()) remove_guest(s, false, RejectReason::Kicked);
     }

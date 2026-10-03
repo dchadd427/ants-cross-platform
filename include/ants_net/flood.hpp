@@ -3,7 +3,8 @@
 // Flood control on the host's side of a connection (docs/NETWORK_PORT.md, "Flood control"). A peer that is not a game can send valid messages as fast as its line allows (a
 // Ping, a TurnAck, a Hash, a Chat line, a StartRequest that is ignored: none of them is ever an offence by itself). Every connection of a host therefore has a MessageBudget
 // (a token bucket): a message that finds it empty is not handled, and it is an offence (a violation: eight throw the sender out). The StartRequests that are ignored have a
-// count of their own, because they are the messages that a person sends twice by accident.
+// count of their own, because they are the messages that a person sends twice by accident. A chat line has a budget of its own as well (ChatBudget): the general budget lets a connection
+// say a thousand lines a second, which is no talk, and every one of them would be relayed to everybody in the room.
 
 #include <algorithm>
 #include <cstdint>
@@ -23,6 +24,16 @@ inline constexpr uint32_t kMessageBurst = 1000;
 /// A StartRequest that cannot be honoured (the sender does not lead, the room cannot start, the match is loading or running already) is no offence: a leader clicks START twice, a
 /// player of a slow link three times. Up to this many of them from one connection cost nothing; each one after them is a violation, like any message that a guest may not send.
 inline constexpr uint32_t kIgnoredStartRequestsAllowed = 16;
+
+/// The lines of chat that one connection may say (a remake protection: the original has no limit, but nobody types more than a line a second for long). A line is relayed to everybody, so
+/// a flood of them is a flood for the whole room: a burst of kChatBurst lines, then kChatPerSecond a second. A line beyond that is DROPPED (not relayed, not logged, no answer): a person
+/// who pastes six lines loses the sixth. It costs nothing at first, but a connection that goes on saying more than the budget allows is flooding: kChatExcessBurst lines beyond it are tolerated and that allowance
+/// is refilled at the budget's own rate, so a talker above TWO lines a second (twice the budget) uses it up (four a second: in ten seconds) and every line after that is a violation, like any
+/// message that a client may not send, and eight throw the sender out; two lines a second, half of them dropped, is tolerated for ever. Used by the waiting room
+/// (HostLobby) and by the match (HostSession); the host's own lines (its own player's) are not limited: it is not a connection.
+inline constexpr uint32_t kChatBurst = 5;
+inline constexpr uint32_t kChatPerSecond = 1;
+inline constexpr uint32_t kChatExcessBurst = 20;
 
 /// A token bucket for the messages of one connection. The clock is the host's millisecond clock, 32 bits wide, which wraps: only differences of it are used. The bucket is
 /// full when the first message comes.
@@ -47,6 +58,21 @@ private:
     uint64_t thousandths_{0};
     uint32_t last_ms_{0};
     bool primed_{false};
+};
+
+/// The budget of the chat lines of one connection (see kChatBurst): Relay when the line is within it, Drop when it is beyond it (and the excess is still tolerated), Offence when the
+/// connection has gone on beyond it for long: the line is dropped and counts as a violation.
+class ChatBudget {
+public:
+    enum class Verdict : uint8_t { Relay, Drop, Offence };
+    Verdict take(uint32_t now_ms, uint32_t burst = kChatBurst, uint32_t per_second = kChatPerSecond, uint32_t excess_burst = kChatExcessBurst) noexcept {
+        if (lines_.take(now_ms, burst, per_second)) return Verdict::Relay;
+        return excess_.take(now_ms, excess_burst, per_second) ? Verdict::Drop : Verdict::Offence;
+    }
+
+private:
+    MessageBudget lines_;
+    MessageBudget excess_;
 };
 
 }  // namespace ants::net

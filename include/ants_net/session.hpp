@@ -179,11 +179,11 @@ public:
     /// stream (a Drop command of the sequencer), so that every machine drops the team at the same tick; this callback is for the presentation.
     void set_on_player_left(std::function<void(uint8_t)> fn) { on_left_ = std::move(fn); }
     /// Called for every chat message the host receives from a client (already relayed) and for its own. A host with a seat is a receiver like the guests: it hears a team line only when it
-    /// is the sender or the sender's ally (the same rule as the relay's); a host without a seat (a dedicated server) is the referee and hears every line, it only logs them.
+    /// is the sender or the sender's ally (the same rule as the relay's); a host without a seat (a dedicated server) is the referee and hears every line (a hook for a log: the server's rooms install none today, so nothing is logged).
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
 
     /// WHO HEARS A TEAM LINE. The host relays every chat line, and a line that is meant for the sender's TEAM (ChatMsg::team) goes to the sender and to the sender's ally only, by the host's
-    /// own alliance table AT THE MOMENT OF THE RELAY (a break takes effect for the very next line, a new alliance for the next one too): `sim::SimulationEngine::alliance_of(sender)`, the
+    /// own alliance table AT THE MOMENT OF THE RELAY (a break takes effect within one turn, 50 ms: a line sent in the same turn as the break, or up to a turn after it, can still reach the ex-ally; a new alliance within a turn of its accept): `sim::SimulationEngine::alliance_of(sender)`, the
     /// rule that a receiver's HUD applies to the lines that it gets (HUD::receive_chat_message: the original's), so that nothing is delivered that a screen would drop, and nothing that a
     /// screen would show is withheld. A line for ALL goes to everybody. The others never get the bytes at all (a modified client that shows every line cannot read the team's talk).
     /// True when `seat` is to hear a line that `sender` says: used by the relay, and public for the tests that pin the rule.
@@ -253,6 +253,7 @@ private:
         uint32_t violations{0};
         uint32_t last_heard_ms{0};          // when the client last sent anything
         MessageBudget talk;                 // flood control: every message that the client sends takes one from it
+        ChatBudget chat;                    // ... and every line of chat takes one from this one as well (flood.hpp: a burst of 5, then one a second; a line beyond it is dropped)
         uint32_t ignored_start_requests{0}; // its StartRequests that arrived in the running match (the first kIgnoredStartRequestsAllowed are free)
         bool lagging{false};                // announced to the others as lagging (a host without a seat)
         uint32_t next_notice_ms{0};         // when the announcement is repeated
