@@ -1275,6 +1275,234 @@ void run_start_delay_tests() {
     } TEST_END();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The prediction of one's own orders (prediction.hpp), in a match of real NetGames
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+void run_prediction_tests() {
+    TEST_CASE("N3.24 Prediction: On By Default In Every Machine Of A Match (The View Engine Stands Ahead Of The Confirmed One), Off Where The User Turned It Off; Orders From Everybody, And All Confirmed Engines End Identical") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        Machine& carol = *t.machines[2];
+        host.net.set_map("SMALL.LVL");
+        ASSERT_TRUE(host.net.prediction_enabled() && bob.net.prediction_enabled());           // on by default
+        carol.net.set_prediction_enabled(false);                                              // Carol never predicts: its screen is its confirmed engine, as it always was
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(99, hash));
+        ASSERT_FALSE(host.net.predicting());                                                  // (nothing runs before the first turn: the "Get ready" dialog)
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+        t.run(2000);
+        for (Machine* m : {&host, &bob}) {
+            ASSERT_TRUE(m->net.predicting());
+            ASSERT_TRUE(&m->net.view_engine() != &m->sim);
+            ASSERT_TRUE(m->net.view_engine().current_tick() > m->sim.current_tick());
+            ASSERT_EQ(m->net.view_engine().current_tick(), m->sim.current_tick() + m->net.prediction()->lead_ticks());
+        }
+        ASSERT_FALSE(carol.net.predicting());
+        ASSERT_TRUE(&carol.net.view_engine() == &carol.sim);
+        int orders[3] = {0, 0, 0};
+        uint32_t next_order_ms = t.now + 300;
+        t.run(25000, [&](uint32_t now) {
+            if (now < next_order_ms) return;
+            next_order_ms = now + 400;
+            for (uint8_t seat = 0; seat < 3; ++seat) {
+                Machine& m = *t.machines[seat];
+                std::vector<uint32_t> mine;
+                for (const auto& a : m.net.view_engine().get_world_state().ants) {              // (what the screen shows: the HUD picks its ants from the view)
+                    if (a.player_id == seat) mine.push_back(a.id);
+                }
+                if (mine.empty()) continue;
+                const uint32_t pick = mine[(now / 400 + seat) % mine.size()];
+                const sim::CommandResult r = m.net.submit(order(seat, pick, static_cast<int16_t>((now / 10 + seat * 7) % 40), static_cast<int16_t>((now / 30 + seat * 11) % 40)));
+                ASSERT_EQ(r.status == sim::CommandResult::Status::Applied || r.status == sim::CommandResult::Status::Ignored, true);
+                ++orders[seat];
+            }
+        });
+        ASSERT_TRUE(orders[0] > 40 && orders[1] > 40 && orders[2] > 40);
+        // the machines that predict handled every order, lost none, and corrected what the others' orders changed; nothing took long
+        for (Machine* m : {&host, &bob}) {
+            const Prediction::Stats& st = m->net.prediction()->stats();
+            ASSERT_TRUE(st.commands_predicted >= static_cast<uint64_t>(orders[m->net.my_seat()]) - 3);
+            ASSERT_EQ(st.commands_lost, 0u);
+            ASSERT_TRUE(st.rebuilds > 0);
+            ASSERT_TRUE(st.rebuild_ns_max < 100ull * 1000ull * 1000ull);                      // (a rebuild of a 40 x 40 map: well under a frame; 100 ms is a loose bound for a busy machine)
+        }
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));                                                            // the confirmed engines: identical, predicting or not
+        for (auto& m : t.machines) ASSERT_FALSE(m->net.desynced());
+        ASSERT_EQ(host.sim.current_tick(), carol.sim.current_tick());
+    } TEST_END();
+
+    TEST_CASE("N3.25 Prediction: An Order Given Through The HUD's Sink Is In The View Engine In The Same Call, Long Before The Confirmed Engine Has It; A Machine That Does Not Predict Waits For The Turn; The Switch Works At Run Time") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(7, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting(); }, kUntilRunning));
+        t.run(3000);
+        const uint32_t ant = first_ant(bob, 1);
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(open_goal_near_hill(bob.sim, 1, gx, gy));
+        ASSERT_TRUE(bob.net.predicting());
+        const sim::CommandResult r = bob.net.submit(order(1, ant, gx, gy));
+        // in the same call: the view engine has the order, with the engine's own verdict; the confirmed engine does not
+        ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(r.ack_ant, ant);
+        ASSERT_EQ(r.needing_order, 1u);
+        ASSERT_EQ(bob.net.view_engine().get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        ASSERT_TRUE(bob.net.view_engine().has_pending_path(ant) || bob.net.view_engine().get_unit(ant).final_dest.x == gx);
+        ASSERT_TRUE(bob.sim.get_unit(ant).orig_order != sim::AntUnit::kOrderMove);
+        const uint32_t given = t.now;
+        ASSERT_TRUE(t.run_until([&]() { return bob.sim.get_unit(ant).orig_order == sim::AntUnit::kOrderMove; }, 3000));
+        ASSERT_TRUE(t.now - given >= 50);                                                      // the confirmed engine had it at least a turn later (the way to the host and back, and the buffer)
+        ASSERT_TRUE(t.now - given <= 1500);
+        // the same order from a machine that does not predict: nothing in the view (which IS its confirmed engine) until the turn runs it
+        bob.net.set_prediction_enabled(false);
+        t.run(200);
+        ASSERT_FALSE(bob.net.predicting());
+        ASSERT_TRUE(&bob.net.view_engine() == &bob.sim);
+        const uint32_t ant2 = [&]() {
+            for (const auto& a : bob.sim.get_world_state().ants) {
+                if (a.player_id == 1 && a.id != ant) return a.id;
+            }
+            return 0u;
+        }();
+        ASSERT_TRUE(ant2 != 0);
+        const sim::CommandResult r2 = bob.net.submit(order(1, ant2, gx, gy));
+        ASSERT_EQ(r2.status, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(r2.ack_ant, ant2);                                                           // (the click's feedback is the guess of predict_order_ack, as before)
+        ASSERT_TRUE(bob.sim.get_unit(ant2).orig_order != sim::AntUnit::kOrderMove);
+        ASSERT_TRUE(t.run_until([&]() { return bob.sim.get_unit(ant2).orig_order == sim::AntUnit::kOrderMove; }, 3000));
+        // on again: it begins with the next tick
+        bob.net.set_prediction_enabled(true);
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.predicting(); }, 1000));
+        ASSERT_TRUE(bob.net.view_engine().current_tick() > bob.sim.current_tick());
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+        ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("N3.26 Prediction: A Host Change Switches It Off While The Guests Elect (The Confirmed Engine Is Shown), It Begins Again Under The New Host, And Both Machines End Identical") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        Machine& carol = *t.machines[2];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(5, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting() && carol.net.predicting(); }, kUntilRunning));
+        t.run(3000);
+        host.net.leave();
+        bool carol_predicted_while_electing = false;
+        bool carol_electing_seen = false;
+        ASSERT_TRUE(t.run_until([&]() {
+            if (carol.net.electing()) {
+                carol_electing_seen = true;
+                carol_predicted_while_electing = carol_predicted_while_electing || carol.net.predicting();
+            }
+            return bob.net.is_host() && carol.net.host_seat() == 1;
+        }, 8000));
+        ASSERT_FALSE(carol_predicted_while_electing);                                          // not while the host is being chosen
+        ASSERT_TRUE(carol_electing_seen || carol.net.host_seat() == 1);
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.predicting() && carol.net.predicting(); }, 8000));
+        ASSERT_TRUE(&bob.net.view_engine() != &bob.sim && &carol.net.view_engine() != &carol.sim);
+        // orders go through the new host, are predicted, and arrive
+        const uint32_t ant = first_ant(carol, 2);
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(open_goal_near_hill(carol.sim, 2, gx, gy));
+        const sim::CommandResult r = carol.net.submit(order(2, ant, gx, gy));
+        ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(carol.net.view_engine().get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        t.run(2000);
+        ASSERT_EQ(bob.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        ASSERT_EQ(carol.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        ASSERT_EQ(carol.net.prediction()->stats().commands_lost, 0u);
+        bob.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(bob.sim.state_hash() == carol.sim.state_hash());
+        ASSERT_EQ(bob.sim.current_tick(), carol.sim.current_tick());
+        ASSERT_FALSE(bob.net.desynced() || carol.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("N3.27 Prediction: The Application's Switch And A Held Match (A Pause: The Sessions Hold The Runner) Turn It Off At Once, The Confirmed Engine Is Shown Meanwhile, And It Begins Again With The Next Tick After They Are Gone") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(8, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting(); }, kUntilRunning));
+        t.run(1000);
+        ASSERT_TRUE(bob.net.predicting() && &bob.net.view_engine() != &bob.sim);
+        // the application (a hidden page's background steps, a screen over the match) switches it off
+        bob.net.set_prediction_suspended(true);
+        t.run(150);
+        ASSERT_FALSE(bob.net.predicting());
+        ASSERT_TRUE(&bob.net.view_engine() == &bob.sim);
+        const uint64_t starts = bob.net.prediction()->stats().starts;
+        t.run(500);
+        ASSERT_EQ(bob.net.prediction()->stats().starts, starts);                              // (nothing began again meanwhile)
+        bob.net.set_prediction_suspended(false);
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.predicting(); }, 1000));
+        ASSERT_EQ(bob.net.prediction()->stats().starts, starts + 1);
+        t.run(300);
+        ASSERT_TRUE(bob.net.view_engine().current_tick() > bob.sim.current_tick());
+        // a pause: the session holds the runner (a seat that is away) and releases it when the match runs again
+        ASSERT_TRUE(bob.net.runner() != nullptr);
+        bob.net.runner()->set_held(true);
+        t.run(150);
+        ASSERT_FALSE(bob.net.predicting());
+        ASSERT_TRUE(&bob.net.view_engine() == &bob.sim);
+        const sim::CommandResult r = bob.net.submit(order(1, first_ant(bob, 1), 10, 10));         // an order given in a pause is not predicted (the server discards it)
+        ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);                                // (the click's feedback is the guess of predict_order_ack, as before)
+        ASSERT_EQ(bob.net.prediction()->pending_orders(), 0u);
+        bob.net.runner()->set_held(false);
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.predicting(); }, 1000));
+        ASSERT_EQ(bob.net.prediction()->stats().starts, starts + 2);
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+        ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("N3.28 Prediction: A Machine Whose Match Has Gone Out Of Sync Shows The Confirmed Engine (The Hash Exchange Finds A State That Was Changed Behind The Turns' Back)") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(9, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting() && host.net.predicting(); }, kUntilRunning));
+        t.run(1000);
+        ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(open_goal_near_hill(bob.sim, 1, gx, gy));
+        bob.sim.apply_command(order(1, first_ant(bob, 1), gx, gy));                              // bob's confirmed engine alone: the machines now differ
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.desynced() || host.net.desynced(); }, 20000));
+        t.run(300);
+        for (Machine* m : {&host, &bob}) {
+            if (!m->net.desynced()) continue;
+            ASSERT_FALSE(m->net.predicting());                                                    // a machine that knows it is wrong shows what it has executed
+            ASSERT_TRUE(&m->net.view_engine() == &m->sim);
+        }
+    } TEST_END();
+}
+
 int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: NetGame (room, start barrier, match) over real sockets\n"
                  "=======================================================\n";
@@ -1288,6 +1516,7 @@ int main() {
     run_reject_tests();
     run_room_chat_tests();
     run_start_delay_tests();
+    run_prediction_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

@@ -2,6 +2,7 @@ add_library(ants_net STATIC
     protocol.cpp
     sequencer.cpp
     lockstep.cpp
+    prediction.cpp
     jitter.cpp
     turnlog.cpp
     attendance.cpp

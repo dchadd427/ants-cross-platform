@@ -14,6 +14,7 @@ bool LockstepRunner::enqueue(TurnMsg turn, bool live) {
     log_.push_back(turn);
     if (log_.size() > kTurnLogTurns) log_.pop_front();
     queue_.push_back(std::move(turn));
+    if (live && on_turn_) on_turn_(queue_.back());              // (queued: the observer finds the turn in the queue; a catch-up turn is no arrival)
     return true;
 }
 

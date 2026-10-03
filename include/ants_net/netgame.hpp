@@ -29,6 +29,7 @@
 
 #include "ants_net/lan.hpp"
 #include "ants_net/lobby.hpp"
+#include "ants_net/prediction.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/session.hpp"
 #include "ants_net/transport.hpp"
@@ -214,8 +215,25 @@ public:
 
     // ---- the match ---------------------------------------------------------------------------------------------------------------------------------
     /// The HUD's sink: the command is stamped with this machine's seat and queued for the next turn; the answer carries the predicted acknowledgement
-    /// (the ant that will say "Yessir!") so that the click feels immediate although the order reaches the simulation a few turns later.
+    /// (the ant that will say "Yessir!") so that the click feels immediate although the order reaches the simulation a few turns later. While the prediction is on (below), an order
+    /// that it handles (group moves, special orders, attacks, Stop) is also applied to the predicted engine at once and the answer is that engine's own verdict.
     sim::CommandResult submit(const sim::Command& command) override;
+
+    // ---- the prediction of one's own orders (prediction.hpp, docs/NETWORK_PORT.md "Prediction of one's own orders") --------------------------------------
+    /// On by default in a match of the network (a local game has no delay to hide); off, every order waits for its turn as it did before the prediction existed. Takes effect at once.
+    void set_prediction_enabled(bool on) noexcept { prediction_enabled_ = on; }
+    bool prediction_enabled() const noexcept { return prediction_enabled_; }
+    /// The application suspends the prediction where only it knows that the match is not simply following the live stream (a hidden page's background steps, a screen over the match)
+    void set_prediction_suspended(bool suspended) noexcept { app_suspends_prediction_ = suspended; }
+    /// True while the predicted engine is the one that the screen shows: a match is running, the prediction is on and not suspended, and at least one tick has run
+    bool predicting() const noexcept { return prediction_ != nullptr && prediction_->active(); }
+    /// The engine that the screen shows and that the HUD asks (the cursor, the selection, the panel, the minimap): the predicted engine while predicting(), else the confirmed one that
+    /// this object was given. Never the engine that orders go to: they go through submit().
+    sim::SimulationEngine& view_engine();
+    const Prediction* prediction() const noexcept { return prediction_.get(); }
+    Prediction* prediction() noexcept { return prediction_.get(); }
+    /// The match's lock-step runner (null before a match has begun and after it); for the tests and the diagnostics: the application does not drive it
+    LockstepRunner* runner() const;
     /// (the chat() above is the match's too) the message goes through the host and comes back to everybody (own text included); use the callback to show it
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
     /// After every simulation tick / for every applied command (see LockstepRunner); may be set before the match begins
@@ -269,9 +287,12 @@ private:
     void set_notice(std::string text);
     void begin_match();
     void install_hooks();
+    void make_prediction();
+    void refresh_prediction();
+    /// What the player's order is going to take to reach the engine, in ms: the measured delay of the last orders, else the round trip, half a seal and the jitter buffer
+    uint32_t expected_command_delay_ms() const;
     void shutdown_transport();
     void announce_room();
-    LockstepRunner* runner() const;
     /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
     void collect_room_chat();
 
@@ -315,6 +336,9 @@ private:
     std::unique_ptr<ClientLobby> client_lobby_;
     std::unique_ptr<HostSession> host_session_;
     std::unique_ptr<ClientSession> client_session_;
+    std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first)
+    bool prediction_enabled_{true};
+    bool app_suspends_prediction_{false};
 };
 
 }  // namespace ants::net

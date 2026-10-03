@@ -1,6 +1,6 @@
 # Rollback for one's own orders: what was built, measured, and where it differs from the design
 
-Update for section 74 of `implementation_plan.md` (that file is not part of the repository; the owner copies this text into it). Client-side prediction with rollback of one's own commands in network matches: the confirmed lock-step simulation, the server's sealing and referee, the network protocol and the rules stay as they are. The steps land one after the other; this file grows with them (R1 first).
+Update for section 74 of `implementation_plan.md` (that file is not part of the repository; the owner copies this text into it). Client-side prediction with rollback of one's own commands in network matches: the confirmed lock-step simulation, the server's sealing and referee, the network protocol and the rules stay as they are. The steps land one after the other; this file grows with them (R1 the engine copy, R2 the prediction core, then the screen, the cues, the switches and the measurements).
 
 ## R1: the engine copy (value semantics of `SimulationEngine`)
 
@@ -98,3 +98,78 @@ A mutant that no test kills would be a hole, so there were three at first (a cop
 | `A4_assign_keeps_fog` | assignment keeps the target's revealed tiles | KILLED by R1.2, R1.4b, R1.4, R1.6, R1.8, R1.11, R1.14 |
 | `A5_assign_keeps_path_serials` | assignment keeps the target's request serials | KILLED by R1.2, R1.4, R1.6, R1.8, R1.11, R1.12, R1.13, R1.14 |
 
+## R2: the prediction core (`net::Prediction`, the lock-step runner's two hooks, the NetGame wiring)
+
+### Built
+
+| Item | Where |
+|---|---|
+| **`net::Prediction`**: owns the predicted engine (`SimulationEngine pred_`, a copy of the confirmed engine) and keeps it equal to a **derivation**: the confirmed engine, plus the turns that are already in hand (the jitter buffer: sealed by the host, not run yet: they are KNOWN commands of every player and are run as such, nothing about them is guessed), plus the player's own orders that no turn has carried yet, applied at the tick at which the prediction stands, advanced to the **display tick** `D = confirmed tick + lead`. Only the ticks beyond the turns in hand are guesses (and the only guess is that nobody else gives a command). No SDL, no clock, no sockets: three inputs (`submit`, `on_turn`, `on_tick`) and the engine out | `include/ants_net/prediction.hpp`, `src/ants_net/prediction.cpp` |
+| **Incremental, not rebuilt every frame.** `on_tick` (one call per tick that the confirmed engine executes) advances the predicted engine by one tick. It keeps a log of the commands that it applied at every tick from the confirmed one to `D`; every live turn that arrives for a tick it has already started is compared with the log. Equal (no command, or the player's own orders at the tick where they were applied): nothing happens. Different (another player's command, an own order sealed at another tick, a kind that is not predicted): the prediction is marked stale and the next time anybody asks for the engine (a frame, an order, the next tick) it is rebuilt: copy of the confirmed engine, replay of the ticks to `D` with the turns as they are by then. That is the whole correction. A rebuild costs a copy (at most 24 us native, 170 us wasm, R1) and `lead` ticks | `prediction.cpp` |
+| `LockstepRunner::set_on_turn` (a hook for every LIVE turn the runner queues, not the replayed ones) and `LockstepRunner::queued_turn(n)` (the turn in hand for tick `n`, read only). Nothing else of the runner changed | `include/ants_net/lockstep.hpp`, `src/ants_net/lockstep.cpp` |
+| **NetGame wiring**: `submit` sends the order first and then hands it to the prediction, whose engine says what the engine says (the ant that answers, the ants that needed the order); the runner's tick hook runs the prediction's tick BEFORE the application's tick hook (the application reads what is shown); `refresh_prediction()` once per update: off when the user turned it off (`set_prediction_enabled`), the application suspends it (`set_prediction_suspended`), the match is not in its Playing phase, it is out of sync, the client session is not in its Normal mode (a host change, a rejoin) or is catching up, or the runner is held (a pause); `view_engine()` is the engine that the screen shows (the predicted one while `predicting()`, else the confirmed one); the lead follows `expected_command_delay_ms()` (the measured delay of the last orders, else half a seal, the round trip and the jitter buffer); `runner()` is public for the tests | `include/ants_net/netgame.hpp`, `src/ants_net/netgame.cpp` |
+| What is predicted: group moves, group special orders, group attacks and Stop. NOT predicted: Hatch (a new ant needs an id that only the confirmed stream gives), the alliance commands, Quit and Drop. A command of another player is never predicted | `Prediction::predicts` |
+| Suite 2.27 `test_prediction` (quick: 20 tests, a rig that plays the server and an oracle engine, about 15 s) and N3.24 - N3.28 in `test_netgame` (real sockets, three machines) | `tests/test_net/test_prediction.cpp`, `tests/test_net/test_netgame.cpp`, `run_tests.sh` |
+
+### What the tests hold the prediction to
+
+- **Exactness**: with the lead of the scenario and nobody else giving commands, the predicted engine equals the ORACLE (a second engine that runs every turn the moment the server seals it) at every frame, is never rebuilt, and an order stands at the tick the turn gives it (RP2.1: 3 buffers, 3 lags, 2 uplinks each). With a jitter buffer deeper than the lead the turns in hand are certain input: whatever the other players do (hatching and the alliance commands too) the predicted engine is the oracle with no rebuild and no guess (RP2.2).
+- **Corrections cost what they should**: another player's command costs one rebuild when its turn arrives and the picture is right from then on (RP3.1: the ants that move in the correction are the other player's, by a few pixels); an own order sealed earlier than it was applied costs one rebuild, later two (its tick passes without it, then its turn comes), unless it lands where the first miss put it, and the classification of every rebuild (an own order's timing, a turn that passed without it, another player's command) is pinned per shift (RP3.2); an order that the server never seals is dropped after `pending_timeout_ticks`, every turn that passes it costs at most one rebuild until then, and the frame of the drop is already right (RP3.3, with the derivation check at every frame); the first of two orders that is lost does not hold up the second (RP3.4). A lead that is too low is chased turn by turn: one rebuild for each turn that passes the order, exactly `uplink + lag` of them (RP2.4, below).
+- **Derived state** (the property that makes it safe): the predicted engine that was advanced tick by tick equals the engine that a rebuild would make now (`derived_hash`), at every frame, under random jitter, stalls, bursts, orders of every kind from every seat and a lead that changes (RP4.1: 24 random matches; RP2.4, RP3.3 and RP5.5 check it at every frame).
+- **Convergence**: after a burst of random commands from every seat and some quiet turns, the prediction is the oracle again (RP4.2).
+- **No effect on the match**: the same match with and without the prediction has the same confirmed state at every tick, the same turns and the same cues (RP4.3); every network suite and golden hash passes unchanged.
+- **States**: suspended the prediction is gone at once, resumed it begins at the next tick (RP5.1); the end of the match (RP5.2); the cues and news of the predicted ticks are kept once, stamped with the tick and a generation (a rebuild's replay is a later one), bounded (RP5.3), and a rebuild does not turn what the confirmed engine has queued into predicted cues (RP5.4); a tick that no hook announced makes the prediction stale (RP5.5).
+- **In real NetGames** (N3.24 - N3.28): on by default in every machine of a match, off where the user turned it off; orders from every seat; every confirmed engine ends identical; an order given through the HUD's sink is in the view engine in the same call and in the confirmed engine at least a turn later; the switch works at run time; a host change switches it off while the guests elect and it begins again under the new host; the application's switch and a held runner (a pause) turn it off and it begins again at the next tick; a machine whose match went out of sync shows the confirmed engine.
+
+### Mutants (each is a temporary edit of the source that the suites must fail)
+
+`Q1 - Q20` edit `prediction.cpp` and are run against `test_prediction`; `N1 - N12` edit `netgame.cpp` and are run against the prediction cases of `test_netgame` (`ANTS_TEST_FILTER=Prediction:`). The harness rebuilds from nothing for every mutant and runs unmutated baselines between them (R1's lesson). The first run had four survivors in the Q list and two in the N list; the tests written for them are RP2.4 (a lead shorter than the buffer: the order must be put behind the turns in hand, chased, never run twice), RP3.2's pinned classification, RP3.3's per-frame derivation check, RP5.4 (events of the confirmed engine's queue), RP5.5 (a tick no hook announced), N3.27 and N3.28. The N list's first two survivors (the election and the pause) were two terms of the gate that the other terms repeat (a client session that elects is not in its Normal mode; a session that is paused holds its runner): the redundant terms are gone and the mode and the runner's `held` are what N3.26 and N3.27 test. The first run also found a bug, not a survivor: RP3.3 showed that a lost order was timed from the tick it had last been put at, and the chase moves that tick on at every miss, so it was never dropped (`Pending::born`, mutant `Q4`).
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `Q1_no_equality_check` | a turn that arrives for a tick the prediction has started is not compared with what it assumed | KILLED by RP2.3, RP2.4, RP3.1, RP3.2, RP3.3, RP4.1, RP4.2, RP5.3, RP5.4 |
+| `Q2_own_timing_not_noticed` | an own order that is sealed at another tick than it was applied is not a mismatch | KILLED by RP3.2 |
+| `Q3_pending_never_matched` | the own orders of a turn do not leave the waiting list | KILLED by RP2.1, RP2.3, RP2.4, RP3.1, RP3.2, RP3.4, RP4.1, RP4.2, RP5.5 |
+| `Q4_timeout_from_tick` | a lost order is timed from the tick it was last put at (the bug that the first run of the tests found): a chase never ends | KILLED by RP3.3 |
+| `Q5_no_reassign_after_miss` | an order that a turn missed stays where it was (a rebuild a turn until it is sealed) | KILLED by RP3.2 |
+| `Q6_known_turns_not_run` | the turns in hand are not run as known commands (only the waiting orders are applied) | KILLED by RP2.2, RP3.1, RP3.2, RP3.4, RP4.1, RP4.2 |
+| `Q7_rebuild_forgets_orders` | a rebuild does not apply the waiting orders | KILLED by RP2.3, RP2.4, RP3.2, RP4.1 |
+| `Q8_lead_ignored` | the display tick is one tick ahead whatever the lead | KILLED by RP1.3, RP2.1, RP2.3, RP3.1, RP3.2 |
+| `Q9_submit_not_advancing_to_known_turns` | an order is applied behind a turn that is in hand | KILLED by RP2.4, RP4.1 |
+| `Q10_suspend_does_not_stop` | suspending leaves the predicted engine running | KILLED by RP5.1 |
+| `Q11_log_not_popped` | the log of assumed commands is not advanced with the confirmed tick | KILLED by RP2.1, RP2.3, RP2.4, RP3.1, RP3.2, RP3.3, RP4.1 |
+| `Q12_lead_falls_at_once` | the lead follows the delay down at once | KILLED by RP1.3 |
+| `Q13_lead_rises_slowly` | the lead rises only after a delay | KILLED by RP1.3 |
+| `Q14_confirmed_events_leak` | a rebuild keeps what the confirmed engine had queued (its cues become the prediction's) | KILLED by RP5.4 |
+| `Q15_lost_orders_not_counted_as_stale` | a lost order is dropped without rebuilding | SURVIVED |
+| `Q16_unmatched_prefix_kept` | orders before the one that a turn carried (lost ones) are not dropped | KILLED by RP3.4 |
+| `Q17_foreign_not_counted` | a command of another player is no mismatch (an empty list is assumed to be right) | KILLED by RP2.3, RP3.1, RP4.1, RP4.2, RP5.3, RP5.4 |
+| `Q18_stale_on_tick_not_marked` | a tick that the prediction was not told of does not make it stale | KILLED by RP5.5 |
+| `Q19_engine_not_rebuilt_when_stale` | engine() hands out the stale engine | KILLED by RP2.4, RP3.1, RP3.2, RP3.3, RP4.1, RP4.2, RP5.3, RP5.4, RP5.5 |
+| `Q20_events_not_captured` | the cues of the predicted ticks are not kept | KILLED by RP5.3, RP5.4 |
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `N1_submit_not_predicted` | NetGame::submit does not hand the order to the prediction | KILLED by N3.24, N3.25, N3.26 |
+| `N2_tick_hook_missing` | the runner's tick is not forwarded to the prediction | KILLED by N3.24, N3.25, N3.26, N3.27, N3.28 |
+| `N3_turn_hook_missing` | the runner's turns are not forwarded to the prediction | KILLED by N3.24 (rerun with a compiling form of the same edit) |
+| `N4_session_mode_not_a_suspension` | a host change, a rejoin (a session that is not in its Normal mode) does not switch the prediction off | KILLED by N3.26 |
+| `N5_view_is_confirmed` | view_engine() always answers with the confirmed engine | KILLED by N3.24, N3.25, N3.26, N3.27 |
+| `N6_switch_ignored` | the user's switch does not turn the prediction off | KILLED by N3.24, N3.25 |
+| `N7_no_prediction_made` | the prediction is never created | KILLED by N3.24, N3.25, N3.26, N3.27, N3.28 |
+| `N8_held_not_a_suspension` | a held match (a pause) keeps predicting | KILLED by N3.27 |
+| `N9_desync_not_a_suspension` | a machine that is out of sync keeps predicting | KILLED by N3.28 |
+| `N10_app_switch_ignored` | the application's switch does not turn the prediction off | KILLED by N3.27 |
+| `N11_wrong_seat` | the prediction is made for seat 0 whoever the player is | KILLED by N3.24, N3.25, N3.26 |
+| `N12_catching_up_not_a_suspension` | a machine that is catching up (a dedicated server's lag policy) keeps predicting [reachable only against a server] | SURVIVED |
+
+Two mutants survive, for reasons that are not holes in the tests:
+
+- **Q15** (a lost order is dropped without marking the prediction stale) is equivalent in what can be seen. The order is chased: every turn that passes it without it re-places it at the display tick (a rebuild), so when it is dropped the prediction has just been rebuilt with the order applied at the display tick and no tick run after it (the state hash does not see an order that has not made its first step), and the very next turn compares the log (which still has the order there) with a turn that has not, finds the difference and rebuilds. The picture is wrong for the rest of one step in a way that no frame can show. The code keeps the explicit `stale_ = true`: it is what is true, and it does not wait for the next turn.
+- **N12** (a machine that is catching up keeps predicting): `ClientSession::catching_up` is the lag policy of a dedicated server (a backlog of 3 s or more is run down at up to four times the speed); no NetGame test has a server's policy to produce it. The flag is tested in the session suites, the gate is one term of an OR, and the web run against a local server (the last step of this work) is where it can be seen.
+
+### Where this differs from the design, and why
+
+- **Rebuild only when a confirmed turn disagrees; advance tick by tick otherwise** (the coordinator's go message): the predicted engine is not rebuilt every frame. R1 measured that a copy is cheap and the ticks are not.
+- **An own order is put at the display tick, but never behind a turn in hand.** Such a turn was sealed before the order existed. When the lead is too low (a delay that grew, or the first orders of a match, before the delay has been measured), the order is put at the first tick whose turn has not arrived and is chased turn by turn until its own turn comes; a rebuild for each turn that passes it, `uplink + lag` of them. The ants of a chased order have started to walk and then hover (their picture is the confirmed one, which is always right) until the lead has caught up. The lead rises at once when the measured delay rises and falls only after 40 ticks (2 s) of a lower one, so the picture does not move back and forth with the phase of the server's seals. A prediction that learns from its own misses (a missed order raises the lead by itself) is possible and is left for the measurements of R6 to ask for.
+- **The gate is the sessions' own state, not a list of their flags.** `held` (a pause), `mode != Normal` (a host change, a rejoin), `catching_up` and `desynced`, the user's switch and the application's.

@@ -258,6 +258,7 @@ define_suites() {
     suite "2.24"   sim    1 "test_jitter"                "Jitter Buffer (test_jitter)"                               "JITTER BUFFER SUITE (the rule, the runner's speed, stalls, hitches, hidden windows)" '"./$BUILD_DIR/tests/test_net/test_jitter"'
     suite "2.25"   sim    1 "test_engine_copy"           "Engine Copy (test_engine_copy)"                            "ENGINE COPY SUITE (the deep copy of the simulation engine: equal to its source, identical ticks, nothing shared, the path searches)" '"./$BUILD_DIR/tests/test_sim/test_engine_copy"'
     suite "2.26"   sim    0 "test_engine_copy"           "Engine Copy, whole matches (test_engine_copy)"             "ENGINE COPY, WHOLE MATCHES (six shipped maps to the end of the match, a copy taken every 1000 ticks, the state hash compared at every tick)" '"./$BUILD_DIR/tests/test_sim/test_engine_copy" --whole-matches'
+    suite "2.27"   sim    1 "test_prediction"            "Prediction (test_prediction)"                              "PREDICTION SUITE (one's own orders shown at once: exact with the right lead, rebuilt only when a turn disagrees, equal to its derivation, never touching the confirmed engine)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_prediction"'
 
     # 3. application
     suite "3"      app    1 "test_app_integration"       "Application Integration Tests (test_app)"                  "APPLICATION INTEGRATION SUITES (libants-app)"                                      '"./$BUILD_DIR/tests/test_app/test_app_integration"'

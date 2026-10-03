@@ -108,6 +108,7 @@ NetGame::NetGame(sim::SimulationEngine& sim) : sim_(sim) {}
 NetGame::~NetGame() { shutdown_transport(); }
 
 void NetGame::shutdown_transport() {
+    prediction_.reset();                                        // (it holds the runner of a session: it goes first)
     host_session_.reset();
     client_session_.reset();
     host_lobby_.reset();
@@ -361,6 +362,7 @@ void NetGame::update(uint32_t now_ms) {
     } else if (role_ == Role::Client) {
         update_client();
     }
+    refresh_prediction();
     refresh_status();
 }
 
@@ -570,6 +572,7 @@ void NetGame::promote() {
         return;
     }
     known_host_ = seat_;
+    if (prediction_) prediction_->rebind(host_session_->runner());      // (the runner is the one that the client session had: it went with the promotion)
 #ifndef __EMSCRIPTEN__
     if (transport_) {
         transport_->peer_listener.reset();                       // nobody joins a match that runs
@@ -688,6 +691,7 @@ void NetGame::begin_match() {
         }
         transport_->listener.reset();                       // no late join: the door closes when the match begins
         known_host_ = seat_;
+        make_prediction();
         install_hooks();
         host_session_->start(now_);
     } else
@@ -703,6 +707,7 @@ void NetGame::begin_match() {
         known_host_ = cc.host;
         client_session_ = std::make_unique<ClientSession>(sim_, cc);
         client_session_->set_connection(transport_->uplink.get());
+        make_prediction();
         install_hooks();
         client_session_->start(now_);
         pump_peers();                                           // hands over the links that were made while the map loaded (none in the browser)
@@ -723,7 +728,11 @@ void NetGame::install_hooks() {
     LockstepRunner* r = runner();
     if (r == nullptr) return;
     r->set_on_tick([this]() {
+        if (prediction_) prediction_->on_tick();                // (the predicted engine runs its tick first: the application's tick hook reads the engine that is shown)
         if (on_tick_) on_tick_();
+    });
+    r->set_on_turn([this](const TurnMsg& turn) {
+        if (prediction_) prediction_->on_turn(turn);
     });
     r->set_on_command([this](const sim::Command& c, const sim::CommandResult& res) {
         if (c.type == sim::CommandType::Drop) events_.push_back(Event{Event::Type::PlayerLeft, c.issuer});
@@ -739,6 +748,42 @@ void NetGame::install_hooks() {
 void NetGame::set_on_tick(std::function<void()> fn) { on_tick_ = std::move(fn); }
 
 void NetGame::set_on_command(std::function<void(const sim::Command&, const sim::CommandResult&)> fn) { on_command_ = std::move(fn); }
+
+// ---- the prediction of one's own orders -----------------------------------------------------------------------------------------------------------
+
+void NetGame::make_prediction() {
+    LockstepRunner* r = runner();
+    if (r == nullptr || seat_ >= sim::MAX_PLAYERS) return;
+    Prediction::Config pc;
+    pc.seat = seat_;
+    prediction_ = std::make_unique<Prediction>(sim_, *r, pc);
+}
+
+// What an order of this player takes to reach the engine, in ms. The measured delay of the last orders when there is one (it includes everything: the way to the host, the wait for the
+// seal, the way back and the jitter buffer); before the first order, an estimate of the same things.
+uint32_t NetGame::expected_command_delay_ms() const {
+    if (const std::optional<uint32_t> measured = command_delay_ms()) return *measured;
+    const LockstepRunner* r = runner();
+    const uint32_t buffer = r != nullptr ? r->buffer_turns() : 1u;
+    return ping_ms().value_or(0u) + kTurnMs / 2u + buffer * kTurnMs;
+}
+
+// Once per update: the prediction is on only while the match simply follows the live stream. Every state in which the confirmed engine does not (a pause, a catch-up, a rejoin, a host
+// change, a desync) and the switches of the user and of the application turn it off; it begins again with the first tick after they are gone.
+// A pause is the runner's `held` (the sessions hold it for as long as the match is paused: a seat that is away, the countdown that follows), and a host change, a rejoin and the like are a
+// client session that is not in its Normal mode: the sessions' own `paused()` and `electing()` say the same thing and are not asked again.
+void NetGame::refresh_prediction() {
+    if (!prediction_) return;
+    bool off = !prediction_enabled_ || app_suspends_prediction_ || phase_ != Phase::Playing || desynced();
+    if (client_session_) off = off || client_session_->mode() != ClientSession::Mode::Normal || client_session_->catching_up();
+    if (const LockstepRunner* r = runner()) off = off || r->held();
+    prediction_->set_suspended(off);
+    if (!off) prediction_->set_expected_delay_ms(expected_command_delay_ms());
+}
+
+sim::SimulationEngine& NetGame::view_engine() {
+    return predicting() ? prediction_->engine() : sim_;
+}
 
 // ---- the host's controls -------------------------------------------------------------------------------------------------------------------------
 
@@ -845,13 +890,16 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
     if (phase_ != Phase::Playing || !sim::is_client_command(command.type)) return result;      // status Ignored
     sim::Command c = command;
     c.issuer = seat_;
-    result.ack_ant = sim_.predict_order_ack(c, &result.needing_order);                          // the immediate feedback of the click
-    result.status = sim::CommandResult::Status::Applied;                                        // optimistic: the turn decides
     if (host_session_) {
-        host_session_->submit_local(std::move(c));
-    } else if (client_session_ && !client_session_->submit(std::move(c))) {
+        host_session_->submit_local(c);
+    } else if (!client_session_ || !client_session_->submit(c)) {
         return sim::CommandResult{};                                                            // no host to send it to (a new one is being chosen): Ignored
     }
+    // The order is on its way. With the prediction on, the predicted engine applies it NOW and says what the engine says (the ant that answers, the ants that needed the order); without it,
+    // the immediate feedback of the click is predict_order_ack's guess, as it was before the prediction existed.
+    if (prediction_ && prediction_->submit(c, result)) return result;
+    result.ack_ant = sim_.predict_order_ack(c, &result.needing_order);
+    result.status = sim::CommandResult::Status::Applied;                                        // optimistic: the turn decides
     return result;
 }
 
