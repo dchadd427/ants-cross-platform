@@ -60,7 +60,7 @@ FILL_LINKS=1
 if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE" && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF 'id="fill-caption">Bots gather food; they do not fight yet.' "$FOUR_PAGE"; then FILL_LINKS=0; fi
 check "web/four.html puts the choice into every game link and into its own address as &fill=<word>, reads the address through validFill, and says under the choice that the bots gather food and do not fight yet" "$FILL_LINKS"
 FILL_SHELL=1
-if grep -qF "ANTS_ARGS.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillArg(q.get('fill'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
+if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillArg(q.get('fill'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
 check "web/shell.html gives the game --fill-bots from antsFillArg's answer and nothing else (the line that takes the address's word and the line that hands it to the game)" "$FILL_SHELL"
 # The validation itself is RUN, not read: the two functions are cut out of the pages and given a table of addresses' values (the three words in any case; empty, other words, spaces, line ends,
 # look-alikes, an argument smuggled behind a word, a very long text, values that are no text): shell.html's antsFillArg must answer the lower case word or nothing, four.html's validFill the same
@@ -226,7 +226,7 @@ code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" > /dev/n
 # clients that chat in the waiting room (--say: a test hook that says a line once two players are in) hear each other
 FILL="E2E-FILL-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$FILL\",\"seed\":13}" "$CTL/rooms"
-"$GAME" --headless --no-lan --name Solo --join "127.0.0.1:$GAME_PORT" --room "$FILL" --fill-bots medium --start-when 1 --screenshot "$WORK/f1.png" --frames 4000 > "$WORK/f1.log" 2>&1 &
+"$GAME" --headless --no-lan --name Solo --join "127.0.0.1:$GAME_PORT" --room "$FILL" --fill-bots medium --start-when 1 --screenshot "$WORK/f1.png" --frames 4000000 > "$WORK/f1.log" 2>&1 &
 FILL_PIDS="$!"
 FILL_UP=1
 for _ in $(seq 1 150); do
@@ -255,10 +255,10 @@ code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" > /dev/n
 
 CHAT="E2E-CHAT-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$CHAT\",\"seed\":17}" "$CTL/rooms"
-"$GAME" --headless --no-lan --name Ann --join "127.0.0.1:$GAME_PORT" --room "$CHAT" --say "hello from Ann" --screenshot "$WORK/ch1.png" --frames 4000 > "$WORK/ch1.log" 2>&1 &
+"$GAME" --headless --no-lan --name Ann --join "127.0.0.1:$GAME_PORT" --room "$CHAT" --say "hello from Ann" --screenshot "$WORK/ch1.png" --frames 4000000 > "$WORK/ch1.log" 2>&1 &
 CHAT_PIDS="$!"
 sleep 1
-"$GAME" --headless --no-lan --name Bob --join "127.0.0.1:$GAME_PORT" --room "$CHAT" --say "hello from Bob" --screenshot "$WORK/ch2.png" --frames 4000 > "$WORK/ch2.log" 2>&1 &
+"$GAME" --headless --no-lan --name Bob --join "127.0.0.1:$GAME_PORT" --room "$CHAT" --say "hello from Bob" --screenshot "$WORK/ch2.png" --frames 4000000 > "$WORK/ch2.log" 2>&1 &
 CHAT_PIDS="$CHAT_PIDS $!"
 HEARD=1
 for _ in $(seq 1 100); do

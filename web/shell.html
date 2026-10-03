@@ -280,11 +280,6 @@
             }
         }
 
-        #aspect-note {
-            display: none;
-            color: var(--accent-gold);
-        }
-
         /* The loading screen: shows the download of the game's data and goes away by itself when the game is ready (there is no start button; a failure puts its
            message here and the button of that message must work, see showCacheError). It takes no clicks and no keys while it is up. */
         #splash-overlay {
@@ -762,11 +757,10 @@
             <button type="button" role="radio" id="aspect-16-9" data-aspect="16:9" aria-checked="true" title="The wide picture (960 x 540)">16:9</button>
             <button type="button" role="radio" id="aspect-4-3" data-aspect="4:3" aria-checked="false" title="The original's picture (640 x 480)">Classic 4:3</button>
         </div>
-        <span id="aspect-note"></span>
     </div>
 
     <div class="mobile-tip-banner" id="mobile-tip-banner">
-        <span>💡&#8197;<strong>Tip:</strong>&#8197;Rotate to&#8197;<strong>landscape</strong>&#8197;and choose&#8197;<strong>16:9</strong>&#8197;under the game for the biggest picture</span>
+        <span>💡&#8197;<strong>Tip:</strong>&#8197;Turn your phone&#8197;<strong>sideways</strong>&#8197;for a bigger picture</span>
         <button type="button" class="tip-close" onclick="document.getElementById('mobile-tip-banner').style.display='none'" aria-label="Dismiss tip">&times;</button>
     </div>
 
@@ -887,14 +881,14 @@
                 return (typeof text === 'string' && Object.prototype.hasOwnProperty.call(SHAPES, text)) ? text : null;
             }
 
-            // Which shape the page shows: the address (?aspect=16:9 or ?aspect=4:3; anything else is ignored), else the choice that the selector remembered, else 16:9, except
-            // on a portrait phone, where the picture of 16:9 would be a thin strip and the classic 4:3 one is bigger.
-            function resolveAspect(fromAddress, remembered, portraitPhone) {
+            // Which shape the page shows: the address (?aspect=16:9 or ?aspect=4:3; anything else is ignored), else the choice that the selector remembered, else 16:9 on every device
+            // (a phone held upright included: the picture is 16:9 as wide as the screen, and turning the phone sideways makes it bigger).
+            function resolveAspect(fromAddress, remembered) {
                 var a = parseAspect(fromAddress);
                 if (a) return { aspect: a, source: 'address' };
                 a = parseAspect(remembered);
                 if (a) return { aspect: a, source: 'remembered' };
-                return portraitPhone ? { aspect: '4:3', source: 'portrait' } : { aspect: '16:9', source: 'default' };
+                return { aspect: '16:9', source: 'default' };
             }
 
             // The CSS size that makes the browser's canvas device pixels exactly `px`. The game's window system (SDL) sets the canvas to floor(CSS size x devicePixelRatio) of the
@@ -1073,11 +1067,9 @@
         (function () {
             var fromAddress = null;
             var remembered = null;
-            var portraitPhone = false;
             try { fromAddress = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             try { remembered = window.localStorage.getItem('ants.aspect'); } catch (e) { /* private window: nothing was remembered */ }
-            try { portraitPhone = window.matchMedia('(max-width: 768px) and (orientation: portrait)').matches; } catch (e) { /* not a phone */ }
-            var chosen = ANTS_PAGE.resolveAspect(fromAddress, ANTS_EMBED ? null : remembered, portraitPhone && !ANTS_EMBED);
+            var chosen = ANTS_PAGE.resolveAspect(fromAddress, ANTS_EMBED ? null : remembered);
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
             ANTS_ARGS.push('--aspect', ANTS_ASPECT);
@@ -1502,18 +1494,6 @@
                     window.location.assign(url.href);
                 });
             });
-            // a portrait phone that was given the classic picture: in landscape the wide one is bigger
-            var note = document.getElementById('aspect-note');
-            if (note && ANTS_ASPECT_SOURCE === 'portrait' && window.matchMedia) {
-                var landscape = window.matchMedia('(orientation: landscape)');
-                var update = function () {
-                    note.style.display = landscape.matches ? 'inline' : 'none';
-                    note.textContent = 'Landscape: choose 16:9 for a bigger picture (the game restarts).';
-                };
-                update();
-                if (landscape.addEventListener) landscape.addEventListener('change', update);
-                else if (landscape.addListener) landscape.addListener(update);
-            }
         })();
 
         // The frame cap (ANTS_PAGE.makeFrameLimiter): the game's loop is the browser's requestAnimationFrame

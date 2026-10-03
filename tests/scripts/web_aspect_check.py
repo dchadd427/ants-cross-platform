@@ -6,7 +6,7 @@ else (the DevTools protocol is spoken with the WebSocket client of web_hidden_ch
 profile, its own port; nothing of yours is touched) and looks at what only a browser can show:
 
   * the page's own logic that needs no layout (`ANTS_PAGE` in web/shell.html): the address's `aspect` (only 16:9 and 4:3 count, anything else is ignored), the order address >
-    remembered choice > portrait phone > default, the box that is the largest whole number of canvas steps for a given area and device ratio and whose CSS size makes the browser's
+    remembered choice > default (16:9 on every device, a phone held upright included), the box that is the largest whole number of canvas steps for a given area and device ratio and whose CSS size makes the browser's
     canvas exactly that many pixels even after the layout's rounding, where the box must stand so that the game's pointer is exact (`snapOffset`), the frame cap (60, 75 and 90 Hz
     are not touched, a jittery 60 Hz display is not capped, 120 / 144 / 165 / 240 Hz are held to 60 a second, decided by the median of the last 24 gaps: slow frames at the start do
     not decide, and a window that moves to a display of another rate is measured again), the arguments of the address (`joinArguments`: the door of a game server on this site only,
@@ -14,7 +14,7 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
   * the page at desktop sizes (1280 x 720, 1920 x 1080, 1440 x 900, a 21:9 window, a small one, a very narrow one) and on a phone, at device ratios 1, 2 and 3: the canvas the game
     makes has EXACTLY the shape of the picture (16:9, or 4:3 for the classic picture), fills the game's box, the box fits the window (no scrolling to see the whole picture and the bar
     under it) and is the largest that fits, the page has no sideways scroll;
-  * the address and the selector: `?aspect=4:3`, `?aspect=16:9`, a bad value, the selector's click (remembered, reload with the parameter), a portrait phone gets the classic picture;
+  * the address and the selector: `?aspect=4:3`, `?aspect=16:9`, a bad value, the selector's click (remembered, reload with the parameter), a portrait phone gets the 16:9 picture like every other device (and a remembered 4:3 still wins there);
   * the picture follows the window when it is resized, and fullscreen (the browser's, and the page's own where there is no Fullscreen API: an iPhone) enters and leaves with the
     canvas the right shape;
   * the pointer: the game draws its own cursor at the position that it reads from the browser; two screenshots with the pointer at two places show the cursor at those places; the box
@@ -123,7 +123,7 @@ JSON.stringify((function () {
   return { dpr: window.devicePixelRatio, inner: [window.innerWidth, window.innerHeight], aspect: stage.getAttribute('data-aspect'), args: ANTS_ARGS,
            fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement), pseudo: stage.classList.contains('pseudo-fullscreen'),
            stage: r(stage), box: r(box), canvas: r(cv), bar: r(bar), backing: [cv.width, cv.height], ready: !!window.isReadyToPlay,
-           scroll: [de.scrollWidth, de.clientWidth, de.scrollHeight, de.clientHeight], note: document.getElementById('aspect-note').style.display,
+           scroll: [de.scrollWidth, de.clientWidth, de.scrollHeight, de.clientHeight],
            checked: Array.prototype.map.call(document.querySelectorAll('.seg button'), function (b) { return b.getAttribute('data-aspect') + '=' + b.getAttribute('aria-checked'); }) };
 })())
 """
@@ -138,13 +138,14 @@ PURE_CHECKS = r"""
   [null, undefined, '', '21:9', '16:10', ' 16:9', '16:9 ', '16x9', '16/9', '4:3:2', '0:0', 'wide', 'toString', '__proto__', 'constructor', 'hasOwnProperty', 16, {}].forEach(function (v) {
     eq(P.parseAspect(v), null, 'parse ' + String(v) + ' is nothing');
   });
-  eq(P.resolveAspect('4:3', '16:9', false), { aspect: '4:3', source: 'address' }, 'the address beats the remembered choice');
-  eq(P.resolveAspect('16:9', '4:3', true), { aspect: '16:9', source: 'address' }, 'the address beats a portrait phone');
-  eq(P.resolveAspect('21:9', '4:3', false), { aspect: '4:3', source: 'remembered' }, 'a bad address value is ignored: the remembered choice');
-  eq(P.resolveAspect(null, '16:9', true), { aspect: '16:9', source: 'remembered' }, 'the remembered choice beats a portrait phone');
-  eq(P.resolveAspect(null, 'junk', true), { aspect: '4:3', source: 'portrait' }, 'a portrait phone: classic');
-  eq(P.resolveAspect('', null, false), { aspect: '16:9', source: 'default' }, 'the default is 16:9');
-  eq(P.resolveAspect(undefined, undefined, false), { aspect: '16:9', source: 'default' }, 'nothing at all: 16:9');
+  eq(P.resolveAspect('4:3', '16:9'), { aspect: '4:3', source: 'address' }, 'the address beats the remembered choice');
+  eq(P.resolveAspect('16:9', '4:3'), { aspect: '16:9', source: 'address' }, 'the address beats the remembered choice (16:9 asked, 4:3 remembered)');
+  eq(P.resolveAspect('21:9', '4:3'), { aspect: '4:3', source: 'remembered' }, 'a bad address value is ignored: the remembered choice');
+  eq(P.resolveAspect(null, '4:3'), { aspect: '4:3', source: 'remembered' }, 'a remembered 4:3 wins over the default');
+  eq(P.resolveAspect(null, 'junk'), { aspect: '16:9', source: 'default' }, 'a remembered value that is no shape is ignored: 16:9');
+  eq(P.resolveAspect(null, 'junk', true), { aspect: '16:9', source: 'default' }, 'a portrait phone (a third argument that the page does not know any more) gets 16:9 too');
+  eq(P.resolveAspect('', null), { aspect: '16:9', source: 'default' }, 'the default is 16:9');
+  eq(P.resolveAspect(undefined, undefined), { aspect: '16:9', source: 'default' }, 'nothing at all: 16:9');
   // the box: exact shape, the largest whole number of steps that fits, and a CSS size that the layout cannot round into a smaller canvas
   var dprs = [1, 1.1, 1.25, 4 / 3, 1.5, 1.75, 2, 2.25, 2.5, 2.625, 3, 3.5, 4, 0.75, 1.100000023841858, 2.0000000298023224];
   var areas = [];
@@ -1008,12 +1009,12 @@ def main():
             tab.emulate(w, h, dpr, mobile)
             tab.open(web)
             g = tab.geometry()
-            portrait_phone = w <= 768 and h > w                      # the page's rule: (max-width: 768px) and (orientation: portrait)
-            layout_checks(label, g, "4:3" if portrait_phone else "16:9")
+            layout_checks(label, g, "16:9")                          # (16:9 on every device, a phone held upright included)
             tab.save_shot(args.shots, "page_" + label.replace(" ", "_").replace("(", "").replace(")", "").replace("@", "_dpr"))
 
         print("[web aspect] touch: a tap lands where it should (a phone, both shapes)")
-        for label, w, h, query, shape in (("portrait phone, classic picture", 390, 844, "", (640, 480)), ("landscape phone, 16:9 picture", 844, 390, "", (960, 540))):
+        for label, w, h, query, shape in (("portrait phone, 16:9 picture", 390, 844, "", (960, 540)), ("portrait phone, classic picture asked for", 390, 844, "?aspect=4:3", (640, 480)),
+                                          ("landscape phone, 16:9 picture", 844, 390, "", (960, 540))):
             tab.emulate(w, h, 3, True)
             tab.open(web + query, settle=2.5)
             g = tab.geometry()
@@ -1025,17 +1026,31 @@ def main():
             diff = sum(1 for i in range(0, len(before[3]), before[2] * 97) if abs(before[3][i] - after[3][i]) > 40)
             check(diff > 60, "%s: a tap on the quick help's START button leaves the quick help (%d sampled pixels changed)" % (label, diff))
 
-        # a portrait phone that is turned to landscape: it keeps the classic picture (the game was made for it), the box follows, and a note offers the wide one
+        # a phone held upright gets the 16:9 picture (no exception for phones: the whole picture is visible, no sideways scroll), keeps it when it is turned to landscape (the box follows and
+        # is bigger), and a remembered 4:3 still wins on a portrait phone
         tab.emulate(390, 844, 3, True)
+        tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
         tab.open(web, settle=1.0)
         g = tab.geometry()
-        check(g["aspect"] == "4:3" and g["note"] == "none", "a portrait phone: classic picture, no note yet")
+        check(g["aspect"] == "16:9" and g["args"][-2:] == ["--aspect", "16:9"] and g["checked"] == ["16:9=true", "4:3=false"], "a phone held upright: the 16:9 picture (%s, %s)" % (g["aspect"], g["checked"]))
+        layout_checks("the phone held upright (390 x 844 at 3)", g, "16:9")
+        check(g["box"][2] > 300 and g["box"][0] + g["box"][2] <= g["inner"][0] + 0.5, "the whole picture is visible: the box is %.0f px wide inside the window's %d" % (g["box"][2], g["inner"][0]))
+        portrait_box = g["box"][2]
         tab.emulate(844, 390, 3, True)
         time.sleep(1.5)
         g = tab.geometry()
-        layout_checks("the portrait phone turned to landscape", g, "4:3")
-        check(g["note"] == "inline", "turned to landscape, the page offers the 16:9 picture (the note is shown)")
+        layout_checks("the phone turned to landscape", g, "16:9")
+        check(g["aspect"] == "16:9" and g["box"][2] > portrait_box, "turned to landscape the picture stays 16:9 and the box is bigger (%.0f px, upright %.0f px)" % (g["box"][2], portrait_box))
         tab.save_shot(args.shots, "phone_turned_to_landscape")
+        tab.emulate(390, 844, 3, True)
+        tab.open(web, settle=0.5)                                                         # (the page's own origin: its local storage is what the selector writes)
+        tab.ev("try { localStorage.setItem('ants.aspect', '4:3'); } catch (e) {} 1")
+        tab.open(web, settle=1.0)
+        g = tab.geometry()
+        check(g["aspect"] == "4:3" and g["checked"] == ["16:9=false", "4:3=true"], "a portrait phone with a remembered 4:3 keeps the classic picture (%s)" % g["aspect"])
+        layout_checks("the phone held upright, classic picture remembered", g, "4:3")
+        tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
+        tab.save_shot(args.shots, "phone_portrait_remembered_classic")
 
         print("[web aspect] the address and the selector")
         tab.emulate(1280, 720, 1)

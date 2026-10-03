@@ -1900,7 +1900,6 @@ void Application::sync_room_view() {
         view.status = net_->status_text();                                                       // (the 16:9 page: the status line keeps the prompt, the typed line is in the chat box)
     }
     map_select_.set_room(view);
-    net_->set_chat_status_mirror(chat_box == nullptr);
     // The chat box of the 16:9 page (the Online and Guest variants): the newest lines of the waiting room (names in front, a room's notices as they are, styled by the screen), the line that is
     // typed and the caret. And the foot of the leader's Players' Status box: what fills the empty seats at START (the choice of the host panel / --fill-bots; not with Fog of War, which seats no
     // bots, and not for a guest, who cannot START).
@@ -1913,10 +1912,8 @@ void Application::sync_room_view() {
         for (size_t i = said.size() > kChatBoxLines ? said.size() - kChatBoxLines : 0u; i < said.size(); ++i) {
             panel.lines.push_back(MapSelectScreen::ChatPanel::Line{chat_box_text(said[i]), said[i].notice()});
         }
-        if (room_chat_.is_open()) {
-            panel.typed = room_chat_.text();
-            panel.caret = room_chat_.caret(static_cast<uint32_t>(net_time_ms_));
-        }
+        panel.typed = room_chat_.text();                                                         // (empty while the input is closed, and the caret is off then)
+        panel.caret = room_chat_.caret(static_cast<uint32_t>(net_time_ms_));
         if (map_select_.setup_variant() == SetupVariant::Online && config_.fill_bots != net::FillLevel::None && !room.fog) {
             fill_first = "Empty seats at START:";
             fill_second = net::fill_level_title(config_.fill_bots) + " bots";

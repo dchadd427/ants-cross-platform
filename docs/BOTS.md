@@ -261,7 +261,7 @@ Each step is a release with the full test suite.
 - **B4a abilities that earn**: island hops (ISLANDS), the swimmer ferry (SMALL).
 - **B4b tactics**: the standard bot with its three levels: power-ups, raids, defence, fights, alliances.
 - **B5 tournaments**: tuning by self-play, regression ladder, community-map sweep.
-- **B6 integration**: server room specification (**built**: `bots`, protocol 11), the leader's fill (**built**) with its choices on the desktop Host panel and the web page (**built**; the status line says what START will do), results and replays, the match API, and the chat box of the 16:9 setup screen (the waiting room's chat is built; typing is T / a click on the status line for now).
+- **B6 integration**: server room specification (**built**: `bots`, protocol 11), the leader's fill (**built**) with its choices on the desktop Host panel and the web page (**built**; the status line says what START will do), results and replays, the match API, and, built in v0.0.100, the chat box of the 16:9 setup screen with the leader's fill footer (the classic screen keeps T / a click on the status line).
 
 ## Known limits
 
