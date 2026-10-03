@@ -9,7 +9,8 @@
 //     independent computation; a dialog, a captured press and the panels do not zoom.
 //   * APPLICATION: the wheel (up zooms in, down out, natural scrolling, the precise deltas, over the map only, not during a drag or with a dialog open), the middle button, the
 //     anchoring at the pointer, the fairness rule per kind of match (no zoom-out in a match of the network), the settings key, --zoom, the start view and the sound listener at every zoom,
-//     and a network match in which the two machines have different zooms and stay identical.
+//     a network match in which the two machines have different zooms and stay identical, and the setup screen after a zoomed match (the map preview is the zoom 1 preview, the wheel does
+//     nothing there).
 // Usage: test_zoom_view. Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -41,6 +42,7 @@
 #include "ants_app/hud.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_layout.hpp"
+#include "ants_app/setup_layout.hpp"
 #include "ants_app/view_zoom.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
@@ -1342,6 +1344,144 @@ void test_app_zoom_api() {
     }
 }
 
+// The setup screen after a match that was zoomed (a match leaves the renderer's camera at its zoom until the next match sets it): the screen's first frame makes the map preview with the
+// live renderer, and it is the same picture at every zoom (pixel for pixel); the wheel and the middle button do nothing on the setup screen, with the preview or the list under the pointer
+struct SetupAfterMatch {
+    bool ok{false};
+    float live_zoom{1.0f};                                     // the camera's zoom while the setup screen is up (the last match's)
+    float remembered{1.0f};
+    std::vector<uint8_t> preview;                              // the preview's inner square on the canvas, RGBA
+    int colours{0};                                            // distinct colours in it (a picture of the map, not the "No preview" box)
+    int32_t area_x{0};
+    int32_t area_y{0};
+};
+
+SetupAfterMatch setup_after_zoomed_match(float level, const std::string& map, int32_t shown_index) {
+    SetupAfterMatch out;
+    AppRig rig(Aspect::Wide16x9);
+    if (!rig.ok) return out;
+    Application& app = rig.app;
+    const LayoutRect view = app.layout().view();
+    app.hud().dismiss_match_start_modal();
+    app.note_pointer(view.x + 284, view.y + 183);
+    if (level != 1.0f && !app.set_zoom(level, view.x + 284, view.y + 183)) return out;
+    if (!app.start_game(maps_dir() + map + ".LVL")) return out;      // (a match that is started at the remembered level, the new match's own camera)
+    app.hud().dismiss_match_start_modal();
+    if (app.zoom() != level) return out;
+    app.return_to_map_select();
+    if (app.state() != AppState::MapSelect) return out;
+    app.map_select().set_selected_index(shown_index);              // (the list's own selection: the map whose preview is made, not the match's)
+    for (int i = 0; i < 6; ++i) app.run_frame_with_delta(0.1f);    // the setup screen's refresh task runs at 500 ms (a frame counts for at most 100 ms): the frame after it, with a map shown, makes the preview
+    const Picture frame = read_canvas(app, kWideW, kWideH);
+    const LayoutRect area = SetupLayout::of(SetupVariant::Single).preview_area();
+    out.area_x = area.x;
+    out.area_y = area.y;
+    std::vector<uint32_t> seen;
+    for (int32_t y = 0; y < area.h; ++y) {
+        for (int32_t x = 0; x < area.w; ++x) {
+            const uint8_t* p = frame.at(area.x + x, area.y + y);
+            out.preview.insert(out.preview.end(), p, p + 4);
+            const uint32_t key = static_cast<uint32_t>(p[0]) << 16 | static_cast<uint32_t>(p[1]) << 8 | p[2];
+            if (std::find(seen.begin(), seen.end(), key) == seen.end()) seen.push_back(key);
+        }
+    }
+    out.colours = static_cast<int>(seen.size());
+    out.live_zoom = app.zoom();
+    out.remembered = app.remembered_zoom();
+    out.ok = true;
+    return out;
+}
+
+void test_app_setup_screen() {
+    group("setup", "the map preview is the same picture after a match at any zoom; the wheel and the middle button do nothing on the setup screen, the loading screen and the quick help");
+    struct Pair {
+        const char* match;                                    // the map of the match that is zoomed
+        int32_t shown;                                        // the index of the map that the setup screen shows afterwards (the list's own order)
+    };
+    for (const Pair& pair : {Pair{"TINY", 1}, Pair{"GAUNTLET", 4}}) {
+        const std::string name = std::string("match on ") + pair.match + ", list at " + std::to_string(pair.shown) + ": ";
+        const SetupAfterMatch at1 = setup_after_zoomed_match(1.0f, pair.match, pair.shown);
+        check(at1.ok && at1.preview.size() > 100000u && at1.colours > 30, name + "(setup) the preview after a match at the zoom 1 is a picture of the map (" + std::to_string(at1.colours) + " colours)");
+        if (!at1.ok) continue;
+        for (const float level : {0.5f, 2.0f}) {
+            const std::string label = name + "after a match at the zoom " + (level == 0.5f ? "0.5" : "2") + ": ";
+            const SetupAfterMatch other = setup_after_zoomed_match(level, pair.match, pair.shown);
+            check(other.ok && other.live_zoom == level && other.remembered == level, label + "the setup screen is up, the camera still has the match's zoom and the level is remembered");
+            size_t different = 0;
+            if (other.preview.size() == at1.preview.size()) {
+                for (size_t i = 0; i < at1.preview.size(); ++i) different += at1.preview[i] != other.preview[i] ? 1u : 0u;
+            } else {
+                different = 1;
+            }
+            check(other.ok && other.preview.size() == at1.preview.size() && different == 0, label + "the preview is the zoom 1 preview, byte for byte (" + std::to_string(different) + " bytes differ)");
+        }
+    }
+    // the wheel and the middle button on the setup screen of a zoomed match: nothing moves, nothing is remembered anew
+    {
+        AppRig rig(Aspect::Wide16x9);
+        check(rig.ok, "(setup) the application is up");
+        if (rig.ok) {
+            Application& app = rig.app;
+            const LayoutRect view = app.layout().view();
+            app.hud().dismiss_match_start_modal();
+            app.note_pointer(view.x + 284, view.y + 183);
+            check(app.set_zoom(2.0f, view.x + 284, view.y + 183), "(setup) the match is zoomed to 2");
+            app.return_to_map_select();
+            app.render_frame();
+            check(app.state() == AppState::MapSelect, "(setup) the setup screen is up");
+            const ViewportCamera camera = app.renderer().camera();
+            const LayoutRect preview = SetupLayout::of(SetupVariant::Single).preview_area();
+            const LayoutRect list = SetupLayout::of(SetupVariant::Single).map_box;
+            const std::vector<std::pair<std::pair<int32_t, int32_t>, std::string>> places = {
+                {{preview.x + preview.w / 2, preview.y + preview.h / 2}, "the preview"},
+                {{list.x + list.w / 2, list.y + list.h / 2}, "the map list"},
+                {{view.x + 284, view.y + 183}, "where the match's map view was"},
+                {{5, 5}, "the corner of the canvas"},
+            };
+            for (const auto& place : places) {
+                const std::string label = "the setup screen, pointer over " + place.second + ": ";
+                app.note_pointer(place.first.first, place.first.second);
+                check(!app.view_zoom_allowed(place.first.first, place.first.second), label + "the wheel is not allowed");
+                notch(app, +1);
+                notch(app, -1);
+                notch(app, -1);
+                app.handle_mouse_wheel(wheel_event(0, 0.6f));
+                app.handle_mouse_wheel(wheel_event(0, 0.6f));
+                app.handle_mouse_button(button_event(SDL_BUTTON_MIDDLE, SDL_MOUSEBUTTONDOWN, place.first.first, place.first.second));
+                app.handle_mouse_button(button_event(SDL_BUTTON_MIDDLE, SDL_MOUSEBUTTONUP, place.first.first, place.first.second));
+                const ViewportCamera& now = app.renderer().camera();
+                check(app.zoom() == 2.0f && app.remembered_zoom() == 2.0f && now.x == camera.x && now.y == camera.y && now.zoom == camera.zoom, label + "the wheel and the middle button changed nothing (zoom, level, origin)");
+                check(app.state() == AppState::MapSelect, label + "the setup screen is still up");
+            }
+            app.render_frame();
+            check(app.zoom() == 2.0f, "(setup) a frame after all of it: the zoom is as it was");
+        }
+    }
+    // the loading screen and the quick help: the same
+    {
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), false);
+        check(rig.ok, "(setup) an application that starts on its loading screen is up");
+        if (rig.ok) {
+            Application& app = rig.app;
+            const AppState first = app.state();
+            app.note_pointer(300, 200);
+            notch(app, +1);
+            app.handle_mouse_button(button_event(SDL_BUTTON_MIDDLE, SDL_MOUSEBUTTONDOWN, 300, 200));
+            check(app.zoom() == 1.0f && app.remembered_zoom() == 1.0f && !app.view_zoom_allowed(300, 200), "the first screen (" + std::to_string(static_cast<int>(first)) + "): the wheel and the middle button do nothing");
+            app.finish_loading();
+            const AppState second = app.state();
+            notch(app, +1);
+            app.handle_mouse_button(button_event(SDL_BUTTON_MIDDLE, SDL_MOUSEBUTTONDOWN, 300, 200));
+            check(app.zoom() == 1.0f && app.remembered_zoom() == 1.0f && !app.view_zoom_allowed(300, 200), "the screen after loading (" + std::to_string(static_cast<int>(second)) + "): the wheel and the middle button do nothing");
+            if (app.state() == AppState::QuickHelp) {
+                app.quick_help_key(SDLK_RETURN);
+                notch(app, +1);
+                check(app.zoom() == 1.0f && app.remembered_zoom() == 1.0f, "the setup screen after the quick help: the wheel does nothing");
+            }
+        }
+    }
+}
+
 void test_app_fairness_local() {
     group("fair", "a local game and a game with bots offer the zoom-out");
     {
@@ -1877,7 +2017,7 @@ void test_network_match() {
 
 int main(int argc, char* argv[]) {
     // (SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one)
-    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, fair, settings, start, client, net)
+    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net)
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
             only = argv[++i];
@@ -1910,6 +2050,7 @@ int main(int argc, char* argv[]) {
     if (run("api")) test_app_zoom_api();
     if (run("ants")) test_app_ants();
     if (run("fair")) test_app_fairness_local();
+    if (run("setup")) test_app_setup_screen();
     if (run("settings")) test_app_settings();
     if (run("start")) test_app_start_view_and_listener();
     if (run("client")) test_local_determinism(arc);

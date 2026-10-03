@@ -84,6 +84,7 @@ bool Renderer::render_world_image(const ants::assets::LevelData& level, const an
     const LayoutRect saved_picture = picture_;
     const bool saved_inset = picture_inset_;
     const LayoutPoint saved_origin = origin_;
+    const bool saved_force_target = force_world_target_;                       // (the zoom's state: the camera's zoom is part of saved_camera; the world pass's own state, in_world_target_ and pass_, is idle between frames)
     const uint8_t saved_team = hud_team_id_;
     const uint32_t saved_sub_tick = sub_tick_ms_;
     const auto saved_ears = ears_state_;
@@ -105,6 +106,7 @@ bool Renderer::render_world_image(const ants::assets::LevelData& level, const an
         picture_ = saved_picture;
         picture_inset_ = saved_inset;
         origin_ = saved_origin;
+        force_world_target_ = saved_force_target;
         hud_team_id_ = saved_team;
         sub_tick_ms_ = saved_sub_tick;
         ears_state_ = saved_ears;
@@ -119,6 +121,7 @@ bool Renderer::render_world_image(const ants::assets::LevelData& level, const an
     hud_team_id_ = 0;
     origin_ = LayoutPoint{};
     picture_inset_ = false;
+    force_world_target_ = false;                                           // the preview is the zoom 1 picture whatever the live game's zoom is (camera_.zoom is set below, with the camera)
 
     bool ok = true;
     std::string reason;
@@ -156,6 +159,7 @@ bool Renderer::render_world_image(const ants::assets::LevelData& level, const an
             layout.view_y = 0;
             layout_ = layout;
             camera_.set_view(layout.view());
+            camera_.zoom = zoom::kNormal;                                  // (a zoomed live camera must not make the preview a zoomed picture: the live one is put back with saved_camera)
             camera_.centre_small_maps = false;
             camera_.x = static_cast<float>(tx - over);
             camera_.y = static_cast<float>(ty - over);

@@ -21,6 +21,10 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
     stands where the pointer is exact (a whole pixel for a whole size, 1/64 short of one for any other), and the edges of the setup screen's START button, found by moving the real
     mouse over it (a hover lights the button), are where the game's arithmetic puts them at six layouts (a fractional position or size used to put them up to a pixel off);
   * the selector asks "Leave the match to change the picture?" in a running match (and not at the quick help or the setup screen), and answered No the match goes on;
+  * the wheel and the pinch (milestone M4, the mouse-wheel zoom): over the game's canvas the page cancels the wheel (the page does not scroll) and the ctrl + wheel of a trackpad's
+    pinch (the browser's page zoom) and Safari's gesture events (turned into wheel events for the game); over the title, the selector and the guide the browser behaves as
+    usual (the page scrolls, nothing is cancelled); and the game really zooms: in a running match a wheel rolled away shows every world pixel as a 2 x 2 square (0.5 and 1 and 2
+    are pictures that differ, the frame around the map view does not), the middle button goes back to 1, and a wheel over the minimap does not zoom (screenshots in --shots);
   * the download of the game's data (index.data): the retry rule, a download that the browser fails once (injected with the DevTools Fetch domain) is retried and the game starts, a
     download that fails for good shows the message with a Reload button; the loading of the game itself: index.js or index.wasm that fail, a game that never starts (the watchdog), a
     body that is a web page / too small / an error status / cut short / a byte short (each is a failed try, the game starts on the next good one), the package that is handed to the
@@ -555,6 +559,8 @@ def main():
     ap.add_argument("--downloads-only", action="store_true", help="only the page's logic and the data download's faults (retry, failure for good)")
     ap.add_argument("--pointer", action="store_true", help="also the exactness of the game's pointer at six layouts (the full run does it too; --pointer-only does nothing else)")
     ap.add_argument("--pointer-only", action="store_true", help="only the exactness of the game's pointer (the game's START button's edges, found with the mouse, at six layouts)")
+    ap.add_argument("--wheel", action="store_true", help="also the wheel and the pinch: cancelled over the canvas only, and the game zooms (the full run does it too; --wheel-only does nothing else)")
+    ap.add_argument("--wheel-only", action="store_true", help="only the wheel and the pinch of the page (cancelled over the canvas only; the game zooms to 0.5, 1 and 2; the middle button)")
     ap.add_argument("--load-only", action="store_true", help="only the page's logic and the faults of the loading of the game (index.js, index.wasm, a game that never starts, a body that is not the data)")
     ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of web/four.html with 2 and with 4 games on the page (needs the game server behind /ws)")
     ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
@@ -943,10 +949,247 @@ def main():
                     detail.append("%s %+.2f" % (name, delta))
                 check(worst <= 0.2, "%s: the START button's four edges are where the game's arithmetic puts them (box %s, canvas %d: %s CSS px off)" % (label, [round(v, 3) for v in b], g["backing"][0], ", ".join(detail)))
 
+        def wheel_checks():
+            """The wheel and a trackpad's pinch over the game zoom the GAME (the mouse-wheel zoom): over the canvas the page cancels them (no scroll, no page zoom), elsewhere it does not
+            (the title, the selector and the guide scroll the page as usual), and in a running match the game really zooms. The game's zoom is seen in the picture: at the zoom 2 every
+            world pixel of the map view is a 2 x 2 square (in a window whose box is exactly the canvas's 960 x 540), the frame around the view never changes."""
+            print("[web aspect] the wheel and the pinch: cancelled over the canvas only, and they zoom the game (0.5, 1, 2); the middle button goes back to 1")
+
+            def wheel(x, y, dy, modifiers=0):
+                tab.call("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": dy, "modifiers": modifiers})
+
+            def settle_scroll():
+                tab.ev("window.scrollTo(0, 0); 1")
+                for _ in range(20):
+                    if tab.ev("window.scrollY") == 0:
+                        return
+                    time.sleep(0.1)
+
+            def centre_of(element_id):
+                return json.loads(tab.ev("JSON.stringify((function(){var b=document.getElementById('%s').getBoundingClientRect();return [b.x+b.width/2,b.y+b.height/2];})())" % element_id))
+
+            def start_match():
+                key = lambda kind: tab.call("Input.dispatchKeyEvent", {"type": kind, "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "text": "\r" if kind == "keyDown" else ""})
+                for _ in range(2):                                           # the quick help's Enter (the setup screen), the setup screen's Enter (START)
+                    key("keyDown")
+                    key("keyUp")
+                    time.sleep(1.5)
+                deadline = time.time() + 20
+                while time.time() < deadline and tab.ev("Module._ants_match_running()") != 1:
+                    time.sleep(0.5)
+                return tab.ev("Module._ants_match_running()") == 1
+
+            def pixels_of(shot, g, cw, ch, x0, y0, w, h):
+                """The rows of a rectangle of the game's canvas (canvas pixels) in a screenshot: the screen pixel at the middle of each canvas pixel (a scale of exactly 1 where the box is the canvas's size)"""
+                sw, sh, nch, data = shot
+                bx = g["box"]
+                scale = bx[2] / cw
+                rows = []
+                for y in range(h):
+                    sy = int(bx[1] + (y0 + y + 0.5) * scale)
+                    row = bytearray()
+                    for x in range(w):
+                        sx = int(bx[0] + (x0 + x + 0.5) * scale)
+                        i = (sy * sw + sx) * nch
+                        row += data[i:i + nch]
+                    rows.append(bytes(row))
+                return rows, nch
+
+            def differ_fraction(a, b, nch):
+                total = 0
+                changed = 0
+                for ra, rb in zip(a, b):
+                    for i in range(0, len(ra), nch * 3):
+                        total += 1
+                        if ra[i:i + 3] != rb[i:i + 3]:
+                            changed += 1
+                return changed / max(1, total)
+
+            def block_fraction(rows, nch):
+                """The share of the 2 x 2 blocks (on the best of the four alignments) that are one colour: a picture that was enlarged 2 times with the nearest filter is all of them"""
+                best = 0.0
+                for oy in (0, 1):
+                    for ox in (0, 1):
+                        total = 0
+                        same = 0
+                        for y in range(oy, len(rows) - 1, 6):
+                            r0, r1 = rows[y], rows[y + 1]
+                            for x in range(ox, len(r0) // nch - 1, 6):
+                                i = x * nch
+                                a = r0[i:i + 3]
+                                total += 1
+                                if a == r0[i + nch:i + nch + 3] and a == r1[i:i + 3] and a == r1[i + nch:i + nch + 3]:
+                                    same += 1
+                        best = max(best, same / max(1, total))
+                return best
+
+            def orange_fraction(rows, nch):
+                total = 0
+                orange = 0
+                for y in range(0, len(rows), 4):
+                    r = rows[y]
+                    for x in range(0, len(r) // nch, 4):
+                        i = x * nch
+                        total += 1
+                        if r[i] > 180 and r[i + 1] < 110 and r[i + 2] < 60:
+                            orange += 1
+                return orange / max(1, total)
+
+            def wait_for_play(g, cw, ch, view):
+                """The match's start dialog (\"Get ready to play!\", orange) closes by itself after some seconds: the wheel does nothing while it is up"""
+                deadline = time.time() + 40
+                while time.time() < deadline:
+                    rows, nch = pixels_of(tab.shot(), g, cw, ch, *view)
+                    if orange_fraction(rows, nch) < 0.02:
+                        return True
+                    time.sleep(1.0)
+                return False
+
+            # ---- the page: what is cancelled and what is not
+            tab.emulate(976, 900, 1)                                          # a window whose box is exactly the canvas: 960 x 540 at (8, 99), a scale of 1
+            tab.open(web + "?aspect=16:9", settle=1.5)
+            g = tab.geometry()
+            check(abs(g["box"][2] - 960) < 0.01 and abs(g["box"][3] - 540) < 0.01 and g["dpr"] == 1 and g["scroll"][2] > g["scroll"][3], "the window of 976 x 900 gives the canvas exactly 960 x 540 CSS pixels and the page scrolls (box %s, scroll %s)" % (g["box"], g["scroll"]))
+            tab.ev("window.__w = []; window.addEventListener('wheel', function (e) { window.__w.push({dp: e.defaultPrevented, ctrl: e.ctrlKey, cancelable: e.cancelable}); }); 1")
+            cx, cy = g["box"][0] + 400, g["box"][1] + 300
+            title = (300, 30)
+            guide = centre_of("guide-mouse")
+            guide[1] = tab.ev("document.getElementById('guide-mouse').getBoundingClientRect().y + 20")
+            selector = centre_of("aspect-4-3")
+            for label, point in (("the page's title", title), ("the selector's bar", selector), ("the guide", guide)):
+                tab.ev("window.__w.length = 0; 1")
+                tab.mouse("mouseMoved", point[0], point[1], button="none")
+                wheel(point[0], point[1], 120)
+                time.sleep(0.7)
+                scrolled = tab.ev("window.scrollY")
+                check(scrolled > 0, "a wheel over %s scrolls the page as usual (the page moved %s CSS pixels)" % (label, scrolled))
+                settle_scroll()
+                tab.ev("window.__w.length = 0; 1")
+                wheel(point[0], point[1], -120, modifiers=2)                  # ctrl + wheel: the browser's page zoom (or a trackpad's pinch)
+                time.sleep(0.5)
+                seen = json.loads(tab.ev("JSON.stringify(window.__w)"))
+                check(len(seen) >= 1 and all(not e["dp"] for e in seen), "a ctrl + wheel over %s is left to the browser: nothing cancels it, it is not even cancelable (the browser's own thread zooms the page without waiting for the page: %s)" % (label, seen))
+            tab.ev("window.__w.length = 0; 1")
+            tab.mouse("mouseMoved", cx, cy, button="none")
+            wheel(cx, cy, 120)
+            time.sleep(0.7)
+            seen = json.loads(tab.ev("JSON.stringify(window.__w)"))
+            check(tab.ev("window.scrollY") == 0 and len(seen) >= 1 and all(e["dp"] for e in seen), "a wheel over the canvas does not scroll the page: the page cancels it (scroll %s, %s)" % (tab.ev("window.scrollY"), seen))
+            tab.ev("window.__w.length = 0; 1")
+            wheel(cx, cy, -120, modifiers=2)
+            time.sleep(0.5)
+            seen = json.loads(tab.ev("JSON.stringify(window.__w)"))
+            check(len(seen) >= 1 and all(e["dp"] and e["ctrl"] for e in seen), "a ctrl + wheel over the canvas (a trackpad's pinch in Chrome and Firefox) is cancelled too: no page zoom (%s)" % seen)
+            gestures = json.loads(tab.ev(r"""(function () {
+                var c = document.getElementById('canvas'), got = [], out = [];
+                c.addEventListener('wheel', function (e) { got.push([Math.round(e.deltaY), e.ctrlKey]); });
+                function fire(target, type, scale) {
+                    var e = new Event(type, {bubbles: true, cancelable: true});
+                    Object.defineProperty(e, 'scale', {value: scale}); Object.defineProperty(e, 'clientX', {value: 100}); Object.defineProperty(e, 'clientY', {value: 100});
+                    target.dispatchEvent(e);
+                    return e.defaultPrevented;
+                }
+                out.push(fire(c, 'gesturestart', 1)); out.push(fire(c, 'gesturechange', 1.25)); out.push(fire(c, 'gesturechange', 1.5625)); out.push(fire(c, 'gesturechange', 1.25)); out.push(fire(c, 'gestureend', 1));
+                var elsewhere = fire(document.getElementById('guide-mouse'), 'gesturechange', 2);
+                return JSON.stringify({prevented: out, wheels: got, elsewhere: elsewhere});
+            })()"""))
+            check(all(gestures["prevented"]) and gestures["wheels"] == [[-100, True], [-100, True], [100, True]] and not gestures["elsewhere"],
+                  "Safari's pinch (gesture events) over the canvas is cancelled and becomes wheel events for the game (a pinch of 25 %% is a notch: %s); on the guide it is left alone (%s)" % (gestures["wheels"], gestures["elsewhere"]))
+
+            # ---- the game: it zooms
+            for aspect, cw, ch_, view, label in (("16:9", 960, 540, (16, 21, 762, 500), "16:9"), ("4:3", 640, 480, (16, 21, 442, 440), "classic 4:3")):
+                tab.emulate(976, 900, 1)
+                tab.open(web + "?aspect=" + aspect, settle=1.5)
+                g = tab.geometry()
+                exact = abs(g["box"][2] - cw) < 0.01 and abs(g["box"][3] - ch_) < 0.01      # (the classic picture's box here is 960 x 720: a canvas pixel is 1.5 screen pixels, so no 2 x 2 squares to count there)
+                tab.ev("document.getElementById('canvas').focus(); 1")
+                check(start_match(), "%s: Enter at the quick help and Enter at the setup screen start a match" % label)
+                check(wait_for_play(g, cw, ch_, view), "%s: the match's start dialog closes and the map view is clear" % label)
+                px, py = screen_of_canvas(g, view[0] + view[2] / 2 + 40, view[1] + view[3] / 2 + 20, cw, ch_)
+                tab.mouse("mouseMoved", px, py, button="none")
+                time.sleep(0.4)
+                shots = {}
+
+                def take(name):
+                    shot = tab.shot()
+                    shots[name] = shot
+                    tab.save_shot(args.shots, "zoom_%s_%s" % ("wide" if aspect == "16:9" else "classic", name))
+                    return shot
+
+                def view_rows(name):
+                    return pixels_of(shots[name], g, cw, ch_, *view)
+
+                def strip(name):
+                    return pixels_of(shots[name], g, cw, ch_, 0, 24, 14, ch_ - 48)
+
+                def differs(a, b):
+                    return differ_fraction(view_rows(a)[0], view_rows(b)[0], view_rows(a)[1])
+
+                take("1")
+                wheel(px, py, -120)
+                time.sleep(0.8)
+                take("2")
+                d21 = differs("1", "2")
+                check(d21 > 0.2, "%s: a wheel rolled away over the map view zooms in: the map view is another picture (%.0f %% of its pixels changed)" % (label, d21 * 100))
+                if exact:
+                    rows1, nch = view_rows("1")
+                    rows2, _ = view_rows("2")
+                    b1, b2 = block_fraction(rows1, nch), block_fraction(rows2, nch)
+                    check(b2 > 0.95 and b1 < 0.85, "%s: at the zoom 2 every world pixel is a 2 x 2 square (%.0f %% of the 2 x 2 blocks are one colour, %.0f %% at the zoom 1)" % (label, b2 * 100, b1 * 100))
+                    s1, nch = strip("1")
+                    s2, _ = strip("2")
+                    check(s1 == s2, "%s: the frame around the map view (its left strip) is the same picture at the zoom 1 and 2" % label)
+                wheel(px, py, 120)
+                time.sleep(0.5)
+                wheel(px, py, 120)
+                time.sleep(0.8)
+                take("05")
+                d51, d52 = differs("1", "05"), differs("2", "05")
+                check(d51 > 0.2 and d52 > 0.2, "%s: two notches toward zoom out to 0.5: a third picture of the map view (%.0f %% of its pixels differ from the zoom 1, %.0f %% from the zoom 2)" % (label, d51 * 100, d52 * 100))
+                if exact:
+                    s5, nch = strip("05")
+                    check(s5 == s1, "%s: the frame around the map view is the same picture at the zoom 0.5" % label)
+                    rows5, _ = view_rows("05")
+                    check(block_fraction(rows5, nch) < 0.85, "%s: the zoom 0.5 is not a picture of 2 x 2 squares (%.0f %%)" % (label, block_fraction(rows5, nch) * 100))
+                wheel(px, py, -120)
+                time.sleep(0.5)
+                wheel(px, py, -120)
+                time.sleep(0.8)
+                take("2b")
+                if exact:
+                    rows2b, nch = view_rows("2b")
+                    check(block_fraction(rows2b, nch) > 0.95, "%s: two notches away from 0.5 are at 2 again (%.0f %% blocks)" % (label, block_fraction(rows2b, nch) * 100))
+                tab.mouse("mousePressed", px, py, button="middle", clickCount=1)
+                tab.mouse("mouseReleased", px, py, button="middle", clickCount=1)
+                time.sleep(0.8)
+                take("1b")
+                if exact:
+                    rows1b, nch = view_rows("1b")
+                    check(block_fraction(rows1b, nch) < 0.85, "%s: the middle button goes back to the zoom 1 (%.0f %% blocks)" % (label, block_fraction(rows1b, nch) * 100))
+                else:
+                    check(differs("2b", "1b") > 0.2, "%s: the middle button goes back to the zoom 1: the map view changes" % label)
+                # a wheel over the minimap does not zoom (and does not scroll the page either)
+                mx, my = screen_of_canvas(g, (480 if aspect == "4:3" else 800) + 40, 60, cw, ch_)
+                tab.mouse("mouseMoved", mx, my, button="none")
+                time.sleep(0.3)
+                take("m0")
+                wheel(mx, my, -120)
+                time.sleep(0.8)
+                take("m1")
+                check(tab.ev("window.scrollY") == 0, "%s: a wheel over the minimap does not scroll the page" % label)
+                if exact:
+                    rows_m, nch = view_rows("m1")
+                    check(block_fraction(rows_m, nch) < 0.85, "%s: a wheel over the minimap does not zoom the map view (%.0f %% blocks)" % (label, block_fraction(rows_m, nch) * 100))
+
         POINTER_CASES = [("1280x720@1", 1280, 720, 1, False), ("1000x640@1", 1000, 640, 1, False), ("1536x864@1.25", 1536, 864, 1.25, False), ("1500x844@1.5", 1500, 844, 1.5, False),
                          ("1280x720@2.625", 1280, 720, 2.625, False), ("844x390@3 (phone)", 844, 390, 3, True)]
         if args.pointer_only:
             pointer_checks(POINTER_CASES)
+            tab.close()
+            print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
+            return 1 if failures else 0
+        if args.wheel_only:
+            wheel_checks()
             tab.close()
             print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
             return 1 if failures else 0
@@ -1286,6 +1529,8 @@ def main():
         load_fault_checks()
         if args.pointer or not args.quick:
             pointer_checks(POINTER_CASES)
+        if args.wheel or not args.quick:
+            wheel_checks()
 
         if args.four:
             print("[web aspect] web/four.html: the games' frames (the game server must be behind /ws)")

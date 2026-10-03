@@ -785,6 +785,62 @@ void test_render(const assets::AssetArchive& arc) {
         rig.renderer.unpin_animation_clock();
     }
 
+    // THE LIVE GAME IS ZOOMED (the mouse-wheel zoom, view_zoom.hpp): the renderer's camera keeps the zoom of the last match while the setup screen is up, and the setup screen's first frame makes
+    // the preview. The image is the zoom 1 picture whatever the live camera's zoom is (0.5 and 2, the world pass's test hook that forces the offscreen target too), the image that was made at
+    // the zoom 1 is the reference, and the live zoomed view is left as it was: the camera (zoom and origin), the hook and the frame that it draws
+    {
+        const assets::LevelData shown = load_level("TREASURE");
+        const assets::LevelData other = load_level("GAUNTLET");
+        sim::SimulationEngine live;
+        live.init(shown, 5u, 0x0F);
+        const sim::WorldState live_world = live.get_world_state();
+        sim::SimulationEngine other_eng;
+        other_eng.init(other, 1u, 0x0F);
+        sim::WorldState other_world = other_eng.get_world_state();
+        other_world.ants.clear();
+        rig.renderer.set_layout(ScreenLayout::with_size(960, 540));
+        rig.renderer.set_picture(LayoutRect{0, 0, 960, 540});
+        rig.renderer.set_level(shown);
+        rig.renderer.pin_animation_clock(0);
+        check(rig.renderer.camera().zoom == 1.0f, "(setup) the live camera is at the zoom 1");
+        WorldImage reference;
+        check(rig.renderer.render_world_image(other, other_world, other_eng.grid(), reference) && reference.valid(), "(setup) the reference image is made at the zoom 1");
+        for (const float level : {0.5f, 2.0f}) {
+            for (const bool forced : {false, true}) {
+                const std::string label = std::string("live zoom ") + (level == 0.5f ? "0.5" : "2") + (forced ? " (the offscreen target forced)" : "") + ": ";
+                rig.renderer.camera().set_zoom(level, 300, 200, shown.width(), shown.height());
+                rig.renderer.set_force_world_target(forced);
+                auto frame = [&]() {
+                    rig.renderer.begin_frame();
+                    rig.renderer.render_world(live_world, live.grid(), -1);
+                    return rgb_digest(rig.read());
+                };
+                const uint64_t before = frame();
+                const ViewportCamera camera_before = rig.renderer.camera();
+                const uint64_t passes_before = rig.renderer.world_target_passes();
+                WorldImage image;
+                std::string why;
+                const bool made = rig.renderer.render_world_image(other, other_world, other_eng.grid(), image, &why);
+                check(made && image.valid() && image.width == reference.width && image.height == reference.height && image.rgba == reference.rgba, label + "the image is the zoom 1 image, byte for byte " + why);
+                const ViewportCamera& cam = rig.renderer.camera();
+                check(cam.zoom == camera_before.zoom && cam.x == camera_before.x && cam.y == camera_before.y && cam.world_x == camera_before.world_x && cam.world_y == camera_before.world_y &&
+                          cam.viewport_w == camera_before.viewport_w && cam.viewport_h == camera_before.viewport_h && cam.view_x == camera_before.view_x && cam.view_y == camera_before.view_y,
+                      label + "the live camera keeps its zoom and its origin");
+                check(rig.renderer.zoomed() && cam.zoom == level, label + "the renderer is still zoomed to the level");
+                check(rig.renderer.world_target_passes() == passes_before, label + "the image was drawn by the direct pass (no pass through the zoom's offscreen target)");
+                check(SDL_GetRenderTarget(rig.renderer.get_sdl_renderer()) == nullptr, label + "the window is the render target again");
+                const uint64_t after = frame();
+                check(before == after, label + "the live zoomed view draws the same frame after the image was made: " + hex64(before) + " and " + hex64(after));
+                rig.renderer.set_force_world_target(false);
+                rig.renderer.camera().set_zoom(1.0f, 300, 200, shown.width(), shown.height());
+            }
+        }
+        // a preview made at the zoom 1 again: still the reference (nothing was left behind)
+        WorldImage again;
+        check(rig.renderer.render_world_image(other, other_world, other_eng.grid(), again) && again.rgba == reference.rgba, "back at the zoom 1 the image is the reference again");
+        rig.renderer.unpin_animation_clock();
+    }
+
     // THE SELECTION MARKERS' CLOCKS: the ears of a selected ant and the brackets of a selected hill each have a clock that starts when they are first drawn; drawing a frame with nothing selected
     // (which is what the preview's render does) resets them. The renderer puts them back: a frame drawn after the preview is the frame that would have been drawn without it
     {
