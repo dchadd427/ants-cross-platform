@@ -1,0 +1,217 @@
+# Continuous integration: every push (all branches) and every pull request is built and tested on Windows (MSVC), macOS (Apple clang) and
+# Linux (GCC), and the web image (Emscripten, the beta site's Docker build) is built once. Nothing is published or deployed from here and the
+# workflow needs no secrets. What runs where is listed in README.md ("Continuous integration").
+#
+# The suites are the ones run_tests.sh runs: ctest runs every test program that the CMake project registers (assets, simulation, network,
+# server, bots, application), then the self-tests of the two tools (map_sweep, bot_arena), the opaque-box E2E runner and, where bash and
+# python3 exist (macOS, Linux), the two script suites (start_game.sh --dry-run, ants_server with two headless clients). The Docker-based
+# and browser-based checks of the project are not run here (the browser checks are opt-in, see tests/TEST_INFRA.md).
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# One run per branch (or pull request): a newer push cancels the run of the older one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # The tests choose SDL's dummy drivers themselves; this is for the game binary that the script suites start (no window, no sound card on a runner).
+  SDL_VIDEODRIVER: dummy
+  SDL_AUDIODRIVER: dummy
+  CTEST_OUTPUT_ON_FAILURE: "1"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux:
+    name: Linux (GCC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 400M
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install SDL2, SDL2_ttf, ccache, Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build
+
+      - name: Restore the compiler cache
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+
+      - name: Configure (Release, warnings are errors)
+        run: |
+          gcc --version | head -1
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build the game, the server and the test programs
+        run: |
+          cmake --build build
+          cmake --build build --target map_sweep bot_arena
+          ccache -s
+
+      - name: Build the E2E runner
+        run: |
+          cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build_e2e
+
+      - name: Test programs (ctest)
+        run: ctest --test-dir build --output-on-failure --timeout 900
+
+      - name: Tool self-tests (map_sweep, bot_arena)
+        run: |
+          build/map_sweep --selftest
+          build/bot_arena --selftest
+
+      - name: Opaque-box E2E runner
+        run: build_e2e/e2e_runner --all
+
+      - name: Script suites (start script, dedicated server with two headless clients)
+        run: |
+          bash tests/scripts/test_start_game.sh
+          BUILD_DIR=build bash tests/scripts/test_ants_server.sh
+
+      - name: Keep the test logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-test-logs
+          path: build/Testing/Temporary/
+          if-no-files-found: ignore
+
+  macos:
+    name: macOS (Apple clang)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 400M
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install SDL2, SDL2_ttf, ccache, Ninja
+        run: brew install sdl2 sdl2_ttf ccache ninja
+
+      - name: Restore the compiler cache
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+
+      - name: Configure (Release, warnings are errors)
+        run: |
+          clang --version | head -1
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build the game, the server and the test programs
+        run: |
+          cmake --build build
+          cmake --build build --target map_sweep bot_arena
+          ccache -s
+
+      - name: Build the E2E runner
+        run: |
+          cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build_e2e
+
+      - name: Test programs (ctest)
+        run: ctest --test-dir build --output-on-failure --timeout 900
+
+      - name: Tool self-tests (map_sweep, bot_arena)
+        run: |
+          build/map_sweep --selftest
+          build/bot_arena --selftest
+
+      - name: Opaque-box E2E runner
+        run: build_e2e/e2e_runner --all
+
+      - name: Script suites (start script, dedicated server with two headless clients)
+        run: |
+          bash tests/scripts/test_start_game.sh
+          BUILD_DIR=build bash tests/scripts/test_ants_server.sh
+
+      - name: Keep the test logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-test-logs
+          path: build/Testing/Temporary/
+          if-no-files-found: ignore
+
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      # SDL2 and SDL2_ttf are not installed: CMakeLists.txt downloads the prebuilt Visual C++ packages itself (FetchContent), as it does on the owner's PC.
+      - name: Configure (Visual Studio generator, x64)
+        env:
+          CXXFLAGS: /MP   # compile the files of a project in parallel
+        run: |
+          cmake --version | head -1
+          cmake -S . -B build -A x64 -DANTS_WERROR=ON
+
+      - name: Build the game, the server and the test programs (Release)
+        run: |
+          cmake --build build --config Release --parallel
+          cmake --build build --config Release --parallel --target map_sweep bot_arena
+
+      - name: Build the E2E runner (Release)
+        env:
+          CXXFLAGS: /MP
+        run: |
+          cmake -S tests/e2e -B build_e2e -A x64
+          cmake --build build_e2e --config Release --parallel
+
+      - name: Test programs (ctest)
+        run: ctest --test-dir build -C Release --output-on-failure --timeout 900
+
+      - name: Tool self-tests (map_sweep, bot_arena)
+        run: |
+          build/Release/map_sweep.exe --selftest
+          build/Release/bot_arena.exe --selftest
+
+      - name: Opaque-box E2E runner
+        run: build_e2e/Release/e2e_runner.exe --all
+
+      - name: Keep the test logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-test-logs
+          path: build/Testing/Temporary/
+          if-no-files-found: ignore
+
+  web:
+    name: Web (Emscripten, Docker image)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      # The same build as the beta site's image (Dockerfile: emsdk, the WebAssembly game, the page, nginx). Nothing is pushed or run anywhere.
+      - name: Build the web image
+        run: docker build -t ants-beta .
+
+      - name: Check the image (nginx accepts its configuration, the game's files are in it)
+        run: |
+          docker run --rm ants-beta nginx -t
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html index.js index.wasm index.data four.html changelog.html'
