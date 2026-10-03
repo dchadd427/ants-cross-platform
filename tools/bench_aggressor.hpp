@@ -3,7 +3,7 @@
 // The scripted AGGRESSOR of the bench (docs/audit/B4_1_notes.md, acceptance A4): a TEST-ONLY bot that is never in the registry (make_bot does not know it; the arena and the tests hand
 // it to a match through ArenaSpec::factory). It exists to measure what the standard bot keeps of its score against an opponent that attacks:
 //
-//   it takes a Thief power-up with the nearest idle worker, and up to two Combat power-ups,
+//   it takes a Thief power-up with the nearest idle worker (two of them in the double-thief opening, kind "aggressor2"), and up to two Combat power-ups,
 //   it raids, again and again, the hill with the highest score box (at least 30 points) that has not shut its thief hole with walls or bombs,
 //   it attacks the nearest enemy carrier with every ant that is not on its way to a power-up (workers and Combat Ants), one order for every blow,
 //   it never harvests (so that everything it takes from a victim is raid and harassment, not a share of the pot).
@@ -26,7 +26,10 @@ namespace ants::ai::bench {
 
 class AggressorBot final : public Bot {
 public:
-    const char* kind() const noexcept override { return "aggressor"; }
+    /// thieves: how many Thief power-ups it takes before it takes the Combat ones (1: the plain aggressor; 2: the DOUBLE-THIEF opening of the owner's playbook, kind "aggressor2": the thief of
+    /// its own side and, with the next idle worker, the nearest other Thief power-up that nobody stands on, then two raids from the start)
+    explicit AggressorBot(size_t thieves = 1) : thieves_wanted_(thieves) {}
+    const char* kind() const noexcept override { return thieves_wanted_ >= 2 ? "aggressor2" : "aggressor"; }
     void start(const BotContext& context) override {
         seat_ = context.seat;
         profile_ = context.profile;
@@ -69,6 +72,9 @@ public:
             int32_t best_d = 0;
             for (const PowerUpView& p : view.powerups()) {
                 if (p.kind != kind || p.standing_ant != 0) continue;
+                bool claimed = false;
+                for (const auto& t : taking_) claimed = claimed || (t.second.tile == p.tile);                // another worker is on its way to this one
+                if (claimed) continue;
                 for (const AntView& a : view.mine()) {
                     if (a.type != sim::AntType::Worker || !a.idle() || a.holding || taking_.count(a.id) != 0) continue;
                     if (!reaches(*map, a.tile, p.tile)) continue;
@@ -82,10 +88,10 @@ public:
             }
             if (best == nullptr) return false;
             orders.pick_up(who->id, best->tile);
-            taking_[who->id] = Taking{kind, now};
+            taking_[who->id] = Taking{kind, now, best->tile};
             return true;
         };
-        if (thieves < 1) send(sim::AntType::Thief);
+        if (thieves < thieves_wanted_) send(sim::AntType::Thief);
         else if (combats < 2) send(sim::AntType::Combat);
 
         // 2. the thieves raid
@@ -154,6 +160,7 @@ private:
     struct Taking {
         sim::AntType kind{sim::AntType::Thief};
         uint64_t since{0};
+        sim::TileCoord tile{};
     };
     static const AntView* find(const std::vector<AntView>& ants, uint32_t id) {
         const auto it = std::lower_bound(ants.begin(), ants.end(), id, [](const AntView& a, uint32_t want) { return a.id < want; });
@@ -171,6 +178,7 @@ private:
         return false;
     }
 
+    size_t thieves_wanted_{1};
     uint8_t seat_{0};
     Profile profile_{};
     const MapInfo* map_{nullptr};

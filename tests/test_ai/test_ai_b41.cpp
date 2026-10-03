@@ -842,18 +842,22 @@ void run_b41_tests() {
             sim.set_fire_at(east[2], 3500);
             ASSERT_TRUE(east_state(sim.grid(), map.hill(0)).shut());
             sim.grid_mut().clear_bomb(8, 5);
-            sim.set_terrain(8, 6, sim::TERRAIN_WALKABLE);
-            sim.grid_mut().place_powerup(8, 6, 4);                                                           // a power-up is solid for every walker: it shuts the tile like a rock
-            sim.grid_mut().place_bomb(8, 5, 1);
-            ASSERT_TRUE(east_state(sim.grid(), map.hill(0)).shut());
-            ASSERT_TRUE(east_state(sim.grid(), map.hill(0)).walls() == 1);
-            sim.grid_mut().clear_bomb(8, 5);
-            sim.grid_mut().clear_powerup(8, 6);
-            sim.set_terrain(8, 6, sim::TERRAIN_OBSTACLE);
             sim.grid_mut().set_terrain_class(8, 5, 3);                                                        // mud
             const EastState st = east_state(sim.grid(), map.hill(0));
             ASSERT_FALSE(st.shut());
             ASSERT_FALSE(st.shuttable());
+        }
+        // a power-up is solid for every walker: it shuts its tile like a rock (and an enemy's bomb next to it, a wall on the third tile: the hole is shut)
+        {
+            sim::SimulationEngine sim;
+            empty_field(sim, 12);
+            sim.grid_mut().place_powerup(8, 6, 4);
+            sim.grid_mut().place_bomb(8, 5, 1);
+            sim.set_fire_at(east[2], 3500);
+            const EastState st = east_state(sim.grid(), map.hill(0));
+            ASSERT_TRUE(st.tile[1] == EastTile::Blocked && st.tile[0] == EastTile::Bomb && st.tile[2] == EastTile::Wall);
+            ASSERT_TRUE(st.shut());
+            ASSERT_EQ(st.walls(), 1u);
         }
         // the own deposits go on with the walls up: four workers on a pile east of the walls bank as much as without them
         const auto bank = [&](bool walls) {
@@ -966,14 +970,15 @@ void run_b41_tests() {
         {
             sim::SimulationEngine sim;
             empty_field(sim, 21);
-            sim.grid_mut().place_powerup(58, 58, 2);
-            sim.spawn_unit(1, sim::AntType::Thief, TileCoord{52, 30});
+            sim.grid_mut().place_powerup(58, 22, 2);
+            sim.spawn_unit(1, sim::AntType::Thief, TileCoord{3, 59});                                   // in sight, and further from the power-up than the ant (no contest)
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{6, 10});
             Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(200);
             ASSERT_EQ(rig.as<StandardBot>().powerups().started(), 0u);
             ASSERT_EQ(rig.as<StandardBot>().powerups().active(), 0u);
-            for (const auto& e : rig.proposed) ASSERT_FALSE(e.second.tile_x == 58 && e.second.tile_y == 58);
+            ASSERT_EQ(rig.as<StandardBot>().powerups().contested(), 0u);
+            for (const auto& e : rig.proposed) ASSERT_FALSE(e.second.tile_x == 58 && e.second.tile_y == 22);
         }
         // (c) a contest: an enemy worker 1 tile from the power-up gets there before any ant of ours (6 tiles), so the trip is not started and the tile is left alone for a while;
         //     the same worker 25 tiles away does not stop it
@@ -1337,18 +1342,19 @@ void run_b41_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI7.18 Securing The Own Side (Medium And Hard Take The Fire And Bomber Power-Ups On Their Side Of TREASURE Early, Nobody Else's, Nothing That They Do Not Need: Thief And Combat Wait For An Enemy That Plays; Easy Takes The Fire Only When An Enemy Thief Is In Sight, Never A Bomber): Typed Ants Go On Harvesting") {
+    TEST_CASE("AI7.18 The Opening, Securing The Own Side (The First Moves Go To Power-Ups, Not To Food: Medium And Hard Take The Fire, Bomber And Thief Power-Ups On Their Side Of TREASURE In That Order Of Value, Nobody Else's, Nothing That They Do Not Need: Combat Waits For An Enemy That Fights; Easy Takes The Fire Only When An Enemy Thief Is In Sight, Never A Bomber Or A Thief): Typed Ants Go On Harvesting") {
         struct Case {
             Level level;
             bool thief_in_sight;
             bool fire;
             bool bomber;
+            bool thief;
         };
         const Case cases[] = {
-            {Level::Easy, false, false, false},    // nothing is wanted: no walls, no denial
-            {Level::Easy, true, true, false},      // an enemy Thief is in sight: the Fire for the walls, and no Bomber
-            {Level::Medium, false, true, true},    // denial: the Fire and the Bomber of the own side
-            {Level::Hard, false, true, true},
+            {Level::Easy, false, false, false, false},    // nothing is wanted: no walls, no denial
+            {Level::Easy, true, true, false, false},      // an enemy Thief is in sight: the Fire for the walls, and no Bomber, no Thief
+            {Level::Medium, false, true, true, true},     // denial: the Fire, the Bomber and the Thief of the own side
+            {Level::Hard, false, true, true, true},
         };
         for (const Case& k : cases) {
             sim::SimulationEngine sim;
@@ -1358,32 +1364,49 @@ void run_b41_tests() {
             rig.run(1100);
             ASSERT_EQ(count_type(sim, 0, sim::AntType::Fire), k.fire ? 1u : 0u);
             ASSERT_EQ(count_type(sim, 0, sim::AntType::Bomber), k.bomber ? 1u : 0u);
-            ASSERT_EQ(count_type(sim, 0, sim::AntType::Thief), 0u);                                       // Thief and Combat wait for an enemy that plays (the others stand idle here)
-            ASSERT_EQ(count_type(sim, 0, sim::AntType::Combat), 0u);
+            ASSERT_EQ(count_type(sim, 0, sim::AntType::Thief), k.thief ? 1u : 0u);
+            ASSERT_EQ(count_type(sim, 0, sim::AntType::Combat), 0u);                                       // Combat waits for an enemy that fights (the others stand idle here)
+            ASSERT_EQ(count_type(sim, 0, sim::AntType::Swimmer), 0u);
             // the power-ups of the own side are gone when taken; every other power-up of the map is where it was
             ASSERT_EQ(sim.grid().has_powerup_at(tc(57, 24)), !k.fire);
             ASSERT_EQ(sim.grid().has_powerup_at(tc(48, 25)), !k.bomber);
-            for (const TileCoord other : {tc(2, 23), tc(57, 34), tc(2, 35), tc(9, 25), tc(9, 33), tc(48, 33)}) ASSERT_TRUE(sim.grid().has_powerup_at(other));
-            ASSERT_EQ(rig.as<StandardBot>().powerups().taken(), static_cast<uint32_t>((k.fire ? 1 : 0) + (k.bomber ? 1 : 0)));
+            ASSERT_EQ(sim.grid().has_powerup_at(tc(35, 14)), !k.thief);
+            for (const TileCoord other : {tc(2, 23), tc(57, 34), tc(2, 35), tc(9, 25), tc(9, 33), tc(48, 33), tc(25, 14), tc(26, 47), tc(34, 47)}) ASSERT_TRUE(sim.grid().has_powerup_at(other));
+            ASSERT_EQ(rig.as<StandardBot>().powerups().taken(), static_cast<uint32_t>((k.fire ? 1 : 0) + (k.bomber ? 1 : 0) + (k.thief ? 1 : 0)));
             ASSERT_EQ(rig.as<StandardBot>().powerups().failed(), 0u);
+            if (k.level != Level::Easy) {                                                                  // the trips of the opening leave at the first looks, in the order of value
+                std::vector<TileCoord> order;
+                for (const auto& e : rig.proposed) {
+                    if (e.second.type == CommandType::GroupMove && e.second.ants.size() == 1 && sim.grid().in_bounds(tc(e.second.tile_x, e.second.tile_y)) &&
+                        (e.second.tile_x == 57 || e.second.tile_x == 48 || e.second.tile_x == 35) && (e.second.tile_y == 24 || e.second.tile_y == 25 || e.second.tile_y == 14)) {
+                        order.push_back(tc(e.second.tile_x, e.second.tile_y));
+                    }
+                }
+                ASSERT_TRUE(order.size() >= 3);
+                ASSERT_TRUE(order[0] == tc(57, 24) && order[1] == tc(48, 25) && order[2] == tc(35, 14));    // Fire, Bomber, Thief
+                ASSERT_TRUE(rig.proposed.front().first <= 10);                                              // and the first of them at the first look
+            }
         }
-        // the own side's Fire and Bomber are gone (an enemy took them): nobody goes for those of the other sides (the levels do not steal)
+        // the own side's Fire, Bomber and Thief are gone (an enemy took them): nobody goes for those of the other sides (the levels do not steal)
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             sim::SimulationEngine sim;
             start_match(sim, "TREASURE", 5, 0x0F);
             sim.grid_mut().clear_powerup(57, 24);
             sim.grid_mut().clear_powerup(48, 25);
+            sim.grid_mut().clear_powerup(35, 14);
             Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
             if (level == Level::Easy) sim.spawn_unit(1, sim::AntType::Thief, rig.map().hill(1).queue);       // (Easy would take a Fire for the walls: still not a stolen one)
             rig.run(1100);
             ASSERT_EQ(rig.as<StandardBot>().powerups().started(), 0u);
-            if (level == Level::Medium) {                                                                   // (nothing threatens: no wish for a Fire or a Bomber at all, however many lie on other sides)
+            if (level == Level::Medium) {                                                                   // (nothing threatens: no wish for a Fire, a Bomber or a Thief at all, however many lie on other sides)
                 ASSERT_EQ(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Fire)], 0);
                 ASSERT_EQ(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Bomber)], 0);
+                ASSERT_EQ(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Thief)], 0);
             }
             ASSERT_EQ(count_type(sim, 0, sim::AntType::Fire), 0u);
             ASSERT_EQ(count_type(sim, 0, sim::AntType::Bomber), 0u);
-            for (const TileCoord other : {tc(2, 23), tc(57, 34), tc(2, 35), tc(9, 25), tc(9, 33), tc(48, 33)}) ASSERT_TRUE(sim.grid().has_powerup_at(other));
+            ASSERT_EQ(count_type(sim, 0, sim::AntType::Thief), 0u);
+            for (const TileCoord other : {tc(2, 23), tc(57, 34), tc(2, 35), tc(9, 25), tc(9, 33), tc(48, 33), tc(25, 14), tc(26, 47), tc(34, 47)}) ASSERT_TRUE(sim.grid().has_powerup_at(other));
         }
     } TEST_END();
 
@@ -1706,24 +1729,22 @@ void run_b41_tests() {
         ASSERT_EQ(late.powerups().size(), 1u);
     } TEST_END();
 
-    TEST_CASE("AI7.22 Thief And Combat Pick-Ups Follow The Enemy: Medium And Hard Take The Thief Power-Up Once An Enemy Plays (Easy Never) And Their Thief Goes Raiding, They Take Combat Power-Ups (Medium One, Hard Up To Two) Once An Enemy Combat Ant Is In Sight, And The Combat Ant Walks To Its Guard Post; Nothing Is Taken From An Enemy That Stands Idle")
+    TEST_CASE("AI7.22 Thief And Combat: Medium And Hard Take The Thief Power-Up Of Their Side In The Opening (Easy Never) And Their Thief Goes Raiding The Team That Has Points; They Take Combat Power-Ups (Medium One, Hard Up To Two) Only Once An Enemy Combat Ant Is In Sight, And The Combat Ant Walks To Its Guard Post")
     {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
-            for (const bool enemy_acts : {false, true}) {
+            for (const bool enemy_combat : {false, true}) {
                 sim::SimulationEngine sim;
                 start_match(sim, "TREASURE", 5, 0x0F);
                 sim.set_player_score(1, 300);
                 Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
-                if (enemy_acts) {
-                    sim.spawn_unit(3, sim::AntType::Combat, rig.map().hill(3).queue);                         // an enemy Combat Ant in sight (not at the hill that is raided: Hard would not go there)
-                    const std::vector<uint32_t> theirs = ants_of(sim, 1);
-                    sim.apply_command(command_of(CommandType::GroupMove, 1, {theirs[0]}, 30, 27));            // and an enemy that moves
-                }
+                if (enemy_combat) sim.spawn_unit(3, sim::AntType::Combat, rig.map().hill(3).queue);           // an enemy Combat Ant in sight (not at the hill that is raided: Hard would not go there)
+                const std::vector<uint32_t> theirs = ants_of(sim, 1);
+                sim.apply_command(command_of(CommandType::GroupMove, 1, {theirs[0]}, 30, 27));                 // an enemy that moves, in both runs: that alone fetches no Combat Ant
                 rig.run(2200);
                 const StandardBot& bot = rig.as<StandardBot>();
                 const size_t thieves = count_type(sim, 0, sim::AntType::Thief);
                 const size_t fighters = count_type(sim, 0, sim::AntType::Combat);
-                if (level == Level::Easy || !enemy_acts) {
+                if (level == Level::Easy) {
                     ASSERT_EQ(thieves, 0u);
                     ASSERT_EQ(fighters, 0u);
                     ASSERT_EQ(bot.raids().raids_ordered(), 0u);
@@ -1735,6 +1756,12 @@ void run_b41_tests() {
                 ASSERT_TRUE(sim.grid().has_powerup_at(tc(25, 14)));                                          // (another side's is left)
                 ASSERT_TRUE(bot.raids().raids_ordered() >= 1);                                               // it raids the team that has points
                 ASSERT_EQ(bot.raids().last_target(), 1);
+                if (!enemy_combat) {
+                    ASSERT_EQ(fighters, 0u);                                                                 // nobody fights: no Combat Ant is fetched
+                    ASSERT_EQ(bot.guard().guards(), 0u);
+                    ASSERT_TRUE(sim.grid().has_powerup_at(tc(37, 2)));
+                    continue;
+                }
                 ASSERT_TRUE(fighters >= 1 && fighters <= (level == Level::Medium ? 1u : 2u));
                 ASSERT_FALSE(sim.grid().has_powerup_at(tc(37, 2)));
                 ASSERT_EQ(bot.guard().guards(), fighters);

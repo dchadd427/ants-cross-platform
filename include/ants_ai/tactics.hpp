@@ -52,7 +52,8 @@ struct LevelPlan {
     uint32_t wall_latch_ticks{3600};     // a thief threat lasts this long after the last time it was seen (a walled hill needs its walls renewed while it lasts)
     uint32_t renew_lead_ticks{0};        // a wall is put out and lit again this long before it would burn out (0: it is lit again after it burned out, while the threat lasts)
     // the side's power-ups and the counters of the enemy's fire walls and bombs
-    bool secure_side{false};             // (Medium, Hard) the Fire and Bomber power-ups on the own side of the map are taken early, so that nobody steals them (docs/BOTS.md)
+    bool secure_side{false};             // (Medium, Hard) the power-ups of secure_kinds on the own side of the map are taken early, so that nobody steals them (docs/BOTS.md)
+    uint8_t secure_kinds{0};             // bit t = AntType t, in the order of value: Fire, Bomber, then Thief, Combat, Swimmer (the owner's playbook: the first moves go to power-ups, not food)
     bool counters{true};                 // enemy fire walls near the hill or a pile are put out by an own Fire Ant, enemy bombs defused by an own Bomber or, without one, set off by a healthy idle worker
     bool bomb_hit{true};                 // ... the worker's way (without a Bomber): an ant that steps on a bomb loses 2 hit points and is thrown, and the bomb is gone
     int32_t counter_hill_radius{10};     // a hazard within this many tiles of the own hill (or within counter_pile_radius of a pile that the hill reaches) is harmful

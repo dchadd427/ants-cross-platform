@@ -70,7 +70,9 @@ public:
 private:
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
         HarvestTask::Params p;
-        if (plan.typed_harvest) p.extra_types = static_cast<uint8_t>((1u << static_cast<unsigned>(sim::AntType::Fire)) | (1u << static_cast<unsigned>(sim::AntType::Bomber)));
+        if (plan.typed_harvest) {
+            p.extra_types = static_cast<uint8_t>((1u << static_cast<unsigned>(sim::AntType::Fire)) | (1u << static_cast<unsigned>(sim::AntType::Bomber)) | (1u << static_cast<unsigned>(sim::AntType::Thief)));
+        }
         if (plan.combat_harvests) p.extra_types = static_cast<uint8_t>(p.extra_types | (1u << static_cast<unsigned>(sim::AntType::Combat)));
         p.fire_aware = plan.fire_aware;
         p.contest_aware = plan.contest_aware;

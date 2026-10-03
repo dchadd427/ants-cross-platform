@@ -8,6 +8,12 @@ namespace ants::ai {
 
 // ---- what a level does ---------------------------------------------------------------------------------------------------------------------------------
 
+namespace {
+// the own side's power-ups that Medium and Hard take in the opening, in the order of value: the Fire Ant (walls, and what an enemy would burn the piles with), the Bomber (what an
+// enemy would mine the base with), the Thief (the enemy's raids, and the own: a thief that steals the own Thief power-up has two thieves at the start)
+constexpr uint8_t kSecureOpening = static_cast<uint8_t>((1u << static_cast<unsigned>(sim::AntType::Fire)) | (1u << static_cast<unsigned>(sim::AntType::Bomber)) | (1u << static_cast<unsigned>(sim::AntType::Thief)));
+}  // namespace
+
 LevelPlan plan_for(Level level) noexcept {
     LevelPlan p;
     p.level = level;
@@ -28,6 +34,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
             p.secure_side = true;
+            p.secure_kinds = kSecureOpening;
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;
@@ -44,6 +51,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;
             p.secure_side = true;
+            p.secure_kinds = kSecureOpening;
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;

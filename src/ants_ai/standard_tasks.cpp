@@ -447,16 +447,17 @@ void PowerUpTask::step(TaskContext& c) {
     }
     if (!call_back.empty()) c.orders.stop(call_back);
 
-    // 2. a new trip for what is wanted and missing, one at a look
-    if (takes_.size() >= params_.max_active) return;
-    for (const sim::AntType kind : {sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat}) {
+    // 2. new trips for what is wanted and missing, in the order of value (Fire, Bomber, Thief, Combat, Swimmer), as many as max_active allows: the opening sends them all at the first look
+    for (const sim::AntType kind : {sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer}) {
         const size_t want = tactics_.wants[static_cast<size_t>(kind)];
         if (want == 0) continue;
         size_t have = 0;
         for (const AntView& a : v.mine()) have += a.type == kind ? 1u : 0u;
         for (const auto& t : takes_) have += t.second.kind == kind ? 1u : 0u;
-        if (have >= want) continue;
-        if (try_start(c, kind)) return;
+        while (have < want && takes_.size() < params_.max_active) {
+            if (!try_start(c, kind)) break;
+            ++have;
+        }
     }
 }
 
@@ -865,7 +866,8 @@ void RaidTask::step(TaskContext& c) {
     const uint64_t now = v.tick();
     if (!v.has_grid()) return;
     for (auto it = black_.begin(); it != black_.end();) it = it->second <= now ? black_.erase(it) : std::next(it);
-    // the thieves of the bot: claimed by this task (a task of a higher rank may take one for a fight: then it is not ours)
+    // the thieves of the bot: one is claimed only for a raid that is under way or about to be ordered; between raids (and while no hill is worth a trip) it harvests like a worker. A
+    // task of a higher rank may take one for a fight: then it is not ours
     for (auto it = raids_.begin(); it != raids_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         if (a == nullptr || a->type != sim::AntType::Thief || c.ledger.owner(it->first) != id()) it = raids_.erase(it);
@@ -873,7 +875,7 @@ void RaidTask::step(TaskContext& c) {
     }
     for (const AntView& a : v.mine()) {
         if (a.type != sim::AntType::Thief) continue;
-        if (c.ledger.owner(a.id) != id() && !c.ledger.take(a.id, id())) continue;
+        const bool held = c.ledger.owner(a.id) == id();
         const auto it = raids_.find(a.id);
         if (it != raids_.end()) {
             Raid& r = it->second;
@@ -893,9 +895,13 @@ void RaidTask::step(TaskContext& c) {
             }
             continue;
         }
-        if (!a.idle() || a.holding || a.carried_points > 0 || a.hp < 4 || !a.takes_orders()) continue;
-        if (v.powerup_at(a.tile) != nullptr) continue;
-        launch(c, a);
+        const bool free_to_go = a.idle() && !a.holding && a.carried_points == 0 && a.hp >= 4 && a.takes_orders() && v.powerup_at(a.tile) == nullptr;
+        if (!free_to_go) {
+            if (held) c.ledger.release(a.id, id());                                     // walking, carrying, hurt: the economy's again
+            continue;
+        }
+        if (!held && !c.ledger.take(a.id, id())) continue;                              // a task of a higher rank has it
+        if (!launch(c, a)) c.ledger.release(a.id, id());                                // nothing to raid: back to the economy
     }
 }
 

@@ -83,7 +83,7 @@ private:
 
 // ---- rank 3: power-ups --------------------------------------------------------------------------------------------------------------------------------------
 
-/// Takes the power-ups that the bot wants (Tactics::wants: the Fire Ant of the walls, the Thief of the raids, the Combat Ants of the guard), one ant for each, by a plain click of the
+/// Takes the power-ups that the bot wants (Tactics::wants: the Fire Ant of the walls, the own side's Fire, Bomber and Thief of the opening, the Thief of the raids, the Combat Ants of the guard), one ant for each, by a plain click of the
 /// ant on the power-up's tile (Orders::pick_up): the ant takes it when its walk ends there, changes type for life, and plays 17 ticks of the pick-up clip in which it takes no order.
 ///   the ant       the closest idle (or walking to a pile) worker with empty hands and enough hit points, by the walking cost from ITS OWN tile (one search from the power-up serves
 ///                 every ant: MapInfo::cost_field_onto); it is taken from the economy (AntLedger::take) for the trip
@@ -97,7 +97,7 @@ class PowerUpTask final : public Task {
 public:
     struct Params {
         uint32_t max_trip_ticks{420};        // a power-up whose walk takes longer than this is not worth an ant
-        uint32_t max_active{2};              // ants on their way at a time
+        uint32_t max_active{5};              // ants on their way at a time (the opening: Fire, Bomber, Thief, Combat, Swimmer)
         uint32_t blacklist_ticks{900};       // an (ant, tile) pair that failed
         uint32_t tile_blacklist_ticks{300};  // a tile that was contested, blocked or gave a failure
         uint32_t field_ttl_ticks{100};       // a walking-cost field is used this long
