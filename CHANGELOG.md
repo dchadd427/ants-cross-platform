@@ -25,7 +25,7 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 **For players:**
 - The footer of the web page and `ants --version` / `ants_server --version` now name the build (the short git commit) next to the version, for example "Version v0.1.0 - build abc1234". The version in the corner plate is unchanged.
 - This changelog is short: one entry per release in a fixed template. The detailed history of every release up to v0.1.0 (the old 556 KB file, unchanged) is in `docs/CHANGELOG_ARCHIVE.md` and on the site at `/changelog_archive.html`, linked from the changelog page.
-- Internal: one version source (the file `VERSION`; CMake generates `ants_app/version.hpp` from it and a build id at every build), `./run_tests.sh --fast` (about a minute) and the time of every suite in the summary, `docs/WORKFLOW.md` (the three test tiers, branches and batch pushes, the version policy), ccache in CMake when it is installed, and a README without per-suite counts.
+- Internal: one version source (the file `VERSION`; CMake generates `ants_app/version.hpp` from it and a build id at every build), `./run_tests.sh --fast` (about a minute) and the time of every suite in the summary, `docs/WORKFLOW.md` (the three test tiers, branches and batch pushes, the version policy) with the rules 1, 1b, 2, 6, 7 and the new rule 11 of `AGENTS.md` that say the same, ccache in CMake when it is installed, and a README without per-suite counts.
 
 **Rules / network:** None: the simulation and network protocol 11 are unchanged.
 

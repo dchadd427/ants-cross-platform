@@ -1,6 +1,6 @@
 # Workflow
 
-How a change travels from a commit to a release: which tests run when, how work is pushed, how the version moves, how the changelog is written. The rules for contributors and agents are in [`AGENTS.md`](../AGENTS.md); this page is the short, practical version.
+How a change travels from a commit to a release: which tests run when, how work is pushed, how the version moves, how the changelog is written. The rules for contributors and agents are in [`AGENTS.md`](../AGENTS.md) (rules 1 and 1b: branches, batch pushes and `STATUS.md`; rule 2: zero warnings and all tests passing; rule 6: the web image; rule 7: the version and the build id; rule 11: the tiers); this page is the short, practical version.
 
 ## The three test tiers
 
