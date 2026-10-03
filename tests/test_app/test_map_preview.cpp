@@ -1049,10 +1049,12 @@ void test_cache(const assets::AssetArchive& arc) {
     show(28);
     show(6);                                    // the last 24 (6 .. 29) are kept
     check(stub.render_calls == 30, "the last 24 maps are still kept");
+    show(5);                                    // the 25th from the end is gone: the cache holds 24, not 25 (and not 23: map 6 above)
+    check(stub.render_calls == 31, "map 5 was dropped (it is rendered again), the cache holds exactly 24: " + std::to_string(stub.render_calls));
     show(0);                                    // the oldest are gone
-    check(stub.render_calls == 31, "map 0 was dropped (it is rendered again), the cache holds 24: " + std::to_string(stub.render_calls));
-    show(5);
-    check(stub.render_calls == 32, "so was map 5");
+    check(stub.render_calls == 32, "so was map 0 (the oldest goes first: 5 took the place of 6)");
+    show(29);
+    check(stub.render_calls == 32, "(map 29 is still there)");
     // the same screen when the room makes it the online host's: another box (248): the same map is drawn again at that size, and both pictures are kept
     {
         MapSelectScreen online;

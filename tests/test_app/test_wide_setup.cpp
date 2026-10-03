@@ -1283,6 +1283,52 @@ void test_state(const assets::AssetArchive& arc) {
         state.screen.render(fog, arc);
         check(drew_all(fog, anim_parts(arc, "d_fowyes", 320, 60)), "the host's Fog of War choice is shown on the fixed box: \"Yes\"");
     }
+    // a map name that is longer than its label's box is cut at the box, in every place that shows it (the original draws into a surface of the label's size: what does not fit is not seen).
+    // Spy::get_text_width is 6 pixels a character, so the 249-pixel box holds 41 characters; no text mask is involved: it is the text that the screen asked the renderer to draw
+    {
+        const std::string long_stem = "A_VERY_LONG_COMMUNITY_MAP_NAME_THAT_DOES_NOT_FIT_ITS_LABEL_AT_ALL_AND_GOES_ON";
+        const SetupLayout& l = SetupLayout::of(SetupVariant::Single);
+        check(static_cast<int32_t>(long_stem.size()) * 6 > l.name_text.w + 120, "(setup) the test's map name is far wider than the name label's box");
+        auto name_drawn = [&](const Spy& spy, const std::string& stem, int32_t x, int32_t y) -> std::string {
+            for (const Spy::Ev& e : spy.events) {
+                if (e.kind == Spy::Kind::Text && e.x == x && e.y == y && e.size == FontSize::Px18 && !e.name.empty() && stem.compare(0, e.name.size(), e.name) == 0) return e.name;
+            }
+            return "";
+        };
+        // a game on this machine: the map that the list has selected
+        const std::filesystem::path dir = std::filesystem::temp_directory_path() / ("ants_wide_setup_longname_" + std::to_string(static_cast<unsigned long long>(SDL_GetPerformanceCounter())));
+        std::filesystem::create_directories(dir);
+        std::error_code ignore;
+        std::filesystem::copy_file(std::string(kMapsDir) + "/TINY.LVL", dir / (long_stem + ".LVL"), std::filesystem::copy_options::overwrite_existing, ignore);
+        {
+            MapSelectScreen screen;
+            screen.init(dir.string());
+            screen.set_wide_layout(true);
+            screen.set_player_name("Player");
+            screen.set_player_team(0);
+            screen.enter();
+            screen.update(1.66f);
+            Spy spy(arc);
+            screen.render(spy, arc);
+            const std::string drawn = name_drawn(spy, long_stem, l.name_text.x, l.name_text.y);
+            check(screen.get_maps().size() == 1 && !drawn.empty() && drawn.size() < long_stem.size() && spy.get_text_width(drawn) <= l.name_text.w && spy.get_text_width(drawn) > l.name_text.w - 12,
+                  "a long map name is cut at the name label's box: " + std::to_string(drawn.size()) + " of " + std::to_string(long_stem.size()) + " characters, " + std::to_string(spy.get_text_width(drawn)) + " of " + std::to_string(l.name_text.w) + " pixels");
+        }
+        // a guest: the room's map, which this machine does not have (the name is the file's)
+        {
+            ScreenState state(kIslands);
+            MapSelectScreen::RoomView room = guest_view();
+            room.map_file = long_stem + ".LVL";
+            state.screen.set_room(room);
+            Spy spy(arc);
+            state.screen.render(spy, arc);
+            const SetupLayout& g = SetupLayout::of(SetupVariant::Guest);
+            const std::string drawn = name_drawn(spy, long_stem, g.name_text.x, g.name_text.y);
+            check(!drawn.empty() && drawn.size() < long_stem.size() && spy.get_text_width(drawn) <= g.name_text.w && spy.get_text_width(drawn) > g.name_text.w - 12,
+                  "the room's map name is cut at the box on a guest's screen too: " + std::to_string(drawn.size()) + " of " + std::to_string(long_stem.size()) + " characters, " + std::to_string(spy.get_text_width(drawn)) + " of " + std::to_string(g.name_text.w) + " pixels");
+        }
+        std::filesystem::remove_all(dir, ignore);
+    }
     // a map that this machine does not have, or cannot read, or no map at all: the "No preview" box
     {
         ScreenState state(kIslands);
