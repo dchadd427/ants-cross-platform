@@ -1662,6 +1662,8 @@ constexpr Golden kGolden[] = {
     {"px.wide.pages.results.rows", 0xbb947f9aa3aa2a78, 518400ull},
     {"px.wide.pages.results.hover_leave", 0x1f5117ddd7aac5f7, 518400ull},
     {"px.wide.pages.results.pressed_leave", 0x1a9b318e13f9e4c6, 518400ull},
+    {"px.wide.pages.results.big_numbers", 0xe44e9c4950a7f6e4, 518400ull},
+    {"px.wide.pages.results.four_rows", 0x3968ebeaa37249bc, 518400ull},
     {"px.wide.pages.menu_main", 0x7ba0d0a4ec7fb2dd, 518400ull},
     {"px.wide.pages.menu_single", 0x7f200eb25b5cfc11, 518400ull},
     {"px.wide.pages.menu_join", 0x519d85125827ebc9, 518400ull},
@@ -1770,6 +1772,26 @@ void test_fingerprints(const assets::AssetArchive& arc) {
             pressed.handle_mouse_down(900, 22);
             draw_results_picture(rig, arc, pressed);
             px("results.pressed_leave", masks);
+            // numbers wider than their labels (cut at the boxes) and four teams that are not allied (four rows: the fourth row's ant hangs over the box's foot by 4 px, as in the original's page)
+            sim::MatchResult big = sample_result();
+            big.stats[2].friendly_lost = 1234;
+            big.stats[3].new_hatched = 987;
+            ScorecardModal wide_big;
+            wide_big.set_wide_layout(true);
+            wide_big.show(big, 3);
+            wide_big.update(0.3f);
+            draw_results_picture(rig, arc, wide_big);
+            px("results.big_numbers", masks);
+            sim::MatchResult apart = sample_result();
+            apart.ally = {sim::ALLIANCE_NONE, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE};
+            apart.decide_winners();
+            ScorecardModal four;
+            four.set_wide_layout(true);
+            four.show(apart, 1);
+            four.update(0.3f);
+            check(four.rows().size() == 4, "four teams that are not allied have four rows");
+            draw_results_picture(rig, arc, four);
+            px("results.four_rows", results_masks(ResultsLayout::wide(), 4));
         }
         for (size_t i = 0; i < 6; ++i) {
             const StartMenu menu = make_menu(kPanels[i], true);
