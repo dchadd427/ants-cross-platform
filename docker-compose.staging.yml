@@ -1,0 +1,64 @@
+# The staging site: a second copy of the whole site (docker-compose.stack.yml) that runs on the same machine next to the first one, for the owner to try finished work before it
+# is released. For Portainer: Stacks -> Add stack -> Repository, reference "refs/heads/staging", compose path "docker-compose.staging.yml" (docs/WORKFLOW.md: the whole set-up,
+# with the reverse proxy and the DNS record). Nothing is shared with the production stack: its container names, host ports, volumes and network are its own, so both run at once.
+# The web page says "staging" in its title and footer (the build argument ANTS_SITE_LABEL); nothing else of the images differs.
+#
+# Host ports (production: 19980, 4001, 4002, 4010): 19981 the web page, 4003 the public TCP game port, 4004 the WebSocket port and 4011 the control interface (both on the
+# loopback address only; the page's nginx reaches the WebSocket port by the network below). The values below are set in the stack's "Environment variables" (they are NOT part
+# of the repository); the names that docker-compose.stack.yml also has mean the same here, and the staging stack has its own values for them:
+#
+#   ANTS_STAGING_PORT=19981                  the host port of the web page
+#   ANTS_STAGING_SERVER_PORT=4003            the public TCP game port of native clients
+#   ANTS_STAGING_SERVER_WS_PORT=4004         the WebSocket port (loopback)
+#   ANTS_STAGING_SERVER_CTL_PORT=4011        the control interface (loopback)
+#   ANTS_SERVER_SECRET, ANTS_MAPS_DIR, ANTS_BUILD_ID, ANTS_DEMO_ROOMS, ANTS_DEMO_MAP, ANTS_DEMO_MAPS    as in docker-compose.stack.yml (the demo rooms of web/four.html are on here too)
+services:
+  ants-beta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
+        # the page says "staging" in its title and footer
+        ANTS_SITE_LABEL: staging
+    container_name: ants-beta-staging
+    restart: unless-stopped
+    ports:
+      - "${ANTS_STAGING_PORT:-19981}:80"
+    networks:
+      - staging
+
+  ants-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+      args:
+        ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
+    container_name: ants-server-staging
+    restart: unless-stopped
+    # as in docker-compose.stack.yml: the demo rooms of web/four.html are on (ANTS_DEMO_ROOMS is 1 to 255, see that file's header)
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-12}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}"]
+    environment:
+      ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
+    volumes:
+      - ${ANTS_MAPS_DIR:-ants-staging-maps}:/maps:ro
+      - ants-staging-results:/results
+    ports:
+      - "${ANTS_STAGING_SERVER_PORT:-4003}:4001"
+      - "127.0.0.1:${ANTS_STAGING_SERVER_WS_PORT:-4004}:4002"
+      - "127.0.0.1:${ANTS_STAGING_SERVER_CTL_PORT:-4011}:4010"
+    # the page's nginx finds the server by the name "ants-server" on this network, which only the staging stack is on
+    networks:
+      - staging
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+
+volumes:
+  ants-staging-results:
+  ants-staging-maps:
+
+networks:
+  staging:
+    name: ants-staging-network

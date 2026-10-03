@@ -45,6 +45,7 @@ RUN BUILD_TIME=$(date +%s) && \
 # (`COPY VERSION .git* ...` copies VERSION, the two files .gitattributes / .gitignore and, when the context has a .git folder, the three entries that .dockerignore lets through; it works with and without a .git folder.)
 # docker/resolve_build_id.sh says which one it used in the build log.
 ARG ANTS_BUILD_ID=
+ARG ANTS_SITE_LABEL=
 COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
 COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
@@ -53,6 +54,18 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
     sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g" "$PAGE" && \
     ! grep -q '@@BUILD_ID@@' "$PAGE" && \
     grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" "$PAGE"
+
+# The site label (the build argument ANTS_SITE_LABEL, empty for the production site, "staging" for the staging stack: docker-compose.staging.yml): a non-empty label is put in the title
+# and in the footer of the game page and of the Play online page, so that nobody takes the staging site for the production one. Empty, the two placeholders become nothing and the
+# pages are the same as ever (the same layer as the build id: the compile layers above do not depend on it). A label may hold letters, digits, dot, dash and underscore only.
+RUN SITE_LABEL="${ANTS_SITE_LABEL}" && \
+    case "${SITE_LABEL}" in *[!A-Za-z0-9._-]*) echo "ANTS_SITE_LABEL may hold letters, digits, dot, dash and underscore only: ${SITE_LABEL}" >&2; exit 1 ;; esac && \
+    if [ -n "${SITE_LABEL}" ]; then SITE_TITLE=" (${SITE_LABEL})"; SITE_FOOTER="<strong id=\"site-label\">${SITE_LABEL}</strong>\&#8197;\&bull;\&#8197;"; else SITE_TITLE=""; SITE_FOOTER=""; fi && \
+    cp /src/web/four.html /src/four.html && \
+    for PAGE in /src/build_web/src/ants_app/index.html /src/four.html; do \
+        sed -i "s|@@SITE_TITLE@@|${SITE_TITLE}|g; s|@@SITE_FOOTER@@|${SITE_FOOTER}|g" "$PAGE" || exit 1; \
+        if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
+    done
 
 # Build the changelog pages (CHANGELOG.md -> changelog.html, the short default page; docs/CHANGELOG_ARCHIVE.md -> changelog_archive.html, the detailed history; no dependencies)
 # after the compile layers so that editing the changelog does not rebuild the game
@@ -79,8 +92,8 @@ COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
 # Copy favicon assets
 COPY web/favicon.* /usr/share/nginx/html/
 
-# The Play online page: host a match on the game server or join one by its code (four.html; it embeds the game page for the seats that play on it)
-COPY web/four.html /usr/share/nginx/html/four.html
+# The Play online page: host a match on the game server or join one by its code (four.html; it embeds the game page for the seats that play on it), with the site label put in
+COPY --from=builder /src/four.html /usr/share/nginx/html/four.html
 
 # The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other)
 COPY --from=builder /src/changelog/changelog.html /src/changelog/changelog_archive.html /usr/share/nginx/html/
