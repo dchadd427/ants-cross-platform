@@ -188,7 +188,11 @@ Ants-Mac/
 │   ├── map_sweep.cpp                # The map sweep: plays every map of a folder headless (built on request: `--target map_sweep`)
 │   ├── bot_arena.cpp                # The bot arena: headless matches of computer players (built on request: `--target bot_arena`)
 │   ├── changelog_to_html.py         # Turns CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md into the beta site's /changelog.html and /changelog_archive.html
-│   └── check_version_consistency.py # Checks that VERSION, CHANGELOG.md, STATUS.md and this README name the same release
+│   ├── check_version_consistency.py # Checks that VERSION, CHANGELOG.md, STATUS.md and this README name the same release
+│   ├── release.py                   # A release in one command: VERSION, the changelog's "## Next" heading, the README and STATUS.md (`--dry-run`, `--open-pr`)
+│   ├── mutate.py                    # The mutation runner of the deep tier: one change at a time, always restored, baselines of the unmutated tree
+│   ├── deploy_filter.py             # Does a push change what the images contain or the stack file? (the deploy job's file filter)
+│   └── deploy_webhook.sh            # Calls the Portainer deploy webhook without ever printing its address
 ├── web/                    # The web build's page files
 │   ├── shell.html          # The game page (WebAssembly shell: loading card, hidden-tab timer, sound unlock, the picture's box)
 │   ├── four.html           # The Play online page (host and join matches on the game server)
@@ -204,6 +208,7 @@ Ants-Mac/
 ├── docker-compose.yml      # Service definition for beta.playants.org
 ├── docker-compose.server.yml # Example service of the dedicated game server
 ├── docker-compose.stack.yml  # The web game and the game server together as one stack (Portainer, auto-deploy)
+├── docker-compose.staging.yml # The same two services as a second stack with its own names, ports, volumes and network, for trying finished work (docs/WORKFLOW.md)
 ├── Dockerfile              # Multi-stage Emscripten + Nginx build
 ├── Dockerfile.server       # The dedicated game server alone (no SDL, no assets)
 ├── build_web.sh            # Local WebAssembly build into dist/
@@ -530,7 +535,7 @@ The version is the single line of the file [`VERSION`](VERSION) (currently `v0.1
 
 ## Testing & Verification
 
-The project enforces strict regression guarantees with automated test suites spanning decoders, simulation rules, application integration, and opaque-box end-to-end scenarios. They come in three **tiers** ([`docs/WORKFLOW.md`](docs/WORKFLOW.md)): the quick tier for every change (`./run_tests.sh --fast`, about a minute), the full matrix of GitHub Actions for every push, and the deep checks (mutation batteries, AddressSanitizer, soak runs, browser checks) for changes to the network, the rules or fairness.
+The project enforces strict regression guarantees with automated test suites spanning decoders, simulation rules, application integration, and opaque-box end-to-end scenarios. They come in three **tiers** ([`docs/WORKFLOW.md`](docs/WORKFLOW.md)): the quick tier for every change (`./run_tests.sh --fast`, well under a minute), the full matrix of GitHub Actions for every pull request (the one full gate: `main` takes a change only through a pull request whose checks pass), and the deep checks (mutation batteries, AddressSanitizer, soak runs, browser checks) for changes to the network, the rules or fairness.
 
 ### Quick tier (every change)
 ```bash
@@ -539,7 +544,7 @@ The project enforces strict regression guarantees with automated test suites spa
 It builds what it needs and runs the asset, simulation and network-core suites and the application's model suites that finish in seconds, plus the repository checks (the version and changelog consistency check and the python tests of the tools). It leaves out the E2E runner, the script suites that start the game, the sanitizer and the slow suites (lock-step soak, server, worker bot, network application); `./run_tests.sh --fast --list` names what it runs.
 
 ### Master Test Suite
-To run all test suites in sequence (what CI runs for every push, minus the Windows-only and browser parts):
+To run all test suites (independent suites run side by side, up to as many as the machine has cores; each suite's output is printed in the order of the table and the result of every suite is the same as in a serial run; what CI runs for every pull request, minus the Windows-only and browser parts):
 
 ```bash
 ./run_tests.sh
@@ -554,6 +559,7 @@ To run all test suites in sequence (what CI runs for every push, minus the Windo
 ./run_tests.sh --tools    # The repository checks: version / changelog consistency and the python tests of tests/scripts (suites 5.x)
 ./run_tests.sh --fast     # The quick tier (above); combines with the others: --sim --fast runs the quick simulation suites only
 ./run_tests.sh --list     # Name the suites the other options select, and run nothing
+./run_tests.sh --jobs 4   # At most 4 suites at a time (the default is the number of cores); --serial: one at a time, the output live, as it used to be
 ./run_tests.sh --asan     # Rebuild and run with AddressSanitizer
 ./run_tests.sh --clean    # Remove the build directories and rebuild first
 ```
@@ -606,9 +612,9 @@ To run all test suites in sequence (what CI runs for every push, minus the Windo
 | 3.20 Zoom fingerprint | What the game draws and what the pointer does at zoom 0.5 and 2, classic and wide, pinned as 64-bit hashes as suite 3.10 pins zoom 1. |
 | 4 E2E | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; it links no engine code and still has the early combat rules, see `tests/TEST_INFRA.md`). |
 | 5.1 Version consistency | `tools/check_version_consistency.py`: the file `VERSION`, the top release heading of `CHANGELOG.md`, "current release" in `STATUS.md` and the version line of this README name the same release. |
-| 5.2 Tool and script tests | The python tests of `tests/scripts`: the two changelog pages, the version tools (build id, stamp, consistency check), the generated version header on the include path of every target in every configuration, the tiers of `run_tests.sh`, and the default map (the stack file, the Play online page and the program name the same one, Treasure). |
+| 5.2 Tool and script tests | The python tests of `tests/scripts`: the two changelog pages, the version tools (build id, stamp, consistency check), the generated version header on the include path of every target in every configuration, `run_tests.sh` (its tiers, the parallel run, the table's resources), the python runner itself, the default map (the stack file, the Play online page and the program name the same one, Treasure), the release, mutation and deploy tools (`tools/release.py`, `tools/mutate.py`, `tools/deploy_filter.py`, `tools/deploy_webhook.sh`), the staging stack and its site label, the CI workflow (the required job names, the deploy job's secrets) and the compile commands (no folder of the checkout in them: ccache). |
 
-`./run_tests.sh` prints every suite's result and its time, and the totals. The CI (see [Continuous Integration](#continuous-integration) below) shows pass / fail for every push. No per-suite numbers are kept in this file.
+`./run_tests.sh` prints every suite's result and its time, and the totals. The CI (see [Continuous Integration](#continuous-integration) below) shows pass / fail for every pull request. No per-suite numbers are kept in this file.
 
 ### Standalone E2E Test Runner
 The E2E test suite exercises the game's features in four tiers against its own model of the rules (it links none of the game's code and its model predates the audit of the original executable, so the engine's rules are checked by the golden, integration and differential suites above):
@@ -629,15 +635,17 @@ cmake --build build_e2e
 
 ### Continuous Integration
 
-Every push (all branches) and every pull request is built and tested by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml); it needs no secrets and publishes or deploys nothing). A newer push to a branch cancels the run of the older one. Five jobs run side by side, each about 5 - 12 minutes (the last run took 12 minutes in all):
+Every pull request, every push to `main` and to `staging`, and every manual run is built and tested by GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). `main` is protected: it takes a change only through a pull request whose five checks (the five jobs below) pass on a branch that is up to date with `main`, merged with a merge commit; the merge deploys the beta site through the sixth job (below). A newer push to a branch or pull request cancels the run of the older one. The five jobs run side by side, each about 5 - 12 minutes:
 
 | Job | Runner and compiler | SDL2 | What runs |
 |---|---|---|---|
-| Linux (GCC) | `ubuntu-latest`, GCC 13, Ninja, Release, `-DANTS_WERROR=ON` | apt: `libsdl2-dev`, `libsdl2-ttf-dev` | build everything; `ctest` (every registered test program); `map_sweep` and `bot_arena` self-tests; the E2E tests; the script suites (`start_game.sh --dry-run`, `ants_server` with two headless clients); the repository checks (version / changelog consistency, the python tests of `tests/scripts`) |
+| Linux (GCC) | `ubuntu-latest`, GCC 13, Ninja, Release, `-DANTS_WERROR=ON` | apt: `libsdl2-dev`, `libsdl2-ttf-dev` | build everything; `ctest` (every registered test program: the same ones as `./run_tests.sh`); `map_sweep` and `bot_arena` self-tests; the E2E tests; the script suites (`start_game.sh --dry-run`, the five parts of the `ants_server` end-to-end script side by side); the repository checks (version / changelog consistency, the python tests of `tests/scripts`, side by side) |
 | macOS (Apple clang) | `macos-latest` (Apple silicon), Apple clang, Ninja, Release, `-DANTS_WERROR=ON` | SDL2 2.32.10 and SDL2_ttf 2.24.0 built from the release sources (cached) | the same as Linux |
-| Windows (MSVC 2022) | `windows-2022`, MSVC 19.44, Visual Studio 17 2022, Release, `/W4 /WX` (`-DANTS_WERROR=ON`) | the prebuilt Visual C++ packages that `CMakeLists.txt` downloads | build everything; `ctest -C Release`; the `map_sweep` and `bot_arena` self-tests; the E2E tests |
-| Windows (MSVC 2026) | `windows-latest`, MSVC 19.5x, Visual Studio 18 2026, the same flags | the same | the same |
-| Web (Emscripten) | `ubuntu-latest`, `docker build -t ants-beta .` (emsdk 3.1.58) | the Emscripten port | the beta site's image builds; `nginx -t` accepts its configuration; the game's files are in it and the page names the version and the build; the game server's image builds and prints its `--version` |
+| Windows (MSVC 2022) | `windows-2022`, MSVC 19.44, Ninja under the Visual C++ environment, Release, `/W4 /WX` (`-DANTS_WERROR=ON`), sccache (its folder cached) | the prebuilt Visual C++ packages that `CMakeLists.txt` downloads | build everything; `ctest`; the `map_sweep` and `bot_arena` self-tests; the E2E tests. Runs for pull requests, pushes to `main` and manual runs |
+| Windows (MSVC 2026) | `windows-latest`, MSVC 19.5x, the same flags and cache | the same | the same, for every run (also for a push to `staging`) |
+| Web (Emscripten) | `ubuntu-latest`, `docker build -t ants-beta .` (emsdk 3.1.58) | the Emscripten port | the beta site's image builds; `nginx -t` accepts its configuration; the game's files are in it and the page names the version and the build; the game server's image builds and prints its `--version`; both stack files render (`docker compose config`); a build with `ANTS_SITE_LABEL=staging` puts "staging" in the title and the footer of both pages and the production pages do not have the word |
+
+The sixth job, **Deploy (Portainer webhook)**, is not a required check: it runs only for a push to `main` (a merged pull request) or to `staging`, after the five jobs of that run passed, and only when the push changed something that an image contains or the stack file (`tools/deploy_filter.py`: documents, `.github/`, `tests/` and the tools that no image runs do not redeploy the site). It calls the Portainer webhook that the repository secret `PORTAINER_WEBHOOK_URL` (staging: `PORTAINER_STAGING_WEBHOOK_URL`) holds, never printing it; without the secret it says "deploy secret not set: skipped" and does nothing ([`docs/WORKFLOW.md`](docs/WORKFLOW.md): how to switch it on, and the staging stack).
 
 All tests run headless (SDL's dummy video and audio drivers). Not covered: the opt-in browser checks (`tests/scripts/test_web_*.sh`: a real browser against a running page), the script suites on Windows (they are bash and python), an AddressSanitizer job (`./run_tests.sh --asan` locally), and the 32-bit and ARM Windows builds. `ctest -N` in a build folder lists the test programs; `ctest -C Release --output-on-failure` runs them on Windows. A failed run keeps `Testing/Temporary` as an artifact. Two things that CI taught: Homebrew's `sdl2` is now sdl2-compat (the SDL2 interface on top of SDL3) and several test programs fail under it (pointer, window and layout checks), so the macOS job builds SDL2 itself; and the pinned pixel fingerprints must mask every TrueType text (SDL's alpha blit rounds differently on x86-64 and on ARM).
 
@@ -713,7 +721,7 @@ The control calls: `POST /rooms {"map": "TINY.LVL", "players": 2, "fog": false, 
 docker compose -f docker-compose.server.yml up -d --build
 ```
 
-**One stack for the site and the server (Portainer, auto-deploy from GitHub):** `docker-compose.stack.yml` holds both services (`ants-beta`, the web game, and `ants-server`) on the network `proxy-network`. In Portainer: Stacks, Add stack, Repository, this repository, reference `refs/heads/main`, compose path `docker-compose.stack.yml`, GitOps updates on (polling or a webhook). Nothing has to be set: the server uses the maps of the image (a volume `ants-maps`, filled the first time), makes its control secret, and allows the demo rooms of `web/four.html` (12 at a time, each waiting up to ten minutes for its players; the page chooses the map among the six of the original and 2 to 4 players; whoever reaches a game port, the site or TCP port 4001, can fill them). Optional environment variables: `ANTS_SERVER_SECRET`, `ANTS_MAPS_DIR` (a host folder instead of the maps of the image; it must hold the demo map and every map of `ANTS_DEMO_MAPS`, or the server stops at startup), `ANTS_DEMO_ROOMS` (1 to 255: **0, or 256 and more, make the server exit at startup, and with `restart: unless-stopped` that is a restart loop**; there is no variable that switches the demo rooms off: delete the three demo options from the `command` in your copy of `docker-compose.stack.yml`), `ANTS_DEMO_MAP` (the map of a code that names none; TREASURE.LVL unless you set it), `ANTS_DEMO_MAPS` (the maps a room code may choose: file names separated by commas, blanks around a name are dropped; the page offers the six maps of the original, so list them all: a page code with a map the server does not allow gets the default map, with the players the page asked for), `ANTS_PORT` (the web page, default 19980), `ANTS_SERVER_PORT` (the game port, default 4001: TCP only, and only native clients use it; the browser pages reach the server through `/ws` of the site). The first deployment builds both images and takes several minutes.
+**One stack for the site and the server (Portainer, auto-deploy from GitHub; `docker-compose.staging.yml` is a second copy of it that runs next to it for trying finished work, `docs/WORKFLOW.md`):** `docker-compose.stack.yml` holds both services (`ants-beta`, the web game, and `ants-server`) on the network `proxy-network`. In Portainer: Stacks, Add stack, Repository, this repository, reference `refs/heads/main`, compose path `docker-compose.stack.yml`, GitOps updates on (polling or a webhook). Nothing has to be set: the server uses the maps of the image (a volume `ants-maps`, filled the first time), makes its control secret, and allows the demo rooms of `web/four.html` (12 at a time, each waiting up to ten minutes for its players; the page chooses the map among the six of the original and 2 to 4 players; whoever reaches a game port, the site or TCP port 4001, can fill them). Optional environment variables: `ANTS_SERVER_SECRET`, `ANTS_MAPS_DIR` (a host folder instead of the maps of the image; it must hold the demo map and every map of `ANTS_DEMO_MAPS`, or the server stops at startup), `ANTS_DEMO_ROOMS` (1 to 255: **0, or 256 and more, make the server exit at startup, and with `restart: unless-stopped` that is a restart loop**; there is no variable that switches the demo rooms off: delete the three demo options from the `command` in your copy of `docker-compose.stack.yml`), `ANTS_DEMO_MAP` (the map of a code that names none; TREASURE.LVL unless you set it), `ANTS_DEMO_MAPS` (the maps a room code may choose: file names separated by commas, blanks around a name are dropped; the page offers the six maps of the original, so list them all: a page code with a map the server does not allow gets the default map, with the players the page asked for), `ANTS_PORT` (the web page, default 19980), `ANTS_SERVER_PORT` (the game port, default 4001: TCP only, and only native clients use it; the browser pages reach the server through `/ws` of the site). The first deployment builds both images and takes several minutes.
 
 ---
 

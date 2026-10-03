@@ -7,17 +7,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Compiler cache. When ccache is found (on the PATH, or in ~/.local/bin, where an install without administrator rights puts it) it launches the C and
 # C++ compilers, so that a second build of the same sources (a fresh clone, another worktree, a clean build folder) takes seconds instead of minutes. It is
-# not used with MSVC (the Visual Studio generators do not support a launcher), when the build already names a launcher (CI passes
-# -DCMAKE_CXX_COMPILER_LAUNCHER=ccache itself) and never for Emscripten (the web image). -DANTS_USE_CCACHE=OFF switches it off. The result of a build
+# not used when the build already names a launcher (CI passes -DCMAKE_CXX_COMPILER_LAUNCHER=ccache, and sccache with MSVC under Ninja, itself), with MSVC (the Visual Studio
+# generators do not support a launcher) and never for Emscripten (the web image). -DANTS_USE_CCACHE=OFF switches it off. The result of a build
 # is the same with and without it (ccache replays the compiler's output, warnings included, so -DANTS_WERROR=ON behaves as before).
 option(ANTS_USE_CCACHE "Use ccache as the compiler launcher when it is found" ON)
 if(NOT EMSCRIPTEN)
     if(NOT ANTS_USE_CCACHE)
         message(STATUS "ccache: not used (ANTS_USE_CCACHE=OFF)")
-    elseif(MSVC)
-        message(STATUS "ccache: not used (MSVC)")
     elseif(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
         message(STATUS "ccache: not used (a compiler launcher is already set: '${CMAKE_CXX_COMPILER_LAUNCHER}')")
+    elseif(MSVC)
+        message(STATUS "ccache: not used (MSVC)")
     else()
         find_program(CCACHE_PROGRAM ccache HINTS "$ENV{HOME}/.local/bin")
         if(CCACHE_PROGRAM)
