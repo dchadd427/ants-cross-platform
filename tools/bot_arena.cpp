@@ -449,7 +449,7 @@ void print_usage(std::FILE* to) {
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
         "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
-        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL or LEVEL (kinds idle worker standard aggressor aggressor2 saboteur; levels easy medium hard).\n"
+        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL or LEVEL (kinds idle worker standard aggressor aggressor2 saboteur rusher; levels easy medium hard).\n"
         "                     Default: four standard bots at medium level. %s.\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
@@ -461,7 +461,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid), for the tournaments\n"
+        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid), for the tournaments\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -501,9 +501,9 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     std::string bench_kind = "aggressor";
     std::vector<std::string> parts = split(spec, ':');
     for (size_t i = 1; i < parts.size(); ++i) {
-        if (upper(parts[i]) == "AGGRESSOR" || upper(parts[i]) == "AGGRESSOR2" || upper(parts[i]) == "SABOTEUR") {
+        if (upper(parts[i]) == "AGGRESSOR" || upper(parts[i]) == "AGGRESSOR2" || upper(parts[i]) == "SABOTEUR" || upper(parts[i]) == "RUSHER") {
             aggressor = true;
-            bench_kind = upper(parts[i]) == "SABOTEUR" ? "saboteur" : upper(parts[i]) == "AGGRESSOR2" ? "aggressor2" : "aggressor";
+            bench_kind = upper(parts[i]) == "SABOTEUR" ? "saboteur" : upper(parts[i]) == "AGGRESSOR2" ? "aggressor2" : upper(parts[i]) == "RUSHER" ? "rusher" : "aggressor";
             parts[i] = "worker";
         } else if (upper(parts[i]).rfind("STANDARD+", 0) == 0) {                      // "standard+K=V,K=V": a standard bot with its own tuning, for the duels of two plans in one match
             aggressor = true;
@@ -535,6 +535,8 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "chigh") { p.contest_high = static_cast<uint32_t>(v); return true; }
     if (key == "rankrem") return flag(p.rank_by_remaining);
     if (key == "cone") return flag(p.contest_one_first);
+    if (key == "creact") return flag(p.contest_reactive);
+    if (key == "copen") { p.contest_opening_ants = static_cast<uint32_t>(v); return true; }
     if (key == "typedh") return flag(p.typed_harvest);
     if (key == "firew") return flag(p.fire_aware);
     if (key == "secure") return flag(p.secure_side);
@@ -557,7 +559,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "hminw") { p.harass_min_workers = static_cast<uint32_t>(v); return true; }
     if (key == "hradius") { p.harass_radius = static_cast<int32_t>(v); return true; }
     if (key == "avoid") return flag(p.avoids_guarded_hills);
-    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid)";
+    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid)";
     return false;
 }
 
@@ -579,6 +581,19 @@ std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
     }
     if (spec.kind == "aggressor") return std::make_unique<ai::bench::AggressorBot>();
     if (spec.kind == "aggressor2") return std::make_unique<ai::bench::AggressorBot>(2);
+    if (spec.kind == "rusher") {                                                      // the centre-rusher of the bench: the economy of the standard bot with the contest order and no tactics
+        ai::LevelPlan plan = ai::plan_for(spec.level);
+        plan.contest_aware = true;
+        plan.secure_side = false;
+        plan.secure_kinds = 0;
+        plan.wall_trigger = ai::WallTrigger::Never;
+        plan.takes_combat = false;
+        plan.takes_thief = false;
+        plan.guards = false;
+        plan.raids = false;
+        plan.counters = false;
+        return std::make_unique<ai::StandardBot>(plan);
+    }
     if (spec.kind == "saboteur") return std::make_unique<ai::bench::SaboteurBot>();
     if (spec.kind == "standard" && !g_tune.empty()) {
         ai::LevelPlan plan = ai::plan_for(spec.level);
@@ -865,7 +880,7 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.max_ticks = o.ticks;
     s.latency_ticks = o.latency;
     s.record = record;
-    s.extra_kinds = {"aggressor", "aggressor2", "saboteur"};
+    s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher"};
     for (const ai::BotSpec& b : j.bots) {
         if (b.kind.rfind("standard+", 0) == 0) s.extra_kinds.push_back(b.kind);
     }

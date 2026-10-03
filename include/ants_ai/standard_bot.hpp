@@ -87,6 +87,8 @@ private:
         p.contest_high = plan.contest_high;
         p.rank_by_remaining = plan.rank_by_remaining;
         p.contest_one_first = plan.contest_one_first;
+        p.contest_reactive = plan.contest_reactive;
+        p.contest_opening_ants = plan.contest_opening_ants;
         return p;
     }
 

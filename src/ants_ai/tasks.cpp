@@ -485,14 +485,33 @@ void HarvestTask::step(TaskContext& c) {
         k.bite = info->bite_index;
         k.units = bite->remaining;
         k.shut_at_start = shut;
-        if (params_.contest_aware) k.tier = tier_for(c, *info, ap.cost);
+        if (params_.contest_aware || params_.contest_reactive || params_.contest_opening_ants > 0) {
+            const uint8_t cls = tier_for(c, *info, ap.cost);
+            const uint8_t safe = static_cast<uint8_t>(PileClass::Safe);
+            const uint8_t multi = static_cast<uint8_t>(PileClass::Multi);
+            if (params_.contest_aware) {
+                k.tier = cls;
+            } else if (params_.contest_reactive) {
+                bool enemy_there = false;
+                for (const AntView& e : v.others()) {
+                    if (e.team == c.seat || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
+                    if (e.tile.chebyshev_dist(info->anchor) <= 3) enemy_there = true;
+                }
+                k.tier = enemy_there && (cls == multi || cls == static_cast<uint8_t>(PileClass::One)) ? multi : safe;
+            } else if (now < params_.contest_opening_ticks && cls == multi) {
+                k.tier = multi;
+                k.cap = std::min<uint32_t>(k.cap, params_.contest_opening_ants);
+            } else {
+                k.tier = safe;
+            }
+        }
         cands.push_back(k);
     }
     if (cands.empty()) {
         unplaced_ = pool.size();
         return;
     }
-    if (params_.contest_aware) {
+    if (params_.contest_aware || params_.contest_reactive || params_.contest_opening_ants > 0) {
         tiers_.clear();
         for (const Candidate& k : cands) tiers_[k.pile] = k.tier;
     }

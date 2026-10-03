@@ -25,6 +25,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_trigger = WallTrigger::ThiefSeen;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 0;
+            p.contest_opening_ants = 0;
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -33,6 +34,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_trigger = WallTrigger::ThiefPossible;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
+            p.contest_opening_ants = 1;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.takes_combat = true;
@@ -50,6 +52,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_trigger = WallTrigger::Early;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;
+            p.contest_opening_ants = 2;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.takes_combat = true;

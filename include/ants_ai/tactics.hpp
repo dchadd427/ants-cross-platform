@@ -46,6 +46,9 @@ struct LevelPlan {
     uint32_t contest_high{130};          // ... and above this percentage it is no competitor
     bool rank_by_remaining{false};       // within a class: the points that a pile still holds per tick of the trip (Medium, Hard)
     bool contest_one_first{true};        // the piles that one enemy competes for come before the safe ones
+    bool contest_reactive{false};        // the tournaments' experiment: a contested pile first only while an enemy ant is at it
+    uint32_t contest_opening_ants{0};    // the opening: this many ants go to the contested centre of the map at the start (Medium 1, Hard 2), the rest harvest by value per trip (the owner's
+                                         // playbook: strong players contest the centre first; a whole-match duel against the plain order is a tie, docs/BOTS.md); 0: none (Easy)
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool typed_harvest{true};            // Fire and Bomber ants harvest between their jobs (HarvestTask::Params::extra_types)
     bool combat_harvests{false};         // Combat Ants harvest too (and punch what comes within two tiles of their way) instead of standing on a guard post

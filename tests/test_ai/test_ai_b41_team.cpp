@@ -4,6 +4,7 @@
 //   AI8.2   the contest-aware pile order on TREASURE: the first harvest orders of every seat go to the centre, at every level; the worker's order is unchanged
 //   AI8.3   the classes of the order in a hand-made world (the centre, a side that one enemy shares, the safe piles, the ally's side last), recomputed when an alliance forms; within a
 //           class by value (Medium, Hard) or by distance (Easy), the richer pile first
+//   AI8.4   the opening: the ants that go to the contested centre of TREASURE at the start (Easy none, Medium one, Hard two), and none where nothing is contested
 //   AI8.1   the accept rule: accepted with four or three live teams, denied when the alliance would unite all live teams, when the bot or the inviter already has an ally; the worker
 //           bot (the yardstick) still denies; the standard bot never invites, withdraws or breaks
 #include "ai_test.hpp"
@@ -158,6 +159,7 @@ void run_b41_team_tests() {
                     start_match(sim, "TREASURE", 7, 0x0F);
                     LevelPlan plan = plan_for(level);
                     plan.contest_aware = aware;
+                    plan.contest_opening_ants = 0;                                                            // (the opening has its own test, AI8.4)
                     Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan), 4, 4);
                     rig.run(30);
                     const std::vector<int> targets = harvest_targets(rig, sim, seat, piles);
@@ -269,6 +271,88 @@ void run_b41_team_tests() {
             const std::vector<int> targets = harvest_targets(rig, sim, 0, 2);
             ASSERT_TRUE(!targets.empty());
             ASSERT_EQ(targets.front(), rank_remaining ? far_rich : near_small);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI8.4 The Opening Contests The Centre (The Owner's Playbook): At The Start Medium Sends ONE Ant And Hard TWO To The Pile In The Centre Of TREASURE, The Rest Harvest By Value Per Trip, Easy None; After The Opening (1200 Ticks) A Pile Of That Class Gets The Ants By Value Per Trip Again; Where Nothing Is Contested The Opening Changes Nothing")
+    {
+        sim::SimulationEngine probe;
+        start_match(probe, "TREASURE", 7, 0x0F);
+        const MapInfo pmap(probe);
+        size_t centre = 0;
+        for (const PileInfo& p : pmap.piles()) {
+            if (p.anchor.x == 30 && p.anchor.y == 29) centre = p.index;
+        }
+        const size_t piles = probe.grid().food_objects().size();
+        const auto ants_at_centre = [&](const Rig& rig, const sim::SimulationEngine& sim, uint64_t until) {
+            size_t n = 0;
+            for (const auto& e : rig.proposed) {
+                if (e.first > until || e.second.type != CommandType::GroupMove) continue;
+                const sim::TileCoord t = tc(e.second.tile_x, e.second.tile_y);
+                if (sim.grid().has_powerup_at(t)) continue;
+                if (pile_of_tile(rig.map(), piles, t) == static_cast<int>(centre)) n += e.second.ants.size();
+            }
+            return n;
+        };
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
+            const size_t want = level == Level::Easy ? 0u : level == Level::Medium ? 1u : 2u;
+            ASSERT_EQ(plan_for(level).contest_opening_ants, want);
+            for (const uint8_t seat : {uint8_t{0}, uint8_t{1}, uint8_t{3}}) {                                 // (at seat 2 the centre is the nearest pile: the plain order goes there anyway)
+                sim::SimulationEngine sim;
+                start_match(sim, "TREASURE", 7, 0x0F);
+                Rig rig(sim, seat, level, std::make_unique<StandardBot>(level), 4, 4);
+                rig.run(60);
+                if (seat == 0) ASSERT_EQ(ants_at_centre(rig, sim, 60), want);                                  // (from the other hills the plain order sends ants to the centre too, once the nearer piles are full)
+                else ASSERT_TRUE(ants_at_centre(rig, sim, 60) >= want);
+                if (want > 0) {
+                    const std::vector<int> targets = harvest_targets(rig, sim, seat, piles);
+                    ASSERT_TRUE(!targets.empty());
+                    ASSERT_EQ(static_cast<size_t>(targets.front()), centre);                                    // and the first order of the harvest is theirs
+                }
+            }
+        }
+        // after the opening the cap is gone: a pile of that class gets its ants by value per trip like any other (here: four newborn ants at tick 1300)
+        for (const bool late : {false, true}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 97);
+            const int32_t middle = add_pile(sim, 27, 27, 40, 25);
+            add_pile(sim, 12, 12, 40, 10);                                                                    // a near pile of little value
+            for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
+            for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 3, kFightHills[t].y + 6});
+            sim.get_unit(ants_of(sim, 0)[0]).hp = 10;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(Level::Hard), 4, 4);
+            if (late) {
+                for (int i = 0; i < 1300; ++i) rig.tick();
+                for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
+            }
+            const size_t before = rig.proposed.size();
+            rig.run(60);
+            size_t n = 0;
+            for (size_t i = before; i < rig.proposed.size(); ++i) {
+                const auto& e = rig.proposed[i];
+                if (e.second.type != CommandType::GroupMove) continue;
+                if (pile_of_tile(rig.map(), 2, tc(e.second.tile_x, e.second.tile_y)) == middle) n += e.second.ants.size();
+            }
+            if (late) ASSERT_TRUE(n >= 3);                                                                    // by value per trip the middle pile (25 a unit) beats the near one (10 a unit)
+            else ASSERT_EQ(n, 2u);                                                                            // in the opening: two ants only, the other two take the near pile
+        }
+        // where nothing is contested (one pile next to the hill, the enemies far away) the opening changes nothing: the same orders with and without it
+        {
+            std::vector<std::vector<std::pair<uint64_t, Command>>> runs;
+            for (const uint32_t k : {0u, 2u}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 98);
+                add_pile(sim, 12, 12, 40, 25);
+                for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
+                for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 3, kFightHills[t].y + 6});
+                LevelPlan plan = plan_for(Level::Hard);
+                plan.contest_opening_ants = k;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(120);
+                runs.push_back(rig.proposed);
+            }
+            ASSERT_TRUE(runs[0] == runs[1]);
+            ASSERT_TRUE(!runs[0].empty());
         }
     } TEST_END();
 }

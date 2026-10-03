@@ -190,6 +190,13 @@ public:
         bool rank_by_remaining{false};
         /// false: a pile that only ONE enemy competes for is served with the safe piles (only the piles that several enemies reach come first)
         bool contest_one_first{true};
+        /// The reactive variant (the tournaments' experiment): a pile is served first only while an enemy ant is at it (within three tiles of its anchor) and it is one that several
+        /// enemies or one enemy compete for; every other pile is ranked by value per trip as before
+        bool contest_reactive{false};
+        /// The opening variant (the tournaments' experiment): until contest_opening_ticks, at most this many ants go to a pile that several enemies compete for (the centre), first; the
+        /// rest harvest by value per trip as before; 0: off
+        uint32_t contest_opening_ants{0};
+        uint64_t contest_opening_ticks{1200};
         /// Fire-aware piles (the standard bot; false for the worker): a pile with a fire wall within fire_radius tiles of its anchor is asked again with the map as it is now (the
         /// start analysis does not know the walls): a pile that the walls have cut off is no candidate (no ant is sent into fire), one that they only made longer is ranked by its
         /// real cost. The engine's own path finder goes round a wall that leaves a way.
