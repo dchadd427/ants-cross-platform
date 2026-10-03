@@ -144,6 +144,8 @@ static_assert(sizeof(AntView) == 24, "AntView changed: extend view_text() and AI
 static_assert(sizeof(TeamRow) == 12, "TeamRow changed: extend view_text() and AI1.25");
 static_assert(sizeof(PileView) == 20, "PileView changed: extend view_text() and AI1.25");
 static_assert(sizeof(PowerUpView) == 16, "PowerUpView changed: extend view_text() and AI1.25");
+static_assert(sizeof(BombView) == 12, "BombView changed: extend view_text() and AI1.25");
+static_assert(sizeof(FireWallView) == 8, "FireWallView changed: extend view_text() and AI1.25");
 
 std::string view_text(const BotView& v) {
     std::string s;
@@ -194,6 +196,19 @@ std::string view_text(const BotView& v) {
         put(static_cast<int>(p.kind));
         put(p.standing_team);
         put(p.standing_ant);
+        s += "/";
+    }
+    s += "B";
+    for (const BombView& b : v.bombs()) {
+        put(b.tile.x);
+        put(b.tile.y);
+        put(b.owner);
+        s += "/";
+    }
+    s += "F";
+    for (const FireWallView& w : v.fire_walls()) {
+        put(w.tile.x);
+        put(w.tile.y);
         s += "/";
     }
     return s;
@@ -689,12 +704,18 @@ void run_b2fix_tests() {
             build_world(b, 51, 12);
             // power-ups are on every screen: a free one, one that an ant of the seat stands on and one that an ant of another team stands on (the same in both worlds, B4-1)
             for (sim::SimulationEngine* e : {&a, &b}) {
+                e->grid_mut().place_bomb(33, 31, seat);                                                           // a bomb of the seat and one of another team: on the screen, in the owner's colour
+                e->grid_mut().place_bomb(34, 31, static_cast<uint8_t>((seat + 1) % sim::MAX_PLAYERS));
                 e->grid_mut().place_powerup(30, 30, 3);
                 e->grid_mut().place_powerup(31, 30, 4);
                 e->grid_mut().place_powerup(32, 30, 2);
                 e->spawn_unit(seat, sim::AntType::Worker, tc(31, 30));
                 e->spawn_unit(static_cast<uint8_t>((seat + 1) % sim::MAX_PLAYERS), sim::AntType::Worker, tc(32, 30));
             }
+            a.set_fire_at(tc(35, 31), 3000);                                                                       // a fire wall: its owner and how long it still burns are on no screen
+            b.set_fire_at(tc(35, 31), 150);
+            a.set_fire_at(tc(36, 31), 3000);
+            b.set_fire_at(tc(36, 31), 150);
             for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
                 a.set_player_score(t, 300);
                 b.set_player_score(t, 300);

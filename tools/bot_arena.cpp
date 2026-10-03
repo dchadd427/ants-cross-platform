@@ -63,6 +63,7 @@
 #include "ants_ai/bot.hpp"
 #include "ants_ai/bot_view.hpp"
 #include "ants_ai/rng.hpp"
+#include "ants_ai/standard_bot.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "bench_aggressor.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -447,7 +448,7 @@ void print_usage(std::FILE* to) {
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
         "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
-        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL or LEVEL (kinds idle worker standard aggressor; levels easy medium hard).\n"
+        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL or LEVEL (kinds idle worker standard aggressor saboteur; levels easy medium hard).\n"
         "                     Default: four standard bots at medium level. %s.\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
@@ -458,6 +459,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
+        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh typedh firew chv secure counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid), for the tournaments\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -494,10 +496,12 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     const size_t eq = spec.find('=');
     if (eq != std::string::npos) spec[eq] = ':';
     bool aggressor = false;
+    std::string bench_kind = "aggressor";
     std::vector<std::string> parts = split(spec, ':');
     for (size_t i = 1; i < parts.size(); ++i) {
-        if (upper(parts[i]) == "AGGRESSOR") {
+        if (upper(parts[i]) == "AGGRESSOR" || upper(parts[i]) == "SABOTEUR") {
             aggressor = true;
+            bench_kind = upper(parts[i]) == "SABOTEUR" ? "saboteur" : "aggressor";
             parts[i] = "worker";
         }
     }
@@ -506,13 +510,60 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
         for (size_t i = 0; i < parts.size(); ++i) spec += (i == 0 ? "" : ":") + parts[i];
     }
     if (!ai::parse_bot_spec(spec, out, err)) return false;
-    if (aggressor) out.kind = "aggressor";
+    if (aggressor) out.kind = bench_kind;
     return true;
+}
+
+// --tune KEY=VALUE,...: the ablations of the standard bot's plan (docs/audit/B4_1_notes.md): every standard bot of the run gets the plan of its level with these values put over it.
+// Set while the options are parsed, before any match (and thread) starts, and only read afterwards.
+std::vector<std::pair<std::string, int64_t>> g_tune;
+
+bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string& err) {
+    const auto flag = [&](bool& f) { f = v != 0; return true; };
+    if (key == "defenders") { p.defenders = static_cast<uint32_t>(v); return true; }
+    if (key == "leash") { p.leash_tiles = static_cast<int32_t>(v); return true; }
+    if (key == "linger") { p.fight_linger_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "aid") return flag(p.carrier_aid);
+    if (key == "contest") return flag(p.contest_aware);
+    if (key == "clow") { p.contest_low = static_cast<uint32_t>(v); return true; }
+    if (key == "chigh") { p.contest_high = static_cast<uint32_t>(v); return true; }
+    if (key == "typedh") return flag(p.typed_harvest);
+    if (key == "firew") return flag(p.fire_aware);
+    if (key == "secure") return flag(p.secure_side);
+    if (key == "counters") return flag(p.counters);
+    if (key == "bhit") return flag(p.bomb_hit);
+    if (key == "chv") return flag(p.combat_harvests);
+    if (key == "walls") { p.wall_trigger = v == 0 ? ai::WallTrigger::Never : v == 1 ? ai::WallTrigger::ThiefSeen : v == 2 ? ai::WallTrigger::ThiefPossible : ai::WallTrigger::Early; return true; }
+    if (key == "renew") { p.renew_lead_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "combat") { p.takes_combat = v > 0; p.max_combat = static_cast<uint32_t>(v); return true; }
+    if (key == "thief") { p.takes_thief = v > 0; p.max_thief = static_cast<uint32_t>(v); return true; }
+    if (key == "intercept") return flag(p.intercepts);
+    if (key == "combat_early") { p.combat_when_attacked = v == 0; return true; }
+    if (key == "combat_idle") return flag(p.combat_when_idle);
+    if (key == "guard") return flag(p.guards);
+    if (key == "raid") return flag(p.raids);
+    if (key == "squads") return flag(p.squads);
+    if (key == "harass") { p.harasses = v > 0; p.harassers = static_cast<uint32_t>(v); return true; }
+    if (key == "hidle") return flag(p.harass_idle_only);
+    if (key == "hminw") { p.harass_min_workers = static_cast<uint32_t>(v); return true; }
+    if (key == "hradius") { p.harass_radius = static_cast<int32_t>(v); return true; }
+    if (key == "avoid") return flag(p.avoids_guarded_hills);
+    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh typedh firew chv secure counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid)";
+    return false;
 }
 
 // The bots of the registry, and the arena's bench bots
 std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
     if (spec.kind == "aggressor") return std::make_unique<ai::bench::AggressorBot>();
+    if (spec.kind == "saboteur") return std::make_unique<ai::bench::SaboteurBot>();
+    if (spec.kind == "standard" && !g_tune.empty()) {
+        ai::LevelPlan plan = ai::plan_for(spec.level);
+        for (const auto& t : g_tune) {
+            std::string err;
+            apply_tune(plan, t.first, t.second, err);
+        }
+        return std::make_unique<ai::StandardBot>(plan);
+    }
     return ai::make_bot(spec);
 }
 
@@ -575,6 +626,17 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         } else if (s == "--out") {
             if (!value("--out", o.out)) return false;
             if (o.out.empty()) { err = "--out needs a file name (an empty one, from an unset shell variable perhaps, is not 'no report': leave --out out for that)"; return false; }
+        } else if (s == "--tune") {
+            if (!value("--tune", v)) return false;
+            g_tune.clear();
+            for (const std::string& kv : split(v, ',')) {
+                const size_t eq = kv.find('=');
+                uint64_t num = 0;
+                if (eq == std::string::npos || !parse_uint(kv.substr(eq + 1), num)) { err = "--tune needs KEY=NUMBER,..., not '" + kv + "'"; return false; }
+                ai::LevelPlan probe;
+                if (!apply_tune(probe, kv.substr(0, eq), static_cast<int64_t>(num), err)) return false;
+                g_tune.emplace_back(kv.substr(0, eq), static_cast<int64_t>(num));
+            }
         } else if (s == "--maps-dir") {
             if (!value("--maps-dir", o.maps_dir)) return false;
         } else {
@@ -756,7 +818,7 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.max_ticks = o.ticks;
     s.latency_ticks = o.latency;
     s.record = record;
-    s.extra_kinds = {"aggressor"};
+    s.extra_kinds = {"aggressor", "saboteur"};
     return s;
 }
 

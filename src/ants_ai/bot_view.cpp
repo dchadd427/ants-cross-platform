@@ -68,7 +68,9 @@ BotView::BotView(const BotView& other)
       mine_(other.mine_),
       others_(other.others_),
       piles_(other.piles_),
-      powerups_(other.powerups_) {}
+      powerups_(other.powerups_),
+      bombs_(other.bombs_),
+      fire_walls_(other.fire_walls_) {}
 
 BotView& BotView::operator=(const BotView& other) {
     if (this != &other) {
@@ -172,11 +174,18 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
         const size_t w = grid.width();
         for (size_t i = 0; i < cells.size(); ++i) {
             const sim::TileCell& c = cells[i];
-            if (!c.is_powerup || c.powerup_type < 1 || c.powerup_type > 5 || c.is_empty_overlay()) continue;      // TileCell::has_powerup(), and a kind that makes an ant
-            PowerUpView p;
-            p.tile = sim::TileCoord{static_cast<int32_t>(i % w), static_cast<int32_t>(i / w)};
-            p.kind = static_cast<sim::AntType>(c.powerup_type);                                                  // 1 Bomber, 2 Fire, 3 Thief, 4 Combat, 5 Swimmer: the AntType numbers
-            v.powerups_.push_back(p);
+            if (c.interactive_id == sim::TILE_EMPTY) continue;                                                   // nothing on layer 2 (the common case: one comparison per tile)
+            const sim::TileCoord tile{static_cast<int32_t>(i % w), static_cast<int32_t>(i / w)};
+            if (c.has_bomb()) {
+                v.bombs_.push_back(BombView{tile, c.interactive_owner});
+            } else if (c.has_fire()) {
+                v.fire_walls_.push_back(FireWallView{tile});
+            } else if (c.is_powerup && c.powerup_type >= 1 && c.powerup_type <= 5 && !c.is_empty_overlay()) {    // TileCell::has_powerup(), and a kind that makes an ant
+                PowerUpView p;
+                p.tile = tile;
+                p.kind = static_cast<sim::AntType>(c.powerup_type);                                              // 1 Bomber, 2 Fire, 3 Thief, 4 Combat, 5 Swimmer: the AntType numbers
+                v.powerups_.push_back(p);
+            }
         }
         if (!v.powerups_.empty()) {
             for (const std::vector<AntView>* list : {&v.mine_, &v.others_}) {

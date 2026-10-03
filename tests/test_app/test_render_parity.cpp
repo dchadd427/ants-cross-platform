@@ -1342,6 +1342,51 @@ void test_dynamic_items(Renderer& r, const assets::AssetArchive& arc) {
     r.unpin_animation_clock();
 }
 
+// A bomb is on every viewer's screen in the colour of its owner (B4-1, the fairness check of the standard bot): a person of team 0 sees the bombs that teams 1 .. 3 planted, with the
+// art of the team that planted each, and a bot of any seat reads the same list from the grid (BotView::bombs(), test AI7.21). The picture of a bomb must not depend on the viewer's team
+// and must differ from the picture without it and from the bomb of another owner. (Fog of War hides a bomb on an unexplored tile, and bots are refused with fog.)
+void test_enemy_bombs_are_drawn(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[enemy bombs] every viewer sees every owner's bomb in the owner's colour\n");
+    assets::LevelData level;
+    if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) { check(false, "load TINY"); return; }
+    const int32_t g = arc.find_animation_id("g01a");
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    static const char* bomb_names[4] = { "greenbomb", "redbomb", "bluebomb", "blackbomb" };   // owners 0 .. 3
+    r.set_level(level);
+    r.pin_animation_clock(0);
+    sim::Grid bare;
+    bare.init_from_level(level);
+    const Image without = capture_map(r, bare, level.width, level.height);
+    std::vector<Image> shown;
+    for (uint8_t owner = 0; owner < 4; ++owner) {
+        sim::Grid grid;
+        grid.init_from_level(level);
+        grid.place_bomb(5, 5, owner);
+        std::vector<Image> per_viewer;
+        for (uint8_t viewer = 0; viewer < 4; ++viewer) {
+            r.set_hud_team(viewer);
+            per_viewer.push_back(capture_map(r, grid, level.width, level.height));
+            const Image ref = model_map(arc, level, 0, {}, {{5, 5, arc.find_animation_id(bomb_names[owner])}});
+            const DiffStats st = diff_images(per_viewer.back(), ref);
+            check(st.pixels == 0, "the bomb of team " + std::to_string(owner) + " is drawn in its colour for the viewer of team " + std::to_string(viewer) + " (" + std::to_string(st.pixels) + " pixels differ)");
+            const DiffStats vs_bare = diff_images(per_viewer.back(), without);
+            check(vs_bare.pixels > 0 && vs_bare.cells == 1, "a bomb changes exactly one cell of the picture (viewer " + std::to_string(viewer) + ", owner " + std::to_string(owner) + ")");
+        }
+        shown.push_back(per_viewer[0]);
+    }
+    r.set_hud_team(0);
+    for (size_t a = 0; a < 4; ++a) {
+        for (size_t b = a + 1; b < 4; ++b) check(diff_images(shown[a], shown[b]).pixels > 0, "the bombs of teams " + std::to_string(a) + " and " + std::to_string(b) + " are drawn in different colours");
+    }
+    r.unpin_animation_clock();
+}
+
 // Power-ups and the flowers of the droppers are tile ids, not dictionary names: a community editor often calls the entries of the five power-up ids (62 .. 66) and of the
 // plants "." (the map's own dictionary only decides which graphics the original loads, and it loads these whatever the dictionary says: the table at 0x1001ba8). The game draws the
 // power-up of a kind the same on every map, and the flower the same, so a level whose dictionary says "." must draw exactly as one whose dictionary names them: the same
@@ -1789,6 +1834,7 @@ int main(int argc, char* argv[]) {
     test_fog_objects(r, arc);
     test_food_fog_footprint(r);
     test_dynamic_items(r, arc);
+    test_enemy_bombs_are_drawn(r, arc);
     test_dotted_power_ups_and_flowers(r, arc);
     test_effect_rendering(r, arc);
     test_score_bubbles(r, arc);

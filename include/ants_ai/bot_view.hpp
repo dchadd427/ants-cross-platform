@@ -97,6 +97,18 @@ struct PileView {
     bool lunchbox{false};                // dropped by a dying ant: one unit
 };
 
+/// A planted bomb as the screen draws it: its tile and the team whose colour it is drawn in (every bomb is drawn, an enemy's too, in its owner's colour: Renderer, the layer-2 pass;
+/// with Fog of War a bomb on an unexplored tile is hidden, and bots are refused with fog). An ant that steps on an enemy bomb loses 2 hit points and is thrown 4 tiles.
+struct BombView {
+    sim::TileCoord tile{};
+    uint8_t owner{0};
+};
+
+/// A fire wall as the screen draws it: only its tile (one picture for every owner, so who lit it is not on any screen, and neither is how long it still burns)
+struct FireWallView {
+    sim::TileCoord tile{};
+};
+
 class BotView {
 public:
     /// Copies what `seat` may know from `sim`. `map` (optional) is the analysis of the match, handed through to the bot: it must outlive every use of the view (the controller owns it).
@@ -134,6 +146,9 @@ public:
     /// stale at the first pick-up: a taken power-up stays on it and a dropped one never appears). The map's power-ups are tile ids 62 .. 66, so a community dictionary that calls them
     /// "." changes nothing (the engine's cells decide); a power-up that a flower dropper has not yet landed is not here (a person sees the droplet falling, which this view does not).
     const std::vector<PowerUpView>& powerups() const noexcept { return powerups_; }
+    /// The bombs on the map now (in reading order) with their owners, and the fire walls (tiles only): copies made at every look, like the power-ups
+    const std::vector<BombView>& bombs() const noexcept { return bombs_; }
+    const std::vector<FireWallView>& fire_walls() const noexcept { return fire_walls_; }
     /// The power-up on `tile`, null when there is none (works on a COPY of a view too)
     const PowerUpView* powerup_at(sim::TileCoord tile) const noexcept;
     /// Whether the ant STANDS on a power-up: its tile holds one and it is not walking (idle, on guard or in the "can't go" clip). Such an ant is immune: an attack order on it is
@@ -187,6 +202,8 @@ private:
     std::vector<AntView> others_;
     std::vector<PileView> piles_;
     std::vector<PowerUpView> powerups_;
+    std::vector<BombView> bombs_;
+    std::vector<FireWallView> fire_walls_;
 };
 
 }  // namespace ants::ai

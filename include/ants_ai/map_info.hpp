@@ -128,6 +128,11 @@ public:
     static std::vector<int32_t> cost_field(const sim::Grid& grid, const std::vector<uint8_t>& mask, sim::TileCoord source);
     /// The same from several sources at once (every walkable source costs 0; an unwalkable one is ignored): the field of a hill, whose ants leave through any tile of the queue row
     static std::vector<int32_t> cost_field(const sim::Grid& grid, const std::vector<uint8_t>& mask, const std::vector<sim::TileCoord>& sources);
+    /// The walking cost of every tile to the step ONTO `cell` (a power-up: solid, so no tile of the map has a field that starts on it): a search that starts at the walkable tiles
+    /// next to the cell with the cost of the last step onto it. The engine's steps cost the same in both directions, so field[t] is what an ant standing on t pays to walk onto the
+    /// cell; -1 for a tile that cannot reach it. All -1 when the engine would not let `team` step onto the cell (can_step_onto: water, a mound, another team's queue row).
+    /// One search serves every ant at once (the closest one, an enemy's arrival).
+    static std::vector<int32_t> cost_field_onto(const sim::Grid& grid, const std::vector<uint8_t>& mask, uint8_t team, sim::TileCoord cell, const WalkContext& ctx = WalkContext{});
     /// Ticks of walking for a cost (the orthogonal rate: see kTicksPerCostNum for the bias on diagonal runs)
     static constexpr int32_t walking_ticks(int32_t cost) noexcept { return cost * kTicksPerCostNum / kTicksPerCostDen; }
     /// The trip model: the ticks of one round trip to a target whose approach costs `cost` (-1 for a cost that is none): there and back plus kTripOverheadTicks

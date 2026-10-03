@@ -27,9 +27,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_trigger = WallTrigger::ThiefPossible;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
+            p.secure_side = true;
             p.takes_combat = true;
             p.takes_thief = true;
-            p.intercepts = true;
+            p.intercepts = false;
             p.guards = true;
             p.raids = true;
             p.max_combat = 1;
@@ -39,12 +40,13 @@ LevelPlan plan_for(Level level) noexcept {
             p.defenders = 3;
             p.leash_tiles = 12;
             p.fight_linger_ticks = 60;
-            p.wall_trigger = WallTrigger::Always;
+            p.wall_trigger = WallTrigger::Early;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;
+            p.secure_side = true;
             p.takes_combat = true;
             p.takes_thief = true;
-            p.intercepts = true;
+            p.intercepts = false;
             p.guards = true;
             p.raids = true;
             p.max_combat = 2;
@@ -87,6 +89,30 @@ EastState east_state(const sim::Grid& grid, const HillInfo& hill) noexcept {
     return st;
 }
 
+// ---- the sides of the map -----------------------------------------------------------------------------------------------------------------------------
+
+int power_up_side(const MapInfo& map, sim::TileCoord tile, uint8_t present) noexcept {
+    for (const PowerUpInfo& p : map.powerups()) {
+        if (p.tile != tile) continue;
+        int best = -1;
+        int32_t best_cost = 0;
+        bool tie = false;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            if (((present >> t) & 1u) == 0 || !p.approach[t].reachable()) continue;
+            const int32_t cost = p.approach[t].cost;
+            if (best < 0 || cost < best_cost) {
+                best = t;
+                best_cost = cost;
+                tie = false;
+            } else if (cost == best_cost) {
+                tie = true;
+            }
+        }
+        return tie ? -1 : best;
+    }
+    return -1;
+}
+
 // ---- the memory ---------------------------------------------------------------------------------------------------------------------------------------
 
 uint64_t Memory::wall_seen(sim::TileCoord tile) const noexcept {
@@ -119,11 +145,13 @@ void Memory::update(const BotView& v, const MapInfo& map) {
         if (now_own.count(e.first) == 0) hits_.push_back(Hit{e.first, e.second.tile, e.second.hp, 0, e.second.carried});     // gone: it was killed (or drowned)
     }
     own_ = std::move(now_own);
+    if (!hits_.empty()) last_hit_ = v.tick();
 
     // the other teams: who moves, and the Thief ants in sight
     std::map<uint32_t, sim::TileCoord> thief_now;
     for (const AntView& a : v.others()) {
         if (a.state != sim::UnitState::Idle && a.state != sim::UnitState::GuardIdle && seen_moving_[a.team] == 0) seen_moving_[a.team] = v.tick();
+        if (a.type == sim::AntType::Combat) combat_last_seen_ = v.tick();
         if (a.type != sim::AntType::Thief) continue;
         ThiefSighting t;
         t.ant = a.id;
@@ -147,6 +175,42 @@ void Memory::update(const BotView& v, const MapInfo& map) {
             else wall_seen_.erase(key);
         }
     }
+}
+
+// ---- the threat to the thief hole ---------------------------------------------------------------------------------------------------------------------
+
+bool reachable_by(const MapInfo& map, uint8_t team, sim::TileCoord tile) noexcept {
+    const int32_t home = map.hill_component(team);
+    if (home < 0) return false;
+    for (int32_t dy = -1; dy <= 1; ++dy) {
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            if (map.component(team, sim::TileCoord{tile.x + dx, tile.y + dy}) == home) return true;
+        }
+    }
+    return false;
+}
+
+bool wall_demand(const Tactics& tactics, const BotView& view, const MapInfo& map) {
+    const HillInfo& hill = map.hill(view.seat());
+    if (!hill.present || !view.has_grid() || view.ticks_left() < 400) return false;
+    if (!east_state(view.grid(), hill).shuttable()) return false;                       // a mud tile cannot take a wall: the hole cannot be shut
+    const Memory& m = tactics.memory;
+    const uint64_t now = view.tick();
+    const LevelPlan& plan = tactics.plan;
+    if (plan.wall_trigger == WallTrigger::Never) return false;
+    const bool seen = m.thief_last_seen() != 0 && now <= m.thief_last_seen() + plan.wall_latch_ticks;
+    if (seen) return true;
+    if (plan.wall_trigger == WallTrigger::ThiefSeen) return false;
+    // an enemy that can reach a Thief power-up that lies on the map: Medium waits until the enemy plays (the idle bot's ants never move: nothing of it is a threat), Hard does not wait
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        const TeamRow& row = view.rows()[t];
+        if (t == view.seat() || !row.present || row.dropped || (view.ally() < sim::MAX_PLAYERS && t == view.ally())) continue;
+        if (plan.wall_trigger == WallTrigger::ThiefPossible && !m.plays(t)) continue;
+        for (const PowerUpView& p : view.powerups()) {
+            if (p.kind == sim::AntType::Thief && reachable_by(map, t, p.tile)) return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace ants::ai

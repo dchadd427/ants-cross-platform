@@ -4,6 +4,9 @@ namespace ants::ai {
 
 namespace {
 constexpr uint8_t kRankHarvest = 1;
+constexpr uint8_t kRankGuard = 2;
+constexpr uint8_t kRankPowerUps = 3;
+constexpr uint8_t kRankWalls = 4;
 constexpr uint8_t kRankFight = 5;
 }  // namespace
 
@@ -13,6 +16,12 @@ void StandardBot::start(const BotContext& context) {
     map_ = context.map;
     ledger_.set_rank(kHarvest, kRankHarvest);
     ledger_.set_rank(kFight, kRankFight);
+    ledger_.set_rank(kWalls, kRankWalls);
+    ledger_.set_rank(kPowerUps, kRankPowerUps);
+    ledger_.set_rank(kRaids, kRankPowerUps);
+    ledger_.set_rank(kBombs, kRankWalls);
+    ledger_.set_rank(kGuard, kRankGuard);
+    ledger_.set_rank(kHarass, kRankWalls);
 }
 
 void StandardBot::think(const BotView& view, Orders& orders) {
@@ -32,8 +41,43 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.memory.update(view, *map);
     TaskContext context{view, orders, ledger_, profile_, *map, seat_};
 
-    // 2. the tasks, the one that takes ants from the others first
+    // 2. what the bot wants at this look: the fire walls (and a Fire Ant for them) when a thief threatens, the Combat Ants and the Thief of the level's plan once an enemy plays
+    const LevelPlan& plan = tactics_.plan;
+    tactics_.wants.fill(0);
+    tactics_.surplus = harvest_.unplaced();
+    tactics_.wall_demand = wall_demand(tactics_, view, *map);
+    if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
+    if (plan.secure_side) {                                       // the Fire and Bomber power-ups of the own side are taken early: an enemy that steals them can wall the piles in or bomb the base
+        uint8_t present = 0;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (view.rows()[t].present ? 1u << t : 0u));
+        for (const PowerUpView& p : view.powerups()) {
+            if ((p.kind == sim::AntType::Fire || p.kind == sim::AntType::Bomber) && power_up_side(*map, p.tile, present) == seat_) tactics_.wants[static_cast<size_t>(p.kind)] = 1;
+        }
+    }
+    bool enemy_plays = false;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        const TeamRow& row = view.rows()[t];
+        if (t != seat_ && row.present && !row.dropped && !(view.ally() < sim::MAX_PLAYERS && t == view.ally()) && tactics_.memory.plays(t)) enemy_plays = true;
+    }
+    if (enemy_plays && view.ticks_left() > 2400) {
+        if (plan.takes_thief) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = static_cast<uint8_t>(plan.max_thief);
+        // Combat Ants pay when the enemy fights (an own ant was hit lately, an enemy Combat Ant or Thief has been seen): against a passive economy they are an ant that does not harvest
+        const Memory& m = tactics_.memory;
+        // (or when the economy has workers that stand idle with nothing to harvest: they cost nothing)
+        const bool fists = (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0;
+        const bool free_ants = plan.combat_when_idle && tactics_.surplus > 0;
+        if (plan.takes_combat && (fists || free_ants || !plan.combat_when_attacked)) tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(plan.max_combat);
+    }
+
+    // 3. the tasks, the one that takes ants from the others first
     fight_.step(context);
+    walls_.step(context);
+    powerups_.step(context);
+    bombs_.step(context);
+    if (plan.raids) raids_.step(context);
+    if (plan.guards) guard_.step(context);
+    if (plan.harasses) harass_.step(context);
+    aid_.step(context);
     harvest_.step(context);
 }
 
@@ -43,6 +87,13 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
         return;
     }
     fight_.on_command(command, fate, tick);
+    walls_.on_command(command, fate, tick);
+    powerups_.on_command(command, fate, tick);
+    bombs_.on_command(command, fate, tick);
+    raids_.on_command(command, fate, tick);
+    guard_.on_command(command, fate, tick);
+    harass_.on_command(command, fate, tick);
+    aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);
 }
 

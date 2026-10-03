@@ -181,4 +181,166 @@ private:
     std::map<uint8_t, uint64_t> black_;                  // a team whose hill could not be raided -> until when it is left alone
 };
 
+// The SABOTEUR (arena-only kind "saboteur", same rules as the aggressor: a bench opponent, never in the registry): it steals the victim's Fire and Bomber power-ups (the ones on the
+// victim's side of the map first) with its nearest idle workers, and then
+//   its Fire Ant walls in the victim's hill: the eight tiles around the gate (the three tiles of the queue row cannot take a wall), then the tiles around the victim's nearest piles,
+//   its Bomber plants bombs on the way between the victim's hill and its nearest piles and around the gate.
+// It never harvests and never fights (it is the opponent of the counters and of the denial of the standard bot, not a model of a good player). The victim is the enemy team with the
+// highest score box, else the first one.
+class SaboteurBot final : public Bot {
+public:
+    const char* kind() const noexcept override { return "saboteur"; }
+    void start(const BotContext& context) override {
+        seat_ = context.seat;
+        map_ = context.map;
+    }
+
+    void think(const BotView& view, Orders& orders) override {
+        const MapInfo* map = view.map() != nullptr ? view.map() : map_;
+        if (map == nullptr || !view.has_grid()) return;
+        const uint64_t now = view.tick();
+        if (view.invite_from() < sim::MAX_PLAYERS && now >= deny_after_) {
+            orders.deny(view.invite_from());
+            deny_after_ = now + 100;
+        }
+        // the victim
+        int victim = -1;
+        int32_t best = -1;
+        uint8_t present = 0;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (view.rows()[t].present ? 1u << t : 0u));
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            const TeamRow& row = view.rows()[t];
+            if (t == seat_ || !row.present || row.dropped || !map->hill(t).present) continue;
+            if (row.score > best) {
+                best = row.score;
+                victim = t;
+            }
+        }
+        if (victim < 0) return;
+        const HillInfo& hill = map->hill(static_cast<uint8_t>(victim));
+        for (auto it = taking_.begin(); it != taking_.end();) {
+            const AntView* a = find(view.mine(), it->first);
+            if (a == nullptr || a->type != sim::AntType::Worker || now > it->second.since + 700) it = taking_.erase(it);
+            else ++it;
+        }
+        // 1. the power-ups: one Fire, one Bomber
+        for (const sim::AntType kind : {sim::AntType::Fire, sim::AntType::Bomber}) {
+            bool have = false;
+            for (const AntView& a : view.mine()) have = have || a.type == kind;
+            for (const auto& t : taking_) have = have || t.second.kind == kind;
+            if (have) continue;
+            const PowerUpView* want = nullptr;
+            const AntView* who = nullptr;
+            int32_t want_d = 0;
+            for (const PowerUpView& p : view.powerups()) {
+                if (p.kind != kind || p.standing_ant != 0) continue;
+                for (const AntView& a : view.mine()) {
+                    if (a.type != sim::AntType::Worker || !a.idle() || a.holding || taking_.count(a.id) != 0 || !reaches(*map, a.tile, p.tile)) continue;
+                    // the victim's side first (its own power-up), then the nearest
+                    const int32_t d = a.tile.chebyshev_dist(p.tile) + (power_up_side(*map, p.tile, present) == victim ? 0 : 1000);
+                    if (want == nullptr || d < want_d) {
+                        want = &p;
+                        who = &a;
+                        want_d = d;
+                    }
+                }
+            }
+            if (want != nullptr) {
+                orders.pick_up(who->id, want->tile);
+                taking_[who->id] = Taking{kind, now};
+            }
+        }
+        // 2. the Fire Ant walls in the victim's gate, then its piles
+        std::vector<sim::TileCoord> walls;
+        for (int32_t dx = -1; dx <= 3; ++dx) walls.push_back(sim::TileCoord{hill.origin.x + dx, hill.origin.y - 2});
+        walls.push_back(sim::TileCoord{hill.origin.x - 1, hill.origin.y - 1});
+        walls.push_back(sim::TileCoord{hill.origin.x + 3, hill.origin.y - 1});
+        walls.push_back(sim::TileCoord{hill.origin.x - 1, hill.origin.y});
+        for (const AntView& a : view.mine()) {
+            if (a.type != sim::AntType::Fire || !a.idle()) continue;
+            std::vector<sim::TileCoord> list = walls;
+            for (const PileView& p : nearest_piles(view, hill, 3)) {                                  // then the tiles around the nearest piles
+                for (int32_t dy = -2; dy <= 3; ++dy) {
+                    for (int32_t dx = -2; dx <= 3; ++dx) {
+                        if (dx > -2 && dx < 3 && dy > -2 && dy < 3) continue;
+                        list.push_back(sim::TileCoord{p.anchor.x + dx, p.anchor.y + dy});
+                    }
+                }
+            }
+            for (const sim::TileCoord& t : list) {
+                if (!view.grid().in_bounds(t) || view.grid().has_fire_at(t)) continue;
+                const auto last = ordered_.find(key_of(t));
+                if (last != ordered_.end() && now < last->second + 150) continue;
+                sim::Command probe;
+                probe.type = sim::CommandType::GroupSpecial;
+                probe.tile_x = static_cast<int16_t>(t.x);
+                probe.tile_y = static_cast<int16_t>(t.y);
+                probe.ants = {a.id};
+                if (view.predict_ack(probe) == 0) continue;
+                orders.special(a.id, t);
+                ordered_[key_of(t)] = now;
+                break;
+            }
+        }
+        // 3. the Bomber plants bombs between the victim's hill and its nearest piles, and around the gate
+        std::vector<sim::TileCoord> bombs;
+        for (const PileView& p : nearest_piles(view, hill, 3)) {
+            for (int32_t k = 3; k <= 9; k += 2) {
+                bombs.push_back(sim::TileCoord{hill.queue.x + (p.anchor.x - hill.queue.x) * k / std::max<int32_t>(1, std::abs(p.anchor.x - hill.queue.x) + std::abs(p.anchor.y - hill.queue.y)),
+                                               hill.queue.y + (p.anchor.y - hill.queue.y) * k / std::max<int32_t>(1, std::abs(p.anchor.x - hill.queue.x) + std::abs(p.anchor.y - hill.queue.y))});
+            }
+        }
+        for (const sim::TileCoord& t : {sim::TileCoord{hill.origin.x + 1, hill.origin.y - 4}, sim::TileCoord{hill.origin.x - 3, hill.origin.y - 1}, sim::TileCoord{hill.origin.x + 5, hill.origin.y - 2}}) bombs.push_back(t);
+        for (const AntView& a : view.mine()) {
+            if (a.type != sim::AntType::Bomber || !a.idle()) continue;
+            for (const sim::TileCoord& t : bombs) {
+                if (!view.grid().in_bounds(t) || view.grid().has_bomb_at(t)) continue;
+                const auto last = ordered_.find(key_of(t) + (1 << 30));
+                if (last != ordered_.end() && now < last->second + 200) continue;
+                sim::Command probe;
+                probe.type = sim::CommandType::GroupSpecial;
+                probe.tile_x = static_cast<int16_t>(t.x);
+                probe.tile_y = static_cast<int16_t>(t.y);
+                probe.ants = {a.id};
+                if (view.predict_ack(probe) == 0) continue;
+                orders.special(a.id, t);
+                ordered_[key_of(t) + (1 << 30)] = now;
+                break;
+            }
+        }
+    }
+
+private:
+    struct Taking {
+        sim::AntType kind{sim::AntType::Fire};
+        uint64_t since{0};
+    };
+    static int64_t key_of(sim::TileCoord t) { return static_cast<int64_t>(t.y) * 4096 + t.x; }
+    static const AntView* find(const std::vector<AntView>& ants, uint32_t id) {
+        const auto it = std::lower_bound(ants.begin(), ants.end(), id, [](const AntView& a, uint32_t want) { return a.id < want; });
+        return it != ants.end() && it->id == id ? &*it : nullptr;
+    }
+    static std::vector<PileView> nearest_piles(const BotView& view, const HillInfo& hill, size_t n) {
+        std::vector<PileView> piles = view.piles();
+        std::stable_sort(piles.begin(), piles.end(), [&](const PileView& x, const PileView& y) { return x.anchor.chebyshev_dist(hill.queue) < y.anchor.chebyshev_dist(hill.queue); });
+        if (piles.size() > n) piles.resize(n);
+        return piles;
+    }
+    bool reaches(const MapInfo& map, sim::TileCoord from, sim::TileCoord to) const {
+        const int32_t mine = map.ant_component(seat_, from);
+        if (mine < 0) return false;
+        for (int32_t dy = -1; dy <= 1; ++dy) {
+            for (int32_t dx = -1; dx <= 1; ++dx) {
+                if (map.component(seat_, sim::TileCoord{to.x + dx, to.y + dy}) == mine) return true;
+            }
+        }
+        return false;
+    }
+    uint8_t seat_{0};
+    const MapInfo* map_{nullptr};
+    uint64_t deny_after_{0};
+    std::map<uint32_t, Taking> taking_;
+    std::map<int64_t, uint64_t> ordered_;
+};
+
 }  // namespace ants::ai::bench
