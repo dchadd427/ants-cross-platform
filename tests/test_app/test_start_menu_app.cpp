@@ -513,6 +513,9 @@ struct Played {
     uint8_t seat{0};
     uint32_t decisions1{0};
     uint32_t decisions3{0};
+    bool dialog_up_during_99_ticks{false};     // the "Get ready" dialog was up after each of the ticks 1 .. 99, and gone after the 100th
+    uint32_t looks_in_the_dialog{0};           // the looks of the bots during those ticks: none (the start hold)
+    uint32_t orders_in_the_dialog{0};          // and the orders they released
     AppState state{AppState::MapSelect};
 };
 
@@ -526,7 +529,19 @@ Played snapshot(Application& app) {
     p.fog = app.sim().is_fog_of_war_enabled();
     for (uint8_t s = 0; s < 4; ++s) p.names[s] = app.sim().get_player_name(s);
     p.seat = app.local_player_id();
-    for (uint32_t i = 0; i < 100u + sim::kMatchStartHoldTicks; ++i) app.update_simulation(0.05f);
+    p.dialog_up_during_99_ticks = app.hud().is_match_start_modal_active();
+    for (uint32_t i = 1; i <= 100u + sim::kMatchStartHoldTicks; ++i) {
+        app.update_simulation(0.05f);
+        if (i < sim::kMatchStartHoldTicks) {
+            p.dialog_up_during_99_ticks = p.dialog_up_during_99_ticks && app.hud().is_match_start_modal_active();
+            if (p.bots) {
+                p.looks_in_the_dialog += app.bots()->stats(1).decisions + app.bots()->stats(3).decisions;
+                p.orders_in_the_dialog += app.bots()->stats(1).released + app.bots()->stats(3).released;
+            }
+        } else if (i == sim::kMatchStartHoldTicks) {
+            p.dialog_up_during_99_ticks = p.dialog_up_during_99_ticks && !app.hud().is_match_start_modal_active();
+        }
+    }
     p.hash = app.sim().state_hash().total;
     if (p.bots) {
         p.decisions1 = app.bots()->stats(1).decisions;
@@ -537,7 +552,8 @@ Played snapshot(Application& app) {
 
 bool same(const Played& a, const Played& b) {
     return a.roster == b.roster && a.hash == b.hash && a.ants == b.ants && a.bots == b.bots && a.bot_seats == b.bot_seats && a.fog == b.fog && a.names == b.names && a.seat == b.seat &&
-           a.decisions1 == b.decisions1 && a.decisions3 == b.decisions3 && a.state == b.state;
+           a.decisions1 == b.decisions1 && a.decisions3 == b.decisions3 && a.state == b.state && a.dialog_up_during_99_ticks == b.dialog_up_during_99_ticks &&
+           a.looks_in_the_dialog == b.looks_in_the_dialog && a.orders_in_the_dialog == b.orders_in_the_dialog;
 }
 
 // ---- the screenshots ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1013,6 +1029,9 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(via_menu.bots && via_menu.bot_seats == 0x0A);
         ASSERT_TRUE(same(via_menu, by_flags));
         ASSERT_TRUE(via_menu.decisions1 >= 4 && via_menu.decisions3 >= 20);                  // the bots ran
+        // and only after the "Get ready" dialog: it was up for the ticks 1 .. 99 and gone on the 100th, and in those ticks neither bot looked or sent anything (the start hold), by the menu and by the flags
+        ASSERT_TRUE(via_menu.dialog_up_during_99_ticks && by_flags.dialog_up_during_99_ticks);
+        ASSERT_TRUE(via_menu.looks_in_the_dialog == 0 && via_menu.orders_in_the_dialog == 0 && by_flags.looks_in_the_dialog == 0 && by_flags.orders_in_the_dialog == 0);
         // the player's own seat can be another one (--player 2): the rows are the other three
         {
             Application app;

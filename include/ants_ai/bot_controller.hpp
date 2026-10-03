@@ -79,7 +79,7 @@ public:
     /// that is seated after the hold's end has no hold (its first look is on the next tick + its stagger) and starts with one token as well. Call it BEFORE seating the bots: it shapes the
     /// first look and the first bucket of the seats that come after it (the clamp of (2) follows the value at any time). 0 switches the hold off, and with it all of the above: the
     /// opening of v0.1.0 (a first look on the next tick + the stagger, a FULL bucket, a refill from the first tick). It is for the tests that measure something else from tick 0 (the
-    /// reaction delay, the budget, the filter, failure learning, the endgame), each of which says so; the hold has its own tests, AI2.17 .. AI2.22.
+    /// reaction delay, the budget, the filter, failure learning, the endgame), each of which says so; the hold has its own tests, AI2.17 .. AI2.20 (the controller), 12.118b (the HUD's dialog), AI6.9 / AI6.10 (the application) and S3.74 (a server's room).
     void set_start_hold(uint32_t ticks) noexcept { hold_end_ = ticks; }
     uint32_t start_hold() const noexcept { return hold_end_; }
 

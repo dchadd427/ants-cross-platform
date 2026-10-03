@@ -261,7 +261,7 @@ void run_controller_tests() {
         build_world(sim, 6);
         RecordingSink sink(sim);
         BotController c(sim, 3);
-        c.set_start_hold(0);   // ants that die, from tick 1 (the start hold: AI2.17 - AI2.22)
+        c.set_start_hold(0);   // ants that die, from tick 1 (the start hold: AI2.17 - AI2.20)
         const std::vector<uint32_t> mine = ants_of(sim, 0);
         const std::vector<uint32_t> theirs = ants_of(sim, 1);
         bool proposed = false;
@@ -307,7 +307,7 @@ void run_controller_tests() {
         build_world(sim, 7);
         RecordingSink sink(sim);
         BotController c(sim, 3);
-        c.set_start_hold(0);   // the filter and the issuer, from tick 1 (the start hold: AI2.17 - AI2.22)
+        c.set_start_hold(0);   // the filter and the issuer, from tick 1 (the start hold: AI2.17 - AI2.20)
         const std::vector<uint32_t> mine = ants_of(sim, 1);
         std::vector<uint32_t> many;
         for (uint32_t i = 0; i < 33; ++i) many.push_back(mine[i % mine.size()]);
@@ -399,7 +399,7 @@ void run_controller_tests() {
                 build_world(sim, 8, 40);
                 RecordingSink sink(sim);
                 BotController c(sim, 3);
-                c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.22)
+                c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.20)
                 const std::vector<uint32_t> mine = ants_of(sim, 0);
                 ASSERT_EQ(mine.size(), 40u);
                 bool done = false;
@@ -434,7 +434,7 @@ void run_controller_tests() {
             build_world(sim, 9);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             bool done = false;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -460,7 +460,7 @@ void run_controller_tests() {
             sim.form_alliance(0, 1);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             const auto tile_of = [&](uint8_t team) {
                 for (const auto& a : sim.get_world_state().ants) {
@@ -500,7 +500,7 @@ void run_controller_tests() {
             build_world(sim, 11);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             bool done = false;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Easy), sink, [&](const BotView&, Orders& o) {
@@ -532,7 +532,7 @@ void run_controller_tests() {
                     build_world(sim, seed);
                     RecordingSink sink(sim);
                     BotController c(sim, seed);
-                    c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.22)
+                    c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.20)
                     const std::vector<uint32_t> mine = ants_of(sim, 0);
                     uint32_t looks = 0;
                     ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -556,7 +556,7 @@ void run_controller_tests() {
             build_world(sim, 12);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             uint32_t looks = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -626,7 +626,7 @@ void run_controller_tests() {
             build_world(sim, 13);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // the end of the match comes before the start hold would end (3 s = 60 ticks): measured from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // the end of the match comes before the start hold would end (3 s = 60 ticks): measured from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             size_t next = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) { o.move({mine[next++ % mine.size()]}, TileCoord{30, 30}); });
@@ -651,7 +651,7 @@ void run_controller_tests() {
             build_world(sim, 13);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // a look that is long due when the match has ended, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // a look that is long due when the match has ended, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) { o.move({mine[0]}, TileCoord{30, 30}); });
             ASSERT_TRUE(bot != nullptr);
@@ -666,7 +666,7 @@ void run_controller_tests() {
             build_world(sim, 14);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // a team that drops out after its bot has been at work for 60 ticks, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // a team that drops out after its bot has been at work for 60 ticks, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine1 = ants_of(sim, 1);
             const std::vector<uint32_t> mine2 = ants_of(sim, 2);
             size_t n1 = 0;
@@ -802,7 +802,7 @@ void run_controller_tests() {
             build_world(sim, 22);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             uint32_t looks = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -823,7 +823,7 @@ void run_controller_tests() {
             build_world(sim, 22);
             RecordingSink sink(sim);
             BotController c(sim, 3);
-            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             uint32_t looks = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -849,7 +849,7 @@ void run_controller_tests() {
                 build_world(sim, 23);
                 RecordingSink sink(sim);
                 BotController c(sim, seed);
-                c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.22)
+                c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.20)
                 const std::vector<uint32_t> mine = ants_of(sim, 0);
                 uint32_t looks = 0;
                 ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -881,7 +881,7 @@ void run_controller_tests() {
             build_world(sim, 24);
             RecordingSink sink(sim);
             BotController c(sim, 5);
-            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.22)
+            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.20)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             uint32_t looks = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {

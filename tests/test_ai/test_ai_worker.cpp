@@ -1539,7 +1539,7 @@ void run_worker_tests() {
             pile(sim, 30, 30, 14, 25);
             LatencySink sink(sim, 3);
             BotController c(sim, 1);
-            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.20)
             std::string why;
             if (!c.add(spec_of(0, "worker", Level::Medium), sink, why) || !c.add(spec_of(1, "idle", Level::Medium), sink, why)) return -1;
             step_late(sim, c, sink, 130);                                                                     // the first order took the healthy ants and the shut-in ones to the best pile together
@@ -1578,7 +1578,7 @@ void run_worker_tests() {
             const int32_t b = pile(sim, 24, 12, 40, 25);
             LatencySink sink(sim, 3);
             BotController c(sim, 1);
-            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.20)
             std::string why;
             ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Easy), sink, why) && c.add(spec_of(1, "idle", Level::Easy), sink, why));
             step_late(sim, c, sink, 300);
@@ -1604,7 +1604,7 @@ void run_worker_tests() {
             pile(sim, 24, 12, 200, 25);
             LatencySink sink(sim, 3);
             BotController c(sim, 1);
-            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.20)
             std::string why;
             ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Easy), sink, why) && c.add(spec_of(1, "idle", Level::Easy), sink, why));
             step_late(sim, c, sink, 700);
@@ -1663,7 +1663,7 @@ void run_worker_tests() {
             const int32_t b = pile(sim, 24, 12, 40, 25);
             LatencySink sink(sim, 3);
             BotController c(sim, 1);
-            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.20)
             std::string why;
             ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Easy), sink, why));
             ring(sim, 21, 9, 27, 15);                                                                         // closes B in after the analysis was made
@@ -1702,7 +1702,7 @@ void run_worker_tests() {
             const int32_t b = pile(sim, 24, 14, 6, 25);
             RecordingSink sink(sim, true);
             BotController c(sim, 1);
-            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.20)
             std::string why;
             ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Hard), sink, why));
             ring(sim, 11, 5, 17, 11);                                                                         // the wall closes after the analysis was made

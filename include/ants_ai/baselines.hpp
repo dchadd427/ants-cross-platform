@@ -11,7 +11,8 @@
 //                  same moment (above)
 //   pot            the points that some hill can walk to (MapInfo::reachable_points)
 // Every number is the mean over kBaselineSeeds (the seed changes the facing of ants and what a dropper drops, a little). Seats are ROTATED because they are not symmetric on a
-// map (a hill's distance to the food differs), and commands reach the engine like in a room (the arena's sink latency, kBaselineLatency).
+// map (a hill's distance to the food differs), and commands reach the engine like in a room (the arena's sink latency, kBaselineLatency). Since v0.1.1 the bots wait for the start hold
+// like the bots of a real match (ArenaSpec::start_hold, 100 ticks: the economy starts five seconds into the match), and the table was regenerated for it.
 //
 // The numbers depend on how the hill banks deposits (about one every 100 ticks) and on the bot: when either changes on purpose, the table is regenerated on purpose:
 //   cmake --build build --target bot_arena && ./build/bot_arena --write-baselines > tests/test_ai/baselines.inc
