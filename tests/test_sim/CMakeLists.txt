@@ -214,3 +214,25 @@ target_include_directories(test_commands PRIVATE
 target_link_libraries(test_commands PRIVATE ants_test_paths)
 
 add_test(NAME test_commands COMMAND test_commands)
+
+# The value semantics of SimulationEngine, the copy that the client-side prediction of one's own orders rests on: a copy equals its source in everything that can be observed, ticks
+# identically (the state hash compared at every tick), and shares nothing. The second test is the same program on whole matches of the six shipped maps (about a minute).
+add_executable(test_engine_copy
+    test_engine_copy.cpp
+)
+
+target_link_libraries(test_engine_copy PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_engine_copy PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_compile_definitions(test_engine_copy PRIVATE
+    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
+)
+
+add_test(NAME test_engine_copy COMMAND test_engine_copy)
+add_test(NAME test_engine_copy_whole_matches COMMAND test_engine_copy --whole-matches)

@@ -55,8 +55,13 @@ public:
     static constexpr int kSlots = 4;
 
     PathGridPool() = default;
-    PathGridPool(const PathGridPool&) = delete;
-    PathGridPool& operator=(const PathGridPool&) = delete;
+    /**
+     * @brief Value copy (a copy of the simulation engine, SimulationEngine's copy constructor): the slots keep their state, and the cell blocks of the slots that a search holds
+     *        are copied. The block of a FREE slot is not: its content is never read (the search that takes the slot zeroes the whole block, PathSearch::init), so the copy
+     *        leaves such a slot unallocated and acquire() allocates it on the next use. Nothing is shared between a pool and its copy.
+     */
+    PathGridPool(const PathGridPool& other);
+    PathGridPool& operator=(const PathGridPool& other);
 
     /**
      * @brief Takes the first free slot (PathRequest::Init, 0x10198e3-0x101994f).
@@ -132,6 +137,13 @@ public:
     PathSearch& operator=(const PathSearch&) = delete;
 
     /**
+     * @brief A copy of a search for the copy of its manager: the same state (the open list, the finished path), attached to @p pool, the copy's OWN pool, whose slot
+     *        `other` holds is already in use in that pool (PathGridPool's copy) and whose cell block holds the same cells. A plain copy of the pointers would leave
+     *        the two searches working on one block of cells; this constructor is the only way to copy a search, and PathManager's copy is the only caller.
+     */
+    PathSearch(const PathSearch& other, PathGridPool& pool);
+
+    /**
      * @brief Runs one A* slice of at most @p budget node expansions (PathRequest::Step, 0x1019a66).
      *
      * @return 0 when no grid slot could be obtained (nothing ran), 1 otherwise. After a return of 1 the
@@ -197,12 +209,17 @@ public:
     PathManager();
     ~PathManager() = default;
 
-    PathManager(const PathManager&) = delete;
-    PathManager& operator=(const PathManager&) = delete;
     // Moving keeps the searches valid: the pool is heap-allocated and moves with its queue. A moved-from
     // manager is empty and creates a fresh pool on its next request().
     PathManager(PathManager&& other) = default;
     PathManager& operator=(PathManager&& other) noexcept;
+    /**
+     * @brief Deep copy (a copy of the simulation engine): a new pool with the same slots, and a copy of every queued search, in queue order, attached to the new pool, so
+     *        the copy goes on with the half-done searches exactly where the original is and delivers the same paths in the same runs. Nothing is shared. The assignment
+     *        keeps the memory that the target's pool and queue already hold where the shapes fit.
+     */
+    PathManager(const PathManager& other);
+    PathManager& operator=(const PathManager& other);
 
     /**
      * @brief PathMgr::Request (0x10246e8): removes the first queued request of the same ant (releasing its

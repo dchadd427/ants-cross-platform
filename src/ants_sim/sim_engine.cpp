@@ -61,6 +61,19 @@ SimulationEngine::~SimulationEngine() = default;
 SimulationEngine::SimulationEngine(SimulationEngine&&) noexcept = default;
 SimulationEngine& SimulationEngine::operator=(SimulationEngine&&) noexcept = default;
 
+// The copy of an engine is the copy of its impl, which the compiler writes member by member (sim_engine_impl.hpp: the ants, the path managers and the cached world state
+// copy themselves as they must). A moved-from source has no impl: its copy is a fresh engine, which is usable (a moved-from engine is not).
+SimulationEngine::SimulationEngine(const SimulationEngine& other)
+    : impl_(other.impl_ ? std::make_unique<SimulationEngineImpl>(*other.impl_) : std::make_unique<SimulationEngineImpl>()) {}
+
+SimulationEngine& SimulationEngine::operator=(const SimulationEngine& other) {
+    if (this == &other) return *this;
+    if (!impl_) impl_ = std::make_unique<SimulationEngineImpl>();
+    if (other.impl_) *impl_ = *other.impl_;
+    else *impl_ = SimulationEngineImpl();
+    return *this;
+}
+
 void SimulationEngine::init(const ants::assets::LevelData& level, uint32_t random_seed) {
     init(level, random_seed, 0x0Fu);
 }

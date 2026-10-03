@@ -1,0 +1,100 @@
+# Rollback for one's own orders: what was built, measured, and where it differs from the design
+
+Update for section 74 of `implementation_plan.md` (that file is not part of the repository; the owner copies this text into it). Client-side prediction with rollback of one's own commands in network matches: the confirmed lock-step simulation, the server's sealing and referee, the network protocol and the rules stay as they are. The steps land one after the other; this file grows with them (R1 first).
+
+## R1: the engine copy (value semantics of `SimulationEngine`)
+
+### Built
+
+| Item | Where |
+|---|---|
+| `SimulationEngine` is copyable: **`explicit SimulationEngine(const SimulationEngine&)`** and `operator=`. A copy is a second engine in exactly the state of the first and shares nothing with it. The assignment keeps the memory the target already holds where the shapes fit (cells, ants, lists), so a rebuild every frame allocates next to nothing. A copy of a moved-from engine is a fresh, usable engine | `include/ants_sim/sim_engine.hpp`, `src/ants_sim/sim_engine.cpp` |
+| `SimulationEngineImpl` is copied **member by member by the compiler's own operations**: a member that is added later cannot be forgotten by a hand-written copy, and one of a type that cannot be copied does not compile. Three members are types of their own that copy themselves as they must: **`AntPtr`** (the table of ants owns its ants through pointers, because an ant keeps its address while the table grows; a copy clones the ant, an assignment copies into the ant that is there; `static_assert`: nothrow move, so that the table moves its ants when it grows), **`WorldStateCache` + `StaleFlag`** (the cached `WorldState` is derived and as big as the map: a copy starts with an empty cache flagged stale, an assignment keeps the target's memory and flags it stale), and the path managers | `src/ants_sim/sim_engine_impl.hpp` |
+| `PathManager` deep copy: a new pool and a copy of every queued search, in queue order, attached to the new pool. `PathSearch` holds raw pointers into the pool of its manager (`pool_`, `grid_`): its only copy is the **rebinding constructor** `PathSearch(const PathSearch&, PathGridPool&)` (the plain copy stays deleted), which the manager's copy calls. `PathGridPool` copies the cell blocks of the slots in use and **not** those of the free slots: nothing reads a free slot's content (the search that takes it zeroes it, `PathSearch::init`) | `include/ants_sim/path_planner.hpp`, `src/ants_sim/path_planner.cpp` |
+| Suite 2.25 `test_engine_copy` (quick: R1.1 - R1.19 with R1.4b, 20 tests, 4,293 assertions, about 4 s) and suite 2.26 (`--whole-matches`: R1.20, six shipped maps to the end of the match, a copy re-taken every 1000 ticks, the state hash compared at **every** tick: 69,970 assertions, 33 s; under a sanitizer the first 2,500 ticks of each match). `--bench` prints the costs, `--census` what the generated matches contain. Registered with `ctest` (two entries) and in `run_tests.sh` | `tests/test_sim/test_engine_copy.cpp`, `tests/test_sim/CMakeLists.txt`, `run_tests.sh` |
+
+### How the tests compare, and what "identical" is
+
+The state hash is not enough: it does not cover the half-done path searches (only the queue of requests), the cues and news, the effects, the fog or the names, and the `WorldState` does not cover the A* open lists. The tests therefore compare everything that can be observed: the hash (all seven parts) after every tick, the answer of every command, the cues and news of every tick, a fingerprint of the whole `WorldState` (cells, ants, effects, score bubbles, droppers, statistics, fog, the match result), the locomotion trace, names, and the order of the path queue (every pending request: ant, start, goal, has a grid, finished). "Independent" is measured against a **twin**: an engine that was never copied and played the same match from the start (the replay is deterministic). The matches are generated commands (valid and invalid, group moves, attacks, special orders, Stop, Hatch, the alliance commands; targets on enemy ants, food, power-ups, hills, the river) from the state of the engine; a census (`--census`) shows that the whole matches have hatching (8 - 36 ants), fights (up to 16 kills) and food income on most maps (the islands map has no contact, by its design).
+
+### Where this differs from the design, and why
+
+- **Value semantics, not `snapshot()` / `restore()`.** Both were allowed. A copy constructor and an assignment are the idiom the code already knows, they make the tests read naturally (`SimulationEngine c(e)`, `predicted = confirmed`), and the assignment is the "restore" that reuses the target's memory. The constructor is `explicit` so that no engine is copied by accident (by value in a parameter, say): `static_assert`s in R1.1.
+- **The cached world state is not copied.** The design said "copies share nothing (caches such as the world-state cache ...)". The cache is derived data and as big as the map; a copy rebuilds it on demand (`get_world_state()` of a copy costs 1 - 3 us on the shipped maps), and R1.16 pins that a copy answers for its own state whether the source's cache was fresh or stale.
+- **The ant table keeps removed ants**, as before (a removed ant keeps its entry for its id, and the hash counts it); a copy keeps them too (R1.4b: a mutant that drops them is caught). The table never shrinks, so the target of an assignment reallocates all its ants only when the match has added ants beyond its capacity (each hatch can do it once).
+- **No new rule in the simulation.** The engine's behaviour is untouched: `git diff` of `ants_sim` is the copy operations and two wrapper types; every golden hash and every network suite passes unchanged (`./run_tests.sh --fast`: 48 suites). Existing tests changed: none.
+
+### Measured (Release build; `./test_engine_copy --bench`)
+
+Microseconds per operation: the BEST of 300 runs (a busy machine only makes a run longer, so the best is the cost; this Mac was shared with other builds during the measuring), the range over five points of a match (ticks 0, 100, 400, 1500, 4000; matches with the generated orders). "copy-assign" is the rebuild of a prediction (into an engine that already holds the same map).
+
+| Map (cells, ants) | copy-construct native | copy-construct wasm | copy-assign native | copy-assign wasm | state hash native | world state native / wasm |
+|---|---|---|---|---|---|---|
+| TINY (31 x 31, 12 - 24) | 1.4 - 14 | 2.3 - 31 | 0.7 - 5.9 | 1.3 - 19 | 39 - 64 | 0.9 - 2.5 / 1.0 - 1.3 |
+| SMALL (40 x 40, 16 - 24) | 1.6 - 13 | 1.4 - 38 | 1.0 - 5.4 | 1.2 - 24 | 65 - 94 | 1.2 - 3.4 / 1.2 - 1.3 |
+| MEDIUM (60 x 60, 24 - 47) | 3.1 - 17.5 | 3.2 - 39 | 2.9 - 8.7 | 2.9 - 24 | 138 - 149 | 2.6 - 2.8 / 2.6 - 3.0 |
+| ISLANDS (60 x 60, 32 - 48) | 3.4 - 23.5 | 3.5 - **170** | 2.5 - 16.7 | 3.0 - 103 | 140 - 144 | 2.6 - 3.0 / 2.9 - 3.1 |
+| GAUNTLET (60 x 60, 24 - 48) | 2.9 - 17.5 | 3.2 - 41 | 2.2 - 8.2 | 2.8 - 25 | 136 - 148 | 2.5 - 2.8 / 2.6 - 3.2 |
+| TREASURE (60 x 60, 24 - 60) | 3.5 - 18.6 | 3.6 - 40 | 2.4 - 8.8 | 3.0 - 25 | 137 - 152 | 2.6 - 3.0 / 2.7 - 3.2 |
+| synthetic 256 x 256 (the largest grid the engine hosts), 200 ants walking | 129 | 116 | 119 | 111 | not measured | 40 / 40 |
+
+(wasm: the same program compiled with Emscripten 3.1.58 at `-O3 -DNDEBUG` like the web build, run with node 22 / V8 12.4 on the same machine. The first `get_world_state()` of a new copy costs 1.5 - 3.8 us in both.)
+
+**The target of the design (a copy under 0.2 ms on the shipped maps, native and wasm) is met**: at most 24 us native and 170 us wasm (ISLANDS late in a match, the worst case), 0.13 ms on the largest grid. The wasm cost is dominated by the ALLOCATOR, not by moving bytes: a copy-construct makes 230 - 375 heap allocations (TINY 272, SMALL 234, MEDIUM 316, ISLANDS 253, GAUNTLET 337, TREASURE 375: the ants, the food objects' lists, the queued path searches and their open lists), each of which is about five times slower in wasm; compiling with `-mbulk-memory` changed nothing (165 us against 170 us on ISLANDS). A copy ASSIGNED into an engine of the same shape allocates next to nothing except the queue of path searches, which is rebuilt object by object (`PathManager::operator=`): if the budget of R5 ever needs it, that queue can be assigned in place. Memory of one copy (heap bytes in use with 64 copies held, per copy, at tick 1500): TINY 124 KiB, SMALL 154, MEDIUM 244, ISLANDS 372, GAUNTLET 343, TREASURE 271 (the cells alone are 37 - 140 KiB; the occupancy grid, the fog, the ants and the grids and open lists of the searches in flight make up the rest).
+
+**What the copy does NOT make cheap is the ticks that the second engine runs.** The cost of one tick over 4000 ticks of a match with many orders (a 40 percent chance of an order on every tick, which is far more than a person gives; every order starts an A* search, and a tick that runs a slice of the path manager, up to 1000 expansions, costs a hundred times a quiet one), in microseconds, native (wasm is 1.2 - 1.4 times as much, p99 and max noisier):
+
+| Map | mean | median | p90 | p99 | max |
+|---|---|---|---|---|---|
+| TINY | 22 - 30 | 9 - 12 | 56 - 82 | 200 - 230 | 380 - 540 |
+| SMALL | 48 - 63 | 15 - 19 | 134 - 183 | 305 - 465 | 650 - 1,210 |
+| MEDIUM | 181 - 234 | 148 - 178 | 400 - 540 | 650 - 910 | 880 - 1,460 |
+| ISLANDS | 32 - 50 | 31 - 49 | 61 - 103 | 89 - 156 | 120 - 385 |
+| GAUNTLET | 291 - 447 | 270 - 406 | 614 - 972 | 940 - 1,510 | 1,240 - 2,070 |
+| TREASURE | 178 - 267 | 131 - 190 | 413 - 640 | 713 - 1,090 | 951 - 1,600 |
+| synthetic 256 x 256, 200 ants | 1,810 - 2,260 (one tick, after three group orders; wasm 2,200) | | | | |
+
+The consequence for the next steps: a prediction that is advanced `lead` ticks (3 - 6 at a round trip of 60 ms) costs the copy (at most 0.02 ms native, 0.17 ms wasm) plus `lead` ticks of the busy kind (about 1 ms each at the heaviest, about 10 - 50 us at a person's pace of orders), and the largest grids may need milliseconds: that is the budget of the fallback of R5, and it is why a prediction that is up to date is advanced by one tick instead of rebuilt (R2).
+
+### Mutants (each is a temporary edit of the source that the quick suite must fail; the table is what the harness printed on the final tests)
+
+A mutant that no test kills would be a hole, so there were three at first (a copy that drops removed ants, one that forgets the audio-owner counter, one that forgets the battle clouds); R1.4b was written for them, and all 35 are killed now. "crash" means that the program died with a segmentation fault in that test (the half-done searches of a mutant that shares or mis-sizes a pool): a failure of the suite all the same. The harness (`run_mutants.py`, not part of the repository) must delete the objects before every build: Apple's `make` compares whole seconds, so a source that is restored within the second of the object that was built from its mutant is not rebuilt, and the stale mutant poisons every run after it (the first complete run reported crashes in R1.4 for harmless mutants; the unmutated tree was then rebuilt from scratch and passed). It also builds and runs the unmutated tree before the first mutant, after every fifth and at the end (all green).
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `P1_search_shares_pool_and_grid` | a copied search keeps pointing at the source's pool and cell block (no rebinding) | KILLED by R1.4, R1.6, R1.7, R1.8, R1.10, R1.11, R1.14, R1.17, R1.18, R1.19 |
+| `P2_search_loses_open_list` | a copied search starts with an empty open list (heap_) | KILLED by R1.4, R1.6, R1.8, R1.11, R1.14, R1.17, R1.18, R1.19 |
+| `P3_search_loses_its_slot` | a copied search forgets which grid slot it holds (restarts its search) | KILLED by R1.2, R1.4, R1.5, R1.6, R1.8, R1.11, R1.14, R1.17, R1.18, R1.19 |
+| `P4_pool_cells_not_copied` | the pool copy zeroes the cells of the slots in use | KILLED by R1.4, R1.6, R1.8, R1.11, R1.17, R1.18, R1.19 |
+| `P5_pool_free_flags_not_copied` | the pool copy marks every slot free | KILLED by R1.4, R1.6, R1.11, R1.17, R1.18, R1.19 |
+| `P6_manager_copy_drops_queue` | the manager copy has the pool but no searches | KILLED by R1.2, R1.4, R1.5, R1.8, R1.17, R1.18, R1.19 |
+| `P7_manager_copy_reverses_queue` | the manager copy queues the searches in reverse order | KILLED by R1.2, R1.4, R1.8, R1.17, R1.18, R1.19 |
+| `P8_manager_assign_keeps_pool_state` | the manager assignment keeps the target's own pool state (slot flags and cells) | KILLED (crash, signal 11, in R1.4) |
+| `E1_ant_assign_keeps_old_ant` | assigning an ant pointer over an existing ant leaves the old ant | KILLED by R1.2, R1.11, R1.12, R1.13, R1.14, R1.16 |
+| `E2_ant_copy_drops_removed_ants` | a copied ant pointer drops the ants that are removed (their entries stay in the table of the original) | KILLED by R1.4b |
+| `E3_stale_flag_not_set_by_assignment` | an assignment into an engine does not mark its cached world state stale | KILLED by R1.13, R1.16 |
+| `E4_stale_flag_copied_with_empty_cache` | a copy takes the source's 'fresh' flag but not its cache | KILLED by R1.4b, R1.12, R1.16 |
+| `C1_copy_forgets_cosmetic_prng` | hashed: the death-clip generator | KILLED by R1.2, R1.4b, R1.4, R1.5, R1.8, R1.9, R1.12, R1.15 |
+| `C2_copy_forgets_effects` | presentation: the visual effects | KILLED by R1.2, R1.4b, R1.4 |
+| `C3_copy_forgets_score_bubbles` | presentation: the score bubbles | KILLED by R1.2, R1.4, R1.15 |
+| `C4_copy_forgets_audio_queue` | presentation: the queued cues | KILLED by R1.2, R1.4b, R1.5, R1.8, R1.15 |
+| `C5_copy_forgets_news_queue` | presentation: the queued news | KILLED by R1.2, R1.4b, R1.5, R1.8, R1.15 |
+| `C6_copy_forgets_fog` | presentation: the revealed tiles | KILLED by R1.5 |
+| `C7_copy_forgets_viewer` | presentation: the seat that looks (fog) | KILLED by R1.5 |
+| `C8_copy_forgets_names` | presentation: the players' names | KILLED by R1.2 |
+| `C9_copy_forgets_trace` | diagnostics: the locomotion trace | KILLED by R1.5 |
+| `C10_copy_forgets_audio_owner_counter` | presentation: the owner ids of effect sprites | KILLED by R1.4b |
+| `C11_copy_forgets_battle_clouds` | presentation: the dust balls | KILLED by R1.4b |
+| `C12_copy_forgets_request_serials` | hashed: the path request serials | KILLED by R1.2, R1.4, R1.5, R1.8 |
+| `C13_copy_forgets_hatching` | hashed: the eggs in the incubator | KILLED by R1.2, R1.4, R1.5, R1.8, R1.9, R1.12, R1.15 |
+| `C14_copy_forgets_occupancy` | hashed: the occupancy grid | KILLED by R1.2, R1.4b, R1.4, R1.5, R1.8, R1.9, R1.12, R1.15 |
+| `C15_copy_forgets_audio_tracked` | presentation: which ants own a sound (their stop cues) | KILLED by R1.4 |
+| `C16_copy_forgets_trace_switch` | diagnostics: the trace is on | KILLED by R1.5 |
+| `C17_copy_forgets_flower_droppers` | hashed: the flower droppers | KILLED by R1.2, R1.4, R1.8, R1.9, R1.12 |
+| `C18_copy_forgets_roster` | hashed: the roster mask | KILLED by R1.5 |
+| `A1_assign_keeps_effects` | assignment keeps the target's visual effects | KILLED by R1.2, R1.4b, R1.4, R1.14 |
+| `A2_assign_keeps_names` | assignment keeps the target's names | KILLED by R1.2, R1.11 |
+| `A3_assign_keeps_audio_queue` | assignment keeps the target's queued cues | KILLED by R1.2, R1.4b, R1.6, R1.11, R1.12, R1.13 |
+| `A4_assign_keeps_fog` | assignment keeps the target's revealed tiles | KILLED by R1.2, R1.4b, R1.4, R1.6, R1.8, R1.11, R1.14 |
+| `A5_assign_keeps_path_serials` | assignment keeps the target's request serials | KILLED by R1.2, R1.4, R1.6, R1.8, R1.11, R1.12, R1.13, R1.14 |
+
