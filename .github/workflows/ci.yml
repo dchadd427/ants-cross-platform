@@ -61,8 +61,8 @@ jobs:
 
       - name: Build the game, the server and the test programs
         run: |
-          cmake --build build
-          cmake --build build --target map_sweep bot_arena
+          cmake --build build -- -k 0
+          cmake --build build --target map_sweep bot_arena -- -k 0
           ccache -s
 
       - name: Build the E2E runner
@@ -71,7 +71,7 @@ jobs:
           cmake --build build_e2e
 
       - name: Test programs (ctest)
-        run: ctest --test-dir build --output-on-failure --timeout 900
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
       - name: Tool self-tests (map_sweep, bot_arena)
         run: |
@@ -104,8 +104,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install SDL2, SDL2_ttf, ccache, Ninja
-        run: brew install sdl2 sdl2_ttf ccache ninja
+      # Not `brew install sdl2`: Homebrew's sdl2 is now sdl2-compat (the SDL2 interface on top of SDL3), under which eight test programs fail (pointer, canvas and
+      # pixel checks). The game is written for SDL2, so SDL2 and SDL2_ttf are built from the release sources (the versions of the owner's Mac) and cached.
+      - name: Install ccache and Ninja
+        run: brew install ccache ninja
+
+      - name: Restore SDL2 and SDL2_ttf
+        id: sdl
+        uses: actions/cache@v6
+        with:
+          path: ~/sdl2
+          key: sdl2-${{ runner.os }}-${{ runner.arch }}-2.32.10-ttf-2.24.0-v1
+
+      - name: Build SDL2 2.32.10 and SDL2_ttf 2.24.0 from source
+        if: steps.sdl.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/sdl-src" && cd "$RUNNER_TEMP/sdl-src"
+          curl -fsSL -o SDL2.tar.gz https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-2.32.10.tar.gz
+          curl -fsSL -o SDL2_ttf.tar.gz https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.24.0/SDL2_ttf-2.24.0.tar.gz
+          tar xzf SDL2.tar.gz && tar xzf SDL2_ttf.tar.gz
+          cmake -S SDL2-2.32.10 -B sdl2-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DSDL_TEST=OFF
+          cmake --build sdl2-build
+          cmake --install sdl2-build
+          cmake -S SDL2_ttf-2.24.0 -B ttf-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DCMAKE_PREFIX_PATH="$HOME/sdl2" -DSDL2TTF_VENDORED=ON -DSDL2TTF_SAMPLES=OFF
+          cmake --build ttf-build
+          cmake --install ttf-build
 
       - name: Restore the compiler cache
         uses: actions/cache@v6
@@ -117,12 +140,13 @@ jobs:
       - name: Configure (Release, warnings are errors)
         run: |
           clang --version | head -1
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          "$HOME/sdl2/bin/sdl2-config" --version
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_PREFIX_PATH="$HOME/sdl2"
 
       - name: Build the game, the server and the test programs
         run: |
-          cmake --build build
-          cmake --build build --target map_sweep bot_arena
+          cmake --build build -- -k 0
+          cmake --build build --target map_sweep bot_arena -- -k 0
           ccache -s
 
       - name: Build the E2E runner
@@ -131,7 +155,7 @@ jobs:
           cmake --build build_e2e
 
       - name: Test programs (ctest)
-        run: ctest --test-dir build --output-on-failure --timeout 900
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
       - name: Tool self-tests (map_sweep, bot_arena)
         run: |
@@ -155,16 +179,26 @@ jobs:
           if-no-files-found: ignore
 
   windows:
-    name: Windows (MSVC)
-    runs-on: windows-latest
+    name: Windows (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Visual Studio 2022 (MSVC 19.4x) is what the owner builds with; windows-latest has Visual Studio 2026 (the newest compiler).
+          - name: MSVC 2022
+            os: windows-2025
+          - name: MSVC 2026
+            os: windows-latest
+    env:
+      # compile the files of a project in parallel (cl's -MP; the dash form because Git Bash would turn /MP into a path)
+      CXXFLAGS: -MP
     steps:
       - uses: actions/checkout@v7
 
       # SDL2 and SDL2_ttf are not installed: CMakeLists.txt downloads the prebuilt Visual C++ packages itself (FetchContent), as it does on the owner's PC.
       - name: Configure (Visual Studio generator, x64)
-        env:
-          CXXFLAGS: /MP   # compile the files of a project in parallel
         run: |
           cmake --version | head -1
           cmake -S . -B build -A x64 -DANTS_WERROR=ON
@@ -175,14 +209,12 @@ jobs:
           cmake --build build --config Release --parallel --target map_sweep bot_arena
 
       - name: Build the E2E runner (Release)
-        env:
-          CXXFLAGS: /MP
         run: |
           cmake -S tests/e2e -B build_e2e -A x64
           cmake --build build_e2e --config Release --parallel
 
       - name: Test programs (ctest)
-        run: ctest --test-dir build -C Release --output-on-failure --timeout 900
+        run: ctest --test-dir build -C Release --output-on-failure --timeout 900 --parallel 4
 
       - name: Tool self-tests (map_sweep, bot_arena)
         run: |
@@ -196,7 +228,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: windows-test-logs
+          name: windows-${{ matrix.os }}-test-logs
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 
