@@ -398,6 +398,9 @@ public:
     NetOverlayLine net_overlay_now() const;
     /// Where the window is now (client area, screen coordinates)
     WindowRect window_rect() const;
+    /// The window as it was CREATED (client area; x and y are SDL's centred position where the place was not known): its size already has the shape of the picture (16:9 by default, 4:3 with
+    /// --aspect 4:3), so that no frame is ever shown in another shape before apply_window_layout runs. For the tests.
+    WindowRect window_created_rect() const noexcept { return window_created_; }
     void update_simulation(float dt);
     /// The music of the original is one sequencer device (docs 5.24e): the intro plays once, every piece that ends is followed by a random in-game piece, the match
     /// start, the activation of the program and the release of the music slider start one, the deactivation of the program and the end of a match close the device.
@@ -442,6 +445,7 @@ private:
     bool show_tile_grid_{false};
 
     SDL_Window* window_{nullptr};
+    WindowRect window_created_{};                          // the window as it was created (initial_window_rect)
     std::unique_ptr<Renderer> renderer_;
 
     ants::assets::AssetArchive assets_;
@@ -560,6 +564,7 @@ private:
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
     LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture, so is the setup screen of a 960 x 540 canvas, every other screen the original's 640 x 480, centred
     void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
+    WindowRect initial_window_rect() const;                // what the window is created as: the picture's shape (see the definition)
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered

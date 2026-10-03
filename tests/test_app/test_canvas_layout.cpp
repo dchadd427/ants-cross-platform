@@ -542,6 +542,36 @@ void test_application_aspects() {
             check(ww % 480 == 0 && wh % 270 == 0 && ww / 480 == wh / 270 && ww >= 960, "... a step of 0.5, at least 1x");
         }
     }
+    {   // the window is CREATED in the shape of the picture it will show: it used to be created 1280 x 960 (4:3) and made 16:9 before the first frame, so that a 4:3 window could flash on screen at
+        // the start. The first size (what SDL_CreateWindow got) has the canvas's aspect, 16:9 by default and 4:3 with --aspect 4:3, and it is the size that the window has afterwards: no resize followed.
+        for (const Aspect aspect : {Aspect::Wide16x9, Aspect::Classic4x3}) {
+            AppFixture f("", config_of(aspect, true), false);
+            check(f.ok, std::string("a ") + aspect_name(aspect) + " application starts (the window's first size)");
+            if (!f.ok) continue;
+            const WindowRect first = f.app.window_created_rect();
+            int32_t ww = 0, wh = 0;
+            f.window_size(ww, wh);
+            check(first.w > 0 && first.h > 0 && first.w * canvas_height_of(aspect) == first.h * canvas_width_of(aspect) && first.w >= canvas_width_of(aspect),
+                  std::string(aspect_name(aspect)) + ": the window is created in the shape of the picture, " + std::to_string(first.w) + " x " + std::to_string(first.h) + " (at least 1x of the canvas)");
+            check(ww == first.w && wh == first.h, std::string(aspect_name(aspect)) + ": it is the size that the window has now, nothing resized it");
+            if (aspect == Aspect::Classic4x3) check(first.w == 1280 && first.h == 960, "4:3: the original's picture at the 2x integer scale, as it always was");
+        }
+        {   // --window-size is the size that is asked for, from the first moment
+            AppFixture f("", config_of(Aspect::Wide16x9, true, 1280, 720), false);
+            check(f.ok && f.app.window_created_rect().w == 1280 && f.app.window_created_rect().h == 720, "--window-size: created at the size that was asked for");
+        }
+        {   // fullscreen and the cells of a grid are as they always were: created at the config's size, sized by apply_window_layout once the window exists
+            ApplicationConfig full = config_of(Aspect::Wide16x9, true);
+            full.fullscreen = true;
+            AppFixture f("", full, false);
+            check(f.ok && f.app.window_created_rect().w == 1280 && f.app.window_created_rect().h == 960, "--fullscreen: created at the config's size, as it always was");
+            ApplicationConfig grid = config_of(Aspect::Wide16x9, true);
+            grid.grid_cols = 2;
+            grid.grid_rows = 2;
+            AppFixture g("", grid, false);
+            check(g.ok && g.app.window_created_rect().w == 1280 && g.app.window_created_rect().h == 960, "--grid: created at the config's size, as it always was");
+        }
+    }
     {   // the cells of the start scripts' grid are of the canvas's shape: 16:9 for --aspect 16:9, 4:3 as ever
         for (const Aspect aspect : {Aspect::Classic4x3, Aspect::Wide16x9}) {
             ApplicationConfig cfg = config_of(aspect, true);

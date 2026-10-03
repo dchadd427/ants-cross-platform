@@ -472,10 +472,11 @@ bool Application::init(const ApplicationConfig& config) {
     if (config_.fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
     if (config_.headless)   win_flags = SDL_WINDOW_HIDDEN;
 
+    window_created_ = initial_window_rect();                 // (the shape of the picture that it will show: no frame is ever shown in another shape)
     window_ = SDL_CreateWindow(
         config_.title.c_str(),
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        config_.window_width, config_.window_height,
+        window_created_.x, window_created_.y,
+        window_created_.w, window_created_.h,
         win_flags
     );
     if (!window_) {
@@ -1709,6 +1710,39 @@ WindowRect Application::window_rect() const {
         SDL_GetWindowPosition(window_, &r.x, &r.y);
         SDL_GetWindowSize(window_, &r.w, &r.h);
     }
+    return r;
+}
+
+// The window that is CREATED: its size, and its place where that is known. The size is the shape of the picture that it will show, so that no frame is ever shown in another shape: a window
+// that was created 4:3 (the config's 1280 x 960) and made 16:9 by apply_window_layout before the first frame was seen on screen as a 4:3 window for a moment at the start. An explicit
+// --window-size is that size; a canvas that is not the original's 4:3 is the size that apply_window_layout would give it (the largest scale in steps of 0.5 that fits the display's usable
+// area, with the title bar of a typical window system, as its own fallback assumes: the borders of a window that does not exist yet cannot be asked), the canvas itself at 1x when the display
+// cannot be asked; the original's own 4:3 (--aspect 4:3, the settings' key) is the config's 1280 x 960. Fullscreen and the cells of the start scripts' grid are as they always were (created at
+// the config's size, sized by apply_window_layout once the window exists), and so is the web build, whose window is the page's canvas.
+WindowRect Application::initial_window_rect() const {
+    WindowRect r{SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, config_.window_width, config_.window_height};
+#if !defined(__EMSCRIPTEN__)
+    const bool in_grid = config_.grid_cols > 0 && config_.grid_rows > 0;
+    if (!config_.fullscreen && !in_grid) {
+        if (config_.has_window_size) {
+            r.w = config_.window_w;
+            r.h = config_.window_h;
+        } else if (aspect_ != Aspect::Classic4x3) {
+            SDL_Rect area{0, 0, 0, 0};
+            const int display = std::max(0, config_.display_index);
+            if (SDL_GetDisplayUsableBounds(display, &area) == 0 || SDL_GetDisplayBounds(display, &area) == 0) {
+                r = default_canvas_window(WindowRect{area.x, area.y, area.w, area.h}, canvas_width_of(aspect_), canvas_height_of(aspect_), config_.headless ? 0 : 28, 0, 0, 0);
+            } else {
+                r.w = canvas_width_of(aspect_);
+                r.h = canvas_height_of(aspect_);
+            }
+        }
+    }
+    if (config_.has_window_pos) {
+        r.x = config_.window_x;
+        r.y = config_.window_y;
+    }
+#endif
     return r;
 }
 
