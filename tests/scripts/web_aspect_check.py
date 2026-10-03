@@ -251,6 +251,9 @@ PURE_CHECKS = r"""
   var slowStart = []; for (var q = 0; q < 40; q++) slowStart.push(45); slowStart = slowStart.concat(series(1000, 1000 / 144, 0.6, seeded(11)));
   var resSlow = trace(slowStart, 432);
   eq(resSlow.capped === true && resSlow.accepted >= 160 && resSlow.accepted <= 185, true, 'slow frames at the start (the game loading) do not decide: a 144 Hz display is capped afterwards: ' + JSON.stringify(resSlow));
+  var outl = []; for (var j = 0; j < 800; j++) outl.push(j % 8 === 7 ? 25 : 1000 / 144);          // a 144 Hz display with a long frame (a pause of the browser) every eighth frame: the median is 6.9 ms
+  var resOutl = trace(outl, 288);
+  eq(resOutl.capped === true && resOutl.accepted >= 120 && resOutl.accepted <= 190, true, 'a 144 Hz display with a long frame every eighth frame is capped (a slow frame decides nothing): ' + JSON.stringify(resOutl));
   var change = series(400, 1000 / 144, 0.6, seeded(13)).concat(series(200, 1000 / 60, 1, seeded(17)));
   var resChange = trace(change, 60);
   eq(resChange.capped === false && resChange.accepted === 60, true, 'a window that moves from a 144 Hz display to a 60 Hz one is measured again: every frame is drawn: ' + JSON.stringify(resChange));
@@ -1135,6 +1138,25 @@ def main():
             g = tab.geometry()
             layout_checks("resized to %dx%d@%s" % (w, h, dpr), g, "16:9")
         tab.save_shot(args.shots, "resized_back")
+        # a page that scrolls (a short window: the guide is below the fold) at a ratio that makes scroll offsets fractional in CSS pixels: the box is placed again where the pointer is exact
+        tab.emulate(800, 420, 1.25)
+        tab.open(web)
+        tab.ev("window.scrollTo(0, 10.4); 1")
+        time.sleep(0.8)
+        g = tab.geometry()
+        check(tab.ev("window.pageYOffset") > 5, "(setup) the short page is scrolled (by %s CSS px)" % tab.ev("window.pageYOffset"))
+        for axis, pos, size in (("x", g["box"][0], g["box"][2]), ("y", g["box"][1], g["box"][3])):
+            whole_size = abs(size - round(size)) < 1.0 / 128
+            at = pos if whole_size else pos + 1.0 / 64
+            check(abs(at - round(at)) < 1e-6, "scrolled by a fractional amount: the box's %s position %.4f is where the pointer is exact (size %.4f)" % (axis, pos, size))
+        # where a browser's scroll offset is not a whole number of CSS pixels the position changes with a scroll: the page places the box again on every scroll event (here: moved off its place
+        # by hand, then a scroll event)
+        tab.ev("document.getElementById('game-container').style.left = '0.3px'; window.dispatchEvent(new Event('scroll')); 1")
+        time.sleep(0.6)
+        g2 = tab.geometry()
+        check(abs(g2["box"][0] - g["box"][0]) < 0.02 and tab.ev("document.getElementById('game-container').style.left") != "0.3px", "a scroll event places the box again (x %.4f after being moved by hand to %.4f)" % (g2["box"][0], g["box"][0] + 0.3))
+        tab.emulate(1280, 720, 1)
+        tab.open(web)
         # the pointer: the game draws its own cursor where the browser says the pointer is
         def cursor_error(tab, at_a, at_b, label):
             g = tab.geometry()
