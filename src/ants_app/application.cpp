@@ -165,6 +165,24 @@ bool os_fullscreen(SDL_Window* window) {
     return false;
 #endif
 }
+
+#if defined(__APPLE__)
+// -[NSApplication setPresentationOptions:] through the runtime, as os_fullscreen asks the window (NSApplicationPresentationOptions: HideDock 1 << 1, HideMenuBar 1 << 3, FullScreen 1 << 10).
+// What a fullscreen Space needs so that the Dock and the menu bar do not come up when the pointer touches the edge of the screen (wants_hidden_dock_and_menu_bar). An exception of the
+// call (the runtime raises one for an invalid combination) is caught: the game plays on with what the system gave it.
+constexpr unsigned long kPresentationHideDock = 1ul << 1;
+constexpr unsigned long kPresentationHideMenuBar = 1ul << 3;
+constexpr unsigned long kPresentationFullScreen = 1ul << 10;
+void set_presentation_options(unsigned long options) {
+    try {
+        using SharedFn = id (*)(Class, SEL);
+        using SetFn = void (*)(id, SEL, unsigned long);
+        const id app = reinterpret_cast<SharedFn>(objc_msgSend)(objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
+        if (app != nullptr) reinterpret_cast<SetFn>(objc_msgSend)(app, sel_registerName("setPresentationOptions:"), options);
+    } catch (...) {
+    }
+}
+#endif
 #endif
 
 } // anonymous namespace
@@ -925,6 +943,12 @@ bool Application::write_chat_transcript(const std::string& path) const {
 void Application::shutdown() {
     is_running_ = false;
     if (menu_enabled_) start_menu_.flush();
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    if (presentation_hidden_) {                           // (closed inside a fullscreen Space that the game made the Dock and the menu bar leave: the system's own behaviour comes back)
+        presentation_hidden_ = false;
+        set_presentation_options(0ul);
+    }
+#endif
 #if !defined(__EMSCRIPTEN__)
     if (!config_.headless && match_started_) {
         const std::string folder = ConfigStore::default_folder();
@@ -1702,6 +1726,15 @@ void Application::update_mouse_grab() {
     const bool want = wants_mouse_grab(sdl_fullscreen, space, config_.headless);
     const bool asked = (flags & SDL_WINDOW_MOUSE_GRABBED) != 0;                              // the request (SDL_GetWindowMouseGrab is its effect: no while unfocused)
     if (asked != want) SDL_SetWindowMouseGrab(window_, want ? SDL_TRUE : SDL_FALSE);
+#if defined(__APPLE__)
+    // The Dock and the menu bar of a fullscreen Space that SDL's flags do not describe (the green button, Cmd+Ctrl+F): hidden for good while the window is in it, the system's own
+    // behaviour given back when it leaves (SDL's own fullscreen needs none of this: its delegate asks for both to be hidden, see wants_hidden_dock_and_menu_bar)
+    const bool hide = wants_hidden_dock_and_menu_bar(sdl_fullscreen, space, config_.headless);
+    if (hide != presentation_hidden_) {
+        presentation_hidden_ = hide;
+        set_presentation_options(hide ? (kPresentationFullScreen | kPresentationHideDock | kPresentationHideMenuBar) : 0ul);
+    }
+#endif
 #endif
 }
 

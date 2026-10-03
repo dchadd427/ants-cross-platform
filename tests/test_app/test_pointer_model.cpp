@@ -2281,7 +2281,25 @@ void test_pillarbox() {
     check(wants_mouse_grab(true, false, false) && wants_mouse_grab(false, true, false), "SDL's fullscreen (--fullscreen) grabs, and so does a macOS fullscreen Space");
     check(!wants_mouse_grab(false, false, false), "a window (also a maximized one: that is not fullscreen) does not grab");
     check(!wants_mouse_grab(true, true, true), "a headless run never grabs");
-    std::printf("[pillarbox] a pointer beyond the picture is on its edge pixel; a release outside the window and a lifted finger end it; fullscreen grabs\n");
+
+    // The Dock and the menu bar of macOS (the owner: they came up whenever the pointer touched the bottom or top edge of a fullscreen screen). SDL's own fullscreen already has them hidden for good
+    // (its window delegate asks for FullScreen | HideDock | HideMenuBar when the window has SDL's flag), so the game asks only for the fullscreen Space that SDL's flags do not describe (the
+    // green button, Cmd+Ctrl+F): the whole table of the three inputs
+    int hiding = 0;
+    for (int bits = 0; bits < 8; ++bits) {
+        const bool sdl_fs = (bits & 1) != 0;
+        const bool os_fs = (bits & 2) != 0;
+        const bool headless = (bits & 4) != 0;
+        const bool hide = wants_hidden_dock_and_menu_bar(sdl_fs, os_fs, headless);
+        if (hide) ++hiding;
+        check(hide == (!headless && os_fs && !sdl_fs), "the Dock and menu bar table, row " + std::to_string(bits));
+    }
+    check(hiding == 1, "the game hides them in exactly 1 of the 8 cases: a Space of the system's own (no SDL flag), not headless");
+    check(wants_hidden_dock_and_menu_bar(false, true, false), "a macOS fullscreen Space entered with the green button: hidden by the game");
+    check(!wants_hidden_dock_and_menu_bar(true, true, false) && !wants_hidden_dock_and_menu_bar(true, false, false), "SDL's own fullscreen needs nothing from the game (SDL's delegate hides them), with or without the Space's style mask");
+    check(!wants_hidden_dock_and_menu_bar(false, false, false), "a window (also a maximized one) leaves the Dock and the menu bar alone");
+    check(!wants_hidden_dock_and_menu_bar(false, true, true), "a headless run never asks the window system for anything");
+    std::printf("[pillarbox] a pointer beyond the picture is on its edge pixel; a release outside the window and a lifted finger end it; fullscreen grabs; the Dock and the menu bar\n");
 }
 
 }  // namespace

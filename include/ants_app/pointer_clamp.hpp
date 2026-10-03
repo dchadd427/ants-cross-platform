@@ -81,4 +81,14 @@ inline bool wants_mouse_grab(bool sdl_fullscreen, bool os_fullscreen, bool headl
     return !headless && (sdl_fullscreen || os_fullscreen);
 }
 
+/// The Dock and the menu bar of macOS stay away from a fullscreen game (the owner: they came up whenever the pointer touched the bottom or the top edge of the screen).
+/// SDL's own fullscreen (SDL_WINDOW_FULLSCREEN_DESKTOP: `--fullscreen`, Alt+Enter) already has it: SDL's window delegate answers the system's question "which presentation options does this
+/// fullscreen Space use" with FullScreen | HideDock | HideMenuBar when the window has that flag (read from SDL 2.32.10's delegate, `window:willUseFullScreenPresentationOptions:`), and
+/// then neither is merely auto-hidden: nothing brings them up. A Space that the player enters with the green button or Cmd+Ctrl+F (`os_fullscreen` without SDL's flag) gets the
+/// system's own proposal, which auto-hides them (they come up at the edge): that one the game asks for itself, and gives back when the window leaves it (Application::update_mouse_grab).
+/// Never in a headless run, and nowhere but on macOS (the caller).
+inline bool wants_hidden_dock_and_menu_bar(bool sdl_fullscreen, bool os_fullscreen, bool headless) {
+    return !headless && os_fullscreen && !sdl_fullscreen;
+}
+
 }  // namespace ants::app

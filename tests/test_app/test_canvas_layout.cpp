@@ -826,6 +826,119 @@ void test_pointer_over_bars() {
         f.scroll(12);
         check(f.app.renderer().camera().world_x > x1, "... and the map scrolls east");
     }
+    {   // THE OWNER'S SCREENS (edge-pan: "if I go off the edge of the game, it no longer pans", on a 16:10 screen in fullscreen): a window of the shape of a 16:10 screen, 1440 x 900 (the picture
+        // 1440 x 810, bars of 45 rows) and 1512 x 982 (a MacBook's, bars of 66 rows at a scale of 1.575): the pointer anywhere over a bar is on the picture's nearest edge pixel and is NOT gone, the
+        // map scrolls up or down, a corner of the bars scrolls diagonally, and the picture's own first row and the bar's last row are the same pointer. A fullscreen window is such a window (the clamp does not
+        // look at fullscreen): tests/test_app/test_app_integration.cpp 7.8f makes one. The windowed case is unchanged: a pointer that really left (SDL's LEAVE) is gone and scrolls nothing.
+        for (const std::pair<int, int> size : {std::pair<int, int>{1440, 900}, std::pair<int, int>{1512, 982}}) {
+            AppFixture f("", config_of(Aspect::Wide16x9, true, size.first, size.second));
+            check(f.ok && f.window != nullptr, "the 16:9 application runs a match in a " + std::to_string(size.first) + " x " + std::to_string(size.second) + " window");
+            if (!f.ok || f.window == nullptr) return;
+            int w = 0, h = 0;
+            SDL_GetWindowSize(f.window, &w, &h);
+            const CanvasFit fit = f.app.canvas().fit(w, h);
+            check(w == size.first && h == size.second && fit.bar_top() > 0 && fit.bar_top() == fit.bar_bottom() && fit.bar_left() == 0, std::to_string(w) + " x " + std::to_string(h) + ": bars of " + std::to_string(fit.bar_top()) + " rows above and below, none at the sides");
+            auto center = [&]() { f.app.renderer().camera().center_on(600, 600, f.app.sim().grid().width(), f.app.sim().grid().height()); };
+            auto window_motion = [&](int wx, int wy) {
+                SDL_Event e{};
+                e.type = SDL_MOUSEMOTION;
+                e.motion.windowID = SDL_GetWindowID(f.window);
+                e.motion.x = wx;
+                e.motion.y = wy;
+                SDL_PushEvent(&e);
+                f.deliver();
+            };
+            const auto& cam = f.app.renderer().camera();
+            const std::string at = std::to_string(w) + " x " + std::to_string(h);
+            center();
+            const int32_t x0 = cam.world_x;
+            const int32_t y0 = cam.world_y;
+            window_motion(w / 2, fit.bar_top() / 2);                           // the middle of the top bar
+            check(f.app.mouse_screen_y() == 0 && !f.app.pointer_outside() && std::abs(f.app.mouse_screen_x() - 480) <= 1, at + ": over the top bar the pointer is on the picture's top edge, level with the pointer");
+            f.scroll(12);
+            check(cam.world_y < y0 && cam.world_x == x0, at + ": ... and the map scrolls north, not sideways");
+            window_motion(w / 2, fit.viewport.y - 1);                          // the bar's last row
+            const int32_t bar_x = f.app.mouse_screen_x();
+            window_motion(w / 2, fit.viewport.y);                              // the picture's own first row
+            check(f.app.mouse_screen_y() == 0 && f.app.mouse_screen_x() == bar_x && !f.app.pointer_outside(), at + ": the bar's last row and the picture's first row are the same pointer");
+            center();
+            const int32_t y1 = cam.world_y;
+            window_motion(w / 2, h - fit.bar_bottom() / 2);                    // the middle of the bottom bar
+            check(f.app.mouse_screen_y() == 539 && !f.app.pointer_outside(), at + ": over the bottom bar the pointer is on the picture's bottom edge");
+            f.scroll(12);
+            check(cam.world_y > y1, at + ": ... and the map scrolls south");
+            center();
+            const int32_t cx = cam.world_x;
+            const int32_t cy = cam.world_y;
+            window_motion(0, 0);                                               // the window's top left corner: the corner of the bars
+            check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 0 && !f.app.pointer_outside(), at + ": the corner of the bars is the picture's corner pixel");
+            f.scroll(12);
+            check(cam.world_x < cx && cam.world_y < cy, at + ": ... and the map scrolls diagonally, north west");
+            center();
+            const int32_t sx = cam.world_x;
+            const int32_t sy = cam.world_y;
+            window_motion(w - 1, h - 1);                                       // the bottom right corner
+            check(f.app.mouse_screen_x() == 959 && f.app.mouse_screen_y() == 539, at + ": the bottom right corner of the window is the picture's last pixel");
+            f.scroll(12);
+            check(cam.world_x > sx && cam.world_y > sy, at + ": ... south east");
+            // the windowed case is unchanged: the pointer that left is gone, and the view does not move
+            center();
+            const int32_t gx = cam.world_x;
+            const int32_t gy = cam.world_y;
+            window_motion(w / 2, 5);                                           // in the top bar again: scrolling
+            SDL_Event leave{};
+            leave.type = SDL_WINDOWEVENT;
+            leave.window.windowID = SDL_GetWindowID(f.window);
+            leave.window.event = SDL_WINDOWEVENT_LEAVE;
+            SDL_PushEvent(&leave);
+            f.deliver();
+            check(f.app.pointer_outside(), at + ": a pointer that left the window (SDL's LEAVE) is gone");
+            f.scroll(12);
+            check(cam.world_x == gx && cam.world_y == gy, at + ": ... and nothing scrolls");
+            window_motion(w / 2, h / 2);
+            check(!f.app.pointer_outside(), at + ": it is back with its next motion");
+        }
+        {   // the original's 4:3 picture on the same screen: bars of 120 columns at the sides (1440 x 900), the pointer over them is on the picture's side edge
+            AppFixture f("", config_of(Aspect::Classic4x3, true, 1440, 900));
+            check(f.ok && f.window != nullptr, "the classic application runs a match in a 1440 x 900 window");
+            if (!f.ok || f.window == nullptr) return;
+            int w = 0, h = 0;
+            SDL_GetWindowSize(f.window, &w, &h);
+            const CanvasFit fit = f.app.canvas().fit(w, h);
+            check(w == 1440 && h == 900 && fit.bar_left() == 120 && fit.bar_right() == 120 && fit.bar_top() == 0, "1440 x 900: the 4:3 picture is 1200 x 900 with bars of 120 columns at the sides");
+            const auto& cam = f.app.renderer().camera();
+            auto center = [&]() { f.app.renderer().camera().center_on(600, 600, f.app.sim().grid().width(), f.app.sim().grid().height()); };
+            auto window_motion = [&](int wx, int wy) {
+                SDL_Event e{};
+                e.type = SDL_MOUSEMOTION;
+                e.motion.windowID = SDL_GetWindowID(f.window);
+                e.motion.x = wx;
+                e.motion.y = wy;
+                SDL_PushEvent(&e);
+                f.deliver();
+            };
+            center();
+            const int32_t x0 = cam.world_x;
+            const int32_t y0 = cam.world_y;
+            window_motion(40, 450);
+            check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 240 && !f.app.pointer_outside(), "the left bar: the picture's left edge, level with the pointer");
+            f.scroll(12);
+            check(cam.world_x < x0 && cam.world_y == y0, "... the map scrolls west, not up or down");
+            center();
+            const int32_t x1 = cam.world_x;
+            window_motion(1400, 450);
+            check(f.app.mouse_screen_x() == 639 && f.app.mouse_screen_y() == 240, "the right bar: the right edge");
+            f.scroll(12);
+            check(cam.world_x > x1, "... east");
+            center();
+            const int32_t x2 = cam.world_x;
+            const int32_t y2 = cam.world_y;
+            window_motion(10, 1);                                              // a corner of the window: a bar on the left, the picture's top row
+            check(f.app.mouse_screen_x() == 0 && f.app.mouse_screen_y() == 0, "the window's top left corner is the picture's corner");
+            f.scroll(12);
+            check(cam.world_x < x2 && cam.world_y < y2, "... the map scrolls diagonally");
+        }
+    }
     {   // a screen outside a match in the 16:9 canvas (the quick help): the whole canvas, so a canvas point is the picture's own (this block used to pin the clamp of a pointer over the margin
         // of a centred page to the page's nearest edge pixel: there is no page and no margin any more)
         AppFixture f("", config_of(Aspect::Wide16x9, true, 1920, 1080), false);
