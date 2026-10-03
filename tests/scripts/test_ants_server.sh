@@ -39,7 +39,7 @@ check() {      # check "what" exit-status
     CHECKS=$((CHECKS + 1))
     if [ "$2" -ne 0 ]; then
         FAILS=$((FAILS + 1))
-        echo "  FAIL: $1"
+        echo "  FAIL:${PART_LABEL} $1"            # (the parts run side by side in the CI: a failure names its part)
     fi
 }
 echo "[server e2e] ants_server and two headless clients: control secret, a room by code, an automatic start"
