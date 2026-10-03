@@ -263,7 +263,7 @@ Visual Studio 2022 Build Tools (MSVC; Visual Studio 2026 builds too) and CMake 3
 ## Building and Running Locally
 
 ### Quick Launch (Desktop)
-To automatically build and launch the native desktop game in one step:
+To automatically build and launch the native desktop game in one step (the script builds the game **every time it starts**, an incremental build that takes a second when nothing changed, and it stops with the compiler's messages when the build fails: it never starts a game from an older build, which is how a game could keep opening in 4:3 after the 16:9 change):
 
 ```bash
 ./start_game.sh
@@ -276,7 +276,7 @@ By default the script opens **four games on this machine, one player each, in a 
 | `./start_game.sh` | four players in a 2 x 2 grid (Windows: `start_game.bat`, same options) |
 | `./start_game.sh --players N` | N windows, 1 - 4 (two sit side by side, green left and red right) |
 | `./start_game.sh --single` | one plain game: the start menu, then the original's screens (add `--map-select` to start on the setup screen at once) |
-| `./start_game.sh --dry-run` | print the command line of every window and stop |
+| `./start_game.sh --dry-run` | print the command line of every window and stop (nothing is built or started) |
 
 A game's own options given without `--players` (`--host`, `--join`, `--bot`, `--lan-list`, `--headless`, `--screenshot`, `--map`) make it a single game, so the examples below still work (`--bot` cannot be combined with `--players`: the extra windows are guests, and a guest runs no bots). `ANTS_PORT` moves the room from port 4001, `ANTS_NAMES_SEED` makes the random names repeatable. `start_game.bat` was written without a Windows machine to run it on: if it misbehaves, the `--dry-run` output shows what it would start.
 

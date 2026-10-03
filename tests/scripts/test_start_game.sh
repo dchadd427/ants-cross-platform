@@ -151,5 +151,77 @@ for f in start_game.sh start_game.bat; do
     check "$f: the setup screen's banner does not say that Esc leaves (Esc does nothing there)" "$({ has "$banner" 'Esc leaves'; } ; [ $? -ne 0 ]; echo $?)"
 done
 
+# The build step. The script used to build only when the game's binary was missing, so a binary that an older checkout had left in ./build was launched for ever and a game that had changed
+# (it opened in 4:3 after the 16:9 change) never showed it. Now every start makes sure that the game is built, and a failed build stops the launch. The script runs here from a COPY in a
+# temporary folder with a fake game (a script that notes that it was started) and a fake cmake (ANTS_CMAKE: a script that notes its arguments and fails when it is told to), so nothing is built
+# or started for real.
+echo "[start script] the build step: on every start, never a game from an older build after a failure, nothing with --dry-run"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/ants_start_test.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$WORK/build/src/ants_app"
+cp "$SCRIPT" "$WORK/start_game.sh"
+printf '#!/bin/sh\necho "$@" >> "%s/game.ran"\n' "$WORK" > "$WORK/build/src/ants_app/ants"
+cat > "$WORK/fake_cmake" <<'FAKE'
+#!/bin/sh
+echo "$*" >> "$FAKE_CMAKE_LOG"
+case "$*" in
+    *--build*)
+        if [ -n "$FAKE_BUILD_FAILS" ]; then echo "fake cmake: the build failed" >&2; exit 1; fi
+        ;;
+    *)
+        if [ -n "$FAKE_CONFIGURE_FAILS" ]; then echo "fake cmake: the configure failed" >&2; exit 1; fi
+        mkdir -p build
+        : > build/CMakeCache.txt
+        ;;
+esac
+exit 0
+FAKE
+chmod +x "$WORK/fake_cmake" "$WORK/build/src/ants_app/ants" "$WORK/start_game.sh"
+OLD_GAME_RAN() { [ -f "$WORK/game.ran" ] && wc -l < "$WORK/game.ran" | tr -d ' ' || echo 0; }
+run_copy() {   # run_copy ARGS...: runs the copy of the script with the fake cmake; prints nothing, sets STATUS and OUTPUT
+    : > "$WORK/cmake.log"
+    OUTPUT="$(cd "$WORK" && FAKE_CMAKE_LOG="$WORK/cmake.log" ANTS_CMAKE="$WORK/fake_cmake" ANTS_PORT=45899 ./start_game.sh "$@" 2>&1)"
+    STATUS=$?
+}
+# the game is there already (an old build) and ./build has no cache: the script configures and builds anyway
+run_copy --single
+check "a start with an old game in ./build still builds: the configure and then the build of the target" "$([ "$(wc -l < "$WORK/cmake.log" | tr -d ' ')" -eq 2 ] && head -1 "$WORK/cmake.log" | grep -q -- '-B build -DCMAKE_BUILD_TYPE=Release' && tail -1 "$WORK/cmake.log" | grep -q -- '--build build --target ants'; echo $?)"
+check "... and then starts the game (it ran once)" "$([ "$STATUS" -eq 0 ] && [ "$(OLD_GAME_RAN)" = "1" ]; echo $?)"
+# the next start: configured, so only the incremental build, and the game again
+run_copy --single
+check "the next start does not configure again (a cache is there) and builds the target again, game or no game" "$([ "$(wc -l < "$WORK/cmake.log" | tr -d ' ')" -eq 1 ] && grep -q -- '--build build --target ants' "$WORK/cmake.log"; echo $?)"
+check "... and starts the game again" "$([ "$STATUS" -eq 0 ] && [ "$(OLD_GAME_RAN)" = "2" ]; echo $?)"
+# --dry-run builds nothing and starts nothing
+run_copy --single --dry-run
+check "--dry-run runs no cmake at all" "$([ ! -s "$WORK/cmake.log" ]; echo $?)"
+check "--dry-run starts no game and prints the command line" "$([ "$STATUS" -eq 0 ] && [ "$(OLD_GAME_RAN)" = "2" ] && [ "$OUTPUT" = "./build/src/ants_app/ants" ]; echo $?)"
+OUT_DRY_RIG="$(cd "$WORK" && FAKE_CMAKE_LOG="$WORK/cmake.log" ANTS_CMAKE="$WORK/fake_cmake" ./start_game.sh --dry-run --players 2 2>&1)"
+check "--dry-run of the rig runs no cmake either" "$([ ! -s "$WORK/cmake.log" ] && [ "$(echo "$OUT_DRY_RIG" | wc -l | tr -d ' ')" -eq 2 ]; echo $?)"
+# a failed build stops the launch: the game that is in ./build (from an older build) is NOT started
+before="$(OLD_GAME_RAN)"
+FAKE_BUILD_FAILS=1 run_copy --single
+check "a failed build stops the script with a failure status" "$([ "$STATUS" -eq 1 ]; echo $?)"
+check "... without starting the game that an older build left in ./build" "$([ "$(OLD_GAME_RAN)" = "$before" ]; echo $?)"
+has "$OUTPUT" "build failed"; check "... and says that the build failed (and that nothing was started)" $?
+has "$OUTPUT" "Nothing was started"; check "... in words that say that nothing was started" $?
+FAKE_BUILD_FAILS=1 run_copy
+check "the four-window rig stops too, with no window started" "$([ "$STATUS" -eq 1 ] && [ "$(OLD_GAME_RAN)" = "$before" ]; echo $?)"
+# a failed configure stops the launch before the build
+rm -f "$WORK/build/CMakeCache.txt"
+FAKE_CONFIGURE_FAILS=1 run_copy --single
+check "a failed configure stops the script (status 1) before any build and starts nothing" "$([ "$STATUS" -eq 1 ] && [ "$(wc -l < "$WORK/cmake.log" | tr -d ' ')" -eq 1 ] && ! grep -q -- '--build' "$WORK/cmake.log" && [ "$(OLD_GAME_RAN)" = "$before" ]; echo $?)"
+has "$OUTPUT" "could not be configured"; check "... and says that the build could not be configured" $?
+# a build that succeeds but makes no game is not launched either (a configuration without the game)
+rm -f "$WORK/build/src/ants_app/ants" "$WORK/build/CMakeCache.txt"
+run_copy --single
+check "a build that made no game stops the script (status 1) with a message" "$([ "$STATUS" -eq 1 ] && has "$OUTPUT" "made no game"; echo $?)"
+# the four windows of the rig are built for first as well (the fake game ends at once, so the script ends with the host window gone: only the build line matters here)
+printf '#!/bin/sh\necho "$@" >> "%s/game.ran"\n' "$WORK" > "$WORK/build/src/ants_app/ants"
+chmod +x "$WORK/build/src/ants_app/ants"
+run_copy --players 2
+check "the rig builds before it starts a window" "$(grep -q -- '--build build --target ants' "$WORK/cmake.log"; echo $?)"
+rm -rf "$WORK"
+trap - EXIT
+
 echo "start script: $CHECKS checks, $FAILS failures"
 [ "$FAILS" -eq 0 ]
