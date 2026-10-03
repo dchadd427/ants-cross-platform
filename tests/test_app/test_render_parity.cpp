@@ -1663,7 +1663,8 @@ void test_text_sizes(Renderer& r) {
         const int32_t w = r.get_text_width("Waiting for others...", s);
         check(w > last_width, "text width grows with size " + std::to_string(h));
         last_width = w;
-        // the ink of a capital H is 55 - 72 % of the cell (the cap height of a text face is about 0.64 of its cell)
+        // the ink of a capital H is 53 - 72 % of the cell: the cap height of the bundled face (Libre Franklin) is about 0.64 of its cell, that of the original's Franklin Gothic Medium (the
+        // renderer takes it first when the machine has it: every Windows PC) about 0.54, which is 13 px of the 24 px cell (54.2 %; the bound used to be 55 %, found by the Windows jobs of CI)
         SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
         SDL_RenderClear(sr);
         r.draw_text("H", 20, 20, assets::ColorRGBA{255, 255, 255, 255}, s);
@@ -1678,7 +1679,7 @@ void test_text_sizes(Renderer& r) {
             }
         }
         const int ink = bottom - top + 1;
-        check(bottom >= 0 && ink * 100 >= h * 55 && ink * 100 <= h * 72 + 100, "a capital H of size " + std::to_string(h) + " is " + std::to_string(ink) + " px tall");
+        check(bottom >= 0 && ink * 100 >= h * 53 && ink * 100 <= h * 72 + 100, "a capital H of size " + std::to_string(h) + " is " + std::to_string(ink) + " px tall");
         if (h == 12) ink12 = ink;
         if (h == 35) check(ink * 12 >= ink12 * 35 * 90 / 100 && ink * 12 <= ink12 * 35 * 110 / 100, "the letters grow in proportion to the cell (12 -> 35)");
     }

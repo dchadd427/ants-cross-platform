@@ -60,28 +60,34 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build the game, the server and the test programs
+        id: build
         run: |
           cmake --build build -- -k 0
           cmake --build build --target map_sweep bot_arena -- -k 0
           ccache -s
 
       - name: Build the E2E runner
+        id: build_e2e
         run: |
           cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build_e2e
 
       - name: Test programs (ctest)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
       - name: Tool self-tests (map_sweep, bot_arena)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           build/map_sweep --selftest
           build/bot_arena --selftest
 
       - name: Opaque-box E2E runner
+        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
         run: build_e2e/e2e_runner --all
 
       - name: Script suites (start script, dedicated server with two headless clients)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           bash tests/scripts/test_start_game.sh
           BUILD_DIR=build bash tests/scripts/test_ants_server.sh
@@ -126,7 +132,7 @@ jobs:
           cmake -S SDL2-2.32.10 -B sdl2-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DSDL_TEST=OFF
           cmake --build sdl2-build
           cmake --install sdl2-build
-          cmake -S SDL2_ttf-2.24.0 -B ttf-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DCMAKE_PREFIX_PATH="$HOME/sdl2" -DSDL2TTF_VENDORED=ON -DSDL2TTF_SAMPLES=OFF
+          cmake -S SDL2_ttf-2.24.0 -B ttf-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DCMAKE_PREFIX_PATH="$HOME/sdl2" -DSDL2TTF_VENDORED=ON -DSDL2TTF_SAMPLES=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build ttf-build
           cmake --install ttf-build
 
@@ -144,28 +150,34 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_PREFIX_PATH="$HOME/sdl2"
 
       - name: Build the game, the server and the test programs
+        id: build
         run: |
           cmake --build build -- -k 0
           cmake --build build --target map_sweep bot_arena -- -k 0
           ccache -s
 
       - name: Build the E2E runner
+        id: build_e2e
         run: |
           cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build_e2e
 
       - name: Test programs (ctest)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
       - name: Tool self-tests (map_sweep, bot_arena)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           build/map_sweep --selftest
           build/bot_arena --selftest
 
       - name: Opaque-box E2E runner
+        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
         run: build_e2e/e2e_runner --all
 
       - name: Script suites (start script, dedicated server with two headless clients)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           bash tests/scripts/test_start_game.sh
           BUILD_DIR=build bash tests/scripts/test_ants_server.sh
@@ -204,24 +216,29 @@ jobs:
           cmake -S . -B build -A x64 -DANTS_WERROR=ON
 
       - name: Build the game, the server and the test programs (Release)
+        id: build
         run: |
           cmake --build build --config Release --parallel
           cmake --build build --config Release --parallel --target map_sweep bot_arena
 
       - name: Build the E2E runner (Release)
+        id: build_e2e
         run: |
           cmake -S tests/e2e -B build_e2e -A x64
           cmake --build build_e2e --config Release --parallel
 
       - name: Test programs (ctest)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build -C Release --output-on-failure --timeout 900 --parallel 4
 
       - name: Tool self-tests (map_sweep, bot_arena)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           build/Release/map_sweep.exe --selftest
           build/Release/bot_arena.exe --selftest
 
       - name: Opaque-box E2E runner
+        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
         run: build_e2e/Release/e2e_runner.exe --all
 
       - name: Keep the test logs of a failed run

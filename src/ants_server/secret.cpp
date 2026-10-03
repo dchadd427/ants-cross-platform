@@ -1,11 +1,13 @@
 #include "ants_server/secret.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <utility>
 
 #ifdef _WIN32
@@ -70,7 +72,15 @@ std::string error_text(int code) { return std::error_code(code, std::generic_cat
 // At most kMaxFile + 1 bytes of the file, never more (a bigger file is refused without being read): false and the reason when it cannot be read or is no regular file.
 bool read_head(const std::string& path, std::string& text, std::string& why) {
 #ifdef _WIN32
-    std::ifstream in(path, std::ios::binary);
+    // The caller looked the file up a moment ago, so a failed open is usually transient: Windows lets a virus scanner or an indexer hold a file that has just been made for a few
+    // milliseconds (a sharing violation), which failed one round of the 8-thread start race of test_server (S3.21) once in the CI runs. Try again for up to half a second.
+    std::ifstream in;
+    for (int tries = 0; tries < 100; ++tries) {
+        in.clear();
+        in.open(path, std::ios::binary);
+        if (in) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
     if (!in) {
         why = "cannot be read";
         return false;

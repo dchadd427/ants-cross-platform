@@ -1,3 +1,4 @@
+#include <exception>
 #include <iostream>
 #include <filesystem>
 #include <iomanip>
@@ -55,7 +56,16 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     ++g_test_count;
     std::cout << "  RUNNING: " << std::left << std::setw(60) << name << " ... " << std::flush;
     int prev_fails = g_test_failures;
-    fn();
+    // an exception that leaves a test case is a failure of that case that names itself (it used to end the whole program: std::terminate, exit code 0xC0000409 on Windows)
+    try {
+        fn();
+    } catch (const std::exception& e) {
+        std::cout << "FAILED!\n    Uncaught exception: " << e.what() << "\n";
+        ++g_test_failures;
+    } catch (...) {
+        std::cout << "FAILED!\n    Uncaught exception of an unknown type\n";
+        ++g_test_failures;
+    }
     if (g_test_failures == prev_fails) {
         std::cout << "PASS\n";
     }

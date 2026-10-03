@@ -3228,8 +3228,10 @@ struct WideRendererRig {
 /// TrueType text is masked as in the classic frames: the boxes of the labels of the wide picture (fixed rectangles) and the plate in the canvas's corner
 const MaskRect kWMaskPlate{790, 526, 960, 540};
 /// The match screen's labels: the status line (801, 254) 139 px, the chat log (802, 299) 138 x 161, the chat input (801, 484) 139 px, the score labels (the local one at (632 .. 719, 4), the
-/// bottom ones (325 .. 421, 483 .. 571, 632 .. 719) x 524)
-const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942, 462}, {799, 482, 942, 498}, {630, 2, 722, 20}, {323, 522, 423, 540}, {481, 522, 573, 540}, {630, 522, 722, 540}};
+/// bottom ones right aligned in [113, 209), [377, 465) and [632, 719) x 524: ScreenLayout::score_slot(1 .. 3) of the 960 x 540 picture, whose cuts move the classic slots (5 .. 101, 163 .. 251,
+/// 312 .. 399) right by 108, 214 and 320). The masks of the two left ones used to lie at 323 .. 423 and 481 .. 573, beside their labels, so "Red:" and "Blue:" were hashed: SDL's alpha blit
+/// rounds differently on x86-64 and on ARM, so the 22 fingerprints that show them failed on every x86-64 machine (the Linux and Windows jobs of .github/workflows/ci.yml found it)
+const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942, 462}, {799, 482, 942, 498}, {630, 2, 722, 20}, {111, 522, 211, 540}, {375, 522, 467, 540}, {630, 522, 722, 540}};
 /// The "Get ready" dialog's two labels and the quit dialog's prompt, moved by the dialog origin (137, 59)
 const std::vector<MaskRect> kWMaskStartModal = {{265, 167, 509, 331}, {265, 347, 509, 373}};
 const std::vector<MaskRect> kWMaskQuit = {{265, 237, 529, 401}};
@@ -3434,10 +3436,10 @@ void app_pixel_wide_scenarios() {
             rig.shot("px.wide.app.match.quit_dialog", wide_masks({&kWMaskMatch, &kWMaskQuit}));
             rig.app.hud().close_quit_dialog();
             rig.app.hud().open_options();
-            rig.shot("px.wide.app.match.options_page", wide_masks({&kWMaskOptions}));
+            rig.shot("px.wide.app.match.options_page", wide_masks({&kWMaskMatch, &kWMaskOptions}));
             rig.app.hud().close_options();
             rig.app.hud().open_quick_help();
-            rig.shot("px.wide.app.match.quickhelp_page", wide_masks({}));
+            rig.shot("px.wide.app.match.quickhelp_page", wide_masks({&kWMaskMatch}));
             rig.app.hud().close_quick_help();
             rig.pointer_at(300, 300);
             rig.shot("px.wide.app.match.cursor_map", wide_masks({&kWMaskMatch}));
@@ -4186,28 +4188,28 @@ const Golden kGoldens[] = {
     {"px.wide.app.quickhelp.rest", 0x174b067d6bc59e00, 518400},
     {"px.wide.app.quickhelp.hover_start", 0x76c3bbba45f90b9c, 518400},
     {"px.wide.app.results", 0x5e72ea394f3c73a0, 518400},
-    {"px.wide.app.match.modal", 0xf49841cb6f991073, 518400},
-    {"px.wide.app.match.start_view", 0x6cd44d692c413fba, 518400},
-    {"px.wide.app.match.cam_tl", 0x97e39b81c5a5682d, 518400},
-    {"px.wide.app.match.cam_t", 0xadef8bca06c3958e, 518400},
-    {"px.wide.app.match.cam_tr", 0xf88503cb713ee12e, 518400},
-    {"px.wide.app.match.cam_l", 0xf088aedcd79df65e, 518400},
-    {"px.wide.app.match.cam_mid", 0x72f5aed9374f8c32, 518400},
-    {"px.wide.app.match.cam_r", 0x82c4c2e5ee6a049c, 518400},
-    {"px.wide.app.match.cam_bl", 0xe35b448528c6ec07, 518400},
-    {"px.wide.app.match.cam_b", 0x2d2ea9bb30f1db12, 518400},
-    {"px.wide.app.match.cam_br", 0x844fb3278dcff684, 518400},
-    {"px.wide.app.match.quit_dialog", 0xfe4b2fc186d9fdec, 518400},
-    {"px.wide.app.match.options_page", 0x815166b8d060a683, 518400},
-    {"px.wide.app.match.quickhelp_page", 0xbc2aac1643eb96d6, 518400},
-    {"px.wide.app.match.cursor_map", 0xf2d8e4ab5fc9b8d3, 518400},
-    {"px.wide.app.match.cursor_edge", 0x37cfc5c575162060, 518400},
-    {"px.wide.app.match.cursor_edge_east", 0xf4b67ad239a6ee95, 518400},
-    {"px.wide.app.start.TINY", 0x0a719e96531996a2, 518400},
-    {"px.wide.app.start.SMALL", 0xd101173a3f7fbbe5, 518400},
-    {"px.wide.app.start.ISLANDS", 0xb24544c266524339, 518400},
-    {"px.wide.app.start.GAUNTLET", 0x3aa378a37adbd566, 518400},
-    {"px.wide.app.start.TREASURE", 0x41d35017d47b5592, 518400},
+    {"px.wide.app.match.modal", 0x8d419e9f8501e52e, 518400},
+    {"px.wide.app.match.start_view", 0xd765a4a26ad4016f, 518400},
+    {"px.wide.app.match.cam_tl", 0xf19b355a5395c138, 518400},
+    {"px.wide.app.match.cam_t", 0x050369ad1ee20bfb, 518400},
+    {"px.wide.app.match.cam_tr", 0xdc84467c2cc25cdb, 518400},
+    {"px.wide.app.match.cam_l", 0x034ab9a1602327ab, 518400},
+    {"px.wide.app.match.cam_mid", 0x7d97859e8b29c4d7, 518400},
+    {"px.wide.app.match.cam_r", 0x4854469b13abcbe1, 518400},
+    {"px.wide.app.match.cam_bl", 0x35f62f16f716266a, 518400},
+    {"px.wide.app.match.cam_b", 0x67453223c42b2c77, 518400},
+    {"px.wide.app.match.cam_br", 0xb82828fd3358d899, 518400},
+    {"px.wide.app.match.quit_dialog", 0x4d7d9fcf69d8da11, 518400},
+    {"px.wide.app.match.options_page", 0x1f47c5b6a481c44b, 518400},
+    {"px.wide.app.match.quickhelp_page", 0xb93e3c6b38410c22, 518400},
+    {"px.wide.app.match.cursor_map", 0xc93c3e5ccd442bce, 518400},
+    {"px.wide.app.match.cursor_edge", 0x0b041ac2e8f6500d, 518400},
+    {"px.wide.app.match.cursor_edge_east", 0x013f74e333517430, 518400},
+    {"px.wide.app.start.TINY", 0xb150432a2667ab27, 518400},
+    {"px.wide.app.start.SMALL", 0x8ecf4e6e210beea0, 518400},
+    {"px.wide.app.start.ISLANDS", 0x87b9b73492df719c, 518400},
+    {"px.wide.app.start.GAUNTLET", 0xc330e6bb849f9783, 518400},
+    {"px.wide.app.start.TREASURE", 0x9cde75b9ccfac4f7, 518400},
 };
 // END GOLDEN TABLE
 
