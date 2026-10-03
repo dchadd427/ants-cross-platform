@@ -497,6 +497,37 @@ check "demo-small-2p-t5 is made on SMALL.LVL for two players" "$([ "$(map_of_roo
 for p in $PICK_PIDS; do kill "$p" 2> /dev/null; done
 stop_server
 
+# the stack's own defaults: docker-compose.stack.yml, read as the stack starts it with nothing set in its environment (tests/scripts/stack_command.py), gives the demo options of the
+# public site. A code that names no map is made on its --demo-map, TREASURE.LVL (the map that is played most); a code that names another map of the six is made on that one
+STACK_OPTS="$(python3 "$ROOT/tests/scripts/stack_command.py" "$ROOT/docker-compose.stack.yml" --demo 2> /dev/null)"
+check "docker-compose.stack.yml: the demo options can be read (--demo-rooms, --demo-map and --demo-maps with their defaults)" "$([ -n "$STACK_OPTS" ]; echo $?)"
+check "docker-compose.stack.yml: the default --demo-map is TREASURE.LVL" "$(echo "$STACK_OPTS" | grep -q -- '--demo-map TREASURE.LVL '; echo $?)"
+STACK_PORT="$(free_port)"
+STACK_CTL="$(free_port)"
+# (the options are words without blanks or wildcards: they are split on purpose)
+# shellcheck disable=SC2086
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$STACK_PORT" --ctl-port "$STACK_CTL" $STACK_OPTS > "$WORK/stack_demo.log" 2>&1 &
+SERVER_PID=$!
+STACK_UP=1
+for _ in $(seq 1 50); do
+    if curl -s -m 1 "http://127.0.0.1:$STACK_CTL/healthz" | grep -q '"ok"'; then STACK_UP=0; break; fi
+    kill -0 "$SERVER_PID" 2> /dev/null || break
+    sleep 0.1
+done
+check "a server started with the stack's own demo options runs (the six maps are in the folder)" "$STACK_UP"
+STACK_PIDS=""
+for code in demo-n1 demo-tiny-n2 demo-treasure-n3 demo-islands-2p-n4; do
+    "$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$STACK_PORT" --room "$code" --frames 400 > "$WORK/stack_$code.log" 2>&1 &
+    STACK_PIDS="$STACK_PIDS $!"
+done
+stack_map_of_room() { for _ in $(seq 1 60); do M="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$STACK_CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("map", ""))' 2> /dev/null)"; [ -n "$M" ] && break; sleep 0.2; done; echo "$M"; }
+check "the stack: demo-n1 (no map in the code) is made on the default map, TREASURE.LVL" "$([ "$(stack_map_of_room demo-n1)" = "TREASURE.LVL" ]; echo $?)"
+check "the stack: demo-tiny-n2 is made on TINY.LVL (a code that names a map still chooses it)" "$([ "$(stack_map_of_room demo-tiny-n2)" = "TINY.LVL" ]; echo $?)"
+check "the stack: demo-treasure-n3 is made on TREASURE.LVL" "$([ "$(stack_map_of_room demo-treasure-n3)" = "TREASURE.LVL" ]; echo $?)"
+check "the stack: demo-islands-2p-n4 is made on ISLANDS.LVL" "$([ "$(stack_map_of_room demo-islands-2p-n4)" = "ISLANDS.LVL" ]; echo $?)"
+for p in $STACK_PIDS; do kill "$p" 2> /dev/null; done
+stop_server
+
 # ---- the server that holds the seat of a player whose connection is lost (protocol 10, --reconnect) --------------------------------------------------------------
 # The game's own clients do not come back yet (that is release B: a native client whose link is cut is lost, the message below says so). What is tested here is the SERVER, with
 # real programs: a client behind a proxy that is cut, a client that is stopped. The room pauses for everybody and names the seat, nothing runs while it waits, the cap (60 s here)

@@ -1041,6 +1041,33 @@ void run_demo_tests() {
         ASSERT_EQ(static_cast<int>(s2.status("demo-small-2p-duel").joined), 2);
     } TEST_END();
 
+    TEST_CASE("S3.74 The Public Stack's Demo Rooms (docker-compose.stack.yml: --demo-map TREASURE.LVL and the six maps of the page): A Code That Names No Map Is Made On TREASURE.LVL For Four Players; A Code That Names One Of The Six Is Made On It, Whatever Its Case; The Players Word Is Read With And Without A Map") {
+        ServerLimits limits;                                                      // the options of the stack file: --demo-rooms 12 --demo-map TREASURE.LVL --demo-maps <the six>
+        limits.demo_rooms = 12;
+        limits.demo_map = "TREASURE.LVL";
+        limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
+        World w(limits);
+        auto made = [&](const std::string& code) {
+            w.connect("P", code);
+            w.run(300);
+            return w.status(code);
+        };
+        struct Case { const char* code; const char* map; int players; };
+        const Case cases[] = {
+            {"demo-x7k2", "TREASURE.LVL", 4}, {"demo-abc", "TREASURE.LVL", 4},    // the page's old codes and every other code that names no map: the default map
+            {"demo-2p-n", "TREASURE.LVL", 2},                                      // a players word without a map: the default map
+            {"demo-tiny-a", "TINY.LVL", 4}, {"demo-small-b", "SMALL.LVL", 4}, {"demo-medium-c", "MEDIUM.LVL", 4},      // a map of the page's six: that map, four players
+            {"demo-gauntlet-d", "GAUNTLET.LVL", 4}, {"demo-treasure-e", "TREASURE.LVL", 4}, {"demo-islands-f", "ISLANDS.LVL", 4},
+            {"demo-ISLANDS-3p-g", "ISLANDS.LVL", 3}, {"demo-tiny-2p-h", "TINY.LVL", 2},                                // whatever the case, and with the players word
+        };
+        for (const Case& c : cases) {
+            const RoomStatus st = made(c.code);
+            ASSERT_MSG(st.map == c.map, c.code);
+            ASSERT_MSG(static_cast<int>(st.expected) == c.players, c.code);
+        }
+        ASSERT_EQ(w.mgr.room_count(), sizeof(cases) / sizeof(cases[0]));
+    } TEST_END();
+
     TEST_CASE("S3.25 Friends Who Come Late: A Demo Room Waits Ten Minutes By Default; A Code Whose Demo Room Is Over Makes A New One (Its End Is Still Reported); A Room Of The Control Interface That Is Over Answers \"No Such Room\", Not \"Match Running\"") {
         ASSERT_EQ(ServerLimits().demo_wait_ms, 600000u);
         ServerLimits limits;

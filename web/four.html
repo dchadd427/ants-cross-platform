@@ -250,6 +250,9 @@
             { key: 'tiny', name: 'Tiny' }, { key: 'small', name: 'Small' }, { key: 'medium', name: 'Medium' },
             { key: 'gauntlet', name: 'Gauntlet' }, { key: 'treasure', name: 'Treasure' }, { key: 'islands', name: 'Islands' }
         ];
+        // The map that the form offers until a choice is remembered (a remembered choice and ?map= win). The list keeps its order, by size, so the form would open on its first entry, Tiny: the
+        // order does not choose the default. Treasure is the map that is played most (the owner's request: Treasure is the default of everything).
+        var DEFAULT_MAP_KEY = 'treasure';
         var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
         var names = NAMES.slice().sort(function () { return 0.5 - Math.random(); });
 
@@ -513,6 +516,7 @@
             o.value = m.key; o.textContent = m.name;
             mapSelect.appendChild(o);
         });
+        mapSelect.value = DEFAULT_MAP_KEY;
         var last = recall('ants-four-map');
         if (last && mapByKey(last)) mapSelect.value = last;
         var playersSelect = $('players');
@@ -522,7 +526,7 @@
         fillSelect.value = validFill(recall('ants-four-fill'));
         // The code carries the choice (the server reads it: demo-<map>-<n>p-<random>)
         function create(mapKey, play, n, fillLevel) {
-            var m = mapByKey(mapKey) || MAPS[0];
+            var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
             var players = (n === 2 || n === 3 || n === 4) ? n : 4;
             var level = validFill(fillLevel);
             remember('ants-four-map', m.key);

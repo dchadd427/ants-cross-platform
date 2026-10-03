@@ -25,7 +25,7 @@ services:
     # The page web/four.html (Play online) needs demo rooms, which are off by default: uncomment to allow them. The maps folder must hold the demo map and every map of
     # --demo-maps (the page offers the six maps of the original); the number of rooms is 1 to 255 (0, or 256 and more, stop the server at startup); a demo room waits
     # ten minutes for its players; whoever reaches a game port can fill the rooms.
-    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "12", "--demo-map", "TINY.LVL", "--demo-maps", "TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL"]
+    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "12", "--demo-map", "TREASURE.LVL", "--demo-maps", "TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL"]
     # Reconnect (network protocol 10, release A: the server's side only): "--reconnect" makes rooms hold the seat of a player whose connection is lost and pause the match for
     # everybody (the others vote after 30 s: "--hold-vote-seconds" 5 - 3600; the match's total pause is capped: "--max-pause-seconds" 60 - 86400, default 1800; one absence may spend "--max-catch-up-seconds" 10 - 3600 (300) catching up; after a pause of 3 s or more the match is held for "--resume-countdown-seconds" 0 - 60 (10) before it goes on; the turn log that
     # a returning player is given is at most "--log-mb" 1 - 256 MiB a room, 256 MiB for all rooms). Off by default, because the game's own clients do not come back yet (release B):
