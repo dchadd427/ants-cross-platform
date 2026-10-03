@@ -131,7 +131,7 @@ JSON.stringify((function () {
            fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement), pseudo: stage.classList.contains('pseudo-fullscreen'),
            stage: r(stage), box: r(box), canvas: r(cv), bar: r(bar), backing: [cv.width, cv.height], ready: !!window.isReadyToPlay,
            scroll: [de.scrollWidth, de.clientWidth, de.scrollHeight, de.clientHeight],
-           checked: Array.prototype.map.call(document.querySelectorAll('.seg button'), function (b) { return b.getAttribute('data-aspect') + '=' + b.getAttribute('aria-checked'); }) };
+           checked: Array.prototype.map.call(document.querySelectorAll('.seg button[data-aspect]'), function (b) { return b.getAttribute('data-aspect') + '=' + b.getAttribute('aria-checked'); }) };
 })())
 """
 

@@ -1447,6 +1447,24 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
     return (g_web_app != nullptr && g_web_app->match_running()) ? 1 : 0;
 }
+
+// For the page's browser check (tests/scripts/web_edge_check.py): what the game believes about the pointer and the view, read-only. 0 and 1: the pointer's x and y on the picture (what the
+// game draws its cursor at and scrolls from); 2: 1 while the game takes the pointer as gone from its window (no cursor, no scrolling); 3 and 4: the map view's origin in world pixels
+// (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
+// Anything else, or no game: -1.
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
+    if (g_web_app == nullptr) return -1;
+    switch (what) {
+        case 0: return g_web_app->mouse_screen_x();
+        case 1: return g_web_app->mouse_screen_y();
+        case 2: return g_web_app->pointer_outside() ? 1 : 0;
+        case 3: return g_web_app->match_running() ? g_web_app->renderer().camera().world_x : -1;
+        case 4: return g_web_app->match_running() ? g_web_app->renderer().camera().world_y : -1;
+        case 5: return g_web_app->match_running() ? (g_web_app->hud().is_modal_open() ? 1 : 0) : -1;
+        case 6: return static_cast<int>(g_web_app->zoom() * 100.0f + 0.5f);
+        default: return -1;
+    }
+}
 #endif
 
 int Application::run() {
