@@ -30,6 +30,8 @@ This document tracks the verified build environments, configuration steps, and t
 ## macOS and Linux
 ```bash
 brew install cmake sdl2 sdl2_ttf          # macOS (Linux: cmake g++ libsdl2-dev libsdl2-ttf-dev)
+# (macOS: Homebrew's sdl2 is now sdl2-compat, SDL2 on top of SDL3; the game builds with it but eight test programs fail. The project is developed with real SDL2 2.32.x:
+#  README.md, "Prerequisites & Dependencies", has the steps that build it from the release sources.)
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
 ./build/src/ants_app/ants

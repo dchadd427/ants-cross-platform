@@ -1,10 +1,9 @@
 # Status
 
-_Updated 2026-10-02 19:43 PDT · current release **v0.0.100** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-02 22:05 PDT · current release **v0.1.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- Mouse-wheel zoom: built, being moved onto 16:9, then a short review
-- Automatic builds and tests on Windows, macOS and Linux for every push: being set up
+- Workflow streamlining (one version source, short changelog, quick tests): next, approved
 
 ## On hold (not started; the owner decides when)
 - Reconnect part B: the games rejoin by themselves (also after a crash or power cut), Rejoin buttons, the resume countdown on screen; then on by default
@@ -15,7 +14,7 @@ _Updated 2026-10-02 19:43 PDT · current release **v0.0.100** · details: [CHANG
 - Dead-code cleanup, Docker hardening, short room codes, replays, match API, an option to match the monitor's aspect
 
 ## Recently done
-- **v0.0.100** online rooms: bots fill the empty seats at START (the leader's choice, one person can start alone), chat in the waiting room with a chat box on the 16:9 setup screen, team chat only to allies; the web game starts in 16:9 on every device, phones held upright included; network protocol 11 (a v0.0.99 game cannot join)
+- **v0.1.0** online rooms with bots and chat, team chat only to allies, mouse-wheel zoom (0.5 / 1 / 2; no zoom-out in a network match), the web game 16:9 on every device; automatic builds and tests on Windows, macOS and Linux for every push (GitHub Actions); network protocol 11 (a v0.0.99 game cannot join)
 - **v0.0.99** the game is 16:9 by default: more map, a frame grown from the original's art, the web page in 16:9 (exact pointer, load failures shown), a wide setup screen with a map preview; classic 4:3 stays selectable (`--aspect 4:3`, `?aspect=4:3`)
 - **v0.0.98** reconnect part A: a server can hold a lost player's seat (match paused, vote after 30 s, 10 s countdown before it goes on); off by default, the games do not rejoin yet; network protocol 10 (a v0.0.97 game cannot join)
 - **v0.0.97** the desktop start menu: Single player with bots per seat, Join with a code, Host an online match (the native game only; the web game and every original screen unchanged)

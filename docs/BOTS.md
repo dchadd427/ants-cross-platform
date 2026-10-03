@@ -30,6 +30,8 @@ Project rule 8 ([`AGENTS.md`](../AGENTS.md)) allows bots as virtual clients, in 
 
 **What a bot may command.** Nothing a human could not click: at most 24 ants per command (a chosen conservative cap: the remake's HUD lets a person send up to 32, and the original's limit has not been established), special orders (bomb, defuse, fire, extinguish, bridge) and thief raids name exactly one ant, no `Quit`, no `Drop`, never an attack on an ally (a break of the alliance comes first and a bot never does that to attack), no command for another seat's ants.
 
+**The human's zoom (v0.1.0) is no part of any of this.** The mouse-wheel zoom changes what a person's screen shows, never what the simulation holds: a bot reads the world through `BotView`, which has no camera and no view, and no state hash depends on the zoom. A match that the leader's START filled with bots is a match of the network, which **offers no zoom-out** (a person could not then see more of the map than the others); a local game against `--bot` seats does offer it, as every local game does (`docs/NETWORK_PORT.md`, "The view's zoom and the network").
+
 **Honesty.** Bots are deterministic given the match seed and the seat (integer arithmetic, a private random generator, no clock), so a match can be reproduced and a recorded match replays from its commands alone, without any bot.
 
 ## What the game looks like to a bot (measured)
@@ -261,7 +263,7 @@ Each step is a release with the full test suite.
 - **B4a abilities that earn**: island hops (ISLANDS), the swimmer ferry (SMALL).
 - **B4b tactics**: the standard bot with its three levels: power-ups, raids, defence, fights, alliances.
 - **B5 tournaments**: tuning by self-play, regression ladder, community-map sweep.
-- **B6 integration**: server room specification (**built**: `bots`, protocol 11), the leader's fill (**built**) with its choices on the desktop Host panel and the web page (**built**; the status line says what START will do), results and replays, the match API, and, built in v0.0.100, the chat box of the 16:9 setup screen with the leader's fill footer (the classic screen keeps T / a click on the status line).
+- **B6 integration**: server room specification (**built**: `bots`, protocol 11), the leader's fill (**built**) with its choices on the desktop Host panel and the web page (**built**; the status line says what START will do), results and replays, the match API, and, built in v0.1.0, the chat box of the 16:9 setup screen with the leader's fill footer (the classic screen keeps T / a click on the status line).
 
 ## Known limits
 
