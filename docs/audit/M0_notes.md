@@ -654,11 +654,21 @@ Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel 
 - **A pinch** calls the API above; the gestures (two-finger scroll, a long press for the right button) are not built.
 - **The web page**: verified by reading only; the 16:9 web page (M5) must keep the listeners.
 
+### The ants in the screenshots (a question from the review of the first pictures, answered)
+
+The first screenshots of the zoom (`ants --headless --map ... --screenshot ... --frames 12`) showed the hit point digits of the ants where they stand but not the ants. **That is not a regression**:
+
+- **Cause.** That picture is taken before the first simulation tick. The headless frames take far less than the 50 ms of a tick, so the clock still reads 10:00 (a run that happens to be slower shows 9:59 and the ants: two of my first runs differed in exactly that). Until the first tick an ant has no animation clip: `draw_single_ant` has no frame to draw, while its digits (Ctrl+L, drawn from the same list of ants) are. So the picture has the digits and no sprites.
+- **Evidence.** 42ef62d (the base) was built and the same command taken with it and with the tip, three times each: the six pictures are identical pixel for pixel, digits without ants included. A match that has ticked (the match-start modal dismissed, 40 frames of 16 ms: tick 3, 9:59) is pixel for pixel the same at the zoom 1 on 42ef62d and on the tip for GAUNTLET, TINY and SMALL in the 16:9 and the classic picture (six pairs); the M3 screenshot of the start view was taken that way (9:59). The ticked pictures at 0.5 and 2 show the ants.
+- **Why no test pinned it, and what pinned ants already.** The renderer-level scenes do draw ants (`populate` gives each a clip): `px.world.*` of suite 3.10 and `zoom.world.*` of 3.20, the groups "pass" and "out" of 3.19. They killed every "no ant at a zoom" mutation I tried (RN40 - RN44, RN46 were run against the suites before the new tests: all killed). What no test had was an application frame WITH ants: the application frames of 3.10 (`px.app.match.*`) and 3.20 (`zoom.app.*`) are taken at once after the start, at tick 0, so they show digits and no sprites (they are kept: they pin the frame as the application draws it at the start).
+- **Added.** In 3.20, `zoom.app.ants.{classic,wide}.{GAUNTLET,TINY}.z{0.5,1,2}` (12 fingerprints, the zoom 1 ones deliberately): whole frames after six ticks, each with a check that more than 300 pixels of the view differ from the frame before the first tick (the ants are in the picture). In 3.19, the group "ants": a real match after six ticks, the camera put at an ant of the local player; at the zoom 1 the sprites make a difference to the view that the same world without ants does not have, the zoom 2 picture is the nearest enlargement of the zoom 1 picture (ants included), and at 2 and 0.5 the ants are drawn; and in "pass" a check that the ants of the renderer scene are drawn. `test_zoom_view --only NAME` runs a single group (a diagnosis aid). Under RN40 - RN44 the new tests fail on their own (`--only ants` of 3.19 and `--only zoom.app.ants` of 3.20), RN46 is killed by the new fingerprints and by the older groups.
+- **The shots tool.** The 12 PNGs for the report are taken from a match that has ticked (a scratch tool, not in the repository); the first set, from before the first tick, is kept beside them for comparison.
+
 ### Proof
 
-- **Suite 3.18 `test_zoom_model`** (176,551 checks), **3.19 `test_zoom_view`** (4,501 checks, about 4 s) and **3.20 `test_zoom_fingerprint`** (126 fingerprints, 259 checks): see the README's table of suites. The first is pure numbers with every expectation written out independently of the header; the second drives the real renderer (the software renderer under SDL's dummy video driver), HUD and application and compares the pictures **with each other** (the target path with the direct path, the zoom 2 picture with the enlarged zoom 1 picture, the zoom 0.5 picture with its 2 x 2 average); the third pins the pictures and the pointer at 0.5 and 2 as 64-bit numbers, the way suite 3.10 pins the zoom 1. Every other suite is unchanged and passes, **including all 551 fingerprints of 3.10 (zoom 1 is exactly today's picture)**. The same hashes come out on macOS (clang, SDL 2.32.10) and Debian 12 (GCC 12.2, SDL 2.26.5).
+- **Suite 3.18 `test_zoom_model`** (176,551 checks), **3.19 `test_zoom_view`** (4,557 checks, about 4 s) and **3.20 `test_zoom_fingerprint`** (138 fingerprints, 319 checks): see the README's table of suites. The first is pure numbers with every expectation written out independently of the header; the second drives the real renderer (the software renderer under SDL's dummy video driver), HUD and application and compares the pictures **with each other** (the target path with the direct path, the zoom 2 picture with the enlarged zoom 1 picture, the zoom 0.5 picture with its 2 x 2 average); the third pins the pictures and the pointer at 0.5 and 2 as 64-bit numbers, the way suite 3.10 pins the zoom 1. Every other suite is unchanged and passes, **including all 551 fingerprints of 3.10 (zoom 1 is exactly today's picture)**. The same hashes come out on macOS (clang, SDL 2.32.10) and Debian 12 (GCC 12.2, SDL 2.26.5).
 - **A test hook for each path that cannot happen in the game**: `Renderer::set_force_world_target(true)` makes the zoom 1 pass go through the offscreen target (the equality test of the two paths), `set_fail_world_target(true)` makes the target impossible (the fall-back to the zoom 1 picture), and `world_target_passes()` counts the passes through the target (the zoom 1 never uses it; the forced and the zoomed pass use it once), so that a test that compares two paths can see that it really took the one it asks for (mutation RN29 found a comparison of the direct path with itself).
-- **Mutations** (one change at a time in a scratch copy, the three suites rebuilt and run, the file restored; the older suites 3.10, 3.13, 3.15, 3.4, 3.5 and 3.11 are run for a mutation that none of the three kills): 153 mutations of the model, the camera, the renderer, the HUD, the edge scroll and the application (a zoom that does not anchor, a clamp that is not applied, a grid of the wrong size, a flipped wheel that is not undone, a limit that does not apply in a network match, a filter swapped, the digits drawn at the zoom's size, a copy that drops the half pixel, a zoom-out offered on a map that fits, a middle button that reaches the HUD ...). **148 are killed by the three new suites, 1 by the older suites only (ES06: the tiles form of the minimap scroll, used by 3.10, 3.13 and 3.4), and 4 are equivalent** (explained in the table: a map exactly as large as the view is 0 either way, the whole part of the camera's origin is always the floor of it, `set_zoom` asks again what `step_zoom` asked, and the start view scrolls from an origin that was set to 0 one line before). How the table came about: the first run (148 mutations) left 14 that no suite killed; ten of them got tests (the right click on an ant at a zoom, Ctrl+N and Ctrl+P at half-pixel origins and where the view has to move right and down, an anchor outside the view in x and in y, `zoom_levels()` in a match of the network, the level 1 under any limits, the fall-back of the world pass and a pass counter: RN29, a hook that made a "forced pass" compare the direct path with itself, was found that way), four are the equivalents, and five mutations were added for the new hooks. **Then a flaw of the runner showed: it read the exit code of `tail`, not of `cmake`, so a mutation that did not compile (an unused variable or parameter is an error under -Werror) was run against the binaries of the mutation before it, and was counted as killed or as a survivor by those (AP28 "survived" twice and was "killed" once for that reason).** The runner now stops at a build error; the whole set of 153 was run again on the final tree, 11 mutations did not compile (VZ15, VZ18, VZ23, VZ24, CM08, RN10, RN20, AP12, ES02, ES04, RN36), they were rewritten to compile (an `(void)` for a variable that became unused, `true ||` for a condition that is bypassed) and run again: the table below is that run. The numbers under "killed by" count the FAIL lines that a suite prints (at most 80 per suite).
+- **Mutations** (one change at a time in a scratch copy, the three suites rebuilt and run, the file restored; the older suites 3.10, 3.13, 3.15, 3.4, 3.5 and 3.2 are run for a mutation that none of the three kills): 159 mutations of the model, the camera, the renderer (the sprite pass included), the HUD, the edge scroll and the application (a zoom that does not anchor, a clamp that is not applied, a grid of the wrong size, a flipped wheel that is not undone, a limit that does not apply in a network match, a filter swapped, the digits drawn at the zoom's size, a copy that drops the half pixel, a zoom-out offered on a map that fits, a middle button that reaches the HUD, no ant drawn at a zoom ...). **154 are killed by the three new suites, 1 by the older suites only (ES06: the tiles form of the minimap scroll, used by 3.10, 3.13 and 3.4), and 4 are equivalent** (explained in the table: a map exactly as large as the view is 0 either way, the whole part of the camera's origin is always the floor of it, `set_zoom` asks again what `step_zoom` asked, and the start view scrolls from an origin that was set to 0 one line before). How the table came about: the first run (148 mutations) left 14 that no suite killed; ten of them got tests (the right click on an ant at a zoom, Ctrl+N and Ctrl+P at half-pixel origins and where the view has to move right and down, an anchor outside the view in x and in y, `zoom_levels()` in a match of the network, the level 1 under any limits, the fall-back of the world pass and a pass counter: RN29, a hook that made a "forced pass" compare the direct path with itself, was found that way), four are the equivalents, and five mutations were added for the new hooks. **Then a flaw of the runner showed: it read the exit code of `tail`, not of `cmake`, so a mutation that did not compile (an unused variable or parameter is an error under -Werror) was run against the binaries of the mutation before it, and was counted as killed or as a survivor by those (AP28 "survived" twice and was "killed" once for that reason).** The runner now stops at a build error; the whole set was run again, 11 mutations did not compile (VZ15, VZ18, VZ23, VZ24, CM08, RN10, RN20, AP12, ES02, ES04, RN36), they were rewritten to compile (an `(void)` for a variable that became unused, `true ||` for a condition that is bypassed) and run again. Last, the question about the ants (below) added six mutations of the sprite pass (RN40 - RN44, RN46), and **the whole set of 159 was run once more on the final tree: the table below is that run.** The numbers under "killed by" count the FAIL lines that a suite prints (at most 80 per suite).
 
 | # | Mutation | Killed by (suite: failing checks) |
 |---|---|---|
@@ -670,11 +680,11 @@ Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel 
 | M4-VZ06 | `view_zoom.hpp`: the edge of a pixel rounds down | killed (3.18: 60, 3.19: 2, 3.20: 2) |
 | M4-VZ07 | `view_zoom.hpp`: the lower limit is not enforced (a network match could zoom out) | killed (3.18: 56, 3.19: 11) |
 | M4-VZ08 | `view_zoom.hpp`: the upper limit is not enforced | killed (3.18: 4) |
-| M4-VZ09 | `view_zoom.hpp`: no zoom in is offered | killed (3.18: 60, 3.19: 80, 3.20: 4) |
+| M4-VZ09 | `view_zoom.hpp`: no zoom in is offered | killed (3.18: 60, 3.19: 80, 3.20: 12) |
 | M4-VZ10 | `view_zoom.hpp`: a zoom-out is offered only when the map exceeds BOTH axes | killed (3.18: 5) |
 | M4-VZ11 | `view_zoom.hpp`: the edge of the fit rule in x | killed (3.18: 1) |
 | M4-VZ12 | `view_zoom.hpp`: the edge of the fit rule in y | killed (3.18: 1) |
-| M4-VZ13 | `view_zoom.hpp`: the level above is the level itself | killed (3.18: 12, 3.19: 6, 3.20: 1) |
+| M4-VZ13 | `view_zoom.hpp`: the level above is the level itself | killed (3.18: 12, 3.19: 6, 3.20: 3) |
 | M4-VZ14 | `view_zoom.hpp`: step goes the other way | killed (3.18: 60, 3.19: 57) |
 | M4-VZ15 | `view_zoom.hpp`: step does not skip a level that is not offered | killed (3.18: 38) |
 | M4-VZ16 | `view_zoom.hpp`: a current level that is no level counts as 0.5 | killed (3.18: 24) |
@@ -694,13 +704,13 @@ Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel 
 | M4-VZ30 | `view_zoom.hpp`: the steps of one event are not bounded | killed (3.18: 1) |
 | M4-VZ31 | `view_zoom.hpp`: a number that rounds to a level is a level | killed (3.18: 2) |
 | M4-VZ32 | `view_zoom.hpp`: any character is accepted in a level (1e0, 0x1) | killed (3.18: 5, 3.19: 1) |
-| M4-VZ33 | `view_zoom.hpp`: level_name of 0.5 | killed (3.18: 1, 3.20: 120) |
+| M4-VZ33 | `view_zoom.hpp`: level_name of 0.5 | killed (3.18: 1, 3.20: 128) |
 | M4-VZ35 | `view_zoom.hpp`: the level 1 follows the limits (equivalent: min is 1 at most) | killed (3.18: 1) |
 | M4-CM01 | `renderer.cpp`: center_on centres by the screen size at a zoom (x) | killed (3.18: 8, 3.19: 14, 3.20: 8) |
 | M4-CM02 | `renderer.cpp`: center_on centres by the screen size at a zoom (y) | killed (3.18: 8, 3.19: 9, 3.20: 8) |
 | M4-CM03 | `renderer.cpp`: the camera clamp does not snap (x) | killed (3.18: 44, 3.19: 80) |
 | M4-CM04 | `renderer.cpp`: the camera clamp does not snap (y) | killed (3.18: 60) |
-| M4-CM05 | `renderer.cpp`: the camera clamp uses the wrong world size | killed (3.18: 60, 3.19: 80, 3.20: 67) |
+| M4-CM05 | `renderer.cpp`: the camera clamp uses the wrong world size | killed (3.18: 60, 3.19: 80, 3.20: 70) |
 | M4-CM06 | `renderer.cpp`: world_x of the zoomed clamp rounds | killed (3.18: 60, 3.19: 8) |
 | M4-CM07 | `renderer.cpp`: the zoom 1 camera never centres a small map (x) | killed (3.18: 48, 3.19: 2) |
 | M4-CM08 | `renderer.cpp`: set_zoom ignores the anchor | killed (3.18: 2, 3.19: 10) |
@@ -720,31 +730,31 @@ Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel 
 | M4-CM22 | `renderer.hpp`: the centre of the view ignores the zoom (y) | killed (3.18: 1, 3.20: 4) |
 | M4-RN01 | `renderer.cpp`: the target has no spare texel in x | killed (3.19: 17, 3.20: 4) |
 | M4-RN02 | `renderer.cpp`: the target has no spare texel in y | killed (3.19: 16, 3.20: 4) |
-| M4-RN03 | `renderer.cpp`: the target starts at the rounded origin (x) | killed (3.19: 22, 3.20: 10) |
+| M4-RN03 | `renderer.cpp`: the target starts at the rounded origin (x) | killed (3.19: 22, 3.20: 11) |
 | M4-RN04 | `renderer.cpp`: no half-pixel shift in x | killed (3.19: 17, 3.20: 5) |
 | M4-RN05 | `renderer.cpp`: no half-pixel shift in y | killed (3.19: 16, 3.20: 5) |
 | M4-RN06 | `renderer.cpp`: the target is not cleared | killed (3.19: 1) |
-| M4-RN07 | `renderer.cpp`: the filters are swapped | killed (3.19: 42, 3.20: 54) |
+| M4-RN07 | `renderer.cpp`: the filters are swapped | killed (3.19: 46, 3.20: 62) |
 | M4-RN08 | `renderer.cpp`: the crop does not skip the shift | killed (3.19: 25, 3.20: 6) |
 | M4-RN09 | `renderer.cpp`: the copy is always one step | killed (3.19: 25, 3.20: 6) |
-| M4-RN10 | `renderer.cpp`: the source is the whole target in x | killed (3.19: 11, 3.20: 26) |
+| M4-RN10 | `renderer.cpp`: the source is the whole target in x | killed (3.19: 11, 3.20: 30) |
 | M4-RN11 | `renderer.cpp`: the copy ignores the shift in x | killed (3.19: 17, 3.20: 4) |
-| M4-RN12 | `renderer.cpp`: the digits are drawn in the pass (they scale) | killed (3.19: 8, 3.20: 48) |
+| M4-RN12 | `renderer.cpp`: the digits are drawn in the pass (they scale) | killed (3.19: 8, 3.20: 56) |
 | M4-RN13 | `renderer.cpp`: the digits are deferred at the zoom 1 too | killed (3.19: 16) |
-| M4-RN14 | `renderer.cpp`: a digit is placed without the zoom (x) | killed (3.19: 8, 3.20: 48) |
-| M4-RN15 | `renderer.cpp`: a digit is placed without the zoom (y) | killed (3.19: 8, 3.20: 48) |
+| M4-RN14 | `renderer.cpp`: a digit is placed without the zoom (x) | killed (3.19: 8, 3.20: 56) |
+| M4-RN15 | `renderer.cpp`: a digit is placed without the zoom (y) | killed (3.19: 8, 3.20: 56) |
 | M4-RN16 | `renderer.cpp`: the map rectangle ignores the zoom (width) | killed (3.19: 2) |
-| M4-RN17 | `renderer.cpp`: the camera is not put back | killed (3.19: 77, 3.20: 48) |
+| M4-RN17 | `renderer.cpp`: the camera is not put back | killed (3.19: 77, 3.20: 56) |
 | M4-RN18 | `renderer.cpp`: the picture is not put back | killed (3.19: 4) |
 | M4-RN19 | `renderer.cpp`: the origin is not put back | killed (3.19: 2) |
 | M4-RN20 | `renderer.cpp`: the zoom is not restored after a frame | killed (3.19: 16) |
-| M4-RN21 | `renderer.cpp`: the zoom is kept after the pass has set it to 1 (the bug of the first screenshots) | killed (3.19: 47, 3.20: 8) |
-| M4-RN22 | `renderer.hpp`: the world code reads the screen view in the pass | killed (3.19: 76, 3.20: 54) |
+| M4-RN21 | `renderer.cpp`: the zoom is kept after the pass has set it to 1 (the bug of the first screenshots) | killed (3.19: 47, 3.20: 16) |
+| M4-RN22 | `renderer.hpp`: the world code reads the screen view in the pass | killed (3.19: 80, 3.20: 63) |
 | M4-RN23 | `renderer.cpp`: the tile grid ignores the zoom | killed (3.19: 2) |
 | M4-RN24 | `renderer.cpp`: render_map_layers ignores the zoom | killed (3.19: 1) |
 | M4-RN25 | `renderer.cpp`: the tile grid is drawn in the pass too | killed (3.19: 2) |
-| M4-RN26 | `renderer.cpp`: the pass camera keeps the zoom | killed (3.19: 45, 3.20: 54) |
-| M4-RN27 | `renderer.cpp`: the pass camera keeps the screen view | killed (3.19: 76, 3.20: 54) |
+| M4-RN26 | `renderer.cpp`: the pass camera keeps the zoom | killed (3.19: 49, 3.20: 65) |
+| M4-RN27 | `renderer.cpp`: the pass camera keeps the screen view | killed (3.19: 80, 3.20: 62) |
 | M4-RN28 | `renderer.cpp`: the pass draws with the picture and the origin of the screen | killed (3.19: 1) |
 | M4-RN29 | `renderer.cpp`: the force hook does nothing in the world pass (a forced pass compares the direct path with itself) | killed (3.19: 16) |
 | M4-RN30 | `renderer.cpp`: no fallback (equivalent while the target can be made) | killed (3.19: 8) |
@@ -764,8 +774,8 @@ Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel 
 | M4-HD12 | `hud.cpp`: the scroll moves world pixels | killed (3.19: 16) |
 | M4-HD13 | `hud.cpp`: Ctrl+N uses the screen view as the world | killed (3.19: 12) |
 | M4-HD14 | `hud.cpp`: Ctrl+N starts from the whole part at a zoom | equivalent: `world_x` is always `floor(x)` (every setter of the camera keeps them together), so the whole part is the same number |
-| M4-HD15 | `hud.cpp`: the minimap frame ignores the zoom (width) | killed (3.19: 16, 3.20: 12) |
-| M4-HD16 | `hud.cpp`: the minimap frame ignores the zoom (height) | killed (3.19: 18, 3.20: 12) |
+| M4-HD15 | `hud.cpp`: the minimap frame ignores the zoom (width) | killed (3.19: 16, 3.20: 20) |
+| M4-HD16 | `hud.cpp`: the minimap frame ignores the zoom (height) | killed (3.19: 18, 3.20: 20) |
 | M4-HD17 | `hud.hpp`: the zoom ignores the dialogs | killed (3.19: 19) |
 | M4-HD18 | `hud.hpp`: the zoom ignores a held press | killed (3.19: 18) |
 | M4-HD19 | `hud.hpp`: the zoom ignores the chat log drag | killed (3.19: 1) |
@@ -793,7 +803,7 @@ Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel 
 | M4-AP20 | `application.cpp`: the wheel event is not handled | killed (3.19: 1) |
 | M4-AP21 | `application.cpp`: the settings key is not read | killed (3.19: 7) |
 | M4-AP22 | `application.cpp`: the key beats --zoom (and is ignored) | killed (3.19: 8) |
-| M4-AP23 | `application.cpp`: the start view ignores the zoom | killed (3.19: 80, 3.20: 6) |
+| M4-AP23 | `application.cpp`: the start view ignores the zoom | killed (3.19: 80, 3.20: 16) |
 | M4-AP24 | `application.cpp`: the listener ignores the zoom (x) | killed (3.19: 80) |
 | M4-AP25 | `application.cpp`: the listener ignores the zoom (y) | killed (3.19: 80) |
 | M4-AP26 | `application.cpp`: --zoom is not an option | killed (3.19: 11) |
@@ -806,7 +816,7 @@ Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel 
 | M4-ES01 | `edge_scroll.hpp`: the tiles form of the edge scroll has half the map | killed (3.18: 3) |
 | M4-ES02 | `edge_scroll.hpp`: the minimap x scale uses the height | killed (3.18: 2) |
 | M4-ES03 | `edge_scroll.hpp`: the minimap square is a third of the view | killed (3.18: 6, 3.19: 6) |
-| M4-ES04 | `edge_scroll.hpp`: the start view ignores the zoom | killed (3.18: 37, 3.19: 80, 3.20: 6) |
+| M4-ES04 | `edge_scroll.hpp`: the start view ignores the zoom | killed (3.18: 37, 3.19: 80, 3.20: 16) |
 | M4-ES05 | `edge_scroll.hpp`: the plain start view is the zoom 0.5 one | killed (3.18: 16) |
 | M4-ES06 | `edge_scroll.hpp`: the tiles form of the minimap scroll has half the height | killed by older suites only (3.10: 6, 3.13: 2, 3.4: 2) |
 | M4-ES07 | `edge_scroll.hpp`: the east edge of the scroll is one pixel early | killed (3.18: 2) |
@@ -815,6 +825,12 @@ Milestone M4 of the widescreen work (sections 52 and 70 of the plan): the wheel 
 | M4-RN35 | `renderer.cpp`: the pass counter does not count | killed (3.19: 56) |
 | M4-RN36 | `renderer.cpp`: render_map_layers leaves the fall-back camera at the zoom 1 | killed (3.19: 1) |
 | M4-RN37 | `renderer.cpp`: the world pass has no fall-back (second look at RN30, with the test hook) | killed (3.19: 8) |
+| M4-RN40 | `renderer.cpp`: no ant is drawn when the world goes through the offscreen target | killed (3.19: 80, 3.20: 70) |
+| M4-RN41 | `renderer.cpp`: no ant is drawn at a zoom (the sprite function returns early) | killed (3.19: 53, 3.20: 62) |
+| M4-RN42 | `renderer.cpp`: no ant is drawn at the zoom 0.5 | killed (3.19: 12, 3.20: 30) |
+| M4-RN43 | `renderer.cpp`: no ant is drawn at the zoom 2 | killed (3.19: 41, 3.20: 32) |
+| M4-RN44 | `renderer.cpp`: the y-sorted sprite queue (plants, ants, effects) is not drawn through the target | killed (3.19: 80, 3.20: 70) |
+| M4-RN46 | `renderer.cpp`: the ants are culled by the screen view at a zoom (the sprite function) | killed (3.19: 8, 3.20: 26) |
 
 - **Screenshots** (the `ants` binary, `--headless --map ... --screenshot ... --frames 12 --zoom Z --aspect ...`): GAUNTLET and TINY at 0.5, 1 and 2, in the 16:9 and the classic picture (12 PNGs, kept outside the repository): the hill is half the size / the size / twice the size of the original's, TINY at 0.5 is centred with black around it, the minimap's frame grows and shrinks with the zoom, the digits of Ctrl+L stay one size.
 - **Timings** (a frame is `begin_frame`, `render_world`, `HUD::render` and a one pixel read-back that makes the GPU finish; GAUNTLET, 160 ants with hit point digits, effects and selection markers; 300 frames each, the scratch tool is not in the repository):
