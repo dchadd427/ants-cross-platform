@@ -45,13 +45,10 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::app;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 namespace {
 

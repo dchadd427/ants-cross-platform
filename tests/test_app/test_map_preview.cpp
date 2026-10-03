@@ -37,13 +37,10 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::app;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 namespace {
 
@@ -120,7 +117,7 @@ uint64_t rgb_digest(const std::vector<uint8_t>& rgba) {
     return h;
 }
 
-constexpr const char* kMapsDir = ORIGINAL_ASSETS_DIR "/Maps";
+const std::string kMapsDir = std::string(ORIGINAL_ASSETS_DIR) + "/Maps";
 const char* const kShipped[] = {"GAUNTLET", "ISLANDS", "MEDIUM", "SMALL", "TINY", "TREASURE"};
 
 assets::LevelData load_level(const std::string& name) {

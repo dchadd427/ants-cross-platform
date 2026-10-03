@@ -65,6 +65,7 @@
 #include "ants_sim/command.hpp"
 #include "ants_sim/movement_tables.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 #ifdef _WIN32
 #include <process.h>
@@ -79,10 +80,6 @@
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
-#endif
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

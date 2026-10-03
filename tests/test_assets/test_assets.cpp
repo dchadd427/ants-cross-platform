@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <cstring>
 #include <functional>
+#include "ants_test_paths.hpp"
 
 namespace fs = std::filesystem;
 

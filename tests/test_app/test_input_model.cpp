@@ -14,12 +14,9 @@
 #include "ants_app/renderer.hpp"
 #include "ants_app/window_layout.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants::app;
-
-#ifndef TEST_DATA_DIR
-#define TEST_DATA_DIR "tests/data"
-#endif
 
 namespace {
 

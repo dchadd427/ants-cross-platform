@@ -24,13 +24,10 @@
 #include "ants_sim/effect_specs.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/movement_tables.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::app;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 namespace {
 

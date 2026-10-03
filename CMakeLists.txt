@@ -7,17 +7,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Compiler cache. When ccache is found (on the PATH, or in ~/.local/bin, where an install without administrator rights puts it) it launches the C and
 # C++ compilers, so that a second build of the same sources (a fresh clone, another worktree, a clean build folder) takes seconds instead of minutes. It is
-# not used with MSVC (the Visual Studio generators do not support a launcher), when the build already names a launcher (CI passes
-# -DCMAKE_CXX_COMPILER_LAUNCHER=ccache itself) and never for Emscripten (the web image). -DANTS_USE_CCACHE=OFF switches it off. The result of a build
+# not used when the build already names a launcher (CI passes -DCMAKE_CXX_COMPILER_LAUNCHER=ccache, and sccache with MSVC under Ninja, itself), with MSVC (the Visual Studio
+# generators do not support a launcher) and never for Emscripten (the web image). -DANTS_USE_CCACHE=OFF switches it off. The result of a build
 # is the same with and without it (ccache replays the compiler's output, warnings included, so -DANTS_WERROR=ON behaves as before).
 option(ANTS_USE_CCACHE "Use ccache as the compiler launcher when it is found" ON)
 if(NOT EMSCRIPTEN)
     if(NOT ANTS_USE_CCACHE)
         message(STATUS "ccache: not used (ANTS_USE_CCACHE=OFF)")
-    elseif(MSVC)
-        message(STATUS "ccache: not used (MSVC)")
     elseif(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
         message(STATUS "ccache: not used (a compiler launcher is already set: '${CMAKE_CXX_COMPILER_LAUNCHER}')")
+    elseif(MSVC)
+        message(STATUS "ccache: not used (MSVC)")
     else()
         find_program(CCACHE_PROGRAM ccache HINTS "$ENV{HOME}/.local/bin")
         if(CCACHE_PROGRAM)
@@ -172,29 +172,38 @@ if(ANTS_BUILD_APP)
     add_subdirectory(src/ants_app)
 endif()
 
+# Where this checkout is, for the tests and tools that read Original-Ants/, tests/data or web/ (tests/common/ants_test_paths.hpp): the folders are written into ONE tiny
+# generated source, never into a compile definition, so that the same source compiles to the same object in every folder and ccache serves another worktree (docs/WORKFLOW.md).
+if(NOT EMSCRIPTEN)
+    set(ANTS_PATH_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    set(ANTS_PATH_ORIGINAL_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
+    set(ANTS_PATH_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+    foreach(ants_path_var ANTS_PATH_SOURCE_DIR ANTS_PATH_ORIGINAL_ASSETS_DIR ANTS_PATH_TEST_DATA_DIR)
+        string(REPLACE "\\" "\\\\" ${ants_path_var} "${${ants_path_var}}")        # (a C++ string literal: a backslash or a quote in a folder name is escaped)
+        string(REPLACE "\"" "\\\"" ${ants_path_var} "${${ants_path_var}}")
+    endforeach()
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ants_test_paths.cpp.in" "${ANTS_GENERATED_DIR}/ants_test_paths.cpp" @ONLY)
+    add_library(ants_test_paths STATIC EXCLUDE_FROM_ALL "${ANTS_GENERATED_DIR}/ants_test_paths.cpp")
+    target_include_directories(ants_test_paths PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tests/common")
+endif()
+
 # Table generator (not part of the normal build): writes src/ants_sim/food_footprints_data.inc from Original-Ants/ants.chd
 #   cmake --build build --target gen_food_footprints && ./build/gen_food_footprints > src/ants_sim/food_footprints_data.inc
 if(NOT EMSCRIPTEN)
     add_executable(gen_food_footprints EXCLUDE_FROM_ALL tools/gen_food_footprints.cpp)
-    target_link_libraries(gen_food_footprints PRIVATE ants_sim ants_assets)
-    target_compile_definitions(gen_food_footprints PRIVATE
-        ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
+    target_link_libraries(gen_food_footprints PRIVATE ants_sim ants_assets ants_test_paths)
 
     # Map sweep (not part of the normal build): plays every map of a folder headless with the real engine (loads, determinism, speed, memory)
     #   cmake --build build --target map_sweep && ./build/map_sweep <maps-folder> --out report.json   (./build/map_sweep --selftest checks the tool itself)
     find_package(Threads REQUIRED)
     add_executable(map_sweep EXCLUDE_FROM_ALL tools/map_sweep.cpp)
-    target_link_libraries(map_sweep PRIVATE ants_net ants_sim ants_assets Threads::Threads)
-    target_compile_definitions(map_sweep PRIVATE
-        ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
+    target_link_libraries(map_sweep PRIVATE ants_net ants_sim ants_assets ants_test_paths Threads::Threads)
 
     # Bot arena (not part of the normal build): plays matches of computer players headless with the real engine and the controller (docs/BOTS.md)
     #   cmake --build build --target bot_arena && ./build/bot_arena --map TINY --seeds 1..8 --seat 0=worker:hard --seat 1=worker:easy --rotate --out report.json
     #   (./build/bot_arena --selftest checks the tool itself)
     add_executable(bot_arena EXCLUDE_FROM_ALL tools/bot_arena.cpp)
-    target_link_libraries(bot_arena PRIVATE ants_ai ants_sim ants_assets Threads::Threads)
-    target_compile_definitions(bot_arena PRIVATE
-        ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Original-Ants")
+    target_link_libraries(bot_arena PRIVATE ants_ai ants_sim ants_assets ants_test_paths Threads::Threads)
 endif()
 
 # Testing

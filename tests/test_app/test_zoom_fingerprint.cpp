@@ -32,6 +32,7 @@
 #include "ants_app/hud.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/view_zoom.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::app;

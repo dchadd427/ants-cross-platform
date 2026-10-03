@@ -16,6 +16,7 @@
 #include <random>
 #include <algorithm>
 #include <functional>
+#include "ants_test_paths.hpp"
 
 namespace fs = std::filesystem;
 using namespace ants::assets;

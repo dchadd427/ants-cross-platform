@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <random>
 #include <memory>
+#include "ants_test_paths.hpp"
 
 using namespace ants::assets;
 

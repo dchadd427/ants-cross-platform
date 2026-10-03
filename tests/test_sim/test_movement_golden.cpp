@@ -21,6 +21,7 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+#include "ants_test_paths.hpp"
 
 using namespace ants::sim;
 namespace mv = ants::sim::movement;
