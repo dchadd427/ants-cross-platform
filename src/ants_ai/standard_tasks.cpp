@@ -348,8 +348,13 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     std::vector<const PowerUpView*> cands;
+    uint8_t present = 0;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (v.rows()[t].present ? 1u << t : 0u));
+    const auto side_of = [&](const PowerUpView& p) { return power_up_side(c.map, p.tile, present); };
     for (const PowerUpView& p : v.powerups()) {
         if (p.kind != kind || p.standing_ant != 0 || tile_blacklisted(p.tile, now)) continue;
+        const int side = side_of(p);
+        if (side >= 0 && side != c.seat && (!tactics_.plan.steals || (v.ally() < sim::MAX_PLAYERS && side == v.ally()))) continue;       // another side's power-up is a theft: Hard's alone, and never the ally's
         bool taken = false;
         for (const auto& t : takes_) taken = taken || t.second.tile == p.tile;
         if (!taken) cands.push_back(&p);
@@ -368,7 +373,12 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         for (const AntView* a : ants) best = std::min(best, a->tile.chebyshev_dist(p->tile));
         return best;
     };
-    std::stable_sort(cands.begin(), cands.end(), [&](const PowerUpView* x, const PowerUpView* y) { return nearest(x) < nearest(y); });
+    std::stable_sort(cands.begin(), cands.end(), [&](const PowerUpView* x, const PowerUpView* y) {
+        const bool ox = side_of(*x) == c.seat || side_of(*x) < 0;                                   // the own side's first, then by the distance
+        const bool oy = side_of(*y) == c.seat || side_of(*y) < 0;
+        if (ox != oy) return ox;
+        return nearest(x) < nearest(y);
+    });
     const sim::Grid& grid = v.grid();
     for (size_t i = 0; i < cands.size() && i < 3; ++i) {
         const PowerUpView& p = *cands[i];

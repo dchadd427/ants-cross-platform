@@ -63,7 +63,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.guards = true;
             p.raids = true;
             p.max_combat = 2;
-            p.max_thief = 1;
+            p.max_thief = 2;                     // the double-thief opening: the own side's Thief and, when an enemy plays and its Thief power-up is not guarded, another one
+            p.steals = true;
             p.strike_force = 4;
             p.hatch_extra = 2;
             p.gate = true;                       // guiding for eating: +5 to +21 percent alone on every shipped map (docs/BOTS.md)

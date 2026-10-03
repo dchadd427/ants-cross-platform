@@ -24,6 +24,7 @@ target_link_libraries(test_ai PRIVATE
 
 target_include_directories(test_ai PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools
 )
 
 target_link_libraries(test_ai PRIVATE ants_test_paths)

@@ -25,6 +25,8 @@
 //   AI7.20  the counter to enemy fire walls: put out near the hill or a pile, never the own three, waiting without a Fire Ant, a pile that a ring cuts off
 //   AI7.21  BotView::bombs() and fire_walls() are the engine's grid at every look
 //   AI7.22  Thief and Combat pick-ups follow the enemy (an enemy that plays, an enemy Combat Ant in sight), the raids, the guard post
+//   AI7.24  the double-thief opening at Hard: with idle neighbours the Hard bot has two Thief ants (its own side's and an unguarded one), Medium one, Easy none
+//   AI7.23  the defence against the double-thief opening: the own side's Thief power-up is taken before the neighbour's second thief gets there (Medium, Hard), not at Easy
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -38,6 +40,7 @@
 #include "ants_ai/idle_bot.hpp"
 #include "ants_ai/standard_bot.hpp"
 #include "ants_ai/tasks.hpp"
+#include "bench_aggressor.hpp"
 
 using namespace ai_test;
 using namespace ants;
@@ -768,6 +771,7 @@ void run_b41_tests() {
     TEST_CASE("AI7.14 Pick-Ups: The Ant That Goes Is The One With The Shortest WALK, Not The Nearest As The Crow Flies (A Rock Wall Between), Alone And By A Plain Click On The Tile; No Trip When Every Walk Is Too Long; A Power-Up That An Enemy Would Reach First Is Not Contested For; One That Somebody Stands On Is No Goal; A Trip That Fails Blacklists The Ant And The Tile And The Next Ant Is Sent") {
         LevelPlan plan = plan_for(Level::Medium);
         plan.secure_side = false;                                                                        // the Fire Ant is wanted for the walls (an enemy Thief is in sight), nothing else
+        plan.steals = true;                                                                              // (the rock wall puts the power-up on another hill's side by the walking cost: this test is about the trips, AI7.24 about the sides)
         const auto build = [&](sim::SimulationEngine& sim, bool with_wall) {
             empty_field(sim, 21);
             sim.grid_mut().place_powerup(16, 12, 2);
@@ -1607,6 +1611,93 @@ void run_b41_tests() {
                 const TileCoord at{sim.get_unit(guard).pos.x, sim.get_unit(guard).pos.y};
                 ASSERT_TRUE(at.chebyshev_dist(post) <= 2);
             }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI7.23 The Defence Against The Double-Thief Opening (The Owner's Playbook: A Player Steals Your Thief Power-Up With His Second Ant And Raids Twice From The Start): The Bench Aggressor That Takes TWO Thief Power-Ups (Its Own Side's And The Nearest Other) Finds The Thief Of A Neighbour's Side Gone When The Neighbour Is A Medium Or Hard Bot (Taken In The Opening) And Takes It At Easy")
+    {
+        assets::LevelData treasure;
+        ASSERT_TRUE(treasure.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TREASURE.LVL"));
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
+            ArenaSpec spec;
+            spec.level = &treasure;
+            spec.seed = 7;
+            spec.max_ticks = 300;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.kind = seat == 0 ? "standard" : seat == 3 ? "aggressor2" : "idle";
+                b.level = seat == 3 ? Level::Hard : seat == 0 ? level : Level::Medium;
+                spec.bots.push_back(b);
+            }
+            spec.extra_kinds = {"aggressor2"};
+            spec.factory = [](const BotSpec& b) -> std::unique_ptr<Bot> {
+                if (b.kind == "aggressor2") return std::make_unique<bench::AggressorBot>(2);
+                return make_bot(b);
+            };
+            size_t thieves_of_ours = 0;
+            size_t thieves_of_theirs = 0;
+            bool power_up_there = true;
+            spec.inspect = [&](const sim::SimulationEngine& e) {
+                for (const sim::AntSnapshot& a : e.get_world_state().ants) {
+                    if (a.raw_type != sim::AntType::Thief) continue;
+                    if (a.player_id == 0) ++thieves_of_ours;
+                    if (a.player_id == 3) ++thieves_of_theirs;
+                }
+                power_up_there = e.grid().has_powerup_at(tc(35, 14));
+            };
+            const ArenaResult r = play_match(spec);
+            ASSERT_TRUE(r.error.empty());
+            ASSERT_FALSE(power_up_there);                                                                     // somebody took it
+            if (level == Level::Easy) {
+                ASSERT_EQ(thieves_of_ours, 0u);                                                              // the aggressor has it: two thieves from the start
+                ASSERT_EQ(thieves_of_theirs, 2u);
+            } else {
+                ASSERT_EQ(thieves_of_ours, 1u);                                                              // the bot took its own side's Thief in the opening
+                ASSERT_EQ(thieves_of_theirs, 1u);                                                            // and the aggressor's second trip found it gone
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI7.24 The Double-Thief Opening At Hard (The Owner's Playbook; Stealing Is Hard's Only): With Three Idle Neighbours The Hard Bot Has Two Thief Ants After 900 Ticks (The Thief Of Its Own Side And The Unguarded Thief Power-Up Of Another), Medium One, Easy None; A Neighbour That Takes Its Own Thief Power-Up At The Start (Medium Or Hard) Is Not Robbed")
+    {
+        for (const Level level : {Level::Hard, Level::Medium, Level::Easy}) {
+            sim::SimulationEngine sim;
+            start_match(sim, "TREASURE", 5, 0x0F);
+            for (uint8_t t = 1; t < 4; ++t) {
+                for (const uint32_t id : ants_of(sim, t)) sim.get_unit(id).hp = 0;                           // the neighbours' ants are away from home (out of the view): their power-ups are unguarded
+            }
+            const uint32_t walker = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{58, 58});
+            sim.apply_command(command_of(CommandType::GroupMove, 1, {walker}, 50, 58));                     // and an enemy plays (the idle bot's ants never move), far from every power-up
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+            rig.run(900);
+            const size_t thieves = count_type(sim, 0, sim::AntType::Thief);
+            const size_t others_gone = (sim.grid().has_powerup_at(tc(25, 14)) ? 0u : 1u) + (sim.grid().has_powerup_at(tc(26, 47)) ? 0u : 1u) + (sim.grid().has_powerup_at(tc(34, 47)) ? 0u : 1u);
+            ASSERT_EQ(thieves, level == Level::Hard ? 2u : level == Level::Medium ? 1u : 0u);
+            ASSERT_EQ(others_gone, level == Level::Hard ? 1u : 0u);
+        }
+        // two Medium neighbours: each takes its own side's Thief power-up at the start, so there is nothing left to steal (the Hard bot keeps its one)
+        {
+            ArenaSpec spec;
+            assets::LevelData treasure;
+            ASSERT_TRUE(treasure.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TREASURE.LVL"));
+            spec.level = &treasure;
+            spec.seed = 5;
+            spec.max_ticks = 900;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.kind = "standard";
+                b.level = seat == 0 ? Level::Hard : Level::Medium;
+                spec.bots.push_back(b);
+            }
+            size_t ours = 0;
+            spec.inspect = [&](const sim::SimulationEngine& e) {
+                for (const sim::AntSnapshot& a : e.get_world_state().ants) ours += a.player_id == 0 && a.raw_type == sim::AntType::Thief ? 1u : 0u;
+            };
+            const ArenaResult r = play_match(spec);
+            ASSERT_TRUE(r.error.empty());
+            ASSERT_EQ(ours, 1u);
         }
     } TEST_END();
 }

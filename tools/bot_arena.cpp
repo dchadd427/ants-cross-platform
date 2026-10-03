@@ -437,6 +437,7 @@ struct Options {
     bool selftest{false};
     bool write_baselines{false};
     bool ally_standard{false};                     // the first two standard bots of a match team up (the lower seat invites)
+    bool ally_pairs{false};                        // every two seats with the same standard spec team up (2 + 2 with [A, A, B, B]; the lower seat of a pair invites)
     bool help{false};
 };
 
@@ -455,13 +456,14 @@ void print_usage(std::FILE* to) {
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
         "  --rotate           every distinct arrangement of the bots over the seats\n"
         "  --ally-standard    the first two standard bots of a match team up: the lower seat invites at its first look, the other accepts by its accept rule (test-only: no bot of the game invites)\n"
+        "  --ally-pairs       every two seats that have the same standard spec team up (2 + 2 for [A, A, B, B]; the lower seat of a pair invites; test-only)\n"
         "  --repeat N         play every match N times and require identical results\n"
         "  --replay-check     replay the applied commands into a fresh engine without any bot: same hash at every 20th tick and at the end\n"
         "  --threads N        matches at the same time (default 1)\n"
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid), for the tournaments\n"
+        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid old allon steals), for the tournaments\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -501,9 +503,10 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     std::string bench_kind = "aggressor";
     std::vector<std::string> parts = split(spec, ':');
     for (size_t i = 1; i < parts.size(); ++i) {
-        if (upper(parts[i]) == "AGGRESSOR" || upper(parts[i]) == "AGGRESSOR2" || upper(parts[i]) == "SABOTEUR" || upper(parts[i]) == "RUSHER") {
+        if (upper(parts[i]) == "AGGRESSOR" || upper(parts[i]) == "AGGRESSOR2" || upper(parts[i]) == "SABOTEUR" || upper(parts[i]) == "RUSHER" ||
+            (upper(parts[i]).rfind("AGGR", 0) == 0 && upper(parts[i]).size() == 5 && upper(parts[i])[4] >= '1' && upper(parts[i])[4] <= '9')) {
             aggressor = true;
-            bench_kind = upper(parts[i]) == "SABOTEUR" ? "saboteur" : upper(parts[i]) == "AGGRESSOR2" ? "aggressor2" : upper(parts[i]) == "RUSHER" ? "rusher" : "aggressor";
+            bench_kind = upper(parts[i]) == "SABOTEUR" ? "saboteur" : upper(parts[i]) == "AGGRESSOR2" ? "aggressor2" : upper(parts[i]) == "RUSHER" ? "rusher" : upper(parts[i]) == "AGGRESSOR" ? "aggressor" : "aggr" + parts[i].substr(4);
             parts[i] = "worker";
         } else if (upper(parts[i]).rfind("STANDARD+", 0) == 0) {                      // "standard+K=V,K=V": a standard bot with its own tuning, for the duels of two plans in one match
             aggressor = true;
@@ -547,6 +550,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "walls") { p.wall_trigger = v == 0 ? ai::WallTrigger::Never : v == 1 ? ai::WallTrigger::ThiefSeen : v == 2 ? ai::WallTrigger::ThiefPossible : ai::WallTrigger::Early; return true; }
     if (key == "renew") { p.renew_lead_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "combat") { p.takes_combat = v > 0; p.max_combat = static_cast<uint32_t>(v); return true; }
+    if (key == "steals") return flag(p.steals);
     if (key == "thief") { p.takes_thief = v > 0; p.max_thief = static_cast<uint32_t>(v); return true; }
     if (key == "intercept") return flag(p.intercepts);
     if (key == "combat_early") { p.combat_when_attacked = v == 0; return true; }
@@ -568,7 +572,28 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "gategap") { p.gate_gap_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "idle") { p.bench_idle_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "avoid") return flag(p.avoids_guarded_hills);
-    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid)";
+    if (key == "old") {                                                               // the conflict tactics as they were shipped before the win-rate measurements: all off, one Thief
+        if (v == 0) return true;
+        p.contest_aware = false;
+        p.contest_reactive = false;
+        p.strikes = false;
+        p.hatches = false;
+        p.wipe_focus = false;
+        p.ally_help = false;
+        if (p.max_thief > 1) p.max_thief = 1;
+        return true;
+    }
+    if (key == "allon") {                                                             // ALL the conflict tactics on (the mirror of the conflict-rich tournaments): the strict contest order, strikes, hatching for fights, wipe-out focus, the help of the ally, two Thieves
+        if (v == 0) return true;
+        p.contest_aware = true;
+        p.strikes = true;
+        p.hatches = true;
+        p.wipe_focus = true;
+        p.ally_help = true;
+        if (p.takes_thief && p.max_thief < 2) p.max_thief = 2;
+        return true;
+    }
+    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid old allon steals)";
     return false;
 }
 
@@ -589,6 +614,7 @@ std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
         return std::make_unique<ai::StandardBot>(plan);
     }
     if (spec.kind == "aggressor") return std::make_unique<ai::bench::AggressorBot>();
+    if (spec.kind.size() == 5 && spec.kind.rfind("aggr", 0) == 0 && spec.kind[4] >= '1' && spec.kind[4] <= '9') return std::make_unique<ai::bench::AggressorBot>(1, static_cast<size_t>(spec.kind[4] - '0'));
     if (spec.kind == "aggressor2") return std::make_unique<ai::bench::AggressorBot>(2);
     if (spec.kind == "rusher") {                                                      // the centre-rusher of the bench: the economy of the standard bot with the contest order and no tactics
         ai::LevelPlan plan = ai::plan_for(spec.level);
@@ -631,6 +657,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--write-baselines") o.write_baselines = true;
         else if (s == "--rotate") o.rotate = true;
         else if (s == "--ally-standard") o.ally_standard = true;
+        else if (s == "--ally-pairs") o.ally_pairs = true;
         else if (s == "--replay-check") o.replay_check = true;
         else if (s == "--quiet") o.quiet = true;
         else if (s == "--no-wall-time") o.wall_time = false;
@@ -881,6 +908,26 @@ std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> ally_factory(const J
     };
 }
 
+// The factory of a match with --ally-pairs: of every two seats with the same standard spec (kind and level) the lower one invites the other
+std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> ally_pairs_factory(const Job& j) {
+    std::map<std::string, std::vector<uint8_t>> by_spec;
+    for (const ai::BotSpec& b : j.bots) {
+        if (b.kind.rfind("standard", 0) == 0) by_spec[spec_text(b)].push_back(b.seat);
+    }
+    std::map<uint8_t, uint8_t> inviter_of;                     // inviting seat -> invited seat
+    for (auto& entry : by_spec) {
+        if (entry.second.size() != 2) continue;
+        std::sort(entry.second.begin(), entry.second.end());
+        inviter_of[entry.second[0]] = entry.second[1];
+    }
+    return [inviter_of](const ai::BotSpec& spec) -> std::unique_ptr<ai::Bot> {
+        std::unique_ptr<ai::Bot> bot = arena_factory(spec);
+        const auto it = inviter_of.find(spec.seat);
+        if (bot != nullptr && it != inviter_of.end()) return std::make_unique<ai::bench::InviterBot>(std::move(bot), it->second);
+        return bot;
+    };
+}
+
 ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool record) {
     ai::ArenaSpec s;
     s.level = &m.level;
@@ -889,7 +936,7 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.max_ticks = o.ticks;
     s.latency_ticks = o.latency;
     s.record = record;
-    s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher"};
+    s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher", "aggr1", "aggr2", "aggr3", "aggr4", "aggr5", "aggr6", "aggr7", "aggr8", "aggr9"};
     for (const ai::BotSpec& b : j.bots) {
         if (b.kind.rfind("standard+", 0) == 0) s.extra_kinds.push_back(b.kind);
     }
@@ -906,7 +953,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     }
     const Clock::time_point started = Clock::now();
     ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check);
-    spec.factory = factory ? factory : o.ally_standard ? ally_factory(job) : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
+    spec.factory = factory ? factory : o.ally_pairs ? ally_pairs_factory(job) : o.ally_standard ? ally_factory(job) : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
     r.result = ai::play_match(spec);
     r.plays = 1;
     if (r.result.error.empty() && o.replay_check) {

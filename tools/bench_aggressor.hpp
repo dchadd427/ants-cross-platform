@@ -29,8 +29,9 @@ class AggressorBot final : public Bot {
 public:
     /// thieves: how many Thief power-ups it takes before it takes the Combat ones (1: the plain aggressor; 2: the DOUBLE-THIEF opening of the owner's playbook, kind "aggressor2": the thief of
     /// its own side and, with the next idle worker, the nearest other Thief power-up that nobody stands on, then two raids from the start)
-    explicit AggressorBot(size_t thieves = 1) : thieves_wanted_(thieves) {}
-    const char* kind() const noexcept override { return thieves_wanted_ >= 2 ? "aggressor2" : "aggressor"; }
+    /// max_attackers: how many ants (Combat Ants first) attack carriers at most (the experiments of the harassment's worth: "aggr3" attacks with three ants only; the rest stand idle as a stand-in for an economy)
+    explicit AggressorBot(size_t thieves = 1, size_t max_attackers = 1000) : thieves_wanted_(thieves), max_attackers_(max_attackers) {}
+    const char* kind() const noexcept override { return max_attackers_ < 1000 ? "aggrN" : thieves_wanted_ >= 2 ? "aggressor2" : "aggressor"; }
     void start(const BotContext& context) override {
         seat_ = context.seat;
         profile_ = context.profile;
@@ -136,8 +137,16 @@ public:
         }
         if (!carriers.empty()) {
             std::map<uint32_t, std::vector<uint32_t>> groups;                              // target ant -> attackers
-            for (const AntView& a : view.mine()) {
-                if (!a.idle() || a.holding || taking_.count(a.id) != 0 || a.hp < 3) continue;
+            std::vector<const AntView*> order;                                             // the attackers in the order of use: Combat Ants first, then by id
+            for (const AntView& a : view.mine()) order.push_back(&a);
+            std::stable_sort(order.begin(), order.end(), [](const AntView* x, const AntView* y) { return (x->type == sim::AntType::Combat) > (y->type == sim::AntType::Combat); });
+            size_t used = 0;
+            for (const AntView* ap : order) {
+                const AntView& a = *ap;
+                if (a.type == sim::AntType::Thief || taking_.count(a.id) != 0) continue;
+                if (used >= max_attackers_) break;
+                ++used;
+                if (!a.idle() || a.holding || a.hp < 3) continue;
                 if (a.type != sim::AntType::Worker && a.type != sim::AntType::Combat) continue;
                 const AntView* near = nullptr;
                 int32_t near_d = 0;
@@ -180,6 +189,7 @@ private:
     }
 
     size_t thieves_wanted_{1};
+    size_t max_attackers_{1000};
     uint8_t seat_{0};
     Profile profile_{};
     const MapInfo* map_{nullptr};

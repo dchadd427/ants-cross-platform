@@ -80,6 +80,7 @@ struct LevelPlan {
     bool raids{false};                   // a Thief raids the hill of the leading team
     uint32_t max_combat{0};              // Combat Ants at a time (including those that are on their way to a power-up)
     uint32_t max_thief{0};
+    bool steals{false};                  // (Hard) a pick-up trip may go to a power-up on ANOTHER team's side (never the ally's), when no ant of the owner is quicker there: a theft; the other levels take their own side's power-ups only
     // forced fights and hatching (Medium and Hard)
     bool strikes{false};                 // clearly behind the leader (by the score boxes) and a fight looks winnable: a strike force hunts the leader's carriers (the owner's playbook)
     uint32_t strike_margin{150};         // clearly behind: the leader's box is this many points above the own ...
