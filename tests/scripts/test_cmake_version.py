@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CMake configure check of the generated version header (run by ./run_tests.sh --fast and by the CI).
+"""CMake configure checks (run by ./run_tests.sh --fast and by the CI): the generated version header, and the ccache support.
 
 ants_app/version.hpp does not exist in the repository: CMake generates it from the file VERSION into <build folder>/generated. This test configures the
 whole project into a build folder whose path has a SPACE in it (as Windows user folders do) with a MULTI-CONFIGURATION generator (the kind Visual Studio is:
@@ -150,6 +150,93 @@ class GeneratedVersionHeader(unittest.TestCase):
         unrelated = by_name["ants_assets"]                                 # the asset decoders never include the header
         for group in unrelated.get("compileGroups", []):
             self.assertNotIn(generated, [norm(i["path"]) for i in group.get("includes", [])])
+
+
+@unittest.skipUnless(shutil.which("cmake") and os.name == "posix", "cmake and a POSIX shell are needed")
+class CcacheSupport(unittest.TestCase):
+    """The ccache option of the root CMakeLists.txt: what it says and does at configure time (configure only; nothing is compiled).
+
+    ccache is the compiler launcher when it is found (PATH, or ~/.local/bin) and nothing speaks against it; the configure output says so either way.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.fake_bin = os.path.join(cls.tmp.name, "fake bin")
+        os.makedirs(cls.fake_bin)
+        fake = os.path.join(cls.fake_bin, "ccache")
+        with open(fake, "w", encoding="utf-8") as f:
+            f.write('#!/bin/sh\nexec "$@"\n')                              # a launcher that just runs the compiler
+        os.chmod(fake, 0o755)
+        cls.fake = fake
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def configure(self, name, *args, path_first=None):
+        build = os.path.join(self.tmp.name, name)
+        env = dict(os.environ)
+        env["HOME"] = os.path.join(self.tmp.name, "home")                  # the folder ~/.local/bin is a hint of the search (before PATH): the machine's own ccache must not win here
+        os.makedirs(env["HOME"], exist_ok=True)
+        if path_first:
+            env["PATH"] = path_first + os.pathsep + env.get("PATH", "")
+        result = subprocess.run(["cmake", "-S", REPO, "-B", build, "-DBUILD_TESTS=OFF", "-DANTS_BUILD_APP=OFF", *args], capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout, build
+
+    def launcher_in_makefiles(self, build):
+        """True when the generated build rules run the compiler through a launcher (Makefile generators write it into the rules)."""
+        rules = []
+        for root, _, files in os.walk(build):
+            for name in files:
+                if name in ("build.make", "rules.ninja"):
+                    rules.append(os.path.join(root, name))
+        if not rules:
+            return None
+        return any(self.fake in read(r) for r in rules)
+
+    def test_the_option_switches_it_off_and_says_so(self):
+        out, build = self.configure("off", "-DANTS_USE_CCACHE=OFF", path_first=self.fake_bin)
+        self.assertIn("ccache: not used (ANTS_USE_CCACHE=OFF)", out)
+        self.assertNotIn("ccache: using", out)
+        self.assertIn(self.launcher_in_makefiles(build), (False, None))
+
+    def test_a_launcher_that_is_already_set_wins_and_the_message_says_so(self):
+        out, build = self.configure("set", "-DCMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/env", path_first=self.fake_bin)
+        self.assertIn("ccache: not used (a compiler launcher is already set", out)
+        self.assertNotIn("ccache: using", out)
+        self.assertIn(self.launcher_in_makefiles(build), (False, None))
+
+    def test_a_ccache_on_the_path_is_the_launcher_by_default(self):
+        out, build = self.configure("found", path_first=self.fake_bin)
+        self.assertIn("ccache: using " + self.fake, out)
+        found = self.launcher_in_makefiles(build)
+        if found is not None:                                              # Makefile and Ninja generators write the launcher into their rules
+            self.assertTrue(found, "the compile rules do not run the compiler through ccache")
+
+    def test_ccache_in_the_home_local_bin_folder_is_found_without_being_on_the_path(self):
+        home = os.path.join(self.tmp.name, "hinthome")
+        local_bin = os.path.join(home, ".local", "bin")
+        os.makedirs(local_bin)
+        shutil.copy(self.fake, os.path.join(local_bin, "ccache"))
+        os.chmod(os.path.join(local_bin, "ccache"), 0o755)
+        build = os.path.join(self.tmp.name, "hint")
+        env = dict(os.environ)
+        env["HOME"] = home
+        env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if not os.path.exists(os.path.join(p, "ccache")))   # a machine's own ccache is off the path
+        result = subprocess.run(["cmake", "-S", REPO, "-B", build, "-DBUILD_TESTS=OFF", "-DANTS_BUILD_APP=OFF", "-DCMAKE_PREFIX_PATH=/nonexistent"], capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        found = re.search(r"ccache: using (\S.*)", result.stdout)
+        self.assertIsNotNone(found, result.stdout)
+        # a ccache in a system folder (/usr/bin, /opt/homebrew/bin) may be found first by CMake's own search; the hint is what this checks: ours when the machine has none
+        if not any(os.path.exists(os.path.join(d, "ccache")) for d in ("/usr/bin", "/usr/local/bin", "/opt/homebrew/bin", "/bin")):
+            self.assertEqual(found.group(1).strip(), os.path.join(local_bin, "ccache"))
+
+    def test_the_build_id_target_and_the_generated_header_do_not_depend_on_ccache(self):
+        out, build = self.configure("with", path_first=self.fake_bin)
+        out2, build2 = self.configure("without", "-DANTS_USE_CCACHE=OFF", path_first=self.fake_bin)
+        self.assertEqual(read(os.path.join(build, "generated", "ants_app", "version.hpp")), read(os.path.join(build2, "generated", "ants_app", "version.hpp")))
 
 
 if __name__ == "__main__":
