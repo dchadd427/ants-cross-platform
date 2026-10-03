@@ -256,9 +256,11 @@
         var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
         var names = NAMES.slice().sort(function () { return 0.5 - Math.random(); });
 
+        // HELPERS_BEGIN (tests/scripts/web_aspect_key_check.js runs these three functions, the block of the picture's shape and the selector's listener below)
         function $(id) { return document.getElementById(id); }
         function remember(key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
         function recall(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
+        // HELPERS_END
         function randomCode() {
             var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';
             var buf = new Uint32Array(6);
@@ -276,19 +278,24 @@
         // FILL_END
         var FILL_NAMES = { easy: 'Easy bots', medium: 'Medium bots', hard: 'Hard bots' };
 
-        // The shape of the games' pictures: ?aspect=16:9 or ?aspect=4:3 (anything else is ignored), else what the game page's selector remembered, else 16:9. Each game passes it on
-        // (?aspect= of its address) and the frames of the games have that shape. Links made for other people carry it only when this address names it.
+        // The shape of the games' pictures: ?aspect=16:9 or ?aspect=4:3 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Each game passes it
+        // on (?aspect= of its address) and the frames of the games have that shape. Links made for other people carry it only when this address names it.
+        // The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the selectors write it. The key of the first versions of the pages was 'ants.aspect': it is NOT
+        // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: every browser starts with 16:9 until its player picks Classic 4:3 again.
+        // SHAPE_BEGIN
+        var ASPECT_KEY = 'ants.aspect.v2';
         var aspect = '16:9';
         var aspectFromAddress = false;
         (function () {
             var asked = null;
             try { asked = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
-            var remembered = recall('ants.aspect');
+            var remembered = recall(ASPECT_KEY);
             if (asked === '16:9' || asked === '4:3') { aspect = asked; aspectFromAddress = true; }
             else if (remembered === '16:9' || remembered === '4:3') aspect = remembered;
             document.body.setAttribute('data-aspect', aspect);
             $('aspect-select').value = aspect;
         })();
+        // SHAPE_END
 
         var room = '';
         var fill = '';                      // the bots that the leader's START seats in the empty seats: '', easy, medium or hard (every link of the room carries it: the page cannot know who connects first)
@@ -585,18 +592,20 @@
         $('join-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
         joinName.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
 
+        // SELECTOR_BEGIN
         $('aspect-select').addEventListener('change', function () {
-            // the choice is remembered (the game page's selector reads it too) and this page reloads with it: the games of a room start again with the new picture
+            // the choice is remembered (the game page's selector reads it too; nothing else writes it) and this page reloads with it: the games of a room start again with the new picture
             var value = $('aspect-select').value === '4:3' ? '4:3' : '16:9';
-            if (value === aspect) { remember('ants.aspect', value); return; }
+            if (value === aspect) { remember(ASPECT_KEY, value); return; }
             if (room && !window.confirm('Changing the picture restarts the games on this page: the seats leave the match they are in. Continue?')) { $('aspect-select').value = aspect; return; }
-            remember('ants.aspect', value);
+            remember(ASPECT_KEY, value);
             try {
                 var url = new URL(window.location.href);
                 url.searchParams.set('aspect', value);
                 window.location.assign(url.href);
             } catch (e) { $('aspect-select').value = aspect; }
         });
+        // SELECTOR_END
 
         $('new-room').addEventListener('click', function () {
             // the setup again (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)

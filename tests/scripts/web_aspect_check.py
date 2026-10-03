@@ -14,7 +14,9 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
   * the page at desktop sizes (1280 x 720, 1920 x 1080, 1440 x 900, a 21:9 window, a small one, a very narrow one) and on a phone, at device ratios 1, 2 and 3: the canvas the game
     makes has EXACTLY the shape of the picture (16:9, or 4:3 for the classic picture), fills the game's box, the box fits the window (no scrolling to see the whole picture and the bar
     under it) and is the largest that fits, the page has no sideways scroll;
-  * the address and the selector: `?aspect=4:3`, `?aspect=16:9`, a bad value, the selector's click (remembered, reload with the parameter), a portrait phone gets the 16:9 picture like every other device (and a remembered 4:3 still wins there);
+  * the address and the selector: `?aspect=4:3`, `?aspect=16:9`, a bad value, the selector's click (remembered under `ants.aspect.v2`, reload with the parameter), a portrait phone gets the 16:9 picture like every other device (and a remembered 4:3 still wins there);
+    a Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is not read any more (every browser starts 16:9 once), on the game page and on web/four.html (the pages' own code
+    runs on a table of such values without a browser in tests/scripts/web_aspect_key_check.js, which ./run_tests.sh --fast runs);
   * the picture follows the window when it is resized, and fullscreen (the browser's, and the page's own where there is no Fullscreen API: an iPhone) enters and leaves with the
     canvas the right shape;
   * the pointer: the game draws its own cursor at the position that it reads from the browser; two screenshots with the pointer at two places show the cursor at those places; the box
@@ -1332,7 +1334,7 @@ def main():
         # a phone held upright gets the 16:9 picture (no exception for phones: the whole picture is visible, no sideways scroll), keeps it when it is turned to landscape (the box follows and
         # is bigger), and a remembered 4:3 still wins on a portrait phone
         tab.emulate(390, 844, 3, True)
-        tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
         tab.open(web, settle=1.0)
         g = tab.geometry()
         check(g["aspect"] == "16:9" and g["args"][-2:] == ["--aspect", "16:9"] and g["checked"] == ["16:9=true", "4:3=false"], "a phone held upright: the 16:9 picture (%s, %s)" % (g["aspect"], g["checked"]))
@@ -1347,12 +1349,12 @@ def main():
         tab.save_shot(args.shots, "phone_turned_to_landscape")
         tab.emulate(390, 844, 3, True)
         tab.open(web, settle=0.5)                                                         # (the page's own origin: its local storage is what the selector writes)
-        tab.ev("try { localStorage.setItem('ants.aspect', '4:3'); } catch (e) {} 1")
+        tab.ev("try { localStorage.setItem('ants.aspect.v2', '4:3'); } catch (e) {} 1")
         tab.open(web, settle=1.0)
         g = tab.geometry()
         check(g["aspect"] == "4:3" and g["checked"] == ["16:9=false", "4:3=true"], "a portrait phone with a remembered 4:3 keeps the classic picture (%s)" % g["aspect"])
         layout_checks("the phone held upright, classic picture remembered", g, "4:3")
-        tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
         tab.save_shot(args.shots, "phone_portrait_remembered_classic")
 
         print("[web aspect] the address and the selector")
@@ -1366,7 +1368,7 @@ def main():
                 bw, bh = g["backing"]
                 check(bw * 3 == bh * 4, "%s: the canvas is exactly 4:3 (%d x %d)" % (query, bw, bh))
         # the selector (a fresh profile has nothing remembered)
-        tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
         tab.open(web)
         g = tab.geometry()
         check(g["checked"] == ["16:9=true", "4:3=false"], "the selector shows 16:9 (%s)" % g["checked"])
@@ -1384,18 +1386,27 @@ def main():
         g = tab.geometry()
         check(g["aspect"] == "4:3" and g["checked"] == ["16:9=false", "4:3=true"], "the selector's click reloads the page with the classic picture (%s)" % g["checked"])
         check(tab.ev("location.search") == "?aspect=4:3", "the address now says ?aspect=4:3 (%s)" % tab.ev("location.search"))
-        check(tab.ev("localStorage.getItem('ants.aspect')") == "4:3", "the browser remembered the choice")
+        check(tab.ev("localStorage.getItem('ants.aspect.v2')") == "4:3", "the browser remembered the choice")
         tab.save_shot(args.shots, "selector_classic")
         tab.open(web)                                                 # no parameter: the remembered choice
         g = tab.geometry()
         check(g["aspect"] == "4:3", "a visit without a parameter uses the remembered choice")
         tab.open(web + "?aspect=16:9")
         g = tab.geometry()
-        check(g["aspect"] == "16:9" and tab.ev("localStorage.getItem('ants.aspect')") == "4:3", "the address beats the remembered choice and does not change it")
-        tab.ev("localStorage.setItem('ants.aspect', 'junk'); 1")
+        check(g["aspect"] == "16:9" and tab.ev("localStorage.getItem('ants.aspect.v2')") == "4:3", "the address beats the remembered choice and does not change it")
+        tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
         tab.open(web)
         check(tab.geometry()["aspect"] == "16:9", "a remembered value that is no shape is ignored")
-        tab.ev("localStorage.removeItem('ants.aspect'); 1")
+        tab.ev("localStorage.removeItem('ants.aspect.v2'); 1")
+        # the key of the first versions of the pages ('ants.aspect') is not read any more: a Classic 4:3 that a browser remembered under it is forgotten once, and the address still asks for 4:3
+        tab.ev("try { localStorage.setItem('ants.aspect', '4:3'); } catch (e) {} 1")
+        tab.open(web)
+        g = tab.geometry()
+        check(g["aspect"] == "16:9" and g["args"][-2:] == ["--aspect", "16:9"] and g["checked"] == ["16:9=true", "4:3=false"],
+              "a 4:3 that the old key 'ants.aspect' remembers is not read: the page is 16:9 (%s, %s)" % (g["aspect"], g["checked"]))
+        tab.open(web + "?aspect=4:3")
+        check(tab.geometry()["aspect"] == "4:3", "... and ?aspect=4:3 still gives the classic picture with the old key in the browser")
+        tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
 
         # the selector asks before it leaves a match that is being played (it restarts the game); at the quick help or the setup screen it does not ask
         print("[web aspect] the selector and a running match: it asks first")
@@ -1426,12 +1437,12 @@ def main():
             time.sleep(0.5)
         check(tab.ev("Module._ants_match_running()") == 1, "START begins a match and the game says one is running")
         tab.save_shot(args.shots, "match_running")
-        tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
         answer["accept"] = False
         tab.click(button[0], button[1])
         time.sleep(1.5)
         check(len(dialogs) == 1 and "Leave the match to change the picture?" in dialogs[0], "the selector's click in a running match asks \"Leave the match to change the picture?\" (%s)" % dialogs)
-        check(tab.ev("location.search.indexOf('aspect=4:3')") == -1 and tab.ev("Module._ants_match_running()") == 1 and tab.ev("localStorage.getItem('ants.aspect')") is None,
+        check(tab.ev("location.search.indexOf('aspect=4:3')") == -1 and tab.ev("Module._ants_match_running()") == 1 and tab.ev("localStorage.getItem('ants.aspect.v2')") is None,
               "answered No, the match goes on, the address is the same and the choice is not remembered")
         answer["accept"] = True
         tab.click(button[0], button[1])
@@ -1445,7 +1456,7 @@ def main():
                 pass
         check(len(dialogs) == 2 and tab.ev("location.search.indexOf('aspect=4:3')") != -1 and tab.geometry()["aspect"] == "4:3", "answered Yes, the page reloads with the classic picture (%d questions)" % len(dialogs))
         tab.dt.handlers.remove(on_dialog)
-        tab.ev("localStorage.removeItem('ants.aspect'); 1")
+        tab.ev("localStorage.removeItem('ants.aspect.v2'); 1")
 
         print("[web aspect] resizing, fullscreen and the pointer (1280 x 720)")
         tab.emulate(1280, 720, 1)
@@ -1620,7 +1631,7 @@ def main():
 
             tab.emulate(1500, 900, 1)
             tab.open(web)                                                  # (the page's origin, to reach its localStorage)
-            tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
+            tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
             frames = four_frames("?map=tiny&players=2&play=here")
             frames_check("default", frames, "16:9")
             check(all(f["frame"][0] < 700 for f in frames), "default in a window of 1500: the frames fill their column, about 651 CSS pixels (%s)" % [f["frame"] for f in frames])
@@ -1631,11 +1642,15 @@ def main():
             tab.save_shot(args.shots, "four_16x9_native")
             frames_check("?aspect=junk (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=junk"), "16:9")
             frames_check("?aspect=21:9 (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=21:9"), "16:9")
-            tab.ev("localStorage.setItem('ants.aspect', '4:3'); 1")
+            tab.ev("localStorage.setItem('ants.aspect.v2', '4:3'); 1")
             frames_check("the choice that the game page remembered (4:3), no parameter", four_frames("?map=tiny&players=2&play=here"), "4:3", (640, 480))
             frames_check("... and ?aspect=16:9 beats it", four_frames("?map=tiny&players=2&play=here&aspect=16:9"), "16:9")
-            tab.ev("localStorage.setItem('ants.aspect', 'junk'); 1")
+            tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
             frames_check("a remembered value that is no shape is ignored", four_frames("?map=tiny&players=2&play=here"), "16:9")
+            tab.ev("localStorage.removeItem('ants.aspect.v2'); 1")
+            tab.ev("localStorage.setItem('ants.aspect', '4:3'); 1")
+            frames_check("a 4:3 that the old key 'ants.aspect' remembers is not read", four_frames("?map=tiny&players=2&play=here"), "16:9")
+            frames_check("... and ?aspect=4:3 still gives the classic picture", four_frames("?map=tiny&players=2&play=here&aspect=4:3"), "4:3", (640, 480))
             tab.ev("localStorage.removeItem('ants.aspect'); 1")
         tab.close()
         if args.downloads > 0:

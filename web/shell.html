@@ -869,6 +869,7 @@
         var antsDataPackage = null;                                          // the bytes of index.data, once downloaded (handed to the game by Module.getPreloadedPackage)
         var ANTS_DATA_SIZE = parseInt('@@DATA_SIZE@@', 10) || 0;             // the exact size of index.data in bytes (the Dockerfile writes it in after the build; 0 = not known: a build outside it)
 
+        // ANTS_PAGE_BEGIN (tests/scripts/web_aspect_key_check.js runs everything from here to ANTS_PAGE_END on a table of addresses and of what the browser remembered)
         // The page's own logic that needs no browser (ANTS_PAGE; tests/scripts/web_aspect_check.py calls these in a real one).
         //   aspect  the shape of the picture: "16:9" (the game's fixed canvas of 960 x 540) or "4:3" (the original's 640 x 480); nothing else is a shape
         //   fitBox  the picture's box: the largest whole number of canvas steps (16 x 9, or 4 x 3 for the classic picture) that fits an area, in device pixels
@@ -882,8 +883,8 @@
                 return (typeof text === 'string' && Object.prototype.hasOwnProperty.call(SHAPES, text)) ? text : null;
             }
 
-            // Which shape the page shows: the address (?aspect=16:9 or ?aspect=4:3; anything else is ignored), else the choice that the selector remembered, else 16:9 on every device
-            // (a phone held upright included: the picture is 16:9 as wide as the screen, and turning the phone sideways makes it bigger).
+            // Which shape the page shows: the address (?aspect=16:9 or ?aspect=4:3; anything else is ignored), else the choice that the selector remembered (under ANTS_ASPECT_KEY below), else 16:9
+            // on every device (a phone held upright included: the picture is 16:9 as wide as the screen, and turning the phone sideways makes it bigger).
             function resolveAspect(fromAddress, remembered) {
                 var a = parseAspect(fromAddress);
                 if (a) return { aspect: a, source: 'address' };
@@ -1063,13 +1064,17 @@
         })();
 
         // The shape of this page's picture, passed on to the game as --aspect (the game validates it too). The stage's data-aspect gives the box its shape in CSS.
+        // What the selector remembers lives under ANTS_ASPECT_KEY, and only the selector writes it (web/four.html reads and writes the same key). The key of the first versions of the page was
+        // 'ants.aspect': it is NOT read any more, so that a Classic 4:3 that a browser once remembered (anybody who tried it stayed on 4:3 for good) is forgotten once: every browser starts
+        // with the 16:9 picture until its player picks Classic 4:3 again. ?aspect=4:3 in the address works as ever.
+        var ANTS_ASPECT_KEY = 'ants.aspect.v2';
         var ANTS_ASPECT = '16:9';
         var ANTS_ASPECT_SOURCE = 'default';
         (function () {
             var fromAddress = null;
             var remembered = null;
             try { fromAddress = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
-            try { remembered = window.localStorage.getItem('ants.aspect'); } catch (e) { /* private window: nothing was remembered */ }
+            try { remembered = window.localStorage.getItem(ANTS_ASPECT_KEY); } catch (e) { /* private window: nothing was remembered */ }
             var chosen = ANTS_PAGE.resolveAspect(fromAddress, ANTS_EMBED ? null : remembered);
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
@@ -1079,6 +1084,7 @@
                 b.setAttribute('aria-checked', b.getAttribute('data-aspect') === ANTS_ASPECT ? 'true' : 'false');
             });
         })();
+        // ANTS_PAGE_END
 
         var Module = {
             arguments: ANTS_ARGS,
@@ -1471,10 +1477,11 @@
         });
         document.getElementById('pseudo-exit').addEventListener('click', leaveFullscreen);
 
-        // The selector: the choice is remembered by the browser and the page reloads with ?aspect= (the game's picture is made when it starts). Other parts of the address
-        // (the room of a match, the seat) stay.
+        // The selector: the choice is remembered by the browser (under ANTS_ASPECT_KEY: nothing else writes it) and the page reloads with ?aspect= (the game's picture is made when it starts).
+        // Other parts of the address (the room of a match, the seat) stay.
+        // ANTS_SELECTOR_BEGIN (tests/scripts/web_aspect_key_check.js clicks the buttons of this block and sees what it stores and where it goes)
         (function () {
-            var remember = function (value) { try { window.localStorage.setItem('ants.aspect', value); } catch (e) { /* private window: not remembered */ } };
+            var remember = function (value) { try { window.localStorage.setItem(ANTS_ASPECT_KEY, value); } catch (e) { /* private window: not remembered */ } };
             document.querySelectorAll('.seg button[data-aspect]').forEach(function (button) {
                 button.addEventListener('click', function () {
                     var value = button.getAttribute('data-aspect');
@@ -1496,6 +1503,7 @@
                 });
             });
         })();
+        // ANTS_SELECTOR_END
 
         // The frame cap (ANTS_PAGE.makeFrameLimiter): the game's loop is the browser's requestAnimationFrame
         (function () {

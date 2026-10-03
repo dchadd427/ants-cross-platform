@@ -2,7 +2,7 @@
 
 // The canvas (widescreen work, milestone M2): the picture that the window shows, and how it sits in the window.
 //
-// The game draws into SDL's LOGICAL canvas (SDL_RenderSetLogicalSize): a fixed size of its own, 640 x 480 (the original's, the default) or 960 x 540 (16:9, `--aspect 16:9`),
+// The game draws into SDL's LOGICAL canvas (SDL_RenderSetLogicalSize): a fixed size of its own, 960 x 540 (16:9, the default of a game that is started from the command line) or 640 x 480 (the original's, `--aspect 4:3`),
 // which SDL scales into the window by the largest scale that fits, centred, with bars where the shapes differ (nearest-neighbour filtering). The scale is a whole number when
 // the window is a multiple of the canvas (1920 x 1080 shows 960 x 540 at 2x, 3840 x 2160 at 4x) and fractional otherwise (2560 x 1440 at 2.667x, 1280 x 720 at 1.333x); a window of
 // another shape has bars (2880 x 1800 shows 960 x 540 at 3x with bars of 90 rows above and below). Everybody who asks for the same aspect sees exactly the same world area, so
@@ -22,7 +22,7 @@ namespace ants::app {
 
 /// The shapes of picture that can be asked for (`--aspect`, the settings key `aspect`)
 enum class Aspect : uint8_t {
-    Classic4x3,     // the original's 640 x 480 (the default)
+    Classic4x3,     // the original's 640 x 480 (`--aspect 4:3`; the aspect of a config that is made by hand, as the tests do: the default of a game is kPlatformDefaultAspect, 16:9)
     Wide16x9        // 960 x 540
 };
 

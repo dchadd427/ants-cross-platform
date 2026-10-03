@@ -56,7 +56,7 @@ enum class AppState {
 
 struct ApplicationConfig {
     std::string title{"Ants"};
-    int window_width{1280};  // Default 2x integer scale
+    int window_width{1280};  // the classic canvas at 2x: the size that the window is created with; a 16:9 game is given its own first window right after (apply_window_layout)
     int window_height{960};
     bool fullscreen{false};
     /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas; 16:9 is a fixed
@@ -117,7 +117,7 @@ struct ApplicationConfig {
     /// log of the program (stderr, "Room chat: Name: text") and to NetGame::take_pregame_chat().
     std::string net_say;
     /// Where the window goes (native builds): an explicit position and size (--window-pos X,Y, --window-size WxH or W,H), or a cell of a grid over the display's usable
-    /// area (--grid CxR --cell N: the start scripts lay four games out as a 2 x 2 grid, each window the largest 4:3 rectangle of its cell); --display N picks the
+    /// area (--grid CxR --cell N: the start scripts lay four games out as a 2 x 2 grid, each window the largest rectangle of the canvas's shape, 16:9 by default, of its cell); --display N picks the
     /// display (default: the one the window opens on). --title sets the window's title.
     bool has_window_pos{false};
     int32_t window_x{0};
