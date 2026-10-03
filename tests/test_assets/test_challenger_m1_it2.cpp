@@ -23,6 +23,7 @@ static int g_tests_passed = 0;
 } while(0)
 
 #include <filesystem>
+#include "ants_test_paths.hpp"
 
 namespace fs = std::filesystem;
 

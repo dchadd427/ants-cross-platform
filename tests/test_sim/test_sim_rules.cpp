@@ -14,6 +14,7 @@
 #include <cassert>
 #include <cmath>
 #include <algorithm>
+#include "ants_test_paths.hpp"
 
 using namespace ants::sim;
 

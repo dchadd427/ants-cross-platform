@@ -15,12 +15,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include "ants_test_paths.hpp"
 
 using namespace ants::sim;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 static int g_test_count = 0;
 static int g_test_failures = 0;

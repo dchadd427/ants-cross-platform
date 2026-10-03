@@ -30,6 +30,7 @@
 #include <iterator>
 #include <string>
 #include <vector>
+#include "ants_test_paths.hpp"
 
 namespace fs = std::filesystem;
 namespace mv = ants::sim::movement;

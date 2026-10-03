@@ -64,13 +64,10 @@
 #include "ants_ai/rng.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/resource.h>
-#endif
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

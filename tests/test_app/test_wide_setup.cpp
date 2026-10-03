@@ -44,13 +44,10 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::app;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 namespace {
 
@@ -482,7 +479,7 @@ void test_strips(const assets::AssetArchive& arc) {
 // 3. The composed screens against the mock-ups, pixel for pixel
 // =====================================================================================================================================================
 
-constexpr const char* kMapsDir = ORIGINAL_ASSETS_DIR "/Maps";
+const std::string kMapsDir = std::string(ORIGINAL_ASSETS_DIR) + "/Maps";
 
 struct RendererRig {
     RendererRig(const assets::AssetArchive& archive, int32_t w, int32_t h) : width(w), height(h) {

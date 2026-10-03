@@ -27,9 +27,7 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
 
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
+#include "ants_test_paths.hpp"
 
 namespace zoomtest {
 

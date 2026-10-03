@@ -46,6 +46,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "ants_test_paths.hpp"
 
 namespace fs = std::filesystem;
 using namespace ants::sim;

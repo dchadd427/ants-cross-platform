@@ -12,9 +12,7 @@
 #include "ants_assets/object_footprint.hpp"
 #include "ants_sim/movement_tables.hpp"
 
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
+#include "ants_test_paths.hpp"
 
 int main() {
     ants::assets::AssetArchive archive;

@@ -28,16 +28,10 @@
 #include "ants_app/text_layout.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::app;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
-#ifndef ANTS_SOURCE_DIR
-#define ANTS_SOURCE_DIR "."
-#endif
 
 static int g_test_count = 0;
 static int g_test_failures = 0;

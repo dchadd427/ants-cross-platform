@@ -27,6 +27,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "ants_test_paths.hpp"
 
 using namespace ants::sim;
 using ants::assets::LevelData;
@@ -66,10 +67,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 #define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
 #define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
 #define ASSERT_NE(a, b) ASSERT_TRUE((a) != (b))
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 namespace {
 
