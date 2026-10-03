@@ -133,10 +133,11 @@ public:
     void handle_mouse_motion(int32_t screen_x, int32_t screen_y);
     /// FUN_01014076: Up / Down step the map list (wrapping), Enter, S and s start, Q, q, X and x leave, every other key does nothing (Esc included). `repeat` is the auto-repeat
     /// of a held key (SDL_KeyboardEvent::repeat). The original does not tell a repeat from a press (its key translation, FUN_01031bbd, never reads the repeat bit of a key message;
-    /// the input queue only thins them to one per 50 ms), so on its own screens a repeat of START acted like a press. In the remake START needs a PRESS on every screen that has one
-    /// (the local game, a LAN host, the leader of a server's room; a deliberate difference from the original, after a review found a held Enter that started a match nobody meant to
-    /// start: a key that closed the quick help or the chat input and is still held, or pressed twice, must not press the new screen's START): the repeat of START (Enter, the
-    /// keypad's Enter, S, s) is ignored. Every other key acts on a repeat (Up and Down scroll the list while they are held).
+    /// the input queue only thins them to one per 50 ms), so on its own screens a repeat of START acts like a press, and the LOCAL game's screen (no network, no chat input) keeps that exactly: a
+    /// held Enter starts it. On the screens of a ROOM (`RoomView::networked`: the LEADER of a server's room, which starts the match of every player there, and the host of a room on the local
+    /// network) START needs a PRESS (a deliberate difference from the original, after a review found a held Enter that started a match nobody meant to start: a key that closed the quick help
+    /// or the chat input and is still held, or pressed twice, must not press the new screen's START): the repeat of START (Enter, the keypad's Enter, S, s) is ignored there. Every other
+    /// key acts on a repeat everywhere (Up and Down scroll the list while they are held).
     void handle_key_down(SDL_Keycode key, bool repeat = false);
     /// Lets go of every button (nothing is pressed or captured any more): the application calls it when the press that was on a button is not the screen's (a click that closed the chat input)
     void release_buttons();

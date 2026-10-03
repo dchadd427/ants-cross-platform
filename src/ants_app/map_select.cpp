@@ -214,7 +214,7 @@ void MapSelectScreen::handle_key_down(SDL_Keycode key, bool repeat) {
         case SDLK_RETURN:
         case SDLK_KP_ENTER:
         case SDLK_s:
-            if (repeat) break;                                                // (a held key is no new press for START, on any screen that has one; the original's own screens act on it)
+            if (repeat && room_.networked) break;                             // (a held key is no new press for START on a screen of a ROOM: the leader's and a LAN host's, where the chat input exists; the local game's screen is the original's and acts on it)
             start();
             break;
         case SDLK_q:

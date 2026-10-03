@@ -3672,7 +3672,7 @@ void run_room_chat_ui_tests() {
         return true;
     };
 
-    TEST_CASE("N5.53 After The Chat Input Closes, START Is Not For The Next Key (A Review Fix): T, A Line, Enter, Enter (A Second Enter Right After) Starts Nothing; T, Enter, Enter Starts Nothing; Esc And Then S Starts Nothing; Neither Does The Keypad's Enter Or A Repeat; 350 ms After The Closing Still Nothing, 450 ms After It A Fresh Key Starts The Match; A Held Enter Starts Nothing On The Leader's, A LAN Host's And A Local Screen") {
+    TEST_CASE("N5.53 After The Chat Input Closes, START Is Not For The Next Key (A Review Fix): T, A Line, Enter, Enter (A Second Enter Right After) Starts Nothing; T, Enter, Enter Starts Nothing; Esc And Then S Starts Nothing; Neither Does The Keypad's Enter Or A Repeat; 350 ms After The Closing Still Nothing, 450 ms After It A Fresh Key Starts The Match; A Held Enter Starts Nothing On The Leader's Or A LAN Host's Screen (A Screen Of A Room) But Still Starts A Local Game (The Original's Screen)") {
         Duo2 d;
         ASSERT_TRUE(open_room(d, "GUARD-1"));
         Application& app = d.app;
@@ -3768,13 +3768,25 @@ void run_room_chat_ui_tests() {
             ASSERT_TRUE(duo.until([&]() { return host.state() == AppState::Playing && guest.net.phase() == net::NetGame::Phase::Playing; }, 8000));
             host.quit();
         }
-        {   // a local game's screen: the repeat of Enter starts nothing, the press does (the guard is not in play: there is no chat there)
+        {   // a local game's screen is the original's: a held Enter (the repeat) STARTS it, as it always did (the rule of the repeat is for the screens of a room only; there is no chat here)
             Application local;
             ASSERT_TRUE(local.init(headless_config()));
             ASSERT_EQ(local.state(), AppState::MapSelect);
-            for (int i = 0; i < 5; ++i) local.room_key_down(SDLK_RETURN, 0, true);
-            local.room_key_down(SDLK_s, 0, true);
-            ASSERT_EQ(local.state(), AppState::MapSelect);
+            ASSERT_FALSE(local.room_chat_available());
+            local.room_key_down(SDLK_RETURN, 0, true);
+            ASSERT_EQ(local.state(), AppState::Playing);
+            local.quit();
+        }
+        {   // ... and so does the repeat of the keypad's Enter and of S; and a press starts it too
+            for (const SDL_Keycode key : {SDLK_KP_ENTER, SDLK_s}) {
+                Application local;
+                ASSERT_TRUE(local.init(headless_config()));
+                local.room_key_down(key, 0, true);
+                ASSERT_EQ(local.state(), AppState::Playing);
+                local.quit();
+            }
+            Application local;
+            ASSERT_TRUE(local.init(headless_config()));
             local.room_key_down(SDLK_RETURN, 0, false);
             ASSERT_EQ(local.state(), AppState::Playing);
             local.quit();

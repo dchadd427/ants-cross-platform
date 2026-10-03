@@ -4423,6 +4423,7 @@ void run_bot_tests() {
             if (s.joined == 2 && clients[0]->lobby->room().slots[1].state == net::SlotState::Client && clients[1]->lobby->room().slots[0].state == net::SlotState::Client) break;
         }
         ASSERT_TRUE(clients[0]->lobby->chat("hello over TCP"));
+        for (int i = 0; i < 3000 && clients[1]->room_chat.empty(); ++i) pump();                // (Bob answers after it has heard Ann: two lines sent at the same moment over two sockets arrive in either order)
         ASSERT_TRUE(clients[1]->lobby->chat("and back"));
         for (int i = 0; i < 400; ++i) pump();
         ASSERT_EQ(said(clients[0]->room_chat), (std::vector<std::string>{"0|Ann|hello over TCP", "1|Bob|and back"}));

@@ -3001,7 +3001,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_FALSE(app.map_select().start_button().hovered());
     } TEST_END();
 
-    TEST_CASE("9.14c Quick Help To Setup Screen, The Original's Own Screens: The Second Click Of A Double Click On START! Presses The Local Game's START As Any Press Does (The Original Has No Double-Click Messages); A Held Enter Does NOT (Its Repeat Is Not A Press: A Rule Of The Remake Since The Review Of The Online Rooms, The Original Passes Key Repeats On); Releases That Began On The Quick Help Start Nothing") {
+    TEST_CASE("9.14c Quick Help To Setup Screen, The Original's Own Screens: The Second Click Of A Double Click On START! And A Held Enter Press The Local Game's START As Any Press Does (The Original Has No Double-Click Messages And Passes Key Repeats On); Releases That Began On The Quick Help Start Nothing") {
         {   // the second click of a double click (SDL: clicks 2), over both START buttons: a press on the new screen, the game starts (a local game is the original's screen, not guarded)
             Application app;
             ApplicationConfig cfg;
@@ -3025,8 +3025,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
             ASSERT_EQ(app.state(), AppState::Playing);
             app.shutdown();
         }
-        {   // a held Enter: the press closes the quick help, its repeats press nothing (the original's key handler does not tell them apart and starts the game; the remake's START needs a
-            // press on every screen), and a press of Enter after them starts the game
+        {   // a held Enter: the press closes the quick help, its repeat presses START (the original's key handler does not tell them apart)
             Application app;
             ApplicationConfig cfg;
             cfg.headless = true;
@@ -3038,10 +3037,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
             rig.key(SDL_KEYDOWN, SDLK_RETURN, false);
             rig.deliver();
             ASSERT_EQ(app.state(), AppState::MapSelect);
-            for (int i = 0; i < 5; ++i) rig.key(SDL_KEYDOWN, SDLK_RETURN, true);
-            rig.deliver();
-            ASSERT_EQ(app.state(), AppState::MapSelect);
-            rig.key(SDL_KEYDOWN, SDLK_RETURN, false);
+            rig.key(SDL_KEYDOWN, SDLK_RETURN, true);
             rig.deliver();
             ASSERT_EQ(app.state(), AppState::Playing);
             app.shutdown();
