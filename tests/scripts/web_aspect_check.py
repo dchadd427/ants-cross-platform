@@ -1096,6 +1096,37 @@ def main():
             check(all(gestures["prevented"]) and gestures["wheels"] == [[-100, True], [-100, True], [100, True]] and not gestures["elsewhere"],
                   "Safari's pinch (gesture events) over the canvas is cancelled and becomes wheel events for the game (a pinch of 25 %% is a notch: %s); on the guide it is left alone (%s)" % (gestures["wheels"], gestures["elsewhere"]))
 
+            # ---- one page with ?fill= and the wheel (v0.1.0: the two features met in this page): the address gives the game its arguments (the leader's fill among them) and the wheel is
+            # cancelled over the canvas only, exactly as on the page without them; the chat input of the setup screen is drawn by the game on that canvas, nothing else of the page changes
+            tab.emulate(976, 900, 1)
+            tab.open(web + "?join=/ws&room=MEET-1&fill=HaRd&name=Zed&aspect=16:9", settle=1.5)
+            joined = json.loads(tab.ev("JSON.stringify(window.ANTS_ARGS || null)") or "null")
+            pairs = [(joined[i], joined[i + 1]) for i in range(len(joined) - 1)] if joined else []
+            check(("--fill-bots", "hard") in pairs and ("--room", "MEET-1") in pairs and ("--name", "Zed") in pairs and ("--aspect", "16:9") in pairs and "HaRd" not in joined,
+                  "?join=/ws&room=MEET-1&fill=HaRd&name=Zed&aspect=16:9: the game's arguments carry the fill in lower case, the room, the name and the aspect (%s)" % joined)
+            g = tab.geometry()
+            tab.ev("window.__w = []; window.addEventListener('wheel', function (e) { window.__w.push({dp: e.defaultPrevented, ctrl: e.ctrlKey}); }); window.scrollTo(0, 0); 1")
+            cx, cy = g["box"][0] + 400, g["box"][1] + 300
+            guide = centre_of("guide-mouse")
+            guide[1] = tab.ev("document.getElementById('guide-mouse').getBoundingClientRect().y + 20")
+            tab.mouse("mouseMoved", cx, cy, button="none")
+            wheel(cx, cy, 120)
+            time.sleep(0.7)
+            seen = json.loads(tab.ev("JSON.stringify(window.__w)"))
+            check(tab.ev("window.scrollY") == 0 and len(seen) >= 1 and all(e["dp"] for e in seen), "the page with ?fill=: a wheel over the canvas is cancelled and does not scroll the page (scroll %s, %s)" % (tab.ev("window.scrollY"), seen))
+            tab.ev("window.__w.length = 0; 1")
+            wheel(cx, cy, -120, modifiers=2)
+            time.sleep(0.5)
+            seen = json.loads(tab.ev("JSON.stringify(window.__w)"))
+            check(len(seen) >= 1 and all(e["dp"] and e["ctrl"] for e in seen), "the page with ?fill=: a ctrl + wheel over the canvas is cancelled too (%s)" % seen)
+            tab.ev("window.__w.length = 0; 1")
+            tab.mouse("mouseMoved", guide[0], guide[1], button="none")
+            wheel(guide[0], guide[1], 120)
+            time.sleep(0.7)
+            seen = json.loads(tab.ev("JSON.stringify(window.__w)"))
+            check(tab.ev("window.scrollY") > 0 and len(seen) >= 1 and all(not e["dp"] for e in seen), "the page with ?fill=: a wheel over the guide scrolls the page as usual (scroll %s, %s)" % (tab.ev("window.scrollY"), seen))
+            settle_scroll()
+
             # ---- the game: it zooms
             for aspect, cw, ch_, view, label in (("16:9", 960, 540, (16, 21, 762, 500), "16:9"), ("4:3", 640, 480, (16, 21, 442, 440), "classic 4:3")):
                 tab.emulate(976, 900, 1)

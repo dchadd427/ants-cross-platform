@@ -4147,7 +4147,7 @@ void run_room_chat_box_tests() {
     const auto centre_y = [](const LayoutRect& r) { return r.y + r.h / 2; };
     // The application of a test in the 16:9 picture (960 x 540, its window the same size so that the pixels are the picture's: a frame is run to be read back, so the headless
     // application is told to take a screenshot that never comes instead of stopping after ten frames) or in the original's 4:3 one
-    const auto room_config = [](const Server& server, const std::string& room, const std::string& name, Aspect aspect, net::FillLevel fill) {
+    const auto room_config = [](const Server& server, const std::string& room, const std::string& name, Aspect aspect, net::FillLevel fill, float zoom_level = 1.0f, bool zoom_given = false) {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Join;
         cfg.net_address = "127.0.0.1";
@@ -4157,6 +4157,8 @@ void run_room_chat_box_tests() {
         cfg.aspect = aspect;
         cfg.aspect_given = true;
         cfg.fill_bots = fill;
+        cfg.zoom = zoom_level;                                                                // (the remembered level of the mouse-wheel zoom: the meeting of the rooms and the zoom, N5.68 - N5.71)
+        cfg.zoom_given = zoom_given;
         cfg.screenshot_path = (std::filesystem::temp_directory_path() / ("ants_box_" + room + ".png")).string();
         cfg.screenshot_frames = 1000000000;
         if (aspect == Aspect::Wide16x9) {
@@ -4173,7 +4175,7 @@ void run_room_chat_box_tests() {
         Peer peer;
         Hall hall{server, &app, {&peer}};
     };
-    const auto open_leader = [&](BoxRoom& d, const std::string& code, Aspect aspect, net::FillLevel fill, bool fog, bool with_bob) -> bool {
+    const auto open_leader = [&](BoxRoom& d, const std::string& code, Aspect aspect, net::FillLevel fill, bool fog, bool with_bob, float zoom_level = 1.0f, bool zoom_given = false) -> bool {
         server::RoomSpec spec;
         spec.code = code;
         spec.map = "TINY.LVL";
@@ -4182,7 +4184,7 @@ void run_room_chat_box_tests() {
         spec.has_seed = true;
         spec.seed = 4242;
         if (d.server.listener == nullptr || !d.server.mgr.create_room(spec, d.server.now).ok) return false;
-        if (!d.app.init(room_config(d.server, code, "Ana", aspect, fill))) return false;
+        if (!d.app.init(room_config(d.server, code, "Ana", aspect, fill, zoom_level, zoom_given))) return false;
         if (!d.hall.until([&]() { return d.app.net()->phase() == net::NetGame::Phase::Room && d.app.net()->is_leader(); }, 8000)) return false;
         if (with_bob) {
             if (!d.peer.net.join("127.0.0.1", d.server.port(), "Bob", 255, code)) return false;
@@ -4192,7 +4194,7 @@ void run_room_chat_box_tests() {
         return true;
     };
     // the application is a GUEST: a bare machine (named Lea) joined first and leads the room, the application joins second
-    const auto open_guest = [&](BoxRoom& d, const std::string& code, Aspect aspect, net::FillLevel fill) -> bool {
+    const auto open_guest = [&](BoxRoom& d, const std::string& code, Aspect aspect, net::FillLevel fill, float zoom_level = 1.0f, bool zoom_given = false) -> bool {
         server::RoomSpec spec;
         spec.code = code;
         spec.map = "TINY.LVL";
@@ -4203,7 +4205,7 @@ void run_room_chat_box_tests() {
         Hall before{d.server, nullptr, {&d.peer}};
         if (!d.peer.net.join("127.0.0.1", d.server.port(), "Lea", 255, code)) return false;
         if (!before.until([&]() { return d.peer.net.phase() == net::NetGame::Phase::Room; }, 8000)) return false;
-        if (!d.app.init(room_config(d.server, code, "Ben", aspect, fill))) return false;
+        if (!d.app.init(room_config(d.server, code, "Ben", aspect, fill, zoom_level, zoom_given))) return false;
         if (!d.hall.until([&]() { return d.app.net()->phase() == net::NetGame::Phase::Room && d.app.net()->my_seat() == 1 && d.peer.net.room().slots[1].rtt_ms != net::kRttUnknown; }, 8000)) return false;
         d.hall.step(700);
         return true;
@@ -4641,6 +4643,389 @@ void run_room_chat_box_tests() {
         app.run_frame_with_delta(0.016f);
         ASSERT_TRUE(app.room_chat().is_open() && app.room_chat().text().empty());
         app.quit();
+    } TEST_END();
+
+    // ---- the meeting of the online rooms and the mouse-wheel zoom (v0.1.0: the two were written apart, on v0.0.99): N5.68 - N5.72 ----
+    // The wheel, the middle button and the level of the zoom through the application's own entry points, and through the window's event queue where the screen's own routing is part of the
+    // question (a setup screen takes its events in handle_events, not in handle_mouse_wheel)
+    uint32_t wheel_clock = 500000;
+    const auto wheel_event = [&wheel_clock](int32_t y, float precise) {
+        SDL_MouseWheelEvent e{};
+        e.type = SDL_MOUSEWHEEL;
+        wheel_clock += 16;
+        e.timestamp = wheel_clock;
+        e.y = y;
+        e.preciseY = precise;
+        e.direction = SDL_MOUSEWHEEL_NORMAL;
+        return e;
+    };
+    const auto notch = [&](Application& app, int notches) {
+        for (int i = 0; i < std::abs(notches); ++i) app.handle_mouse_wheel(wheel_event(notches > 0 ? 1 : -1, notches > 0 ? 1.0f : -1.0f));
+    };
+    const auto middle_click = [](Application& app, int32_t x, int32_t y) {
+        SDL_MouseButtonEvent b{};
+        b.type = SDL_MOUSEBUTTONDOWN;
+        b.button = SDL_BUTTON_MIDDLE;
+        b.state = SDL_PRESSED;
+        b.clicks = 1;
+        b.x = x;
+        b.y = y;
+        app.handle_mouse_button(b);
+        b.type = SDL_MOUSEBUTTONUP;
+        b.state = SDL_RELEASED;
+        app.handle_mouse_button(b);
+    };
+    const auto queue = [](SDL_Event e) { return SDL_PushEvent(&e) == 1; };
+    const auto queue_motion = [&](int32_t x, int32_t y) {
+        SDL_Event e;
+        std::memset(&e, 0, sizeof(e));
+        e.type = SDL_MOUSEMOTION;
+        e.motion.x = x;
+        e.motion.y = y;
+        return queue(e);
+    };
+    const auto queue_wheel = [&](int32_t y, float precise) {
+        SDL_Event e;
+        std::memset(&e, 0, sizeof(e));
+        e.type = SDL_MOUSEWHEEL;
+        e.wheel.y = y;
+        e.wheel.preciseY = precise;
+        e.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+        return queue(e);
+    };
+    const auto queue_button = [&](uint8_t button, bool down, int32_t x, int32_t y) {
+        SDL_Event e;
+        std::memset(&e, 0, sizeof(e));
+        e.type = down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+        e.button.button = button;
+        e.button.state = down ? SDL_PRESSED : SDL_RELEASED;
+        e.button.clicks = 1;
+        e.button.x = x;
+        e.button.y = y;
+        return queue(e);
+    };
+    const auto queue_text = [&](const char* text) {
+        SDL_Event e;
+        std::memset(&e, 0, sizeof(e));
+        e.type = SDL_TEXTINPUT;
+        std::snprintf(e.text.text, sizeof(e.text.text), "%s", text);
+        return queue(e);
+    };
+    const auto queue_key = [&](SDL_Keycode sym) {
+        SDL_Event e;
+        std::memset(&e, 0, sizeof(e));
+        e.type = SDL_KEYDOWN;
+        e.key.keysym.sym = sym;
+        return queue(e);
+    };
+    // the picture of a rectangle of the canvas: the number of distinct colours in it (a picture of a map has many, the "No preview" box a handful)
+    const auto region_colours = [](Application& app, const LayoutRect& r) {
+        SDL_Rect rect{r.x, r.y, r.w, r.h};
+        std::vector<uint8_t> px(static_cast<size_t>(r.w) * static_cast<size_t>(r.h) * 4u, 0);
+        if (SDL_RenderReadPixels(app.renderer().get_sdl_renderer(), &rect, SDL_PIXELFORMAT_RGBA32, px.data(), r.w * 4) != 0) return 0;
+        std::set<uint32_t> seen;
+        for (size_t i = 0; i + 3 < px.size(); i += 4) seen.insert(static_cast<uint32_t>(px[i]) << 16 | static_cast<uint32_t>(px[i + 1]) << 8 | px[i + 2]);
+        return static_cast<int>(seen.size());
+    };
+    // START of the room's leader (Enter, the chat input closed): the match begins on this machine and on Bob's
+    const auto start_room_match = [&](BoxRoom& d, const std::string& code) -> bool {
+        d.app.room_key_down(SDLK_RETURN, 0, false);
+        if (!d.hall.until([&]() { return d.app.state() == AppState::Playing && d.peer.net.phase() == net::NetGame::Phase::Playing; }, 15000)) return false;
+        const server::RoomStatus st = d.server.status(code);
+        d.app.hud().dismiss_match_start_modal();
+        return st.state == server::RoomState::Running && st.bots.size() == 2;                // the fill seated the two empty seats
+    };
+
+    TEST_CASE("N5.68 The Wheel And The Middle Button Do Nothing On The 16:9 Setup Screens Of A Room (Leader And Guest, With Their Chat Box) - Not Over The Chat Box, Its Input Box, The Map Preview Or Anywhere Else - Whether The Chat Input Is Closed Or Open: Nothing Zooms, Nothing Opens Or Closes The Input, What Is Typed Stays, The Pictures Stay") {
+        for (const bool leader : {true, false}) {
+            BoxRoom d;
+            const std::string code = leader ? "WZ-LEAD" : "WZ-GUEST";
+            ASSERT_TRUE(leader ? open_leader(d, code, Aspect::Wide16x9, net::FillLevel::Medium, false, true, 2.0f, true) : open_guest(d, code, Aspect::Wide16x9, net::FillLevel::None, 2.0f, true));
+            Application& app = d.app;
+            const SetupVariant variant = leader ? SetupVariant::Online : SetupVariant::Guest;
+            const SetupLayout& layout = SL::of(variant);
+            ASSERT_TRUE(app.map_select().wide_layout() && app.map_select().setup_variant() == variant && app.map_select().chat_panel().visible);
+            ASSERT_TRUE(app.remembered_zoom() == 2.0f && app.zoom() == 2.0f);                  // (the setup screen's camera is at the remembered level until a match starts; a wheel or a middle button that leaked would change it)
+            app.map_select().update(0.6f);
+            const LayoutRect preview = layout.preview_area();
+            struct Spot {
+                const char* what;
+                int32_t x;
+                int32_t y;
+            };
+            const std::vector<Spot> spots = {
+                {"the chat box's lines", centre_x(layout.chat.lines), centre_y(layout.chat.lines)},
+                {"the chat box's input box", centre_x(layout.chat.input_box), centre_y(layout.chat.input_box)},
+                {"the map preview", centre_x(preview), centre_y(preview)},
+                {"the clay at the top right", 700, 20},
+                {"where a match's map view would be", 300, 200},
+            };
+            const LayoutRect outside{0, 0, layout.chat.box.x - 4, 540};                          // (the screen left of the chat column, the preview in it)
+            struct Snap {
+                float zoom{0};
+                float remembered{0};
+                float camera_zoom{0};
+                bool open{false};
+                std::string typed;
+                std::string text;
+                size_t lines{0};
+                bool locked{false};
+                AppState state{AppState::Loading};
+                net::NetGame::Phase phase{net::NetGame::Phase::Off};
+                uint64_t lines_px{0};
+                uint64_t outside_px{0};
+            };
+            const auto park = [&]() { return queue_motion(700, 20); };
+            const auto snap = [&]() {
+                park();
+                app.run_frame_with_delta(0.016f);
+                Snap s;
+                s.zoom = app.zoom();
+                s.remembered = app.remembered_zoom();
+                s.camera_zoom = app.renderer().camera().zoom;
+                s.open = app.room_chat().is_open();
+                s.typed = app.map_select().chat_panel().typed;
+                s.text = app.room_chat().text();
+                s.lines = app.map_select().chat_panel().lines.size();
+                s.locked = app.map_select().is_locked();
+                s.state = app.state();
+                s.phase = app.net()->phase();
+                s.lines_px = region_hash(app, layout.chat.lines);
+                s.outside_px = region_hash(app, outside);
+                return s;
+            };
+            const auto same = [](const Snap& a, const Snap& b) {
+                return a.zoom == b.zoom && a.remembered == b.remembered && a.camera_zoom == b.camera_zoom && a.open == b.open && a.typed == b.typed && a.text == b.text && a.lines == b.lines &&
+                       a.locked == b.locked && a.state == b.state && a.phase == b.phase && a.lines_px == b.lines_px && a.outside_px == b.outside_px;
+            };
+            // the wheel and the middle button at every spot, by the application's entry points and through the event queue
+            const auto roll_everywhere = [&](const char* when) -> bool {
+                for (const Spot& spot : spots) {
+                    const Snap before = snap();
+                    if (!queue_motion(spot.x, spot.y)) return false;
+                    app.run_frame_with_delta(0.016f);
+                    if (app.view_zoom_allowed(spot.x, spot.y)) {
+                        std::cout << "\n    [" << when << ", " << spot.what << "] the wheel would be allowed\n";
+                        return false;
+                    }
+                    notch(app, +1);
+                    notch(app, -1);
+                    notch(app, -1);
+                    app.handle_mouse_wheel(wheel_event(0, 0.6f));
+                    app.handle_mouse_wheel(wheel_event(0, 0.6f));
+                    middle_click(app, spot.x, spot.y);
+                    if (!(queue_wheel(1, 1.0f) && queue_wheel(-1, -1.0f) && queue_wheel(0, 0.6f) && queue_wheel(0, 0.6f) && queue_button(SDL_BUTTON_MIDDLE, true, spot.x, spot.y) &&
+                          queue_button(SDL_BUTTON_MIDDLE, false, spot.x, spot.y))) {
+                        return false;
+                    }
+                    app.run_frame_with_delta(0.016f);
+                    d.hall.step(30);
+                    const Snap after = snap();
+                    if (!same(before, after)) {
+                        std::cout << "\n    [" << when << ", " << spot.what << "] something changed: zoom " << before.zoom << " -> " << after.zoom << ", remembered " << before.remembered << " -> " << after.remembered
+                                  << ", input open " << before.open << " -> " << after.open << ", typed '" << before.typed << "' -> '" << after.typed << "', lines " << before.lines << " -> " << after.lines
+                                  << ", pictures " << (before.lines_px == after.lines_px && before.outside_px == after.outside_px ? "same" : "differ") << "\n";
+                        return false;
+                    }
+                }
+                return true;
+            };
+            // 1. the chat input closed: nothing opens it either (a middle click over the input box is not a click)
+            ASSERT_TRUE(roll_everywhere("input closed"));
+            ASSERT_FALSE(app.room_chat().is_open());
+            // 2. the chat input open, with a line typed
+            app.room_key_down(SDLK_t, 0, false);
+            app.room_text_input("t");
+            app.room_text_input("abc");
+            d.hall.step(30);
+            ASSERT_TRUE(app.room_chat().is_open() && app.room_chat().text() == "abc" && app.map_select().chat_panel().typed == "abc");
+            ASSERT_TRUE(roll_everywhere("input open"));
+            ASSERT_TRUE(app.room_chat().is_open() && app.room_chat().text() == "abc" && app.map_select().chat_panel().typed == "abc");
+            // 3. the line is sent as it was typed, and the room is still the room
+            app.room_key_down(SDLK_RETURN, 0, false);
+            ASSERT_TRUE(d.hall.until([&]() { return !d.peer.net.pregame_chat().empty(); }, 8000));
+            ASSERT_EQ(d.peer.net.pregame_chat().back().text, std::string("abc"));
+            ASSERT_TRUE(!app.room_chat().is_open() && app.state() == AppState::MapSelect && app.net()->phase() == net::NetGame::Phase::Room && !app.map_select().is_locked());
+            ASSERT_TRUE(app.remembered_zoom() == 2.0f && app.zoom() == 2.0f);
+            app.quit();
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.69 A Match Started From A Room With Bots (The Leader's Fill, A Server's Room) Starts At The Zoom 1 And Offers No Zoom-Out Although 0.5 Is Remembered - The Server's Bots Are Not A Local Game - And Leaves The Level Remembered: The Local Game After It Starts At 0.5 And Has The Zoom-Out Back") {
+        BoxRoom d;
+        ASSERT_TRUE(open_leader(d, "ZM-FILL", Aspect::Wide16x9, net::FillLevel::Medium, false, true, 0.5f, true));
+        Application& app = d.app;
+        ASSERT_TRUE(app.remembered_zoom() == 0.5f && app.zoom() == 0.5f);                    // (the setup screen's camera is at the remembered level until a match starts)
+        ASSERT_TRUE(start_room_match(d, "ZM-FILL"));
+        ASSERT_TRUE(app.network_active());
+        const LayoutRect view = app.layout().view();
+        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);                    // started at 1 (the zoom-out is not offered here), 0.5 stays remembered
+        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::no_zoom_out() && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}));
+        app.note_pointer(view.x + 300, view.y + 200);
+        notch(app, -1);
+        ASSERT_EQ(app.zoom(), 1.0f);                                                         // the wheel toward does not zoom out
+        app.handle_mouse_wheel(wheel_event(0, -0.6f));
+        app.handle_mouse_wheel(wheel_event(0, -0.6f));
+        ASSERT_EQ(app.zoom(), 1.0f);                                                         // nor does a trackpad's creep
+        ASSERT_TRUE(!app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));
+        middle_click(app, view.x + 300, view.y + 200);
+        ASSERT_EQ(app.zoom(), 1.0f);
+        ASSERT_TRUE(queue_motion(view.x + 300, view.y + 200) && queue_wheel(-1, -1.0f) && queue_button(SDL_BUTTON_MIDDLE, true, view.x + 300, view.y + 200) && queue_button(SDL_BUTTON_MIDDLE, false, view.x + 300, view.y + 200));
+        app.run_frame_with_delta(0.016f);                                                    // (through the window's own event loop, in the match)
+        ASSERT_EQ(app.zoom(), 1.0f);
+        ASSERT_EQ(app.remembered_zoom(), 0.5f);                                              // none of it changed what is remembered
+        d.hall.step(3000);                                                                   // the match goes on, at the zoom 1, with the server's bots
+        ASSERT_TRUE(!app.net()->desynced() && d.server.status("ZM-FILL").ticks > 40);
+        // the match is left: the local setup screen follows, and a local game starts at the remembered level and has the zoom-out
+        app.return_to_map_select();
+        ASSERT_TRUE(!app.network_active() && app.zoom_limits() == zoom::Limits::any());
+        ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
+        app.hud().dismiss_match_start_modal();
+        ASSERT_TRUE(app.zoom() == 0.5f && app.remembered_zoom() == 0.5f);
+        ASSERT_TRUE(app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}));
+        app.note_pointer(view.x + 300, view.y + 200);
+        notch(app, +1);
+        ASSERT_EQ(app.zoom(), 1.0f);
+        notch(app, -1);
+        ASSERT_EQ(app.zoom(), 0.5f);                                                         // (the zoom-out works in the local game after the network's)
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.70 Typing In The Match's Chat While Zooming (A Match From A Room With Bots): The Typed Line Is The Same Through Every Zoom Step Of The Wheel And The Middle Button - The Keys Of The Line (+ - =) Do Not Zoom - Enter Sends It Whole To The Room, And The Level Chosen In The Match Is What The Next Local Game Starts With") {
+        BoxRoom d;
+        ASSERT_TRUE(open_leader(d, "ZM-CHAT", Aspect::Wide16x9, net::FillLevel::Medium, false, true));
+        Application& app = d.app;
+        ASSERT_TRUE(start_room_match(d, "ZM-CHAT"));
+        const LayoutRect view = app.layout().view();
+        const int32_t px = view.x + 300;
+        const int32_t py = view.y + 200;
+        ASSERT_TRUE(queue_motion(px, py));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input().empty());
+        ASSERT_TRUE(queue_text("hel"));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_EQ(app.hud().get_chat_input(), std::string("hel"));
+        ASSERT_TRUE(queue_wheel(1, 1.0f));                                                   // zoom in, in the middle of the line
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.zoom() == 2.0f && app.hud().get_chat_input() == "hel");
+        ASSERT_TRUE(queue_text("lo"));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_EQ(app.hud().get_chat_input(), std::string("hello"));
+        ASSERT_TRUE(queue_text(" +-="));                                                     // the characters that a zoom key would have: they are text, the zoom stays
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.zoom() == 2.0f && app.hud().get_chat_input() == "hello +-=");
+        ASSERT_TRUE(queue_button(SDL_BUTTON_MIDDLE, true, px, py) && queue_button(SDL_BUTTON_MIDDLE, false, px, py));       // the middle button: back to 1, the line stays
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input() == "hello +-=");
+        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(-1, -1.0f));                         // toward: no zoom-out in this match (a queued button release in a headless run reads as a release outside the window: the motion puts the pointer back)
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input() == "hello +-=");
+        ASSERT_TRUE(queue_text(" team"));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_EQ(app.hud().get_chat_input(), std::string("hello +-= team"));
+        ASSERT_TRUE(queue_key(SDLK_RETURN));                                                 // Enter: the line goes to the room whole
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(app.hud().get_chat_input().empty() && log_has(app.hud().get_chat_log(), "hello +-= team"));
+        ASSERT_TRUE(d.hall.until([&]() { return !d.peer.chats.empty(); }, 8000));
+        ASSERT_EQ(d.peer.chats.back().text, std::string("hello +-= team"));
+        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(1, 1.0f));                           // zoomed again, a second line while zoomed, and the match goes on
+        app.run_frame_with_delta(0.016f);
+        ASSERT_EQ(app.zoom(), 2.0f);
+        ASSERT_TRUE(queue_text("second"));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(queue_key(SDLK_RETURN));
+        app.run_frame_with_delta(0.016f);
+        ASSERT_TRUE(d.hall.until([&]() { return d.peer.chats.size() == 2; }, 8000));
+        ASSERT_EQ(d.peer.chats.back().text, std::string("second"));
+        d.hall.step(2000);
+        ASSERT_TRUE(!app.net()->desynced() && app.zoom() == 2.0f && app.remembered_zoom() == 2.0f);
+        app.return_to_map_select();                                                          // the level chosen in the match (the zoom in) is what a local game starts with
+        ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
+        ASSERT_EQ(app.zoom(), 2.0f);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.71 The Same For The Host Of A Room On The Local Network Whose START Seats Bots Itself (This Machine Runs Them): The Match Is A Match Of The Network - It Starts At The Zoom 1 And Offers No Zoom-Out Although 0.5 Is Remembered, Bots Or Not - And The Local Game After It Starts At 0.5") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.fill_bots = net::FillLevel::Easy;
+        cfg.aspect = Aspect::Wide16x9;
+        cfg.aspect_given = true;
+        cfg.has_window_size = true;
+        cfg.window_w = 960;
+        cfg.window_h = 540;
+        cfg.zoom = 0.5f;
+        cfg.zoom_given = true;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.remembered_zoom() == 0.5f && app.zoom() == 0.5f);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x0C);               // this machine runs the two bots of the fill ...
+        ASSERT_TRUE(app.network_active());                                                   // ... and it is still a match of the network
+        app.hud().dismiss_match_start_modal();
+        const LayoutRect view = app.layout().view();
+        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);
+        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::no_zoom_out() && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}));
+        app.note_pointer(view.x + 300, view.y + 200);
+        notch(app, -1);
+        ASSERT_TRUE(app.zoom() == 1.0f && !app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));
+        middle_click(app, view.x + 300, view.y + 200);
+        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);
+        duo.step(3000);
+        ASSERT_TRUE(!app.net()->desynced() && !bob.net.desynced() && app.bots()->stats(2).decisions > 0);
+        app.return_to_map_select();
+        ASSERT_TRUE(!app.network_active() && app.bots() == nullptr && app.zoom_limits() == zoom::Limits::any());
+        ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
+        ASSERT_TRUE(app.zoom() == 0.5f && app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}));
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.72 The Map Preview Of The 16:9 Setup Screens Of A Room (Leader And Guest) Is The Zoom 1 Picture Whatever The Camera Is At (--zoom 0.5 Or 2: The Camera Of The Setup Screen Is At The Remembered Level, As A Zoomed Match Leaves It): The Same Pixels As With The Camera At 1, A Picture Of The Map, And The Live Camera Keeps Its Zoom") {
+        struct Shot {
+            bool ok{false};
+            uint64_t hash{0};
+            int colours{0};
+            float camera_zoom{0};
+        };
+        const auto preview_after = [&](bool leader, float level, int index) {
+            Shot out;
+            BoxRoom d;
+            const std::string code = "PV-" + std::string(leader ? "L" : "G") + std::to_string(index);
+            // (--zoom LEVEL --join ...: the camera of the setup screen is at the remembered level from the start, as a zoomed match leaves it; no preview has been made yet: no frame has run)
+            const bool opened = leader ? open_leader(d, code, Aspect::Wide16x9, net::FillLevel::None, false, true, level, true) : open_guest(d, code, Aspect::Wide16x9, net::FillLevel::None, level, true);
+            if (!opened) return out;
+            Application& app = d.app;
+            const LayoutRect area = SL::of(leader ? SetupVariant::Online : SetupVariant::Guest).preview_area();
+            app.map_select().update(0.6f);
+            app.run_frame_with_delta(0.016f);
+            out.hash = region_hash(app, area);
+            out.colours = region_colours(app, area);
+            out.camera_zoom = app.renderer().camera().zoom;
+            out.ok = out.hash != 0;
+            app.quit();
+            return out;
+        };
+        int index = 0;
+        for (const bool leader : {true, false}) {
+            const Shot at1 = preview_after(leader, 1.0f, index++);
+            ASSERT_TRUE(at1.ok && at1.colours > 30 && at1.camera_zoom == 1.0f);              // (a picture of the map, not the "No preview" box)
+            for (const float level : {0.5f, 2.0f}) {
+                const Shot other = preview_after(leader, level, index++);
+                if (!(other.ok && other.hash == at1.hash && other.colours == at1.colours && other.camera_zoom == level)) {
+                    std::cout << "\n    [" << (leader ? "leader" : "guest") << ", camera at " << level << "] hash " << other.hash << " vs " << at1.hash << ", colours " << other.colours << " vs " << at1.colours
+                              << ", camera " << other.camera_zoom << "\n";
+                }
+                ASSERT_TRUE(other.ok && other.hash == at1.hash && other.colours == at1.colours && other.camera_zoom == level);
+            }
+        }
     } TEST_END();
 }
 
