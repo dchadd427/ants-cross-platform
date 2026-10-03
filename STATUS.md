@@ -1,9 +1,9 @@
 # Status
 
-_Updated 2026-10-03 00:30 PDT · current release **v0.1.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-03 01:33 PDT · current release **v0.1.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- Workflow streamlining (one version source, short changelog, quick tests): next, approved
+- Workflow streamlining (one VERSION file and a build id, short changelog, `./run_tests.sh --fast`, ccache, docs/WORKFLOW.md): built on the branch `streamline` and tested; waits for CI on the branch and for the owner's go on the new AGENTS.md wording (a proposal, not in effect)
 
 ## On hold (not started; the owner decides when)
 - Reconnect part B: the games rejoin by themselves (also after a crash or power cut), Rejoin buttons, the resume countdown on screen; then on by default

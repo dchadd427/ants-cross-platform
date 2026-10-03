@@ -6,6 +6,7 @@
 
 # Scripts: a shell script with CRLF does not run; a batch file for cmd.exe needs CRLF in the working tree (it is stored with LF in the index)
 *.sh  text eol=lf
+VERSION text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
