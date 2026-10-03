@@ -213,3 +213,4 @@ void run_b2fix_tests();
 void run_b41_tests();
 void run_b41_team_tests();
 void run_b41_fight_tests();
+void run_b41_gate_tests();

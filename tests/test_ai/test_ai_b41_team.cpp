@@ -206,6 +206,7 @@ void run_b41_team_tests() {
                 const auto id = build(sim, allied);
                 LevelPlan plan = plan_for(level);
                 plan.contest_aware = true;
+                plan.gate = false;                                                                           // (the gate guiding raises the ants per pile: this test is about the order of the piles)
                 Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(30);
                 const HarvestTask& h = rig.as<StandardBot>().harvest();
@@ -229,6 +230,7 @@ void run_b41_team_tests() {
             const auto id = build(sim, false);
             LevelPlan plan = plan_for(Level::Medium);
             plan.contest_aware = true;
+                plan.gate = false;                                                                           // (the gate guiding raises the ants per pile: this test is about the order of the piles)
             Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(30);
             ASSERT_EQ(rig.as<StandardBot>().harvest().tier_of(static_cast<uint32_t>(id[2])), static_cast<int>(PileClass::One));
@@ -251,6 +253,7 @@ void run_b41_team_tests() {
             for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
             LevelPlan plan = plan_for(level);
             plan.contest_aware = true;
+                plan.gate = false;                                                                           // (the gate guiding raises the ants per pile: this test is about the order of the piles)
             Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(30);
             const std::vector<int> targets = harvest_targets(rig, sim, 0, 2);
@@ -265,6 +268,7 @@ void run_b41_team_tests() {
             for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
             LevelPlan plan = plan_for(Level::Medium);
             plan.contest_aware = true;
+                plan.gate = false;                                                                           // (the gate guiding raises the ants per pile: this test is about the order of the piles)
             plan.rank_by_remaining = rank_remaining;
             Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(30);

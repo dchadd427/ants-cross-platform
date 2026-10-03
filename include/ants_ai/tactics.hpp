@@ -50,6 +50,11 @@ struct LevelPlan {
     uint32_t contest_opening_ants{0};    // the opening: this many ants go to the contested centre of the map at the start (Medium 1, Hard 2), the rest harvest by value per trip (the owner's
                                          // playbook: strong players contest the centre first; a whole-match duel against the plain order is a tie, docs/BOTS.md); 0: none (Easy)
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
+    bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating", the owner's playbook): 55 to 65 ticks per deposit instead of 93 to 116
+    uint32_t gate_latency{9};            // ticks between a decision and the order's arrival (the profile's reaction delay less its jitter, and the sink)
+    uint32_t gate_max_staged{8};         // carriers brought to the doorstep at a time
+    bool gate_predictive{true};          // the entrance click is given before the gate is seen free (from the clip that the look showed first)
+    uint32_t gate_gap_ticks{47};         // with the gate guided the hill banks a deposit per 47 ticks per pile slot: the economy's cap of ants per pile follows (trip / gap + 1)
     bool typed_harvest{true};            // Fire and Bomber ants harvest between their jobs (HarvestTask::Params::extra_types)
     bool combat_harvests{false};         // Combat Ants harvest too (and punch what comes within two tiles of their way) instead of standing on a guard post
     // protecting the thief hole (every level)
@@ -60,6 +65,8 @@ struct LevelPlan {
     bool secure_side{false};             // (Medium, Hard) the power-ups of secure_kinds on the own side of the map are taken early, so that nobody steals them (docs/BOTS.md)
     uint8_t secure_kinds{0};             // bit t = AntType t, in the order of value: Fire, Bomber, then Thief, Combat, Swimmer (the owner's playbook: the first moves go to power-ups, not food)
     bool counters{true};                 // enemy fire walls near the hill or a pile are put out by an own Fire Ant, enemy bombs defused by an own Bomber or, without one, set off by a healthy idle worker
+    bool ally_help{false};               // the counters and the strike-back reach the ally's hill and piles too, and a blow on an ant of the ally that an own ant is near is answered
+    int32_t ally_help_radius{10};        // ... an own ant within this many tiles of the blow answers it (nobody walks across the map)
     bool bomb_hit{true};                 // ... the worker's way (without a Bomber): an ant that steps on a bomb loses 2 hit points and is thrown, and the bomb is gone
     int32_t counter_hill_radius{10};     // a hazard within this many tiles of the own hill (or within counter_pile_radius of a pile that the hill reaches) is harmful
     int32_t counter_pile_radius{3};
@@ -195,6 +202,8 @@ public:
     }
     /// The tick of the last look at which an own ant was lost (0: never)
     uint64_t last_loss() const noexcept { return last_loss_; }
+    /// The tiles of the ants of the ally that are in their hit clip (flinch or flight) at this look and were not at the previous one: a blow on the ally, as a person sees it
+    const std::vector<sim::TileCoord>& ally_hits() const noexcept { return ally_hits_; }
     /// Whether any ant of the team has been seen doing something (not idle) at some look: an idle bot's ants never move, so nothing of that team is a threat
     bool plays(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS && seen_moving_[team] != 0; }
     /// The tick of the first look that saw a wall on the tile (0: no wall there now); the wall burns out 3,600 ticks after it was lit, which is at or before this tick plus 3,600
@@ -227,6 +236,8 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> peak_ants_{};
     std::map<uint32_t, uint64_t> attacking_;                   // ant of another team -> the tick it was last seen in its attack clip
     std::vector<std::pair<uint64_t, uint32_t>> hit_log_;       // (tick of a look, own ants hit or lost at it)
+    std::vector<sim::TileCoord> ally_hits_;
+    std::map<uint32_t, bool> ally_in_hit_;                     // the ally's ants that were in their hit clip at the previous look
     uint64_t last_loss_{0};
     std::map<std::pair<int32_t, int32_t>, uint64_t> wall_seen_;   // (x, y) of a wall tile of the thief hole -> the tick it was first seen
 };

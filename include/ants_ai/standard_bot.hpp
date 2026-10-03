@@ -40,7 +40,8 @@ public:
           raids_(kRaids, tactics_),
           guard_(kGuard, tactics_),
           strike_(kStrike, tactics_),
-          hatch_(kHatch, tactics_) {}
+          hatch_(kHatch, tactics_),
+          gate_(kGate, gate_params(plan)) {}
     const char* kind() const noexcept override { return "standard"; }
     void start(const BotContext& context) override;
     void think(const BotView& view, Orders& orders) override;
@@ -57,6 +58,7 @@ public:
     const GuardTask& guard() const noexcept { return guard_; }
     const StrikeTask& strike() const noexcept { return strike_; }
     const HatchTask& hatch() const noexcept { return hatch_; }
+    const GateTask& gate() const noexcept { return gate_; }
     const Tactics& tactics() const noexcept { return tactics_; }
     const AntLedger& ledger() const noexcept { return ledger_; }
     uint32_t denials() const noexcept { return denials_; }
@@ -78,12 +80,20 @@ public:
     static constexpr TaskId kStrike = 8;
     static constexpr TaskId kBombs = 9;
     static constexpr TaskId kHatch = 10;
+    static constexpr TaskId kGate = 11;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
         Tactics t;
         t.plan = plan;
         return t;
+    }
+    static GateTask::Params gate_params(const LevelPlan& plan) {
+        GateTask::Params p;
+        p.latency_ticks = plan.gate_latency;
+        p.max_staged = plan.gate_max_staged;
+        p.predictive = plan.gate_predictive;
+        return p;
     }
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
         HarvestTask::Params p;
@@ -92,6 +102,10 @@ private:
         }
         if (plan.combat_harvests) p.extra_types = static_cast<uint8_t>(p.extra_types | (1u << static_cast<unsigned>(sim::AntType::Combat)));
         p.fire_aware = plan.fire_aware;
+        if (plan.gate) {
+            p.rescue = false;                                    // the gate task owns every carrier
+            p.gate_gap_ticks = plan.gate_gap_ticks;
+        }
         p.contest_aware = plan.contest_aware;
         p.contest_low = plan.contest_low;
         p.contest_high = plan.contest_high;
@@ -117,6 +131,7 @@ private:
     GuardTask guard_;
     StrikeTask strike_;
     HatchTask hatch_;
+    GateTask gate_;
     uint32_t denials_{0};
     uint32_t accepts_{0};
     uint64_t deny_after_{0};

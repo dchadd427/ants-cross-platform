@@ -66,6 +66,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.max_thief = 1;
             p.strike_force = 4;
             p.hatch_extra = 2;
+            p.gate = true;                       // guiding for eating: +5 to +21 percent alone on every shipped map (docs/BOTS.md)
             p.avoids_guarded_hills = true;
             break;
     }
@@ -166,6 +167,18 @@ void Memory::update(const BotView& v, const MapInfo& map) {
         }
     }
     while (!hit_log_.empty() && v.tick() > hit_log_.front().first + 2400u) hit_log_.erase(hit_log_.begin());
+
+    // the ally's ants that were hit since the previous look (their hit points are hidden, the clip is on the screen)
+    ally_hits_.clear();
+    std::map<uint32_t, bool> hit_now;
+    if (v.ally() < sim::MAX_PLAYERS) {
+        for (const AntView& a : v.others()) {
+            if (a.team != v.ally() || (a.state != sim::UnitState::Flinch && a.state != sim::UnitState::Knockback)) continue;
+            hit_now[a.id] = true;
+            if (ally_in_hit_.count(a.id) == 0) ally_hits_.push_back(a.tile);
+        }
+    }
+    ally_in_hit_ = std::move(hit_now);
 
     // the other teams: who moves, how many ants each shows, and the Thief ants in sight
     std::map<uint32_t, sim::TileCoord> thief_now;

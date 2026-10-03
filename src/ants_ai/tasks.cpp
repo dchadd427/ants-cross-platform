@@ -361,7 +361,7 @@ void HarvestTask::step(TaskContext& c) {
     }
 
     // 1b. a carrier that stands idle with its food for longer than a legitimate wait for the gate: its walk home failed. A person would click it onto the hill.
-    {
+    if (params_.rescue) {
         std::map<uint32_t, uint64_t> stuck_now;
         std::vector<uint32_t> home;
         const HillInfo& hill = c.map.hill(c.seat);

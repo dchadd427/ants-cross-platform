@@ -12,6 +12,7 @@ add_executable(test_ai
     test_ai_b41.cpp
     test_ai_b41_team.cpp
     test_ai_b41_fight.cpp
+    test_ai_b41_gate.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

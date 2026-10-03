@@ -120,6 +120,40 @@ void FightTask::start_fights(TaskContext& c) {
         fights_.emplace(best->id, std::move(f));
         ++fights_started_;
     }
+    // a blow on an ant of the ally: answered by the ants that are near it (nobody walks across the map)
+    if (plan.ally_help) {
+        for (const sim::TileCoord& tile : tactics_.memory.ally_hits()) {
+            const AntView* best = nullptr;
+            int32_t best_d = 0;
+            for (const AntView& e : v.others()) {
+                const int32_t d = e.tile.chebyshev_dist(tile);
+                if (d > 2 || !attackable(v, e) || shunned(e.id, now)) continue;
+                if (best == nullptr || d < best_d) {
+                    best = &e;
+                    best_d = d;
+                }
+            }
+            if (best == nullptr) continue;
+            const auto it = fights_.find(best->id);
+            if (it != fights_.end()) {
+                it->second.last_alarm = now;
+                continue;
+            }
+            bool near = false;
+            for (const AntView& a : v.mine()) {
+                if (can_fight(v, a) && a.tile.chebyshev_dist(best->tile) <= plan.ally_help_radius) near = true;
+            }
+            if (!near) continue;
+            Fight f;
+            f.target = best->id;
+            f.anchor = tile;
+            f.started = now;
+            f.last_alarm = now;
+            f.ally = true;
+            fights_.emplace(best->id, std::move(f));
+            ++fights_started_;
+        }
+    }
     // a thief on its way to the own hill (Medium and Hard)
     const HillInfo& hill = c.map.hill(c.seat);
     if (plan.intercepts && hill.present && v.has_grid()) {
@@ -197,6 +231,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         std::vector<const AntView*> cands;
         for (const AntView& a : v.mine()) {
             if (f.defenders.count(a.id) != 0 || !can_fight(v, a)) continue;
+            if (f.ally && a.tile.chebyshev_dist(target->tile) > plan.ally_help_radius) continue;
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && c.ledger.rank(owner) >= 3) continue;         // the ants of a pick-up, a raid or a fight are not taken
             cands.push_back(&a);
@@ -585,6 +620,7 @@ void WallTask::step(TaskContext& c) {
     if (plan.counters && !have_counter && pick < 0 && renew < 0) {
         const HillInfo* ally_hill = v.ally() < sim::MAX_PLAYERS && c.map.hill(v.ally()).present ? &c.map.hill(v.ally()) : nullptr;
         int32_t best = 0;
+        int best_harm = 0;
         for (const FireWallView& w : v.fire_walls()) {
             bool ours = false;
             for (const sim::TileCoord& e : tiles) ours = ours || e == w.tile;
@@ -592,11 +628,14 @@ void WallTask::step(TaskContext& c) {
                 for (const sim::TileCoord& e : east_tiles(*ally_hill)) ours = ours || e == w.tile;
             }
             const auto b = counter_black_.find(static_cast<int64_t>(w.tile.y) * 4096 + w.tile.x);
-            if (ours || (b != counter_black_.end() && b->second > now) || !harms_economy(v, c.map, plan, w.tile)) continue;
+            if (ours || (b != counter_black_.end() && b->second > now)) continue;
+            const int harm = harm_to(v, c.map, plan, w.tile);                              // the own economy first, then the ally's
+            if (harm == 0) continue;
             const int32_t d = keeper->tile.chebyshev_dist(w.tile);
-            if (!have_counter || d < best) {
+            if (!have_counter || harm < best_harm || (harm == best_harm && d < best)) {
                 have_counter = true;
                 best = d;
+                best_harm = harm;
                 counter_tile = w.tile;
             }
         }
@@ -680,6 +719,20 @@ void WallTask::step(TaskContext& c) {
 
 // ---- BombTask -------------------------------------------------------------------------------------------------------------------------------------------
 
+int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept {
+    if (harms_economy(view, map, plan, tile)) return 1;
+    const uint8_t ally = view.ally();
+    if (!plan.ally_help || ally >= sim::MAX_PLAYERS) return 0;
+    const HillInfo& hill = map.hill(ally);
+    if (hill.present && tile.chebyshev_dist(hill.origin) <= plan.counter_hill_radius) return 2;
+    for (const PileView& p : view.piles()) {
+        const PileInfo* info = map.pile(p.index);
+        if (info == nullptr || !info->approach[ally].reachable()) continue;
+        if (tile.chebyshev_dist(p.anchor) <= plan.counter_pile_radius + 1) return 2;
+    }
+    return 0;
+}
+
 bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept {
     const HillInfo& hill = map.hill(view.seat());
     if (hill.present && tile.chebyshev_dist(hill.origin) <= plan.counter_hill_radius) return true;
@@ -738,14 +791,18 @@ void BombTask::step(TaskContext& c) {
     const HillInfo& hill = c.map.hill(c.seat);
     const BombView* pick = nullptr;
     int32_t best = 0;
+    int best_harm = 0;
     for (const BombView& b : v.bombs()) {
         if (b.owner == c.seat || (v.ally() < sim::MAX_PLAYERS && b.owner == v.ally())) continue;       // an own or an allied bomb is no enemy's
         const auto bl = black_.find(key_of(b.tile));
-        if ((bl != black_.end() && bl->second > now) || !harms_economy(v, c.map, plan, b.tile)) continue;
+        if (bl != black_.end() && bl->second > now) continue;
+        const int harm = harm_to(v, c.map, plan, b.tile);                                              // the own economy first, then the ally's (only a Bomber goes there)
+        if (harm == 0) continue;
         const int32_t d = hill.present ? b.tile.chebyshev_dist(hill.origin) : 0;
-        if (pick == nullptr || d < best) {
+        if (pick == nullptr || harm < best_harm || (harm == best_harm && d < best)) {
             pick = &b;
             best = d;
+            best_harm = harm;
         }
     }
     if (pick == nullptr) return;
@@ -764,7 +821,7 @@ void BombTask::step(TaskContext& c) {
             defuse = true;
         }
     }
-    if (actor == nullptr && plan.bomb_hit) {
+    if (actor == nullptr && plan.bomb_hit && best_harm == 1) {                                         // (a worker does not walk to the ally's base to set a bomb off)
         for (const AntView& a : v.mine()) {
             if (a.type != v.default_ant_type() || a.hp < 8 || a.holding || a.carried_points > 0 || !a.idle() || v.powerup_at(a.tile) != nullptr) continue;
             const TaskId owner = c.ledger.owner(a.id);
@@ -1157,6 +1214,397 @@ void HatchTask::step(TaskContext& c) {
     clicked_ = true;
     eggs_before_ = v.eggs();
     next_after_ = now + 70u;
+}
+
+// ---- GateTask -------------------------------------------------------------------------------------------------------------------------------------------
+
+int GateTask::cost_of(const Geometry& g, sim::TileCoord t) const noexcept {
+    if (t.x < 0 || t.y < 0 || t.x >= g.width || g.cost == nullptr) return -1;
+    const size_t i = static_cast<size_t>(t.y) * static_cast<size_t>(g.width) + static_cast<size_t>(t.x);
+    return i < g.cost->size() ? (*g.cost)[i] : -1;
+}
+
+void GateTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
+    if (fate != Bot::Fate::Sent || command.type != sim::CommandType::GroupMove) return;
+    for (const uint32_t id : command.ants) {
+        const auto it = cmd_.find(id);
+        if (it == cmd_.end()) continue;
+        Cmd& cm = it->second;
+        if (cm.tile.x != command.tile_x || cm.tile.y != command.tile_y) continue;      // (an order of another task that this one did not give)
+        cm.release = tick;
+        if (id == user_) user_release_ = tick;
+    }
+}
+
+// The depositors leave through the queue-row tile that is cheapest toward the pile (the engine plans around idle ants, but a moving ant that arrives later is a head-on conflict): that
+// tile and the lane behind it are kept free, the other two tiles are the staging slots (Q1 first, it is the nearest to the ramp). Seen from the looks: an empty ant that stands on a
+// queue-row tile after the previous look saw it inside the mound has just left through that tile.
+void GateTask::track_exits(TaskContext& c, const Geometry& g) {
+    const BotView& v = c.view;
+    bool changed = false;
+    for (const AntView& a : v.mine()) {
+        const int zone = in_mound(g, a.tile) ? 1 : 0;
+        const auto it = prev_zone_.find(a.id);
+        if (it != prev_zone_.end() && it->second == 1 && zone == 0 && !a.holding && in_queue_row(g, a.tile)) {
+            exits_.push_back(a.tile.x - g.hill.x);
+            if (exits_.size() > 12) exits_.pop_front();
+            changed = true;
+        }
+        prev_zone_[a.id] = zone;
+    }
+    if (!changed && slot_pile_ != 0xFFFFFFFFu) return;
+    slot_pile_ = 0;
+    if (exits_.size() < 3) {                                                          // not enough exits seen yet: by the walking cost from the queue row to the nearest pile
+        slot_pile_ = 0xFFFFFFFFu;
+        choose_slots(c, g);
+        slot_pile_ = 0;
+        return;
+    }
+    int cnt[3] = {0, 0, 0};
+    for (const int e : exits_) ++cnt[e];
+    int best = 1;
+    for (const int i : {1, 0, 2}) {
+        if (cnt[i] > cnt[best]) best = i;
+    }
+    int n = 0;
+    if (best != 1) slot_order_[n++] = 1;
+    for (const int i : {0, 2}) {
+        if (i != best) slot_order_[n++] = i;
+    }
+    while (n < 3) slot_order_[n++] = -1;
+}
+
+void GateTask::choose_slots(TaskContext& c, const Geometry& g) {
+    const BotView& v = c.view;
+    const PileView* pile = nullptr;
+    int32_t pile_cost = 0;
+    for (const PileView& p : v.piles()) {
+        const PileInfo* info = c.map.pile(p.index);
+        if (info == nullptr || !info->approach[c.seat].reachable()) continue;
+        if (pile == nullptr || info->approach[c.seat].cost < pile_cost) {
+            pile = &p;
+            pile_cost = info->approach[c.seat].cost;
+        }
+    }
+    if (pile == nullptr) return;
+    if (pile->index == slot_pile_) return;
+    slot_pile_ = pile->index;
+    const std::vector<uint8_t> mask = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
+    const std::vector<int32_t> f = MapInfo::cost_field_onto(v.grid(), mask, c.seat, pile->anchor, v.walk_context());
+    int best = 1;
+    int32_t best_cost = 1 << 30;
+    for (const int i : {1, 0, 2}) {
+        const sim::TileCoord q = queue_tile(g, i);
+        const size_t idx = static_cast<size_t>(q.y) * static_cast<size_t>(g.width) + static_cast<size_t>(q.x);
+        const int32_t cost = idx < f.size() ? f[idx] : -1;
+        if (cost >= 0 && cost < best_cost) {
+            best_cost = cost;
+            best = i;
+        }
+    }
+    int n = 0;
+    if (best != 1) slot_order_[n++] = 1;
+    for (const int i : {0, 2}) {
+        if (i != best) slot_order_[n++] = i;
+    }
+    while (n < 3) slot_order_[n++] = -1;
+}
+
+void GateTask::step(TaskContext& c) {
+    const BotView& v = c.view;
+    const uint64_t now = v.tick();
+    const HillInfo& hill = c.map.hill(c.seat);
+    if (!hill.present || !v.has_grid()) return;
+    Geometry g;
+    g.hill = hill.origin;
+    g.entrance = hill.entrance;
+    g.width = c.map.width();
+    g.cost = &c.map.cost_field_of(c.seat);
+    if (g.cost->empty()) return;
+    // the staging tiles must be ones that an ant can stand on (a rock or water on the queue row or four rows north of the ramp: another tile, or no gate guiding at that hill)
+    const sim::Grid& grid = v.grid();
+    int slots_walkable = 0;
+    for (int i = 0; i < 3; ++i) {
+        g.slot_ok[static_cast<size_t>(i)] = MapInfo::walkable(grid, c.seat, queue_tile(g, i), v.walk_context()) && v.powerup_at(queue_tile(g, i)) == nullptr;
+        slots_walkable += g.slot_ok[static_cast<size_t>(i)] ? 1 : 0;
+    }
+    bool buffer_found = false;
+    for (int32_t dy = 0; dy <= 3 && !buffer_found; ++dy) {
+        for (const int32_t dx : {0, -1, 1}) {
+            const sim::TileCoord t{g.hill.x + 1 + dx, g.hill.y - params_.buffer_rows - (dy % 2 == 0 ? dy / 2 : -(dy + 1) / 2)};
+            if (!grid.in_bounds(t) || !MapInfo::walkable(grid, c.seat, t, v.walk_context()) || v.powerup_at(t) != nullptr || cost_of(g, t) < 0) continue;
+            g.buffer = t;
+            buffer_found = true;
+            break;
+        }
+    }
+    if (slots_walkable < 2 || !buffer_found) return;                                   // no room at the doorstep: the engine's flow stays
+    track_exits(c, g);
+
+    // what the ants do: a bite that runs, the entrance occupied, a clip that was first seen now
+    bool bite = false;
+    bool entrance_occupied = false;
+    std::vector<const AntView*> carriers;
+    for (const AntView& a : v.mine()) {
+        if (a.state == sim::UnitState::HarvestingFood) bite = true;
+        if (a.tile == g.entrance) entrance_occupied = true;
+        if (a.state == sim::UnitState::EnteringBase) {
+            if (clip_seen_.count(a.id) == 0) {
+                clip_seen_[a.id] = now;
+                pending_free_at_ = static_cast<int64_t>(now) + params_.clip_ticks + params_.exit_ticks;
+            }
+        }
+        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance) carriers.push_back(&a);          // (a thief with loot banks at the entrance too)
+    }
+    for (auto it = cmd_.begin(); it != cmd_.end();) {                                // only carriers are ours to place
+        bool carrier = false;
+        for (const AntView* a : carriers) carrier = carrier || a->id == it->first;
+        if (!carrier) it = cmd_.erase(it);
+        else ++it;
+    }
+    for (auto it = clip_seen_.begin(); it != clip_seen_.end();) {
+        bool in_clip = false;
+        for (const AntView& a : v.mine()) in_clip = in_clip || (a.id == it->first && a.state == sim::UnitState::EnteringBase);
+        if (!in_clip) it = clip_seen_.erase(it);
+        else ++it;
+    }
+    const auto find_mine = [&](uint32_t id) -> const AntView* {
+        for (const AntView& a : v.mine()) {
+            if (a.id == id) return &a;
+        }
+        return nullptr;
+    };
+
+    // 1. the gate user: the ant that was clicked onto the entrance
+    bool user_active = false;
+    if (user_ != 0) {
+        const AntView* ua = find_mine(user_);
+        if (ua == nullptr || !ua->holding) {
+            user_ = 0;
+        } else if (ua->tile == g.entrance || ua->state == sim::UnitState::EnteringBase) {
+            user_active = true;
+        } else {
+            user_active = true;
+            if (user_release_ != 0) {
+                const uint64_t age = now - user_release_;
+                const int cost = cost_of(g, ua->tile);
+                bool fail = false;
+                if (age >= params_.fail_age && !in_mound(g, ua->tile) && cost >= user_cost0_ && user_cost0_ >= 0) fail = true;
+                if (age >= 12 && !in_mound(g, ua->tile) && (ua->state == sim::UnitState::Idle || ua->state == sim::UnitState::CantGo) && !v.has_pending_path(ua->id)) fail = true;      // it stands: the click was refused
+                if (age > static_cast<uint64_t>(user_eta0_ + 40)) fail = true;
+                if (fail) {
+                    ++user_failures_;
+                    cmd_.erase(user_);
+                    user_ = 0;
+                    user_active = false;
+                }
+            }
+        }
+    }
+    if (!entrance_occupied) pending_free_at_ = 0;
+    const bool gate_free = !entrance_occupied && !user_active;
+    const bool predicted = params_.predictive && pending_free_at_ > 0 && !gate_free && static_cast<int64_t>(now) + params_.latency_ticks >= pending_free_at_;
+
+    // 2. the queue row as the engine counts it: occupied tiles (any own ant) and own orders onto its tiles that are still on their way
+    bool q_occ[3] = {false, false, false};
+    bool q_tgt[3] = {false, false, false};
+    for (const AntView& a : v.mine()) {
+        for (int i = 0; i < 3; ++i) {
+            if (a.tile == queue_tile(g, i)) q_occ[i] = true;
+        }
+    }
+    for (const AntView* a : carriers) {
+        const auto it = cmd_.find(a->id);
+        if (it == cmd_.end()) continue;
+        if (a->state != sim::UnitState::Walking && it->second.release != 0) continue;     // only an ant that is still on its way (or whose order has not left yet) holds a slot
+        for (int i = 0; i < 3; ++i) {
+            if (it->second.tile == queue_tile(g, i) && a->tile != queue_tile(g, i) && a->id != user_) q_tgt[i] = true;
+        }
+    }
+    int q_count = 0;
+    for (int i = 0; i < 3; ++i) {
+        if (q_occ[i] || q_tgt[i]) ++q_count;
+    }
+
+    // 3. the entrance click: the carrier that can be on the entrance soonest
+    const AntView* best = nullptr;
+    int best_key = 1 << 30;
+    for (const AntView* a : carriers) {
+        if (a->id == user_ && user_active) continue;
+        const int cost = cost_of(g, a->tile);
+        if (cost < 0) continue;
+        int key = cost * 2 + (a->idle() ? 0 : 1);
+        if (a->tile == queue_tile(g, 1)) key -= 1;                                    // straight in front of the ramp
+        if (key < best_key) {
+            best_key = key;
+            best = a;
+        }
+    }
+    uint32_t click = 0;
+    if ((gate_free || predicted) && best != nullptr) {
+        const bool hold = bite && bite_waited_ < params_.bite_wait_max;
+        if (hold) ++bite_waited_;
+        else {
+            click = best->id;
+            bite_waited_ = 0;
+        }
+    } else {
+        bite_waited_ = 0;
+    }
+
+    // 4. how many carriers are at the doorstep or on their way to it (the parked ones are not)
+    uint32_t staged = 0;
+    for (const AntView* a : carriers) {
+        if (a->id == user_ && user_active) continue;
+        const auto it = cmd_.find(a->id);
+        if (it != cmd_.end() && it->second.parked) continue;
+        if (in_doorstep(g, a->tile)) {
+            ++staged;
+            continue;
+        }
+        if (it != cmd_.end() && it->second.decided && in_doorstep(g, it->second.tile)) ++staged;
+    }
+
+    // 5. carriers nobody has ordered: take them over (the engine's own order for a fresh carrier is the entrance or the far waiting tile)
+    std::vector<uint32_t> to_buffer;
+    std::vector<uint32_t> to_park;
+    std::vector<std::pair<uint32_t, int>> to_slot;
+    bool released_one = false;
+    for (const AntView* a : carriers) {
+        if (a->id == click) continue;
+        if (a->id == user_ && user_active) continue;
+        auto it = cmd_.find(a->id);
+        const bool at_doorstep = in_doorstep(g, a->tile);
+        if (it != cmd_.end() && it->second.parked) {
+            if (!a->idle()) {                                                         // it moves again (a hit, a push): start over
+                cmd_.erase(it);
+                continue;
+            }
+            if (released_one || staged + 1 >= params_.max_staged) continue;          // stays parked
+            cmd_.erase(it);                                                           // room at the doorstep: this one is released
+            released_one = true;
+            ++staged;
+            to_buffer.push_back(a->id);
+            continue;
+        }
+        if (it != cmd_.end()) {
+            Cmd& cm = it->second;
+            if (!cm.decided || cm.release == 0) continue;                             // decided, not released yet
+            if (a->state == sim::UnitState::Walking) continue;                        // on its way
+            if (a->idle() && at_doorstep) {                                           // staged: remember where it really stands
+                cm.tile = a->tile;
+                continue;
+            }
+            if (now < cm.release + 24) continue;                                      // a young order: its path is not delivered yet
+            cmd_.erase(it);                                                           // stopped somewhere else: take it over again
+        }
+        if (a->idle() && at_doorstep) {
+            Cmd& cm = cmd_[a->id];
+            cm.tile = a->tile;
+            cm.release = now;
+            cm.decided = true;
+            continue;
+        }
+        if (staged >= params_.max_staged) {                                           // the doorstep is full: it stands where it is
+            to_park.push_back(a->id);
+            continue;
+        }
+        ++staged;
+        ++takeovers_;
+        int slot = -1;                                                                // a free queue-row slot if there is one, else the buffer
+        if (q_count < static_cast<int>(params_.slots)) {
+            for (int k = 0; k < 3; ++k) {
+                const int pref = slot_order_[k];
+                if (pref >= 0 && g.slot_ok[static_cast<size_t>(pref)] && !q_occ[pref] && !q_tgt[pref]) {
+                    slot = pref;
+                    break;
+                }
+            }
+        }
+        if (slot >= 0) {
+            to_slot.emplace_back(a->id, slot);
+            q_tgt[slot] = true;
+            ++q_count;
+        } else {
+            to_buffer.push_back(a->id);
+        }
+    }
+
+    // 6. what is sent: the takeovers first (they cancel the claims of fresh carriers), then the entrance click
+    const sim::TileCoord buffer = g.buffer;
+    if (!to_park.empty()) {
+        click = 0;                                                                    // a Stop is a Normal-priority command and would leave after an Urgent click: the click waits for the next look
+        c.orders.stop(to_park);
+        parks_ += static_cast<uint32_t>(to_park.size());
+        for (const uint32_t id : to_park) {
+            Cmd& cm = cmd_[id];
+            cm.tile = sim::TileCoord{-1, -1};
+            cm.release = now;
+            cm.decided = true;
+            cm.parked = true;
+        }
+    }
+    if (!to_buffer.empty()) {
+        c.orders.move(to_buffer, buffer, Priority::Urgent);
+        for (const uint32_t id : to_buffer) {
+            Cmd& cm = cmd_[id];
+            cm.tile = buffer;
+            cm.release = 0;
+            cm.decided = true;
+        }
+    }
+    for (const auto& p : to_slot) {
+        c.orders.move({p.first}, queue_tile(g, p.second), Priority::Urgent);
+        Cmd& cm = cmd_[p.first];
+        cm.tile = queue_tile(g, p.second);
+        cm.release = 0;
+        cm.decided = true;
+    }
+    if (click != 0 && best != nullptr) {
+        c.orders.move({click}, g.entrance, Priority::Urgent);
+        ++entrance_clicks_;
+        if (predicted) pending_free_at_ = 0;
+        user_ = click;
+        user_release_ = 0;
+        user_cost0_ = cost_of(g, best->tile);
+        user_eta0_ = MapInfo::walking_ticks(user_cost0_) + 25;
+        Cmd& cm = cmd_[click];
+        cm.tile = g.entrance;
+        cm.release = 0;
+        cm.decided = true;
+    }
+
+    // 7. keep the queue row filled: an idle carrier at the doorstep that is not on the row goes to a free slot
+    if (click == 0 && to_slot.empty() && q_count < static_cast<int>(params_.slots)) {
+        int slot = -1;
+        for (int k = 0; k < 3; ++k) {
+            const int pref = slot_order_[k];
+            if (pref >= 0 && g.slot_ok[static_cast<size_t>(pref)] && !q_occ[pref] && !q_tgt[pref]) {
+                slot = pref;
+                break;
+            }
+        }
+        if (slot >= 0) {
+            const AntView* pick = nullptr;
+            int pick_cost = 1 << 30;
+            for (const AntView* a : carriers) {
+                if (a->id == user_ && user_active) continue;
+                if (!a->idle() || !in_doorstep(g, a->tile) || in_queue_row(g, a->tile)) continue;
+                const int cost = cost_of(g, a->tile);
+                if (cost >= 0 && cost < pick_cost) {
+                    pick_cost = cost;
+                    pick = a;
+                }
+            }
+            if (pick != nullptr) {
+                c.orders.move({pick->id}, queue_tile(g, slot), Priority::Urgent);
+                Cmd& cm = cmd_[pick->id];
+                cm.tile = queue_tile(g, slot);
+                cm.release = 0;
+                cm.decided = true;
+            }
+        }
+    }
 }
 
 // ---- GuardTask ------------------------------------------------------------------------------------------------------------------------------------------

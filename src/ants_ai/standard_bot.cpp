@@ -89,7 +89,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.guards) guard_.step(context);
     if (plan.strikes || plan.wipe_focus) strike_.step(context);
     if (plan.hatches) hatch_.step(context);
-    aid_.step(context);
+    if (plan.gate) gate_.step(context);
+    else aid_.step(context);                                                          // (the gate task owns every carrier, a hit one included)
     harvest_.step(context);
 }
 
@@ -121,6 +122,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     raids_.on_command(command, fate, tick);
     guard_.on_command(command, fate, tick);
     strike_.on_command(command, fate, tick);
+    gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);
 }

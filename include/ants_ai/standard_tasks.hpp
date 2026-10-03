@@ -12,7 +12,9 @@
 //
 // Every order a task gives is a click that a person could make: a plain move, an attack on the tile of an enemy ant, a special order of one ant (BotController filters the rest).
 
+#include <array>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <set>
 #include <vector>
@@ -68,6 +70,7 @@ private:
         sim::TileCoord anchor{};             // the place of the first blow (the own hill for a thief): the leash is measured from here
         uint64_t started{0};
         uint64_t last_alarm{0};
+        bool ally{false};                    // a blow on an ant of the ally: only ants within ally_help_radius of the target answer
         std::map<uint32_t, Defender> defenders;
     };
 
@@ -242,6 +245,10 @@ private:
 /// with units that its hill reaches
 bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept;
 
+/// Whose economy a bomb or a fire wall on `tile` is in the way of: 1 the own (harms_economy), 2 the ally's (with plan.ally_help: within counter_hill_radius of the ally's hill, or
+/// within counter_pile_radius of a pile that the ally's hill reaches), 0 nobody's
+int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept;
+
 // ---- rank 3: the raids -------------------------------------------------------------------------------------------------------------------------------------
 
 /// The Thief ants of the bot (an own ant of type Thief, which this task claims) raid, again and again: a special order on an enemy hill makes the thief walk to its raid tile, plays
@@ -365,6 +372,99 @@ private:
     bool clicked_{false};                // a click was proposed at the last eligible look
     uint32_t eggs_before_{0};
     uint64_t refused_until_{0};
+};
+
+// ---- the gate -----------------------------------------------------------------------------------------------------------------------------------------------
+
+/// "Guiding for eating" (the owner's playbook: "bypassing the queue by manually controlling which ant deposits food"). The engine's own queue sends an ant that finds the entrance busy to a
+/// waiting tile on the FAR side of the mound (bx - 1, by + 3), and the task ANTHILLQ dispatches it from there on a walk of 44 to 68 ticks around the mound: one deposit per 93 to 116
+/// ticks, 10 to 13 a minute for a hill however many workers feed it. By hand a deposit takes 55 to 65 ticks (docs/BOTS.md, "The gate": measured with a Hard-limited client in the
+/// engine, +23 percent on TREASURE for a lone seat, +55 to +86 percent for 8 to 12 workers on a pile 8 to 20 tiles away). The task owns every carrier of the seat (an ant that holds food):
+///   stage      a fresh carrier (the engine's own order for it is the entrance or the far waiting tile) is taken over before it can claim the entrance: it goes to a free slot on the queue row
+///              (bx .. bx + 2, by - 1; two of them are kept filled, never the tile the depositors leave by), else to a buffer tile four rows north of the ramp; more than max_staged are
+///              stopped where they stand and released one by one
+///   deposit    one ant at a time is clicked onto the entrance (bx + 1, by + 1): the one that can be there soonest, when the gate is free, or, predictively, latency_ticks before it will
+///              be (the enter clip is 22 ticks and the depositor needs 9 more to leave the entrance, counted from the look that first showed the clip); never while a bite runs
+///   exit       the tile that the empty ants leave the hill by is seen from the looks (the queue-row tile an ant steps on right after the mound): it and the lane behind it stay free
+///   fails      a clicked ant that is neither on the mound nor nearer after 30 ticks, or that takes longer than its walk and 40 ticks, was refused: it is taken over again
+/// Without an entry in the plan (Easy and Medium, and every level until the tournaments say so) the engine's flow stays. It claims no ant in the ledger (carriers are nobody's task); the
+/// economy's own rescue of idle carriers and the carrier aid are off while it runs.
+class GateTask final : public Task {
+public:
+    struct Params {
+        int32_t buffer_rows{4};              // the buffer tile is (bx + 1, by - buffer_rows)
+        uint32_t slots{2};                   // queue-row tiles kept filled
+        uint32_t max_staged{8};              // carriers brought to the doorstep at a time (the others are parked)
+        uint32_t fail_age{30};
+        uint32_t clip_ticks{22};
+        uint32_t exit_ticks{9};
+        uint32_t latency_ticks{9};           // an order decided now is applied this many ticks later (the profile's delay less its jitter, and the sink)
+        uint32_t bite_wait_max{25};          // the entrance click waits at most this many looks for a bite that runs (a fresh carrier's own order claims the entrance until the takeover lands)
+        bool predictive{true};
+        int32_t doorstep_dx0{-4};
+        int32_t doorstep_dx1{6};
+        int32_t doorstep_dy0{-8};
+        int32_t doorstep_dy1{-1};
+    };
+    explicit GateTask(TaskId id) : GateTask(id, Params{}) {}
+    GateTask(TaskId id, const Params& params) : Task(id), params_(params) {}
+    const char* name() const noexcept override { return "gate"; }
+    void step(TaskContext& context) override;
+    void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
+
+    // ---- for the tests and the reports ----
+    uint32_t entrance_clicks() const noexcept { return entrance_clicks_; }
+    uint32_t takeovers() const noexcept { return takeovers_; }
+    uint32_t parks() const noexcept { return parks_; }
+    uint32_t user_failures() const noexcept { return user_failures_; }
+    uint32_t user() const noexcept { return user_; }
+    const std::deque<int>& exits() const noexcept { return exits_; }
+    /// The order in which the queue-row tiles (0, 1, 2) are used as slots, -1 for none
+    std::array<int, 3> slot_order() const noexcept { return {slot_order_[0], slot_order_[1], slot_order_[2]}; }
+    const Params& params() const noexcept { return params_; }
+
+private:
+    struct Cmd {
+        sim::TileCoord tile{-1, -1};
+        uint64_t release{0};
+        bool decided{false};
+        bool parked{false};
+    };
+    struct Geometry {
+        sim::TileCoord hill{};
+        sim::TileCoord entrance{};
+        sim::TileCoord buffer{};             // the doorstep tile for the carriers that wait: walkable, (bx + 1, by - buffer_rows) or the nearest that is
+        std::array<bool, 3> slot_ok{{true, true, true}};   // the queue-row tiles that an ant can stand on
+        int width{0};
+        const std::vector<int32_t>* cost{nullptr};
+    };
+    sim::TileCoord queue_tile(const Geometry& g, int i) const noexcept { return sim::TileCoord{g.hill.x + i, g.hill.y - 1}; }
+    bool in_queue_row(const Geometry& g, sim::TileCoord t) const noexcept { return t.y == g.hill.y - 1 && t.x >= g.hill.x && t.x <= g.hill.x + 2; }
+    bool in_mound(const Geometry& g, sim::TileCoord t) const noexcept { return t.x >= g.hill.x && t.x <= g.hill.x + 3 && t.y >= g.hill.y && t.y <= g.hill.y + 3; }
+    bool in_doorstep(const Geometry& g, sim::TileCoord t) const noexcept {
+        return t.x >= g.hill.x + params_.doorstep_dx0 && t.x <= g.hill.x + params_.doorstep_dx1 && t.y >= g.hill.y + params_.doorstep_dy0 && t.y <= g.hill.y + params_.doorstep_dy1;
+    }
+    int cost_of(const Geometry& g, sim::TileCoord t) const noexcept;
+    void track_exits(TaskContext& context, const Geometry& g);
+    void choose_slots(TaskContext& context, const Geometry& g);
+
+    Params params_;
+    int slot_order_[3]{1, 0, 2};
+    uint32_t slot_pile_{0xFFFFFFFFu};
+    std::deque<int> exits_;                       // the queue-row tile (0..2) used by the last empty ants that left the hill
+    std::map<uint32_t, int> prev_zone_;           // ant -> 0 outside / 1 in the mound (previous look)
+    std::map<uint32_t, Cmd> cmd_;
+    std::map<uint32_t, uint64_t> clip_seen_;
+    int64_t pending_free_at_{0};
+    uint32_t bite_waited_{0};
+    uint32_t user_{0};
+    uint64_t user_release_{0};
+    int user_cost0_{0};
+    int user_eta0_{0};
+    uint32_t entrance_clicks_{0};
+    uint32_t takeovers_{0};
+    uint32_t parks_{0};
+    uint32_t user_failures_{0};
 };
 
 // ---- rank 2: the guard -------------------------------------------------------------------------------------------------------------------------------------
