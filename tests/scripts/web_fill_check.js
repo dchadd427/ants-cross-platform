@@ -43,10 +43,17 @@ for (const [path, isShell] of [[process.argv[2], true], [process.argv[3], false]
     const receivers = [...text.matchAll(/([A-Za-z_$][\w$.]*)\.addEventListener\(\s*['"](wheel|mousewheel|DOMMouseScroll|gesturestart|gesturechange|gestureend)['"]/g)].map((m) => m[1] + ':' + m[2]);
     const onattr = /\bonwheel\b|\bonmousewheel\b/.test(text);
     if (isShell) {
-        const wrong = receivers.filter((r) => !r.startsWith('canvas:'));
+        // (the one other receiver is the fullscreen STAGE's wheel: the black bars around the picture of a screen of another shape; it cancels the wheel only in fullscreen and only
+        // outside the picture's box, so the page scrolls as usual otherwise: web_edge_check.py checks it in a real browser)
+        const wrong = receivers.filter((r) => !r.startsWith('canvas:') && r !== 'stageElement:wheel');
         const kinds = new Set(receivers.map((r) => r.split(':')[1]));
         if (wrong.length || onattr || !kinds.has('wheel') || !kinds.has('gesturestart') || !kinds.has('gesturechange') || !kinds.has('gestureend')) {
-            console.log('FAIL ' + path + ': wheel / pinch listeners must all be on the canvas, wheel and the three gesture events: ' + JSON.stringify(receivers) + (onattr ? ' (and an on-wheel attribute)' : ''));
+            console.log('FAIL ' + path + ': wheel / pinch listeners must all be on the canvas (and the stage\'s, in fullscreen over a bar), wheel and the three gesture events: ' + JSON.stringify(receivers) + (onattr ? ' (and an on-wheel attribute)' : ''));
+            failed++;
+        }
+        const stageWheel = /stageElement\.addEventListener\('wheel',[^\n]*/.exec(text);
+        if (receivers.indexOf('stageElement:wheel') !== -1 && !(stageWheel && /isFullscreen\(\)/.test(stageWheel[0]) && /!boxElement\.contains\(e\.target\)/.test(stageWheel[0]))) {
+            console.log('FAIL ' + path + ': the stage\'s wheel listener must act in fullscreen only, and only outside the picture\'s box');
             failed++;
         }
         // the middle button (back to the zoom 1): its press and its click are cancelled on the canvas, and only there, and only for button 1 (an unprevented press over a page that scrolls starts
