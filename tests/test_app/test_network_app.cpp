@@ -1144,6 +1144,52 @@ void run_host_tests() {
         app.quit();
         ASSERT_FALSE(app.network_active());
     } TEST_END();
+
+    TEST_CASE("N5.3b Host: before the host chooses anything its room is on the map that its setup screen highlights, TREASURE.LVL, and the guest's screen shows it (the host's own choice still wins, Down from the last map wraps to the first); a Maps folder without TREASURE.LVL gives the first map of its list") {
+        {
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            cfg.net_port = 0;
+            cfg.net_loopback_only = true;
+            cfg.player_name = "Alice";
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            const MapSelectScreen& screen = app.map_select();
+            ASSERT_EQ(screen.get_maps()[static_cast<size_t>(screen.get_selected_index())].filename, "TREASURE.LVL");
+            ASSERT_EQ(app.net()->room().map_name, "TREASURE.LVL");                          // the room is on it from the start: START needs a chosen map, and this is the host's
+            Peer bob;
+            ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+            Duo duo{app, bob};
+            ASSERT_TRUE(duo.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && bob.net.room().map_name == "TREASURE.LVL"; }, 8000));
+            app.map_select().handle_key_down(SDLK_DOWN);                                      // TREASURE.LVL is the last map of the list: Down wraps to the first
+            duo.step(200);
+            ASSERT_EQ(bob.net.room().map_name, "GAUNTLET.LVL");
+            app.quit();
+        }
+        {   // a folder that has no TREASURE.LVL (here two copies of TINY): the first map of its list, as before
+            namespace fs = std::filesystem;
+            std::random_device unique;
+            const fs::path folder = fs::temp_directory_path() / ("ants_host_maps_test_" + std::to_string(unique()));
+            std::error_code ec;
+            fs::create_directories(folder, ec);
+            for (const char* name : {"TINY.LVL", "OCEAN.LVL"}) fs::copy_file(maps_dir() + "TINY.LVL", folder / name, fs::copy_options::overwrite_existing, ec);
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            cfg.net_port = 0;
+            cfg.net_loopback_only = true;
+            cfg.player_name = "Alice";
+            cfg.maps_dir = folder.string();
+            {
+                Application app;
+                const bool ok = app.init(cfg);
+                const std::string room_map = ok ? app.net()->room().map_name : std::string();
+                if (ok) app.quit();
+                fs::remove_all(folder, ec);
+                ASSERT_TRUE(ok);
+                ASSERT_EQ(room_map, "OCEAN.LVL");
+            }
+        }
+    } TEST_END();
 }
 
 void run_guest_tests() {

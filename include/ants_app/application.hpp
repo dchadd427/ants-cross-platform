@@ -78,7 +78,7 @@ struct ApplicationConfig {
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
-    std::string default_map_path;                   // --map: the map of a game that starts without the setup screen; empty: the first map of the list
+    std::string default_map_path;                   // --map: the map of a game that starts without the setup screen; empty: the map that the setup screen highlights (TREASURE.LVL, else the first of the list)
     std::string midi_path{"Original-Ants/INTRO.MID"};
     /// --settings: where the options are remembered (a file; the original keeps them in the registry). Empty: the per-user application folder (the browser's local
     /// storage in the web build), and nowhere in a headless run, which is what the tests use.

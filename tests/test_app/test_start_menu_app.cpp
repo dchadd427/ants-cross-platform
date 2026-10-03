@@ -449,9 +449,11 @@ void menu_join(Application& app, const std::string& name, const std::string& cod
     click(app, MenuId::Join);
 }
 
-// "Host an online match" from the first panel: the map (a click goes forward through the six), the players (the page's default is 4: a click gives 2, two clicks 3), the name, Host
+// "Host an online match" from the first panel: the map (a click goes forward through the six; the panel opens on Treasure, the default, so the first two clicks go round to Tiny, the first of the
+// six, and `map_clicks` counts from Tiny as it always did in these tests), the players (the page's default is 4: a click gives 2, two clicks 3), the name, Host
 void menu_host(Application& app, const std::string& name, int map_clicks, int players_clicks) {
     click(app, MenuId::HostOnline);
+    for (int i = 0; i < 2; ++i) click(app, MenuId::HostMap);                         // Treasure (the default) -> Islands -> Tiny
     for (int i = 0; i < map_clicks; ++i) click(app, MenuId::HostMap);
     for (int i = 0; i < players_clicks; ++i) click(app, MenuId::HostPlayers);
     if (!name.empty()) fill(app, MenuId::HostName, name);
@@ -866,7 +868,9 @@ int main(int argc, char** argv) {
             click(app, MenuId::Seat3);                                                       // black: hard
             press(app, SDLK_ESCAPE);
             click(app, MenuId::HostOnline);
-            click(app, MenuId::HostMap);                                                     // small
+            click(app, MenuId::HostMap);                                                     // Treasure (the default) -> Islands
+            click(app, MenuId::HostMap);                                                     // -> Tiny
+            click(app, MenuId::HostMap);                                                     // -> small
             click(app, MenuId::HostPlayers);                                                 // 2
             click(app, MenuId::HostPlayers);                                                 // 3
         }
@@ -1317,6 +1321,49 @@ int main(int argc, char** argv) {
         click(app, MenuId::Host);                                                            // the same panel hosts again (a new code)
         ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
         ASSERT_TRUE(shown_code(app) != code);
+    } TEST_END();
+
+    TEST_CASE("A4.6 Host: with no map stored the panel opens on Treasure and a room that is made without choosing a map is a Treasure room (the code names it, the server makes it on TREASURE.LVL for four players); the default is not written to the settings; a map that is stored wins after a restart (the room is made on it)") {
+        TempDir temp;
+        const std::string settings = ini(temp, "t.ini");
+        {   // nothing stored (the fixture server's own default map is TINY.LVL: a Treasure room can only come from the code that the menu made)
+            Server server;
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
+            click(app, MenuId::HostOnline);
+            MenuElement e;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::HostMap, e) && e.value == "Treasure");
+            ASSERT_EQ(app.start_menu().settings().host_map, 4);
+            fill(app, MenuId::HostName, "Hostess");
+            click(app, MenuId::Host);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+            const std::string code = shown_code(app);
+            ASSERT_TRUE(code.rfind("demo-treasure-4p-", 0) == 0 && code.size() == 23);       // the page's grammar: demo-<map>-<n>p-<six>
+            const server::RoomStatus made = server.status(code);
+            ASSERT_TRUE(made.map == "TREASURE.LVL" && made.expected == 4 && made.joined == 1 && made.leader == 0);
+        }
+        ASSERT_TRUE(read_file(settings).find("host_map") == std::string::npos);              // nothing was chosen, so nothing was written: the default is the program's, not the player's
+        {   // a stored choice wins
+            {
+                std::ofstream out(settings, std::ios::app | std::ios::binary);
+                out << "host_map=gauntlet\n";
+            }
+            Server server;
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
+            click(app, MenuId::HostOnline);
+            MenuElement e;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::HostMap, e) && e.value == "Gauntlet");
+            ASSERT_EQ(app.start_menu().settings().host_map, 3);
+            fill(app, MenuId::HostName, "Hostess");
+            click(app, MenuId::Host);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+            const std::string code = shown_code(app);
+            ASSERT_TRUE(code.rfind("demo-gauntlet-4p-", 0) == 0);
+            ASSERT_EQ(server.status(code).map, std::string("GAUNTLET.LVL"));
+        }
     } TEST_END();
 
     TEST_CASE("A5.1 Failures come back to the panel with a clear line, every one different: the server cannot be reached (named), no room with that code (named), a name the server would rename is refused on the panel without any connection, and the lost connection") {
@@ -2215,11 +2262,11 @@ int main(int argc, char** argv) {
             hall.step(300);
             ASSERT_EQ(app.start_menu().panel(), MenuPanel::Host);
             ASSERT_TRUE(app.net() == nullptr && server.mgr.list(server.now).empty());        // no room was made
-            ASSERT_EQ(app.start_menu().settings().host_map, 0);                              // and the map under the cursor was not cycled by the second Enter
+            ASSERT_EQ(app.start_menu().settings().host_map, 4);                              // and the map under the cursor (Treasure, the default) was not cycled by the second Enter
             app.start_menu().update(0.4f);
             key(SDLK_RETURN);
             app.run_frame_with_delta(0.016f);
-            ASSERT_EQ(app.start_menu().settings().host_map, 1);                              // Enter of its own does cycle it
+            ASSERT_EQ(app.start_menu().settings().host_map, 5);                              // Enter of its own does cycle it (Islands)
         }
         {   // Single player
             Application app;

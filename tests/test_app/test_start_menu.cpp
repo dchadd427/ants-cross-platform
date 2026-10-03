@@ -747,6 +747,9 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(r.menu.panel(), MenuPanel::Host);
         ASSERT_EQ(r.menu.selected(), MenuId::HostMap);                                     // the first input is selected on arrival, not the Host button (M2)
         const std::vector<std::string> maps = {"Tiny", "Small", "Medium", "Gauntlet", "Treasure", "Islands"};
+        ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Treasure"));              // the panel opens on the default map (M4.4); the walk below starts from the first of the list
+        r.key(SDLK_RIGHT);                                                                 // Treasure -> Islands
+        r.key(SDLK_RIGHT);                                                                 // Islands -> Tiny: the list goes round
         for (int lap = 0; lap < 2; ++lap) {
             for (size_t i = 0; i < maps.size(); ++i) {
                 ASSERT_EQ(r.element(MenuId::HostMap).value, maps[i]);
@@ -980,6 +983,77 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(has_text(room_panel.menu.elements(), fill_choice_caption()));                                                       // (only the panel that has the choice)
     } TEST_END();
 
+    TEST_CASE("M4.4 Host: the map is Treasure until a choice is stored (the list keeps the page's order, so Tiny, its first entry, is not the default) and a stored choice wins: a new menu, an empty store, a store with a word that is no map, a store with each of the six (any case); the panel shows it, the request carries it, the room's code names it, a change is stored") {
+        // the default is Treasure, the fifth of the six; the list is the page's (by size), so the first entry is Tiny
+        ASSERT_EQ(kDefaultMenuMap, 4);
+        ASSERT_EQ(std::string(menu_map(static_cast<size_t>(kDefaultMenuMap)).key), std::string("treasure"));
+        ASSERT_EQ(std::string(menu_map(0).key), std::string("tiny"));
+        ASSERT_EQ(std::string(menu_map(kMenuMapCount).key), std::string("treasure"));      // an index that is not in the list gives the default map too
+        ASSERT_EQ(std::string(menu_map(99).key), std::string("treasure"));
+        {
+            StartMenu fresh;
+            ASSERT_EQ(fresh.settings().host_map, 4);
+            MenuSettings plain;
+            ASSERT_EQ(plain.host_map, 4);
+        }
+        // nothing stored: the panel shows Treasure, the request, the code and the settings key follow it, a change is stored
+        {
+            Rig r;
+            r.to_panel(MenuId::HostOnline);
+            ASSERT_EQ(r.menu.selected(), MenuId::HostMap);
+            ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Treasure"));
+            ASSERT_EQ(r.menu.settings().host_map, 4);
+            r.key(SDLK_DOWN);                                                              // players
+            r.key(SDLK_DOWN);                                                              // the empty seats at START
+            r.key(SDLK_DOWN);                                                              // the name
+            r.key(SDLK_DOWN);                                                              // Host
+            r.key(SDLK_RETURN);
+            const MenuRequest request = r.take();
+            ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.map == 4 && request.players == 4);
+            ASSERT_EQ(std::string(menu_map(static_cast<size_t>(request.map)).key), std::string("treasure"));
+            const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, []() { return 0u; });
+            ASSERT_EQ(code, std::string("demo-treasure-4p-aaaaaa"));                       // a room whose code names Treasure: the server makes it on TREASURE.LVL
+            r.menu.connection_failed("The server is busy.");
+            ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Treasure"));          // (and a failed attempt keeps it)
+            TempDir temp;
+            ConfigStore store;
+            store.set_location(temp.file("settings.ini"));
+            r.menu.settings().write(store, MenuSetting::HostMap);
+            ASSERT_EQ(store.get_string("host_map", "", 99), std::string("treasure"));
+        }
+        // the settings that come from a store: what is not one of the six words is the default, and a stored map wins, Tiny and Islands (the two ends of the list) included
+        const auto shown_with = [](const std::string& ini, int& index) {
+            ConfigStore store;
+            store.parse(ini);
+            MenuSettings settings;
+            settings.load(store);
+            index = settings.host_map;
+            Rig r;
+            r.menu.set_settings(settings);
+            r.to_panel(MenuId::HostOnline);
+            return r.element(MenuId::HostMap).value;
+        };
+        int index = -1;
+        ASSERT_EQ(shown_with("", index), std::string("Treasure"));
+        ASSERT_TRUE(index == 4);
+        ASSERT_EQ(shown_with("host_map=\n", index), std::string("Treasure"));
+        ASSERT_TRUE(index == 4);
+        ASSERT_EQ(shown_with("host_map=bogus\n", index), std::string("Treasure"));
+        ASSERT_TRUE(index == 4);
+        ASSERT_EQ(shown_with("host_map=tiny\n", index), std::string("Tiny"));
+        ASSERT_TRUE(index == 0);
+        ASSERT_EQ(shown_with("host_map=SMALL\n", index), std::string("Small"));
+        ASSERT_TRUE(index == 1);
+        ASSERT_EQ(shown_with("host_map=Medium\n", index), std::string("Medium"));
+        ASSERT_TRUE(index == 2);
+        ASSERT_EQ(shown_with("host_map=gauntlet\n", index), std::string("Gauntlet"));
+        ASSERT_TRUE(index == 3);
+        ASSERT_EQ(shown_with("host_map=treasure\n", index), std::string("Treasure"));
+        ASSERT_TRUE(index == 4);
+        ASSERT_EQ(shown_with("host_map=islands\n", index), std::string("Islands"));
+        ASSERT_TRUE(index == 5);
+    } TEST_END();
+
     TEST_CASE("M5.1 Servers: HOST, HOST:PORT, IPv4, [IPv6] and [IPv6]:PORT are read (the port 4001 when none is given); anything else is refused with a reason; what the screen shows reads back") {
         struct Good { const char* text; const char* host; uint16_t port; };
         const Good good[] = {
@@ -1137,7 +1211,7 @@ int main(int argc, char* argv[]) {
         d.load(junk);
         ASSERT_TRUE(d.name.empty() && d.server.empty());
         ASSERT_TRUE(d.seats[0] == SeatChoice::Empty && d.seats[1] == SeatChoice::Easy && d.seats[2] == SeatChoice::Empty && d.seats[3] == SeatChoice::Hard);
-        ASSERT_TRUE(d.host_map == 0 && d.host_players == 4);
+        ASSERT_TRUE(d.host_map == 4 && d.host_players == 4);                               // "bogus" is no map: the default, Treasure (index 4: M4.4)
         {   // what the menu is given is brought into range
             StartMenu menu;
             MenuSettings given;
@@ -1153,7 +1227,7 @@ int main(int argc, char* argv[]) {
         ConfigStore none;
         MenuSettings n;
         n.load(none);
-        ASSERT_TRUE(n.name.empty() && n.server.empty() && n.host_map == 0 && n.host_players == 4);
+        ASSERT_TRUE(n.name.empty() && n.server.empty() && n.host_map == 4 && n.host_players == 4);     // nothing stored: Treasure
         for (SeatChoice c : n.seats) ASSERT_TRUE(c == SeatChoice::Empty);
         // a name that was stored too long or with odd characters is cleaned
         ConfigStore long_name;
@@ -1607,9 +1681,9 @@ int main(int argc, char* argv[]) {
             r.quick_key(SDLK_RETURN);
             ASSERT_FALSE(r.menu.has_request());
             ASSERT_EQ(r.menu.panel(), MenuPanel::Host);
-            ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Tiny"));              // the map is not cycled by it
+            ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Treasure"));          // the map is not cycled by it (the panel opens on the default map: Treasure)
             r.key(SDLK_RETURN);
-            ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Small"));             // a press of its own is
+            ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Islands"));           // a press of its own is
         }
         // Join: the Enter that joins is followed by a second one while "Connecting" shows: it must not cancel the attempt (Cancel used to be selected)
         {

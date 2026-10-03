@@ -416,7 +416,8 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
 
-    // 3. Load Map Level: the list is what the Maps folder holds; a game that starts without the setup screen plays --map, else the first map of the list
+    // 3. Load Map Level: the list is what the Maps folder holds; a game that starts without the setup screen plays --map, else the map that the setup screen highlights (TREASURE.LVL when the folder
+    // holds it, else the first map of the list: MapSelectScreen::init)
     map_select_.init(config_.maps_dir);
     if (config_.default_map_path.empty()) config_.default_map_path = map_select_.get_selected_map_path();
     if (config_.default_map_path.empty()) {

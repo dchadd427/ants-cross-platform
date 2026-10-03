@@ -39,7 +39,8 @@ struct MapSelectEntry {
  * @brief The setup screen of the original (Ants.exe: base class FUN_01012ce0, host screen FUN_01013b36, refresh FUN_010133ef, map list FUN_01013de7, selection
  * FUN_01013fc9, keys FUN_01014076, START FUN_010140c5; docs 5.50).
  *
- * The maps are every `*.lvl` of the Maps folder in the byte order of their file names. All labels, the portraits and the thumbs appear with the
+ * The maps are every `*.lvl` of the Maps folder in the byte order of their file names; the list starts with DEFAULT_MAP_FILE highlighted when the folder has it (the original highlights
+ * its first entry: a deliberate deviation at the owner's request), else with the first entry. All labels, the portraits and the thumbs appear with the
  * first run of the refresh task, 500 ms after the screen was created. The buttons are the original's button class (ScreenButton: the callback runs at the release);
  * the keys are Up / Down (previous / next map, wrapping), Enter, S and s (START), Q, q, X and x (Leave); nothing else does anything. START locks the screen.
  *
@@ -50,6 +51,10 @@ struct MapSelectEntry {
 class MapSelectScreen {
 public:
     static constexpr double REFRESH_MS = 500.0;    // the refresh task's delay (FUN_01031e92(task, 500, 0)): until then the labels are empty and nobody is listed
+
+    /// The map that the list highlights when the screen is made, if the Maps folder holds it (any case): the map that is played most, at the owner's request. A DELIBERATE DEVIATION from
+    /// the original, which highlights the first entry of its list (docs/AUDIT_ONE_TO_ONE.md, 3b); the list, its order and everything else of the screen stay the original's.
+    static constexpr const char* DEFAULT_MAP_FILE = "TREASURE.LVL";
 
     // The labels of the screen (FUN_01012ce0): the map name (36, 312) 179 x 26, its description (36, 380) 293 x 26, the prompt (36, 447) 293 x 35 with 14 px lines,
     // the players' names (415, 95 + 50 i) 120 x 20; every label has 18 px lines (the prompt 14) and the colour (239, 231, 223)
@@ -113,7 +118,8 @@ public:
     MapSelectScreen();
     ~MapSelectScreen() = default;
 
-    /// Reads the map list: every `*.lvl` of `maps_dir`, sorted by the byte order of the file names (no map is named in the program; an unreadable folder gives an empty list)
+    /// Reads the map list: every `*.lvl` of `maps_dir`, sorted by the byte order of the file names (no map is named in the program, but for the highlight below; an unreadable folder gives an
+    /// empty list). The highlighted entry is `DEFAULT_MAP_FILE` when the folder holds it, else the first entry (as the original always does).
     void init(const std::string& maps_dir = "Original-Ants/Maps");
     /// The screen is created (again): the labels are empty until the refresh, nothing is locked, no button is pressed
     void enter();

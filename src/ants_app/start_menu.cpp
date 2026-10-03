@@ -47,6 +47,15 @@ constexpr MenuMap kMaps[kMenuMapCount] = {
     {"tiny", "Tiny"}, {"small", "Small"}, {"medium", "Medium"}, {"gauntlet", "Gauntlet"}, {"treasure", "Treasure"}, {"islands", "Islands"},
 };
 
+constexpr bool same_word(const char* a, const char* b) noexcept {
+    while (*a != '\0' && *a == *b) {
+        ++a;
+        ++b;
+    }
+    return *a == *b;
+}
+static_assert(kDefaultMenuMap >= 0 && static_cast<size_t>(kDefaultMenuMap) < kMenuMapCount && same_word(kMaps[kDefaultMenuMap].key, "treasure"), "the Host panel's default map is Treasure");
+
 bool host_char(char c) noexcept {
     return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '.' || c == '-' || c == '_';
 }
@@ -223,7 +232,7 @@ std::string fill_choice_sentence(net::FillLevel level) {
     return "Empty seats will be " + net::fill_level_title(level) + " bots.";
 }
 
-const MenuMap& menu_map(size_t index) noexcept { return kMaps[index < kMenuMapCount ? index : 0]; }
+const MenuMap& menu_map(size_t index) noexcept { return kMaps[index < kMenuMapCount ? index : static_cast<size_t>(kDefaultMenuMap)]; }
 
 int menu_map_index(const std::string& key) noexcept {
     const std::string k = lower_text(key);
@@ -311,7 +320,7 @@ void MenuSettings::load(const ConfigStore& store) {
         from = comma + 1;
     }
     const int map = menu_map_index(store.get_string(kKeyHostMap, std::string(), 16));
-    host_map = map >= 0 ? map : 0;
+    host_map = map >= 0 ? map : kDefaultMenuMap;                                    // (nothing stored, or anything that is not one of the six words: Treasure; a stored map wins)
     host_players = store.get_int(kKeyHostPlayers, 4, 2, 5);                         // 2 <= value < 5
     host_fill = net::FillLevel::None;                                               // (anything that is not one of the four words is the default)
     net::parse_fill_level(trim_blanks(store.get_string(kKeyHostFill, std::string(), 16)), host_fill);
@@ -343,7 +352,7 @@ void MenuSettings::write(ConfigStore& store, MenuSetting setting) const {
 // ---- the menu ---------------------------------------------------------------------------------------------------------------------------------------------
 
 StartMenu::StartMenu() {
-    settings_.host_map = 0;
+    settings_.host_map = kDefaultMenuMap;
     settings_.host_players = 4;
 }
 

@@ -66,6 +66,10 @@ struct MenuMap {
     const char* name;      // what the screen shows ("Small")
 };
 inline constexpr size_t kMenuMapCount = 6;
+/// The map that the Host panel offers when the settings hold no choice (a `host_map` that was stored wins): Treasure, the map that is played most (the owner's request: Treasure is the default
+/// of everything). The list keeps the order of web/four.html (by size), so its first entry, Tiny, is not the default; `kDefaultMenuMap` is Treasure's index (start_menu.cpp checks it).
+inline constexpr int kDefaultMenuMap = 4;
+/// The map at `index`; an index that is not in the list gives the default map, Treasure
 const MenuMap& menu_map(size_t index) noexcept;
 /// The index of a key (any case), or -1
 int menu_map_index(const std::string& key) noexcept;
@@ -104,7 +108,7 @@ struct MenuSettings {
     std::string name;                                   // "" when none is stored (the menu then proposes the game's default)
     std::string server;                                 // "" when none is stored (the default server)
     std::array<SeatChoice, 4> seats{};                  // by seat: green, red, blue, black
-    int host_map{0};                                    // index into the six maps
+    int host_map{kDefaultMenuMap};                      // index into the six maps (Treasure until a choice is stored)
     int host_players{4};                                // 2 - 4
     net::FillLevel host_fill{net::FillLevel::None};     // the bots that the leader's START seats in the empty seats (none: the match starts with the people who are there)
 

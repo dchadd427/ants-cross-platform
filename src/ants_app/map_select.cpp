@@ -3,6 +3,7 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_app/ui_anim.hpp"
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <unordered_set>
 
@@ -33,6 +34,12 @@ MapSelectEntry make_entry(const std::string& file_name, const std::string& full_
     return entry;
 }
 
+// The same file name, whatever the case (a folder of the community's maps may spell TREASURE.LVL as Treasure.lvl)
+bool same_file_name(const std::string& a, const std::string& b) {
+    return a.size() == b.size() &&
+           std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y)); });
+}
+
 }  // namespace
 
 // FUN_01013de7: FindFirstFile / FindNextFile over the Maps folder's `*.lvl`; every name is inserted into the list in front of the first entry that compares greater
@@ -55,7 +62,17 @@ void MapSelectScreen::init(const std::string& maps_dir) {
     for (const auto& f : found) maps_.push_back(make_entry(f.first, f.second));
     previews_.clear();                                                      // (the pictures of the wide screen belong to the files that were listed)
 
+    // The highlight. The original selects the first entry of its list: FUN_01013de7 ends with FindClose and FUN_010298fc(list, 0), which puts the list's cursor on its head, and the screen's
+    // constructor (FUN_01013b36) ends with FUN_01013fc9(this, 0), which selects the entry at the cursor. THE REMAKE DEVIATES ON PURPOSE, at the owner's request (Treasure is the map that is played
+    // most, and it is to be the default of everything): TREASURE.LVL is highlighted when the folder holds it (any case), else the first entry, as the original does.
+    // Only the highlight differs: the list, its order, the keys, START and the labels are the original's (docs/AUDIT_ONE_TO_ONE.md, 3b).
     selected_index_ = 0;
+    for (size_t i = 0; i < maps_.size(); ++i) {
+        if (same_file_name(maps_[i].filename, DEFAULT_MAP_FILE)) {
+            selected_index_ = static_cast<int32_t>(i);
+            break;
+        }
+    }
     fog_of_war_ = false;
     enter();
 }

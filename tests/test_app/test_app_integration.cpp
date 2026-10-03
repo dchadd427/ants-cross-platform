@@ -1948,9 +1948,13 @@ void run_suite_8_unit_health_and_map_select() {
             }
         }
 
-        // Initial selection: the first entry
-        ASSERT_EQ(screen.get_selected_index(), 0);
+        // Initial selection: TREASURE.LVL, the last entry of this list (the one deliberate deviation of the screen, at the owner's request: the original highlights the first entry; 8.9 has it)
+        ASSERT_EQ(screen.get_selected_index(), 5);
+        ASSERT_EQ(maps[5].filename, "TREASURE.LVL");
         ASSERT_FALSE(screen.get_selected_map_path().empty());
+        // The rest of this test walks the list from its first entry, as the original's screen starts
+        screen.set_selected_index(0);
+        ASSERT_EQ(screen.get_selected_index(), 0);
 
         // Down: next map, Up: previous map, both wrap round
         screen.handle_key_down(SDLK_DOWN);
@@ -1994,6 +1998,7 @@ void run_suite_8_unit_health_and_map_select() {
     TEST_CASE("8.3 Setup Screen Buttons Are The Original's Button Class: The Press Captures (Pressed Art, Click Sound), The Release Acts, Leaving The Button Cancels For Good") {
         MapSelectScreen screen;
         screen.init("Original-Ants/Maps");
+        screen.set_selected_index(0);                                               // (the screen starts on TREASURE.LVL, see 8.9; this test steps through the list from its first entry)
         std::vector<uint32_t> sounds;
         screen.set_on_play_sfx([&](uint32_t s) { sounds.push_back(s); });
 
@@ -2060,6 +2065,7 @@ void run_suite_8_unit_health_and_map_select() {
     TEST_CASE("8.5 Setup Screen: The Fog Of War Pair Is Silent, Off By Default And Acts At The Release; There Are No Other Click Targets (Map Box, Description Box, Thumbs, Drop)") {
         MapSelectScreen screen;
         screen.init("Original-Ants/Maps");
+        const int32_t start_index = screen.get_selected_index();                    // (TREASURE.LVL, see 8.9: what matters here is that no click target below moves it)
         std::vector<uint32_t> sounds;
         screen.set_on_play_sfx([&](uint32_t s) { sounds.push_back(s); });
         int starts = 0;
@@ -2103,7 +2109,7 @@ void run_suite_8_unit_health_and_map_select() {
             screen.handle_mouse_down(pt[0], pt[1], SDL_BUTTON_LEFT);
             screen.handle_mouse_up(pt[0], pt[1], SDL_BUTTON_LEFT);
         }
-        ASSERT_EQ(screen.get_selected_index(), 0);
+        ASSERT_EQ(screen.get_selected_index(), start_index);
         ASSERT_FALSE(screen.is_fog_of_war_enabled());
         ASSERT_EQ(starts, 0);
         ASSERT_EQ(leaves, 0);
@@ -2175,6 +2181,110 @@ void run_suite_8_unit_health_and_map_select() {
         empty.handle_key_down(SDLK_RETURN);
         ASSERT_TRUE(started.empty());
         ASSERT_TRUE(empty.get_selected_map_path().empty());
+    } TEST_END();
+
+    TEST_CASE("8.9 Setup Screen: The List Highlights TREASURE.LVL When The Folder Holds It (Any Case), Else The First Entry; Only The Highlight Differs From The Original (The List, Its Order, Up / Down With The Wrap, START); A Room's Leader And Guest Show The Room's Map") {
+        namespace fs = std::filesystem;
+        struct TempDir {
+            fs::path path;
+            ~TempDir() { std::error_code ec; fs::remove_all(path, ec); }
+        } dir;
+        dir.path = temp_path_of_this_run("ants_map_default_test");
+        std::error_code ec;
+        fs::create_directories(dir.path, ec);
+        const fs::path source = fs::path("Original-Ants/Maps/TINY.LVL");
+        ASSERT_TRUE(fs::exists(source));
+        const auto copies = [&](const std::string& folder_name, const std::vector<std::string>& names) {
+            const fs::path folder = dir.path / folder_name;
+            fs::create_directories(folder, ec);
+            for (const std::string& name : names) fs::copy_file(source, folder / name, fs::copy_options::overwrite_existing, ec);
+            return folder.string();
+        };
+
+        // 1. The six maps of the original: the list is the original's (byte order of the names, GAUNTLET first, TREASURE last) and TREASURE.LVL is the highlighted entry
+        {
+            MapSelectScreen screen;
+            screen.init("Original-Ants/Maps");
+            const auto& maps = screen.get_maps();
+            const char* order[] = {"GAUNTLET.LVL", "ISLANDS.LVL", "MEDIUM.LVL", "SMALL.LVL", "TINY.LVL", "TREASURE.LVL"};
+            ASSERT_EQ(maps.size(), 6u);
+            for (size_t i = 0; i < maps.size(); ++i) ASSERT_EQ(maps[i].filename, order[i]);
+            ASSERT_EQ(std::string(MapSelectScreen::DEFAULT_MAP_FILE), "TREASURE.LVL");
+            ASSERT_EQ(screen.get_selected_index(), 5);
+            ASSERT_EQ(maps[static_cast<size_t>(screen.get_selected_index())].filename, "TREASURE.LVL");
+            ASSERT_TRUE(screen.get_selected_map_path().find("TREASURE.LVL") != std::string::npos);
+            // a player who only presses START plays it (a local screen: Enter starts)
+            std::string started;
+            screen.set_on_start([&](const std::string& path) { started = path; });
+            screen.handle_key_down(SDLK_RETURN);
+            ASSERT_TRUE(started.find("TREASURE.LVL") != std::string::npos);
+            // everything else is the original's: Down from the last entry is the first (the wrap), Up goes back, nothing else moves the list
+            screen.handle_key_down(SDLK_DOWN);
+            ASSERT_EQ(screen.get_selected_index(), 0);
+            screen.handle_key_down(SDLK_UP);
+            ASSERT_EQ(screen.get_selected_index(), 5);
+            screen.handle_key_down(SDLK_UP);
+            ASSERT_EQ(screen.get_selected_index(), 4);                                // TINY.LVL: the entry in front of it
+        }
+        // 2. A folder without TREASURE.LVL: the first entry, as the original does (a name that only starts like it is not it)
+        {
+            MapSelectScreen screen;
+            screen.init(copies("without", {"POPCORN.lvl", "OCEAN.LVL", "Mid.LVL", "TREASURE2.LVL", "TREASURE ISLAND.LVL"}));
+            ASSERT_EQ(screen.get_maps().size(), 5u);
+            ASSERT_EQ(screen.get_selected_index(), 0);
+            ASSERT_EQ(screen.get_maps()[0].filename, "Mid.LVL");
+        }
+        // 3. A folder with its own spelling of the name: found whatever the case, highlighted where the list puts it (capitals sort before small letters: TREASURE2.LVL is in front of Treasure.lvl)
+        {
+            MapSelectScreen screen;
+            screen.init(copies("mixed", {"ZULU.LVL", "Treasure.lvl", "TREASURE2.LVL", "ALPHA.LVL"}));
+            ASSERT_EQ(screen.get_maps().size(), 4u);
+            ASSERT_EQ(screen.get_maps()[2].filename, "Treasure.lvl");
+            ASSERT_EQ(screen.get_selected_index(), 2);
+            MapSelectScreen lower;
+            lower.init(copies("lower", {"alpha.lvl", "treasure.lvl"}));
+            ASSERT_EQ(lower.get_maps().size(), 2u);
+            ASSERT_EQ(lower.get_selected_index(), 1);
+        }
+        // 4. No maps at all: nothing is highlighted and nothing starts (as before)
+        {
+            MapSelectScreen screen;
+            screen.init((dir.path / "nothing").string());
+            ASSERT_TRUE(screen.get_maps().empty());
+            ASSERT_TRUE(screen.get_selected_map_path().empty());
+        }
+        // 5. A guest and the leader of a server's room show the room's map, never the highlight of the list: the application follows the room (follow_host_choice), and the leader's
+        // Up / Down change nothing
+        {
+            MapSelectScreen guest;
+            guest.init("Original-Ants/Maps");
+            MapSelectScreen::RoomView view;
+            view.networked = true;
+            view.is_host = false;
+            view.my_seat = 1;
+            view.seats[0] = {true, "Ana", MapSelectScreen::Thumb::Good};
+            view.seats[1] = {true, "Ben", MapSelectScreen::Thumb::Good};
+            view.map_file = "SMALL.LVL";
+            guest.set_room(view);
+            ASSERT_TRUE(guest.is_guest());
+            ASSERT_TRUE(guest.follow_host_choice("SMALL.LVL", false));
+            ASSERT_EQ(guest.get_maps()[static_cast<size_t>(guest.get_selected_index())].filename, "SMALL.LVL");
+            MapSelectScreen leader;
+            leader.init("Original-Ants/Maps");
+            view.leader = true;
+            view.my_seat = 0;
+            leader.set_room(view);
+            ASSERT_TRUE(leader.leads_server_room());
+            ASSERT_TRUE(leader.follow_host_choice("SMALL.LVL", false));
+            const int32_t room_index = leader.get_selected_index();
+            ASSERT_EQ(leader.get_maps()[static_cast<size_t>(room_index)].filename, "SMALL.LVL");
+            leader.handle_key_down(SDLK_DOWN);
+            leader.handle_key_down(SDLK_UP);
+            leader.handle_key_down(SDLK_UP);
+            ASSERT_EQ(leader.get_selected_index(), room_index);
+            ASSERT_FALSE(leader.follow_host_choice("NOSUCH.LVL", false));              // a room on a map that this machine does not have: the highlight is left where it was
+            ASSERT_EQ(leader.get_selected_index(), room_index);
+        }
     } TEST_END();
 
     TEST_CASE("8.4 INTRO.MID Lifecycle & In-Game Music") {
@@ -2280,13 +2390,14 @@ void run_suite_8_unit_health_and_map_select() {
         ApplicationConfig cfg;
         cfg.headless = true;
         cfg.start_in_map_select = false;
+        cfg.default_map_path = "Original-Ants/Maps/GAUNTLET.LVL";                  // (a run without --map plays TREASURE.LVL now, see 8.9: the numbers below are GAUNTLET's, so it is named)
         ASSERT_TRUE(app.init(cfg));
 
         // Default starts as Player 0 (Green)
         ASSERT_EQ(app.local_player_id(), 0);
 
         // The start view is the original's (HUD constructor 0x100e458 - 0x100e4b1): the fresh view scrolls just far enough to show the square (-160, +192) around the
-        // anchor tile of Team 0's hill, it does not centre it. A run without --map plays the first map of the list, GAUNTLET: green's anchor is (30, 8), so (726, 24)
+        // anchor tile of Team 0's hill, it does not centre it. On GAUNTLET (the first map of the original's list) green's anchor is (30, 8), so (726, 24)
         // (a centred view would be (772, 69)).
         const auto* base0 = app.sim().grid().find_anthill(0);
         ASSERT_TRUE(base0 != nullptr);
