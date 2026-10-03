@@ -218,6 +218,16 @@ Bytes u16_table() {
     return out;
 }
 
+// One animation index (a single number, not a table), taken by value. As `u16_table<mvd::kIdleWater>` (a reference to an inline constexpr scalar as the template argument) the compiler
+// of Visual Studio 2022 17.14 (MSVC 19.44) put other bytes than the number into the region, a different value in every program (found by the Windows job of CI: idle in water, infiltrate
+// and get power-up failed their digests; Visual Studio 2026, GCC and clang read the same reference right). The tables are arrays and have no such trouble.
+template <uint16_t Value>
+Bytes u16_value() {
+    Bytes out;
+    put_u16(out, Value);
+    return out;
+}
+
 // The x86 instruction bytes around the immediates that the tests read (the tests assert them too).
 inline constexpr uint8_t kOpPushImm32 = 0x68u;    // push imm32
 inline constexpr uint8_t kOpOperandSize = 0x66u;  // operand-size prefix: with 0x3d, cmp ax, imm16
@@ -306,7 +316,7 @@ inline const Region kRegions[] = {
     {"swim", 0x1004838u, 10, 1, 0, "17a4bb64d586f29da6b5e577453cd5aaeea6ba9f85a850c91a147325b3b90ff3", &u16_table<mvd::kSwim>},
     {"dive", 0x1004878u, 10, 1, 0, "0444870ded3c29f44c50074d60c020fd48ba8d423829b078f3340bee13585a78", &u16_table<mvd::kDive>},
     {"climb", 0x10048c0u, 10, 1, 0, "352b131926aa23230cbbd03900bd31134d251347d1033099c27e0531d23c1400", &u16_table<mvd::kClimb>},
-    {"idle in water", 0x10048b8u, 2, 1, 0, "75a343cae007ba3927506d9b8f98994e795740f01136d7d80060d76c16dcb20c", &u16_table<mvd::kIdleWater>},
+    {"idle in water", 0x10048b8u, 2, 1, 0, "75a343cae007ba3927506d9b8f98994e795740f01136d7d80060d76c16dcb20c", &u16_value<mvd::kIdleWater>},
     {"bump push", 0x101cae3u, 5, 1, 0, "497cbde725e3f9eb9237058fa2058bd5057c689b06902eb744f44bbde4e34b06", &bump_push},
     // Action clips of SetAction FUN_0101ad02 (colour-0 blocks): [type 6], [type 6][dir 8] (runs: dirs 0..4), [dir 8]
     {"enter", 0x1003eb8u, 12, 1, 0, "7616d1fc32c45230513805976124633066f4fd29dcc8cc12f3ce0c26488ff299", &u16_table<mvd::kEnter>},
@@ -328,8 +338,8 @@ inline const Region kRegions[] = {
     {"bridge demolish land", 0x1004778u, 10, 1, 0, "f63608dd319f0c433097762a9004030ebbed2919dfa2e6ade2291ea2e17d3d5c", &u16_table<mvd::kBridgeDemolishLand>},
     {"plant", 0x10047b8u, 10, 1, 0, "98e3a713c75afc97884c9a00e6527aa6df5b85ec2b7986b0d0920d633909f959", &u16_table<mvd::kPlant>},
     {"defuse", 0x10047f8u, 10, 1, 0, "5c474ec8a9ccf28018f4408f1e311dc296950148d1a5801beb78e461261788c7", &u16_table<mvd::kDefuse>},
-    {"infiltrate", 0x1004900u, 2, 1, 0, "6b02392d87667b615855fc9e150d6964b828666690ec83c7b7d3ebfa8dfe6aea", &u16_table<mvd::kInfiltrate>},
-    {"get power-up", 0x1004908u, 2, 1, 0, "bb153e97380f82aa57033add2c11b28a3ae640c8daaa89d2bd5bd317456ecb03", &u16_table<mvd::kGetPow>},
+    {"infiltrate", 0x1004900u, 2, 1, 0, "6b02392d87667b615855fc9e150d6964b828666690ec83c7b7d3ebfa8dfe6aea", &u16_value<mvd::kInfiltrate>},
+    {"get power-up", 0x1004908u, 2, 1, 0, "bb153e97380f82aa57033add2c11b28a3ae640c8daaa89d2bd5bd317456ecb03", &u16_value<mvd::kGetPow>},
     // Terrain and path tables
     {"bridge compares", 0x1008b95u, 4, 4, 6, "22ed5d9b9d12d3752300c9c2624b5537ae7c0441d6f42d9c17005954a9e11b9e", &bridge_compares},
     {"passable", 0x10049b8u, 16, 1, 0, "8b4697133be69b441b927ab4612f16ba78602228ae1a8f0d730a1e254aff449e", &passable},
