@@ -1243,17 +1243,28 @@ void run_b2fix_tests() {
         if (p.hash != 0x60174838e5ae019full) std::cout << "\n    the pinned scripted match now ends at hash " << std::hex << p.hash << std::dec << " (" << p.seats[0].stats.released << " + " << p.seats[1].stats.released << " commands)\n";
         ASSERT_EQ(p.hash, 0x60174838e5ae019full);
         ASSERT_TRUE(p.seats[0].stats.released == 98 && p.seats[1].stats.released == 29);
-        // the same match with the start hold (the arena's default, the 100 ticks of the "Get ready to play!" dialog): the bots wait for it, so it is another match with a pin of its own, and
-        // not one command is applied before the dialog is gone
+        // the same match with the product's opening (the arena's default, kStartHoldTicks: one token in the bucket to begin with, the refill from the first tick; the first look is on tick 1 + seat as it
+        // was in v0.1.0): another match with a pin of its own, and not one command is applied before a bot's first reaction time is over
         ArenaSpec held = pinned;
-        held.start_hold = sim::kMatchStartHoldTicks;
+        held.start_hold = ai::kStartHoldTicks;
         held.record = true;
         const ArenaResult h = play_match(held);
         ASSERT_TRUE(h.error.empty() && h.ticks == 600 && !h.log.empty());
-        ASSERT_TRUE(h.log.front().tick >= sim::kMatchStartHoldTicks);
-        if (h.hash != 0x5b22a0b40e3231f5ull) std::cout << "\n    the pinned scripted match with the start hold now ends at hash " << std::hex << h.hash << std::dec << " (" << h.seats[0].stats.released << " + " << h.seats[1].stats.released << " commands)\n";
-        ASSERT_EQ(h.hash, 0x5b22a0b40e3231f5ull);
-        ASSERT_TRUE(h.seats[0].stats.released == 76 && h.seats[1].stats.released == 25);                 // (98 and 29 without the hold: the bots walk 500 ticks of the 600, not 600)
+        ASSERT_TRUE(h.log.front().tick >= ai::kStartHoldTicks);
+        if (h.hash != 0x95c9094978ca5f46ull) std::cout << "\n    the pinned scripted match with the product's opening now ends at hash " << std::hex << h.hash << std::dec << " (" << h.seats[0].stats.released << " + " << h.seats[1].stats.released << " commands)\n";
+        ASSERT_EQ(h.hash, 0x95c9094978ca5f46ull);
+        ASSERT_TRUE(h.seats[0].stats.released == 91 && h.seats[1].stats.released == 29);                 // (98 and 29 with the full bucket of v0.1.0: the one token holds the first look's commands back a little)
+        // and with a long hold (the mechanism: v0.1.1's 100 ticks, in which the bots waited for the dialog while the simulation ran): another match with a pin of its own, the bots walk 500 ticks of
+        // the 600, and not one command is applied before the hold's end
+        ArenaSpec longer = pinned;
+        longer.start_hold = 100;
+        longer.record = true;
+        const ArenaResult lr = play_match(longer);
+        ASSERT_TRUE(lr.error.empty() && lr.ticks == 600 && !lr.log.empty());
+        ASSERT_TRUE(lr.log.front().tick >= 100);
+        if (lr.hash != 0x6ce648347dbc5a25ull) std::cout << "\n    the pinned scripted match with a hold of 100 ticks now ends at hash " << std::hex << lr.hash << std::dec << " (" << lr.seats[0].stats.released << " + " << lr.seats[1].stats.released << " commands)\n";
+        ASSERT_EQ(lr.hash, 0x6ce648347dbc5a25ull);                                                       // (v0.1.1's pin of this match was 0x5b22a0b40e3231f5 with the same counts: its refill started one tick later)
+        ASSERT_TRUE(lr.seats[0].stats.released == 76 && lr.seats[1].stats.released == 25);
     } TEST_END();
 
     TEST_CASE("AI4.6 The Result Fields Of A Seat Are The Engine's Numbers: Two Harvesting Bots (One Hatches An Egg As Soon As It Can Pay) Score, And The Result Says Exactly What The Engine's Own Getters Say; Points Banked Are The Score Plus The Cost Of The Hatch, Nothing Was Raided") {

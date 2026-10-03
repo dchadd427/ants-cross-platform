@@ -551,7 +551,7 @@ void run_worker_tests() {
                 ASSERT_TRUE(s.stats.released >= 1u && s.stats.released == r.log.size());
                 ASSERT_TRUE(s.milli_commands_per_second(r.ticks) < 150u);                      // the design measured 2 to 83 thousandths of a command per second; Easy's budget alone is 400
                 ASSERT_TRUE(s.stats.rejected == 0 && s.stats.filtered == 0 && s.stats.expired == 0 && s.stats.superseded == 0);
-                ASSERT_TRUE(r.log.front().tick >= sim::kMatchStartHoldTicks + p.reaction_delay * 3 / 4);   // no look before the start hold's end (tick 100 + seat), and 75 percent of the reaction time is the least a command waits
+                ASSERT_TRUE(r.log.front().tick >= ai::kStartHoldTicks + p.reaction_delay * 3 / 4);   // no look before the hold's first tick (tick 1 + seat), and 75 percent of the reaction time is the least a command waits
                 size_t early = 0;
                 for (const RecordedCommand& c : r.log) early += c.tick <= 600 ? 1u : 0u;
                 ASSERT_TRUE(early >= 1 && early <= 3);                                         // the first look sends the start ants to one or two piles

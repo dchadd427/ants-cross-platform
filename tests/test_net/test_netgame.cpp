@@ -234,6 +234,17 @@ bool everybody_playing(Table& t) {
     return true;
 }
 
+// The match is under way: everybody plays AND every machine has executed its first turn. The host seals the first turn kMatchStartDelayMs after the match began (protocol 12: the "Get ready to
+// play!" dialog of every machine, in which no simulation runs), so this is later than everybody_playing (the Begin) by that much.
+bool everybody_running(Table& t) {
+    if (!everybody_playing(t)) return false;
+    for (auto& m : t.machines) {
+        if (m->ticks == 0) return false;
+    }
+    return true;
+}
+constexpr uint32_t kUntilRunning = 5000 + kMatchStartDelayMs;
+
 bool all_equal(Table& t, size_t skip = 99) {
     const sim::StateHash h = t.machines[0]->sim.state_hash();
     for (size_t i = 1; i < t.machines.size(); ++i) {
@@ -433,7 +444,7 @@ void run_match_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(99, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         int predicted_acks = 0;
         int orders = 0;
         uint32_t next_order_ms = t.now + 500;
@@ -491,7 +502,7 @@ void run_match_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(5, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(5000);
         t.machines[2]->net.leave();                                          // Carol quits
         ASSERT_EQ(t.machines[2]->net.phase(), NetGame::Phase::Off);
@@ -522,7 +533,7 @@ void run_match_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
         ASSERT_TRUE(host.net.start_match(3, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(2000);
         host.net.leave();
         ASSERT_EQ(host.net.phase(), NetGame::Phase::Off);
@@ -550,7 +561,7 @@ void run_match_tests() {
         // before the match nothing can be submitted
         ASSERT_EQ(host.net.submit(order(0, 1, 5, 5)).status, sim::CommandResult::Status::Ignored);
         ASSERT_TRUE(host.net.start_match(11, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         for (auto& m : t.machines) {
             ASSERT_EQ(m->sim.roster_mask(), 0x03);
             ASSERT_EQ(m->sim.grid().anthills().size(), 2u);
@@ -712,7 +723,7 @@ void run_migration_tests() {
         ASSERT_TRUE(host.net.start_info().endpoints[1].address == "127.0.0.1" && host.net.start_info().endpoints[1].port == bob.net.peer_port());
         ASSERT_TRUE(host.net.start_info().endpoints[2].address == "127.0.0.1" && host.net.start_info().endpoints[2].port == carol.net.peer_port());
         ASSERT_TRUE(bob.net.peer_port() != 0 && carol.net.peer_port() != 0 && bob.net.peer_port() != carol.net.peer_port());
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(4000);
         bool electing_seen = false;
         host.net.leave();
@@ -772,7 +783,7 @@ void run_migration_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(6, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(4000);
         Machine& carol = *t.machines[2];
         Machine& dave = *t.machines[3];
@@ -803,7 +814,7 @@ void run_migration_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(7, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(3000);
         for (auto& m : t.machines) m->net.freeze();                                 // the application does this when the match is over
         t.run(1000);
@@ -825,7 +836,7 @@ void run_migration_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(8, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(2000);
         Machine& carol = *t.machines[2];                                            // seat 2: only seat 1 may connect to it
         const std::vector<std::vector<uint8_t>> claims = {encode(PeerHelloMsg{3}),   // no such player

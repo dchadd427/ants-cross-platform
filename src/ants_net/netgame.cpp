@@ -671,6 +671,7 @@ void NetGame::begin_match() {
     if (role_ == Role::Host) {
         HostSession::Config hc;
         hc.host_player = seat_;
+        hc.start_delay_ms = kMatchStartDelayMs;                 // protocol 12: the first turn is sealed when the "Get ready to play!" dialog of every machine has had its 5 s (session.hpp)
         host_session_ = std::make_unique<HostSession>(sim_, hc);
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
             if (Connection* c = host_lobby_->connection_of(s)) host_session_->add_client(s, c);

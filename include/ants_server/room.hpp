@@ -27,7 +27,7 @@
 // door (RoomManager: Room::rejoin) and the session gives the player the match again from its turn log. The others may vote to go on without the seat (more than half of those who are
 // there, after 30 s of absence in all) and the match's total pause is capped (30 minutes): at the cap every seat that is not present is dropped. The room is finished by its rules as before, and
 // when everybody has left: a held seat counts as present, so a room whose players all lost their connection waits (until the cap) and then ends "everybody left". The wall-clock limit
-// `run_ms` counts the time that the match ran, not the time that it waited. The log of the match, which the stream of a returning player is cut from, is bounded per room and by the
+// `run_ms` counts the time since the match began (the five seconds of the start dialog before the first turn included, protocol 12), not the time that it waited for a seat. The log of the match, which the stream of a returning player is cut from, is bounded per room and by the
 // server's budget (net::LogBudget), and is freed when the match is over. A room without `reconnect` is exactly what it was before: keys are zero, a Hello for a running match is
 // MatchRunning, a lost connection is a drop at once. No key is ever in a status, a result file or a log line.
 
@@ -66,8 +66,8 @@ struct RoomSpec {
     uint32_t load_ms{60000};                // everybody must have loaded the map this long after the start
     uint32_t keep_ms{10u * 60u * 1000u};    // a finished or failed room stays visible to status calls this long
     uint32_t run_ms{2u * 3600u * 1000u};    // a match that is still running this long after it began is ended (failed, "took too long"): a wall-clock limit on the life of
-                                            // a room (it never waits for a seat, but a match that does not end by its rules would run on for ever). It counts the time that the match
-                                            // ran: the time that it waited for a seat that was away does not count
+                                            // a room (it never waits for a seat, but a match that does not end by its rules would run on for ever). It counts from the moment the match
+                                            // began (the 5 s before its first turn, the start dialog, count: protocol 12), without the time that it waited for a seat that was away
     // Reconnect (protocol 10): the room holds the seat of a player whose connection is lost. OFF by default in this release (the server's `--reconnect` and the control interface's
     // "reconnect" turn it on): a server that held seats for clients that cannot come back yet would be worse than one that does not.
     bool reconnect{false};

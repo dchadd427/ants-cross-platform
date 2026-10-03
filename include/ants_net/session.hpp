@@ -19,6 +19,11 @@
 // The old host and every seat that did not follow are dropped by the first turn of the new host. Commands that were in flight when the host went
 // are lost. See docs/NETWORK_PORT.md.
 //
+// The start of a match (protocol 12). start() begins the match at once, but the first turn is sealed Config::start_delay_ms later (the two product paths, a LAN host's NetGame and a server's Room, set
+// kMatchStartDelayMs: the length of the "Get ready to play!" dialog). Until then no turn exists: a client's runner has not started (it begins when its first turns are in), the sequencer has no turn that
+// a seat could be behind, and the lag policy (police_laggards) has nothing that waits for a player, so the wait is no stall, no lag notice, no growth of the jitter buffer and no countdown of the
+// idle rule. A machine ends its dialog when its first turn executes. The reconnect machinery is as it was (a pause slides the schedule: the first turn follows the end of a pause at once).
+//
 // Who waits for whom. A host with a seat (a game on the local network) stops sealing while a peer is more than 3 s behind: its friends wait for the slow machine (the
 // match is theirs, and the machine may be back in a moment). A host without a seat (a dedicated server) never waits: a room is made of strangers, and one machine that
 // stalls (a window in the background, a laptop that went to sleep) must not slow down the others. The server keeps sealing every 50 ms; the player that falls behind
@@ -111,6 +116,9 @@ public:
     struct Config {
         uint8_t host_player{0};             // the host's own seat; kNoSeat (255) for a dedicated server: the host plays nobody, runs the match as the referee
         uint8_t epoch{0};                   // 0 for the first host, one more for every host change
+        uint32_t start_delay_ms{0};         // the first turn is sealed this long after start(): the "Get ready to play!" dialog that every machine opens when the match begins (protocol 12:
+                                            // kMatchStartDelayMs, which the LAN host's NetGame and the server's Room set; 0, the default, seals turn 0 at once, as a test rig wants). Nothing is
+                                            // sealed meanwhile, so nobody is behind and nothing waits for anybody: the wait is not lag (see "The start of a match" above)
         Sequencer::Config sequencer{};
         LockstepRunner::Config runner{};
         uint32_t violation_limit{8};        // undecodable or forbidden messages before a client is thrown out
@@ -152,7 +160,7 @@ public:
     /// A command of a bot seat's bot for the next turn (the issuer is stamped by the sequencer). False unless the match runs, the seat is a bot seat and the
     /// command is one that a player may send (never Drop), and false while the match is paused (a bot waits like everybody; a bot seat is never absent and never votes).
     bool submit_bot(uint8_t player, sim::Command command);
-    /// Begins the match at `now_ms`: turn 0 is sealed at once.
+    /// Begins the match at `now_ms`: turn 0 is sealed Config::start_delay_ms later (at once when that is 0; the LAN host and the server's rooms wait kMatchStartDelayMs, protocol 12).
     void start(uint32_t now_ms);
     /// Continues a match in which the previous host left: the next turn sealed is `resume_turn`, every survivor is told (Resume) and gets the turns
     /// it misses, and the first turn drops the old host and every seat of the roster that did not follow. Instead of start().

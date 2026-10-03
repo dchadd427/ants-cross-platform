@@ -13,7 +13,8 @@
 // in canonical order (by issuer, each issuer's commands in the order they were released), before the bots look again. Contested results move by up to 15 percent per seat
 // between latency 0 and 3, which is why the default is 3: a tournament should play like a room.
 //
-// The bots wait for the start hold (ArenaSpec::start_hold, by default the 100 ticks of the game's "Get ready to play!" dialog), like the bots of a real match.
+// The bots open like the bots of a real match (ArenaSpec::start_hold, by default the product's kStartHoldTicks: a first look on tick 1 + the seat, a bucket of one token). The game's "Get ready to play!"
+// dialog costs the arena nothing: the match clock waits for it in the game (the simulation does not run while it is up), so a match here starts where the game's tick 0 is.
 //
 // Replay: with `record` on, every command is kept with the tick it was applied at and the engine's state hash after every 20th tick. replay_commands() feeds those commands
 // into a FRESH engine without any bot and requires the same hash at every 20th tick and at the end: the proof that a bot match is nothing but its commands.
@@ -68,10 +69,9 @@ struct ArenaSpec {
     std::vector<BotSpec> bots;                 // the seats that play: one bot each, seat 0 to 3, every seat once
     uint64_t max_ticks{0};                     // 0 = until the match is over (the map's own length); else at most this many ticks
     uint32_t latency_ticks{3};                 // the sink latency, see the top of this file
-    /// The start hold of the bots (BotController::set_start_hold): the "Get ready to play!" dialog that every real match opens with, during which a person cannot give an order and
-    /// so no bot may act. The default is the game's (sim::kMatchStartHoldTicks), because an arena match must be the real one; 0 is the opening of v0.1.0, for the tests that measure
-    /// something else from tick 0 (each says so).
-    uint32_t start_hold{sim::kMatchStartHoldTicks};
+    /// The start hold of the bots (BotController::set_start_hold): the opening of a real match, a first look on tick 1 + the seat and a bucket of one token. The default is the product's
+    /// (kStartHoldTicks), because an arena match must be the real one; 0 is the opening of v0.1.0 (a full bucket), for the tests that measure something else from tick 0 (each says so).
+    uint32_t start_hold{kStartHoldTicks};
     bool record{false};                        // keep the applied commands (for replay_commands)
     /// A bot that is not in the registry (tests, later the tournaments): called instead of make_bot when set; a null result refuses the match. The `kind` of the BotSpec must
     /// still be a name that make_bot knows (check_setup), and the Profile comes from the spec's level.

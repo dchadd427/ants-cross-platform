@@ -51,7 +51,7 @@ void HostSession::start(uint32_t now_ms) {
     if (started_) return;
     started_ = true;
     last_ms_ = now_ms;
-    next_seal_ms_ = now_ms;
+    next_seal_ms_ = now_ms + cfg_.start_delay_ms;                              // turn 0 waits for the start dialog (protocol 12; 0: at once)
     sequencer_.set_active(cfg_.host_player, true);
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
         if (is_bot_seat(p)) sequencer_.set_active(p, true);                    // a bot's commands are accepted and its turns awaited (see run_local)
@@ -357,6 +357,7 @@ void HostSession::police_laggards(uint32_t now_ms) {
             continue;
         }
         const uint32_t behind = behind_ms(p);
+        if (behind == 0) c.progress_ms = now_ms;                     // nothing waits for it, so no idle time runs: the seconds before the first turn of a match (nothing is sealed yet, protocol 12) are nobody's lag
         const bool idle = behind > 0 && cfg_.lag_drop_idle_ms != 0 && now_ms - c.progress_ms >= cfg_.lag_drop_idle_ms;
         if (idle || (cfg_.lag_drop_behind_ms != 0 && behind >= cfg_.lag_drop_behind_ms)) {
             drop(p);                                                 // the others play on, as they did all along; the drop travels in the turn stream

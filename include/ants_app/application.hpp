@@ -593,6 +593,7 @@ private:
     uint64_t last_frame_time_{0};
     int headless_frame_count_{0};
     float tick_accumulator_{0.0f};
+    double start_dialog_clock_ms_{0.0};  // a match of the network: the real milliseconds of the "Get ready" dialog that are not handed to the HUD yet (its portrait moves in real time while it waits for the first turn)
     float input_accumulator_{0.0f};     // the 50 ms input task (edge scrolling, minimap drag)
     float current_fps_{60.0f};
     int last_music_track_{-1};

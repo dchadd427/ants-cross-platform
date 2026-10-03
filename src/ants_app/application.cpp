@@ -1007,7 +1007,9 @@ void Application::enter_match() {
     // Reset HUD & Scorecard
     hud_.init(local_player_id_);
     hud_.reset();
-    hud_.start_match_modal();
+    hud_.start_match_modal(network_active());                               // (the simulation waits for it: update_simulation, post_tick)
+    tick_accumulator_ = 0.0f;                                               // the dialog and the match are counted from now
+    start_dialog_clock_ms_ = 0.0;
     scorecard_.hide();
     match_over_handled_ = false;
     state_ = AppState::Playing;
@@ -1862,10 +1864,24 @@ void Application::update_simulation(float dt) {
     if (network_active() && net_->phase() == net::NetGame::Phase::Playing) {
         // The ticks come from the lock-step runner (pump_network); only what shows between two ticks is advanced here
         tick_accumulator_ = static_cast<float>(net_->sub_tick_ms()) / 1000.0f;
+        // The "Get ready" dialog of the match's start: no tick runs while it is up (the host seals the first turn kMatchStartDelayMs after the match began) and it ends with the first turn that
+        // runs (post_tick). Meanwhile the HUD is stepped in real time, 50 ms at a time, so that its portrait moves and the wait does not look like a hang.
+        if (hud_.is_match_start_modal_active()) {
+            start_dialog_clock_ms_ += static_cast<double>(dt) * 1000.0;
+            while (start_dialog_clock_ms_ >= static_cast<double>(sim::TICK_MS) && hud_.is_match_start_modal_active()) {
+                start_dialog_clock_ms_ -= static_cast<double>(sim::TICK_MS);
+                hud_.update(sim_.get_world_state(), 1);
+            }
+        }
     } else {
         tick_accumulator_ += dt;
         while (tick_accumulator_ >= 0.050f) {
-            if (!sim_.is_match_over()) {
+            if (hud_.is_match_start_modal_active()) {
+                // A local game: the "Get ready" dialog counts REAL time, in the 50 ms steps of this clock (the HUD closes it after kMatchStartDialogMs of them), and the simulation waits for it: tick 0
+                // runs on the step after the dialog's last one, the match's clock shows its full time behind the dialog, and the whole time of the match is playable (the original runs the clock
+                // behind the dialog: a deliberate deviation, sim_engine.hpp)
+                hud_.update(sim_.get_world_state(), 1);
+            } else if (!sim_.is_match_over()) {
                 sim_.tick();
                 post_tick();
             }
@@ -1885,6 +1901,9 @@ void Application::update_simulation(float dt) {
 
 // What one simulation tick shows: the HUD, the events of the tick, the sounds and, once, the end of the match.
 void Application::post_tick() {
+    // The first turn of a match of the network has executed: the ants can move now, and the "Get ready" dialog (which every machine opened when the match began, while the host waited for it)
+    // is gone. (A local game's dialog ends before its first tick, in update_simulation.)
+    if (hud_.is_match_start_modal_active()) hud_.dismiss_match_start_modal();
     const auto& world = sim_.get_world_state();
     hud_.update(world, 1);
     hud_.poll_sim_events(sim_);

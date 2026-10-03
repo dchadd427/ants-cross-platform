@@ -90,9 +90,11 @@ namespace {
 
 std::string maps_dir() { return std::string(ORIGINAL_ASSETS_DIR) + "/Maps/"; }
 
-// The "Get ready to play!" dialog that opens every match, and with it the start hold of the computer players (sim::kMatchStartHoldTicks): a bot does not look before this many ticks
-constexpr int kHoldTicks = static_cast<int>(sim::kMatchStartHoldTicks);
-constexpr uint32_t kHoldMs = sim::kMatchStartHoldTicks * sim::TICK_MS;
+// The "Get ready to play!" dialog that opens every match, and what the simulation does meanwhile: nothing (the match clock waits for it). A local game counts the dialog in kDialogSteps steps of 50 ms
+// of its frame clock (HUD::kMatchStartModalSteps); the host of a match of the network seals the first turn kDialogMs after the match began (net::kMatchStartDelayMs, protocol 12), so a machine's
+// first tick comes that long after its Begin.
+constexpr int kDialogSteps = static_cast<int>(HUD::kMatchStartModalSteps);
+constexpr uint32_t kDialogMs = net::kMatchStartDelayMs;
 
 // The other machine of a test: a simulation and a NetGame, with the little that the application does for the room (load the map, report)
 struct Peer {
@@ -726,12 +728,13 @@ void run_bot_tests() {
         ASSERT_TRUE(app.bots()->stats(1).decisions == 0 && app.bots()->stats(3).decisions == 0);
         ASSERT_TRUE(ants_of(app.sim(), 2).empty() && !ants_of(app.sim(), 1).empty());
         const uint64_t hash0 = app.sim().state_hash().total;
-        // the ticks of the local loop reach the controller: the bots look at the world (the idle one never acts; the standard one is the worker bot of B3 until B4 and sends its ants to the food)
-        for (int i = 0; i < 400; ++i) app.update_simulation(0.05f);
+        // the ticks of the local loop reach the controller: the bots look at the world (the idle one never acts; the standard one is the worker bot of B3 until B4 and sends its ants to the food).
+        // The first kDialogSteps steps are the "Get ready" dialog, in which the simulation waits, so 400 ticks take kDialogSteps + 400 steps
+        for (int i = 0; i < kDialogSteps + 400; ++i) app.update_simulation(0.05f);
         ASSERT_EQ(app.sim().current_tick(), 400u);
-        // medium: every 20 ticks, hard: every 4, the first look on tick 100 + seat (the start hold: the bots do not look behind the "Get ready" dialog): seat 1 on 101, 121, ... 381 (15 looks),
-        // seat 3 on 103, 107, ... 399 (75 looks)
-        ASSERT_TRUE(app.bots()->stats(1).decisions == 15 && app.bots()->stats(3).decisions == 75);
+        // medium: every 20 ticks, hard: every 4, the first look on tick 1 + seat (the simulation did not run behind the dialog, so tick 1 is the first there is): seat 1 on 2, 22, ... 382 (20 looks),
+        // seat 3 on 4, 8, ... 400 (100 looks)
+        ASSERT_TRUE(app.bots()->stats(1).decisions == 20 && app.bots()->stats(3).decisions == 100);
         ASSERT_TRUE(app.bots()->stats(1).released >= 1 && app.bots()->stats(3).released == 0 && app.bots()->stats(1).filtered == 0);
         ASSERT_TRUE(app.sim().state_hash().total != hash0);                                                              // the world moved on (food, queues, clock)
         // the match ends: the results name the bots, and the controller falls silent
@@ -772,8 +775,10 @@ void run_bot_tests() {
         ASSERT_EQ(app.sim().grid().anthills().size(), 2u);
         ASSERT_EQ(app.sim().get_player_name(2), "Bot (Hard)");
         ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x04);
-        for (int i = 0; i < 100 + kHoldTicks; ++i) app.update_simulation(0.05f);                                          // (the bot looks from tick 102 on: 100 ticks after the dialog)
-        ASSERT_TRUE(app.bots()->stats(2).decisions >= 24);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());                                                         // (a game that starts straight into its match has no "Get ready" dialog to wait for)
+        for (int i = 0; i < 100; ++i) app.update_simulation(0.05f);
+        ASSERT_EQ(app.sim().current_tick(), 100u);                                                                      // the match runs at once
+        ASSERT_TRUE(app.bots()->stats(2).decisions >= 24);                                                              // (the bot looks from tick 3 on, every 4 ticks)
         // the same game without a bot has no controller and all four teams, as ever
         ApplicationConfig plain = headless_config();
         plain.start_in_map_select = false;
@@ -844,8 +849,8 @@ void run_bot_tests() {
         ASSERT_EQ(app.sim().get_player_name(2), "Bot (Medium)");
         ASSERT_EQ(app.hud().team_names()[2], "Bot (Medium)");
         ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x04);
-        duo.step(15000 + kHoldMs);
-        ASSERT_TRUE(app.bots()->stats(2).decisions >= 10);                                                                  // it looks every second of the match, after the start hold
+        duo.step(15000 + kDialogMs);                                                                                       // (the host seals the first turn kDialogMs after the match began: 15 s of play follow)
+        ASSERT_TRUE(app.bots()->stats(2).decisions >= 10);                                                                  // it looks every second of the match
         ASSERT_EQ(app.bots()->stats(2).rejected, 0u);
         ASSERT_EQ(bob.sim.roster_mask(), 0x07);
         app.net()->freeze();                                                                                                // the host stops sealing: what is in flight arrives, then both are at the same tick
@@ -872,7 +877,7 @@ void run_bot_tests() {
         for (const auto& a : app.sim().get_world_state().ants) {
             if (a.id == mine[0]) start = sim::TileCoord{a.tile_x, a.tile_y};
         }
-        for (int i = 0; i < 200 + kHoldTicks; ++i) app.update_simulation(0.05f);                                          // (200 ticks after the dialog)
+        for (int i = 0; i < kDialogSteps + 200; ++i) app.update_simulation(0.05f);                                        // (200 ticks after the dialog)
         const auto& st = app.bots()->stats(1);
         ASSERT_TRUE(st.released >= 1);
         ASSERT_EQ(st.rejected, 0u);                                                                                      // the engine accepted what the door carried
@@ -951,7 +956,7 @@ void run_bot_tests() {
         return false;
     };
 
-    TEST_CASE("AI6.9 The Start Hold In A Local Game (--bot 1:LEVEL, Every Level): The \"Get Ready\" Dialog Is Up During Ticks 1 - 99 And Gone On Tick 100; No Command Of The Bot's Seat Reaches The Engine Before Then (Its First Look Is On Tick 100 + Seat, Its First Order 75 To 125 Percent Of Its Reaction Time Later); A Click On An Own Ant Selects Nothing On Tick 99 And Selects It On Tick 100") {
+    TEST_CASE("AI6.9 The Opening Of A Local Game (--bot 1:LEVEL, Every Level): The \"Get Ready\" Dialog Is Up For 100 Steps Of 50 Ms Of The Frame Clock And The Simulation Does Not Run Meanwhile (Tick 0 For The Whole Dialog, The Match's Clock Shows Its Full Time), So The Bot Neither Looks Nor Sends Anything; Tick 1 Runs On The Step After The Dialog's Last, The Bot's First Look Is On Tick 1 + Seat And Its First Order 75 To 125 Percent Of Its Reaction Time Later; A Click On An Own Ant Selects Nothing In The Dialog And Selects It After It") {
         for (const char* spec_text : {"1:easy", "1:medium", "1:hard"}) {
             const ai::BotSpec spec = bot_spec(spec_text);
             const ai::Profile profile = ai::profile_for(spec.level);
@@ -962,40 +967,52 @@ void run_bot_tests() {
             ASSERT_TRUE(app.init(cfg));
             ASSERT_TRUE(app.start_game("Original-Ants/Maps/SMALL.LVL"));
             ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x02);
-            ASSERT_TRUE(app.bots()->start_hold() == sim::kMatchStartHoldTicks);                           // every product path has the hold
+            ASSERT_TRUE(app.bots()->start_hold() == ai::kStartHoldTicks);                                 // every product path has the opening of the product: one token, a first look on the first tick
             const std::vector<uint32_t> bots_ants = ants_of(app.sim(), 1);
             const std::vector<uint32_t> own = ants_of(app.sim(), 0);
             ASSERT_TRUE(!bots_ants.empty() && !own.empty());
             ASSERT_EQ(app.sim().current_tick(), 0u);
             ASSERT_TRUE(app.hud().is_match_start_modal_active());
-            for (int t = 1; t <= kHoldTicks - 1; ++t) {                                                  // ticks 1 .. 99
+            const uint32_t full_time = app.sim().get_match_time_remaining_ms();
+            ASSERT_TRUE(full_time > 0);
+            const uint64_t still_hash = app.sim().state_hash().total;
+            for (int step = 1; step <= kDialogSteps - 1; ++step) {                                       // steps 1 .. 99
                 app.update_simulation(0.05f);
-                ASSERT_EQ(app.sim().current_tick(), static_cast<uint64_t>(t));
-                ASSERT_TRUE(app.hud().is_match_start_modal_active());                                    // the dialog is up ...
-                ASSERT_TRUE(app.bots()->stats(1).decisions == 0 && app.bots()->stats(1).released == 0);  // ... and the bot has neither looked nor sent anything to the engine
+                ASSERT_EQ(app.sim().current_tick(), 0u);                                                  // the simulation waits for the dialog ...
+                ASSERT_EQ(app.sim().get_match_time_remaining_ms(), full_time);                            // ... the clock shows the match's full time (the HUD's clock text is a function of it) ...
+                ASSERT_TRUE(app.hud().is_match_start_modal_active());                                    // ... the dialog is up ...
+                ASSERT_TRUE(app.bots()->stats(1).decisions == 0 && app.bots()->stats(1).released == 0);  // ... and the bot has neither looked nor sent anything to the engine (nothing ticked)
             }
-            ASSERT_TRUE(click_own_ant(app, own[0]));                                                      // tick 99: the dialog takes the click
+            ASSERT_TRUE(app.sim().state_hash().total == still_hash);                                      // the world is a still picture behind the dialog
+            ASSERT_TRUE(click_own_ant(app, own[0]));                                                      // step 99: the dialog takes the click
             ASSERT_TRUE(app.hud().get_selected_ant_ids().empty() && app.hud().get_selected_ant_id() == 0u);
             ASSERT_TRUE(app.hud().is_match_start_modal_active());
-            app.update_simulation(0.05f);                                                                  // tick 100: the dialog closes in this tick's post_tick
-            ASSERT_EQ(app.sim().current_tick(), 100u);
+            app.update_simulation(0.05f);                                                                  // step 100: the dialog closes, the simulation has not run yet
             ASSERT_FALSE(app.hud().is_match_start_modal_active());
-            ASSERT_TRUE(click_own_ant(app, own[0]));                                                      // the same click, now: the ant is selected
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            ASSERT_EQ(app.sim().get_match_time_remaining_ms(), full_time);
+            ASSERT_TRUE(click_own_ant(app, own[0]));                                                      // the same click, now: the ant is selected (a person can order from the first tick)
             ASSERT_FALSE(app.hud().get_selected_ant_ids().empty());
             ASSERT_TRUE(app.hud().get_selected_ant_id() != 0u);
-            ASSERT_EQ(app.bots()->stats(1).released, 0u);                                                  // (the bot's look is on tick 101: seat 1)
+            app.update_simulation(0.05f);                                                                  // step 101: tick 1 runs, right after the dialog
+            ASSERT_EQ(app.sim().current_tick(), 1u);
+            ASSERT_TRUE(app.sim().get_match_time_remaining_ms() < full_time);                             // the clock runs from here
+            ASSERT_EQ(app.bots()->stats(1).decisions, 0u);                                                 // (the bot's first look is on tick 2: seat 1)
+            app.update_simulation(0.05f);                                                                  // tick 2
+            ASSERT_EQ(app.bots()->stats(1).decisions, 1u);
+            ASSERT_EQ(app.bots()->stats(1).released, 0u);
             uint64_t first = 0;
-            for (int t = 101; t <= 400; ++t) {
+            for (int t = 3; t <= 400; ++t) {
                 app.update_simulation(0.05f);
                 if (first == 0 && app.bots()->stats(1).released > 0) first = static_cast<uint64_t>(t);
             }
             ASSERT_TRUE(first != 0);
-            ASSERT_TRUE(first >= 101u + profile.reaction_delay * 3 / 4 && first <= 101u + profile.reaction_delay * 5 / 4);       // 75 to 125 percent of the reaction time after the first look
+            ASSERT_TRUE(first >= 2u + profile.reaction_delay * 3 / 4 && first <= 2u + profile.reaction_delay * 5 / 4);       // 75 to 125 percent of the reaction time after the first look
             ASSERT_EQ(app.bots()->stats(1).rejected, 0u);
         }
     } TEST_END();
 
-    TEST_CASE("AI6.10 The Start Hold In A Host's Room: While The Dialog Is Up (Ticks 1 - 99, On The Lock-Step Ticks) The Bot Seat Sends Nothing; No Turn Before Tick 100 Carries A Command Of The Bot's Seat, As The Guest's Own Engine Applies The Turn Stream, And The Bot Does Play After It") {
+    TEST_CASE("AI6.10 The Opening Of A Host's Room: The Host Seals The First Turn 5 s After The Match Began (Protocol 12), So The Dialog Is Up Exactly While No Tick Has Run, The Bot Seat Looks And Sends Nothing Before It, The Guest's Engine Has Run No Tick Either, No Turn Carries A Command Of The Bot's Seat Before The Bot's First Look Plus Its Reaction Time, And The Bot Does Play After It") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;
         cfg.net_port = 0;
@@ -1013,17 +1030,22 @@ void run_bot_tests() {
         ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start(); }, 8000));
         app.map_select().handle_key_down(SDLK_RETURN);
         ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
-        ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x04 && app.bots()->start_hold() == sim::kMatchStartHoldTicks);
+        ASSERT_TRUE(app.bots() != nullptr && app.bots()->seat_mask() == 0x04 && app.bots()->start_hold() == ai::kStartHoldTicks);
         ASSERT_TRUE(app.hud().is_match_start_modal_active());
-        // the dialog and the bot follow the same ticks: while the host's engine has run fewer than 100 ticks the dialog is up and the bot has not looked
-        for (int i = 0; i < 3000 && app.sim().current_tick() < sim::kMatchStartHoldTicks; ++i) {
-            ASSERT_TRUE(app.hud().is_match_start_modal_active() == (app.sim().current_tick() < sim::kMatchStartHoldTicks));
+        ASSERT_EQ(app.sim().current_tick(), 0u);
+        // the dialog is up exactly while the host has run no tick: no tick runs for kDialogMs (the first turn is sealed that long after the match began), and the bot has not looked meanwhile
+        uint32_t waited_ms = 0;
+        while (app.sim().current_tick() == 0 && waited_ms < 20000) {
+            ASSERT_TRUE(app.hud().is_match_start_modal_active());
             ASSERT_TRUE(app.bots()->stats(2).decisions == 0 && app.bots()->stats(2).released == 0);
+            ASSERT_EQ(bob.sim.current_tick(), 0u);                                                      // the guest's engine waits for the first turn as well
             duo.step(10);
+            waited_ms += 10;
         }
-        ASSERT_TRUE(app.sim().current_tick() >= sim::kMatchStartHoldTicks);
+        ASSERT_TRUE(app.sim().current_tick() >= 1);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());                                           // the dialog ended with the first turn that ran
+        ASSERT_TRUE(waited_ms >= kDialogMs && waited_ms <= kDialogMs + 150);                             // 5 s, and the second turn (the runner starts with two in hand) and a step
         duo.step(15000);
-        ASSERT_FALSE(app.hud().is_match_start_modal_active());
         ASSERT_TRUE(app.bots()->stats(2).released >= 3 && app.bots()->stats(2).rejected == 0);
         app.net()->freeze();
         duo.step(3000);                                                                                    // what is in flight arrives and executes
@@ -1032,9 +1054,8 @@ void run_bot_tests() {
             if (e.second.issuer == 2) bot_ticks.push_back(e.first);
         }
         ASSERT_TRUE(bot_ticks.size() >= 3);                                                                // the bot played (its commands are in the guest's turn stream, with its seat)
-        for (const uint64_t tick : bot_ticks) ASSERT_TRUE(tick >= sim::kMatchStartHoldTicks);              // and none of its commands is in a turn before tick 100
         const ai::Profile hard = ai::profile_for(ai::Level::Hard);
-        ASSERT_TRUE(bot_ticks.front() >= sim::kMatchStartHoldTicks + 2u + hard.reaction_delay * 3 / 4);    // the first look is on tick 102, its first order leaves 6 to 10 ticks later (and travels through a turn)
+        ASSERT_TRUE(bot_ticks.front() >= 3u + hard.reaction_delay * 3 / 4);                                // the first look is on tick 3 (seat 2), its first order leaves 6 to 10 ticks later (and travels through a turn)
         ASSERT_EQ(app.sim().current_tick(), bob.sim.current_tick());
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
@@ -1107,7 +1128,7 @@ void run_host_tests() {
         int predicted = 0;
         int given = 0;
         uint32_t next = 0;
-        for (uint32_t t = 0; t < 30000; t += 10) {
+        for (uint32_t t = 0; t < 30000 + kDialogMs; t += 10) {                           // (the host seals the first turn kDialogMs after the match began: 30 s of play follow)
             if (t >= next) {
                 next = t + 900;
                 const auto mine = ants_of(app.sim(), 0);
@@ -2249,8 +2270,9 @@ void run_latency_tests() {
         ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
         ASSERT_TRUE(host.net.start_match(4242, hash));
         ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
-        duo.step(1000);                                                                   // the match runs: one turn of buffer
+        duo.step(kDialogMs + 1000);                                                       // the first turn is sealed kDialogMs after the match began; then the match runs: one turn of buffer
         ASSERT_TRUE(app.net()->stalled_ms() < 1000);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());                            // (the dialog ended with the first turn)
         // the window is busy for 400 ms (a hitch): the host goes on sealing, its turns wait in the socket
         for (int i = 0; i < 40; ++i) {
             host.now += 10;
@@ -2833,6 +2855,17 @@ void run_hidden_page_tests() {
         ASSERT_TRUE(hidden.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
         ASSERT_EQ(app.local_player_id(), 1);
         ASSERT_EQ(app.audio_mixer().active_channel_count(), 0u);                          // a match that begins in a hidden page has no start voice (the shown page's has one: N5.36)
+        // the "Get ready" dialog of a hidden page ends on time as well: with the first turn that executes, which a wake-up runs (post_tick), kDialogMs after the match began (the host seals
+        // the first turn that long after it) and before the second turn's time: a page that never draws a frame does not need one to start its match
+        ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.sim().current_tick() == 0);
+        uint32_t waited = 0;
+        while (app.hud().is_match_start_modal_active() && waited < 20000) {
+            hidden.step(10);
+            waited += 10;
+        }
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());
+        ASSERT_TRUE(app.sim().current_tick() >= 1);
+        ASSERT_TRUE(waited >= kDialogMs - 20 && waited <= kDialogMs + 150);               // (the Begin was read a step or two before the check above)
         hidden.step(10000);
         ASSERT_TRUE(app.net()->turns_executed() + 6 >= 10000 / net::kTurnMs);             // the match runs here although no frame ever did
         ASSERT_FALSE(host.net.desynced());
@@ -3364,7 +3397,7 @@ void run_room_bot_tests() {
             const server::RoomStatus s = server.status("ALONE-APP");
             ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.bots.size() == 3 && s.names[0] == "Solo");
             ASSERT_EQ(app.sim().roster_mask(), 0x0F);
-            hall.step(4000);
+            hall.step(kDialogMs + 4000);                                                     // (the server seals the first turn kDialogMs after the match began: 4 s of play follow)
             ASSERT_FALSE(app.net()->desynced());
             ASSERT_TRUE(server.status("ALONE-APP").ticks > 40);
             app.quit();
@@ -5044,7 +5077,7 @@ void run_room_chat_box_tests() {
         app.run_frame_with_delta(0.016f);                                                    // (through the window's own event loop, in the match)
         ASSERT_EQ(app.zoom(), 1.0f);
         ASSERT_EQ(app.remembered_zoom(), 0.5f);                                              // none of it changed what is remembered
-        d.hall.step(3000);                                                                   // the match goes on, at the zoom 1, with the server's bots
+        d.hall.step(kDialogMs + 3000);                                                       // the match goes on, at the zoom 1, with the server's bots (its first turn is sealed kDialogMs after it began)
         ASSERT_TRUE(!app.net()->desynced() && d.server.status("ZM-FILL").ticks > 40);
         // the match is left: the local setup screen follows, and a local game starts at the remembered level and has the zoom-out
         app.return_to_map_select();
@@ -5149,7 +5182,7 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(app.zoom() == 1.0f && !app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));
         middle_click(app, view.x + 300, view.y + 200);
         ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);
-        duo.step(3000 + kHoldMs);                                                            // (the bots look from the end of the start hold on)
+        duo.step(3000 + kDialogMs);                                                          // (the host seals the first turn kDialogMs after the match began; the bots look from the first tick on)
         ASSERT_TRUE(!app.net()->desynced() && !bob.net.desynced() && app.bots()->stats(2).decisions > 0);
         app.return_to_map_select();
         ASSERT_TRUE(!app.network_active() && app.bots() == nullptr && app.zoom_limits() == zoom::Limits::any());
