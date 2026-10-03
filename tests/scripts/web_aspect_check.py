@@ -996,7 +996,7 @@ def main():
             check(bx[0] >= -0.5 and bx[0] + bx[2] <= g["inner"][0] + 0.5, "%s: the box is inside the window's width" % label)
             check(g["scroll"][0] <= g["scroll"][1] + 1, "%s: no sideways scroll (%d of %d)" % (label, g["scroll"][0], g["scroll"][1]))
 
-        print("[web aspect] the page at several sizes (16:9 unless the address or a phone says otherwise)")
+        print("[web aspect] the page at several sizes (16:9 unless the address or the remembered choice says otherwise: a phone held upright gets 16:9 too)")
         sizes = [("1280x720@1", 1280, 720, 1, False), ("phone portrait 390x844@3", 390, 844, 3, True), ("phone landscape 844x390@3", 844, 390, 3, True)]
         if not args.quick:
             sizes = [("1280x720@1", 1280, 720, 1, False), ("1280x720@2", 1280, 720, 2, False), ("1920x1080@1", 1920, 1080, 1, False), ("1920x1080@2", 1920, 1080, 2, False),
