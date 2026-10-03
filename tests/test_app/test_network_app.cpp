@@ -4456,6 +4456,38 @@ void run_room_chat_ui_tests() {
         }
         app.quit();
     } TEST_END();
+
+    TEST_CASE("N5.76 The Refusal For Another Version On The Web Page Says To Reload The Page (A Tab That Was Opened Before The Server Was Updated Is The Old Game), In Words That Fit The Setup Screen's Status Box In Two Lines On Both Pages; The Desktop Game's Words Are As They Were, And Every Other Refusal Is The Same Words In Both") {
+        using net::NetGame;
+        using net::RejectReason;
+        const std::string desktop = NetGame::reject_text(RejectReason::VersionMismatch, false);
+        const std::string web = NetGame::reject_text(RejectReason::VersionMismatch, true);
+        ASSERT_EQ(desktop, std::string("This version cannot play with the host's version."));            // (the words that test_netgame N3.17 pins for a native client)
+        ASSERT_TRUE(web.compare(0, desktop.size(), desktop) == 0 && web.find("Reload the page") != std::string::npos);      // the same sentence, and what to do about it
+        for (const RejectReason reason : {RejectReason::Full, RejectReason::MatchRunning, RejectReason::Kicked, RejectReason::BadRequest, RejectReason::NoSuchRoom, RejectReason::Dropped,
+                                          RejectReason::RejoinFailed, RejectReason::Superseded}) {
+            ASSERT_EQ(NetGame::reject_text(reason, false), NetGame::reject_text(reason, true));          // nothing else changes with the page
+            ASSERT_TRUE(NetGame::reject_text(reason, true).find("Reload") == std::string::npos);
+        }
+        Application app;
+        ASSERT_TRUE(app.init(headless_config()));
+        Renderer& r = app.renderer();
+        using MS = MapSelectScreen;
+        MS::RoomView v;                                                                                   // the classic page (the web page's "Classic 4:3"): 293 px, two lines of 14 px
+        v.networked = true;
+        v.status = web;
+        const std::vector<std::string> lines = MS::status_lines(r, v);
+        ASSERT_TRUE(!lines.empty() && lines.size() <= MS::STATUS_LINES);
+        std::string joined;
+        for (const std::string& l : lines) {
+            ASSERT_TRUE(r.get_text_width(l, FontSize::Px14) <= MS::STATUS_W);
+            joined += (joined.empty() ? "" : " ") + l;
+        }
+        ASSERT_EQ(joined, web);                                                                           // not cut: no "..." and every word of it is on the screen
+        const SetupLayout& wide = SetupLayout::of(SetupVariant::Guest);                                   // the 16:9 page (the web page's default): its label is wrapped at 363 px without a limit of lines
+        ASSERT_TRUE(wrap_label_text(r, web, wide.prompt_text.w, FontSize::Px14).size() <= MS::STATUS_LINES);
+        app.quit();
+    } TEST_END();
 }
 
 // ---- the chat box of the 16:9 setup screen (online rooms, protocol 11): the application feeds MapSelectScreen::set_chat_panel / set_fill_footer from the room (N5.60 - N5.68) ----
