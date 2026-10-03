@@ -202,9 +202,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Visual Studio 2022 (MSVC 19.4x) is what the owner builds with; windows-latest has Visual Studio 2026 (the newest compiler).
+          # Visual Studio 2022 (MSVC 19.4x) is what the owner builds with (windows-2022); windows-latest (and windows-2025) have Visual Studio 2026, the newest compiler.
           - name: MSVC 2022
-            os: windows-2025
+            os: windows-2022
           - name: MSVC 2026
             os: windows-latest
     env:
