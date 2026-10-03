@@ -5330,7 +5330,13 @@ void run_persist_tests() {
         }
 #endif
         // the name: the code, a hash of the code (so that "ABC" and "abc" are two files even where the file system ignores case), an extension
-        ASSERT_TRUE(store.path_for("ABC") != store.path_for("abc"));
+        {
+            const auto lower = [](std::string text) {
+                for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                return text;
+            };
+            ASSERT_TRUE(lower(store.path_for("ABC")) != lower(store.path_for("abc")));      // two files even where the file system ignores case (the names differ without it)
+        }
         {
             const std::string name = fs::path(store.path_for("ROOM-1")).filename().string();
             const std::string ext = kRestartExtension;
