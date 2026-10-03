@@ -23,7 +23,8 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
   * the selector asks "Leave the match to change the picture?" in a running match (and not at the quick help or the setup screen), and answered No the match goes on;
   * the wheel and the pinch (milestone M4, the mouse-wheel zoom): over the game's canvas the page cancels the wheel (the page does not scroll) and the ctrl + wheel of a trackpad's
     pinch (the browser's page zoom) and Safari's gesture events (turned into wheel events for the game); over the title, the selector and the guide the browser behaves as
-    usual (the page scrolls, nothing is cancelled); and the game really zooms: in a running match a wheel rolled away shows every world pixel as a 2 x 2 square (0.5 and 1 and 2
+    usual (the page scrolls, nothing is cancelled); the middle button's press and click (mousedown, auxclick) are cancelled over the canvas only (an unprevented press over a page
+    that scrolls starts the browser's autoscroll on Windows) and a left press is not; and the game really zooms: in a running match a wheel rolled away shows every world pixel as a 2 x 2 square (0.5 and 1 and 2
     are pictures that differ, the frame around the map view does not), the middle button goes back to 1, and a wheel over the minimap does not zoom (screenshots in --shots);
   * the download of the game's data (index.data): the retry rule, a download that the browser fails once (injected with the DevTools Fetch domain) is retried and the game starts, a
     download that fails for good shows the message with a Reload button; the loading of the game itself: index.js or index.wasm that fail, a game that never starts (the watchdog), a
@@ -1080,6 +1081,34 @@ def main():
             time.sleep(0.5)
             seen = json.loads(tab.ev("JSON.stringify(window.__w)"))
             check(len(seen) >= 1 and all(e["dp"] and e["ctrl"] for e in seen), "a ctrl + wheel over the canvas (a trackpad's pinch in Chrome and Firefox) is cancelled too: no page zoom (%s)" % seen)
+
+            # ---- the middle button (back to the zoom 1): SDL cancels the mouseup only, so on a page that scrolls an unprevented press would start the browser's autoscroll (Windows: Chrome,
+            # Edge, Firefox) and defeat the game's use of the button. The page cancels the press (mousedown) and the click (auxclick) of the MIDDLE button over the canvas, and nothing elsewhere.
+            tab.ev("window.__m = []; ['mousedown', 'auxclick'].forEach(function (n) { window.addEventListener(n, function (e) { window.__m.push([n, e.button, e.defaultPrevented]); }); }); 1")
+
+            def press(point, name):
+                tab.ev("window.__m.length = 0; 1")
+                tab.mouse("mouseMoved", point[0], point[1], button="none")
+                time.sleep(0.15)
+                bits = {"left": 1, "middle": 4}[name]
+                tab.call("Input.dispatchMouseEvent", {"type": "mousePressed", "x": point[0], "y": point[1], "button": name, "clickCount": 1, "buttons": bits})
+                time.sleep(0.1)
+                tab.call("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": point[0], "y": point[1], "button": name, "clickCount": 1})
+                time.sleep(0.3)
+                return json.loads(tab.ev("JSON.stringify(window.__m)"))
+
+            seen = press((cx, cy), "middle")
+            check(["mousedown", 1, True] in seen and ["auxclick", 1, True] in seen and all(e[2] for e in seen if e[1] == 1),
+                  "a middle press over the canvas is cancelled (mousedown and auxclick defaultPrevented: no browser autoscroll; %s)" % seen)
+            for label, point in (("the page's title", title), ("the guide", guide)):
+                seen = press(point, "middle")
+                check(["mousedown", 1, False] in seen and all(not e[2] for e in seen),
+                      "a middle press over %s is left to the browser: nothing cancels it (%s)" % (label, seen))
+                settle_scroll()
+            seen = press((cx, cy), "left")
+            check(["mousedown", 0, False] in seen and all(not e[2] for e in seen),
+                  "a left press over the canvas is not cancelled (the game keeps its focus and its clicks; %s)" % seen)
+            settle_scroll()
             gestures = json.loads(tab.ev(r"""(function () {
                 var c = document.getElementById('canvas'), got = [], out = [];
                 c.addEventListener('wheel', function (e) { got.push([Math.round(e.deltaY), e.ctrlKey]); });

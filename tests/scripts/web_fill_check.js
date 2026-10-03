@@ -49,10 +49,19 @@ for (const [path, isShell] of [[process.argv[2], true], [process.argv[3], false]
             console.log('FAIL ' + path + ': wheel / pinch listeners must all be on the canvas, wheel and the three gesture events: ' + JSON.stringify(receivers) + (onattr ? ' (and an on-wheel attribute)' : ''));
             failed++;
         }
+        // the middle button (back to the zoom 1): its press and its click are cancelled on the canvas, and only there, and only for button 1 (an unprevented press over a page that scrolls starts
+        // the browser's autoscroll on Windows); web_aspect_check.py --wheel checks it in a real browser
+        const auxclicks = [...text.matchAll(/([A-Za-z_$][\w$.]*)\.addEventListener\(\s*['"]auxclick['"][^\n]*button === 1/g)].map((m) => m[1]);
+        const anyAux = [...text.matchAll(/([A-Za-z_$][\w$.]*)\.addEventListener\(\s*['"]auxclick['"]/g)].map((m) => m[1]);
+        const downs = [...text.matchAll(/([A-Za-z_$][\w$.]*)\.addEventListener\(\s*['"]mousedown['"][^\n]*button === 1/g)].map((m) => m[1]);
+        if (auxclicks.join() !== 'canvas' || anyAux.join() !== 'canvas' || downs.join() !== 'canvas') {
+            console.log('FAIL ' + path + ': the middle button must be cancelled on the canvas only (button === 1): mousedown ' + JSON.stringify(downs) + ', auxclick ' + JSON.stringify(anyAux));
+            failed++;
+        }
         const joinsWithFill = /joinArguments/.test(text) && /--fill-bots/.test(text);
         if (!joinsWithFill) { console.log('FAIL ' + path + ': the page does not pass ?fill= on as --fill-bots'); failed++; }
-    } else if (receivers.length || onattr) {
-        console.log('FAIL ' + path + ': the games\' page must not handle the wheel itself: ' + JSON.stringify(receivers));
+    } else if (receivers.length || onattr || /\bauxclick\b/.test(text)) {
+        console.log('FAIL ' + path + ': the games\' page must not handle the wheel or the middle button itself: ' + JSON.stringify(receivers));
         failed++;
     }
 }

@@ -1557,6 +1557,11 @@
         // deltas arrive as its notches); this one is not passive, so it can cancel the page's own reaction (the scroll, and the browser's page zoom of ctrl + wheel) in every browser. Only over
         // the game's canvas: elsewhere on the page the browser behaves as usual. Safari reports a pinch as gesture events: they are turned into wheel events (a pinch of 25 % is one notch,
         // the unit of the zoom's levels) for the game, and cancelled for the page.
+        // The middle button (back to the zoom 1) too: an unprevented middle press over a page that scrolls starts the browser's autoscroll (Windows: Chrome, Edge and Firefox), which would
+        // swallow the press and scroll the page instead. SDL cancels the `mouseup` only, so the press (`mousedown`) and the click that follows (`auxclick`) are cancelled here, for the
+        // canvas and the middle button only: the rest of the page keeps its middle button (autoscroll, a link opened in a new tab).
+        canvas.addEventListener('mousedown', function(e) { if (e.button === 1) e.preventDefault(); }, {passive: false});
+        canvas.addEventListener('auxclick', function(e) { if (e.button === 1) e.preventDefault(); }, {passive: false});
         canvas.addEventListener('wheel', function(e) { e.preventDefault(); }, {passive: false});
         (function() {
             var lastScale = 1;
