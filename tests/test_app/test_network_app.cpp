@@ -5035,10 +5035,8 @@ void run_room_chat_box_tests() {
         struct Page {
             Aspect aspect;
             const char* code;
-            const char* name;
         };
-        for (const Page& page : {Page{Aspect::Wide16x9, "BOX-DBL-W", "16:9"}, Page{Aspect::Classic4x3, "BOX-DBL-C", "classic"}}) {
-            const std::string at = std::string(page.name) + ": ";
+        for (const Page& page : {Page{Aspect::Wide16x9, "BOX-DBL-W"}, Page{Aspect::Classic4x3, "BOX-DBL-C"}}) {
             BoxRoom d;
             ASSERT_TRUE(open_leader(d, page.code, page.aspect, net::FillLevel::Medium, false, true));
             Application& app = d.app;
