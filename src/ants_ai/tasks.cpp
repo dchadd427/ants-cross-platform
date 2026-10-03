@@ -187,27 +187,29 @@ bool HarvestTask::connected_now(const MapInfo& map, sim::TileCoord tile) const n
 uint8_t HarvestTask::tier_for(const TaskContext& c, const PileInfo& pile, int32_t own_cost) const {
     const BotView& v = c.view;
     const uint8_t ally = v.ally();
-    bool contested = false;
-    bool hopeless = false;
+    size_t competitors = 0;                                                          // live enemy teams that reach the pile at a comparable cost
+    bool first = false;                                                              // an enemy that is far nearer than the seat
     bool ally_near = false;
+    const uint64_t mine = static_cast<uint64_t>(std::max<int32_t>(own_cost, 1));
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
         const TeamRow& row = v.rows()[t];
-        if (t == c.seat || !row.present || row.dropped) continue;                      // a team that dropped out competes for nothing
+        if (t == c.seat || !row.present || row.dropped) continue;                  // a team that dropped out competes for nothing
         const int32_t cost = pile.approach[t].cost;
-        if (cost < 0) continue;                                                       // its hill cannot walk there
+        if (cost < 0) continue;                                                   // its hill cannot walk there
         const uint64_t theirs = static_cast<uint64_t>(cost) * 100u;
-        const uint64_t mine = static_cast<uint64_t>(std::max<int32_t>(own_cost, 1));
         if (ally < sim::MAX_PLAYERS && t == ally) {
-            if (theirs <= mine * params_.contest_high) ally_near = true;              // the ally is as near as the seat, or nearer
+            if (theirs <= mine * params_.contest_high) ally_near = true;          // the ally is as near as the seat, or nearer
             continue;
         }
-        if (theirs < mine * params_.contest_low) hopeless = true;
-        else if (theirs <= mine * params_.contest_high) contested = true;
+        if (theirs < mine * params_.contest_low) first = true;
+        else if (theirs <= mine * params_.contest_high) ++competitors;
     }
-    if (contested) return 0;
-    if (hopeless) return 3;
-    if (ally_near) return 2;
-    return 1;
+    if (competitors >= 2) return static_cast<uint8_t>(PileClass::Multi);
+    if (competitors == 1 && params_.contest_one_first) return static_cast<uint8_t>(PileClass::One);
+    if (competitors == 1) return static_cast<uint8_t>(PileClass::Safe);
+    if (first) return static_cast<uint8_t>(PileClass::Hopeless);
+    if (ally_near) return static_cast<uint8_t>(PileClass::Shared);
+    return static_cast<uint8_t>(PileClass::Safe);
 }
 
 void HarvestTask::reask(const TaskContext& c) {
@@ -477,6 +479,7 @@ void HarvestTask::step(TaskContext& c) {
         k.cost = ap.cost;
         k.trip = trip;
         k.rank = profile.value_aware_piles ? static_cast<int64_t>(p.value) * 100000 / trip : -static_cast<int64_t>(ap.cost);
+        if (params_.rank_by_remaining && profile.value_aware_piles) k.rank = static_cast<int64_t>(p.value) * static_cast<int64_t>(bite->remaining) * 100000 / trip;
         k.cap = std::max<uint32_t>(1u, std::min<uint32_t>(profile.max_ants_per_pile, static_cast<uint32_t>(trip) / std::max<uint32_t>(1u, params_.gate_gap_ticks) + 2u));
         for (const auto& e : recs_) k.load += e.second.pile == p.index ? 1u : 0u;
         k.bite = info->bite_index;

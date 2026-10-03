@@ -41,9 +41,11 @@ struct LevelPlan {
     uint32_t fight_linger_ticks{100};    // a fight ends this long after the last blow that was seen
     bool carrier_aid{true};              // a carrier that was hit stands idle with its food (the blow cleared its walk): it is sent home at once, as a person would click it
     // the economy
-    bool contest_aware{false};           // the pile order: contested piles first, safe next, ally-shared last, hopeless last of all (HarvestTask::Params::contest_aware)
-    uint32_t contest_low{70};            // an enemy whose cost to a pile is below this percentage of the own cost owns it
+    bool contest_aware{false};           // the pile order of the owner's playbook: the piles that several enemies reach first, then those that one reaches, the safe ones, those of the ally, the hopeless (HarvestTask::Params::contest_aware)
+    uint32_t contest_low{70};            // an enemy whose cost to a pile is below this percentage of the own cost is there first
     uint32_t contest_high{130};          // ... and above this percentage it is no competitor
+    bool rank_by_remaining{false};       // within a class: the points that a pile still holds per tick of the trip (Medium, Hard)
+    bool contest_one_first{true};        // the piles that one enemy competes for come before the safe ones
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool typed_harvest{true};            // Fire and Bomber ants harvest between their jobs (HarvestTask::Params::extra_types)
     bool combat_harvests{false};         // Combat Ants harvest too (and punch what comes within two tiles of their way) instead of standing on a guard post

@@ -10,6 +10,7 @@ add_executable(test_ai
     test_ai_arena.cpp
     test_ai_b2fix.cpp
     test_ai_b41.cpp
+    test_ai_b41_team.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

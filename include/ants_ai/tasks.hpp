@@ -151,6 +151,9 @@ private:
 ///               blacklist_ticks and the pile stays as it was. The PILE's otherwise, when two ants that fail nowhere else failed on it, or when no ant of the task makes
 ///               progress anywhere (a seat that gets nowhere cannot tell, and a wall that came up after the analysis of the map is learned this way): it is blacklisted for
 ///               blacklist_ticks for every ant.
+/// The classes of a pile for the contest-aware order (HarvestTask::Params::contest_aware), in the order they are served
+enum class PileClass : uint8_t { Multi = 0, One = 1, Safe = 2, Shared = 3, Hopeless = 4 };
+
 class HarvestTask final : public Task {
 public:
     struct Params {
@@ -169,14 +172,24 @@ public:
         /// Ants of these types (bit t = AntType t) join the pool besides the level's default type: a typed ant harvests like a worker (a Combat Ant punches the enemy that comes within
         /// two tiles of its way as well), so the standard bot lets its Fire and Bomber ants harvest between their jobs. 0 (the worker bot): the default type only.
         uint8_t extra_types{0};
-        /// Contest-aware piles (the standard bot; false for the worker, whose ranking and pinned numbers stay as they are): the candidates are ordered by TIER first, then by points per
-        /// tick of the trip as before. Tier 0: CONTESTED, a live enemy team (not an ally) whose hill reaches the pile at a cost between contest_low and contest_high percent of the own
-        /// cost: whoever goes first takes it, so it is secured first. Tier 1: SAFE, no enemy comes close. Tier 2: SHARED with the ally (only the ally competes, or the ally is nearer,
-        /// and no enemy does): the team's score box adds both scores, so an ally taking it costs the team nothing. Tier 3: HOPELESS, an enemy reaches it at less than contest_low
-        /// percent of the own cost: it will be gone before the ants get there.
+        /// Contest-aware piles (the standard bot; false for the worker, whose order and pinned numbers stay as they are): the candidates are ordered by CLASS first (the owner's playbook:
+        /// "the center food first, then the contested food on one of the sides, depending on who is teamed up"), then within a class by the rank below. A team COMPETES for a pile when its
+        /// hill reaches it at a cost between contest_low and contest_high percent of the own cost (the start analysis' costs of every team's hill, PileInfo::approach); an enemy that is
+        /// nearer than contest_low percent will have the pile before the ants get there. The classes, in the order they are sent to:
+        ///   Multi     at least two live teams that are not allies compete (the centre of TREASURE)
+        ///   One       exactly one competes (a side that is shared with a neighbour)
+        ///   Safe      nobody competes (the piles near the own hill)
+        ///   Shared    only the ally competes, or is as near: the score box adds both scores, so what the ally takes costs the team nothing
+        ///   Hopeless  an enemy is far nearer than the seat and nobody else competes: it is gone before the ants arrive
+        /// The classes are made again at every look from the alliance state of the view: an alliance that forms moves the ally's side to Shared and a neighbour's to One.
         bool contest_aware{false};
-        uint32_t contest_low{70};            // the enemy's cost as a percentage of the own cost: below this the pile is the enemy's
-        uint32_t contest_high{130};          // ... and above this it is no competitor (the pile is safe from that team)
+        uint32_t contest_low{70};            // an enemy whose cost is below this percentage of the own cost is there first
+        uint32_t contest_high{130};          // ... and above this percentage it is no competitor
+        /// Within a class: the points that the pile still holds per tick of the trip (points of a unit times the units left; a richer pile first), not the points of one unit per tick of
+        /// the trip. Only with value_aware_piles (Medium, Hard): Easy ranks by distance, as before.
+        bool rank_by_remaining{false};
+        /// false: a pile that only ONE enemy competes for is served with the safe piles (only the piles that several enemies reach come first)
+        bool contest_one_first{true};
         /// Fire-aware piles (the standard bot; false for the worker): a pile with a fire wall within fire_radius tiles of its anchor is asked again with the map as it is now (the
         /// start analysis does not know the walls): a pile that the walls have cut off is no candidate (no ant is sent into fire), one that they only made longer is ranked by its
         /// real cost. The engine's own path finder goes round a wall that leaves a way.
@@ -206,7 +219,7 @@ public:
     bool blacklisted(uint32_t pile, uint64_t tick) const noexcept;
     /// Whether the ant is kept away from the pile at `tick` (an order of it failed there lately)
     bool excluded(uint32_t ant, uint32_t pile, uint64_t tick) const noexcept;
-    /// The tier of a pile for the seat as of the last look (contest-aware option; -1 when the pile was not a candidate or the option is off): for the tests and the reports
+    /// The class (PileClass as a number) of a pile for the seat as of the last look (contest-aware option; -1 when the pile was not a candidate or the option is off): for the tests and the reports
     int tier_of(uint32_t pile) const noexcept {
         const auto it = tiers_.find(pile);
         return it != tiers_.end() ? it->second : -1;
@@ -240,7 +253,7 @@ private:
         uint32_t bite{0};                    // the object whose units a bite takes
         uint16_t units{0};                   // its units now
         bool shut_at_start{false};           // the analysis of the start could not reach it: the walker components of the start say nothing about it
-        uint8_t tier{0};                     // contest-aware: 0 contested, 1 safe, 2 shared with the ally, 3 hopeless (always 0 when the option is off)
+        uint8_t tier{0};                     // contest-aware: the PileClass (always 0 when the option is off)
     };
     struct Watch {
         sim::TileCoord tile{};               // where an ordered ant that walks (or waits for a path) stood at the last look ...
@@ -251,7 +264,7 @@ private:
     void sync_ledger(AntLedger& ledger) const;
     /// Asks the map as it is now again (see "candidates"): the piles that were shut off at the start and the hill's walking field for the ants that were shut in
     void reask(const TaskContext& context);
-    /// The tier of a pile for the seat (the contest-aware option), from the start analysis' cost of every team's hill to it
+    /// The class of a pile for the seat (the contest-aware option), from the start analysis' cost of every team's hill to it
     uint8_t tier_for(const TaskContext& context, const PileInfo& pile, int32_t own_cost) const;
     /// Whether an ant standing on `tile` can walk to the hill now (the field of the last reask)
     bool connected_now(const MapInfo& map, sim::TileCoord tile) const noexcept;
@@ -264,7 +277,7 @@ private:
     std::map<uint32_t, Watch> watch_;        // ordered ants that walk or wait for a path: the watchdog's memory
     std::map<uint32_t, uint64_t> stuck_;     // ant id -> the tick it was first seen idle with food
     std::map<uint32_t, uint64_t> rescued_;   // ant id -> the tick it was last sent home by hand
-    std::map<uint32_t, int> tiers_;          // pile index -> its tier at the last look (contest-aware option)
+    std::map<uint32_t, int> tiers_;          // pile index -> its class at the last look (contest-aware option)
     std::map<uint32_t, Approach> reach_now_; // piles that were shut off at the start and can be walked to now (as of the last reask)
     std::vector<int32_t> now_field_;         // the hill's walking field now (as of the last reask: MapInfo::field_now, from every walkable tile of the queue row), for the ants that the start analysis took for shut in
     uint64_t next_reask_{0};

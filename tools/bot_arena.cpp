@@ -436,6 +436,7 @@ struct Options {
     bool wall_time{true};
     bool selftest{false};
     bool write_baselines{false};
+    bool ally_standard{false};                     // the first two standard bots of a match team up (the lower seat invites)
     bool help{false};
 };
 
@@ -453,13 +454,14 @@ void print_usage(std::FILE* to) {
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
         "  --rotate           every distinct arrangement of the bots over the seats\n"
+        "  --ally-standard    the first two standard bots of a match team up: the lower seat invites at its first look, the other accepts by its accept rule (test-only: no bot of the game invites)\n"
         "  --repeat N         play every match N times and require identical results\n"
         "  --replay-check     replay the applied commands into a fresh engine without any bot: same hash at every 20th tick and at the end\n"
         "  --threads N        matches at the same time (default 1)\n"
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid), for the tournaments\n"
+        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid), for the tournaments\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -503,6 +505,10 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
             aggressor = true;
             bench_kind = upper(parts[i]) == "SABOTEUR" ? "saboteur" : upper(parts[i]) == "AGGRESSOR2" ? "aggressor2" : "aggressor";
             parts[i] = "worker";
+        } else if (upper(parts[i]).rfind("STANDARD+", 0) == 0) {                      // "standard+K=V,K=V": a standard bot with its own tuning, for the duels of two plans in one match
+            aggressor = true;
+            bench_kind = "standard" + parts[i].substr(8);
+            parts[i] = "worker";
         }
     }
     if (aggressor) {
@@ -527,6 +533,8 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "contest") return flag(p.contest_aware);
     if (key == "clow") { p.contest_low = static_cast<uint32_t>(v); return true; }
     if (key == "chigh") { p.contest_high = static_cast<uint32_t>(v); return true; }
+    if (key == "rankrem") return flag(p.rank_by_remaining);
+    if (key == "cone") return flag(p.contest_one_first);
     if (key == "typedh") return flag(p.typed_harvest);
     if (key == "firew") return flag(p.fire_aware);
     if (key == "secure") return flag(p.secure_side);
@@ -549,12 +557,26 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "hminw") { p.harass_min_workers = static_cast<uint32_t>(v); return true; }
     if (key == "hradius") { p.harass_radius = static_cast<int32_t>(v); return true; }
     if (key == "avoid") return flag(p.avoids_guarded_hills);
-    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid)";
+    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid)";
     return false;
 }
 
 // The bots of the registry, and the arena's bench bots
 std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
+    if (spec.kind.rfind("standard+", 0) == 0) {                                      // the tuning of this seat only, over the global one
+        ai::LevelPlan plan = ai::plan_for(spec.level);
+        for (const auto& t : g_tune) {
+            std::string err;
+            apply_tune(plan, t.first, t.second, err);
+        }
+        for (const std::string& kv : split(spec.kind.substr(9), ',')) {
+            const size_t eq = kv.find('=');
+            uint64_t num = 0;
+            std::string err;
+            if (eq == std::string::npos || !parse_uint(kv.substr(eq + 1), num) || !apply_tune(plan, kv.substr(0, eq), static_cast<int64_t>(num), err)) return nullptr;
+        }
+        return std::make_unique<ai::StandardBot>(plan);
+    }
     if (spec.kind == "aggressor") return std::make_unique<ai::bench::AggressorBot>();
     if (spec.kind == "aggressor2") return std::make_unique<ai::bench::AggressorBot>(2);
     if (spec.kind == "saboteur") return std::make_unique<ai::bench::SaboteurBot>();
@@ -584,6 +606,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--selftest") o.selftest = true;
         else if (s == "--write-baselines") o.write_baselines = true;
         else if (s == "--rotate") o.rotate = true;
+        else if (s == "--ally-standard") o.ally_standard = true;
         else if (s == "--replay-check") o.replay_check = true;
         else if (s == "--quiet") o.quiet = true;
         else if (s == "--no-wall-time") o.wall_time = false;
@@ -812,6 +835,28 @@ void release_memory(std::vector<T>& v) {
     std::vector<T>().swap(v);
 }
 
+// The factory of a match with --ally-standard: the standard bot of the lower seat of the first two is wrapped in an inviter for the other
+std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> ally_factory(const Job& j) {
+    int first = -1;
+    int second = -1;
+    for (const ai::BotSpec& b : j.bots) {
+        if (b.kind != "standard") continue;
+        if (first < 0 || b.seat < first) {
+            second = first;
+            first = b.seat;
+        } else if (second < 0 || b.seat < second) {
+            second = b.seat;
+        }
+    }
+    if (first < 0 || second < 0) return arena_factory;
+    if (first > second) std::swap(first, second);
+    return [first, second](const ai::BotSpec& spec) -> std::unique_ptr<ai::Bot> {
+        std::unique_ptr<ai::Bot> bot = arena_factory(spec);
+        if (bot != nullptr && spec.seat == first) return std::make_unique<ai::bench::InviterBot>(std::move(bot), static_cast<uint8_t>(second));
+        return bot;
+    };
+}
+
 ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool record) {
     ai::ArenaSpec s;
     s.level = &m.level;
@@ -821,6 +866,9 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.latency_ticks = o.latency;
     s.record = record;
     s.extra_kinds = {"aggressor", "aggressor2", "saboteur"};
+    for (const ai::BotSpec& b : j.bots) {
+        if (b.kind.rfind("standard+", 0) == 0) s.extra_kinds.push_back(b.kind);
+    }
     return s;
 }
 
@@ -834,7 +882,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     }
     const Clock::time_point started = Clock::now();
     ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check);
-    spec.factory = factory ? factory : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
+    spec.factory = factory ? factory : o.ally_standard ? ally_factory(job) : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
     r.result = ai::play_match(spec);
     r.plays = 1;
     if (r.result.error.empty() && o.replay_check) {

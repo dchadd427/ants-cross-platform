@@ -11,7 +11,8 @@
 //   Hard          also fights in larger groups, Combat Ants first, harasses enemy carriers near contested piles when it pays, and does not raid a hill that an enemy Combat Ant guards
 //
 // It is a virtual client like every bot (project rule 8): it reads the world through the BotView, sends commands that a person could click, and has no knowledge that a person of its
-// seat could not have. It never hatches and answers an invitation with one Deny, like the worker bot, which stays what it was: the frozen yardstick that this bot is measured against.
+// seat could not have. It answers an invitation to team up by the accept rule (accepts_invitation), never invites and never breaks an alliance. The worker bot stays what it was: the
+// frozen yardstick that this bot is measured against.
 
 #include <cstdint>
 
@@ -55,6 +56,12 @@ public:
     const Tactics& tactics() const noexcept { return tactics_; }
     const AntLedger& ledger() const noexcept { return ledger_; }
     uint32_t denials() const noexcept { return denials_; }
+    uint32_t accepts() const noexcept { return accepts_; }
+    /// The accept rule: an invitation to team up is accepted unless it would unite all live teams (the match would end at once: the alliance of the last two live teams wins), or the bot
+    /// already has an ally, or the inviter has one (accepting would break an alliance). A team counts as live when it plays, has not dropped out and has an ant in sight (the bot's own
+    /// ants count for itself); the eggs of a team that has no ant cannot be seen: such a team counts as gone, which only makes the bot more careful. The bot never invites, never withdraws
+    /// and never breaks an alliance.
+    static bool accepts_invitation(const BotView& view, uint8_t from);
 
     /// The ids of the tasks (their rank is the order they take ants in: a higher rank takes from a lower one)
     static constexpr TaskId kHarvest = 1;
@@ -78,6 +85,8 @@ private:
         p.contest_aware = plan.contest_aware;
         p.contest_low = plan.contest_low;
         p.contest_high = plan.contest_high;
+        p.rank_by_remaining = plan.rank_by_remaining;
+        p.contest_one_first = plan.contest_one_first;
         return p;
     }
 
@@ -96,6 +105,7 @@ private:
     GuardTask guard_;
     HarassTask harass_;
     uint32_t denials_{0};
+    uint32_t accepts_{0};
     uint64_t deny_after_{0};
 };
 

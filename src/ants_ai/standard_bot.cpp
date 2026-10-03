@@ -27,10 +27,15 @@ void StandardBot::start(const BotContext& context) {
 void StandardBot::think(const BotView& view, Orders& orders) {
     const uint64_t now = view.tick();
 
-    // 1. An invitation to team up waits for an answer for ever, and an alliance of all live teams ends the match at once: decline, once (see WorkerBot::think)
+    // 1. An invitation to team up waits for an answer for ever: answer it once (see WorkerBot::think), by the accept rule
     if (view.invite_from() < sim::MAX_PLAYERS && now >= deny_after_) {
-        orders.deny(view.invite_from());
-        ++denials_;
+        if (accepts_invitation(view, view.invite_from())) {
+            orders.accept(view.invite_from());
+            ++accepts_;
+        } else {
+            orders.deny(view.invite_from());
+            ++denials_;
+        }
         const uint64_t longest = profile_.reaction_delay + profile_.reaction_delay * profile_.jitter_percent / 100u + profile_.intent_ttl;
         deny_after_ = now + longest + 2u;
     }
@@ -81,8 +86,24 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     harvest_.step(context);
 }
 
+bool StandardBot::accepts_invitation(const BotView& view, uint8_t from) {
+    if (from >= sim::MAX_PLAYERS || from == view.seat()) return false;
+    if (view.ally() < sim::MAX_PLAYERS) return false;                                // never break an alliance
+    const TeamRow& inviter = view.rows()[from];
+    if (!inviter.present || inviter.dropped || inviter.ally < sim::MAX_PLAYERS) return false;
+    std::array<bool, sim::MAX_PLAYERS> has_ant{};
+    has_ant[view.seat()] = !view.mine().empty();
+    for (const AntView& a : view.others()) has_ant[a.team] = true;
+    size_t live = 0;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        const TeamRow& row = view.rows()[t];
+        if (row.present && !row.dropped && has_ant[t]) ++live;
+    }
+    return live >= 3;                                                                // with only two live teams the alliance would unite all of them: the match would end at once
+}
+
 void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t tick) {
-    if (command.type == sim::CommandType::AllianceDeny) {
+    if (command.type == sim::CommandType::AllianceDeny || command.type == sim::CommandType::AllianceAccept) {
         deny_after_ = fate == Fate::Sent ? tick + 12u : 0u;
         return;
     }

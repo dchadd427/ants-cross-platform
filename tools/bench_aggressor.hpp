@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "ants_ai/bot.hpp"
@@ -349,6 +350,30 @@ private:
     uint64_t deny_after_{0};
     std::map<uint32_t, Taking> taking_;
     std::map<int64_t, uint64_t> ordered_;
+};
+
+// The INVITER (arena-only: a wrapper, not a kind): the bots of the game never invite (docs/BOTS.md, the accept rule of the standard bot), so the arena seats an alliance by letting one seat
+// invite another at its first look, once, through the controller like any command, and the invited standard bot answers by its accept rule. The wrapped bot plays on as before and the
+// wrapper reports its kind.
+class InviterBot final : public Bot {
+public:
+    InviterBot(std::unique_ptr<Bot> inner, uint8_t invitee, uint64_t at_tick = 8) : inner_(std::move(inner)), invitee_(invitee), at_tick_(at_tick) {}
+    const char* kind() const noexcept override { return inner_->kind(); }
+    void start(const BotContext& context) override { inner_->start(context); }
+    void think(const BotView& view, Orders& orders) override {
+        if (!sent_ && view.tick() >= at_tick_ && view.ally() >= sim::MAX_PLAYERS) {
+            orders.invite(invitee_);
+            sent_ = true;
+        }
+        inner_->think(view, orders);
+    }
+    void on_command(const sim::Command& command, Fate fate, uint64_t tick) override { inner_->on_command(command, fate, tick); }
+
+private:
+    std::unique_ptr<Bot> inner_;
+    uint8_t invitee_;
+    uint64_t at_tick_;
+    bool sent_{false};
 };
 
 }  // namespace ants::ai::bench
