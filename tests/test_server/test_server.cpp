@@ -5765,7 +5765,10 @@ std::vector<RClient*> play_room(PWorld& w, const RoomSpec& spec, uint32_t play_m
         machines.back()->record_hashes = true;                                              // (the state of every tick that the machine runs, by tick: what the record's checkpoints are compared with)
     }
     w.run(play_ms + kPre);
-    if (w.status(spec.code).state != RoomState::Running) throw std::runtime_error("the room is not running");
+    if (w.status(spec.code).state != RoomState::Running) {
+        const RoomStatus s = w.status(spec.code);
+        throw std::runtime_error(std::string("the room is not running: ") + room_state_name(s.state) + ", " + s.reason + ", turns " + std::to_string(s.turns));
+    }
     return machines;
 }
 
@@ -6823,6 +6826,114 @@ void run_persist_server_tests_5() {
 }
 
 
+void run_persist_server_tests_6() {
+    TEST_CASE("S3.94 What A Record Costs (Measured): Its Size For A Minute Of Play (An Idle Match, A Busy One Of Three Players And Of Four), The Cost Of Writing A Turn (One write() Of A Few Dozen Bytes) And Of The Flush Once A Second, And The Time It Takes To Bring A Match Back (Three Minutes Of Play Here; ANTS_PERSIST_MEASURE_LONG=1 Measures The Longest Plays Of TINY And Of TREASURE): The Numbers Are Printed, The Bounds Are Generous (A Record Of A Minute Under 120 KB, A Turn Under 1 ms, A Flush Under 250 ms, A Restore Of A Minute Of Play Under 5 s)")  {
+        const auto seconds_since = [](const std::chrono::steady_clock::time_point& t0) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(); };
+        // the size of a minute of play
+        {
+            double idle_per_minute = 0;
+            double busy3_per_minute = 0;
+            double busy4_per_minute = 0;
+            for (int variant = 0; variant < 3; ++variant) {
+                PWorld w("persist-94a");
+                w.start_server(500);
+                const uint8_t players = variant == 2 ? 4 : 3;
+                std::vector<RClient*> m = play_room(w, held_spec("Z-1", players), 10000);
+                if (variant == 0) {
+                    for (RClient* p : m) p->orders = false;                                    // nobody gives an order: the idle match
+                }
+                const uint64_t at_start = w.status("Z-1").record_bytes;
+                const uint32_t turns_start = w.status("Z-1").turns;
+                w.run(60000);
+                const RoomStatus s = w.status("Z-1");
+                const double per_minute = static_cast<double>(s.record_bytes - at_start) / (static_cast<double>(s.turns - turns_start) / 1200.0);
+                (variant == 0 ? idle_per_minute : variant == 1 ? busy3_per_minute : busy4_per_minute) = per_minute;
+            }
+            std::cout << "\n      [measured] a minute of play adds " << static_cast<int>(idle_per_minute) << " bytes to a record when nobody gives an order, " << static_cast<int>(busy3_per_minute)
+                      << " for three players who each give an order every 0.7 s, " << static_cast<int>(busy4_per_minute) << " for four" << std::flush;
+            ASSERT_TRUE(idle_per_minute > 15000 && idle_per_minute < 40000);              // 1,200 turns at 17 bytes and 60 checkpoints: about 21 KB
+            ASSERT_TRUE(busy3_per_minute < 120000 && busy4_per_minute < 120000 && busy3_per_minute > idle_per_minute);
+        }
+        // the cost of writing a turn, and of the flush (the folder is the test's own: on a real disk)
+        {
+            RestartConfig cfg = test_restart_config("persist-94b");
+            RestartStore store(cfg);
+            std::string why;
+            ASSERT_TRUE(store.prepare(why));
+            auto writer = store.create(sample_head("M-1"), why);
+            ASSERT_TRUE(writer != nullptr);
+            const uint32_t turns = 100000;
+            std::vector<net::TurnMsg> prepared;
+            for (uint32_t n = 0; n < 1000; ++n) {
+                prepared.push_back(sample_turn(n % 11 == 4 ? n : n + 1));
+                prepared.back().commands.erase(std::remove_if(prepared.back().commands.begin(), prepared.back().commands.end(), [](const sim::Command& c) { return c.type == sim::CommandType::Drop; }), prepared.back().commands.end());
+            }
+            const auto t0 = std::chrono::steady_clock::now();
+            for (uint32_t n = 0; n < turns; ++n) {
+                net::TurnMsg t = prepared[n % prepared.size()];
+                t.turn = n;
+                if (!writer->append_turn(t)) break;
+            }
+            const double write_seconds = seconds_since(t0);
+            ASSERT_EQ(writer->turns(), turns);
+            const double write_us = write_seconds * 1e6 / turns;
+            double worst_sync_ms = 0;
+            double total_sync_ms = 0;
+            const int syncs = 30;
+            for (int i = 0; i < syncs; ++i) {
+                for (uint32_t n = 0; n < 20; ++n) {
+                    net::TurnMsg t = prepared[n];
+                    t.turn = writer->turns();
+                    ASSERT_TRUE(writer->append_turn(t));
+                }
+                const auto s0 = std::chrono::steady_clock::now();
+                ASSERT_TRUE(writer->sync());
+                const double ms = seconds_since(s0) * 1000.0;
+                worst_sync_ms = std::max(worst_sync_ms, ms);
+                total_sync_ms += ms;
+            }
+            std::cout << "\n      [measured] writing a turn costs " << write_us << " microseconds (100,000 turns in " << write_seconds << " s, " << writer->bytes() / 1024 << " KiB); a flush of a second's turns costs "
+                      << total_sync_ms / syncs << " ms on average, " << worst_sync_ms << " ms at the worst of " << syncs << std::flush;
+            ASSERT_TRUE(write_us < 1000.0);
+            ASSERT_TRUE(worst_sync_ms < 250.0);
+        }
+        // the time to bring a match back
+        {
+            struct Run {
+                const char* map;
+                uint8_t players;
+                uint32_t minutes;
+            };
+            std::vector<Run> runs = {{"TINY.LVL", 3, 3}};
+            if (std::getenv("ANTS_PERSIST_MEASURE_LONG") != nullptr) {
+                runs.push_back(Run{"TINY.LVL", 3, 5});                                         // (a minute short of its 6 minutes)
+                runs.push_back(Run{"TREASURE.LVL", 4, 11});
+            }
+            for (const Run& r : runs) {
+                PWorld w("persist-94c");
+                w.start_server(500);
+                RoomSpec spec = held_spec("Z-2", r.players, r.map);
+                spec.run_ms = 24u * 3600u * 1000u;
+                std::vector<RClient*> m = play_room(w, spec, r.minutes * 60000u - 20000u);                  // (the match ends at its minutes of play: a little before)
+                for (RClient* p : m) p->reconnects = false;
+                const uint32_t sealed = w.status("Z-2").turns;
+                const uint64_t bytes = w.status("Z-2").record_bytes;
+                w.stop_server(false);
+                const auto t0 = std::chrono::steady_clock::now();
+                w.start_server(500);
+                const double total_seconds = seconds_since(t0);
+                ASSERT_EQ(w.report.count(RestoreItem::Outcome::Restored), size_t{1});
+                const RoomStatus s = w.status("Z-2");
+                std::cout << "\n      [measured] a match of " << r.minutes << " minutes (less 20 s) of play on " << r.map << " with " << static_cast<int>(r.players) << " players: " << sealed << " turns, a record of " << bytes / 1024
+                          << " KiB, brought back in " << total_seconds << " s (the replay " << s.restore_ms << " ms: " << static_cast<double>(sealed) / std::max(1.0, static_cast<double>(s.restore_ms)) * 1000.0 << " turns a second)" << std::flush;
+                ASSERT_TRUE(s.restored && s.restored_turns == sealed);
+                ASSERT_TRUE(total_seconds < 5.0 * r.minutes);
+            }
+        }
+    } TEST_END();
+}
+
+
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The real program: ants_server as a child process of the test, stopped with SIGTERM or killed with SIGKILL in the middle of a match and started again over the same folder, and two
@@ -7146,6 +7257,7 @@ int main() {
     run_persist_server_tests_3();
     run_persist_server_tests_4();
     run_persist_server_tests_5();
+    run_persist_server_tests_6();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();
 #endif
