@@ -1,6 +1,6 @@
 # Rollback for one's own orders: what was built, measured, and where it differs from the design
 
-Update for section 74 of `implementation_plan.md` (that file is not part of the repository; the owner copies this text into it). Client-side prediction with rollback of one's own commands in network matches: the confirmed lock-step simulation, the server's sealing and referee, the network protocol and the rules stay as they are. The steps land one after the other; this file grows with them (R1 the engine copy, R2 the prediction core, then the screen, the cues, the switches and the measurements).
+Update for section 74 of `implementation_plan.md` (that file is not part of the repository; the owner copies this text into it). Client-side prediction with rollback of one's own commands in network matches: the confirmed lock-step simulation, the server's sealing and referee, the network protocol and the rules stay as they are. The steps land one after the other; this file grows with them (R1 the engine copy, R2 the prediction core, R3 the screen, then the cues, the switches and the measurements).
 
 ## R1: the engine copy (value semantics of `SimulationEngine`)
 
@@ -173,3 +173,38 @@ Two mutants survive, for reasons that are not holes in the tests:
 - **Rebuild only when a confirmed turn disagrees; advance tick by tick otherwise** (the coordinator's go message): the predicted engine is not rebuilt every frame. R1 measured that a copy is cheap and the ticks are not.
 - **An own order is put at the display tick, but never behind a turn in hand.** Such a turn was sealed before the order existed. When the lead is too low (a delay that grew, or the first orders of a match, before the delay has been measured), the order is put at the first tick whose turn has not arrived and is chased turn by turn until its own turn comes; a rebuild for each turn that passes it, `uplink + lag` of them. The ants of a chased order have started to walk and then hover (their picture is the confirmed one, which is always right) until the lead has caught up. The lead rises at once when the measured delay rises and falls only after 40 ticks (2 s) of a lower one, so the picture does not move back and forth with the phase of the server's seals. A prediction that learns from its own misses (a missed order raises the lead by itself) is possible and is left for the measurements of R6 to ask for.
 - **The gate is the sessions' own state, not a list of their flags.** `held` (a pause), `mode != Normal` (a host change, a rejoin), `catching_up` and `desynced`, the user's switch and the application's.
+
+## R3: the match screen reads the predicted engine (`Application::view_sim`)
+
+### Built
+
+| Item | Where |
+|---|---|
+| **`Application::view_sim()`**: the engine that the match screen shows. In a match of the network it is `NetGame::view_engine()` (the predicted engine while the prediction is on, else the confirmed one); in every game of one machine it is the confirmed engine. One call may rebuild a predicted engine that a turn has shown to be wrong, so a frame asks once. `Application::sim()` stays the confirmed engine | `include/ants_app/application.hpp`, `src/ants_app/application.cpp` |
+| What reads the shown engine: **the frame** (`render_world`: the world and the grid; `HUD::render`: the panel, the minimap, the selection markers), **the HUD's step of every tick** (`HUD::update` in `post_tick`: the selection's status text, the alliance flag, the pick-up edge), **the HUD's input** (key, motion, press, release: what a click picks, the group order and its feedback, the rubber band, the minimap), **the cursor** (`evaluate_cursor` and its special-target question). The HUD's own code reads nothing but `grid()`, `get_world_state()`, `get_unit()` and `ant_type()` of the engine it is given and sends the player's commands through the sink (`NetGame::submit`), so that is all there is to it; `HUD::pointer_click` and `pointer_right_click` ask the special-target question of the engine whose world the click picks from | `application.cpp`, `src/ants_app/hud_input.cpp` |
+| What stays the CONFIRMED engine's: the news (`poll_sim_events`: told once, on the confirmed stream), the cues (until R4), the scorecard and the end of the match, the hashes (the web page's sync hash), the bots, the names. `HUD::current_cursor()` is new (the cursor that the last evaluation chose) | `application.cpp`, `include/ants_app/hud.hpp` |
+| Ant ids are stable: the predicted engine is a copy of the confirmed one, nothing in it hatches (Hatch is not predicted: a new ant appears when its turn is run, with the id that the engine gives it), so a selection by id means the same ant in both | (by construction; PA1 selects by clicking on the shown ant and the id is the confirmed engine's) |
+| Suite 3.21 `test_prediction_app` (quick, about 4 s): a headless Application hosts a room, a bare machine joins, SMALL.LVL, a real match over loopback | `tests/test_app/test_prediction_app.cpp`, `tests/test_app/CMakeLists.txt`, `run_tests.sh` |
+
+### What the tests hold the application to
+
+- **PA1**: the application predicts; `view_sim()` is the NetGame's view engine, ahead of the confirmed one by the lead; a right click on open ground with an own ant selected puts the order in the shown engine in the click's own call (and in the confirmed engine a few ticks later); the host then stops sealing and the turns in hand run (no tick can run between two frames: a tick would move an ant in the confirmed engine and prove nothing); **a click at the edge of the shown ant's box, away from where the confirmed engine has the ant, picks it** (the confirmed engine has nothing there); the pointer over it gets the selection cursor; with nothing selected and the pointer away, the frame drawn is the same frame when drawn again, and **the frame drawn after the switch is off (the confirmed engine) differs where the ant stands**; the click that picked the ant now finds nothing and the cursor is the plain one.
+- **PA2**: the HUD's step of every tick reads the shown engine: the alliance that a turn in hand makes is in the HUD (`is_on_team`) at every step at which the shown engine has it and the confirmed one has not (a window of several 10 ms steps), and the team's news flash reaches the chat log once, from the confirmed engine (the predicted engine's own queue is empty: the prediction took it).
+
+### Mutants (A1 - A7 edit `application.cpp`; run against `test_prediction_app`)
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `A1_render_confirmed` | the frame is drawn from the confirmed engine | KILLED by PA1 |
+| `A2_mouse_down_confirmed` | a button press is handled against the confirmed engine's world | SURVIVED |
+| `A3_mouse_up_confirmed` | a button release (where a click happens) is handled against the confirmed engine's world | KILLED by PA1 |
+| `A4_hud_step_confirmed` | the HUD's step of every tick reads the confirmed engine's world | KILLED by PA2 |
+| `A5_news_from_view` | the HUD polls the news of the shown (predicted) engine, whose queue the prediction has emptied | KILLED by PA2 |
+| `A6_view_always_confirmed` | view_sim() always answers with the confirmed engine | KILLED by PA1, PA2 |
+| `A7_cursor_confirmed` | the cursor is evaluated against the confirmed engine's world | KILLED by PA1 |
+
+The first run of the harness had A1 and A5 survive. A1 (the frame drawn from the confirmed engine) survived because the test compared two frames that differed in more than the engine (the selection marker, the pointer, and a tick that `pump_network(0)` could run); the test now freezes the match and compares two frames of one user interface. A5 (the HUD polls the shown engine's news) survived because the line that the test looked for is the HUD's own ("Game started"); it now looks at the news flash of the new team, which only the engine makes. The survivor that remains, **A2**, is equivalent: a press of a button reads the engine's grid for its size (both engines have the same grid) and decides nothing from the ants; the pick happens at the release (A3).
+
+### What this does not do (R4 and R5 follow)
+
+The cues are still the confirmed engine's: a sound is heard when the confirmed engine makes it, `lead` ticks after the picture shows it. The picture of other players' things (a fight, an explosion) is the prediction's, a few ticks ahead, and its sound arrives with the confirmed tick. R4 decides which cues can come from the predicted engine.

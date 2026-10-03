@@ -287,6 +287,7 @@ define_suites() {
     suite "3.18"   app    1 "test_zoom_model"            "Zoom Model (test_zoom_model)"                              "ZOOM MODEL SUITE (the wheel zoom's levels, anchoring, clamps, camera, edge scroll in screen pixels, start view, wheel accumulation, settings key)" '"./$BUILD_DIR/tests/test_app/test_zoom_model"'
     suite "3.19"   app    1 "test_zoom_view"             "Zoom View (test_zoom_view)"                                "ZOOM VIEW SUITE (the world pass against the direct pass, the HUD at a zoom, the wheel, fairness, settings, a network match with a zoom)" '"./$BUILD_DIR/tests/test_app/test_zoom_view"'
     suite "3.20"   app    1 "test_zoom_fingerprint"      "Zoom Fingerprint (test_zoom_fingerprint)"                  "ZOOM FINGERPRINT SUITE (the pictures and the pointer pinned at the zoom 0.5 and 2, classic and wide)" '"./$BUILD_DIR/tests/test_app/test_zoom_fingerprint"'
+    suite "3.21"   app    1 "test_prediction_app"        "Prediction in the Application (test_prediction_app)"       "PREDICTION IN THE APPLICATION SUITE (the match screen reads the predicted engine: the frame, the click, the HUD's step, the switch; a real match over loopback)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_prediction_app"'
 
     # 4. opaque-box E2E (its own build folder)
     suite "4"      e2e    0 "-"                          "Opaque-Box E2E Tests (e2e_runner)"                         "E2E OPAQUE-BOX VERIFICATION SUITES"                                                './build_e2e/e2e_runner $E2E_ARGS'

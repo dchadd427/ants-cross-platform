@@ -1907,7 +1907,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod, key.repeat != 0);
+    hud_.handle_key_down(key.keysym.sym, view_sim(), renderer_->camera(), key.keysym.mod, key.repeat != 0);
 }
 
 void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
@@ -1921,7 +1921,7 @@ void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
         return;
     }
 
-    hud_.handle_mouse_motion(motion.x, motion.y, sim_, renderer_->camera());
+    hud_.handle_mouse_motion(motion.x, motion.y, view_sim(), renderer_->camera());
 }
 
 void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
@@ -1948,10 +1948,14 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
 
     uint16_t mod = static_cast<uint16_t>(SDL_GetModState());
     if (button.type == SDL_MOUSEBUTTONDOWN) {
-        hud_.handle_mouse_down(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
+        hud_.handle_mouse_down(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     } else if (button.type == SDL_MOUSEBUTTONUP) {
-        hud_.handle_mouse_up(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
+        hud_.handle_mouse_up(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     }
+}
+
+sim::SimulationEngine& Application::view_sim() {
+    return network_active() ? net_->view_engine() : sim_;       // (the confirmed engine while the prediction is off, and in every game of one machine)
 }
 
 void Application::update_simulation(float dt) {
@@ -1984,7 +1988,7 @@ void Application::update_simulation(float dt) {
             start_dialog_clock_ms_ += static_cast<double>(dt) * 1000.0;
             while (start_dialog_clock_ms_ >= static_cast<double>(sim::TICK_MS) && hud_.is_match_start_modal_active()) {
                 start_dialog_clock_ms_ -= static_cast<double>(sim::TICK_MS);
-                hud_.update(sim_.get_world_state(), 1);
+                hud_.update(view_sim().get_world_state(), 1);
             }
         }
     } else {
@@ -2018,9 +2022,9 @@ void Application::post_tick() {
     // The first turn of a match of the network has executed: the ants can move now, and the "Get ready" dialog (which every machine opened when the match began, while the host waited for it)
     // is gone. (A local game's dialog ends before its first tick, in update_simulation.)
     if (hud_.is_match_start_modal_active()) hud_.dismiss_match_start_modal();
-    const auto& world = sim_.get_world_state();
+    const auto& world = view_sim().get_world_state();        // (what the screen shows: with the prediction on, the predicted engine's, a tick further for every tick)
     hud_.update(world, 1);
-    hud_.poll_sim_events(sim_);
+    hud_.poll_sim_events(sim_);                              // (the news are the confirmed engine's: they are told once, whatever was shown before)
 
     if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
@@ -2467,9 +2471,10 @@ void Application::render_frame() {
     } else if (scorecard_.is_open()) {
         scorecard_.render(*renderer_, assets_);
     } else {
-        const auto& world = sim_.get_world_state();
+        sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
+        const auto& world = view.get_world_state();
         renderer_->set_show_hp(hud_.is_show_hp());
-        renderer_->render_world(world, sim_.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
+        renderer_->render_world(world, view.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,
                                 hud_.get_selected_base_team_id(),
@@ -2542,7 +2547,9 @@ void Application::render_frame() {
     renderer_->set_picture(picture_);
     CursorType cur = CursorType::Normal;
     if (state_ == AppState::Playing && !scorecard_.is_open()) {
-        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, sim_.get_world_state(), sim_.grid(), renderer_->camera());
+        sim::SimulationEngine& view = view_sim();
+        hud_.set_sim_query(&view);                           // (the cursor's special-target question is asked of the picture's own engine)
+        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, view.get_world_state(), view.grid(), renderer_->camera());
     }
     if (!pointer_outside_) renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()));
 
