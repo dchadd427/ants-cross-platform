@@ -72,6 +72,8 @@ struct Limits {
 
     static constexpr Limits any() noexcept { return Limits{kOut, kIn}; }
     static constexpr Limits no_zoom_out() noexcept { return Limits{kNormal, kIn}; }
+    /// Only the original's picture: what a renderer that cannot make the offscreen target of a zoom can draw (a zoom, in or out, is drawn through it)
+    static constexpr Limits only_normal() noexcept { return Limits{kNormal, kNormal}; }
     constexpr bool operator==(const Limits& o) const noexcept { return min_zoom == o.min_zoom && max_zoom == o.max_zoom; }
     constexpr bool operator!=(const Limits& o) const noexcept { return !(*this == o); }
 };
@@ -145,7 +147,10 @@ inline Camera zoomed(const Camera& camera, float to, int32_t anchor_x, int32_t a
 /// (`precise_y`, a trackpad's small fractions); an event whose precise amount is 0 but whose whole amount is not (an old SDL) is its whole amount. `flipped` is SDL's
 /// SDL_MOUSEWHEEL_FLIPPED: the system's "natural scrolling" has already inverted the numbers, SDL says "multiply by -1 to change them back", and that is done here, so the wheel
 /// rolled away zooms in whatever the system's setting is.
-constexpr double wheel_amount(int32_t y, float precise_y, bool flipped) noexcept {
+/// A precise amount that is not a number or is infinite (a broken driver or a synthetic event) says nothing: 0 (a conversion of NaN to an int is undefined, and a NaN in the accumulator would
+/// stay there for good).
+inline double wheel_amount(int32_t y, float precise_y, bool flipped) noexcept {
+    if (!std::isfinite(precise_y)) return 0.0;
     const double amount = precise_y != 0.0f ? static_cast<double>(precise_y) : static_cast<double>(y);
     return flipped ? -amount : amount;
 }
@@ -159,6 +164,8 @@ public:
 
     /// Feeds one event (its amount in notches and its time in ms); returns the whole steps it completes: positive zooms in, negative zooms out
     int feed(double amount, uint32_t time_ms) noexcept {
+        if (!std::isfinite(amount)) return 0;                                // (an event that is not a number is no event: nothing is added and nothing is forgotten)
+        amount = std::clamp(amount, -static_cast<double>(kMaxSteps), static_cast<double>(kMaxSteps));        // (an absurd amount is the most that one event can ask for)
         if (have_ && static_cast<int64_t>(time_ms) - static_cast<int64_t>(last_ms_) > static_cast<int64_t>(kStaleMs)) acc_ = 0.0;
         have_ = true;
         last_ms_ = time_ms;

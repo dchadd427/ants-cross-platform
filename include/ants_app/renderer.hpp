@@ -398,7 +398,20 @@ public:
     /// A test hook: the offscreen target cannot be made (what the fall-back to the zoom 1 picture is for); and a count of the world passes that went through the target (the zoom 1
     /// never does, unless it is forced: a test that compares the two paths can see that the pass really took the one it asks for)
     void set_fail_world_target(bool fail) noexcept { fail_world_target_ = fail; }
+    /// A test hook for the other failure, the real one: SDL_CreateTexture of a target that is not there yet (or of another size) says no. The failure is then recorded (world_target_error), reported
+    /// once, and lasts until retry_world_target() can make the target again.
+    void set_fail_world_target_creation(bool fail) noexcept { fail_world_target_creation_ = fail; }
     uint64_t world_target_passes() const noexcept { return world_target_passes_; }
+    /// THE OFFSCREEN TARGET CANNOT BE MADE (true while the failure lasts: SDL_CreateTexture / SDL_SetRenderTarget failed, or the test hook above). A zoomed world pass that finds this draws the zoom
+    /// 1 picture instead, for that frame; what the player sees must then be what the game says, so the Application reads this every frame (enforce_zoom_limits) and takes the camera to the zoom 1
+    /// and offers only that level until it is false again. The failure is reported once (to stderr), when it begins, not at every frame.
+    bool world_target_failed() const noexcept { return fail_world_target_ || !world_target_error_.empty(); }
+    /// The text of the failure of the target (SDL's own), empty when the last attempt worked; "" for the test hook
+    const std::string& world_target_error() const noexcept { return world_target_error_; }
+    /// While a real failure lasts the picture is the zoom 1 and no pass tries the target any more, so this is the way back: once every kWorldTargetRetryFrames frames it tries to make the largest
+    /// target that a zoom needs (the zoom 0.5's), and clears the failure when that works. Nothing at all when there is no failure.
+    void retry_world_target();
+    static constexpr int32_t kWorldTargetRetryFrames = 120;
 
     void set_level(const ants::assets::LevelData& level);
 
@@ -644,9 +657,14 @@ private:
     LayoutRect world_view() const noexcept { return in_world_target_ ? target_view_ : layout_.view(); }
     bool begin_world_target();
     void end_world_target();
+    bool ensure_world_target(int32_t tw, int32_t th, bool report);   // the target of this size (made if there is none or it is another size); false, with world_target_error_ set (and reported when `report`), when it cannot be made
+    void note_world_target_error(const char* what);     // the error of a failure: reported (once per failure) and kept in world_target_error_
+    std::string world_target_error_;
+    int32_t world_target_retry_frames_{0};
     bool in_world_target_{false};
     bool force_world_target_{false};
     bool fail_world_target_{false};
+    bool fail_world_target_creation_{false};
     uint64_t world_target_passes_{0};
     LayoutRect target_view_{};
     SDL_Texture* world_target_{nullptr};

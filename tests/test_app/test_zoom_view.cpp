@@ -26,6 +26,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -1508,6 +1509,156 @@ void test_app_fairness_local() {
     }
 }
 
+// ---- the review of v0.1.0: the camera's zoom is always one that is allowed and drawn (no offscreen target, a network match), and a wheel event that is not a number ----
+// The frames that a test runs with the program's stderr caught (the Application's and the Renderer's reports go there): returns what was written
+std::string frames_with_stderr(Application& app, int frames) {
+    std::ostringstream sink;
+    std::streambuf* const old = std::cerr.rdbuf(sink.rdbuf());
+    for (int i = 0; i < frames; ++i) app.run_frame_with_delta(0.016f);
+    std::cerr.rdbuf(old);
+    return sink.str();
+}
+int lines_with(const std::string& text, const std::string& needle) {
+    int n = 0;
+    std::istringstream in(text);
+    for (std::string line; std::getline(in, line);) {
+        if (line.find(needle) != std::string::npos) ++n;
+    }
+    return n;
+}
+
+void test_app_guards() {
+    group("guard", "the zoom is always a level that is allowed and drawn: no offscreen target (the hook and a refused texture), a network match, and a wheel that is not a number");
+    const std::vector<float> all_levels{0.5f, 1.0f, 2.0f};
+    const std::vector<float> only_one{1.0f};
+
+    // 1. the target cannot be made (the hook: the pass finds it failing): the zoom drops to 1 at the next frame, only 1 is offered, one line says so, and a later success restores the levels
+    for (const float start_zoom : {0.5f, 2.0f}) {
+        const std::string at = "from " + num(static_cast<double>(start_zoom)) + ": ";
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
+        check(rig.ok && start_ticked_match(rig.app, "MEDIUM"), at + "a match is up");
+        if (!rig.ok) continue;
+        Application& app = rig.app;
+        const LayoutRect view = app.layout().view();
+        app.note_pointer(view.x + 200, view.y + 150);
+        notch(app, start_zoom < 1.0f ? -1 : +1);
+        check(app.zoom() == start_zoom && app.zoom_levels() == all_levels, at + "the zoom is " + num(static_cast<double>(start_zoom)) + " and three levels are offered");
+        check(frames_with_stderr(app, 3).empty() && app.renderer().world_target_passes() > 0, at + "its frames go through the offscreen target and write nothing");
+        const auto centre_before = rig.world_at(view.x + view.w / 2, view.y + view.h / 2);
+        const uint64_t passes = app.renderer().world_target_passes();
+        app.renderer().set_fail_world_target(true);
+        check(app.renderer().world_target_failed() && app.zoom_levels() == only_one && app.zoom_limits() == zoom::Limits::only_normal(), at + "while the target fails only the level 1 is offered (at once)");
+        const std::string said = frames_with_stderr(app, 60);
+        check(app.zoom() == 1.0f, at + "one frame took the camera to the zoom 1 (the picture is the zoom 1: the camera, the clicks, the minimap and the scroll agree with it)");
+        check(app.zoom_levels() == only_one, at + "the levels offered are {1}");
+        check(app.remembered_zoom() == start_zoom, at + "what the player chose last stays remembered (the failure is not the player's choice)");
+        check(lines_with(said, "") == 1 && lines_with(said, "the zoom is 1 until it can be") == 1, at + "60 frames wrote exactly ONE line: \"" + said + "\"");
+        check(app.renderer().world_target_passes() == passes, at + "no pass tried the target while it fails");
+        const auto centre_after = rig.world_at(view.x + view.w / 2, view.y + view.h / 2);
+        check(std::abs(centre_after.first - centre_before.first) <= 2 && std::abs(centre_after.second - centre_before.second) <= 2,
+              at + "the drop is anchored at the view's centre: the world point there stays (within the grid of the zoom): (" + std::to_string(centre_before.first) + ", " + std::to_string(centre_before.second) + ") -> (" + std::to_string(centre_after.first) + ", " + std::to_string(centre_after.second) + ")");
+        // nothing zooms while it lasts, by wheel, middle button or API
+        notch(app, -1);
+        notch(app, +1);
+        check(app.zoom() == 1.0f, at + "the wheel does nothing");
+        check(!app.set_zoom(0.5f, 300, 200) && !app.set_zoom(2.0f, 300, 200) && !app.step_zoom(+1, 300, 200) && !app.step_zoom(-1, 300, 200) && app.zoom() == 1.0f, at + "set_zoom and step_zoom refuse every level but 1");
+        // a match that starts now starts at 1 (the remembered level is not offered), and the level that was chosen is still remembered
+        check(start_ticked_match(app, "MEDIUM") && app.zoom() == 1.0f && app.remembered_zoom() == start_zoom, at + "a match that starts while it fails starts at 1");
+        // it works again: the levels come back at the next frame, and the player's level is offered once more
+        app.renderer().set_fail_world_target(false);
+        check(!app.renderer().world_target_failed() && app.zoom_levels() == all_levels, at + "when the failure is over the three levels are offered at once");
+        check(frames_with_stderr(app, 3).empty(), at + "(and nothing is written)");
+        app.note_pointer(view.x + 200, view.y + 150);
+        notch(app, start_zoom < 1.0f ? -1 : +1);
+        check(app.zoom() == start_zoom, at + "the wheel zooms again");
+        // a second failure is a new one: one line again
+        app.renderer().set_fail_world_target(true);
+        const std::string again = frames_with_stderr(app, 20);
+        check(app.zoom() == 1.0f && lines_with(again, "") == 1, at + "a second failure drops the zoom again and writes one line more");
+    }
+
+    // 2. the failure of the texture itself (SDL_CreateTexture says no, here by the test hook): the renderer reports it once, the Application drops to 1 and says so once; the renderer tries again
+    // now and then and, when it works, the levels are back; a try that fails again writes nothing
+    {
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
+        check(rig.ok && start_ticked_match(rig.app, "MEDIUM"), "(refused texture) a match is up");
+        if (rig.ok) {
+            Application& app = rig.app;
+            const LayoutRect view = app.layout().view();
+            app.note_pointer(view.x + 200, view.y + 150);
+            check(frames_with_stderr(app, 2).empty() && app.renderer().world_target_error().empty(), "(refused texture) at the zoom 1 no target is needed and nothing is wrong");
+            app.renderer().set_fail_world_target_creation(true);
+            notch(app, +1);
+            check(app.zoom() == 2.0f, "(refused texture) the wheel zooms in: nothing is known to be wrong yet");
+            const std::string first = frames_with_stderr(app, 2);
+            check(app.renderer().world_target_failed() && !app.renderer().world_target_error().empty(), "(refused texture) the pass that could not make the target keeps the failure");
+            check(app.zoom() == 1.0f && app.zoom_levels() == only_one, "(refused texture) and the next frame has the camera at 1 with only that level offered");
+            check(lines_with(first, "[Renderer]") == 1 && lines_with(first, "[Application]") == 1 && lines_with(first, "") == 2, "(refused texture) one line of the renderer (what SDL said) and one of the application: \"" + first + "\"");
+            const uint64_t passes = app.renderer().world_target_passes();
+            const std::string long_run = frames_with_stderr(app, 2 * Renderer::kWorldTargetRetryFrames + 20);
+            check(long_run.empty() && app.renderer().world_target_failed() && app.zoom() == 1.0f && app.renderer().world_target_passes() == passes,
+                  "(refused texture) while it still fails the retries write nothing, the zoom stays 1 and no pass uses a target (\"" + long_run + "\")");
+            app.renderer().set_fail_world_target_creation(false);
+            const std::string recovered = frames_with_stderr(app, Renderer::kWorldTargetRetryFrames + 5);
+            check(!app.renderer().world_target_failed() && app.renderer().world_target_error().empty() && recovered.empty(), "(refused texture) once the texture can be made the renderer finds out within its retry interval, silently");
+            check(app.zoom_levels() == all_levels && app.zoom() == 1.0f, "(refused texture) the three levels are offered again (the camera stays at the 1 it was taken to)");
+            const uint64_t before = app.renderer().world_target_passes();
+            notch(app, +1);
+            app.run_frame_with_delta(0.016f);
+            check(app.zoom() == 2.0f && app.renderer().world_target_passes() > before, "(refused texture) the player zooms in again and the frame is drawn through the target");
+        }
+    }
+
+    // 3. a camera that something put outside the allowed levels is taken back at the next frame: in a match of the network never below 1 (defence in depth: the wheel, the API and the match start
+    // already keep to it); the same for a local game's levels (0.5 stays, it is allowed there)
+    {
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
+        check(rig.ok && start_ticked_match(rig.app, "MEDIUM"), "(clamp) a local match is up");
+        if (rig.ok) {
+            Application& app = rig.app;
+            const LayoutRect view = app.layout().view();
+            app.renderer().camera().set_zoom(0.5f, view.w / 2, view.h / 2, app.sim().grid().width(), app.sim().grid().height());
+            app.run_frame_with_delta(0.016f);
+            check(app.zoom() == 0.5f, "(clamp) in a local game a camera at 0.5 is left alone");
+        }
+    }
+}
+
+// A wheel event whose precise amount is not a number or is infinite is no event: the accumulator keeps what it had, the zoom does not move (static_cast<int>(NaN) is undefined, and a NaN in the
+// accumulator would make every later event of the session 0)
+void test_app_wheel_garbage() {
+    group("garbage", "a wheel event that is not a number is ignored and poisons nothing");
+    AppRig rig(Aspect::Wide16x9);
+    check(rig.ok && start_ticked_match(rig.app, "MEDIUM"), "a match is up");
+    if (!rig.ok) return;
+    Application& app = rig.app;
+    app.note_pointer(300, 200);
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    for (const float v : {nan, inf, -inf, -nan}) {
+        app.handle_mouse_wheel(wheel_event(0, v));
+        check(app.zoom() == 1.0f, "a precise amount of " + num(static_cast<double>(v)) + " does not zoom");
+    }
+    app.handle_mouse_wheel(wheel_event(3, nan));
+    check(app.zoom() == 1.0f, "a NaN with a whole amount of 3 does not zoom either (the event cannot be trusted)");
+    g_clock_ms += 2000;
+    notch(app, +1);
+    check(app.zoom() == 2.0f, "a normal notch afterwards still zooms (the accumulator is not poisoned)");
+    notch(app, -1);
+    check(app.zoom() == 1.0f, "and back");
+    // a trackpad's fractions around a NaN: 0.4 + (NaN) + 0.7 is one step with 0.1 left; nothing was forgotten and nothing was added
+    app.handle_mouse_wheel(wheel_event(0, 0.4f));
+    app.handle_mouse_wheel(wheel_event(0, nan, false, 16));
+    check(app.zoom() == 1.0f, "0.4 and a NaN: no step yet");
+    app.handle_mouse_wheel(wheel_event(0, 0.7f));
+    check(app.zoom() == 2.0f, "... and 0.7 completes the step: the 0.4 was not forgotten");
+    // an absurd amount is one event's worth at most (never more than the levels there are)
+    app.handle_mouse_wheel(wheel_event(0, -1.0e30f, false, 2000));
+    check(app.zoom() == 0.5f, "an absurd amount toward zooms out as far as there are levels");
+    app.handle_mouse_wheel(wheel_event(0, 1.0e30f, false, 2000));
+    check(app.zoom() == 2.0f, "an absurd amount away zooms in as far as there are levels");
+}
+
 void test_app_settings() {
     group("settings", "the key `zoom` of the settings file, and --zoom");
     const std::filesystem::path dir = std::filesystem::temp_directory_path() / ("ants_zoom_view_test_" + std::to_string(static_cast<long>(SDL_GetTicks())) + "_" + std::to_string(reinterpret_cast<uintptr_t>(&g_clock_ms) % 100000));
@@ -1865,6 +2016,19 @@ void test_network_match() {
             check(app.remembered_zoom() == 0.5f && app.zoom() == 1.0f, "a network match starts at 1 even though 0.5 is remembered (and stays remembered)");
             check(app.zoom_limits() == zoom::Limits::no_zoom_out() && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}), "the levels offered are 1 and 2");
             app.hud().dismiss_match_start_modal();
+            // defence in depth (the review of v0.1.0): the wheel, the API and the match start already keep to the limits, and every frame holds the camera to them as well: a camera that
+            // something put at 0.5 in a match of the network is at 1 after the next frame, and the level that the player remembered is not touched
+            {
+                const LayoutRect gview = app.layout().view();
+                app.renderer().camera().set_zoom(0.5f, gview.w / 2, gview.h / 2, app.sim().grid().width(), app.sim().grid().height());
+                check(app.zoom() == 0.5f && app.network_active(), "(forced) the camera is at 0.5 in a match of the network");
+                app.run_frame_with_delta(0.016f);
+                check(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f, "the next frame takes the camera back to 1 (a network match never zooms out, whatever put it there)");
+                app.renderer().camera().set_zoom(2.0f, gview.w / 2, gview.h / 2, app.sim().grid().width(), app.sim().grid().height());
+                app.run_frame_with_delta(0.016f);
+                check(app.zoom() == 2.0f, "a camera at 2 is left alone (zooming in is allowed)");
+                app.renderer().camera().set_zoom(1.0f, gview.w / 2, gview.h / 2, app.sim().grid().width(), app.sim().grid().height());
+            }
             app.note_pointer(300, 200);
             notch(app, -1);
             check(app.zoom() == 1.0f, "the wheel toward does not zoom out");
@@ -2017,7 +2181,7 @@ void test_network_match() {
 
 int main(int argc, char* argv[]) {
     // (SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one)
-    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net)
+    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net, guard, garbage)
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
             only = argv[++i];
@@ -2055,6 +2219,8 @@ int main(int argc, char* argv[]) {
     if (run("start")) test_app_start_view_and_listener();
     if (run("client")) test_local_determinism(arc);
     if (run("net")) test_network_match();
+    if (run("guard")) test_app_guards();
+    if (run("garbage")) test_app_wheel_garbage();
     std::printf("\nzoom view: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

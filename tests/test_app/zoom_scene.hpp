@@ -456,7 +456,8 @@ inline ApplicationConfig base_config(Aspect aspect) {
 }
 
 struct AppRig {
-    explicit AppRig(Aspect aspect = Aspect::Wide16x9, float zoom_level = 1.0f, bool given = false, const std::string& settings = std::string(), bool in_match = true) {
+    /// `many_frames`: a headless application stops after ten frames; with this it is told to take a screenshot that never comes instead, so a test can run as many frames as it needs
+    explicit AppRig(Aspect aspect = Aspect::Wide16x9, float zoom_level = 1.0f, bool given = false, const std::string& settings = std::string(), bool in_match = true, bool many_frames = false) {
         const QuietStdout quiet;
         SDL_Init(SDL_INIT_VIDEO);
         ApplicationConfig cfg = base_config(aspect);
@@ -464,6 +465,10 @@ struct AppRig {
         cfg.zoom_given = given;
         cfg.settings_path = settings;
         cfg.start_in_map_select = !in_match;
+        if (many_frames) {
+            cfg.screenshot_path = "never_written.png";
+            cfg.screenshot_frames = 1 << 30;
+        }
         ok = app.init(cfg);
         if (ok && in_match) app.renderer().camera().set_origin(450.0, 500.0, app.sim().grid().width(), app.sim().grid().height());
     }

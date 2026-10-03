@@ -739,6 +739,41 @@ LayoutRect Renderer::map_view_rect(uint32_t map_w, uint32_t map_h) const {
 // The world pass at a zoom: the world is drawn at one texel per world pixel into an offscreen target, which is then copied into the view
 // ----------------------------------------------------------------------------
 
+// The target of tw x th texels: the one that there is when it is of that size, else a new one. A failure is kept in world_target_error_ and reported once (while it lasts, the Application takes
+// the camera to the zoom 1 at its next frame and no pass asks again, see world_target_failed()); `report` false is the retry's (the failure is already reported).
+bool Renderer::ensure_world_target(int32_t tw, int32_t th, bool report) {
+    if (world_target_ != nullptr && world_target_w_ == tw && world_target_h_ == th) return true;
+    if (world_target_ != nullptr) SDL_DestroyTexture(world_target_);
+    world_target_ = fail_world_target_creation_ ? nullptr : SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, tw, th);
+    world_target_w_ = world_target_ != nullptr ? tw : 0;
+    world_target_h_ = world_target_ != nullptr ? th : 0;
+    if (world_target_ == nullptr) {
+        if (report) note_world_target_error(fail_world_target_creation_ ? "the test refuses the texture" : SDL_GetError());
+        return false;
+    }
+    SDL_SetTextureBlendMode(world_target_, SDL_BLENDMODE_NONE);
+    return true;
+}
+
+void Renderer::note_world_target_error(const char* what) {
+    if (!world_target_error_.empty()) return;                    // (one report for one failure)
+    world_target_error_ = (what != nullptr && what[0] != '\0') ? what : "unknown error";
+    std::cerr << "[Renderer] Cannot make the offscreen target of the zoom: " << world_target_error_ << std::endl;
+}
+
+// The way back from a real failure: the picture is the zoom 1 and no pass asks for the target, so the renderer asks now and then, with the largest target that a zoom needs (the 0.5's) and the
+// switch to it as the drawing target. A try that fails again is the failure that is already reported: no second report.
+void Renderer::retry_world_target() {
+    if (!renderer_ || in_world_target_ || world_target_error_.empty()) return;
+    if (++world_target_retry_frames_ < kWorldTargetRetryFrames) return;
+    world_target_retry_frames_ = 0;
+    const LayoutRect view = layout_.view();
+    if (!ensure_world_target(zoom::visible(view.w, zoom::kOut) + 1, zoom::visible(view.h, zoom::kOut) + 1, false)) return;
+    if (SDL_SetRenderTarget(renderer_, world_target_) != 0) return;
+    SDL_SetRenderTarget(renderer_, nullptr);
+    world_target_error_.clear();                                  // it works again: the zoom levels come back, and a new failure is a new report
+}
+
 bool Renderer::begin_world_target() {
     if (!renderer_ || in_world_target_ || fail_world_target_) return false;
     const LayoutRect view = layout_.view();
@@ -751,19 +786,10 @@ bool Renderer::begin_world_target() {
     const int32_t cy = static_cast<int32_t>(std::floor(oy));
     const int32_t tw = zoom::visible(view.w, z) + 1;
     const int32_t th = zoom::visible(view.h, z) + 1;
-    if (world_target_ == nullptr || world_target_w_ != tw || world_target_h_ != th) {
-        if (world_target_ != nullptr) SDL_DestroyTexture(world_target_);
-        world_target_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, tw, th);
-        world_target_w_ = world_target_ != nullptr ? tw : 0;
-        world_target_h_ = world_target_ != nullptr ? th : 0;
-        if (world_target_ == nullptr) {
-            std::cerr << "[Renderer] Cannot make the offscreen target of the zoom: " << SDL_GetError() << std::endl;
-            return false;
-        }
-        SDL_SetTextureBlendMode(world_target_, SDL_BLENDMODE_NONE);
-    }
+    if (!world_target_error_.empty()) return false;               // (a failure that lasts: no new attempt at every frame; retry_world_target is the way back)
+    if (!ensure_world_target(tw, th, true)) return false;
     if (SDL_SetRenderTarget(renderer_, world_target_) != 0) {
-        std::cerr << "[Renderer] Cannot draw into the offscreen target of the zoom: " << SDL_GetError() << std::endl;
+        note_world_target_error(SDL_GetError());
         return false;
     }
     // The pass's own state: what is replaced is kept in pass_ and put back by end_world_target

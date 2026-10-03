@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -762,6 +763,29 @@ void test_wheel() {
     check(w.feed(0.5, 100) == 0 && w.pending() == 0.5, "half a notch is pending");
     w.reset();
     check(w.pending() == 0.0 && w.feed(0.5, 100) == 0, "reset forgets the left-over");
+    // an event that is not a number (a broken driver, a synthetic event): no amount, no step, and nothing forgotten or poisoned (the review of v0.1.0: static_cast<int>(NaN) is undefined and a NaN in
+    // the accumulator stays there for good)
+    {
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        const float inf = std::numeric_limits<float>::infinity();
+        check(zoom::wheel_amount(0, nan, false) == 0.0 && zoom::wheel_amount(0, inf, false) == 0.0 && zoom::wheel_amount(0, -inf, false) == 0.0 && zoom::wheel_amount(0, nan, true) == 0.0,
+              "a precise amount that is NaN or infinite is no amount (flipped or not)");
+        check(zoom::wheel_amount(3, nan, false) == 0.0 && zoom::wheel_amount(-3, -inf, true) == 0.0, "... whatever the whole amount says: the event cannot be trusted");
+        zoom::WheelAccumulator g;
+        const double dnan = std::numeric_limits<double>::quiet_NaN();
+        const double dinf = std::numeric_limits<double>::infinity();
+        check(g.feed(0.4, 100) == 0 && g.feed(dnan, 110) == 0 && g.feed(dinf, 120) == 0 && g.feed(-dinf, 130) == 0 && std::fabs(g.pending() - 0.4) < 1e-12, "NaN and infinities add nothing and forget nothing: 0.4 is still pending");
+        check(g.feed(0.7, 140) == 1 && std::fabs(g.pending() - 0.1) < 1e-9, "... and the next fraction completes the step: 0.4 + 0.7 is one step with 0.1 left");
+        g.reset();
+        check(g.feed(dnan, 200) == 0 && g.feed(0.5, 210) == 0 && g.feed(0.5, 220) == 1, "a NaN first, on a fresh accumulator: nothing happens, the next events are as if it had not been");
+        // a NaN does not refresh the clock either: the left-over of 0.4 is forgotten after the pause as ever
+        g.reset();
+        check(g.feed(0.4, 1000) == 0 && g.feed(dnan, 1400) == 0 && g.feed(0.7, 1000 + zoom::WheelAccumulator::kStaleMs + 1) == 0 && std::fabs(g.pending() - 0.7) < 1e-9, "a NaN does not keep a fraction alive past the stale time");
+        // an absurd amount is the most that one event can ask for: it never leaves a NaN or a huge remainder behind
+        g.reset();
+        check(g.feed(1.0e300, 100) == zoom::WheelAccumulator::kMaxSteps && g.pending() == 0.0 && g.feed(-1.0e300, 110) == -zoom::WheelAccumulator::kMaxSteps && g.pending() == 0.0, "an absurd amount is kMaxSteps and leaves nothing");
+        check(g.feed(std::numeric_limits<double>::max(), 120) == zoom::WheelAccumulator::kMaxSteps && g.feed(-std::numeric_limits<double>::max(), 130) == -zoom::WheelAccumulator::kMaxSteps && g.feed(0.5, 140) == 0 && g.pending() == 0.5, "even the largest double: the accumulator still works afterwards");
+    }
     // a long run of small deltas sums to the right number of steps
     w.reset();
     int steps = 0;

@@ -238,7 +238,10 @@ public:
     /// FAIRNESS: in a match of the network (a server's room or a LAN game, host or guest) the zoom-out is not offered (the level 0.5 shows more of the map than the others see; zooming in is always
     /// fair); a local game and a game with bots offer it. A level is also not offered when the level above it already shows the whole map (it would add only black).
     float zoom() const noexcept { return renderer_ ? renderer_->camera().zoom : zoom::kNormal; }
-    zoom::Limits zoom_limits() const noexcept { return network_active() ? zoom::Limits::no_zoom_out() : zoom::Limits::any(); }
+    /// What the kind of match allows now: a network match has no zoom-out, and while the renderer cannot make the offscreen target of a zoom (Renderer::world_target_failed) only the zoom 1 can be
+    /// drawn: both offer only the levels that are drawn. enforce_zoom_limits() holds the camera to this at every frame (a camera that is outside it, by whatever way, is taken to the nearest level
+    /// that it allows, anchored at the view's centre, and what the player chose last stays remembered).
+    zoom::Limits zoom_limits() const noexcept;
     std::vector<float> zoom_levels() const;
     bool set_zoom(float level, int32_t anchor_x, int32_t anchor_y);
     bool step_zoom(int direction, int32_t anchor_x, int32_t anchor_y);
@@ -364,6 +367,8 @@ public:
     /// A press after that time that SDL counts as a first click (`clicks` 1) begins a new sequence: it is the screen's, and it ends the rule. (The held key that closed the quick
     /// help is the screen's business: the leader's START ignores a key repeat, see MapSelectScreen::handle_key_down.) The original's own screens, the local game and a LAN host, are
     /// not touched: its window class has no double-click messages, so its second click was a press like any other.
+    /// The same rule for the click that closes the chat input of a room (room_mouse_down: a click anywhere while the input is open closes it and does nothing else): the player typed, then double
+    /// clicked START; the first click closes the input, and the second must not start the match. It holds in every room that has a chat input, the host's included.
     static constexpr uint32_t kDoubleClickMs = 500;
     bool closing_click_pending() const noexcept { return closing_click_pending_; }
 
@@ -555,6 +560,8 @@ private:
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered
     void apply_match_zoom();                              // a match starts: the camera takes the remembered level if the kind of match and the map offer it, else 1
+    void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() (a network match never below 1; no zoom while the offscreen target cannot be made), one report when that failure begins
+    bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile
@@ -577,7 +584,7 @@ private:
     // Intro & Loading state
     uint32_t intro_ticks_{0};
     ScreenButton quick_help_start_{ButtonRect{529, 437, 98, 27}, ButtonRect{528, 438, 97, 24}};   // START!: the pictures qh_start1 / 2 and qh_start3 (the hit test is the rectangle of the picture that shows)
-    bool closing_click_pending_{false};                    // the quick help was closed by a click, on a machine that joined a room: the rest of that click sequence is not for the screen
+    bool closing_click_pending_{false};                    // the quick help was closed by a click, on a machine that joined a room, or a click closed the chat input of a room: the rest of that click sequence is not for the screen
     uint32_t closing_click_ms_{0};                         // ... closed at this time (SDL's ticks)
     bool menu_gesture_pending_{false};                     // a click changed the screen of a run with a menu: the rest of that click sequence is not for the screen that is up now
     uint32_t menu_gesture_ms_{0};                          // ... at this time (SDL's ticks)

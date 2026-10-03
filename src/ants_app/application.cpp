@@ -807,6 +807,35 @@ void Application::apply_match_zoom() {
                                                      static_cast<int64_t>(current_level_.height()) * TILE_SIZE);
 }
 
+zoom::Limits Application::zoom_limits() const noexcept {
+    if (renderer_ && renderer_->world_target_failed()) return zoom::Limits::only_normal();      // (a zoom is drawn through the target: with none there is only the original's picture)
+    return network_active() ? zoom::Limits::no_zoom_out() : zoom::Limits::any();
+}
+
+// The camera's zoom, in a match, is always a level that zoom_limits() allows (and so a level that is drawn): at every frame, before anything of it is used. A network match never zoomed out (a test, or
+// anything else, that put the camera there is corrected at the next frame); and when the renderer cannot make the offscreen target the picture it draws is the zoom 1 whatever the camera says,
+// so the camera says 1 (the clicks, the minimap's frame and the edge scroll then agree with the picture), only that level is offered, and one line is written when the failure begins (not at
+// every frame). The level that the player chose stays remembered (it is not the player's choice that is wrong): the next match starts with it when the target works again. The correction goes
+// as set_zoom's does, anchored at the view's centre.
+void Application::enforce_zoom_limits() {
+    if (!renderer_) return;
+    const bool failed = renderer_->world_target_failed();
+    if (failed && !zoom_failure_reported_) {
+        std::cerr << "[Application] The offscreen target of the zoom cannot be made"
+                  << (renderer_->world_target_error().empty() ? "" : " (" + renderer_->world_target_error() + ")")
+                  << ": the zoom is 1 until it can be" << std::endl;
+    }
+    zoom_failure_reported_ = failed;
+    renderer_->retry_world_target();                                       // (a failure that lasts is tried again now and then; nothing when there is none)
+    if (state_ != AppState::Playing) return;                               // (the map view is drawn in a match only: the setup screens, a room's included, leave the camera as it is; the next match start chooses its level, apply_match_zoom)
+    ViewportCamera& camera = renderer_->camera();
+    const zoom::Limits limits = zoom_limits();
+    const float held = std::clamp(camera.zoom, limits.min_zoom, limits.max_zoom);
+    if (held == camera.zoom) return;
+    const LayoutRect view = layout_.view();
+    camera.set_zoom(held, view.w / 2, view.h / 2, current_level_.width(), current_level_.height());
+}
+
 std::vector<float> Application::zoom_levels() const {
     std::vector<float> levels;
     if (!renderer_) return levels;
@@ -1202,6 +1231,8 @@ void Application::run_frame_with_delta(float delta_time) {
     }
 
     handle_events();
+
+    enforce_zoom_limits();                      // the camera's zoom is one that is allowed and drawn (a network match: never below 1; no offscreen target: 1)
 
     handle_camera_panning(delta_time);
 
@@ -2076,6 +2107,11 @@ bool Application::room_mouse_down(int32_t x, int32_t y, uint8_t button) {
         close_room_chat();
         room_chat_press_taken_ = true;
         map_select_.release_buttons();
+        // ... and neither is the rest of its click sequence: the closing click may be the first of a double click on START (the player typed, then double clicked START, as one does), whose second
+        // press would start the match. The rule of the quick help's closing click (swallow_closing_click): a press that SDL counts as part of the sequence (clicks above 1), or that comes within
+        // the double-click time of this one, does nothing; the first press after that is a new click, the screen's. (In every room that has a chat input: a host's too.)
+        closing_click_pending_ = true;
+        closing_click_ms_ = SDL_GetTicks();
         return true;
     }
     if (!room_chat_available()) return false;

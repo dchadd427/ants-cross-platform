@@ -3861,6 +3861,7 @@ void run_room_chat_ui_tests() {
         ASSERT_TRUE(quiet() && app.room_chat().is_open());                                      // (the input is still open: a release is no click on it)
         app.room_key_down(SDLK_ESCAPE, 0, false);
         // the same through the window's own event loop (motion, press, release as SDL queues them): a click on START with the input open starts nothing
+        SDL_Delay(600);                                                                         // (the double-click time of the click that closed the input before is over: its rest is not this click, N5.73)
         ASSERT_TRUE(push_button(SDL_MOUSEBUTTONDOWN, line_x, line_y));
         ASSERT_TRUE(push_button(SDL_MOUSEBUTTONUP, line_x, line_y));
         app.run_frame_with_delta(0.016f);
@@ -3871,7 +3872,9 @@ void run_room_chat_ui_tests() {
         ASSERT_FALSE(app.room_chat().is_open());
         d.hall.step(1500);
         ASSERT_TRUE(quiet());
-        // and with the input closed the same click is START: the match begins (the mouse has no guard: a click is a decision)
+        // and with the input closed the same click is START: the match begins (the mouse has no guard: a click is a decision; only the rest of the click that closed the input is not one, N5.73:
+        // a click after its double-click time is)
+        SDL_Delay(600);
         ASSERT_TRUE(push_button(SDL_MOUSEBUTTONDOWN, sx, sy));
         ASSERT_TRUE(push_button(SDL_MOUSEBUTTONUP, sx, sy));
         app.run_frame_with_delta(0.016f);
@@ -5025,6 +5028,83 @@ void run_room_chat_box_tests() {
                 }
                 ASSERT_TRUE(other.ok && other.hash == at1.hash && other.colours == at1.colours && other.camera_zoom == level);
             }
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.73 A Double Click On START After Typing Does Not Start The Match (The Review Of v0.1.0): The First Click Closes The Chat Input, The Rest Of Its Click Sequence Is Not The Screen's - A Press That SDL Counts As The Second Of A Double Click, And One That Comes Within The Double-Click Time Of The Closing Click - A Fresh Single Click 600 ms Later Is START (The 16:9 Page And The Classic One)") {
+        struct Page {
+            Aspect aspect;
+            const char* code;
+            const char* name;
+        };
+        for (const Page& page : {Page{Aspect::Wide16x9, "BOX-DBL-W", "16:9"}, Page{Aspect::Classic4x3, "BOX-DBL-C", "classic"}}) {
+            const std::string at = std::string(page.name) + ": ";
+            BoxRoom d;
+            ASSERT_TRUE(open_leader(d, page.code, page.aspect, net::FillLevel::Medium, false, true));
+            Application& app = d.app;
+            const bool wide = page.aspect == Aspect::Wide16x9;
+            const SetupLayout& layout = SL::of(SetupVariant::Online);
+            const int32_t open_x = wide ? centre_x(layout.chat.input_box) : MapSelectScreen::LABEL_X + 20;       // (where a click opens the input: the chat box's input box, the classic page's status line)
+            const int32_t open_y = wide ? centre_y(layout.chat.input_box) : MapSelectScreen::STATUS_Y + 10;
+            const int32_t sx = wide ? centre_x(layout.start) : MapSelectScreen::BTN_START_X + 5;
+            const int32_t sy = wide ? centre_y(layout.start) : MapSelectScreen::BTN_START_Y + 5;
+            const auto push = [](Uint32 type, int32_t x, int32_t y, uint8_t clicks) {
+                SDL_Event e;
+                std::memset(&e, 0, sizeof(e));
+                e.type = type;
+                e.button.x = x;
+                e.button.y = y;
+                e.button.button = SDL_BUTTON_LEFT;
+                e.button.clicks = clicks;
+                e.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+                return SDL_PushEvent(&e) == 1;
+            };
+            const auto waiting = [&]() { return d.server.status(page.code).state == server::RoomState::Waiting && !app.map_select().is_locked() && app.state() == AppState::MapSelect; };
+            const auto open_input = [&]() {
+                app.room_mouse_down(open_x, open_y, SDL_BUTTON_LEFT);                          // (the input's own click, as a person's: press and release)
+                app.room_mouse_up(open_x, open_y, SDL_BUTTON_LEFT);
+                return app.room_chat().is_open();
+            };
+            app.map_select().update(0.6f);
+            ASSERT_FALSE(app.closing_click_pending());
+
+            // (a) typed, then a double click on START: SDL counts the presses 1 and 2; the first closes the input, the second is the rest of that click and starts nothing
+            ASSERT_TRUE(open_input());
+            app.room_text_input("on my way");
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONDOWN, sx, sy, 1));
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONUP, sx, sy, 1));
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONDOWN, sx, sy, 2));
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONUP, sx, sy, 2));
+            app.run_frame_with_delta(0.016f);
+            d.hall.step(2000);
+            ASSERT_TRUE(!app.room_chat().is_open());
+            ASSERT_TRUE(app.closing_click_pending());                                         // (the rule waits for a click that begins a new sequence)
+            ASSERT_TRUE(!app.map_select().start_button().pressed());
+            ASSERT_TRUE(waiting());
+
+            // (b) a double click that SDL does not count (a hand moves the pointer between the clicks): the second press, 100 ms after the closing one, is the rest of it as well
+            SDL_Delay(600);                                                                   // (the double-click time of (a) is over)
+            ASSERT_TRUE(open_input());
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONDOWN, sx, sy, 1));
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONUP, sx, sy, 1));
+            app.run_frame_with_delta(0.016f);
+            ASSERT_TRUE(!app.room_chat().is_open() && app.closing_click_pending());
+            SDL_Delay(100);
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONDOWN, sx, sy, 1));
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONUP, sx, sy, 1));
+            app.run_frame_with_delta(0.016f);
+            d.hall.step(1500);
+            ASSERT_TRUE(app.closing_click_pending() && !app.map_select().start_button().pressed() && waiting());
+
+            // (c) a click that begins a new sequence (600 ms after the closing click, SDL counts 1): the screen's own: START asks, and the server starts the match with the two of them and the fill
+            SDL_Delay(600);
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONDOWN, sx, sy, 1));
+            ASSERT_TRUE(push(SDL_MOUSEBUTTONUP, sx, sy, 1));
+            app.run_frame_with_delta(0.016f);
+            ASSERT_TRUE(!app.closing_click_pending());
+            ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.peer.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+            ASSERT_TRUE(app.map_select().is_locked());
+            app.quit();
         }
     } TEST_END();
 }
