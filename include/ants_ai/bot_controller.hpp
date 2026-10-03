@@ -4,7 +4,8 @@
 // tick hook). It runs each bot when it is due, and stands between a bot and the door a person uses:
 //
 //   the opening     the first look of a seat is on the first tick of the simulation (kStartHoldTicks = 1) + its stagger, and the bucket starts with ONE token. The "Get ready to play!" dialog needs no
-//                   hold of the bots: the simulation does not run while it is up (the match clock waits for it), so no bot looks or acts before a person can (set_start_hold)
+//                   hold of the bots: the simulation does not run while it is up (the match clock waits for it), so no bot looks or acts while it is up (set_start_hold). A person on the far side
+//                   of a link starts the link's delay plus the jitter buffer later than the machine that runs the bots (a LAN host, the server's referee): measured 20 - 290 ms, not seconds
 //   schedule        a bot thinks every Profile::decision_interval ticks, the first time on the first tick of the hold + seat (the seats do not all think on the same tick)
 //   reaction delay  every command of a decision is released Profile::reaction_delay ticks after the decision, plus or minus 25 percent drawn ONCE per decision
 //                   from the seat's own generator (so the commands of one look leave in the order they were proposed, and a later look never leaves before an earlier one)
@@ -85,7 +86,7 @@ public:
     /// seating the bots: it shapes the first look and the first bucket of the seats that come after it (the clamp of (2) follows the value at any time). 0 switches it off, and with it the rest of
     /// the above: the opening of v0.1.0 (a first look on tick 1 + the stagger, a FULL bucket, a refill from the first tick). It is for the tests that measure something else from tick 0 (the reaction
     /// delay, the budget, the filter, failure learning, the endgame), each of which says so; the opening has its own tests, AI2.17 .. AI2.20 (the controller), AI6.9 / AI6.10 (the application) and
-    /// S3.74 (a server's room).
+    /// S3.76 (a server's room).
     void set_start_hold(uint32_t ticks) noexcept { hold_end_ = ticks; }
     uint32_t start_hold() const noexcept { return hold_end_; }
 

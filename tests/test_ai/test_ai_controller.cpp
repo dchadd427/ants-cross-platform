@@ -996,7 +996,7 @@ void run_controller_tests() {
     } TEST_END();
 
     // ---- the opening of a seat (the start hold): kStartHoldTicks = 1 in every product path (since v0.2.0: the match clock waits for the "Get ready to play!" dialog, the simulation does not run while it
-    // is up, so no bot can look or act before a person can; v0.1.1 held the bots for the dialog's 100 ticks while the simulation ran behind it). The mechanism takes any number: the tests below run
+    // is up, so no bot can look or act while it is up; v0.1.1 held the bots for the dialog's 100 ticks while the simulation ran behind it). The mechanism takes any number: the tests below run
     // with the product's hold and with a long one (kLongHold). The rest of this suite measures the controller from tick 0 with the hold off. ----
 
     TEST_CASE("AI2.17 The Opening: A Bot That Wants To Act At Every Look Does Nothing Before The Simulation Runs (The Controller Acts On A Tick Only), Looks First On The Hold's First Tick + Seat (Tick 1 + Seat By Default: Nothing Is Held Back Behind The Dialog Any More), At Every Level From Every Seat, And Its First Command Leaves 75 To 125 Percent Of The Reaction Time After That Look; A Long Hold Still Holds") {

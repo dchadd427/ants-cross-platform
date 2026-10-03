@@ -188,7 +188,7 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
             const uint32_t d = s.profile.reaction_delay;
             const uint32_t spread = d * s.profile.jitter_percent / 100u;
             release = std::max<uint64_t>(tick + (d - spread) + s.rng.below(2u * spread + 1u), s.last_release);
-            release = std::max<uint64_t>(release, hold_end_);                              // the start hold: nothing leaves before the dialog is gone, whatever tick the look was on
+            release = std::max<uint64_t>(release, hold_end_);                              // the start hold: nothing leaves before the hold's first tick (set_start_hold: the product's hold is tick 1, since the simulation does not run behind the dialog), whatever tick the look was on
             s.last_release = release;
             release_drawn = true;
         }
