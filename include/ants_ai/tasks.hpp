@@ -37,11 +37,18 @@ namespace ants::ai {
 using TaskId = uint32_t;
 inline constexpr TaskId kNoTask = 0;
 
-/// Which ant is claimed by which task. An ant has at most one owner.
+/// Which ant is claimed by which task. An ant has at most one owner. A task may have a RANK (set_rank; the standard bot gives every task one): a task of a higher rank may TAKE an
+/// ant from a task of a lower rank (take), which then finds out at its next look that the ant is no longer its own. Tasks without a rank all have rank 0 and take nothing.
 class AntLedger {
 public:
     /// True when the ant was free or already the task's (and now is); false when another task holds it, or `task` is kNoTask
     bool claim(uint32_t ant, TaskId task);
+    /// The rank of a task (0 until set_rank): who may take an ant from whom
+    void set_rank(TaskId task, uint8_t rank);
+    uint8_t rank(TaskId task) const noexcept;
+    /// claim(), and when another task holds the ant: take it if that task's rank is LOWER than `task`'s. True when the ant is the task's now. The previous owner is not told: it
+    /// notices at its next look that the ledger gives the ant to another (HarvestTask forgets its order of the ant).
+    bool take(uint32_t ant, TaskId task);
     /// True when the ant was the task's and is free now
     bool release(uint32_t ant, TaskId task);
     /// Frees every ant of the task; the number of ants that were freed
@@ -58,6 +65,7 @@ public:
 
 private:
     std::map<uint32_t, TaskId> owner_;
+    std::map<TaskId, uint8_t> rank_;
 };
 
 /// What a task gets at every look

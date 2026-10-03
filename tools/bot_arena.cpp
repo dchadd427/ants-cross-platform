@@ -9,9 +9,10 @@
 //
 //   --map NAMES       a comma list of shipped maps by name (TINY, SMALL, MEDIUM, GAUNTLET, TREASURE, ISLANDS, or "shipped" for all six) or paths of .LVL files (default TINY)
 //   --seeds A..B      the engine and controller seeds: "3", "1..8", "1,4,9..12" (default 1)
-//   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL or LEVEL: KIND idle, worker, standard; LEVEL easy, medium, hard.
+//   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL or LEVEL: KIND idle, worker, standard (or aggressor, the bench bot of
+//                     tools/bench_aggressor.hpp: raids and harasses, never harvests, not a bot of the game); LEVEL easy, medium, hard.
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants.
-//                     idle stands still; worker harvests (B3); standard is an ALIAS of worker until the standard bot with its tactics arrives with B4 (every report says so).
+//                     idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
 //   --ticks full|N    play until the match is over (the map's own length, default) or at most N ticks (50 ms each)
 //   --latency-ticks N the sink latency: 0 applies a command the moment a bot releases it; N > 0 plays like a lock-step room (applied at the first 100 ms turn
 //                     boundary at least N ticks later, in canonical order); default 3
@@ -63,6 +64,7 @@
 #include "ants_ai/bot_view.hpp"
 #include "ants_ai/rng.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "bench_aggressor.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
 
@@ -89,7 +91,7 @@ constexpr const char* kShippedMaps[] = {"TINY", "SMALL", "MEDIUM", "GAUNTLET", "
 constexpr size_t kMaxMatches = 200000;
 
 const char* const kKindsNote =
-    "idle stands still; worker harvests (B3); standard is an alias of worker until the standard bot with its tactics arrives with B4";
+    "idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the economy of the worker plus the tactics of its level)";
 
 ARENA_PRINTF(1, 2) std::string fmt(const char* format, ...) {
     va_list args;
@@ -445,7 +447,7 @@ void print_usage(std::FILE* to) {
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
         "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
-        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL or LEVEL (kinds idle worker standard; levels easy medium hard).\n"
+        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL or LEVEL (kinds idle worker standard aggressor; levels easy medium hard).\n"
         "                     Default: four standard bots at medium level. %s.\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
@@ -485,12 +487,33 @@ bool parse_seeds(const std::string& text, std::vector<uint32_t>& out, std::strin
     return true;
 }
 
-// "N=KIND:LEVEL" (also "N:KIND:LEVEL"): the spec of ants::ai::parse_bot_spec with the seat in front
+// "N=KIND:LEVEL" (also "N:KIND:LEVEL"): the spec of ants::ai::parse_bot_spec with the seat in front. The kind "aggressor" (any case) is the arena's own bench bot
+// (tools/bench_aggressor.hpp: it raids and harasses, it is not in the registry): the registry parses it as a worker and the kind is put back afterwards
 bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     std::string spec = text;
     const size_t eq = spec.find('=');
     if (eq != std::string::npos) spec[eq] = ':';
-    return ai::parse_bot_spec(spec, out, err);
+    bool aggressor = false;
+    std::vector<std::string> parts = split(spec, ':');
+    for (size_t i = 1; i < parts.size(); ++i) {
+        if (upper(parts[i]) == "AGGRESSOR") {
+            aggressor = true;
+            parts[i] = "worker";
+        }
+    }
+    if (aggressor) {
+        spec.clear();
+        for (size_t i = 0; i < parts.size(); ++i) spec += (i == 0 ? "" : ":") + parts[i];
+    }
+    if (!ai::parse_bot_spec(spec, out, err)) return false;
+    if (aggressor) out.kind = "aggressor";
+    return true;
+}
+
+// The bots of the registry, and the arena's bench bots
+std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
+    if (spec.kind == "aggressor") return std::make_unique<ai::bench::AggressorBot>();
+    return ai::make_bot(spec);
 }
 
 bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err) {
@@ -733,6 +756,7 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.max_ticks = o.ticks;
     s.latency_ticks = o.latency;
     s.record = record;
+    s.extra_kinds = {"aggressor"};
     return s;
 }
 
@@ -746,7 +770,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     }
     const Clock::time_point started = Clock::now();
     ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check);
-    spec.factory = factory;
+    spec.factory = factory ? factory : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
     r.result = ai::play_match(spec);
     r.plays = 1;
     if (r.result.error.empty() && o.replay_check) {
@@ -755,7 +779,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     }
     for (uint32_t again = 1; again < o.repeat && r.result.error.empty(); ++again) {
         ai::ArenaSpec s2 = spec_of(o, m, job, false);
-        s2.factory = factory;
+        s2.factory = spec.factory;
         const ai::ArenaResult second = ai::play_match(s2);
         ++r.plays;
         if (!same_match(r.result, second)) {
@@ -1004,15 +1028,10 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         return 2;
     }
     std::string kinds;
-    bool placeholder = false;
-    for (const ai::BotSpec& s : o.seats) {
-        kinds += (kinds.empty() ? "" : ", ") + std::to_string(static_cast<unsigned>(s.seat)) + "=" + spec_text(s);
-        placeholder = placeholder || s.kind == "standard";
-    }
+    for (const ai::BotSpec& s : o.seats) kinds += (kinds.empty() ? "" : ", ") + std::to_string(static_cast<unsigned>(s.seat)) + "=" + spec_text(s);
     std::fprintf(g_out, "bot_arena: %zu match(es): maps %zu, seeds %s, %zu arrangement(s) of [%s], ticks %s, latency %u%s%s\n", jobs.size(), maps.size(), seeds_text(o.seeds).c_str(),
                  arrangements(o.seats, o.rotate).size(), kinds.c_str(), o.ticks == 0 ? "full" : std::to_string(o.ticks).c_str(), o.latency, o.replay_check ? ", replay check" : "",
                  o.repeat > 1 ? fmt(", every match %u times", o.repeat).c_str() : "");
-    if (placeholder) std::fprintf(g_out, "NOTE: %s\n", kKindsNote);
     const Clock::time_point started = Clock::now();
     const std::vector<MatchReport> reports = run_jobs(o, maps, jobs, factory, jobs.size() > 100);
     if (!o.quiet) {
@@ -1866,7 +1885,7 @@ int selftest() {
         t.check(JsonChecker(json1).valid(), "the JSON report is valid JSON");
         t.check(json1.find("/Users/") == std::string::npos && json1.find(ORIGINAL_ASSETS_DIR) == std::string::npos && json1.find('\\') == std::string::npos && json1.find(".LVL") == std::string::npos,
                 "the JSON report holds no path");
-        t.check(json1.find(kKindsNote) != std::string::npos, "the report says what the kinds are (standard is an alias of worker until B4)");
+        t.check(json1.find(kKindsNote) != std::string::npos, "the report says what the kinds are (worker is the yardstick, standard the standard bot)");
         t.check(json1.find("\"wall_ms\"") == std::string::npos, "no wall time with --no-wall-time");
         o.wall_time = true;
         t.check(report_json(o, maps, one).find("\"wall_ms\"") != std::string::npos, "wall times with the default");

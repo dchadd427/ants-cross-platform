@@ -78,6 +78,7 @@ struct SetupInfo {
     std::vector<BotSpec> bots;
     bool fog{false};
     bool allow_all_bots{false};          // only the headless arena plays a match without a person
+    std::vector<std::string> extra_kinds;   // kinds that a factory supplies besides the registry's (the bench bots of the arena: ArenaSpec::extra_kinds); never set by the game or a room
 };
 
 /// "" when a game with these bots may start, else the reason it may not: Fog of War is on (a bot would see through it), a bot sits at a seat that is not in
@@ -93,6 +94,9 @@ enum class Priority : uint8_t { Background = 0, Normal = 1, Urgent = 2 };
 struct Intent {
     sim::Command command;
     Priority priority{Priority::Normal};
+    /// A planned PICK-UP of a power-up: a plain click (GroupMove) of ONE ant on the tile of a power-up (Orders::pick_up). The controller lets a move onto a power-up tile through only
+    /// with this mark: a click on one takes it for the ant that arrives, so no other order of a bot (a rally, a guard post, a spread) may name such a tile by accident.
+    bool pickup{false};
 };
 
 /// The only way out of a bot: what a person could click, as data. The named methods cannot express Quit or Drop (push_unchecked exists for the tests of the
@@ -101,8 +105,11 @@ class Orders {
 public:
     /// A group move; more ants than one command may hold (kMaxCommandAnts) become several intents. An empty list is nothing.
     void move(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Normal);
-    /// A group attack on the ant that stands at `tile`
+    /// A group attack on the ant that stands at `tile`. The controller lets it through only when an ant of another team (not an ally) stands there and the tile is not part of a
+    /// hill: what a person's click on an enemy ant sends (the attack cursor shows over an ant of another colour, and an ant on a hill tile gets the plain move cursor).
     void attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Urgent);
+    /// A planned pick-up: ONE ant is clicked onto the tile of a power-up (a plain GroupMove, the click that takes it when the ant arrives). Nothing else may name a power-up tile.
+    void pick_up(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
     /// A special order (bomb, defuse, fire, extinguish, bridge, thief raid) of ONE ant: the HUD sends it for a single selected ant only
     void special(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
     void stop(const std::vector<uint32_t>& ants);
@@ -116,8 +123,8 @@ public:
     const std::vector<Intent>& intents() const noexcept { return intents_; }
     void clear() noexcept { intents_.clear(); }
 
-    /// For the tests of the controller's filter ONLY: puts any command into the list, however malformed. No bot uses it.
-    void push_unchecked(sim::Command command, Priority priority = Priority::Normal);
+    /// For the tests of the controller's filter ONLY: puts any command into the list, however malformed (and, with `pickup`, marked as a planned pick-up whatever it names). No bot uses it.
+    void push_unchecked(sim::Command command, Priority priority = Priority::Normal, bool pickup = false);
 
 private:
     void group(sim::CommandType type, const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority);

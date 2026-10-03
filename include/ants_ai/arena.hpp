@@ -76,6 +76,8 @@ struct ArenaSpec {
     /// A bot that is not in the registry (tests, later the tournaments): called instead of make_bot when set; a null result refuses the match. The `kind` of the BotSpec must
     /// still be a name that make_bot knows (check_setup), and the Profile comes from the spec's level.
     std::function<std::unique_ptr<Bot>(const BotSpec&)> factory;
+    /// Kinds besides the registry's that `factory` supplies (the bench bots of tools/bot_arena.cpp, never a bot of the game): the setup check accepts them
+    std::vector<std::string> extra_kinds;
     /// Called once with the engine as the match ended (a test hook: the tests compare the result with the engine's own getters). Read-only; the engine is gone after play_match.
     std::function<void(const sim::SimulationEngine&)> inspect;
 };

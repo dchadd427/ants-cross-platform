@@ -98,6 +98,7 @@ std::string refusal(const ArenaSpec& spec) {
     info.bots = spec.bots;
     info.fog = false;
     info.allow_all_bots = true;                          // the arena is the one place where nobody is a person
+    info.extra_kinds = spec.extra_kinds;
     const std::string why = check_setup(info);
     if (!why.empty()) return why;
     // Is the map playable by the teams that sit? (a start marker of a team that plays must lie inside the grid: the engine places no ant for one outside and the team would start

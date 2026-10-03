@@ -9,6 +9,7 @@ add_executable(test_ai
     test_ai_map.cpp
     test_ai_arena.cpp
     test_ai_b2fix.cpp
+    test_ai_b41.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

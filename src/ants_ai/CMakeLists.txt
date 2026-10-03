@@ -6,6 +6,9 @@ add_library(ants_ai STATIC
     map_info.cpp
     bot_controller.cpp
     tasks.cpp
+    tactics.cpp
+    standard_tasks.cpp
+    standard_bot.cpp
     worker_bot.cpp
     baselines.cpp
     arena.cpp

@@ -19,7 +19,9 @@
 //                   min(Profile::max_ants_per_command, kHudAntCap) ants go into one command, a larger one is split and every part is paid for
 //   HUD parity      nothing a person could not click: no Quit, no Drop, no None, a special order names exactly one ant, no group order outside the map, no
 //                   attack on the tile of an ally, alliance commands name another seat that is in the match and has not dropped out, a break needs an ally,
-//                   an answer needs the invitation it answers, a withdrawal needs the offer it takes back
+//                   an answer needs the invitation it answers, a withdrawal needs the offer it takes back; an ATTACK needs an ant of another team on its tile
+//                   (the attack cursor shows over an enemy ant, and an ant on a hill tile gets the plain move cursor); a click on a power-up tile takes the power-up
+//                   for the ant that arrives, so a move onto one passes only as a planned pick-up (Orders::pick_up: one ant), and no special order or attack names one
 //   issuer          every released command carries the seat of the bot, whatever the bot wrote
 //   anti-thrash     no second order to the same ant within Profile::reissue_cooldown ticks, unless it is Urgent (every order snaps the ant to its tile
 //                   centre and replaces its queued path request)
@@ -132,7 +134,7 @@ private:
     Seat* find(uint8_t seat) noexcept;
     const Seat* find(uint8_t seat) const noexcept;
     void decide(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
-    bool allowed(const sim::SimulationEngine& sim, const Seat& s, const sim::Command& c) const;
+    bool allowed(const sim::SimulationEngine& sim, const Seat& s, const Intent& in) const;
     void refill(Seat& s, uint64_t tick) const;
     void release(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
 

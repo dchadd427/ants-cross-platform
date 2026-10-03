@@ -210,3 +210,4 @@ void run_view_tests();
 void run_map_tests();
 void run_arena_tests();
 void run_b2fix_tests();
+void run_b41_tests();

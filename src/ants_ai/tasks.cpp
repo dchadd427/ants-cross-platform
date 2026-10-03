@@ -75,6 +75,26 @@ bool AntLedger::claim(uint32_t ant, TaskId task) {
     return true;
 }
 
+void AntLedger::set_rank(TaskId task, uint8_t rank) { rank_[task] = rank; }
+
+uint8_t AntLedger::rank(TaskId task) const noexcept {
+    const auto it = rank_.find(task);
+    return it != rank_.end() ? it->second : uint8_t{0};
+}
+
+bool AntLedger::take(uint32_t ant, TaskId task) {
+    if (task == kNoTask) return false;
+    const auto it = owner_.find(ant);
+    if (it == owner_.end()) {
+        owner_.emplace(ant, task);
+        return true;
+    }
+    if (it->second == task) return true;
+    if (rank(it->second) >= rank(task)) return false;                // only a task of a higher rank takes an ant from another
+    it->second = task;
+    return true;
+}
+
 bool AntLedger::release(uint32_t ant, TaskId task) {
     const auto it = owner_.find(ant);
     if (it == owner_.end() || it->second != task) return false;
@@ -192,6 +212,15 @@ void HarvestTask::step(TaskContext& c) {
     const uint64_t stale_after = max_delay + profile.intent_ttl + profile.decision_interval + 8u;
 
     sync_ledger(c.ledger);
+    // an ant that a task of a higher rank took from us (AntLedger::take) is not ours any more: its order of ours is forgotten (nothing else ever takes an ant of the worker bot)
+    for (auto it = recs_.begin(); it != recs_.end();) {
+        if (c.ledger.owner(it->first) != id()) {
+            watch_.erase(it->first);
+            it = recs_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
     // 1. what became of the ants that were ordered
     //    first the evidence: a pile that another ant of the task walks to, bites at or carries from is not a pile that cannot be reached

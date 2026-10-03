@@ -14,8 +14,9 @@ using namespace ants::ai;
 
 namespace {
 
-// A scripted bot (the registry's worker is the economy of B3, the standard bot of B4 is not there yet): at every look it sends one of its ants to a tile near it, so that a match holds
-// commands for the replay to check whatever the registry's bots do
+// A scripted bot (independent of the registry's bots): at every look it sends one of its ants to a tile near it, so that a match holds commands for the replay to check whatever the
+// registry's bots do. It never names a power-up tile (a click on one takes the power-up, and the controller lets only a planned pick-up through: B4-1, the W5 rule), so a match of
+// walkers has no command that the controller refuses.
 class WalkerBot final : public Bot {
 public:
     const char* kind() const noexcept override { return "walker"; }
@@ -27,6 +28,7 @@ public:
         const int32_t h = static_cast<int32_t>(view.grid().height());
         const int32_t x = std::clamp(a.tile.x + static_cast<int32_t>(rng_.below(15)) - 7, 0, w - 1);
         const int32_t y = std::clamp(a.tile.y + static_cast<int32_t>(rng_.below(15)) - 7, 0, h - 1);
+        if (view.powerup_at(TileCoord{x, y}) != nullptr) return;                          // (the random draws were made: the walkers' stream does not depend on the power-ups)
         orders.move({a.id}, TileCoord{x, y});
     }
 
@@ -220,7 +222,7 @@ void run_arena_tests() {
         }
         ASSERT_TRUE(a.log.empty());
         ASSERT_EQ(a.checkpoints.size(), a.ticks / kArenaHashPeriod);
-        // the kinds that play: "worker" is the worker bot (B3), "standard" is an alias of it until the standard bot (B4) exists, and the result says which one actually played
+        // the kinds that play: "worker" is the worker bot (B3), "standard" the standard bot (B4-1; until then an alias of the worker), and the result says which one actually played
         ArenaSpec placeholders;
         placeholders.level = &level_of("TINY");
         placeholders.seed = 4;
@@ -228,7 +230,7 @@ void run_arena_tests() {
         placeholders.bots = {seat_spec(0, "worker", Level::Hard), seat_spec(1, "standard", Level::Easy), seat_spec(2, "idle", Level::Medium)};
         const ArenaResult p = play_match(placeholders);
         ASSERT_TRUE(p.error.empty() && p.seats.size() == 3);
-        ASSERT_TRUE(p.seats[0].runs == "worker" && p.seats[1].runs == "worker" && p.seats[2].runs == "idle");
+        ASSERT_TRUE(p.seats[0].runs == "worker" && p.seats[1].runs == "standard" && p.seats[2].runs == "idle");
         ASSERT_TRUE(p.seats[0].spec.kind == "worker" && p.seats[1].spec.kind == "standard");
         // The arena's default opening is the product's (kStartHoldTicks = 1: the match clock waits for the "Get ready to play!" dialog in the game, so the arena's tick 0 is the game's): the first
         // look of seat s is on tick 1 + s, Hard looks on 1, 5, ... 297 (75 looks in 300 ticks), Easy (seat 1) on 2, 102 and 202. With the hold off (the opening of v0.1.0) the looks are the same: the

@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "ants_ai/idle_bot.hpp"
+#include "ants_ai/standard_bot.hpp"
 #include "ants_ai/worker_bot.hpp"
 
 namespace ants::ai {
@@ -174,7 +175,7 @@ std::string check_setup(const SetupInfo& info) {
         }
         if ((taken & bit(b.seat)) != 0) return "Seat " + std::to_string(static_cast<unsigned>(b.seat)) + " has two bots.";
         taken = static_cast<uint8_t>(taken | bit(b.seat));
-        if (!known_bot_kind(b.kind)) return "Unknown bot kind " + quoted(b.kind) + ".";
+        if (!known_bot_kind(b.kind) && std::find(info.extra_kinds.begin(), info.extra_kinds.end(), b.kind) == info.extra_kinds.end()) return "Unknown bot kind " + quoted(b.kind) + ".";
     }
     if (!info.allow_all_bots && (info.human_mask & info.roster) == 0) return "A game needs at least one person besides the bots.";
     return std::string();
@@ -205,6 +206,11 @@ void Orders::move(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priori
 
 void Orders::attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority) { group(sim::CommandType::GroupAttack, ants, tile, priority); }
 
+void Orders::pick_up(uint32_t ant, sim::TileCoord tile, Priority priority) {
+    group(sim::CommandType::GroupMove, std::vector<uint32_t>{ant}, tile, priority);
+    intents_.back().pickup = true;
+}
+
 void Orders::special(uint32_t ant, sim::TileCoord tile, Priority priority) { group(sim::CommandType::GroupSpecial, std::vector<uint32_t>{ant}, tile, priority); }
 
 void Orders::stop(const std::vector<uint32_t>& ants) {
@@ -234,14 +240,15 @@ void Orders::break_alliance() {
     intents_.push_back(Intent{std::move(c), Priority::Urgent});
 }
 
-void Orders::push_unchecked(sim::Command command, Priority priority) { intents_.push_back(Intent{std::move(command), priority}); }
+void Orders::push_unchecked(sim::Command command, Priority priority, bool pickup) { intents_.push_back(Intent{std::move(command), priority, pickup}); }
 
 // ---- the registry ------------------------------------------------------------------------------------------------------------------------------
 
 std::unique_ptr<Bot> make_bot(const BotSpec& spec) {
     if (!known_bot_kind(spec.kind)) return nullptr;
     if (spec.kind == "idle") return std::make_unique<IdleBot>();
-    return std::make_unique<WorkerBot>();        // "worker"; "standard" is an alias of it until the standard bot (B4) exists
+    if (spec.kind == "worker") return std::make_unique<WorkerBot>();
+    return std::make_unique<StandardBot>(spec.level);
 }
 
 }  // namespace ants::ai

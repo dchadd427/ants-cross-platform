@@ -143,6 +143,7 @@ void build_rich_world(sim::SimulationEngine& sim, uint32_t seed) {
 static_assert(sizeof(AntView) == 24, "AntView changed: extend view_text() and AI1.25");
 static_assert(sizeof(TeamRow) == 12, "TeamRow changed: extend view_text() and AI1.25");
 static_assert(sizeof(PileView) == 20, "PileView changed: extend view_text() and AI1.25");
+static_assert(sizeof(PowerUpView) == 16, "PowerUpView changed: extend view_text() and AI1.25");
 
 std::string view_text(const BotView& v) {
     std::string s;
@@ -184,6 +185,15 @@ std::string view_text(const BotView& v) {
         put(p.remaining);
         put(p.value);
         put(p.lunchbox ? 1 : 0);
+        s += "/";
+    }
+    s += "P";
+    for (const PowerUpView& p : v.powerups()) {
+        put(p.tile.x);
+        put(p.tile.y);
+        put(static_cast<int>(p.kind));
+        put(p.standing_team);
+        put(p.standing_ant);
         s += "/";
     }
     return s;
@@ -677,6 +687,14 @@ void run_b2fix_tests() {
         const auto make_pair_of_worlds = [&](uint8_t seat, sim::SimulationEngine& a, sim::SimulationEngine& b, bool with_orders) -> void {
             build_world(a, 51, 12);
             build_world(b, 51, 12);
+            // power-ups are on every screen: a free one, one that an ant of the seat stands on and one that an ant of another team stands on (the same in both worlds, B4-1)
+            for (sim::SimulationEngine* e : {&a, &b}) {
+                e->grid_mut().place_powerup(30, 30, 3);
+                e->grid_mut().place_powerup(31, 30, 4);
+                e->grid_mut().place_powerup(32, 30, 2);
+                e->spawn_unit(seat, sim::AntType::Worker, tc(31, 30));
+                e->spawn_unit(static_cast<uint8_t>((seat + 1) % sim::MAX_PLAYERS), sim::AntType::Worker, tc(32, 30));
+            }
             for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
                 a.set_player_score(t, 300);
                 b.set_player_score(t, 300);
