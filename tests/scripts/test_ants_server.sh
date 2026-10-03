@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The dedicated server with REAL programs: ants_server (TCP game port, control interface with a bearer secret) and two headless game clients that join a room by its
 # code. Checks: the control interface refuses a missing or a wrong secret, makes a room with the right one, the two clients join, the match starts by itself (nobody
-# presses START), runs, and both clients finish their frames without an error; a room for four whose leader (the first client to join, --start-when 2: a test hook that
+# presses START), runs (the referee's first tick comes after the 5 s of the "Get ready to play!" dialog: network protocol 12), and both clients play without an error; a room for four whose leader (the first client to join, --start-when 2: a test hook that
 # presses START for a headless client) starts it with the two players who are there; a raw client (no game) that floods the server with valid messages (StartRequests, Pings) is
 # dropped within seconds while a match in another room keeps its clock, the control interface answers, and the process neither grows nor stays busy; the server stops cleanly on
 # SIGTERM and writes the result file of a room that was closed. The last section is the server that HOLDS the seat of a player whose connection is lost (protocol 10, --reconnect):
@@ -44,6 +44,19 @@ CTL_PORT="$(free_port)"
 SECRET="e2e-$RANDOM-$RANDOM-secret"
 CODE="E2E-ROOM-$RANDOM"
 CTL="http://127.0.0.1:$CTL_PORT"
+# A match opens with the "Get ready to play!" dialog and its simulation waits for it (network protocol 12): the referee seals the first turn 5 s after the match began, so a room that is
+# "running" has ticked nothing yet and its `ticks` count from the end of the dialog. ticks_of ROOM [CONTROL-URL] prints the referee's ticks; wait_ticks ROOM [CONTROL-URL [SECONDS]] polls
+# until the room has ticked at all and prints the ticks (0 when it had not within SECONDS, 20 by default). Every check that measures the referee's clock, or cuts a link, starts from there.
+ticks_of() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "${2:-$CTL}/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))' 2> /dev/null; }
+wait_ticks() {
+    local t
+    for _ in $(seq 1 $(( ${3:-20} * 5 ))); do
+        t="$(ticks_of "$1" "${2:-$CTL}")"
+        if [ "${t:-0}" -gt 0 ] 2> /dev/null; then echo "$t"; return; fi
+        sleep 0.2
+    done
+    echo 0
+}
 
 cd "$ROOT"
 # the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
@@ -165,10 +178,10 @@ RESP="$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"T
 check "the room is made and is waiting" "$(echo "$RESP" | grep -q '"state":"waiting"'; echo $?)"
 check "a map outside the folder is refused: 404" "$([ "$(code_of -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"../../etc/passwd"}' "$CTL/rooms")" = "404" ]; echo $?)"
 
-# two real clients (headless: they run a number of frames, then end)
+# two real clients (headless: they run until this script stops them; their frames are not paced, so a few thousand would be over before the dialog's 5 s are)
 CLIENT_PIDS=""
 for i in 1 2; do
-    "$GAME" --headless --no-lan --name "Player$i" --join "127.0.0.1:$GAME_PORT" --room "$CODE" --screenshot "$WORK/c$i.png" --frames 4000 > "$WORK/c$i.log" 2>&1 &
+    "$GAME" --headless --no-lan --name "Player$i" --join "127.0.0.1:$GAME_PORT" --room "$CODE" --screenshot "$WORK/c$i.png" --frames 4000000 > "$WORK/c$i.log" 2>&1 &
     CLIENT_PIDS="$CLIENT_PIDS $!"
 done
 RUNNING=1
@@ -177,11 +190,16 @@ for _ in $(seq 1 150); do
     if echo "$STATUS" | grep -q '"state":"running"'; then RUNNING=0; break; fi
     sleep 0.2
 done
+RUN_SEEN_AT="$(python3 -c 'import time; print(time.time())')"
 check "both clients joined and the match started by itself (state running)" "$RUNNING"
 check "both players are in the room list" "$(echo "$STATUS" | grep -q 'Player1' && echo "$STATUS" | grep -q 'Player2'; echo $?)"
-sleep 1
-TICKS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))')"
-check "the referee's clock runs" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
+TICKS="$(wait_ticks "$CODE")"
+DIALOG_WAIT="$(python3 -c "import time; print(round(time.time() - $RUN_SEEN_AT, 1))")"
+check "the referee's clock runs (ticks after the dialog: $TICKS)" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
+# (the lower bound is the point: nothing ticks during the dialog; the 5 s of it are 4.8 s from the moment this script saw "running", the bound has two seconds of slack for a loaded machine)
+check "the referee's clock waits for the \"Get ready to play!\" dialog: its first tick came $DIALOG_WAIT s after the match began (5 s; never under 3, within 15)" "$(python3 -c "print(0 if 3.0 <= $DIALOG_WAIT <= 15.0 else 1)")"
+sleep 3      # (a few seconds of play: the clients compare their state hashes every second, a desync would be reported within it)
+for p in $CLIENT_PIDS; do kill "$p" 2> /dev/null; done
 for p in $CLIENT_PIDS; do wait "$p" 2> /dev/null; done
 check "no client reported an error" "$(grep -qiE 'out of sync|failed|error' "$WORK/c1.log" "$WORK/c2.log"; [ $? -ne 0 ]; echo $?)"
 
@@ -190,7 +208,7 @@ check "no client reported an error" "$(grep -qiE 'out of sync|failed|error' "$WO
 LEAD="E2E-LEAD-$RANDOM"
 RESP="$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$LEAD\",\"seed\":7}" "$CTL/rooms")"
 check "a room for four is made: it allows an early start and has no leader yet" "$(echo "$RESP" | grep -q '"early_start":true' && echo "$RESP" | grep -q '"leader":null'; echo $?)"
-"$GAME" --headless --no-lan --name First --join "127.0.0.1:$GAME_PORT" --room "$LEAD" --start-when 2 --screenshot "$WORK/l1.png" --frames 4000 > "$WORK/l1.log" 2>&1 &
+"$GAME" --headless --no-lan --name First --join "127.0.0.1:$GAME_PORT" --room "$LEAD" --start-when 2 --screenshot "$WORK/l1.png" --frames 4000000 > "$WORK/l1.log" 2>&1 &
 LEAD_PIDS="$!"
 LED=1
 for _ in $(seq 1 100); do
@@ -201,7 +219,7 @@ done
 check "the first player to join is the leader of the room (seat 0)" "$LED"
 sleep 2
 check "alone in a room for four the leader starts nothing" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | grep -q '"state":"waiting"'; echo $?)"
-"$GAME" --headless --no-lan --name Second --join "127.0.0.1:$GAME_PORT" --room "$LEAD" --screenshot "$WORK/l2.png" --frames 4000 > "$WORK/l2.log" 2>&1 &
+"$GAME" --headless --no-lan --name Second --join "127.0.0.1:$GAME_PORT" --room "$LEAD" --screenshot "$WORK/l2.png" --frames 4000000 > "$WORK/l2.log" 2>&1 &
 LEAD_PIDS="$LEAD_PIDS $!"
 STARTED=1
 for _ in $(seq 1 150); do
@@ -212,9 +230,8 @@ done
 check "the leader pressed START when the second player was in: the match runs (it was not started by the room: two of four)" "$STARTED"
 check "the room keeps what was asked for (4 players) and shows who joined (2: First and Second)" "$(echo "$STATUS" | grep -q '"expected":4' && echo "$STATUS" | grep -q '"joined":2' && echo "$STATUS" | grep -q 'First' && echo "$STATUS" | grep -q 'Second'; echo $?)"
 check "the leader's request was honoured (none ignored)" "$(echo "$STATUS" | grep -q '"ignored_start_requests":0'; echo $?)"
-sleep 1
-TICKS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))')"
-check "the referee's clock runs for the two of them" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
+TICKS="$(wait_ticks "$LEAD")"
+check "the referee's clock runs for the two of them (ticks after the dialog: $TICKS)" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
 check "neither client reported an error" "$(grep -qiE 'out of sync|failed|error' "$WORK/l1.log" "$WORK/l2.log"; [ $? -ne 0 ]; echo $?)"
 check "the room did not fail (no desync)" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | grep -q '"state":"running"'; echo $?)"
 for p in $LEAD_PIDS; do kill "$p" 2> /dev/null; done
@@ -243,9 +260,9 @@ ok = len(bots) == 3 and [b["seat"] for b in bots] == [1, 2, 3] and all(b["bot"] 
 ok = ok and r.get("joined") == 4 and r.get("expected") == 4 and r["players"][0]["name"] == "Solo" and sum(1 for p in r["players"] if p["name"] == "Bot (Medium)") == 3
 print(0 if ok else 1)' 2> /dev/null)"
 check "the status lists three bots on seats 1 - 3 (medium, named Bot (Medium), seated by the fill), four players, the person on seat 0" "${BOTS_OK:-1}"
-FILL_T1="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))' 2> /dev/null)"
+FILL_T1="$(wait_ticks "$FILL")"      # (the rate is measured from the first tick: the match's first 5 s are the dialog)
 sleep 3
-FILL_T2="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))' 2> /dev/null)"
+FILL_T2="$(ticks_of "$FILL")"
 FILL_RATE="$(python3 -c "print(($FILL_T2 - $FILL_T1) / 3.0)" 2> /dev/null)"
 check "the referee runs the match with the bots at 20 ticks a second (measured: ${FILL_RATE:-?})" "$(python3 -c "import sys; r = float('${FILL_RATE:-0}'); sys.exit(0 if 17.0 <= r <= 23.0 else 1)"; echo $?)"
 check "the room did not fail (no desync with the bots) and the client reported no error" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" | grep -q '"state":"running"' && ! grep -qiE 'out of sync|failed|error' "$WORK/f1.log"; echo $?)"
@@ -281,7 +298,6 @@ rss_kb() { ps -o rss= -p "$SERVER_PID" 2> /dev/null | tr -d ' '; }
 cpu_secs() { ps -o time= -p "$SERVER_PID" 2> /dev/null | python3 -c 'import sys; t = sys.stdin.read().strip().replace("-", ":"); s = 0.0
 for part in t.split(":"): s = s * 60 + float(part)
 print(s)'; }
-ticks_of() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))' 2> /dev/null; }
 field_of() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get(sys.argv[1], ""))' "$2" 2> /dev/null; }
 VICTIM="E2E-VICTIM-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$VICTIM\",\"seed\":11}" "$CTL/rooms"
@@ -296,6 +312,7 @@ for _ in $(seq 1 100); do
     sleep 0.2
 done
 check "two clients play in a room next to the flood room (the match runs)" "$VICTIM_UP"
+wait_ticks "$VICTIM" > /dev/null      # (its dialog's 5 s first: the rates below are measured while it plays)
 rate_of_victim() { local a b; a="$(ticks_of "$VICTIM")"; sleep "$1"; b="$(ticks_of "$VICTIM")"; python3 -c "print(($b - $a) / $1)"; }
 QUIET_RATE="$(rate_of_victim 3)"
 check "the referee of that match ticks about 20 times a second without a flood ($QUIET_RATE)" "$(python3 -c "print(0 if 15 < $QUIET_RATE < 25 else 1)")"
@@ -575,10 +592,11 @@ for _ in $(seq 1 150); do
     sleep 0.2
 done
 check "three clients (one of them behind the proxy) joined and the match runs" "$RC_RUNNING"
+RC_T0="$(wait_ticks "$RC_CODE" "$RC_URL")"      # (the first turn is sealed 5 s after the match began: the pause below is tested in a match that plays)
 check "the status says that nobody waits: not paused, nobody absent, no vote, the log is being kept" "$([ "$(rc_field "$RC_CODE" paused)" = "false" ] && [ "$(rc_field "$RC_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_CODE" vote)" = "null" ] && [ "$(rc_field "$RC_CODE" log.usable)" = "true" ] && [ "$(rc_field "$RC_CODE" log.turns)" -gt 0 ]; echo $?)"
 sleep 2
-RC_T0="$(rc_field "$RC_CODE" ticks)"
-check "the referee's clock runs before the cut" "$([ "${RC_T0:-0}" -gt 0 ]; echo $?)"
+RC_T1="$(rc_field "$RC_CODE" ticks)"
+check "the referee's clock runs before the cut (ticks $RC_T0, then $RC_T1 two seconds later)" "$([ "${RC_T0:-0}" -gt 0 ] && [ "${RC_T1:-0}" -gt "${RC_T0:-0}" ]; echo $?)"
 
 # the second room: a client that is stopped (a machine that hangs: its link stays open and says nothing)
 "$GAME" --headless --no-lan --name Steady1 --join "127.0.0.1:$RC_PORT" --room "$RC_STOP_CODE" --screenshot "$WORK/s1.png" --frames 4000000 > "$WORK/s1.log" 2>&1 &
@@ -594,6 +612,7 @@ for _ in $(seq 1 150); do
     sleep 0.2
 done
 check "the second room runs with its three clients" "$RC_STOP_RUNNING"
+wait_ticks "$RC_STOP_CODE" "$RC_URL" > /dev/null      # (its dialog's 5 s first: the client below is stopped in a match that plays)
 sleep 2
 
 # cut the proxy: the victim's link dies, the room pauses (within a few seconds), and says who is missing
