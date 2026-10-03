@@ -81,6 +81,7 @@ struct Machine {
     std::vector<NetGame::Event> events;
     std::vector<ChatMsg> chats;
     std::vector<uint64_t> drop_ticks;       // the sim tick at which a Drop command was applied
+    std::vector<std::pair<uint64_t, Command>> applied;     // every other command that a turn applied on this machine, with the sim tick it was applied at
     uint64_t ticks{0};
     uint32_t loads{0};
 
@@ -127,6 +128,7 @@ struct Table {
         m.net.set_on_tick([&m]() { ++m.ticks; });
         m.net.set_on_command([&m](const Command& c, const sim::CommandResult&) {
             if (c.type == CommandType::Drop) m.drop_ticks.push_back(m.sim.current_tick());
+            else m.applied.emplace_back(m.sim.current_tick(), c);
         });
         return m;
     }
@@ -1227,6 +1229,52 @@ void run_start_delay_tests() {
         ASSERT_TRUE(bob.sim.state_hash() == carol.sim.state_hash());
         ASSERT_EQ(bob.sim.current_tick(), carol.sim.current_tick());
         ASSERT_FALSE(bob.net.desynced() || carol.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("N3.24 Protocol 12, A Command That Reaches A LAN Host Before Its First Turn Is Sealed Is Discarded (The Product Path: NetGame::begin_match Sets The Start Delay): A Guest's Orders At 100 ms (Seventy At Once) And 2,500 ms Of The Dialog Are Applied On No Machine And Cost It Neither Its Seat Nor A Desync; Its Order After Every Machine Has Run Its First Tick Is Applied On All Of Them At The Same Tick") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(24, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        const uint32_t begun = t.now;
+        const uint32_t ant = first_ant(bob, 1);
+        int16_t goal_x = 0, goal_y = 0;
+        ASSERT_TRUE(ant != 0 && open_goal_near_hill(bob.sim, 1, goal_x, goal_y));
+        // Bob is a modified client (or a rig: a NetGame has no dialog of its own, the application's dialog is what keeps a person's client quiet): he orders in the dialog's seconds, seventy at once and one more later
+        bool sent = true;
+        t.run(2600, [&](uint32_t now) {
+            const uint32_t at = now - begun;
+            if (at != 100 && at != 2500) return;
+            for (int i = 0; i < (at == 100 ? 70 : 1); ++i) sent = bob.net.submit(order(1, ant, static_cast<int16_t>(goal_x + i % 3), goal_y)).status == sim::CommandResult::Status::Applied && sent;
+        });
+        ASSERT_TRUE(sent);
+        for (auto& m : t.machines) ASSERT_TRUE(m->sim.current_tick() == 0 && m->ticks == 0);          // still inside the 5 s: nothing runs (the orders are in the host's hands, or gone)
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+        for (auto& m : t.machines) {
+            for (const auto& a : m->applied) ASSERT_TRUE(a.second.issuer != 1);                          // none of the seventy-one was applied, on any machine, in any turn
+            ASSERT_FALSE(m->net.desynced());
+        }
+        ASSERT_FALSE(host.sim.is_player_dropped(1) || bob.sim.is_player_dropped(1));                     // a discarded command is no violation: the seat stays
+        // the same order once every machine has run its first tick (the point from which a person can give one) is applied everywhere, at the same tick
+        ASSERT_EQ(bob.net.submit(order(1, ant, goal_x, goal_y)).status, sim::CommandResult::Status::Applied);
+        t.run(1500);
+        std::array<std::vector<uint64_t>, 3> ticks;
+        for (size_t i = 0; i < 3; ++i) {
+            for (const auto& a : t.machines[i]->applied) {
+                if (a.second.issuer == 1) ticks[i].push_back(a.first);
+            }
+        }
+        ASSERT_TRUE(ticks[0].size() == 1 && ticks[1] == ticks[0] && ticks[2] == ticks[0]);
+        ASSERT_EQ(bob.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        host.net.freeze();
+        t.run(2000);
+        ASSERT_TRUE(all_equal(t));
+        for (auto& m : t.machines) ASSERT_FALSE(m->net.desynced());
     } TEST_END();
 }
 

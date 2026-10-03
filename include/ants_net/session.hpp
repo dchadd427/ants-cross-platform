@@ -23,6 +23,10 @@
 // kMatchStartDelayMs: the length of the "Get ready to play!" dialog). Until then no turn exists: a client's runner has not started (it begins when its first turns are in), the sequencer has no turn that
 // a seat could be behind, and the lag policy (police_laggards) has nothing that waits for a player, so the wait is no stall, no lag notice, no growth of the jitter buffer and no countdown of the
 // idle rule. A machine ends its dialog when its first turn executes. The reconnect machinery is as it was (a pause slides the schedule: the first turn follows the end of a pause at once).
+// A Command that reaches the host before the first turn is sealed is DISCARDED, without a violation: an honest client sends none (its dialog takes every click and key until its own first turn has
+// run), and one that a modified client scripted ahead of time (up to 64 per seat) would run at the first tick, before any person can act. The gate is the first seal and not a seat's
+// acknowledgement of turn 0, because an acknowledgement is only a claim: a modified client can send TurnAck(0) the moment after the seal, so it would add no protection and would tie a command
+// to the order in which two messages of a frame arrive (docs/NETWORK_PORT.md, "Protocol 12").
 //
 // Who waits for whom. A host with a seat (a game on the local network) stops sealing while a peer is more than 3 s behind: its friends wait for the slow machine (the
 // match is theirs, and the machine may be back in a moment). A host without a seat (a dedicated server) never waits: a room is made of strangers, and one machine that
@@ -118,7 +122,8 @@ public:
         uint8_t epoch{0};                   // 0 for the first host, one more for every host change
         uint32_t start_delay_ms{0};         // the first turn is sealed this long after start(): the "Get ready to play!" dialog that every machine opens when the match begins (protocol 12:
                                             // kMatchStartDelayMs, which the LAN host's NetGame and the server's Room set; 0, the default, seals turn 0 at once, as a test rig wants). Nothing is
-                                            // sealed meanwhile, so nobody is behind and nothing waits for anybody: the wait is not lag (see "The start of a match" above)
+                                            // sealed meanwhile, so nobody is behind and nothing waits for anybody: the wait is not lag, and a client's Command that arrives before the first
+                                            // turn is discarded (see "The start of a match" above); with 0 a command is accepted at any time
         Sequencer::Config sequencer{};
         LockstepRunner::Config runner{};
         uint32_t violation_limit{8};        // undecodable or forbidden messages before a client is thrown out

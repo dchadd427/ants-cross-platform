@@ -4880,6 +4880,70 @@ void run_bot_tests() {
             ASSERT_TRUE(plain.state == RoomState::Running && !plain.bot_controller && plain.bot_start_hold == 0u);
         }
     } TEST_END();
+    TEST_CASE("S3.77 Protocol 12, A Command That Reaches A Server's Room Before Its First Turn Is Sealed Is Discarded (The Product Path: Room::begin_match Sets The Start Delay): A Raw Connection That Writes Seventy Orders At 100 ms And One At 4,500 ms Of The Dialog Has Them In No Turn On Any Machine And Stays In The Room; Its Order After The First Seal And An Honest Client's Order After Its First Tick Are Applied On Both Machines At The Same Tick") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("EARLY-1", 2), w.now).ok);
+        Client& ann = w.connect("Ann", "EARLY-1");                       // honest: it orders after its first tick
+        Client& bob = w.connect("Bob", "EARLY-1");                       // a raw connection in the dialog (a modified client): it writes CommandMsg itself
+        ann.record_commands = true;
+        bob.record_commands = true;
+        ann.next_order_ms = bob.next_order_ms = 0xFFFFFFFFu;             // (the rig's own orders, one every 700 ms from its first moment because it knows no dialog, are off: this test sends its own, at chosen times)
+        uint32_t begin = 0;
+        for (int i = 0; i < 400 && begin == 0; ++i) {
+            w.run(10);
+            if (w.status("EARLY-1").state == RoomState::Running) begin = w.now;
+        }
+        ASSERT_TRUE(begin != 0);
+        ASSERT_TRUE(ann.sim.get_world_state().ants.size() > 0);
+        const auto order_of = [&](Client& who, int16_t x) {
+            sim::Command c;
+            c.type = sim::CommandType::GroupMove;
+            c.issuer = who.lobby->my_seat();
+            c.tile_x = x;
+            c.tile_y = 12;
+            for (const auto& a : who.sim.get_world_state().ants) {
+                if (a.player_id == c.issuer && c.ants.size() < 3) c.ants.push_back(a.id);
+            }
+            return c;
+        };
+        const auto step_to = [&](uint32_t ms_after_begin) {
+            while (w.now - begin < ms_after_begin) w.run(10);
+        };
+        step_to(100);
+        ASSERT_TRUE(bob.session != nullptr && !order_of(bob, 10).ants.empty());
+        for (int i = 0; i < 70; ++i) bob.end->send(net::encode(net::CommandMsg{order_of(bob, static_cast<int16_t>(10 + i % 5))}));   // a scripted opening, seventy orders
+        step_to(4500);
+        bob.end->send(net::encode(net::CommandMsg{order_of(bob, 30)}));                                                              // one more, half a second before the first turn
+        step_to(4700);
+        RoomStatus s = w.status("EARLY-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.turns == 0 && s.ticks == 0);      // the dialog is still up: nothing sealed
+        uint32_t sealed_at = 0;
+        for (int i = 0; i < 100 && sealed_at == 0; ++i) {
+            w.run(10);
+            if (w.status("EARLY-1").turns > 0) sealed_at = w.now - begin;
+        }
+        ASSERT_TRUE(sealed_at >= net::kMatchStartDelayMs && sealed_at <= net::kMatchStartDelayMs + net::kTurnMs);   // the first turn is 5000 ms after the match began
+        // after the first seal: the raw connection's order is an order like any other, and so is an honest client's, sent after its own first tick
+        step_to(sealed_at + 200);
+        bob.end->send(net::encode(net::CommandMsg{order_of(bob, 31)}));
+        bool ann_sent = false;
+        for (int i = 0; i < 600 && !ann_sent; ++i) {
+            if (ann.sim.current_tick() >= 1) ann_sent = ann.session->submit(order_of(ann, 20));
+            if (!ann_sent) w.run(10);
+        }
+        ASSERT_TRUE(ann_sent);
+        w.run(3000);
+        ASSERT_TRUE(ann.saw.size() == 2 && bob.saw.size() == 2);                         // Bob's late order and Ann's, and none of Bob's seventy-one orders of the dialog (their tiles are 10 - 14 and 30)
+        for (size_t i = 0; i < 2; ++i) {
+            ASSERT_TRUE(ann.saw[i].second.tile_x == 31 || ann.saw[i].second.tile_x == 20);
+            ASSERT_TRUE(ann.saw[i].first >= 1u);                                         // not turn 0 (no tick had run)
+            ASSERT_TRUE(ann.saw[i].first == bob.saw[i].first && ann.saw[i].second.issuer == bob.saw[i].second.issuer && ann.saw[i].second.tile_x == bob.saw[i].second.tile_x);   // the same tick on both machines
+        }
+        ASSERT_TRUE(!ann.lost && !bob.lost && !ann.session->lost() && !bob.session->lost());      // a discarded command is no violation: Bob stays in the room
+        ASSERT_FALSE(ann.session->desynced() || bob.session->desynced());
+        s = w.status("EARLY-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.ticks > 50);                      // (some 3 s of play after the first turn)
+    } TEST_END();
 }
 
 

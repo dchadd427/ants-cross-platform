@@ -1456,6 +1456,10 @@ void run_guest_tests() {
         ASSERT_TRUE(start_three(host, bob, app, "Carol"));
         Trio trio{app, host, bob};
         ViewportCamera& camera = app.renderer().camera();
+        // The match opens with its "Get ready to play!" dialog and the host seals the first turn kDialogMs later; a command that reaches the host BEFORE that is discarded (protocol 12: no honest client sends one,
+        // its dialog takes every click and key until its own first turn has run). So the offers of this test wait for the first tick of every machine, as a person's would: Bob and the host are bare
+        // machines with no dialog, and the application's HUD is asked directly (a click would be swallowed by the dialog until then).
+        ASSERT_TRUE(trio.until([&]() { return app.sim().current_tick() > 0 && bob.sim.current_tick() > 0 && host.sim.current_tick() > 0; }, 8000));
         trio.step(1000);
         // a team message of Alice before there is any team: the application is not her ally and never sees it
         host.net.chat("secret plan", true);
@@ -1515,6 +1519,10 @@ void run_guest_tests() {
         ASSERT_TRUE(start_three(host, bob, app, "Carol"));
         Trio trio{app, host, bob};
         ViewportCamera& camera = app.renderer().camera();
+        // The match opens with its "Get ready to play!" dialog and the host seals the first turn kDialogMs later; a command that reaches the host BEFORE that is discarded (protocol 12: no honest client sends one,
+        // its dialog takes every click and key until its own first turn has run). So the offers of this test wait for the first tick of every machine, as a person's would: Bob and the host are bare
+        // machines with no dialog, and the application's HUD is asked directly (a click would be swallowed by the dialog until then).
+        ASSERT_TRUE(trio.until([&]() { return app.sim().current_tick() > 0 && bob.sim.current_tick() > 0 && host.sim.current_tick() > 0; }, 8000));
         trio.step(1000);
         app.hud().request_team_up(app.sim(), 1);                                          // the ally pedestal of Bob's hill
         ASSERT_TRUE(trio.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::Waiting; }, 5000));

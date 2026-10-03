@@ -249,6 +249,8 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             if (!decode(msg, m)) return violation(player);
             if (paused()) return;                    // the match waits for a seat: a click now would be carried out at a moment that nobody expects, and a pause is long (a player who
                                                      // clicks on would reach the limit of commands per turn, which no turn resets): discarded, no violation
+            if (cfg_.start_delay_ms != 0 && sequencer_.next_turn() == 0) return;     // no turn is sealed yet in a match that waits for its start dialog (protocol 12): an honest client sends nothing (its dialog takes every
+                                                     // click and key until its first turn has run), and a command now would run at the first tick, ahead of every person's: discarded, no violation
             if (!sequencer_.submit(player, std::move(m.command))) violation(player);
             return;
         }
