@@ -32,6 +32,41 @@ def read(path):
         return f.read()
 
 
+def resolve_tools():
+    """The programs that a CMake configure of this project needs, found ONCE, with the environment as the test run started (before any test replaces PATH or HOME):
+    cmake, the build programs of the generators (make, ninja) and the C++ compiler. Where they live differs from machine to machine (/usr/bin on a Linux runner,
+    /opt/homebrew/bin or /usr/local/bin on a Mac): no test may assume a folder, and a test that restricts PATH builds it from the folders of these programs."""
+    found = {}
+    for name in ("cmake", "make", "ninja"):
+        path = shutil.which(name)
+        if path:
+            found[name] = path
+    candidates = []
+    if os.environ.get("CXX"):
+        candidates.append(os.environ["CXX"].split()[0])
+    candidates += ["c++", "g++", "clang++"]
+    for name in candidates:
+        path = shutil.which(name)
+        if path:
+            found["c++"] = path
+            break
+    return found
+
+
+TOOLS = resolve_tools()
+CMAKE = TOOLS.get("cmake")
+
+
+def tool_folders(tools=TOOLS):
+    """The folders of the resolved tools, in order, without repeats: the PATH that is enough to configure and nothing more."""
+    folders = []
+    for path in tools.values():
+        folder = os.path.dirname(path)
+        if folder not in folders:
+            folders.append(folder)
+    return folders
+
+
 def pick_generator():
     if shutil.which("ninja"):
         return "Ninja Multi-Config"
@@ -52,7 +87,7 @@ def includes_version_header(path):
     return re.search(r'#\s*include\s*[<"]ants_app/version\.hpp[>"]', text) is not None
 
 
-@unittest.skipUnless(shutil.which("cmake"), "cmake is needed")
+@unittest.skipUnless(CMAKE, "cmake is needed")
 class GeneratedVersionHeader(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -62,7 +97,7 @@ class GeneratedVersionHeader(unittest.TestCase):
         os.makedirs(query)
         open(os.path.join(query, "codemodel-v2"), "w").close()           # ask for the codemodel
         cls.generator = pick_generator()
-        command = ["cmake", "-S", REPO, "-B", cls.build, "-DANTS_USE_CCACHE=OFF"]
+        command = [CMAKE, "-S", REPO, "-B", cls.build, "-DANTS_USE_CCACHE=OFF"]
         if cls.generator:
             command += ["-G", cls.generator]
         cls.configure = subprocess.run(command, capture_output=True, text=True)
@@ -152,7 +187,7 @@ class GeneratedVersionHeader(unittest.TestCase):
             self.assertNotIn(generated, [norm(i["path"]) for i in group.get("includes", [])])
 
 
-@unittest.skipUnless(shutil.which("cmake") and os.name == "posix", "cmake and a POSIX shell are needed")
+@unittest.skipUnless(CMAKE and os.name == "posix", "cmake and a POSIX shell are needed")
 class CcacheSupport(unittest.TestCase):
     """The ccache option of the root CMakeLists.txt: what it says and does at configure time (configure only; nothing is compiled).
 
@@ -181,7 +216,7 @@ class CcacheSupport(unittest.TestCase):
         os.makedirs(env["HOME"], exist_ok=True)
         if path_first:
             env["PATH"] = path_first + os.pathsep + env.get("PATH", "")
-        result = subprocess.run(["cmake", "-S", REPO, "-B", build, "-DBUILD_TESTS=OFF", "-DANTS_BUILD_APP=OFF", *args], capture_output=True, text=True, env=env)
+        result = subprocess.run([CMAKE, "-S", REPO, "-B", build, "-DBUILD_TESTS=OFF", "-DANTS_BUILD_APP=OFF", *args], capture_output=True, text=True, env=env)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result.stdout, build
 
@@ -215,23 +250,53 @@ class CcacheSupport(unittest.TestCase):
         if found is not None:                                              # Makefile and Ninja generators write the launcher into their rules
             self.assertTrue(found, "the compile rules do not run the compiler through ccache")
 
-    def test_ccache_in_the_home_local_bin_folder_is_found_without_being_on_the_path(self):
+    def restricted_environment(self, home):
+        """HOME as given and a PATH of exactly the folders of the tools that a configure needs (cmake, make / ninja, the compiler: resolved before the environment was
+        touched, see resolve_tools): nothing else is on it, so a ccache of this machine is on it only if it lives in one of those folders (/usr/bin of a runner that
+        installed it), where it has to stay."""
+        env = dict(os.environ)
+        env["HOME"] = home
+        env["PATH"] = os.pathsep.join(tool_folders())
+        return env
+
+    def test_ccache_in_the_home_local_bin_folder_is_found_by_the_hint_and_chosen_before_the_path(self):
+        self.assertIn("c++", TOOLS, "no C++ compiler was found to configure with")
         home = os.path.join(self.tmp.name, "hinthome")
         local_bin = os.path.join(home, ".local", "bin")
         os.makedirs(local_bin)
-        shutil.copy(self.fake, os.path.join(local_bin, "ccache"))
-        os.chmod(os.path.join(local_bin, "ccache"), 0o755)
+        hinted = os.path.join(local_bin, "ccache")
+        shutil.copy(self.fake, hinted)
+        os.chmod(hinted, 0o755)
+        env = self.restricted_environment(home)
+        self.assertNotIn(local_bin, env["PATH"].split(os.pathsep))        # the fake is NOT on the path: only the hint ~/.local/bin can lead to it
         build = os.path.join(self.tmp.name, "hint")
-        env = dict(os.environ)
-        env["HOME"] = home
-        env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if not os.path.exists(os.path.join(p, "ccache")))   # a machine's own ccache is off the path
-        result = subprocess.run(["cmake", "-S", REPO, "-B", build, "-DBUILD_TESTS=OFF", "-DANTS_BUILD_APP=OFF", "-DCMAKE_PREFIX_PATH=/nonexistent"], capture_output=True, text=True, env=env)
+        result = subprocess.run([CMAKE, "-S", REPO, "-B", build, "-DBUILD_TESTS=OFF", "-DANTS_BUILD_APP=OFF", "-DCMAKE_CXX_COMPILER=" + TOOLS["c++"]],
+                                capture_output=True, text=True, env=env)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         found = re.search(r"ccache: using (\S.*)", result.stdout)
         self.assertIsNotNone(found, result.stdout)
-        # a ccache in a system folder (/usr/bin, /opt/homebrew/bin) may be found first by CMake's own search; the hint is what this checks: ours when the machine has none
-        if not any(os.path.exists(os.path.join(d, "ccache")) for d in ("/usr/bin", "/usr/local/bin", "/opt/homebrew/bin", "/bin")):
-            self.assertEqual(found.group(1).strip(), os.path.join(local_bin, "ccache"))
+        # CMake searches the HINTS before PATH and before the system folders, so the hinted one is the one chosen whether or not the machine has a real ccache in a folder of
+        # the restricted PATH (a runner that installed it in /usr/bin: that folder must stay, it holds cmake, make and the compiler)
+        self.assertEqual(found.group(1).strip(), hinted)
+
+    def machine_has_a_ccache(self):
+        """A real ccache anywhere that CMake's search could find it without a hint (on the PATH this test run started with, or a standard folder)."""
+        if shutil.which("ccache"):
+            return True
+        return any(os.path.exists(os.path.join(d, "ccache")) for d in ("/usr/bin", "/usr/local/bin", "/opt/homebrew/bin", "/bin", "/opt/local/bin"))
+
+    def test_without_any_ccache_the_message_says_not_found_and_nothing_launches_the_compiler(self):
+        if self.machine_has_a_ccache():
+            self.skipTest("this machine has a ccache that CMake's own search would find")
+        home = os.path.join(self.tmp.name, "emptyhome")
+        os.makedirs(home)
+        env = self.restricted_environment(home)
+        build = os.path.join(self.tmp.name, "absent")
+        result = subprocess.run([CMAKE, "-S", REPO, "-B", build, "-DBUILD_TESTS=OFF", "-DANTS_BUILD_APP=OFF", "-DCMAKE_CXX_COMPILER=" + TOOLS["c++"]],
+                                capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("ccache: not used (not found)", result.stdout)
+        self.assertNotIn("ccache: using", result.stdout)
 
     def test_the_build_id_target_and_the_generated_header_do_not_depend_on_ccache(self):
         out, build = self.configure("with", path_first=self.fake_bin)

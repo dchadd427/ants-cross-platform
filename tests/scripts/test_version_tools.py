@@ -141,8 +141,13 @@ def have(tool):
     return shutil.which(tool) is not None
 
 
+# the programs are found once, with the environment as the run started (a test that changes PATH or HOME must not lose them)
+CMAKE = shutil.which("cmake")
+GIT = shutil.which("git")
+
+
 def git(root, *args):
-    return subprocess.run(["git", "-C", root, *args], capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run([GIT, "-C", root, *args], capture_output=True, text=True, check=True).stdout.strip()
 
 
 def make_repo(root):
@@ -171,8 +176,8 @@ class StampScript(unittest.TestCase):
 
     def stamp(self, build_id="", git_exe="__git__"):
         if git_exe == "__git__":
-            git_exe = shutil.which("git") or ""
-        args = ["cmake", "-DSOURCE_DIR=" + self.src, "-DOUT_FILE=" + self.out, "-DGIT_EXECUTABLE=" + git_exe, "-DANTS_BUILD_ID=" + build_id, "-P", STAMP]
+            git_exe = GIT or ""
+        args = [CMAKE, "-DSOURCE_DIR=" + self.src, "-DOUT_FILE=" + self.out, "-DGIT_EXECUTABLE=" + git_exe, "-DANTS_BUILD_ID=" + build_id, "-P", STAMP]
         result = subprocess.run(args, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         return read(self.out)
