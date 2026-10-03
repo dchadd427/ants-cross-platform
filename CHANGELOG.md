@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.1.3 - 2026-10-03 - Deploys wait for an idle server; faster checks
+
+**For players:**
+- No change in the game itself. For whoever runs a server: the game server answers `GET /busy` with the number of matches that are loading or running and the people in rooms (two counts, no names, no codes), and the site's proxy routes `/busy` to it, so that an update can wait for a moment when nobody plays.
+- Behind the scenes: GitHub can now deploy the site itself after every test has passed, and it waits for an idle server first (up to three hours); the site owner switches this on with one secret (docs/WORKFLOW.md). A staging copy of the site can run next to it (`docker-compose.staging.yml`, its pages say "staging"). The tests run in parallel (the full run in about 2.5 minutes instead of 6 to 8), the Windows builds use a compiler cache, and a release is one command (`tools/release.py`).
+
+**Rules / network:** None: the rules and network protocol 11 are unchanged.
+
+**Fixes:**
+- CI's script and python steps report every failure instead of stopping at the first.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b8d2603...e40591f), [workflow](docs/WORKFLOW.md)
+
 ## v0.1.2 - 2026-10-03 - Treasure is the default map; the web page opens in 16:9
 
 **For players:**
