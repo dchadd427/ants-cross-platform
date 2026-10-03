@@ -39,7 +39,7 @@ print_usage() {
     echo "Options:"
     echo "  --fast           The quick tier, for every change: the asset, simulation, network-core and application MODEL suites that need no window and finish in seconds,"
     echo "                   plus the repository checks (version / changelog consistency, tool and script tests). No E2E, no script suites that start the game, no"
-    echo "                   sanitizer, none of the slow suites (lock-step soak, server, worker bot, network application): CI runs everything for every push"
+    echo "                   sanitizer, none of the slow suites (lock-step soak, server, worker bot, network application): CI runs everything for every pull request"
     echo "  --all            Run all test suites (libants-assets + libants-sim + libants-app + E2E + repository checks, default)"
     echo "  --assets         Run only asset decoder tests (test_assets)"
     echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker) and server suites)"

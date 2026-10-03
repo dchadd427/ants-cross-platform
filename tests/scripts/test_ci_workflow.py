@@ -246,6 +246,49 @@ class Actions(unittest.TestCase):
         self.assertNotIn("write", extra)
 
 
+class Documents(unittest.TestCase):
+    """What the documents say about the pipeline is what the files do (the documents name them instead of restating them where they can; these are the facts that they must state)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = read(os.path.join(REPO, "docs", "WORKFLOW.md"))
+        cls.agents = read(os.path.join(REPO, "AGENTS.md"))
+        cls.readme = read(os.path.join(REPO, "README.md"))
+        cls.staging = read(os.path.join(REPO, "docker-compose.staging.yml"))
+
+    def test_the_required_checks_are_named_where_a_person_decides_about_merging(self):
+        for name in ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten, Docker image)"):
+            self.assertIn(name, self.workflow)
+            self.assertIn(name, self.agents)
+        for name in ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten)"):                 # (the README's table has a column for each)
+            self.assertIn("| " + name + " |", self.readme)
+
+    def test_the_secrets_and_the_switch_over_are_explained(self):
+        for needle in ("PORTAINER_WEBHOOK_URL", "PORTAINER_STAGING_WEBHOOK_URL", "deploy secret not set: skipped", "delete the repository webhook", "refs/heads/staging", "docker-compose.staging.yml"):
+            self.assertIn(needle, self.workflow)
+        self.assertIn("PORTAINER_WEBHOOK_URL", self.readme)
+
+    def test_the_staging_ports_of_the_document_are_those_of_the_compose_file(self):
+        defaults = re.findall(r"\$\{ANTS_STAGING_[A-Z_]+:-(\d+)\}", self.staging)
+        self.assertEqual(sorted(defaults), ["19981", "4003", "4004", "4011"])
+        for port in defaults:
+            self.assertIn(port, self.workflow)
+        for variable in re.findall(r"\$\{(ANTS_STAGING_[A-Z_]+):-", self.staging):
+            self.assertIn(variable, self.workflow)
+
+    def test_the_agents_rules_say_what_the_workflow_says(self):
+        for needle in ("pull request", "CI Is the One Full Gate", "merge commit", "tools/mutate.py", "AddressSanitizer and UBSan", "Short Documents"):
+            self.assertIn(needle, self.agents)
+        for stale in ("Push to `origin main`", "fast-forward", "Mandatory Dual Local", "Mandatory Docker Web Build"):
+            self.assertNotIn(stale, self.agents)
+            self.assertNotIn(stale, self.workflow)
+        self.assertIn("no sanitizer job", self.workflow)
+
+    def test_every_tool_that_the_workflow_page_names_exists(self):
+        for path in re.findall(r"`(tools/[a-z_]+\.(?:py|sh))`", self.workflow) + re.findall(r"`(tests/scripts/[a-z_]+\.(?:py|sh))`", self.workflow):
+            self.assertTrue(os.path.isfile(os.path.join(REPO, path)), path)
+
+
 try:
     import yaml
 except ImportError:                                                                        # (macOS runners have no PyYAML: the text checks above are the guard there)
