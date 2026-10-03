@@ -308,6 +308,54 @@
             pointer-events: auto;
         }
 
+        /* The name step of a link that somebody shared (see runNameStep): a card over the whole page, so that it fits any screen (the loading screen's box of a phone held upright is small). The game
+           does not start, and so does not connect, before its button (or Enter). */
+        .name-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(8, 12, 9, 0.84);
+        }
+        .name-modal[hidden] { display: none; }
+        .name-step {
+            padding: 16px 18px;
+            width: min(380px, 100%);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            background: #1c231e;
+            text-align: left;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+        }
+        .name-step-title { color: var(--accent-gold); font-weight: bold; margin-bottom: 10px; overflow-wrap: anywhere; }
+        .name-step label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 4px; }
+        .name-step-row { display: flex; gap: 8px; }
+        .name-step input {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 8px 10px;
+            font-size: 16px;
+            color: #d0e0d4;
+            background: #0f1411;
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+        }
+        .name-step button {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #fff;
+            background: #22c55e;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .name-step-msg { min-height: 1.1em; margin-top: 6px; font-size: 0.8rem; color: #fca5a5; }
+        .name-step-hint { margin-top: 6px; font-size: 0.78rem; color: var(--text-dim); }
+
         .splash-card {
             text-align: center;
             padding: 24px;
@@ -760,6 +808,19 @@
         <button type="button" id="pseudo-exit" aria-label="Leave fullscreen" title="Leave fullscreen">&times;</button>
     </div>
 
+    <div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>
+        <div class="name-step">
+            <div class="name-step-title" id="name-step-title">Join the match</div>
+            <label for="name-step-input">Your name</label>
+            <div class="name-step-row">
+                <input type="text" id="name-step-input" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="name-step-msg">
+                <button type="button" id="name-step-go">Join</button>
+            </div>
+            <div class="name-step-msg" id="name-step-msg" role="alert"></div>
+            <div class="name-step-hint">The name the other players see. Leave it empty to play as Player.</div>
+        </div>
+    </div>
+
     <div class="view-bar" id="view-bar">
         <span id="view-bar-label">Picture</span>
         <div class="seg" role="radiogroup" aria-labelledby="view-bar-label">
@@ -893,7 +954,7 @@
         //   snapOffset where the box must stand for an exact pointer
         //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
         //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
-        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; badDownload whether a download is not the game data
+        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
 
@@ -1074,6 +1135,31 @@
                 return out;
             }
 
+            // Does this address make the page ASK for a name before the game connects? A link that somebody shared does: a join of a room (a door and a room code that joinArguments accepts), not a
+            // frame of another page (embed), and with no `name` parameter at all. The page that makes an address of its own (web/four.html: its frames, its windows and its Join button) always puts
+            // the name in, empty or not, because its player chose it there ("name=" with nothing behind it is a name that was chosen: none), so such an address asks nobody.
+            function asksForName(search) {
+                var q;
+                try { q = new URLSearchParams(search); } catch (e) { return false; }
+                var join = q.get('join');
+                var room = q.get('room');
+                if (!(join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1)) return false;
+                if (!(room && /^[A-Za-z0-9_-]{1,32}$/.test(room))) return false;
+                return q.get('embed') !== '1' && !q.has('name');
+            }
+            // The address without its `name` parameter: a game that was given a name by the page that opened it must not hand that name on to whoever is sent the address from its address bar
+            // (the person that opens the copy is asked, like for any shared link).
+            function withoutName(search) {
+                var text = String(search);
+                if (text.charAt(0) !== '?') return text;
+                var kept = text.slice(1).split('&').filter(function (part) {
+                    var key = part.split('=')[0];
+                    try { key = decodeURIComponent(key.replace(/\+/g, ' ')); } catch (e) { /* a key that does not decode is not `name` */ }
+                    return key !== 'name';
+                });
+                return kept.length ? '?' + kept.join('&') : '';
+            }
+
             // Is what came back for index.data the data? A captive portal or an error page is served with "200 OK" and a body that is not the package: its type is HTML and it is far
             // smaller than the package. null: it is the data; else the reason. `expected` is the package's exact size in bytes when the build knows it (the Dockerfile writes it into
             // the page; 0 when it does not), else anything under a megabyte (the package is 14.7 MB) is not it.
@@ -1103,7 +1189,7 @@
             }
 
             return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, badDownload: badDownload,
+                     lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, asksForName: asksForName, withoutName: withoutName, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
@@ -1143,6 +1229,101 @@
             });
         })();
         // ANTS_PAGE_END
+        // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/four.html and web/shell.html carry the same text)
+        // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
+        // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
+        // 32 characters, and nothing that starts with "Bot (" (blanks and case ignored: a computer player is always shown as one, so a room would rename such a name; here it is refused, with the reason).
+        // An empty name is fine on the web: it means that none was chosen (the game's own "Player", or a random name where the page has seats to name). nameCheck(text) is { ok: true, name } or
+        // { ok: false, why }, why being a short line for the person. A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
+        var NAME_KEY = 'ants.name';
+        var NAME_MAX = 32;
+        function nameCheck(text) {
+            var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
+            if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
+            var name = raw.replace(/^ +/, '').replace(/ +$/, '');
+            if (name.length > NAME_MAX) return { ok: false, why: 'A name has at most ' + NAME_MAX + ' characters.' };
+            if (name.replace(/ /g, '').toLowerCase().indexOf('bot(') === 0) return { ok: false, why: 'A name that starts with "Bot (" is for computer players. Please choose another name.' };
+            return { ok: true, name: name };
+        }
+        // THE NAME STEP of a link that somebody else shared (the owner: "when joining a link from somebody else, it should ask you first what you want your name to be"): the field is filled in with
+        // the name that this browser remembered (ants.name), the person sees it and may change it, and only the button (or Enter) with a name that nameCheck accepts goes on: onDone(name) is called
+        // once with the name ('' for none, which is fine) and the name is remembered. A bad name is explained in ui.message and nothing happens. ui is { input, button, message, show(), hide() }, store
+        // is { recall(key), remember(key, value) } (the browser's storage, which may refuse: neither may throw).
+        function runNameStep(ui, store, onDone) {
+            var done = false;
+            var remembered = nameCheck(store.recall(NAME_KEY));
+            ui.input.value = remembered.ok ? remembered.name : '';
+            ui.show();
+            function confirm() {
+                if (done) return;
+                var checked = nameCheck(ui.input.value);
+                if (!checked.ok) { ui.message.textContent = checked.why; return; }
+                done = true;
+                ui.message.textContent = '';
+                store.remember(NAME_KEY, checked.name);
+                ui.hide();
+                onDone(checked.name);
+            }
+            ui.button.addEventListener('click', confirm);
+            ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
+            ui.input.addEventListener('input', function () { ui.message.textContent = ''; });
+            return confirm;
+        }
+        // NAME_END
+
+        // NAMEGATE_BEGIN (tests/scripts/web_name_check.js runs this block)
+        // The game of a link that somebody shared starts only when its player has chosen a name: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after the
+        // name step is done, which puts the name into the game's arguments (--name; none for an empty name: the game's own Player) and opens the gate. The game does not connect before it starts.
+        function makeNameGate(pending, args, ui, store) {
+            var open = !pending;
+            var waiting = [];
+            var gate = {
+                pending: function () { return !open; },
+                when: function (fn) { if (open) fn(); else waiting.push(fn); },
+                open: function () { open = true; var run = waiting; waiting = []; run.forEach(function (fn) { fn(); }); }
+            };
+            if (pending) {
+                runNameStep(ui, store, function (name) {
+                    if (name) args.push('--name', name);
+                    gate.open();
+                });
+            }
+            return gate;
+        }
+        // NAMEGATE_END
+
+        // The name step of a shared link (the gate above): a card in the loading screen, filled in with the name that this browser remembered. The address of a game that was opened with a name by
+        // web/four.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
+        var ANTS_NAME_GATE = (function () {
+            var asks = !ANTS_EMBED && ANTS_PAGE.asksForName(window.location.search);
+            if (!ANTS_EMBED) {
+                var stripped = ANTS_PAGE.withoutName(window.location.search);
+                if (stripped !== window.location.search) {
+                    try { window.history.replaceState(null, '', window.location.pathname + stripped + window.location.hash); } catch (e) { /* the address stays as it is */ }
+                }
+            }
+            var card = document.getElementById('name-step');
+            var ui = {
+                input: document.getElementById('name-step-input'),
+                button: document.getElementById('name-step-go'),
+                message: document.getElementById('name-step-msg'),
+                show: function () {
+                    var room = '';
+                    try { room = new URLSearchParams(window.location.search).get('room') || ''; } catch (e) { /* no address to read */ }
+                    document.getElementById('name-step-title').textContent = 'Join the match ' + room;      // (text: the room code passed asksForName's rule)
+                    card.hidden = false;
+                    try { ui.input.focus(); } catch (e) { /* nothing to focus */ }
+                },
+                hide: function () {
+                    card.hidden = true;
+                }
+            };
+            var store = {
+                recall: function (key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } },
+                remember: function (key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
+            };
+            return makeNameGate(asks, ANTS_ARGS, ui, store);
+        })();
 
         var Module = {
             arguments: ANTS_ARGS,
@@ -1925,7 +2106,7 @@
                     if (!isReadyToPlay) showDownloadError(new Error('the game did not start within ' + Math.round(START_TIMEOUT_MS / 1000) + ' s'), 'program');
                 }, START_TIMEOUT_MS);
             }
-            if (!window.fetch || !window.Promise || !window.Uint8Array) { startGame(); return; }
+            if (!window.fetch || !window.Promise || !window.Uint8Array) { ANTS_NAME_GATE.when(startGame); return; }
 
             function rememberedSize() {
                 if (ANTS_DATA_SIZE > 0) return ANTS_DATA_SIZE;
@@ -2016,7 +2197,8 @@
                 remember(bytes.byteLength);
                 progressFill.style.width = '100%';
                 antsDataPackage = bytes;
-                startGame();
+                if (ANTS_NAME_GATE.pending() && statusElement) statusElement.textContent = 'The game is ready. Choose your name to join the match.';
+                ANTS_NAME_GATE.when(startGame);                              // (a link that somebody shared waits for the name: the game does not connect before)
             }, function(error) {
                 console.error('[download] the game data could not be downloaded:', error);
                 showDownloadError(error, 'data');

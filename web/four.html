@@ -122,7 +122,7 @@
         .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border: 1px solid #888; }
         footer { max-width: 1320px; margin: 12px auto 0; color: var(--text-dim); font-size: 0.8rem; line-height: 1.5; }
     
-        #setup, #join, #room-panel {
+        #who, #setup, #join, #room-panel {
             max-width: 1320px;
             margin: 0 auto 10px;
             padding: 12px;
@@ -130,7 +130,7 @@
             border-radius: 6px;
             background: var(--panel-bg);
         }
-        #setup h2, #join h2, #room-panel h2 { font-size: 0.95rem; color: var(--accent-gold); margin-bottom: 8px; letter-spacing: 0.5px; }
+        #who h2, #setup h2, #join h2, #room-panel h2 { font-size: 0.95rem; color: var(--accent-gold); margin-bottom: 8px; letter-spacing: 0.5px; }
         .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
         .row label { color: var(--text-dim); font-size: 0.85rem; }
         .fillchoice { display: flex; flex-direction: column; gap: 3px; }
@@ -146,6 +146,8 @@
         .seatrow .who { min-width: 150px; font-size: 0.9rem; }
         .seatrow .state { color: var(--text-dim); font-size: 0.8rem; min-width: 90px; }
         .btn.small { padding: 4px 10px; min-height: 30px; font-size: 0.78rem; }
+        .msg { color: var(--accent-red); font-size: 0.82rem; margin-top: 2px; }
+        .msg:empty { display: none; }
         [hidden] { display: none !important; }
 </style>
 </head>
@@ -166,6 +168,17 @@
             <a class="btn" href="/">Single game</a>
         </div>
     </header>
+
+    <section id="who">
+        <h2 id="who-title" hidden>Join the match</h2>
+        <div class="row">
+            <label for="player-name">Your name</label>
+            <input type="text" id="player-name" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Your name" aria-describedby="who-hint name-msg" style="flex: 0 1 240px">
+            <button id="who-go" type="button" class="btn primary" hidden>Join</button>
+        </div>
+        <div class="hint" id="who-hint">The name your ants play under, for the seat you play: the one you play when you host a match, the one you get when you join one. Leave it empty for a random name when you host and Player when you join. This browser remembers it.</div>
+        <div class="msg" id="name-msg" role="alert"></div>
+    </section>
 
     <section id="setup" hidden>
         <h2>New match</h2>
@@ -200,8 +213,6 @@
         <div class="row">
             <label for="join-code">Room code</label>
             <input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Room code">
-            <label for="join-name">Your name</label>
-            <input type="text" id="join-name" placeholder="Player" maxlength="32" autocomplete="off" aria-label="Your name" style="flex: 0 1 160px">
             <button id="join-go" type="button" class="btn primary">Join</button>
         </div>
         <div class="hint" id="join-hint">The code of a match that somebody else made here (they see it above their seats). It takes you into the game in this window and gives you the first free seat; the match starts by itself when all its seats are filled, or earlier: the first player in the room can start it with START once at least 2 players are in.</div>
@@ -255,12 +266,90 @@
         var DEFAULT_MAP_KEY = 'treasure';
         var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
         var names = NAMES.slice().sort(function () { return 0.5 - Math.random(); });
+        // SEATNAMES_BEGIN (tests/scripts/web_name_check.js runs this block)
+        // The name that each seat plays under on this page. The name that was typed goes to the FIRST seat that this page starts (the player's own seat: the one hosted from here, or the one joined here);
+        // every other seat that the page starts (playing every seat on one page is a way of testing) keeps a random name, and with no typed name every seat has a random one. typed() is the name in
+        // the field when a seat starts ('' for none); peek(seat) is the name a row shows, start(seat) the name a seat starts with (and the claim of the first start).
+        function makeSeatNames(typed, random) {
+            var started = false;
+            var first = -1;
+            var claimed = '';
+            return {
+                peek: function (seat) { return first === seat ? claimed : random[seat]; },
+                start: function (seat) {
+                    if (!started) {
+                        started = true;
+                        var name = typed();
+                        if (name) { first = seat; claimed = name; }
+                    }
+                    return first === seat ? claimed : random[seat];
+                },
+                typedSeat: function () { return first; }
+            };
+        }
+        // SEATNAMES_END
 
         // HELPERS_BEGIN (tests/scripts/web_aspect_key_check.js runs these three functions, the block of the picture's shape and the selector's listener below)
         function $(id) { return document.getElementById(id); }
         function remember(key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
         function recall(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
         // HELPERS_END
+        // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/four.html and web/shell.html carry the same text)
+        // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
+        // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
+        // 32 characters, and nothing that starts with "Bot (" (blanks and case ignored: a computer player is always shown as one, so a room would rename such a name; here it is refused, with the reason).
+        // An empty name is fine on the web: it means that none was chosen (the game's own "Player", or a random name where the page has seats to name). nameCheck(text) is { ok: true, name } or
+        // { ok: false, why }, why being a short line for the person. A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
+        var NAME_KEY = 'ants.name';
+        var NAME_MAX = 32;
+        function nameCheck(text) {
+            var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
+            if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
+            var name = raw.replace(/^ +/, '').replace(/ +$/, '');
+            if (name.length > NAME_MAX) return { ok: false, why: 'A name has at most ' + NAME_MAX + ' characters.' };
+            if (name.replace(/ /g, '').toLowerCase().indexOf('bot(') === 0) return { ok: false, why: 'A name that starts with "Bot (" is for computer players. Please choose another name.' };
+            return { ok: true, name: name };
+        }
+        // THE NAME STEP of a link that somebody else shared (the owner: "when joining a link from somebody else, it should ask you first what you want your name to be"): the field is filled in with
+        // the name that this browser remembered (ants.name), the person sees it and may change it, and only the button (or Enter) with a name that nameCheck accepts goes on: onDone(name) is called
+        // once with the name ('' for none, which is fine) and the name is remembered. A bad name is explained in ui.message and nothing happens. ui is { input, button, message, show(), hide() }, store
+        // is { recall(key), remember(key, value) } (the browser's storage, which may refuse: neither may throw).
+        function runNameStep(ui, store, onDone) {
+            var done = false;
+            var remembered = nameCheck(store.recall(NAME_KEY));
+            ui.input.value = remembered.ok ? remembered.name : '';
+            ui.show();
+            function confirm() {
+                if (done) return;
+                var checked = nameCheck(ui.input.value);
+                if (!checked.ok) { ui.message.textContent = checked.why; return; }
+                done = true;
+                ui.message.textContent = '';
+                store.remember(NAME_KEY, checked.name);
+                ui.hide();
+                onDone(checked.name);
+            }
+            ui.button.addEventListener('click', confirm);
+            ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
+            ui.input.addEventListener('input', function () { ui.message.textContent = ''; });
+            return confirm;
+        }
+        // NAME_END
+
+        // The name field is shared by Host and Join. It is filled in with the name that this browser remembered; readName() is its check: a bad name is explained under the field and nothing
+        // starts, a good one (or none) is remembered.
+        var nameInput = $('player-name');
+        var nameMsg = $('name-msg');
+        (function () { var remembered = nameCheck(recall(NAME_KEY)); nameInput.value = remembered.ok ? remembered.name : ''; })();
+        function readName() {
+            var checked = nameCheck(nameInput.value);
+            nameMsg.textContent = checked.ok ? '' : checked.why;
+            if (checked.ok) { nameInput.removeAttribute('aria-invalid'); remember(NAME_KEY, checked.name); }
+            else { nameInput.setAttribute('aria-invalid', 'true'); try { nameInput.focus(); } catch (e) { /* no focus to give */ } }
+            return checked;
+        }
+        nameInput.addEventListener('input', function () { nameMsg.textContent = ''; nameInput.removeAttribute('aria-invalid'); });
+        var seatNames = makeSeatNames(function () { var checked = nameCheck(nameInput.value); return checked.ok ? checked.name : ''; }, names);
         function randomCode() {
             var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';
             var buf = new Uint32Array(6);
@@ -372,15 +461,34 @@
         }, 1000);
 
         // ---- the seats: on this page (a frame), in a window of its own, or a link for somebody else ----
-        function gameUrl(seat, withAspect) {            // a link to the game page of this site (never taken from the path of this page: a path that starts with // would leave the site)
+        // A link to the game page of this site (never taken from the path of this page: a path that starts with // would leave the site). `own`: the game is one of this page's own (a frame, a window): it
+        // carries the picture's shape and the NAME of its seat (the name always has its parameter, empty or not: the name was chosen on this page). A link for somebody else carries no name: the game
+        // page asks whoever opens it what they want to be called.
+        function gameUrl(seat, own) {
             var q = '?join=/ws&room=' + encodeURIComponent(room);
             if (fill) q += '&fill=' + fill;                // (the game takes it as --fill-bots; it matters for the leader only)
-            if (seat >= 0) q += '&seat=' + seat + '&name=' + encodeURIComponent(names[seat]);
-            if (withAspect || aspectFromAddress) q += '&aspect=' + aspect;
+            if (seat >= 0) q += '&seat=' + seat;
+            if (own && seat >= 0) q += '&name=' + encodeURIComponent(seatNames.start(seat));
+            if (own || aspectFromAddress) q += '&aspect=' + aspect;
             return new URL('./' + q, window.location.href).href;
         }
+        // What a seat shows of itself: its colour's dot, its colour, and the name that it plays under (text only: a typed name may hold < > &)
+        function fillWho(holder, seat, strong) {
+            while (holder.firstChild) holder.removeChild(holder.firstChild);
+            var dot = document.createElement('span');
+            dot.className = 'dot ' + SEATS[seat].css;
+            var colour = document.createElement(strong ? 'strong' : 'span');
+            if (!strong) colour.className = 'seat';
+            colour.textContent = SEATS[seat].name;
+            holder.appendChild(dot);
+            holder.appendChild(colour);
+            holder.appendChild(document.createTextNode(' \u00b7 ' + seatNames.peek(seat)));
+        }
+        var seatWho = [null, null, null, null];         // the elements that show a seat's name (the row's and the cell's), to be shown again when the seat takes the typed name
+        function showSeatNames(seat) { (seatWho[seat] || []).forEach(function (holder) { fillWho(holder.el, seat, holder.strong); }); }
         function setRowState(seat, text) { if (rows[seat]) rows[seat].state.textContent = text; }
         function playHere(seat) {
+            if (!inFrame[seat] && !readName().ok) return false;       // a bad name starts nothing (the field says why)
             if (inFrame[seat]) {                     // again: reconnect that seat (a frame whose game lost its connection, or a room that was made again)
                 if (frames[seat]) frames[seat].src = gameUrl(seat, true) + '&embed=1';
                 setRowState(seat, 'on this page (reconnected)');
@@ -392,32 +500,41 @@
             cell.setAttribute('data-seat', String(seat));      // the place on the page comes from the seat number (CSS above), not from the order the seats were started in
             var label = document.createElement('div');
             label.className = 'label';
-            label.innerHTML = '<span><span class="dot ' + SEATS[seat].css + '"></span><span class="seat">' + SEATS[seat].name + '</span> &middot; ' + names[seat] + '</span><span class="info">connecting...</span>';
+            var who = document.createElement('span');
+            var info = document.createElement('span');
+            info.className = 'info';
+            info.textContent = 'connecting...';
+            label.appendChild(who);
+            label.appendChild(info);
             var frame = document.createElement('div');
             frame.className = 'frame';
             var iframe = document.createElement('iframe');
             iframe.setAttribute('allow', 'autoplay; fullscreen');
             iframe.setAttribute('title', SEATS[seat].name + ' player');
-            iframe.src = gameUrl(seat, true) + '&embed=1';
+            iframe.src = gameUrl(seat, true) + '&embed=1';              // (the seat takes its name here: the first seat of this page takes the typed one)
+            (seatWho[seat] = seatWho[seat] || []).push({ el: who, strong: false });
+            showSeatNames(seat);
             frames[seat] = iframe;
             frame.appendChild(iframe);
             cell.appendChild(label);
             cell.appendChild(frame);
             $('grid').appendChild(cell);
             cells[seat] = cell;
-            labels[seat] = label.querySelector('.info');
+            labels[seat] = info;
             iframe.addEventListener('load', function () { iframe.contentWindow.addEventListener('focus', function () { setFocus(seat); }); });
             setRowState(seat, 'on this page');
             $('sync').hidden = false;
             return true;
         }
         function openWindow(seat) {
+            if (!(wins[seat] && !wins[seat].closed) && !inFrame[seat] && !readName().ok) return false;     // a bad name starts nothing (the field says why)
             if (wins[seat] && !wins[seat].closed) {   // already open: bring it to the front (opening it again would reload that seat's game and drop it from the match)
                 try { wins[seat].focus(); } catch (e) { /* the browser decides */ }
                 return true;
             }
             var w = window.open(gameUrl(seat, true), 'ants-seat-' + seat + '-' + room, 'popup=yes,width=980,height=660');
             if (!w) { $('popup-hint').hidden = false; return false; }
+            showSeatNames(seat);
             wins[seat] = w;
             setRowState(seat, 'in a window');
             $('sync').hidden = false;
@@ -485,7 +602,8 @@
                 row.className = 'seatrow';
                 var who = document.createElement('span');
                 who.className = 'who';
-                who.innerHTML = '<span class="dot ' + seat.css + '"></span><strong>' + seat.name + '</strong> &middot; ' + names[i];
+                (seatWho[i] = seatWho[i] || []).push({ el: who, strong: true });
+                showSeatNames(i);
                 var st = document.createElement('span');
                 st.className = 'state';
                 st.textContent = 'not started';
@@ -499,7 +617,10 @@
                 holder.appendChild(row);
                 rows[i] = { state: st };
             });
-            $('all-here').addEventListener('click', function () { seats.forEach(function (s, i) { playHere(i); }); });
+            $('all-here').addEventListener('click', function () {
+                if (!readName().ok) return;           // (a bad name starts nothing: one message, not one per seat)
+                seats.forEach(function (s, i) { playHere(i); });
+            });
             $('all-windows').addEventListener('click', function () {
                 // the seats that are not open yet (a browser lets one click open one window unless pop-ups are allowed for the site: click again after allowing them)
                 $('popup-hint').hidden = true;
@@ -555,42 +676,60 @@
         var wantedPlayersText = params.get('players');
         var wantedPlayers = (wantedPlayersText === '2' || wantedPlayersText === '3' || wantedPlayersText === '4') ? Number(wantedPlayersText) : 4;
         var wantedFill = validFill(params.get('fill'));
-        if (wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted)) {
-            var d = describeCode(wanted);
-            startRoom(wanted, d.map, params.get('play') === 'here' ? 'here' : '', d.players, wantedFill);
-        } else if (wantedMap && mapByKey(wantedMap.toLowerCase())) {
-            create(wantedMap.toLowerCase(), params.get('play') === 'here' ? 'here' : '', wantedPlayers, wantedFill);
-        } else {
-            $('setup').hidden = false;
-            $('join').hidden = false;
+        var asksRoom = !!(wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted));
+        var asksMap = !asksRoom && !!(wantedMap && mapByKey(wantedMap.toLowerCase()));
+        function fromAddress() {                    // what the address asks for, once the name step (if there is one) is done
+            if (wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted)) {
+                var d = describeCode(wanted);
+                startRoom(wanted, d.map, params.get('play') === 'here' ? 'here' : '', d.players, wantedFill);
+            } else if (wantedMap && mapByKey(wantedMap.toLowerCase())) {
+                create(wantedMap.toLowerCase(), params.get('play') === 'here' ? 'here' : '', wantedPlayers, wantedFill);
+            } else {
+                $('setup').hidden = false;
+                $('join').hidden = false;
+            }
         }
-        $('create').addEventListener('click', function () { create(mapSelect.value, '', Number(playersSelect.value), fillSelect.value); });
+        // A match that an address asks for is the page of somebody who was sent a link: they are asked for a name first, every time, even when this browser remembers one (the owner: "when joining a link
+        // from somebody else, it should ask you first what you want your name to be"), and nothing starts before. The test mode ?play=here starts every seat at once and asks nobody.
+        if ((asksRoom || asksMap) && params.get('play') !== 'here') {
+            var generalHint = $('who-hint').textContent;
+            $('who-title').textContent = asksRoom ? 'Join the match ' + wanted : 'Host a match';
+            $('who-go').textContent = asksRoom ? 'Join' : 'Host';
+            runNameStep({
+                input: nameInput, button: $('who-go'), message: nameMsg,
+                show: function () {
+                    $('who-title').hidden = false;
+                    $('who-go').hidden = false;
+                    $('who-hint').textContent = (asksRoom ? 'The name your ants play under in this match: the seat that you play from this page takes it.' : 'The name your ants play under in the match that you host from this page.') +
+                        ' Leave it empty for a random name. This browser remembers it.';
+                },
+                hide: function () { $('who-title').hidden = true; $('who-go').hidden = true; $('who-hint').textContent = generalHint; }
+            }, { recall: recall, remember: remember }, fromAddress);
+        } else {
+            fromAddress();
+        }
+        $('create').addEventListener('click', function () {
+            if (!readName().ok) return;               // a bad name starts nothing (the field says why)
+            create(mapSelect.value, '', Number(playersSelect.value), fillSelect.value);
+        });
 
-        // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat
-        var joinName = $('join-name');
-        var savedName = recall('ants-four-name');
-        if (savedName) joinName.value = savedName;
+        // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat, under the name of the field above (the game
+        // page gets the name's parameter even when it is empty: the name was chosen here, so it is not asked for again)
         function joinNow() {
             var code = $('join-code').value.trim();
-            var name = joinName.value.trim();
             var hint = $('join-hint');
             if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {
                 hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like demo-small-x7k2.';
                 hint.style.color = 'var(--accent-red)';
                 return;
             }
-            if (name && !/^[\x20-\x7e]{1,32}$/.test(name)) {
-                hint.textContent = 'The name may hold printable ASCII characters only (up to 32).';
-                hint.style.color = 'var(--accent-red)';
-                return;
-            }
-            remember('ants-four-name', name);
-            var q = '?join=/ws&room=' + encodeURIComponent(code) + (name ? '&name=' + encodeURIComponent(name) : '') + (aspectFromAddress ? '&aspect=' + aspect : '');
+            var checked = readName();
+            if (!checked.ok) return;                  // the field says why
+            var q = '?join=/ws&room=' + encodeURIComponent(code) + '&name=' + encodeURIComponent(checked.name) + (aspectFromAddress ? '&aspect=' + aspect : '');
             window.location.assign(new URL('./' + q, window.location.href).href);
         }
         $('join-go').addEventListener('click', joinNow);
         $('join-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
-        joinName.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
 
         // SELECTOR_BEGIN
         $('aspect-select').addEventListener('change', function () {
