@@ -176,3 +176,62 @@ Each deliberate fault was put into a scratch copy of the sources (the library ob
 - A hill with many more workers than the gate can serve is not helped by the bot (it sends them all to work): see "Known limits" in `docs/BOTS.md`.
 - Emscripten: the new library files (`tasks.cpp`, `worker_bot.cpp`, `baselines.cpp`) use only `<algorithm>`, `<map>`, `<set>`, `<utility>`, `<vector>`, `<string>`, `<array>` and the existing arena; the image's toolchain was NOT run for this patch, nor `docker build -t ants-beta .`; the owner's release routine (both Docker builds, a clean-clone build, new files tracked) still applies. New files: `include/ants_ai/tasks.hpp`, `worker_bot.hpp`, `baselines.hpp`, `src/ants_ai/tasks.cpp`, `worker_bot.cpp`, `baselines.cpp`, `tests/test_ai/baselines.inc`, `test_ai_worker.cpp`, `test_ai_worker_main.cpp`, `docs/audit/B3_notes.md`.
 - `run_tests.bat` does not run the bot suites (none of B1, B2, B3).
+
+
+## Start hold (v0.1.1): the bots wait for the "Get ready to play!" dialog
+
+The owner, playing v0.1.0 against bots: "the bots are able to move before the players can move, which should not be the case." Cause: every match opens with the original's "Get ready to play!" dialog, which takes every click and key for 100 ticks (5 s) while the simulation already runs (`HUD::update` counts them; only the top window of the original gets input), and `BotController::add` seated a bot with a first look on tick 1 + seat and a FULL bucket, so every level moved before a person could (Hard about 0.5 s into the match, Medium 1.3 s, Easy 3 s; a Hard bot could send ten orders in one tick). Every bot goes through that controller (a local game, a LAN host's bot seats, the server's rooms, the arena), so one change covers all of them.
+
+**What changed.** One constant `sim::kMatchStartHoldTicks` = 100 (`include/ants_sim/sim_engine.hpp`, `static_assert`ed to 5000 ms), which the HUD's dialog uses (`HUD::MATCH_START_MODAL_DURATION_TICKS`: its behaviour is unchanged, the view fingerprints did not move) and which is the default of `BotController::set_start_hold` and of the new `ArenaSpec::start_hold`: (a) the first look of a seat is on tick `max(now + 1, 100) + seat`; (b) every release is clamped to at least tick 100; (c) the bucket starts with one token and does not refill up to tick 100 (the first refill is on tick 101); (d) a seat that comes after tick 100 has no hold and starts with one token as well. `set_start_hold(0)` switches all of it off and restores the opening of v0.1.0 exactly: the old pinned scripted match of AI4.5 keeps its hash (`0x60174838e5ae019f`) and its command counts (98 and 29) with `ArenaSpec::start_hold = 0`. No protocol change (`kProtocolVersion` stays 11) and no state hash of a match without bots moved (the quick tier and the application suites pass with their golden hashes as they were).
+
+**What the original says (Capstone on `Original-Ants/Ants.exe`, section 21 of `docs/GAME_REVERSE_ENGINEERING.md`, rewritten).** The dialog's constructor `0x1017127` adds the task KWFO with a delay of 5000 ms and an interval of 200 ms (`0x10174a0`, body `0x10254b0`); the body closes the dialog at the first run that finds it released (`[dialog + 0xa0]`, set by the GO handler `0x1022432` through `0x100eb59`), so it stays up at least 5.0 s: **the remake's 100 ticks are right, and the "exactly 6.0 seconds (120 ticks)" of the old text of section 21 was not in the program** (that text also named the wrong dialog class). **The game clock runs while the dialog is up**: the same GO handler starts the match clock, the ants and the other tasks, and in a game of one person GO follows the person's own READY at once (by the code; not run). Nothing in the HUD changed.
+
+**Existing tests (nothing weakened: each assertion that stays was left as it was, an expectation that moved is derived from the hold, and a test that measures something else from tick 0 keeps all its assertions with the hold off).**
+
+(i) The premise is the opening timing that this fix changes on purpose, so the expectation is updated:
+- AI2.5 (the schedule): runs both ways now, the default (first look on tick 100 + seat, a seat seated at tick 150 looks on 153) and with the hold off (every assertion of v0.1.0: tick 1 + seat, 53 for a seat seated at tick 50).
+- AI2.11 (a controller whose bots only read): the looks are counted from tick 100 (and an upper bound is added: no look before the hold); the hash equality at every tick is untouched.
+- AI3.2 (the worker's first command): no sooner than tick 100 + 75 percent of the reaction time (it was 75 percent of the reaction time).
+- AI4.3 (the arena's counts of looks): 51 and 2 in 300 ticks with the hold (Hard looks on 100, 104 ... 300; Easy, seat 1, on 101 and 201), the old 75 and 3 kept for `start_hold = 0`.
+- AI5.5 (host migration, a bot at seat 3): the mesh runs 5 s plus the 5 s of the hold before the host goes, so that the bot has played.
+- AI6.3, AI6.4, AI6.6, AI6.7, N5.71 (the application's bots): the counts of looks after 400 ticks (15 and 75: seat 1 on 101, 121, ... and seat 3 on 103, 107, ...) and the run lengths include the 100 ticks of the dialog.
+- A2.1, A2.2 (the start menu's two ways into one game): the compared state is the one at tick 200 (the dialog's 100 ticks and 100 more), so that the bots have looked; titles say so.
+
+(ii) The test measures something else from tick 0 (reaction delay, budget, filter, failure learning, the endgame, the controller's mechanics), so it switches the hold off with `set_start_hold(0)` / `start_hold = 0` and a comment that points at the hold's own tests; all its assertions are unchanged: AI2.3 (the budget in every window, against the opening bucket of v0.1.0), AI2.4 (the reaction delay; two controllers), AI2.6 (the time to live, against the bucket of two), AI2.7 (ants that die), AI2.8 (issuer and filter), AI2.9 (splitting and the HUD's rules; three controllers), AI2.10 (priorities and the cool-down; three), AI2.12 (the first three blocks: the match ending before the hold would end, the look that is long due, the team that drops out), AI2.14 (the newest order wins; four), AI1.7 (the view and the map at the first look), AI3.5 (the two whole matches of the stuck-carrier jam: they are the jam of the opening of v0.1.0, with the hold the jam may not come at all), AI3.16 (failure learning against the timings of a look on tick 1; five controllers), AI4.5 (the sink latency model and its old pinned match). AI2.13, AI2.15, AI2.16, AI3.1, AI3.3, AI3.4, AI3.7 - AI3.11, AI3.13 - AI3.15 and AI3.17 - AI3.23 pass with the hold on, unchanged.
+
+(iii) Pinned numbers of whole matches, regenerated, not edited: `tests/test_ai/baselines.inc` (AI3.12) with `bot_arena --write-baselines > tests/test_ai/baselines.inc` in the Release build (the same file with `--threads 8`), and the new pin of the AI4.5 scripted match with the hold (hash `0x5b22a0b40e3231f5`, 76 and 25 commands: printed by the test's own mismatch message, as its comment prescribes). Shift of the pinned means (mean of the four seats; old -> new; alone for two minutes, alone for the whole match, the sum of four workers):
+
+| Map | Level | Alone, 2 min | Alone, whole match | Four workers, sum |
+|---|---|---|---|---|
+| TINY | Easy | 530 -> 508 | 1530 -> 1510 | 4825 -> 4820 |
+| TINY | Medium | 619 -> 593 | 1789 -> 1763 | 4800 -> 4840 |
+| TINY | Hard | 630 -> 608 | 1823 -> 1808 | 4815 -> 4810 |
+| SMALL | Easy | 550 -> 525 | 1985 -> 1966 | 3000 -> 3025 |
+| SMALL | Medium | 556 -> 531 | 2019 -> 1994 | 3013 -> 3025 |
+| SMALL | Hard | 560 -> 538 | 2028 -> 1997 | 3038 -> 3013 |
+| MEDIUM | Easy | 330 -> 312 | 1794 -> 1778 | 4908 -> 4908 |
+| MEDIUM | Medium | 385 -> 365 | 1800 -> 1791 | 4908 -> 4900 |
+| MEDIUM | Hard | 390 -> 368 | 1804 -> 1790 | 4900 -> 4900 |
+| GAUNTLET | Easy | 117 -> 109 | 842 -> 831 | 1500 -> 1500 |
+| GAUNTLET | Medium | 124 -> 109 | 846 -> 838 | 1500 -> 1508 |
+| GAUNTLET | Hard | 126 -> 113 | 844 -> 840 | 1500 -> 1500 |
+| TREASURE | Easy | 500 -> 471 | 2779 -> 2765 | 8863 -> 8850 |
+| TREASURE | Medium | 545 -> 509 | 2977 -> 2947 | 8850 -> 8863 |
+| TREASURE | Hard | 543 -> 501 | 2977 -> 2950 | 8850 -> 8860 |
+| ISLANDS | Easy | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+| ISLANDS | Medium | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+| ISLANDS | Hard | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+
+New tests: AI2.17 (every level and seat, a bot that acts at every look: no look and no command before tick 100, first look on tick 100 + seat, first command 75 to 125 percent of the reaction time later; 30 seeds each), AI2.18 (the bucket: the exact ticks on which the commands of one look leave, against a hand-written bucket with one token and a refill from tick 101, 40 seeds per level, and a flood of twelve hundred ticks), AI2.19 (the clamp on its own: the hold is raised from 20 to 100 ticks after the seat was seated, so the seat looks on tick 20 + seat; nothing leaves before tick 100, two commands due then leave 7, 14 and 50 ticks apart at Hard, Medium and Easy), AI2.20 (seats seated at ticks 0, 60, 99, 100, 150 and 300), 12.118b (the HUD's dialog closes on the tick that the constant names; a click on an own ant on tick 99 selects nothing, on tick 100 it does), AI6.9 (a local game at every level: the dialog and the bot against the engine's ticks, a click on tick 99 and 100), AI6.10 (a host's room: the dialog follows the lock-step ticks, the guest's own turn stream has no command of the bot's seat before tick 100) and S3.74 (a server's room filled with Hard bots at the leader's START: the same stream, no turn before tick 100 carries a bot's command).
+
+**Each new test fails without the code it tests** (deliberate faults, one at a time, the suites of the new tests run: failing tests listed; `mutate.py` of the session, not kept):
+- (a) the first look ignores the hold (tick 1 + seat, the clamp still there): AI2.5, AI2.11, AI2.13, AI2.15, AI2.17, AI2.18, AI2.19, AI2.20, AI4.3 and AI4.5's pin (and AI4.7).
+- (b) no clamp: AI2.19 alone (the early look is its premise: nothing else makes one).
+- (c) the bucket starts full: AI2.18, AI2.19, AI2.20, AI4.5's pin. The bucket refills during the hold: the same four. The refill starts on tick 100 instead of 101: the same four.
+- (d) a seat seated after the hold looks at once (no stagger): AI2.5, AI2.20 and AI4.5's old pin; a seat seated after the hold starts full: AI2.20 alone.
+- the bots wait 20 ticks longer than the dialog: AI2.3 - AI2.5, AI2.7, AI2.11, AI2.17 - AI2.20, AI4.3, AI4.5.
+- the arena ignores `ArenaSpec::start_hold`: AI4.3 and AI4.5.
+- the HUD's dialog lasts 99 ticks instead of the shared constant: 12.118 and 12.118b.
+- a product path without the hold: the local game (`Application::start_local_bots`), the LAN host (`start_net_bots`) and the server room (`Room::start_bots`) each with `set_start_hold(0)`: AI6.9, AI6.10 and S3.74 fail (the two application tests also with their own check of `start_hold()` removed, so that their behaviour assertions are what catches it).
+
+**Open, and noted rather than changed.** (1) The "Play again" button of the results screen starts a new local match without the dialog (`hud_.reset()` without `start_match_modal()`, as before); its bots still wait 100 ticks, which only favours the person. (2) On a dedicated server the referee, which runs the bots, is ahead of a person's screen by the link's delay and the runner's buffer, so a bot's first order can be applied a few ticks before a person's first click can be; the protocol is not touched for this. (3) In a network game the original's dialog is made at the local READY and its clock starts at GO, so the dialog there may cover less than 5 s of clock; the remake starts both at the barrier (section 21).
