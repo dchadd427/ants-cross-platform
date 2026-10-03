@@ -54,7 +54,7 @@ The version is the single line of the file [`VERSION`](../VERSION) (`MAJOR.MINOR
 **Details:** [commits](link to the commit range), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
 ```
 
-An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. Work that is merged but not yet released is collected under `## Unreleased` at the top, and becomes the next entry when `VERSION` moves. The detailed history of every release up to v0.1.0 is [`docs/CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md) (frozen). The site builds both files into `changelog.html` (the short page, the default) and `changelog_archive.html` with `tools/changelog_to_html.py`, linked to each other and from the game page.
+An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. Work that is merged but not yet released is collected under a section headed exactly `## Next` (the same template, no version, no date) above the newest release; `tools/release.py` turns it into the next entry. The detailed history of every release up to v0.1.0 is [`docs/CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md) (frozen). The site builds both files into `changelog.html` (the short page, the default) and `changelog_archive.html` with `tools/changelog_to_html.py`, linked to each other and from the game page.
 
 ## Speed: ccache
 
