@@ -112,8 +112,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Not `brew install sdl2`: Homebrew's sdl2 is now sdl2-compat (the SDL2 interface on top of SDL3), under which eight test programs fail (pointer, canvas and
-      # pixel checks). The game is written for SDL2, so SDL2 and SDL2_ttf are built from the release sources (the versions of the owner's Mac) and cached.
+      # Not `brew install sdl2`: Homebrew's sdl2 is now sdl2-compat (the SDL2 interface on top of SDL3), under which eight test programs failed in the first run of this job
+      # (pointer, window and canvas checks, pixel fingerprints, one crash). The game is written for SDL2, so SDL2 and SDL2_ttf (with HarfBuzz, as Homebrew's and the distributions'
+      # SDL2_ttf have: the text widths that some tests pin to the pixel depend on it) are built from the release sources, the versions of the owner's Mac, and cached.
       - name: Install ccache and Ninja
         run: brew install ccache ninja
 
