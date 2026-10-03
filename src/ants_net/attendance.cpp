@@ -343,7 +343,7 @@ std::vector<uint8_t> Attendance::update(uint32_t now_ms) {
         Seat& seat = seats_[s];
         if (seat.flap && !flap_active(seat, now_ms)) {
             seat.flap = false;
-            if (!(seat.state == State::Absent && vote_time_reached(seat, s, now_ms))) seat.vote.fill(0);      // (a seat that has been away long enough stays the subject of its vote)
+            if (!(seat.state == State::Absent && away_ms(s, now_ms) >= cfg_.vote_after_ms)) seat.vote.fill(0);      // (a seat that has been away long enough stays the subject of its vote; a seat that flapped has lost its link, so its absence is no restart's: excused is false)
         }
     }
     const uint8_t subject = vote_subject(now_ms);                 // a vote that is won drops its seat (the next seat's vote starts empty: one at a time)
