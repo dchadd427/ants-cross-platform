@@ -8607,6 +8607,39 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     } TEST_END();
 
     // ------------------------------------------------------------------------
+    // 12.118b: The Dialog Lasts Exactly sim::kMatchStartHoldTicks Ticks (The Computer Players Wait For The Same Number)
+    // ------------------------------------------------------------------------
+    TEST_CASE("12.118b The \"Get Ready\" Dialog Closes On The Very Tick That sim::kMatchStartHoldTicks Names (Open After 99 Updates, Closed After 100): The Number The Computer Players Wait For; A Click On An Own Ant Is Swallowed On Tick 99 And Selects On Tick 100") {
+        ASSERT_EQ(ants::sim::kMatchStartHoldTicks, 100u);                                    // 5.0 s of 50 ms ticks: the original's task KWFO (Ants.exe 0x10254b0), first run 5000 ms after the dialog was made
+        ASSERT_EQ(ants::sim::kMatchStartHoldTicks * ants::sim::TICK_MS, 5000u);
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 100, 60000);
+        const uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
+        ViewportCamera camera;
+        camera.x = 0.0f; camera.y = 0.0f;
+        camera.world_x = 0; camera.world_y = 0;
+        HUD hud;
+        hud.init(0);
+        hud.start_match_modal();
+        WorldState world{};
+        const int32_t sx = 176 + HUD::PLAYFIELD_X;                                           // the middle of the ant at tile (5, 5), as test 7.1 clicks it
+        const int32_t sy = 176 + HUD::PLAYFIELD_Y;
+        for (uint32_t t = 1; t < ants::sim::kMatchStartHoldTicks; ++t) {                     // 99 updates: the dialog is up after each of them
+            hud.update(world, 1);
+            ASSERT_TRUE(hud.is_match_start_modal_active());
+        }
+        hud.handle_mouse_down(sx, sy, 1, sim, camera);                                        // the click of tick 99 is swallowed whole
+        hud.handle_mouse_up(sx, sy, 1, sim, camera);
+        ASSERT_TRUE(hud.get_selected_ant_ids().empty() && hud.get_selected_ant_id() == 0u && !hud.is_ant_selected(ant));
+        hud.update(world, 1);                                                                 // the 100th: the dialog is gone
+        ASSERT_FALSE(hud.is_match_start_modal_active());
+        hud.handle_mouse_down(sx, sy, 1, sim, camera);                                        // and the same click selects
+        hud.handle_mouse_up(sx, sy, 1, sim, camera);
+        ASSERT_EQ(hud.get_selected_ant_id(), ant);
+        ASSERT_TRUE(hud.is_ant_selected(ant));
+    } TEST_END();
+
+    // ------------------------------------------------------------------------
     // 12.119: Mutual Friendly Collision Bouncing (Neither Ant Static)
     // ------------------------------------------------------------------------
     TEST_CASE("12.119 A Friendly Ant Hit Into A Friendly Ant: Pile-Up Throws Both Apart (Neither Ant Static)") {

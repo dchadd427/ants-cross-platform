@@ -500,7 +500,8 @@ char** argv_of(std::vector<std::string>& args, std::vector<char*>& storage) {
     return storage.data();
 }
 
-// What a match looks like when it has just started and has run for 100 ticks: what two ways into the same game must agree on
+// What a match looks like when it has just started and has run for the 100 ticks of the "Get ready" dialog and 100 more (the bots look from the end of the dialog on): what two ways
+// into the same game must agree on
 struct Played {
     uint8_t roster{0};
     uint64_t hash{0};
@@ -525,7 +526,7 @@ Played snapshot(Application& app) {
     p.fog = app.sim().is_fog_of_war_enabled();
     for (uint8_t s = 0; s < 4; ++s) p.names[s] = app.sim().get_player_name(s);
     p.seat = app.local_player_id();
-    for (int i = 0; i < 100; ++i) app.update_simulation(0.05f);
+    for (uint32_t i = 0; i < 100u + sim::kMatchStartHoldTicks; ++i) app.update_simulation(0.05f);
     p.hash = app.sim().state_hash().total;
     if (p.bots) {
         p.decisions1 = app.bots()->stats(1).decisions;
@@ -909,7 +910,7 @@ int main(int argc, char** argv) {
         ASSERT_FALSE(refused.init(bad));
     } TEST_END();
 
-    TEST_CASE("A2.1 Single player with nobody: the match is the original's single-player game exactly: the same four teams, no bot code, the same state at tick 100 as the game that never saw the menu") {
+    TEST_CASE("A2.1 Single player with nobody: the match is the original's single-player game exactly: the same four teams, no bot code, the same state at tick 200 (the 100 ticks of the get-ready dialog and 100 more) as the game that never saw the menu") {
         TempDir temp;
         Server server;
         write_no_quick_help(temp.file("a.ini"));
@@ -956,7 +957,7 @@ int main(int argc, char** argv) {
         }
     } TEST_END();
 
-    TEST_CASE("A2.2 Single player with two bots: the match starts with exactly the bots that --bot 1:medium --bot 3:hard gives (same roster, names, bot seats, state at tick 100, decisions); the fog option refuses START with the reason, without fog it starts") {
+    TEST_CASE("A2.2 Single player with two bots: the match starts with exactly the bots that --bot 1:medium --bot 3:hard gives (same roster, names, bot seats, state at tick 200, decisions); the fog option refuses START with the reason, without fog it starts") {
         TempDir temp;
         Server server;
         write_no_quick_help(temp.file("a.ini"));

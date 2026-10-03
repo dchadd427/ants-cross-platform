@@ -209,8 +209,16 @@ void run_arena_tests() {
         ASSERT_TRUE(p.error.empty() && p.seats.size() == 3);
         ASSERT_TRUE(p.seats[0].runs == "worker" && p.seats[1].runs == "worker" && p.seats[2].runs == "idle");
         ASSERT_TRUE(p.seats[0].spec.kind == "worker" && p.seats[1].spec.kind == "standard");
-        ASSERT_EQ(p.seats[0].stats.decisions, 75u);                                              // Hard looks every 4 ticks (the first look is on tick 1)
-        ASSERT_EQ(p.seats[1].stats.decisions, 3u);                                               // Easy every 100
+        // With the start hold (the arena's default: the 100 ticks of the "Get ready to play!" dialog) the first look of seat s is on tick 100 + s: Hard looks on 100, 104, ... 300 (51 looks
+        // in 300 ticks), Easy (seat 1) on 101 and 201. Without it (the opening of v0.1.0) the first look is on tick 1 + s: 75 and 3.
+        ASSERT_EQ(p.seats[0].stats.decisions, 51u);
+        ASSERT_EQ(p.seats[1].stats.decisions, 2u);
+        ArenaSpec no_hold = placeholders;
+        no_hold.start_hold = 0;
+        const ArenaResult n = play_match(no_hold);
+        ASSERT_TRUE(n.error.empty() && n.seats.size() == 3);
+        ASSERT_EQ(n.seats[0].stats.decisions, 75u);                                              // Hard looks every 4 ticks (the first look is on tick 1)
+        ASSERT_EQ(n.seats[1].stats.decisions, 3u);                                               // Easy every 100
         // commands per second: the released commands of the whole match
         ArenaSpec w = walkers("TINY", 6, 1200, 3, 0x03);
         const ArenaResult wr = play_match(w);

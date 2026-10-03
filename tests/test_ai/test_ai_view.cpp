@@ -388,6 +388,7 @@ void run_view_tests() {
         build_world(sim, 27);
         RecordingSink sink(sim);
         BotController c(sim, 5);
+        c.set_start_hold(0);   // the view and the map at the first look, 30 ticks into the match (the start hold: AI2.17 - AI2.22)
         const MapInfo* seen_in_view = nullptr;
         bool grid_is_engine = false;
         ScriptBot* bot = nullptr;

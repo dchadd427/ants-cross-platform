@@ -173,6 +173,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     sim::CommandSink& sink = spec.latency_ticks == 0 ? static_cast<sim::CommandSink&>(direct) : static_cast<sim::CommandSink&>(delayed);
 
     BotController controller(sim, spec.seed);
+    controller.set_start_hold(spec.start_hold);                // (before the seats: it shapes their first look and their bucket)
     for (const BotSpec& b : spec.bots) {
         std::string why;
         const bool ok = spec.factory ? controller.add(b, spec.factory(b), sink, why) : controller.add(b, sink, why);

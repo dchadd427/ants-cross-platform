@@ -539,7 +539,9 @@ private:
     // Dialog & Modal State
     bool show_match_start_modal_{false};
     uint32_t match_start_modal_ticks_{0};
-    static constexpr uint32_t MATCH_START_MODAL_DURATION_TICKS = 100; // 5.0 s at 20 Hz (first timer tick of Ants.exe 0x1017127)
+    // 5.0 s at 20 Hz: the original's task KWFO (delay 5000 ms, interval 200 ms, added by the dialog's constructor 0x1017127, body 0x10254b0) closes the dialog at the first run
+    // that finds it released. The number is shared with the computer players, who wait for the same ticks (ants_sim/sim_engine.hpp).
+    static constexpr uint32_t MATCH_START_MODAL_DURATION_TICKS = sim::kMatchStartHoldTicks;
 
     bool show_quit_dialog_{false};
     UIButton yes_button_{};

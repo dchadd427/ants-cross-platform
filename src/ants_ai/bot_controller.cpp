@@ -100,8 +100,12 @@ bool BotController::add(const BotSpec& spec, std::unique_ptr<Bot> bot, sim::Comm
     s->profile = profile_for(spec.level);
     s->sink = &sink;
     s->rng = BotRng(seat_seed(match_seed_, spec.seat, bot->kind()));
-    s->tokens_milli = static_cast<int64_t>(s->profile.burst) * kToken;                     // the bucket starts full
-    s->next_decision = sim_->current_tick() + 1u + spec.seat;                              // the seats do not all think on the same tick
+    // The opening bucket. With the start hold (the default in every product path) ONE token: the first orders after the dialog come one by one, where a full bucket was a burst of up to ten
+    // commands in one tick. Without the hold (set_start_hold(0), the tests only) the opening of v0.1.0, a full bucket.
+    s->tokens_milli = hold_end_ != 0 ? kToken : static_cast<int64_t>(s->profile.burst) * kToken;
+    // The first look is on the tick that ends the start hold (set_start_hold): a bot does not act on what it saw behind the "Get ready to play!" dialog. A seat that is seated after the
+    // hold's end has no hold: its first look is on the next tick. Either way the seats do not all think on the same tick.
+    s->next_decision = std::max<uint64_t>(sim_->current_tick() + 1u, hold_end_) + spec.seat;
     s->bot = std::move(bot);
     s->bot->start(BotContext{spec.seat, s->profile, s->rng.next(), &map_});
     const auto where = std::find_if(seats_.begin(), seats_.end(), [&](const std::unique_ptr<Seat>& o) { return o->seat > spec.seat; });
@@ -119,7 +123,7 @@ void BotController::on_tick(const sim::SimulationEngine& sim) {
             continue;
         }
         if (tick >= s.next_decision) decide(sim, s, tick);
-        refill(s);
+        refill(s, tick);
         release(sim, s, tick);
     }
 }
@@ -184,6 +188,7 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
             const uint32_t d = s.profile.reaction_delay;
             const uint32_t spread = d * s.profile.jitter_percent / 100u;
             release = std::max<uint64_t>(tick + (d - spread) + s.rng.below(2u * spread + 1u), s.last_release);
+            release = std::max<uint64_t>(release, hold_end_);                              // the start hold: nothing leaves before the dialog is gone, whatever tick the look was on
             s.last_release = release;
             release_drawn = true;
         }
@@ -206,8 +211,10 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
     }
 }
 
-// The token bucket: rate_milli_cps thousandths of a command per second = rate / 20 per tick (the remainder is carried, so the rate is exact)
-void BotController::refill(Seat& s) const {
+// The token bucket: rate_milli_cps thousandths of a command per second = rate / 20 per tick (the remainder is carried, so the rate is exact). It does not fill during the start hold, the
+// hold's last tick included: the seat holds its one token, and the first refill is on the tick after the dialog has closed.
+void BotController::refill(Seat& s, uint64_t tick) const {
+    if (hold_end_ != 0 && tick <= hold_end_) return;
     const uint32_t sum = s.profile.rate_milli_cps + s.refill_carry;
     s.refill_carry = sum % kTicksPerSecond;
     s.tokens_milli = std::min<int64_t>(s.tokens_milli + sum / kTicksPerSecond, static_cast<int64_t>(s.profile.burst) * kToken);

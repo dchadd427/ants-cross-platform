@@ -51,6 +51,32 @@ size_t released_between(const RecordingSink& sink, uint64_t first, uint64_t last
 
 uint32_t level_ticks(Level l) { return profile_for(l).decision_interval; }
 
+// The token bucket of the start hold, by hand (the specification, not a copy of the controller): ONE token to begin with, nothing added up to tick `first_refill - 1`, from `first_refill` on
+// rate / 20 thousandths of a command per tick (after t ticks exactly floor(rate * t / 20): the controller carries the remainder), never more than the level's depth. `n` commands that are all due
+// on tick `due` leave one per token, each on the first tick (from `due` on) that holds one. Returns the ticks they leave on.
+std::vector<uint64_t> bucket_departures(const Profile& p, uint64_t first_refill, uint64_t due, size_t n) {
+    std::vector<uint64_t> out;
+    int64_t tokens = 1000;
+    const int64_t depth = static_cast<int64_t>(p.burst) * 1000;
+    const int64_t rate = p.rate_milli_cps;
+    int64_t refills = 0;
+    for (uint64_t t = 0; out.size() < n && t < due + 100000; ++t) {
+        if (t >= first_refill) {
+            ++refills;
+            tokens = std::min<int64_t>(tokens + rate * refills / 20 - rate * (refills - 1) / 20, depth);
+        }
+        if (t < due) continue;
+        while (tokens >= 1000 && out.size() < n) {
+            tokens -= 1000;
+            out.push_back(t);
+        }
+    }
+    return out;
+}
+
+// How many one-ant commands one look of a level proposes in the start hold tests: all of them can leave inside the time to live, and more than a bucket of one token pays at once
+size_t look_size(Level l) { return l == Level::Hard ? 8u : (l == Level::Medium ? 4u : 3u); }
+
 }  // namespace
 
 void run_controller_tests() {
@@ -60,6 +86,7 @@ void run_controller_tests() {
             build_world(sim, 3);
             RecordingSink sink(sim);
             BotController c(sim, 7);
+            c.set_start_hold(0);   // from tick 0 against the opening bucket of v0.1.0 (a full one): the budget of the start hold is AI2.18
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             ASSERT_TRUE(mine.size() >= 12);
             size_t next = 0;
@@ -103,6 +130,7 @@ void run_controller_tests() {
                 build_world(sim, seed);
                 RecordingSink sink(sim);
                 BotController c(sim, seed);
+                c.set_start_hold(0);   // the reaction delay of every look from tick 1 (the start hold's first look is AI2.17)
                 const std::vector<uint32_t> mine = ants_of(sim, 0);
                 size_t next = 0;
                 ScriptBot* bot = seat_script(c, sim, spec_of(0, level), sink, [&](const BotView&, Orders& o) { o.move({mine[next++ % mine.size()]}, TileCoord{30, 30}); });
@@ -127,6 +155,7 @@ void run_controller_tests() {
                 build_world(sim, 1);
                 RecordingSink sink(sim);
                 BotController c(sim, match_seed);
+                c.set_start_hold(0);   // the reaction delay of every look from tick 1 (the start hold's first look is AI2.17)
                 const std::vector<uint32_t> mine = ants_of(sim, seat);
                 size_t next = 0;
                 ScriptBot* bot = seat_script(c, sim, spec_of(seat, level), sink, [&](const BotView&, Orders& o) { o.move({mine[next++ % mine.size()]}, TileCoord{30, 30}); });
@@ -141,46 +170,54 @@ void run_controller_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI2.5 Schedule: A Bot Looks Every decision_interval Ticks, The First Time On Tick 1 + Seat, So The Seats Never All Look On The Same Tick; Its Own Ants Are Its Own") {
-        sim::SimulationEngine sim;
-        build_world(sim, 4);
-        RecordingSink sink(sim);
-        BotController c(sim, 1);
-        std::vector<uint32_t> mine_seen[3];
-        std::vector<uint32_t> others_seen[3];
-        ScriptBot* b[3] = {};
-        const Level levels[3] = {Level::Easy, Level::Medium, Level::Hard};
-        for (uint8_t seat = 0; seat < 3; ++seat) {
-            b[seat] = seat_script(c, sim, spec_of(seat, levels[seat]), sink, [&, seat](const BotView& v, Orders&) {
-                ASSERT_EQ(v.seat(), seat);
-                mine_seen[seat].push_back(static_cast<uint32_t>(v.mine().size()));
-                others_seen[seat].push_back(static_cast<uint32_t>(v.others().size()));
-                for (const AntView& a : v.mine()) ASSERT_EQ(a.team, seat);
-                for (const AntView& a : v.others()) ASSERT_TRUE(a.team != seat && a.hp == 0);                   // another team's hit points are not on the screen
-            });
-            ASSERT_TRUE(b[seat] != nullptr && b[seat]->started && b[seat]->seat == seat);
+    TEST_CASE("AI2.5 Schedule: A Bot Looks Every decision_interval Ticks, The First Time On The Tick That Ends The Start Hold Plus Its Seat (Tick 1 + Seat With The Hold Off), So The Seats Never All Look On The Same Tick; Its Own Ants Are Its Own") {
+        // The first look of every seat is on tick `hold + seat` with the start hold (the default: the "Get ready to play!" dialog is up for kMatchStartHoldTicks ticks) and on tick
+        // `1 + seat` with the hold off (the opening of v0.1.0, kept under test). Everything else about the schedule is the same.
+        for (const uint32_t hold : {sim::kMatchStartHoldTicks, 0u}) {
+            const uint32_t first = hold != 0 ? hold : 1u;
+            sim::SimulationEngine sim;
+            build_world(sim, 4);
+            RecordingSink sink(sim);
+            BotController c(sim, 1);
+            c.set_start_hold(hold);
+            std::vector<uint32_t> mine_seen[3];
+            std::vector<uint32_t> others_seen[3];
+            ScriptBot* b[3] = {};
+            const Level levels[3] = {Level::Easy, Level::Medium, Level::Hard};
+            for (uint8_t seat = 0; seat < 3; ++seat) {
+                b[seat] = seat_script(c, sim, spec_of(seat, levels[seat]), sink, [&, seat](const BotView& v, Orders&) {
+                    ASSERT_EQ(v.seat(), seat);
+                    mine_seen[seat].push_back(static_cast<uint32_t>(v.mine().size()));
+                    others_seen[seat].push_back(static_cast<uint32_t>(v.others().size()));
+                    for (const AntView& a : v.mine()) ASSERT_EQ(a.team, seat);
+                    for (const AntView& a : v.others()) ASSERT_TRUE(a.team != seat && a.hp == 0);                   // another team's hit points are not on the screen
+                });
+                ASSERT_TRUE(b[seat] != nullptr && b[seat]->started && b[seat]->seat == seat);
+            }
+            run_ticks(sim, c, first + 420);
+            for (uint8_t seat = 0; seat < 3; ++seat) {
+                const uint32_t interval = level_ticks(levels[seat]);
+                ASSERT_TRUE(b[seat]->thought.size() >= 420 / interval);
+                ASSERT_EQ(b[seat]->thought[0], first + seat);
+                for (size_t k = 1; k < b[seat]->thought.size(); ++k) ASSERT_EQ(b[seat]->thought[k] - b[seat]->thought[k - 1], interval);
+                ASSERT_EQ(c.stats(seat).decisions, static_cast<uint32_t>(b[seat]->thought.size()));
+                ASSERT_EQ(mine_seen[seat][0], 12u);
+                ASSERT_EQ(others_seen[seat][0], 36u);
+            }
+            ASSERT_TRUE(b[0]->thought[0] != b[1]->thought[0] && b[1]->thought[0] != b[2]->thought[0]);
+            // a bot that is seated later starts counting from then on (with the hold: seated after its end, so without a hold of its own)
+            const uint32_t seated_at = hold != 0 ? hold + 50 : 50u;
+            sim::SimulationEngine late;
+            build_world(late, 4);
+            RecordingSink late_sink(late);
+            BotController lc(late, 1);
+            lc.set_start_hold(hold);
+            for (uint32_t i = 0; i < seated_at; ++i) late.tick();
+            ScriptBot* lb = seat_script(lc, late, spec_of(2, Level::Medium), late_sink);
+            ASSERT_TRUE(lb != nullptr);
+            run_ticks(late, lc, 30);
+            ASSERT_TRUE(!lb->thought.empty() && lb->thought[0] == seated_at + 3u);                                   // tick (when seated) + 1 + seat
         }
-        run_ticks(sim, c, 420);
-        for (uint8_t seat = 0; seat < 3; ++seat) {
-            const uint32_t interval = level_ticks(levels[seat]);
-            ASSERT_TRUE(b[seat]->thought.size() >= 420 / interval);
-            ASSERT_EQ(b[seat]->thought[0], 1u + seat);
-            for (size_t k = 1; k < b[seat]->thought.size(); ++k) ASSERT_EQ(b[seat]->thought[k] - b[seat]->thought[k - 1], interval);
-            ASSERT_EQ(c.stats(seat).decisions, static_cast<uint32_t>(b[seat]->thought.size()));
-            ASSERT_EQ(mine_seen[seat][0], 12u);
-            ASSERT_EQ(others_seen[seat][0], 36u);
-        }
-        ASSERT_TRUE(b[0]->thought[0] != b[1]->thought[0] && b[1]->thought[0] != b[2]->thought[0]);
-        // a bot that is seated later starts counting from then on
-        sim::SimulationEngine late;
-        build_world(late, 4);
-        RecordingSink late_sink(late);
-        BotController lc(late, 1);
-        for (int i = 0; i < 50; ++i) late.tick();
-        ScriptBot* lb = seat_script(lc, late, spec_of(2, Level::Medium), late_sink);
-        ASSERT_TRUE(lb != nullptr);
-        run_ticks(late, lc, 30);
-        ASSERT_TRUE(!lb->thought.empty() && lb->thought[0] == 53u);                                              // tick 50 + 1 + seat
     } TEST_END();
 
     TEST_CASE("AI2.6 Time To Live: A Command That Cannot Be Paid Is Dropped Intent_ttl Ticks After Its Release Time And The Bot Is Told (Expired); The Rest Are Paid As The Bucket Refills") {
@@ -188,6 +225,7 @@ void run_controller_tests() {
         build_world(sim, 5);
         RecordingSink sink(sim);
         BotController c(sim, 3);
+        c.set_start_hold(0);   // the time to live against the opening bucket of v0.1.0 (a full one of two): the start hold's bucket is AI2.18
         const std::vector<uint32_t> mine = ants_of(sim, 0);
         bool proposed = false;
         ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Easy), sink, [&](const BotView&, Orders& o) {
@@ -223,6 +261,7 @@ void run_controller_tests() {
         build_world(sim, 6);
         RecordingSink sink(sim);
         BotController c(sim, 3);
+        c.set_start_hold(0);   // ants that die, from tick 1 (the start hold: AI2.17 - AI2.22)
         const std::vector<uint32_t> mine = ants_of(sim, 0);
         const std::vector<uint32_t> theirs = ants_of(sim, 1);
         bool proposed = false;
@@ -268,6 +307,7 @@ void run_controller_tests() {
         build_world(sim, 7);
         RecordingSink sink(sim);
         BotController c(sim, 3);
+        c.set_start_hold(0);   // the filter and the issuer, from tick 1 (the start hold: AI2.17 - AI2.22)
         const std::vector<uint32_t> mine = ants_of(sim, 1);
         std::vector<uint32_t> many;
         for (uint32_t i = 0; i < 33; ++i) many.push_back(mine[i % mine.size()]);
@@ -359,6 +399,7 @@ void run_controller_tests() {
                 build_world(sim, 8, 40);
                 RecordingSink sink(sim);
                 BotController c(sim, 3);
+                c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.22)
                 const std::vector<uint32_t> mine = ants_of(sim, 0);
                 ASSERT_EQ(mine.size(), 40u);
                 bool done = false;
@@ -393,6 +434,7 @@ void run_controller_tests() {
             build_world(sim, 9);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             bool done = false;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -418,6 +460,7 @@ void run_controller_tests() {
             sim.form_alliance(0, 1);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // splitting and the HUD's rules, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             const auto tile_of = [&](uint8_t team) {
                 for (const auto& a : sim.get_world_state().ants) {
@@ -457,6 +500,7 @@ void run_controller_tests() {
             build_world(sim, 11);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             bool done = false;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Easy), sink, [&](const BotView&, Orders& o) {
@@ -488,6 +532,7 @@ void run_controller_tests() {
                     build_world(sim, seed);
                     RecordingSink sink(sim);
                     BotController c(sim, seed);
+                    c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.22)
                     const std::vector<uint32_t> mine = ants_of(sim, 0);
                     uint32_t looks = 0;
                     ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -511,6 +556,7 @@ void run_controller_tests() {
             build_world(sim, 12);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // priorities and the cool-down, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             uint32_t looks = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -564,7 +610,9 @@ void run_controller_tests() {
             }
             ASSERT_EQ(first_difference, -1);
             for (uint8_t seat = 1; seat < 4; ++seat) {
-                ASSERT_TRUE(c.stats(seat).decisions >= static_cast<uint32_t>(ticks / 4 - 1));                           // they did look, every 4 ticks
+                // they did look, every 4 ticks from the end of the start hold on (the first look is on tick 100 + seat: a bot does not look at the world behind the "Get ready" dialog)
+                ASSERT_TRUE(c.stats(seat).decisions >= static_cast<uint32_t>((ticks - static_cast<int>(sim::kMatchStartHoldTicks)) / 4 - 1));
+                ASSERT_TRUE(c.stats(seat).decisions <= static_cast<uint32_t>((ticks - static_cast<int>(sim::kMatchStartHoldTicks)) / 4 + 1));
                 ASSERT_EQ(c.stats(seat).released, 0u);
                 ASSERT_EQ(c.stats(seat).intents, 0u);
             }
@@ -578,6 +626,7 @@ void run_controller_tests() {
             build_world(sim, 13);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // the end of the match comes before the start hold would end (3 s = 60 ticks): measured from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             size_t next = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) { o.move({mine[next++ % mine.size()]}, TileCoord{30, 30}); });
@@ -602,6 +651,7 @@ void run_controller_tests() {
             build_world(sim, 13);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // a look that is long due when the match has ended, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) { o.move({mine[0]}, TileCoord{30, 30}); });
             ASSERT_TRUE(bot != nullptr);
@@ -616,6 +666,7 @@ void run_controller_tests() {
             build_world(sim, 14);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // a team that drops out after its bot has been at work for 60 ticks, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine1 = ants_of(sim, 1);
             const std::vector<uint32_t> mine2 = ants_of(sim, 2);
             size_t n1 = 0;
@@ -751,6 +802,7 @@ void run_controller_tests() {
             build_world(sim, 22);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             uint32_t looks = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -771,6 +823,7 @@ void run_controller_tests() {
             build_world(sim, 22);
             RecordingSink sink(sim);
             BotController c(sim, 3);
+            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             uint32_t looks = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -796,6 +849,7 @@ void run_controller_tests() {
                 build_world(sim, 23);
                 RecordingSink sink(sim);
                 BotController c(sim, seed);
+                c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.22)
                 const std::vector<uint32_t> mine = ants_of(sim, 0);
                 uint32_t looks = 0;
                 ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -827,6 +881,7 @@ void run_controller_tests() {
             build_world(sim, 24);
             RecordingSink sink(sim);
             BotController c(sim, 5);
+            c.set_start_hold(0);   // the newest order wins, from tick 1 (the start hold: AI2.17 - AI2.22)
             const std::vector<uint32_t> mine = ants_of(sim, 0);
             uint32_t looks = 0;
             ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
@@ -933,5 +988,178 @@ void run_controller_tests() {
         ASSERT_TRUE(after.rows()[3].dropped);
         for (const AntView& a : after.others()) ASSERT_TRUE(a.team != 3);                     // its ants are gone from the screen
         ASSERT_EQ(after.others().size(), 24u);
+    } TEST_END();
+
+    // ---- the start hold (v0.1.1): the bots wait for the "Get ready to play!" dialog that every match opens with. The rest of this suite measures the controller from tick 0 with the hold off. ----
+
+    TEST_CASE("AI2.17 Start Hold: A Bot That Wants To Act At Every Look Does Nothing Behind The Get Ready Dialog, At Every Level From Every Seat: No Look And No Command Before Tick 100, The First Look On Tick 100 + Seat, The First Command 75 To 125 Percent Of The Reaction Time After It") {
+        ASSERT_EQ(sim::kMatchStartHoldTicks, 100u);                                                      // the original's dialog: 5 s of 50 ms ticks
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
+            const Profile p = profile_for(level);
+            const uint32_t spread = p.reaction_delay * p.jitter_percent / 100u;
+            for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+                uint64_t earliest = ~0ull;
+                uint64_t latest = 0;
+                for (uint32_t seed = 1; seed <= 30; ++seed) {
+                    sim::SimulationEngine sim;
+                    build_world(sim, seed);
+                    RecordingSink sink(sim);
+                    BotController c(sim, seed);                                                         // the default: the hold of every product path
+                    ASSERT_EQ(c.start_hold(), sim::kMatchStartHoldTicks);
+                    const std::vector<uint32_t> mine = ants_of(sim, seat);
+                    size_t next = 0;
+                    ScriptBot* bot = seat_script(c, sim, spec_of(seat, level), sink, [&](const BotView&, Orders& o) { o.move({mine[next++ % mine.size()]}, TileCoord{30, 30}); });
+                    ASSERT_TRUE(bot != nullptr);
+                    run_ticks(sim, c, sim::kMatchStartHoldTicks - 1);                                    // ticks 1 .. 99: the dialog is up
+                    ASSERT_TRUE(bot->thought.empty() && c.stats(seat).decisions == 0 && c.stats(seat).intents == 0 && c.pending(seat) == 0 && sink.log.empty());
+                    run_ticks(sim, c, p.reaction_delay * 2 + 8);                                         // tick 100 on
+                    ASSERT_FALSE(bot->thought.empty());
+                    ASSERT_EQ(bot->thought[0], sim::kMatchStartHoldTicks + seat);                        // the first look: the hold's last tick and the seat's own stagger
+                    ASSERT_FALSE(sink.log.empty());
+                    for (const auto& e : sink.log) ASSERT_TRUE(e.first >= sim::kMatchStartHoldTicks);
+                    const uint64_t look = bot->thought[0];
+                    const uint64_t first = sink.log.front().first;
+                    ASSERT_TRUE(first >= look + p.reaction_delay - spread && first <= look + p.reaction_delay + spread);       // a reaction time of 75 to 125 percent after the look ...
+                    ASSERT_TRUE(first >= sim::kMatchStartHoldTicks + p.reaction_delay * 3 / 4 && first <= sim::kMatchStartHoldTicks + p.reaction_delay * 5 / 4 + seat + 1);   // ... which is 100 + 75 percent to 100 + 125 percent + seat + 1
+                    earliest = std::min(earliest, first - look);
+                    latest = std::max(latest, first - look);
+                }
+                ASSERT_TRUE(latest > earliest);                                                          // the jitter is still real: another seed waits another time
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.18 Start Hold, The Bucket: A Seat Starts With ONE Token And Gets No More Before The Hold's End, Then It Refills At The Level's Rate: The Commands Of One Look Leave One By One On The Ticks The Bucket Allows (No Burst In One Tick), At Every Level; A Flood Gets No More Out Than The Bucket Made") {
+        // n one-ant commands of ONE look are all due on the same tick (one reaction time after the look); the departures are the law of the bucket
+        for (const Level level : {Level::Hard, Level::Medium, Level::Easy}) {
+            const Profile p = profile_for(level);
+            const size_t n = look_size(level);
+            size_t at_once_most = 0;
+            for (uint32_t seed = 1; seed <= 40; ++seed) {
+                sim::SimulationEngine sim;
+                build_world(sim, seed);
+                RecordingSink sink(sim);
+                BotController c(sim, seed);
+                const std::vector<uint32_t> mine = ants_of(sim, 0);
+                bool done = false;
+                ScriptBot* bot = seat_script(c, sim, spec_of(0, level), sink, [&](const BotView&, Orders& o) {
+                    if (done) return;
+                    done = true;
+                    for (size_t i = 0; i < n; ++i) o.move({mine[i]}, TileCoord{30 + static_cast<int32_t>(i), 30});     // one ant and one tile each: nothing is superseded, no cool-down binds
+                });
+                ASSERT_TRUE(bot != nullptr);
+                run_ticks(sim, c, sim::kMatchStartHoldTicks + 400);
+                ASSERT_TRUE(sink.log.size() == n && c.stats(0).expired == 0 && bot->thought[0] == sim::kMatchStartHoldTicks);
+                const uint64_t due = sink.log.front().first;                                            // the first leaves the moment it is due: the bucket holds its token
+                ASSERT_TRUE(due >= sim::kMatchStartHoldTicks + p.reaction_delay * 3 / 4 && due <= sim::kMatchStartHoldTicks + p.reaction_delay * 5 / 4);
+                const std::vector<uint64_t> expect = bucket_departures(p, sim::kMatchStartHoldTicks + 1, due, n);
+                ASSERT_EQ(expect.size(), n);
+                size_t at_once = 0;
+                for (size_t k = 0; k < n; ++k) {
+                    ASSERT_EQ(sink.log[k].first, expect[k]);                                              // exactly the ticks of one token at the hold's end and a refill from the tick after it
+                    at_once += sink.log[k].first == due ? 1u : 0u;
+                }
+                at_once_most = std::max(at_once_most, at_once);
+            }
+            // v0.1.0's full bucket let min(n, burst) leave on the first tick: Hard 8, Medium 4. Now at most what one token and the refill of the reaction time make.
+            if (level != Level::Easy) ASSERT_TRUE(at_once_most < n);
+            ASSERT_TRUE(at_once_most <= 3u);
+        }
+        // a flood (five one-ant commands at every look) for twelve hundred ticks after the hold: no command leaves before its token is there, and the budget is used. The tokens made by tick t are
+        // the one the seat started with and rate * (t - 100) / 20000 more.
+        for (const Level level : {Level::Hard, Level::Medium, Level::Easy}) {
+            const Profile p = profile_for(level);
+            sim::SimulationEngine sim;
+            build_world(sim, 3);
+            RecordingSink sink(sim);
+            BotController c(sim, 7);
+            const std::vector<uint32_t> mine = ants_of(sim, 0);
+            size_t next = 0;
+            ScriptBot* bot = seat_script(c, sim, spec_of(0, level), sink, [&](const BotView&, Orders& o) {
+                for (int i = 0; i < 5; ++i) o.move({mine[next++ % mine.size()]}, TileCoord{30, 30});
+            });
+            ASSERT_TRUE(bot != nullptr);
+            run_ticks(sim, c, sim::kMatchStartHoldTicks + 1200);
+            ASSERT_TRUE(c.stats(0).released == sink.log.size() && !sink.log.empty());
+            for (size_t i = 0; i < sink.log.size(); ++i) {
+                ASSERT_TRUE(sink.log[i].first >= sim::kMatchStartHoldTicks);
+                ASSERT_TRUE(1000 * (static_cast<int64_t>(i) + 1) <= 1000 + static_cast<int64_t>(p.rate_milli_cps) * static_cast<int64_t>(sink.log[i].first - sim::kMatchStartHoldTicks) / 20);
+            }
+            const double made = 1.0 + p.rate_milli_cps / 1000.0 * 60.0;                                  // twelve hundred ticks are a minute
+            ASSERT_TRUE(c.stats(0).released >= made * 0.95 && c.stats(0).released <= made + 0.001);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.19 Start Hold, The Clamp On Its Own: A Look Before The Hold's End (The Hold Is Raised From 20 To 100 Ticks After The Seat Was Seated, So It Looks On Tick 20 + Seat) Releases Nothing Before Tick 100; Two Commands Due Then Leave On Different Ticks, The Second One Token Later (7 Ticks At Hard, 14 At Medium, 50 At Easy)") {
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
+            const Profile p = profile_for(level);
+            for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+                sim::SimulationEngine sim;
+                build_world(sim, 9);
+                RecordingSink sink(sim);
+                BotController c(sim, 5);
+                c.set_start_hold(20);                                                                    // a short hold: the seat's first look is on tick 20 + seat ...
+                const std::vector<uint32_t> mine = ants_of(sim, seat);
+                bool done = false;
+                ScriptBot* bot = seat_script(c, sim, spec_of(seat, level), sink, [&](const BotView&, Orders& o) {
+                    if (done) return;
+                    done = true;
+                    o.move({mine[0]}, TileCoord{30, 30});
+                    o.move({mine[1]}, TileCoord{31, 30});
+                });
+                ASSERT_TRUE(bot != nullptr);
+                c.set_start_hold(sim::kMatchStartHoldTicks);                                             // ... and now the dialog lasts 100 ticks: a look before the hold's end, which the schedule never makes
+                run_ticks(sim, c, 99);
+                ASSERT_TRUE(!bot->thought.empty() && bot->thought[0] == 20u + seat);                      // the look happened, behind the dialog (and more looks followed, nothing more was proposed) ...
+                ASSERT_EQ(c.stats(seat).intents, 2u);
+                ASSERT_TRUE(sink.log.empty() && c.pending(seat) == 2);                                   // ... and its two commands wait, whatever their reaction time (6 to 10 ticks at Hard) says
+                run_ticks(sim, c, 120);
+                ASSERT_EQ(sink.log.size(), 2u);
+                ASSERT_EQ(sink.log[0].first, 100u);                                                      // due on the hold's end: the first leaves with the one token the seat has
+                const uint64_t ticks_for_a_token = (20000u + p.rate_milli_cps - 1u) / p.rate_milli_cps;   // 7, 14 and 50: nothing was added during the wait, the refill starts on tick 101
+                ASSERT_EQ(sink.log[1].first, 100u + ticks_for_a_token);
+                ASSERT_EQ(c.stats(seat).expired, 0u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.20 Start Hold, A Seat That Comes Later: Seated During The Dialog It First Looks On Tick 100 + Seat; Seated After It There Is No Hold For It (Its First Look Is On The Next Tick + Seat, The Refill Starts At Once) And It Starts With One Token Too") {
+        for (const Level level : {Level::Hard, Level::Medium, Level::Easy}) {
+            const Profile p = profile_for(level);
+            const size_t n = look_size(level);
+            for (const uint8_t seat : {uint8_t{0}, uint8_t{2}, uint8_t{3}}) {
+                for (const uint32_t seated_at : {0u, 60u, 99u, 100u, 150u, 300u}) {
+                    sim::SimulationEngine sim;
+                    build_world(sim, 4);
+                    for (uint32_t i = 0; i < seated_at; ++i) sim.tick();                                  // the match is under way, the controller is not there yet
+                    RecordingSink sink(sim);
+                    BotController c(sim, 3);
+                    const std::vector<uint32_t> mine = ants_of(sim, seat);
+                    bool done = false;
+                    ScriptBot* bot = seat_script(c, sim, spec_of(seat, level), sink, [&](const BotView&, Orders& o) {
+                        if (done) return;
+                        done = true;
+                        for (size_t i = 0; i < n; ++i) o.move({mine[i]}, TileCoord{30 + static_cast<int32_t>(i), 30});
+                    });
+                    ASSERT_TRUE(bot != nullptr);
+                    run_ticks(sim, c, 500);
+                    const uint64_t hold_end = sim::kMatchStartHoldTicks;
+                    ASSERT_TRUE(!bot->thought.empty());
+                    ASSERT_EQ(bot->thought[0], std::max<uint64_t>(seated_at + 1u, hold_end) + seat);       // inside the hold: its end + seat; after it: the next tick + seat (no hold)
+                    ASSERT_TRUE(sink.log.size() == n && c.stats(seat).expired == 0);
+                    const uint64_t due = sink.log.front().first;
+                    ASSERT_TRUE(due >= bot->thought[0] + p.reaction_delay * 3 / 4 && due >= hold_end);
+                    // the bucket: one token, and a refill from the tick after the hold's end, or from the tick after the seat came when that is later
+                    const std::vector<uint64_t> expect = bucket_departures(p, std::max<uint64_t>(seated_at, hold_end) + 1u, due, n);
+                    ASSERT_EQ(expect.size(), n);
+                    for (size_t k = 0; k < n; ++k) ASSERT_EQ(sink.log[k].first, expect[k]);
+                    if (seated_at >= 300u && level == Level::Hard) {                                      // (a late seat is not a full bucket: v0.1.0 would have let all eight leave on the same tick)
+                        size_t first_tick = 0;
+                        for (const auto& e : sink.log) first_tick += e.first == due ? 1u : 0u;
+                        ASSERT_TRUE(first_tick < n);
+                    }
+                }
+            }
+        }
     } TEST_END();
 }

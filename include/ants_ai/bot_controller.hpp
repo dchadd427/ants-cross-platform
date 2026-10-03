@@ -3,13 +3,16 @@
 // The controller owns the bots of one game and is called after EVERY simulation tick (a local game: after sim.tick(); a lock-step room: from the runner's
 // tick hook). It runs each bot when it is due, and stands between a bot and the door a person uses:
 //
-//   schedule        a bot thinks every Profile::decision_interval ticks, the first time on tick 1 + seat (the seats do not all think on the same tick)
+//   start hold      nothing before the end of the "Get ready to play!" dialog (sim::kMatchStartHoldTicks, 100 ticks = 5 s: a person can neither select nor order while it is up):
+//                   the first look is on that tick (plus the seat's stagger), no command is released before it, and the bucket (one token to start with) does not fill during it
+//   schedule        a bot thinks every Profile::decision_interval ticks, the first time on the tick that ends the start hold + seat (the seats do not all think on the same tick)
 //   reaction delay  every command of a decision is released Profile::reaction_delay ticks after the decision, plus or minus 25 percent drawn ONCE per decision
 //                   from the seat's own generator (so the commands of one look leave in the order they were proposed, and a later look never leaves before an earlier one)
 //   newest wins     among the orders that are due, an ant that a newer order names leaves every older one (like the later click of a person); an older order that
 //                   is left with no ant never leaves (Fate::Superseded). An order that is not due yet takes nothing from the ones before it.
 //   budget          a token bucket in thousandths of a command (one token per released command, whatever the number of ants): Profile::rate_milli_cps
-//                   refills it, Profile::burst is its depth; a command that cannot be paid waits and is dropped after Profile::intent_ttl ticks
+//                   refills it, Profile::burst is its depth, a seat starts with ONE token (with the start hold, which every product path has); a command that cannot be
+//                   paid waits and is dropped after Profile::intent_ttl ticks
 //   priorities      Urgent before Normal before Background, first come first served inside a class
 //   ants            ants that died since the decision are dropped from a command (a command whose ants all died never leaves); at most
 //                   min(Profile::max_ants_per_command, kHudAntCap) ants go into one command, a larger one is split and every part is paid for
@@ -66,6 +69,20 @@ public:
     /// After every simulation tick. Does nothing once the match is over, and nothing for a seat whose team has dropped out.
     void on_tick(const sim::SimulationEngine& sim);
 
+    /// THE START HOLD (v0.1.1, docs/BOTS.md "How fast a bot acts"). Every match opens with the original's "Get ready to play!" dialog, which takes every click and key of a person for
+    /// sim::kMatchStartHoldTicks ticks while the simulation already runs: until it closes a person can neither select an ant nor order one. A bot must not move before the people it plays
+    /// against can, so until the hold has ended (1) a bot does not look at the world (a seat's first look is on the hold's last tick plus its stagger: it never acts on what it saw behind
+    /// the dialog), (2) no command is released (every release time is at least that tick: defence in depth, no path may leave one earlier), and (3) the token bucket does not fill (it
+    /// holds the one token a seat starts with), so the first orders after the dialog come one by one at the level's rate where a full bucket was a burst of up to ten in one tick.
+    /// `ticks` is an ABSOLUTE tick of the match (SimulationEngine::current_tick()); the hold ends on that tick and a person's first possible click is the one after the HUD has closed its
+    /// dialog on it. The default is sim::kMatchStartHoldTicks in every product path (a local game, a LAN host, a room of the server, the arena): a bot match must be the real one. A seat
+    /// that is seated after the hold's end has no hold (its first look is on the next tick + its stagger) and starts with one token as well. Call it BEFORE seating the bots: it shapes the
+    /// first look and the first bucket of the seats that come after it (the clamp of (2) follows the value at any time). 0 switches the hold off, and with it all of the above: the
+    /// opening of v0.1.0 (a first look on the next tick + the stagger, a FULL bucket, a refill from the first tick). It is for the tests that measure something else from tick 0 (the
+    /// reaction delay, the budget, the filter, failure learning, the endgame), each of which says so; the hold has its own tests, AI2.17 .. AI2.22.
+    void set_start_hold(uint32_t ticks) noexcept { hold_end_ = ticks; }
+    uint32_t start_hold() const noexcept { return hold_end_; }
+
     bool has_seat(uint8_t seat) const noexcept;
     /// The seats that have a bot, bit s = seat s
     uint8_t seat_mask() const noexcept;
@@ -109,11 +126,12 @@ private:
     const Seat* find(uint8_t seat) const noexcept;
     void decide(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
     bool allowed(const sim::SimulationEngine& sim, const Seat& s, const sim::Command& c) const;
-    void refill(Seat& s) const;
+    void refill(Seat& s, uint64_t tick) const;
     void release(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
 
     const sim::SimulationEngine* sim_;
     uint64_t match_seed_;
+    uint32_t hold_end_{sim::kMatchStartHoldTicks};      // the start hold: the tick that ends it (an absolute tick of the match), see set_start_hold
     MapInfo map_;
     std::vector<std::unique_ptr<Seat>> seats_;          // by seat number, so the order of the --bot options never matters
 };

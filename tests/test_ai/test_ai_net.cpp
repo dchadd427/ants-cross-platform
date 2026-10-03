@@ -82,6 +82,9 @@ sim::Command hatch_of(uint8_t issuer) {
     return c;
 }
 
+// The time in which a bot of a room waits for the match's "Get ready to play!" dialog (the start hold): no command of a bot before it
+constexpr uint32_t kStartHoldMs = sim::kMatchStartHoldTicks * sim::TICK_MS;
+
 // A bot that sends one move per look with one of its ants, to a tile that changes every time
 ScriptBot::Think wanderer(const std::vector<uint32_t>& ants, size_t& counter) {
     return [&ants, &counter](const BotView&, Orders& o) {
@@ -664,7 +667,7 @@ void run_net_tests() {
 
     TEST_CASE("AI5.5 Host Migration: When The Host Leaves, Its Bot Leaves With It (Dropped By The New Host's First Turn); The Survivors Stay Identical And Play On") {
         BotMesh m;
-        m.run(5000);
+        m.run(5000 + kStartHoldMs);                                                                        // (the bot's first order comes after the start hold: five seconds of play, then the host goes)
         ASSERT_TRUE(m.hosts[0]->is_bot_seat(3));
         ASSERT_TRUE(m.hosts[0]->turns_sealed() > 80);
         ASSERT_TRUE(of_issuer(m.saw1, 3).size() > 5);                                                      // the bot played, and the guest saw it

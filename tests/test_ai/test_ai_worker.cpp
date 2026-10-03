@@ -551,7 +551,7 @@ void run_worker_tests() {
                 ASSERT_TRUE(s.stats.released >= 1u && s.stats.released == r.log.size());
                 ASSERT_TRUE(s.milli_commands_per_second(r.ticks) < 150u);                      // the design measured 2 to 83 thousandths of a command per second; Easy's budget alone is 400
                 ASSERT_TRUE(s.stats.rejected == 0 && s.stats.filtered == 0 && s.stats.expired == 0 && s.stats.superseded == 0);
-                ASSERT_TRUE(r.log.front().tick >= p.reaction_delay * 3 / 4);                   // 75 percent of the reaction time is the least a command waits
+                ASSERT_TRUE(r.log.front().tick >= sim::kMatchStartHoldTicks + p.reaction_delay * 3 / 4);   // no look before the start hold's end (tick 100 + seat), and 75 percent of the reaction time is the least a command waits
                 size_t early = 0;
                 for (const RecordedCommand& c : r.log) early += c.tick <= 600 ? 1u : 0u;
                 ASSERT_TRUE(early >= 1 && early <= 3);                                         // the first look sends the start ants to one or two piles
@@ -942,7 +942,10 @@ void run_worker_tests() {
             sim::SimulationEngine engine;
             engine.init(level_of(map), 2, 0x0F);
             const TileCoord entrance = MapInfo(engine).hill(seat).entrance;
-            const ArenaResult r = play_match(match_of(map, treasure ? 5 : 2, static_cast<uint8_t>(1u << seat), treasure ? Level::Hard : Level::Medium, 0, 3, true));
+            ArenaSpec jam = match_of(map, treasure ? 5 : 2, static_cast<uint8_t>(1u << seat), treasure ? Level::Hard : Level::Medium, 0, 3, true);
+            jam.start_hold = 0;                                                                               // these two matches are the jam of v0.1.0's opening (the start hold moves every tick of the economy by 100 and
+                                                                                                              // more: the jam may not come at all): the rescue is measured on them as they were, from tick 1
+            const ArenaResult r = play_match(jam);
             ASSERT_TRUE(r.error.empty() && r.match_over);
             uint64_t first_home = 0;
             for (const RecordedCommand& c : r.log) {
@@ -1536,6 +1539,7 @@ void run_worker_tests() {
             pile(sim, 30, 30, 14, 25);
             LatencySink sink(sim, 3);
             BotController c(sim, 1);
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
             std::string why;
             if (!c.add(spec_of(0, "worker", Level::Medium), sink, why) || !c.add(spec_of(1, "idle", Level::Medium), sink, why)) return -1;
             step_late(sim, c, sink, 130);                                                                     // the first order took the healthy ants and the shut-in ones to the best pile together
@@ -1574,6 +1578,7 @@ void run_worker_tests() {
             const int32_t b = pile(sim, 24, 12, 40, 25);
             LatencySink sink(sim, 3);
             BotController c(sim, 1);
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
             std::string why;
             ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Easy), sink, why) && c.add(spec_of(1, "idle", Level::Easy), sink, why));
             step_late(sim, c, sink, 300);
@@ -1599,6 +1604,7 @@ void run_worker_tests() {
             pile(sim, 24, 12, 200, 25);
             LatencySink sink(sim, 3);
             BotController c(sim, 1);
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
             std::string why;
             ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Easy), sink, why) && c.add(spec_of(1, "idle", Level::Easy), sink, why));
             step_late(sim, c, sink, 700);
@@ -1657,6 +1663,7 @@ void run_worker_tests() {
             const int32_t b = pile(sim, 24, 12, 40, 25);
             LatencySink sink(sim, 3);
             BotController c(sim, 1);
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
             std::string why;
             ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Easy), sink, why));
             ring(sim, 21, 9, 27, 15);                                                                         // closes B in after the analysis was made
@@ -1695,6 +1702,7 @@ void run_worker_tests() {
             const int32_t b = pile(sim, 24, 14, 6, 25);
             RecordingSink sink(sim, true);
             BotController c(sim, 1);
+            c.set_start_hold(0);   // failure learning against the timings of a look on tick 1: not about the opening (the start hold has its own tests, AI2.17 - AI2.22)
             std::string why;
             ASSERT_TRUE(c.add(spec_of(0, "worker", Level::Hard), sink, why));
             ring(sim, 11, 5, 17, 11);                                                                         // the wall closes after the analysis was made

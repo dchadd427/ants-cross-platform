@@ -170,7 +170,7 @@ void HUD::reset() {
 }
 
 void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
-    // 0. Match Start Modal Countdown (5.0 s / 100 ticks at 20 Hz: first timer tick of Ants.exe 0x1017127)
+    // 0. Match Start Modal Countdown (5.0 s / sim::kMatchStartHoldTicks = 100 ticks at 20 Hz: the original's task KWFO, Ants.exe 0x10254b0, first run 5000 ms after the dialog was made)
     if (show_match_start_modal_) {
         match_start_modal_ticks_ += delta_ticks;
         if (match_start_modal_ticks_ >= MATCH_START_MODAL_DURATION_TICKS) {

@@ -160,6 +160,8 @@ struct Client {
     std::map<uint64_t, uint64_t> hash_at;
     std::vector<net::ChatLine> room_chat;    // every line that the room said to this player before the match (a guest's line, the room's own notices)
     std::vector<net::ChatMsg> chats;         // the chat of the match
+    bool record_commands{false};             // every command that a turn applies on this machine, with the tick count at the time (the turn stream as this player's engine sees it)
+    std::vector<std::pair<uint64_t, sim::Command>> saw;
     bool freeze{false};                      // the session is no longer run: no acks, no orders (a seat that stopped executing the turns)
     uint32_t clock_lag{0};                   // the application's network clock never advances more than a second per frame: what a window that stood still lost of the real time
     uint32_t last_frame_ms{0};               // and when the session's last frame ran
@@ -208,6 +210,7 @@ struct Client {
                 session->set_connection(end);
                 session->set_on_chat([this](const net::ChatMsg& m) { chats.push_back(m); });
                 if (record_hashes) session->runner().set_on_tick([this]() { hash_at[sim.current_tick()] = sim.state_hash().total; });
+                if (record_commands) session->runner().set_on_command([this](const sim::Command& c, const sim::CommandResult&) { saw.emplace_back(sim.current_tick(), c); });
                 session->start(now_ms);
             }
         }
@@ -4749,6 +4752,33 @@ void run_bot_tests() {
             ASSERT_TRUE(v.get("paused").as_bool_or(false) && v.get("absent").size() == 1);
             ASSERT_TRUE(v.get("vote").is_null());                       // nobody can vote: no vote to show (the status of a vote with voters 0 used to be {"seat": 0, "continue": 0, "voters": 0})
         }
+    } TEST_END();
+
+    TEST_CASE("S3.74 The Start Hold In A Server's Room: A Room That The Leader's START Fills With Hard Bots Has No Command Of A Bot Seat In Any Turn Before Tick 100 (As The Person's Own Engine Applies The Turn Stream: The Bots Wait For The Dialog That Opens Every Match), And The Bots Do Play After It") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("HOLD-1", 4), w.now).ok);
+        Client& ann = w.connect("Ann", "HOLD-1", 2);                      // the person sits in seat 2: the bots take 0, 1 and 3
+        ann.record_commands = true;
+        w.run(500);
+        ASSERT_TRUE(ann.lobby->is_leader());
+        ASSERT_TRUE(ann.lobby->request_start(net::FillLevel::Hard));
+        w.run(2000);
+        RoomStatus s = w.status("HOLD-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.bots.size() == 3 && s.bots[0].level == "hard");
+        w.run(25000);                                                       // some 500 ticks
+        ASSERT_TRUE(ann.sim.current_tick() > 400);
+        size_t per_seat[4] = {0, 0, 0, 0};
+        uint64_t first = ~0ull;
+        for (const auto& e : ann.saw) {
+            if (e.second.issuer == 2) continue;                              // the person's own (this test client orders from the first turn on: it knows no dialog)
+            ASSERT_TRUE(e.second.issuer == 0 || e.second.issuer == 1 || e.second.issuer == 3);
+            ASSERT_TRUE(e.first >= sim::kMatchStartHoldTicks);               // no turn before tick 100 carries a command of a bot
+            ++per_seat[e.second.issuer];
+            first = std::min(first, e.first);
+        }
+        ASSERT_TRUE(per_seat[0] >= 1 && per_seat[1] >= 1 && per_seat[3] >= 1);        // every bot played (a harvesting bot needs well under a command per second)
+        ASSERT_TRUE(first >= sim::kMatchStartHoldTicks + 6u);                 // a Hard bot looks on tick 100 + seat and its first order leaves 6 to 10 ticks later (then it is sealed into a turn)
+        ASSERT_FALSE(ann.session->desynced());
     } TEST_END();
 }
 
