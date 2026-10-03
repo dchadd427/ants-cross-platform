@@ -20,19 +20,22 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
 -->
 
-## Unreleased - the streamlined workflow (tooling and documents; the game and the network protocol are unchanged)
+## v0.1.1 - 2026-10-03 - Bots wait for the start dialog
 
 **For players:**
-- The footer of the web page and `ants --version` / `ants_server --version` now name the build (the short git commit) next to the version, for example "Version v0.1.0 - build abc1234". The version in the corner plate is unchanged.
+- Computer players no longer move during the "Get ready to play!" dialog at the start of a match. Their first orders come after it closes, when you can give yours, and they come one by one at the speed of their level: about 5.4 s into the match at Hard, 6.2 s at Medium and 8 s at Easy. This holds in a game against `--bot` or the start menu's bots, in a room on the local network and on the online server.
+- The footer of the web page and `ants --version` / `ants_server --version` now name the build (the short git commit) next to the version, for example "Version v0.1.1 - build abc1234". The version in the corner plate is unchanged.
 - This changelog is short: one entry per release in a fixed template. The detailed history of every release up to v0.1.0 (the old 556 KB file, unchanged) is in `docs/CHANGELOG_ARCHIVE.md` and on the site at `/changelog_archive.html`, linked from the changelog page.
-- Internal: one version source (the file `VERSION`; CMake generates `ants_app/version.hpp` from it and a build id at every build), `./run_tests.sh --fast` (about a minute) and the time of every suite in the summary, `docs/WORKFLOW.md` (the three test tiers, branches and batch pushes, the version policy) with the rules 1, 1b, 2, 6, 7 and the new rule 11 of `AGENTS.md` that say the same, ccache in CMake when it is installed, and a README without per-suite counts.
+- Internal: one version source (the file `VERSION`), a build id at every build, `./run_tests.sh --fast` (about a minute) with the time of every suite, `docs/WORKFLOW.md` (the three test tiers, branches and batch pushes, the version policy) with the rules of `AGENTS.md` that say the same, ccache in CMake when it is installed, and a README without per-suite counts.
 
-**Rules / network:** None: the simulation and network protocol 11 are unchanged.
+**Rules / network:** The rules did not change. Network protocol 11: v0.1.0 and v0.1.1 games play together (the bots run on one machine and their commands travel as data).
 
 **Fixes:**
-- Test 12.108 no longer pins the value of the version (it failed at every release for no reason). It checks the FORMAT: `VERSION_STRING` is `vMAJOR.MINOR.PATCH`, the three numbers agree with it and the build id names the build. The value lives in one place, the file `VERSION`, and a check run by `./run_tests.sh --fast` and by CI compares the top release heading of this file, "current release" in `STATUS.md` and the version line of the README with it.
+- The bots could move before the players could: a bot looked on the first tick and started with a full budget, so a Hard bot could send ten orders in one tick while the dialog still took your clicks. They now wait for the same 100 ticks as the dialog and start with one order's worth of budget.
+- Test 12.108 no longer pins the value of the version. It checks the format; the value lives in the file `VERSION`, and a check run by `./run_tests.sh --fast` and by CI compares the top release heading of this file, "current release" in `STATUS.md` and the version line of the README with it.
+- The reverse-engineering notes said that the dialog lasts 6.0 seconds; the program keeps it up at least 5.0 s, which is what the game does, and the notes now say so.
 
-**Details:** [workflow](docs/WORKFLOW.md), [version policy](docs/WORKFLOW.md#version-policy)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...a7adf5d), [workflow](docs/WORKFLOW.md), [notes](docs/audit/B3_notes.md)
 
 ## v0.1.0 - 2026-10-02 - Online rooms: bots fill the empty seats at START, chat in the waiting room, team chat only to allies, and mouse-wheel zoom
 

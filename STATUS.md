@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-03 02:23 PDT · current release **v0.1.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-03 11:52 PDT · current release **v0.1.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
 - Nothing: the streamlining batch is the last approved task; the items below wait for the owner
