@@ -10,6 +10,7 @@
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -1148,6 +1149,87 @@ void run_room_chat_tests() {
 
 }  // namespace
 
+// Protocol 12: the first turn of a match is sealed kMatchStartDelayMs after the match began (the "Get ready to play!" dialog of every machine), on a game of the local network too
+void run_start_delay_tests() {
+    TEST_CASE("N3.22 Protocol 12, The Start Of A Match On The Local Network: No Machine Runs A Tick For 5 s After The Match Began, Nobody Waits Or Is Told Anything Meanwhile (No Stall, No Lag, No Election, No Notice), Then Every Machine's First Tick Comes And The Match Is Identical; A Guest Of Protocol 11 Is Refused By The Host's Door") {
+        ASSERT_EQ(kProtocolVersion, 12);
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(21, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        const uint32_t begun = t.now;                                                // (within one step of the host's own Begin)
+        std::array<uint32_t, 3> first_tick{0, 0, 0};
+        for (uint32_t elapsed = 0; elapsed < 20000 && (first_tick[0] == 0 || first_tick[1] == 0 || first_tick[2] == 0); elapsed += 10) {
+            t.run(10);
+            for (size_t i = 0; i < 3; ++i) {
+                if (first_tick[i] == 0 && t.machines[i]->ticks >= 1) first_tick[i] = t.now - begun;
+            }
+            for (size_t i = 0; i < 3; ++i) {
+                Machine& m = *t.machines[i];
+                if (first_tick[i] != 0) continue;
+                ASSERT_TRUE(m.sim.current_tick() == 0 && m.net.turns_executed() == 0);   // nothing runs ...
+                ASSERT_TRUE(m.net.stalled_ms() == 0 && !m.net.stalled() && m.net.laggard() == 255 && !m.net.lag_notice() && !m.net.catching_up() && !m.net.self_lag_behind_ms());   // ... and nobody waits, lags or is told
+                ASSERT_TRUE(!m.net.electing() && m.net.match_notice().empty() && !m.net.desynced() && m.net.phase() == NetGame::Phase::Playing);
+            }
+        }
+        for (size_t i = 0; i < 3; ++i) ASSERT_TRUE(first_tick[i] >= kMatchStartDelayMs && first_tick[i] <= kMatchStartDelayMs + 250);       // the host's runner starts with two turns in hand, a guest's adds the link
+        t.run(5000);
+        for (auto& m : t.machines) ASSERT_TRUE(m->net.stalled_ms() == 0 && !m->net.lag_notice() && m->ticks > 60);
+        host.net.freeze();
+        t.run(2000);
+        ASSERT_TRUE(all_equal(t));
+        // a guest of protocol 11 (a raw connection that says its Hello) is refused with the existing refusal, in a room that is open for a match of the same protocol
+        Table room;
+        ASSERT_TRUE(make_room(room, 1));
+        Machine& open_host = *room.machines[0];
+        auto raw = TcpConnection::connect("127.0.0.1", open_host.net.listen_port());
+        ASSERT_TRUE(raw != nullptr);
+        HelloMsg old;
+        old.version = static_cast<uint16_t>(kProtocolVersion - 1);
+        old.name = "Old";
+        bool sent = false;
+        bool refused = false;
+        ASSERT_TRUE(room.run_until([&]() {
+            std::vector<uint8_t> msg;
+            RejectMsg rj;
+            while (raw->poll(msg)) refused = refused || (decode(msg, rj) && rj.reason == RejectReason::VersionMismatch);
+            if (raw->is_open() && !sent) sent = raw->send(encode(old));
+            return refused;
+        }, 5000));
+        ASSERT_EQ(open_host.net.room().slots[2].state, SlotState::Empty);            // nobody sat down for it
+    } TEST_END();
+
+    TEST_CASE("N3.23 Protocol 12, The Host Leaves While The Dialogs Are Up (Before The First Turn Was Sealed): The Lowest Guest Takes Over, Seals The First Turn At Once (A Host That Was Never Seen Seal Anything Has No Schedule To Keep), And The Two Guests Play On Identical; The Match Is Not Lost") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        Machine& carol = *t.machines[2];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(22, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(1500);                                                                // still inside the 5 s: nothing was sealed
+        ASSERT_TRUE(host.sim.current_tick() == 0 && bob.sim.current_tick() == 0 && carol.sim.current_tick() == 0);
+        host.net.leave();
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.is_host() && carol.net.host_seat() == 1; }, 10000));
+        ASSERT_TRUE(t.run_until([&]() { return bob.ticks >= 40 && carol.ticks >= 40; }, 10000));      // the new host seals from turn 0 on, at once: the match plays on
+        ASSERT_FALSE(carol.saw(NetGame::Event::Type::HostLeft));
+        ASSERT_TRUE(t.run_until([&]() { return bob.count(NetGame::Event::Type::PlayerLeft) == 1 && carol.count(NetGame::Event::Type::PlayerLeft) == 1; }, 5000));      // the old host's team drops out
+        ASSERT_TRUE(bob.sim.is_player_dropped(0) && carol.sim.is_player_dropped(0));
+        bob.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(bob.sim.state_hash() == carol.sim.state_hash());
+        ASSERT_EQ(bob.sim.current_tick(), carol.sim.current_tick());
+        ASSERT_FALSE(bob.net.desynced() || carol.net.desynced());
+    } TEST_END();
+}
+
 int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: NetGame (room, start barrier, match) over real sockets\n"
                  "=======================================================\n";
@@ -1160,6 +1242,7 @@ int main() {
     run_migration_tests();
     run_reject_tests();
     run_room_chat_tests();
+    run_start_delay_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

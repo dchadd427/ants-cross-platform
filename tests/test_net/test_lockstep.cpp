@@ -9508,6 +9508,103 @@ void run_team_chat_tests() {
 
 }  // namespace
 
+// ---- protocol 12: the start of a match (the first turn is sealed kMatchStartDelayMs after the match began: the "Get ready to play!" dialog of every machine) -------------------------------
+
+void run_protocol12_tests() {
+    TEST_CASE("N2.94 Protocol 12, The Start Of A Match (A Host With A Seat): The Host Seals The First Turn Exactly start_delay_ms After start() And Nothing Before It; The Seconds Before Are No Stall, No Lag, No Pause And No Growth Of The Jitter Buffer; The First Turn Runs On Every Machine A Link's Delay And One Turn Of Buffer Later; The Match Is Then Identical Everywhere; With The Default Of 0 The First Turn Is Sealed At Once (The Rigs)") {
+        ASSERT_EQ(kMatchStartDelayMs, 5000u);                                       // the dialog's 5 s (the original's task KWFO: Ants.exe 0x10254b0)
+        ASSERT_EQ(kMatchStartDelayMs, sim::kMatchStartDialogMs);
+        {   // the default is a host that seals at once, as every rig of this suite wants it
+            Match m(3, 3, {40, 10});
+            m.run(20, false);
+            ASSERT_TRUE(m.host->turns_sealed() >= 1);
+        }
+        HostSession::Config hc;
+        hc.start_delay_ms = kMatchStartDelayMs;
+        Match m(5, 4, {40, 10}, hc);
+        uint32_t first_seal = 0;
+        uint32_t first_tick = 0;
+        uint32_t first_tick_client = 0;
+        while (m.now < 30000 && (first_seal == 0 || first_tick == 0 || first_tick_client == 0)) {
+            m.run(10, false);
+            if (first_seal == 0 && m.host->turns_sealed() >= 1) first_seal = m.now;
+            if (first_tick == 0 && m.sims[0]->current_tick() >= 1) first_tick = m.now;
+            if (first_tick_client == 0 && m.sims[3]->current_tick() >= 1) first_tick_client = m.now;
+            if (first_seal == 0) {                                                  // the seconds before the first turn: nothing is sealed, run, waited for or reported
+                ASSERT_EQ(m.host->turns_sealed(), 0u);
+                ASSERT_TRUE(!m.host->paused() && !m.host->waiting() && m.host->lagging_mask() == 0 && m.host->laggard() == 255 && m.host->desyncs().empty());
+                ASSERT_EQ(m.host->runner().next_turn_to_execute(), 0u);
+                for (auto& c : m.clients) {
+                    ASSERT_TRUE(c->mode() == ClientSession::Mode::Normal && c->connected() && !c->paused() && !c->catching_up());
+                    ASSERT_TRUE(c->lagging_seat() == 255 && c->self_lag_behind_ms() == 0);
+                    ASSERT_TRUE(c->runner().queued() == 0 && c->runner().next_turn_to_execute() == 0 && c->runner().next_turn_expected() == 0);
+                    ASSERT_TRUE(c->runner().stalled_ms() == 0 && !c->runner().stalled() && !c->runner().rebuilding() && c->runner().buffer_turns() == 1);   // not a stall of the link
+                }
+                for (auto& sm : m.sims) ASSERT_EQ(sm->current_tick(), 0u);
+            }
+        }
+        ASSERT_EQ(first_seal, kMatchStartDelayMs);                                  // sealed on the very pass that is 5 s after start()
+        ASSERT_TRUE(first_tick >= kMatchStartDelayMs && first_tick <= kMatchStartDelayMs + 2 * kTurnMs);                       // the host's own runner begins with two turns in hand
+        ASSERT_TRUE(first_tick_client >= kMatchStartDelayMs + 30 && first_tick_client <= kMatchStartDelayMs + 400);             // a client: the link's delay, the second turn, a few steps of jitter
+        m.run(10000, false);
+        for (auto& c : m.clients) ASSERT_TRUE(c->runner().buffer_turns() == 1 && !c->runner().stalled() && c->lagging_seat() == 255);   // the wait before the start left the buffer as it was
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        for (auto& c : m.clients) ASSERT_FALSE(c->desynced());
+        ASSERT_TRUE(m.all_equal());
+        ASSERT_TRUE(m.sims[0]->current_tick() > 150);
+    } TEST_END();
+
+    TEST_CASE("S2.15 Protocol 12, A Dedicated Server's Start: The Referee's First Turn Is Sealed Exactly start_delay_ms After start() And Nothing Before It, Nobody Is Behind, Announced As Lagging Or Paused In The Seconds Before It (A Room That Holds Seats Included); The Idle Rule Of The Lag Policy Does Not Count Those Seconds: A Seat That Never Acks Is Dropped Its Idle Time After The First Turn, Not After start()") {
+        {   // the idle rule: seat 3's window never runs (no acks, no pings), the rule is 8 s (30 s by default: a shorter rule makes the difference visible)
+            HostSession::Config hc;
+            hc.start_delay_ms = kMatchStartDelayMs;
+            hc.lag_drop_idle_ms = 8000;
+            ServerMatch m(4, 4, {40, 10}, hc);
+            m.frozen_mask = 1u << 3;
+            uint32_t first_seal = 0;
+            while (m.now < 5200 && first_seal == 0) {
+                m.run(10, false);
+                if (m.host->turns_sealed() >= 1) first_seal = m.now;
+                if (first_seal == 0) {                                              // the quiet seconds: nothing is sealed, run or waited for
+                    ASSERT_TRUE(m.host->turns_sealed() == 0 && m.referee.current_tick() == 0 && !m.host->paused() && m.host->lagging_mask() == 0);
+                    ASSERT_TRUE(m.clients[0]->lagging_seat() == 255 && !m.clients[0]->catching_up() && !m.clients[0]->paused() && m.clients[0]->runner().stalled_ms() == 0);
+                }
+            }
+            ASSERT_EQ(first_seal, kMatchStartDelayMs);
+            m.run(7000, false);                                                     // 12 s after start(): the idle rule would have dropped the seat at 8 s if the quiet seconds counted
+            ASSERT_TRUE(m.host->client_present(3));
+            ASSERT_TRUE(m.clients[0]->lagging_seat() == 3);                         // (the others are told who lags once it is 3 s behind)
+            m.run(2000, false);                                                     // 14 s: 9 s after the first turn, the idle time of 8 s is over
+            ASSERT_FALSE(m.host->client_present(3));                                // dropped, the others play on
+            for (auto& c : m.clients) ASSERT_FALSE(c->lost());
+            m.run(1500, false);
+            ASSERT_TRUE(m.sims[0]->is_player_dropped(3) && m.referee.is_player_dropped(3));
+            ASSERT_TRUE(m.sims[0]->current_tick() > 100);
+        }
+        {   // a room that holds seats: the seconds before the first turn are no pause (nobody is missing, nothing is announced), and the first turn comes on time
+            HostSession::Config hc;
+            hc.start_delay_ms = kMatchStartDelayMs;
+            hc.hold_seats = true;
+            ServerMatch m(5, 3, {40, 10}, hc);
+            uint32_t first_seal = 0;
+            while (m.now < 5200 && first_seal == 0) {
+                m.run(10, false);
+                if (m.host->turns_sealed() >= 1) first_seal = m.now;
+                if (first_seal == 0) {
+                    ASSERT_TRUE(!m.host->paused() && !m.host->attendance().paused() && m.host->rejoiners() == 0);
+                    for (auto& c : m.clients) ASSERT_TRUE(!c->paused() && c->presence().missing.empty() && c->presence().resume_s == 0 && c->mode() == ClientSession::Mode::Normal);
+                }
+            }
+            ASSERT_EQ(first_seal, kMatchStartDelayMs);
+            m.run(8000, false);
+            ASSERT_TRUE(!m.host->paused() && m.referee.current_tick() > 100);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+        }
+    } TEST_END();
+}
+
 int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: lock-step core (protocol, sequencer, runner, sessions)\n"
                  "=======================================================\n";
@@ -9524,6 +9621,7 @@ int main() {
     run_reconnect_session_tests();
     run_protocol11_tests();
     run_team_chat_tests();
+    run_protocol12_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

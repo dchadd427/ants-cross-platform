@@ -386,6 +386,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.reason = reason_;
     s.joined = static_cast<uint8_t>(lobby_.players());
     s.bot_controller = bot_controller_ != nullptr;
+    s.bot_start_hold = bot_controller_ != nullptr ? bot_controller_->start_hold() : 0u;
     for (const ai::BotSpec& b : bot_specs_) {
         RoomStatus::Bot row;
         row.seat = b.seat;

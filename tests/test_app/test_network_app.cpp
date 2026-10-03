@@ -1546,6 +1546,60 @@ void run_guest_tests() {
         trio.step(3000);
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash() && app.sim().state_hash() == host.sim.state_hash());
     } TEST_END();
+
+    TEST_CASE("N5.74 The \"Get Ready\" Dialog Of A Guest (A Match On The Local Network, Protocol 12): It Opens When The Match Begins And Ends With The Guest's First Executed Turn, Not Before And Not After (Up At Every 10 ms Step While No Tick Has Run, Gone The Step The First One Ran); In Those 5 s The Portrait Moves, The Clock Shows The Full Time And The Screen Says Nothing (No Waiting Message, No Lag, No Pause); No Click Selects Until It Is Gone") {
+        Peer host;
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = host.net.listen_port();
+        cfg.player_name = "Bob";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Duo duo{app, host};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(4343, hash));
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.sim().current_tick() == 0 && app.hud().match_start_modal_ticks() <= 1u);
+        const uint32_t full_time = app.sim().get_match_time_remaining_ms();
+        ASSERT_TRUE(full_time > 0);
+        const uint32_t mine = static_cast<uint32_t>(ants_of(app.sim(), 1).front());
+        uint32_t waited = 0;
+        while (app.sim().current_tick() == 0 && waited < 20000) {
+            ASSERT_TRUE(app.hud().is_match_start_modal_active());                              // up exactly while no tick has run ...
+            ASSERT_EQ(app.sim().get_match_time_remaining_ms(), full_time);                      // ... the clock shows the match's full time ...
+            ASSERT_TRUE(app.net_overlay_now().text.empty());                                    // ... the screen says nothing: no "Waiting for the other players...", no lag, no "Catching up...", no notice ...
+            ASSERT_TRUE(app.net()->stalled_ms() == 0 && app.net()->laggard() == 255 && !app.net()->lag_notice() && !app.net()->catching_up() && !app.net()->electing() && !app.net()->desynced());
+            if (waited == 2000) {                                                               // ... and a click on an own ant selects nothing
+                for (const auto& a : app.sim().get_world_state().ants) {
+                    if (a.id != mine) continue;
+                    app.renderer().camera().center_on(a.px, a.py, app.sim().grid().width(), app.sim().grid().height());
+                    int32_t sx = 0;
+                    int32_t sy = 0;
+                    ASSERT_TRUE(app.renderer().camera().world_to_screen(a.px, a.py, sx, sy));
+                    ASSERT_TRUE(app.hud().handle_mouse_down(sx, sy, 1, app.sim(), app.renderer().camera()));         // (taken by the dialog)
+                    app.hud().handle_mouse_up(sx, sy, 1, app.sim(), app.renderer().camera());
+                    ASSERT_TRUE(app.hud().get_selected_ant_ids().empty() && app.hud().get_selected_ant_id() == 0u);
+                }
+            }
+            duo.step(10);
+            waited += 10;
+        }
+        ASSERT_TRUE(app.sim().current_tick() >= 1);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());                                  // gone on the very step that the first turn ran
+        ASSERT_TRUE(waited >= kDialogMs && waited <= kDialogMs + 250);                          // 5 s, and the link, the second turn (the buffer) and a step
+        ASSERT_TRUE(app.hud().match_start_modal_ticks() >= static_cast<uint32_t>(kDialogSteps) - 2u);    // the portrait moved in real time, 50 ms at a time, all the while (the wait is no hang)
+        duo.step(3000);
+        ASSERT_TRUE(app.sim().get_match_time_remaining_ms() < full_time);                       // the clock runs from the first tick
+        ASSERT_TRUE(app.net_overlay_now().text.empty() && app.net()->stalled_ms() == 0);
+        host.net.freeze();
+        duo.step(2000);
+        ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash() && !app.net()->desynced());
+    } TEST_END();
 }
 
 // The first player in the room of a dedicated server is its LEADER (protocol 7): its setup screen is the host's, with START, in a "server room" mode
@@ -2027,6 +2081,52 @@ void run_leader_tests() {
         ASSERT_FALSE(app.closing_click_pending());
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
         ASSERT_TRUE(server.status("LEAD-WIDE").state == server::RoomState::Running && server.status("LEAD-WIDE").joined == 2);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.75 The \"Get Ready\" Dialog In A Server's Room (Protocol 12): A Leader Who Starts A Room With Bots Sees The Dialog For The 5 s Before The Referee's First Turn, Up Exactly While No Tick Has Run And Gone The Step The First One Ran; The Referee Seals Nothing And Runs Nothing Meanwhile, The Screen Says Nothing, The Bots Look And Send Nothing; A Click Selects Nothing Until It Is Gone") {
+        Server server;
+        ASSERT_TRUE(server.make_room("DIALOG-APP", 4));
+        ApplicationConfig cfg = join_config(server, "DIALOG-APP", "Solo");
+        cfg.fill_bots = net::FillLevel::Hard;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{server, &app, {}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+        click_start(app);
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 15000));
+        ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.sim().current_tick() == 0);
+        ASSERT_TRUE(server.status("DIALOG-APP").state == server::RoomState::Running && server.status("DIALOG-APP").bots.size() == 3);
+        const uint32_t full_time = app.sim().get_match_time_remaining_ms();
+        const uint32_t mine = static_cast<uint32_t>(ants_of(app.sim(), 0).front());
+        uint32_t waited = 0;
+        while (app.sim().current_tick() == 0 && waited < 20000) {
+            ASSERT_TRUE(app.hud().is_match_start_modal_active());                              // up exactly while no tick has run
+            ASSERT_EQ(app.sim().get_match_time_remaining_ms(), full_time);
+            const server::RoomStatus st = server.status("DIALOG-APP");
+            if (st.turns == 0) ASSERT_TRUE(st.ticks == 0 && !st.paused);                         // the referee seals nothing and runs nothing before its first turn
+            ASSERT_TRUE(app.net_overlay_now().text.empty() && app.net()->stalled_ms() == 0 && !app.net()->lag_notice() && !app.net()->catching_up() && !app.net()->self_lag_behind_ms());
+            if (waited == 2000) {
+                for (const auto& a : app.sim().get_world_state().ants) {
+                    if (a.id != mine) continue;
+                    app.renderer().camera().center_on(a.px, a.py, app.sim().grid().width(), app.sim().grid().height());
+                    int32_t sx = 0;
+                    int32_t sy = 0;
+                    ASSERT_TRUE(app.renderer().camera().world_to_screen(a.px, a.py, sx, sy));
+                    ASSERT_TRUE(app.hud().handle_mouse_down(sx, sy, 1, app.sim(), app.renderer().camera()));
+                    app.hud().handle_mouse_up(sx, sy, 1, app.sim(), app.renderer().camera());
+                    ASSERT_TRUE(app.hud().get_selected_ant_ids().empty() && app.hud().get_selected_ant_id() == 0u);
+                }
+            }
+            hall.step(10);
+            waited += 10;
+        }
+        ASSERT_TRUE(app.sim().current_tick() >= 1);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());                                  // gone on the step that the first turn ran
+        ASSERT_TRUE(waited >= kDialogMs - 100 && waited <= kDialogMs + 400);                    // 5 s (the Begin was read a step or two before the check above) and the link, the second turn, the frames
+        ASSERT_TRUE(server.status("DIALOG-APP").bot_start_hold == ai::kStartHoldTicks);         // the room's bots open like the product's: one token, a look on tick 1 + seat
+        hall.step(3000);
+        ASSERT_TRUE(server.status("DIALOG-APP").ticks > 40 && !app.net()->desynced() && app.net_overlay_now().text.empty());
         app.quit();
     } TEST_END();
 }
@@ -2824,10 +2924,14 @@ void run_hidden_page_tests() {
         ASSERT_FALSE(app.background_driven());                                            // no room, no match of the network
         ASSERT_FALSE(app.background_pump_after(1.0f));
         ASSERT_FALSE(app.background_pump());
+        ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.hud().match_start_modal_ticks() == 0u && app.sim().current_tick() == 0u);   // the "Get ready" dialog of a local game: nothing of it passed in the wake-ups
         const float fps = app.get_current_fps();
         app.run_frame_with_delta(0.040f);                                                 // the frame loop is the only driver of a local game
         ASSERT_TRUE(app.get_current_fps() != fps);
         ASSERT_EQ(app.background_pumps(), 0u);
+        ASSERT_EQ(app.hud().match_start_modal_ticks(), 0u);                               // (40 ms of the frame clock are not a whole step of 50 ms yet)
+        app.run_frame_with_delta(0.040f);
+        ASSERT_TRUE(app.hud().match_start_modal_ticks() == 1u && app.sim().current_tick() == 0u);   // the frames count the dialog, 50 ms a step, and the simulation waits for it
         app.set_page_hidden(false);
         ASSERT_FALSE(app.page_hidden());
     } TEST_END();

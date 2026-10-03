@@ -2289,8 +2289,8 @@ void Application::net_end_session(const std::string& notice) {
 
 // The waiting and out-of-sync messages of a network match (remake UI: the original has no such text). A machine that waits for the next turn
 // says so after one second; a desync stops the match and says so.
-void Application::render_net_overlay() {
-    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return;
+NetOverlayLine Application::net_overlay_now() const {
+    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return NetOverlayLine{};
     NetOverlayInput in;
     in.desynced = net_->desynced();
     in.electing = net_->electing();
@@ -2305,7 +2305,11 @@ void Application::render_net_overlay() {
         in.lag_behind_ms = lag->behind_ms;
     }
     in.notice = net_->match_notice();                                   // "Bob is the host now." for a few seconds
-    const NetOverlayLine line = net_overlay_line(in);
+    return net_overlay_line(in);
+}
+
+void Application::render_net_overlay() {
+    const NetOverlayLine line = net_overlay_now();
     const std::string& text = line.text;
     const ants::assets::ColorRGBA colour = line.alarm ? ants::assets::ColorRGBA{255, 90, 90, 255} : ants::assets::ColorRGBA{255, 255, 255, 255};
     if (text.empty()) return;

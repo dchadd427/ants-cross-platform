@@ -799,7 +799,9 @@ void run_manager_tests() {
         // the engine's rules changed in 9 (the community-map rules), and the number is all that the door has to tell the two games apart
         // (the door decides the version before it looks for the room, so an old game that asks for a room that does not exist is refused for its version, not told "no such room")
         ASSERT_TRUE(net::kProtocolVersion != 8);
-        for (const uint16_t old_version : {uint16_t{4}, uint16_t{8}}) {
+        // (and so is a game of protocol 11, v0.1.0 or v0.1.1: its Hello is a Hello of 12 byte for byte, the number alone refuses it; it would count its dialog in simulation ticks and be blocked for
+        // 100 ticks of the match after the server's late first turn)
+        for (const uint16_t old_version : {uint16_t{4}, uint16_t{8}, uint16_t{11}}) {
             for (const char* room : {"AAA-1", "NOPE-9"}) {
                 auto ends = w.net.connect({10, 0});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "x", w.now);
@@ -4835,6 +4837,48 @@ void run_bot_tests() {
         ASSERT_TRUE(per_seat[0] >= 1 && per_seat[1] >= 1 && per_seat[3] >= 1);        // every bot played (a harvesting bot needs well under a command per second)
         ASSERT_TRUE(first >= 1u + 6u);                                       // a Hard bot looks on tick 1 + seat and its first order leaves 6 to 10 ticks later (then it is sealed into a turn)
         ASSERT_FALSE(ann.session->desynced());
+    } TEST_END();
+    TEST_CASE("S3.75 What The Room's Limit And Status Say About The Start (Protocol 12): run_ms Counts From The Moment The Match Began, The 5 s Before The First Turn Included (A Room With A Limit Of 8 s Fails 8 s After It Began, Not 13); A Room With A Bot Of Its Specification Opens Its Bots Like The Product Does (The Status Says The Controller's Hold Is kStartHoldTicks), A Room Without Bots Has No Controller") {
+        {
+            World w;
+            RoomSpec spec = spec_of("RUNLIM-1", 2);
+            spec.run_ms = 8000;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            w.connect("Ann", "RUNLIM-1");
+            w.connect("Bob", "RUNLIM-1");
+            uint32_t begin = 0;
+            for (int i = 0; i < 400 && begin == 0; ++i) {
+                w.run(10);
+                if (w.status("RUNLIM-1").state == RoomState::Running) begin = w.now;
+            }
+            ASSERT_TRUE(begin != 0);
+            uint32_t failed_after = 0;
+            while (w.now - begin < 20000 && failed_after == 0) {
+                w.run(10);
+                const RoomStatus s = w.status("RUNLIM-1");
+                if (s.state == RoomState::Failed) {
+                    failed_after = w.now - begin;
+                    ASSERT_TRUE(s.reason.find("longer") != std::string::npos);
+                    ASSERT_TRUE(s.turns > 0 && s.turns < 100);                                       // (3 s of turns: the first one was sealed 5 s into the 8)
+                }
+            }
+            ASSERT_TRUE(failed_after >= 8000 && failed_after <= 8000 + net::kTurnMs);             // the limit counts from the begin of the match, the 5 s of the dialog in it
+        }
+        {
+            World w;
+            RoomSpec own = spec_of("HOLDSPEC-1", 2);
+            own.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+            ASSERT_TRUE(w.mgr.create_room(own, w.now).ok);
+            w.connect("Fay", "HOLDSPEC-1");
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PLAIN-1", 2), w.now).ok);
+            w.connect("Gus", "PLAIN-1");
+            w.connect("Hal", "PLAIN-1");
+            w.run(1500);
+            const RoomStatus with_bot = w.status("HOLDSPEC-1");
+            const RoomStatus plain = w.status("PLAIN-1");
+            ASSERT_TRUE(with_bot.state == RoomState::Running && with_bot.bot_controller && with_bot.bot_start_hold == ai::kStartHoldTicks);
+            ASSERT_TRUE(plain.state == RoomState::Running && !plain.bot_controller && plain.bot_start_hold == 0u);
+        }
     } TEST_END();
 }
 

@@ -126,6 +126,7 @@ struct RoomStatus {
     };
     std::vector<Bot> bots;
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
+    uint32_t bot_start_hold{0};             // ... and its start hold in ticks (BotController::start_hold: ai::kStartHoldTicks, the product's opening; 0 without a controller): for the tests, not shown by the control interface
     RoomState state{RoomState::Waiting};
     std::string reason;                     // why a room failed, or how it ended ("" while it runs)
     uint8_t joined{0};

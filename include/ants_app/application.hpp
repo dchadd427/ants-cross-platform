@@ -36,6 +36,7 @@
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
+#include "ants_app/net_overlay.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
 #include "ants_app/room_chat.hpp"
@@ -392,6 +393,9 @@ public:
     bool pointer_outside() const noexcept { return pointer_outside_; }
     /// Where the last frame put the network's ping and delay (none when it drew none: a game of one machine, a screen without the readout); for the tests
     const std::optional<LatencyCornerLayout>& last_latency_layout() const noexcept { return last_latency_layout_; }
+    /// The line that a match of the network shows at the top of the playfield right now (an empty text: nothing, and always for a game that is not a match of the network): the one that
+    /// render_net_overlay draws, from what the network layer reports. Public for the tests (the seconds before the first turn of a match must say nothing)
+    NetOverlayLine net_overlay_now() const;
     /// Where the window is now (client area, screen coordinates)
     WindowRect window_rect() const;
     void update_simulation(float dt);

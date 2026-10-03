@@ -618,8 +618,11 @@ int main() {
             }
         }
         // a Hello of this layout but another version number is "version mismatch" as well (protocols 8 and 9 with the new fields: nobody sends them, a stranger may), key and all; before the
-        // keys, protocol 8 (v0.0.94) was the release whose Hello had exactly the layout of protocol 9 (the community-map rules): nothing but the number told them apart, and the number refuses them
-        for (const uint16_t version : {uint16_t{8}, uint16_t{9}}) {
+        // keys, protocol 8 (v0.0.94) was the release whose Hello had exactly the layout of protocol 9 (the community-map rules): nothing but the number told them apart, and the number refuses them.
+        // The same is the whole of how protocol 11 (v0.1.0 and v0.1.1) is refused by a host of protocol 12: its Hello is byte for byte a Hello of 12, and a client of 11 would count its "Get ready"
+        // dialog in simulation ticks and be blocked for 100 ticks of the running match after the host's late first turn (the match clock waits for the dialog since 12)
+        ASSERT_EQ(kProtocolVersion, 12);
+        for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}}) {
             Room r8;
             auto e8 = r8.net.connect({10, 0});
             r8.host.add_connection(e8.first, 0);
