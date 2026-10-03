@@ -23,8 +23,12 @@
 // after a pause runs), "resume_seconds" (the seconds that are left of that countdown, 0: none), "absent": [{"seat", "name", "state": "absent|catching_up", "away_seconds",
 // "progress"}] (the seats that are missing, longest away first), "vote": {"seat", "continue", "voters"} | null, "paused_seconds" (the match's total pause so far), "rejoins",
 // "drops_by_vote", "drops_by_cap", "rejoins_refused" (Hellos with a key that a budget refused), "catch_up_expired", "streamed_bytes" (the log, streamed to returning players), "log": {"turns", "bytes", "usable"} (the turn log that a returning player is given; it is freed when the match is over and keeps what it held),
+// "record": {"kept": bool (a restart of the server would bring this match back: restart_record.hpp), "bytes", "note" (why not: the server keeps no records, the room holds no seats, the disk
+// refused, the turn log passed its limit, ...)}, "restored": {"turns", "replay_ms", "state_hash"} | null (the room came back from a restart record: the turns that were replayed, how long it took,
+// and the referee's state hash at the restored tick),
 // "result": {"quitter": seat | null, "rows": [{"names": [..], "score", "lost", "killed", "hatched", "winner"}]}}
-// All the reconnect keys are additions: a lobby that ignores them works as before. A seat's key is never in any of it, nor in a result file, nor in a log line.
+// All the reconnect and record keys are additions: a lobby that ignores them works as before. A seat's key is never in any of it, nor in a result file, nor in a log line. A match that a restart could
+// not bring back (another version of the game, a changed map, ...) is a FAILED room whose "reason" says so, from the moment the server has started.
 
 #include <cstdint>
 #include <string>

@@ -4,6 +4,10 @@
 #include "ants_server/secret.hpp"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
+#include <functional>
+#include <limits>
 
 namespace ants::server {
 
@@ -39,6 +43,12 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
 }
 
 namespace {
+
+unsigned seats_in(uint8_t mask) noexcept {
+    unsigned n = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) n += (mask >> seat) & 1u;
+    return n;
+}
 
 ai::Level ai_level_of(net::FillLevel fill) noexcept {
     switch (fill) {
@@ -78,6 +88,8 @@ Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, 
     }
     std::sort(bot_specs_.begin(), bot_specs_.end(), [](const ai::BotSpec& a, const ai::BotSpec& b) { return a.seat < b.seat; });
 }
+
+Room::~Room() = default;
 
 bool Room::expired(uint32_t now_ms) const noexcept {
     return (state_ == RoomState::Finished || state_ == RoomState::Failed) && now_ms - ended_ms_ >= spec_.keep_ms;
@@ -126,6 +138,7 @@ void Room::fail(const std::string& reason, uint32_t now_ms) {
     reason_ = reason;
     ended_ms_ = now_ms;
     end_log(now_ms);
+    record_discard();                                            // the room is over: nothing to bring back after a restart
     close_connections();
 }
 
@@ -188,17 +201,8 @@ bool Room::start_bots(uint32_t seed, std::string& why) {
     return true;
 }
 
-void Room::begin_match(uint32_t now_ms) {
-    const net::StartMsg& start = lobby_.start_info();
-    sim_ = std::make_unique<sim::SimulationEngine>();
-    sim_->set_fog_of_war_enabled(start.fog);
-    sim_->init(level_, start.seed, start.roster);                // exactly what every client does with the same values
-    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
-        if ((start.roster & (1u << seat)) == 0) continue;
-        names_[seat] = start.names[seat];
-        sim_->set_player_name(seat, start.names[seat]);
-    }
-    started_ms_ = now_ms;                                        // (run_ms counts from here: the 5 s before the first turn count, the match's pauses do not)
+// The session of the match, as a match that starts and a match that is restored both make it: a host without a seat that holds seats when the room says so
+void Room::build_session(uint32_t restart_vote_after_ms) {
     net::HostSession::Config hc;
     hc.host_player = net::kNoSeat;
     hc.start_delay_ms = net::kMatchStartDelayMs;                  // protocol 12: the first turn is sealed when the "Get ready to play!" dialog of every machine has had its 5 s (session.hpp)
@@ -207,12 +211,28 @@ void Room::begin_match(uint32_t now_ms) {
     // A room that holds seats pauses the match for a player whose connection is lost (and whose key it knows) instead of dropping it: the vote, the cap and the log are the room's settings
     hc.hold_seats = spec_.reconnect;
     hc.attendance.vote_after_ms = spec_.vote_after_ms;
+    hc.attendance.restart_vote_after_ms = std::max(restart_vote_after_ms, spec_.vote_after_ms);      // (after a restart: never less than a lost link's time)
     hc.attendance.max_pause_ms = spec_.max_pause_ms;
     hc.attendance.max_catch_up_ms = spec_.max_catch_up_ms;
     hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
+}
+
+void Room::begin_match(uint32_t now_ms) {
+    const net::StartMsg& start = lobby_.start_info();
+    sim_ = std::make_unique<sim::SimulationEngine>();
+    sim_->set_fog_of_war_enabled(start.fog);
+    sim_->init(level_, start.seed, start.roster);                // exactly what every client does with the same values
+    roster_ = start.roster;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((start.roster & (1u << seat)) == 0) continue;
+        names_[seat] = start.names[seat];
+        sim_->set_player_name(seat, start.names[seat]);
+    }
+    started_ms_ = now_ms;                                        // (run_ms counts from here: the 5 s before the first turn count, the match's pauses do not)
+    build_session(restart_store_ != nullptr ? restart_store_->config().restart_vote_after_ms : net::kRestartVoteAfterMs);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);
         if (lobby_.room().slots[seat].state == net::SlotState::Bot) session_->add_bot_seat(seat);       // a computer player: no connection, acknowledged by the server itself
@@ -223,6 +243,7 @@ void Room::begin_match(uint32_t now_ms) {
         session_->set_seat_keys(keys);
         session_->set_rejoin_start(start);                          // what a machine that starts from nothing is sent first
     }
+    record_hook_up();                                               // (before the first turn can be sealed: every turn goes to the restart record before it goes to anybody)
     session_->start(now_ms);
     std::string bot_problem;
     if (!start_bots(start.seed, bot_problem)) {
@@ -239,6 +260,7 @@ void Room::finish(const std::string& reason, uint32_t now_ms) {
     ended_ms_ = now_ms;
     if (session_) session_->freeze();
     end_log(now_ms);
+    record_discard();                                            // the match is over: nothing to bring back after a restart
     if (sim_) {
         final_hash_ = sim_->state_hash().total;                       // (once, at the end: the hash is not worth computing at every pass)
         const sim::MatchResult result = sim_->get_world_state().match_result;
@@ -284,6 +306,7 @@ void Room::update(uint32_t now_ms) {
                 state_ = RoomState::Waiting;
                 retry_at_ms_ = now_ms + kRetryMs;
                 unseat_fill();                                       // the room is as it was before the START: the bots that it seated go again
+                record_discard();                                    // (and it has no match to bring back)
             }
         } else if (ev.type == net::HostLobby::Event::Type::Begun && state_ == RoomState::Loading) {
             begin_match(now_ms);
@@ -336,6 +359,7 @@ void Room::update(uint32_t now_ms) {
                 if (seated && lobby_.start(seed_, map_.hash, now_ms)) {
                     state_ = RoomState::Loading;
                     lobby_.host_loaded(true);                        // the server loaded the map when it made the room
+                    record_open(now_ms);                             // the match is fixed (the start message, the keys): a restart from here on can bring it back
                 } else {
                     unseat_fill();                                   // (the lobby refused: the room is as it was)
                 }
@@ -348,6 +372,10 @@ void Room::update(uint32_t now_ms) {
 
     if (state_ == RoomState::Running && session_) {
         session_->update(now_ms);
+        if (record_ != nullptr && restart_store_ != nullptr && net::time_reached(now_ms, next_sync_ms_)) {       // the record is made durable once a second (what write() leaves to the operating system)
+            next_sync_ms_ = now_ms + restart_store_->config().sync_every_ms;
+            if (record_->dirty() && !record_->sync()) record_stop("the disk refused a flush: " + record_->error());
+        }
         last_turns_ = session_->turns_sealed();
         if (sim_) {
             last_ticks_ = static_cast<uint32_t>(sim_->current_tick());
@@ -373,6 +401,259 @@ void Room::update(uint32_t now_ms) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Restart records (restart_record.hpp)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// What a record's head holds: the room as it is, the match that is being started (the start message without the addresses of the clients: the record is no place for them) and the keys that the lobby
+// gave out (secrets: they are in this file and nowhere else)
+RestartHead Room::make_head() const {
+    RestartHead h;
+    if (restart_store_ != nullptr) h.identity = restart_store_->config().identity;
+    h.code = spec_.code;
+    h.map = map_.name;
+    h.map_hash = map_.hash;
+    h.players = spec_.players;
+    h.fog = spec_.fog;
+    h.early_start = spec_.early_start;
+    h.wait_ms = spec_.wait_ms;
+    h.load_ms = spec_.load_ms;
+    h.keep_ms = spec_.keep_ms;
+    h.run_ms = spec_.run_ms;
+    h.vote_after_ms = spec_.vote_after_ms;
+    h.max_pause_ms = spec_.max_pause_ms;
+    h.max_catch_up_ms = spec_.max_catch_up_ms;
+    h.resume_countdown_ms = spec_.resume_countdown_ms;
+    h.max_log_bytes = spec_.max_log_bytes;
+    h.max_connections = static_cast<uint32_t>(std::min<size_t>(spec_.max_connections, UINT32_MAX));
+    h.bots = bot_specs_;
+    h.fill_mask = fill_seats_;
+    h.start = lobby_.start_info();
+    for (net::Endpoint& e : h.start.endpoints) e = net::Endpoint{};      // (how the other clients reach a client: its address, which the record has no business keeping)
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) h.keys[seat] = lobby_.key_of(seat);
+    return h;
+}
+
+void Room::record_open(uint32_t now_ms) {
+    record_.reset();
+    record_note_.clear();
+    if (restart_store_ == nullptr || !restart_store_->enabled()) {
+        record_note_ = "this server keeps no restart records";
+        return;
+    }
+    if (!spec_.reconnect) {
+        record_note_ = "the room holds no seats (reconnect is off): a restart ends its match";
+        return;
+    }
+    std::string why;
+    record_ = restart_store_->create(make_head(), why);
+    if (record_ == nullptr) {
+        record_note_ = "no restart record could be made: " + why;
+        restart_store_->note("room " + spec_.code + ": " + record_note_ + " (a restart would end this match)");
+        return;
+    }
+    const uint32_t every = std::max<uint32_t>(1, restart_store_->config().sync_every_ms);
+    next_sync_ms_ = now_ms + static_cast<uint32_t>(std::hash<std::string>{}(spec_.code) % every);      // (the rooms' syncs are spread over the second, not made all at once)
+}
+
+// Every sealed turn goes to the record BEFORE it goes to anybody (HostSession::set_on_seal), and the referee's hash after every 20th turn is its checkpoint. The record ends at once when the
+// log of the match is dead (the room can no longer give the match to a player who comes back, so a restart could not hold its seats) or the disk refuses.
+void Room::record_hook_up() {
+    if (record_ == nullptr || session_ == nullptr) return;
+    session_->set_on_seal([this](const net::TurnMsg& turn) {
+        if (record_ == nullptr) return;
+        if (!session_->log().usable()) return record_stop("the turn log passed its limit or the server's memory for logs, so the match could not be given to a player who comes back: a restart would end it");
+        if (!record_->append_turn(turn)) record_stop("the disk refused a write: " + record_->error());
+    });
+    session_->set_on_referee_hash([this](uint32_t turn, const sim::StateHash& hash) {
+        if (record_ == nullptr) return;
+        if (!record_->append_check(turn, hash.total)) record_stop("the disk refused a write: " + record_->error());
+    });
+}
+
+// The record cannot be kept any more: it is deleted (a record that stops in the middle of a match would bring the match back at the wrong tick), the room plays on, and says why
+void Room::record_stop(const std::string& note) {
+    if (record_ == nullptr) return;
+    record_->discard();
+    record_.reset();
+    record_note_ = note;
+    if (restart_store_ != nullptr) restart_store_->note("room " + spec_.code + ": the restart record is gone, a restart would end this match: " + note);
+}
+
+// The room is over, or its start was cancelled: there is no match to bring back
+void Room::record_discard() {
+    if (record_ != nullptr) {
+        record_->discard();
+        record_.reset();
+    }
+    record_note_.clear();
+}
+
+void Room::flush_record() {
+    if (record_ == nullptr) return;
+    if (record_->dirty() && !record_->sync()) record_stop("the disk refused a flush: " + record_->error());
+}
+
+void Room::release_record() {
+    record_.reset();
+}
+
+RoomSpec room_spec_of(const RestartHead& h) {
+    RoomSpec spec;
+    spec.code = h.code;
+    spec.map = h.map;
+    spec.fog = h.fog;
+    spec.players = h.players;
+    spec.early_start = h.early_start;
+    for (const ai::BotSpec& b : h.bots) {
+        if ((h.fill_mask & (1u << b.seat)) == 0) spec.bots.push_back(b);        // (the leader's fill is seated by Room::restore)
+    }
+    spec.has_seed = true;
+    spec.seed = h.start.seed;
+    spec.wait_ms = h.wait_ms;
+    spec.load_ms = h.load_ms;
+    spec.keep_ms = h.keep_ms;
+    spec.run_ms = h.run_ms;
+    spec.reconnect = true;                                      // (only a room that holds seats has a record)
+    spec.vote_after_ms = h.vote_after_ms;
+    spec.max_pause_ms = h.max_pause_ms;
+    spec.max_log_bytes = static_cast<size_t>(std::min<uint64_t>(h.max_log_bytes, std::numeric_limits<size_t>::max()));
+    spec.max_catch_up_ms = h.max_catch_up_ms;
+    spec.resume_countdown_ms = h.resume_countdown_ms;
+    spec.max_connections = h.max_connections;
+    return spec;
+}
+
+std::unique_ptr<Room> Room::refused(const RestartHead& head, const std::string& reason, uint32_t turns, uint32_t now_ms) {
+    RoomSpec spec = room_spec_of(head);
+    spec.bots.clear();                                          // (nobody sits down in a room that is over)
+    MapEntry entry;
+    entry.name = head.map;
+    entry.hash = head.map_hash;
+    auto room = std::make_unique<Room>(std::move(spec), std::move(entry), assets::LevelData{}, head.start.seed, now_ms, nullptr);
+    room->state_ = RoomState::Failed;
+    room->reason_ = reason;
+    room->ended_ms_ = now_ms;
+    room->connections_closed_ = true;
+    room->from_record_ = true;
+    room->roster_ = head.start.roster;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((head.start.roster & (1u << seat)) != 0) room->names_[seat] = head.start.names[seat];
+    }
+    room->last_turns_ = turns;
+    room->last_ticks_ = turns;
+    return room;
+}
+
+bool Room::restore(const RestartLoaded& rec, uint32_t now_ms, uint32_t restart_vote_after_ms, uint32_t replay_budget_ms, std::string& why) {
+    const RestartHead& h = rec.head;
+    if (state_ != RoomState::Waiting || session_ != nullptr || !spec_.reconnect || restart_store_ == nullptr || h.code != spec_.code || !rec.ok()) {
+        why = "the room is not one that a record can be restored into";
+        return false;
+    }
+    const auto began = std::chrono::steady_clock::now();
+    const auto real_ms = [&began]() { return static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count()); };
+    // the bots: the specification's sat down when the room was made, the leader's fill sits down again now (the lobby refuses what the match could not have had)
+    for (const ai::BotSpec& b : h.bots) {
+        if ((h.fill_mask & (1u << b.seat)) == 0) continue;
+        if (!lobby_.add_bot(b.seat, ai::bot_display_name(b))) {
+            why = "a bot of the record cannot sit down again";
+            return false;
+        }
+        bot_specs_.push_back(b);
+        fill_seats_ = static_cast<uint8_t>(fill_seats_ | (1u << b.seat));
+    }
+    std::sort(bot_specs_.begin(), bot_specs_.end(), [](const ai::BotSpec& a, const ai::BotSpec& b) { return a.seat < b.seat; });
+    if (bot_specs_.size() != h.bots.size()) {
+        why = "the bots of the record do not all sit down again";
+        return false;
+    }
+    const net::StartMsg& start = h.start;
+    roster_ = start.roster;
+    from_record_ = true;
+    sim_ = std::make_unique<sim::SimulationEngine>();
+    sim_->set_fog_of_war_enabled(start.fog);
+    sim_->init(level_, start.seed, start.roster);                // exactly what begin_match does, and every client
+    uint8_t bot_mask = 0;
+    for (const ai::BotSpec& b : bot_specs_) bot_mask = static_cast<uint8_t>(bot_mask | (1u << b.seat));
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((start.roster & (1u << seat)) == 0) continue;
+        names_[seat] = start.names[seat];
+        sim_->set_player_name(seat, start.names[seat]);
+    }
+    build_session(restart_vote_after_ms);
+    std::array<net::SeatKey, sim::MAX_PLAYERS> keys{};
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) keys[seat] = h.keys[seat];
+    session_->set_seat_keys(keys);
+    session_->set_rejoin_start(start);                           // what a machine that starts from nothing is sent first (no addresses of clients in it)
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((bot_mask & (1u << seat)) != 0) session_->add_bot_seat(seat);
+    }
+    // The replay: every sealed turn goes into the log (what a player who comes back is given) and into the referee's runner, which runs them 20 at a time; at every checkpoint the referee's state
+    // hash must be the one that the old server had at that turn: a replay that is not the match that was played (the rules of this build are not those of the one that wrote the record) stops here
+    net::LockstepRunner& runner = session_->runner();
+    size_t next_check = 0;
+    for (const net::TurnMsg& turn : rec.turns) {
+        if (!session_->restore_turn(turn)) {
+            why = "the turn log cannot hold the match (its limit, or the server's memory for logs)";
+            return false;
+        }
+        if ((turn.turn + 1) % net::kHashEveryTurns != 0) continue;
+        runner.fast_forward(static_cast<uint32_t>(runner.queued()));
+        if (next_check < rec.checks.size() && rec.checks[next_check].turn == turn.turn) {
+            if (sim_->state_hash().total != rec.checks[next_check].hash) {
+                why = "the replay does not agree with the state hash that the record holds for turn " + std::to_string(turn.turn) + ": the rules of this build are not those that played the match";
+                return false;
+            }
+            ++next_check;
+        }
+        if (real_ms() > replay_budget_ms) {
+            why = "the replay would take longer than the " + std::to_string(replay_budget_ms / 1000) + " s that a restore may";
+            return false;
+        }
+    }
+    runner.fast_forward(static_cast<uint32_t>(runner.queued()));
+    if (runner.next_turn_to_execute() != rec.turns.size() || runner.queued() != 0 || !runner.at_boundary() || next_check != rec.checks.size()) {
+        why = "the replay of the record did not run every turn of it";
+        return false;
+    }
+    restored_hash_ = sim_->state_hash().total;
+    // who is at the table: every seat of a person is held, except those that the match had dropped already (the engine knows who left: their Drop is in the turns)
+    const uint8_t humans = static_cast<uint8_t>(start.roster & ~bot_mask);
+    uint8_t dropped = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((humans & (1u << seat)) != 0 && sim_->is_player_dropped(seat)) dropped = static_cast<uint8_t>(dropped | (1u << seat));
+    }
+    session_->start_restored(now_ms, humans, dropped);
+    // The match began that long ago, as far as its limit and its age are concerned: its first turn waited for the dialog (protocol 12) and every turn is 50 ms of play. The pause that the restart is
+    // does not count (Attendance::held_ms), as every pause does not.
+    const uint32_t ran_ms = net::kMatchStartDelayMs + static_cast<uint32_t>(rec.turns.size()) * net::kTurnMs;
+    started_ms_ = now_ms - ran_ms;
+    created_ms_ = started_ms_;
+    retry_at_ms_ = now_ms;
+    // the record goes on being written (a torn tail is cut off); when it cannot be opened the room is restored all the same, and says that a second restart would end it
+    std::string open_why;
+    record_ = restart_store_->reopen(rec.path, rec.good_bytes, static_cast<uint32_t>(rec.turns.size()), open_why);
+    if (record_ == nullptr) {
+        record_note_ = "the restart record could not be opened again: " + open_why;
+        restart_store_->remove_file(rec.path);                   // (a record that is not written any more would bring the match back at the wrong tick)
+        restart_store_->note("room " + spec_.code + ": " + record_note_ + " (another restart would end this match)");
+    } else {
+        record_hook_up();
+        const uint32_t every = std::max<uint32_t>(1, restart_store_->config().sync_every_ms);
+        next_sync_ms_ = now_ms + static_cast<uint32_t>(std::hash<std::string>{}(spec_.code) % every);
+    }
+    if (!start_bots(start.seed, why)) return false;              // (the bots start again at the restored tick: their tasks are soft, docs/BOTS.md; a bot that was running goes on from what it sees)
+    state_ = RoomState::Running;
+    restored_ = true;
+    restored_turns_ = static_cast<uint32_t>(rec.turns.size());
+    last_turns_ = session_->turns_sealed();
+    last_ticks_ = static_cast<uint32_t>(sim_->current_tick());
+    restore_ms_ = real_ms();
+    if (sim_->is_match_over()) finish("the match had ended when the server stopped", now_ms);
+    return true;
+}
+
 RoomStatus Room::status(uint32_t now_ms) const {
     RoomStatus s;
     s.code = spec_.code;
@@ -384,9 +665,12 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.ignored_start_requests = lobby_.ignored_start_requests() + (session_ ? session_->ignored_start_requests() : 0u);       // (the late ones of a running match are the session's)
     s.state = state_;
     s.reason = reason_;
-    s.joined = static_cast<uint8_t>(lobby_.players());
+    s.joined = static_cast<uint8_t>(from_record_ ? seats_in(roster_) : lobby_.players());       // (a room made from a record has no lobby that knows its players: the roster of its match does)
     s.bot_controller = bot_controller_ != nullptr;
     s.bot_start_hold = bot_controller_ != nullptr ? bot_controller_->start_hold() : 0u;
+    if (bot_controller_ != nullptr) {
+        for (const ai::BotSpec& b : bot_specs_) s.bot_decisions += bot_controller_->stats(b.seat).decisions;
+    }
     for (const ai::BotSpec& b : bot_specs_) {
         RoomStatus::Bot row;
         row.seat = b.seat;
@@ -399,7 +683,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     const net::RoomMsg& room = lobby_.room();
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         s.names[seat] = room.slots[seat].state == net::SlotState::Empty ? std::string() : room.slots[seat].name;
-        if (state_ == RoomState::Running || state_ == RoomState::Finished) {
+        if (state_ == RoomState::Running || state_ == RoomState::Finished || from_record_) {
             if (!names_[seat].empty()) s.names[seat] = names_[seat];
         }
     }
@@ -415,6 +699,17 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.max_catch_up_ms = spec_.max_catch_up_ms;
     s.resume_countdown_ms = spec_.resume_countdown_ms;
     s.connections = static_cast<uint32_t>(connections_.size());
+    s.record_kept = record_ != nullptr;
+    s.record_bytes = record_ != nullptr ? record_->bytes() : 0u;
+    s.record_note = record_note_;
+    if (record_ == nullptr && record_note_.empty()) {
+        s.record_note = state_ == RoomState::Waiting ? "the room has not started: a room is kept from the start of its match on" : "the room is over";
+        if (state_ == RoomState::Waiting && restart_store_ == nullptr) s.record_note = "this server keeps no restart records";
+    }
+    s.restored = restored_;
+    s.restored_turns = restored_turns_;
+    s.restore_ms = restore_ms_;
+    s.restored_hash = restored_hash_;
     if (session_) {
         const net::Attendance& a = session_->attendance();
         const bool running = state_ == RoomState::Running;

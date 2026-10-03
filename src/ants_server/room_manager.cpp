@@ -1,13 +1,20 @@
 #include "ants_server/room_manager.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <exception>
+#include <filesystem>
 #include <random>
 
 #include "ants_net/protocol.hpp"
 
+namespace fs = std::filesystem;
+
 namespace ants::server {
 
 RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes) {}
+
+RoomManager::~RoomManager() = default;
 
 RoomSpec RoomManager::default_spec() const {
     RoomSpec spec;
@@ -32,6 +39,23 @@ std::string RoomManager::new_code() {
     return "R" + std::to_string(++code_counter_);
 }
 
+namespace {
+
+// The ranges of a room's specification (what create_room and the control interface refuse, and what a restart record's room must keep): "" when all is well, else what is wrong, as the sentence of a 400
+std::string spec_range_error(const RoomSpec& spec) {
+    if (spec.wait_ms < 1000 || spec.wait_ms > 24u * 3600u * 1000u) return "wait_seconds must be 1 to 86400";
+    if (spec.load_ms < 1000 || spec.load_ms > 600u * 1000u) return "load_seconds must be 1 to 600";
+    if (spec.vote_after_ms < kMinVoteAfterMs || spec.vote_after_ms > kMaxVoteAfterMs) return "hold_vote_seconds must be 5 to 3600";
+    if (spec.max_pause_ms < kMinMaxPauseMs || spec.max_pause_ms > kMaxMaxPauseMs) return "max_pause_seconds must be 60 to 86400";
+    if (spec.max_catch_up_ms < kMinCatchUpMs || spec.max_catch_up_ms > kMaxCatchUpLimitMs) return "max_catch_up_seconds must be 10 to 3600";
+    if (spec.resume_countdown_ms > kMaxResumeCountdownMs) return "resume_countdown_seconds must be 0 to 60";
+    if (spec.max_connections < spec.players || spec.max_connections > 4096) return "max_connections must be the number of players to 4096";
+    if (spec.max_log_bytes < kMinLogBytes || spec.max_log_bytes > kMaxLogBytes) return "the limit of the turn log must be 1 KiB to 1 GiB";
+    return std::string();
+}
+
+}  // namespace
+
 CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     CreateResult r;
     auto fail = [&](int status, const std::string& why) {
@@ -44,14 +68,7 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     if (spec.players < 2 || spec.players > sim::MAX_PLAYERS) return fail(400, "players must be 2 to 4");
     if (!spec.code.empty() && (!net::valid_room_code(spec.code))) return fail(400, "the room code may hold letters, digits, '_' and '-' only (up to 32 characters)");
     if (!spec.code.empty() && rooms_.find(spec.code) != rooms_.end()) return fail(409, "a room with this code exists");
-    if (spec.wait_ms < 1000 || spec.wait_ms > 24u * 3600u * 1000u) return fail(400, "wait_seconds must be 1 to 86400");
-    if (spec.load_ms < 1000 || spec.load_ms > 600u * 1000u) return fail(400, "load_seconds must be 1 to 600");
-    if (spec.vote_after_ms < kMinVoteAfterMs || spec.vote_after_ms > kMaxVoteAfterMs) return fail(400, "hold_vote_seconds must be 5 to 3600");
-    if (spec.max_pause_ms < kMinMaxPauseMs || spec.max_pause_ms > kMaxMaxPauseMs) return fail(400, "max_pause_seconds must be 60 to 86400");
-    if (spec.max_catch_up_ms < kMinCatchUpMs || spec.max_catch_up_ms > kMaxCatchUpLimitMs) return fail(400, "max_catch_up_seconds must be 10 to 3600");
-    if (spec.resume_countdown_ms > kMaxResumeCountdownMs) return fail(400, "resume_countdown_seconds must be 0 to 60");
-    if (spec.max_connections < spec.players || spec.max_connections > 4096) return fail(400, "max_connections must be the number of players to 4096");
-    if (spec.max_log_bytes < kMinLogBytes || spec.max_log_bytes > kMaxLogBytes) return fail(400, "the limit of the turn log must be 1 KiB to 1 GiB");
+    if (const std::string range = spec_range_error(spec); !range.empty()) return fail(400, range);
     // The bots of the room (docs/BOTS.md B6): distinct seats, a kind that exists, at least one seat left for a person, and never together with Fog of War (a bot would see through it)
     if (!spec.bots.empty()) {
         if (spec.fog) return fail(400, "bots cannot play with Fog of War: a bot would see through it");
@@ -76,7 +93,9 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
         seed = rd();
     }
     const std::string code = spec.code;
-    rooms_.emplace(code, std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), seed, now_ms, &log_budget_));
+    auto room = std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), seed, now_ms, &log_budget_);
+    if (restart_ != nullptr && restart_->enabled()) room->set_restart_store(restart_.get());       // (a room that holds seats keeps a record from the start of its match: room.hpp)
+    rooms_.emplace(code, std::move(room));
     ++created_;
     r.ok = true;
     r.http_status = 201;
@@ -274,6 +293,159 @@ void RoomManager::update(uint32_t now_ms) {
             ++it;
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Restart records
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+bool RoomManager::enable_restart_records(RestartConfig config, std::string& why) {
+    restart_.reset();
+    if (config.dir.empty()) return true;
+    auto store = std::make_unique<RestartStore>(std::move(config));
+    if (!store->prepare(why)) return false;
+    restart_ = std::move(store);
+    return true;
+}
+
+std::vector<std::string> RoomManager::take_notices() {
+    return restart_ != nullptr ? restart_->take_notes() : std::vector<std::string>();
+}
+
+namespace {
+
+std::string seconds_text(uint64_t ms) { return std::to_string(ms / 1000) + " s"; }
+
+std::string hex16(uint64_t v) {
+    static const char kHex[] = "0123456789abcdef";
+    std::string out(16, '0');
+    for (int i = 0; i < 16; ++i) out[static_cast<size_t>(15 - i)] = kHex[(v >> (4 * i)) & 0xFu];
+    return out;
+}
+
+const char* read_status_name(RestartLoaded::Status status) {
+    switch (status) {
+        case RestartLoaded::Status::Ok: return "ok";
+        case RestartLoaded::Status::Unreadable: return "unreadable";
+        case RestartLoaded::Status::TooBig: return "too big";
+        case RestartLoaded::Status::NotARecord: return "not a record";
+        case RestartLoaded::Status::UnknownFormat: return "another format";
+        case RestartLoaded::Status::Corrupt: return "corrupt";
+    }
+    return "unknown";
+}
+
+}  // namespace
+
+RestoreReport RoomManager::restore_rooms(uint32_t now_ms) {
+    RestoreReport report;
+    if (restart_ == nullptr || !restart_->enabled()) return report;
+    const RestartConfig& cfg = restart_->config();
+    for (const std::string& path : restart_->records()) {
+        RestoreItem item;
+        item.file = fs::path(path).filename().string();
+        // One record: read (and checked all through), judged, and either made a room again or made a failed room with the reason. Its file is deleted unless the room that it became goes on writing it.
+        const auto unreadable = [&](const std::string& note) {
+            item.outcome = RestoreItem::Outcome::Unreadable;
+            item.note = note;
+            restart_->remove_file(path);
+            restart_->note("restart record " + item.file + " was not restored: " + note);
+            report.items.push_back(item);
+        };
+        RestartLoaded rec = read_restart_record(path, cfg.max_record_bytes);
+        if (!rec.ok()) {
+            unreadable(std::string(read_status_name(rec.status)) + ": " + rec.why);
+            continue;
+        }
+        const RestartHead& head = rec.head;
+        item.code = head.code;
+        item.turns = static_cast<uint32_t>(rec.turns.size());
+        if (rooms_.find(head.code) != rooms_.end()) {                       // (two records for one code cannot be: the name holds a hash of the code; a room made before the restore can)
+            unreadable("a room with the code " + head.code + " exists already");
+            continue;
+        }
+        // The things that make a match impossible to go on with. What each says is what the status shows for the room, and the log.
+        std::string refusal;
+        if (!head.identity.same_rules_as(cfg.identity)) {
+            refusal = "ended by a restart of the server: the match was started by " + head.identity.game_version + " (protocol " + std::to_string(head.identity.protocol) + "), this server is " + cfg.identity.game_version +
+                      " (protocol " + std::to_string(cfg.identity.protocol) + "), and a match cannot go on across a change of the rules";
+        }
+        RoomSpec spec = room_spec_of(head);
+        MapEntry entry;
+        assets::LevelData level;
+        if (refusal.empty()) {
+            const std::string range = spec_range_error(spec);
+            if (!range.empty()) refusal = "ended by a restart of the server: the record holds a room that this server would not make (" + range + ")";
+        }
+        if (refusal.empty()) {
+            std::error_code ec;
+            const auto age = fs::file_time_type::clock::now() - fs::last_write_time(path, ec);
+            const uint64_t age_ms = ec || age.count() < 0 ? 0u : static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(age).count());
+            if (age_ms > cfg.max_age_ms) refusal = "ended by a restart of the server: the record was last written " + seconds_text(age_ms) + " ago and its players have given up";
+        }
+        if (refusal.empty() && rooms_.size() >= limits_.max_rooms) refusal = "ended by a restart of the server: this server has no room for another room";
+        if (refusal.empty()) {
+            std::string why;
+            if (!store_.find(head.map, entry, &why)) refusal = "ended by a restart of the server: the map " + head.map + " is not on this server (" + why + ")";
+            else if (entry.hash != head.map_hash) refusal = "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
+            else if (!level.load_from_file(entry.path)) refusal = "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
+            else if (!level.validate(head.start.roster).playable) refusal = "ended by a restart of the server: the map cannot be played by the seats of the match";
+        }
+        std::unique_ptr<Room> room;
+        uint32_t replay_ms = 0;
+        if (refusal.empty()) {
+            room = std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), head.start.seed, now_ms, &log_budget_);
+            room->set_restart_store(restart_.get());
+            std::string why;
+            bool ok = false;
+            try {
+                ok = room->restore(rec, now_ms, cfg.restart_vote_after_ms, cfg.replay_budget_ms, why);
+            } catch (const std::exception& e) {
+                why = std::string("the replay failed (") + e.what() + ")";
+            }
+            if (!ok) {
+                refusal = "ended by a restart of the server: " + why;
+                room.reset();                                           // (it holds a half-built match, and maybe the record's file: closed with it, deleted below)
+            }
+        }
+        if (room != nullptr) {
+            const RoomStatus st = room->status(now_ms);
+            replay_ms = st.restore_ms;
+            item.outcome = RestoreItem::Outcome::Restored;
+            item.replay_ms = replay_ms;
+            item.note = "restored: " + std::to_string(item.turns) + " turns (" + seconds_text(uint64_t{item.turns} * net::kTurnMs) + " of play) replayed in " + std::to_string(replay_ms) + " ms, state hash " + hex16(st.restored_hash) + ", " +
+                        std::to_string(st.absent.size()) + " seat(s) waiting for their players" + (st.state == RoomState::Finished ? "; the match had ended" : std::string());
+            restart_->note("room " + head.code + " " + item.note);
+            rooms_.emplace(head.code, std::move(room));
+            report.items.push_back(item);
+            continue;
+        }
+        // not restored: the room is there as a failed room with the reason, and the record goes
+        item.outcome = RestoreItem::Outcome::Ended;
+        item.note = refusal;
+        restart_->remove_file(path);
+        if (rooms_.size() < limits_.max_rooms) rooms_.emplace(head.code, Room::refused(head, refusal, item.turns, now_ms));
+        restart_->note("room " + head.code + " was not restored: " + refusal);
+        report.items.push_back(item);
+    }
+    return report;
+}
+
+size_t RoomManager::shutdown(uint32_t now_ms) {
+    size_t kept = 0;
+    for (auto& kv : rooms_) {
+        Room& room = *kv.second;
+        if (room.keeps_record()) {
+            room.flush_record();                                  // (a record that the disk refuses to make durable is gone: its room does not count)
+            if (room.keeps_record()) {
+                ++kept;
+                room.release_record();                            // the file stays as it is: a record is deleted when its room is over, never because the server stops
+            }
+            continue;
+        }
+        room.close("closed by the owner", now_ms);                // (a room without a record ends with the server, as it always did)
+    }
+    return kept;
 }
 
 std::vector<RoomStatus> RoomManager::take_ended(uint32_t now_ms) {

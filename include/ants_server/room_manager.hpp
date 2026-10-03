@@ -23,9 +23,14 @@
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/restart_record.hpp"
 #include "ants_server/room.hpp"
 
 namespace ants::server {
+
+/// Whether the rooms of a server hold the seat of a player whose connection is lost unless something says otherwise (ServerLimits::reconnect, the server's `--reconnect` / `--no-reconnect`: the rooms
+/// that the control interface makes and the demo rooms follow it). OFF while the game's own clients cannot come back by themselves; the release that adds that (release B) flips this one constant.
+inline constexpr bool kReconnectByDefault = false;
 
 struct ServerLimits {
     size_t max_rooms{256};
@@ -50,7 +55,7 @@ struct ServerLimits {
     std::vector<std::string> demo_maps;
     // Reconnect (protocol 10; ants_server's --reconnect, --hold-vote-seconds, --max-pause-seconds, --max-catch-up-seconds, --resume-countdown-seconds, --log-mb): what a room holds unless its specification says otherwise. Demo rooms follow
     // `reconnect`. OFF by default in this release.
-    bool reconnect{false};
+    bool reconnect{kReconnectByDefault};
     uint32_t hold_vote_ms{net::kVoteAfterMs};                       // the vote opens after a seat has been away this long in all
     uint32_t max_pause_ms{net::kMaxPauseMs};                        // a match's pauses may last this long in all; at the cap every seat that is not present is dropped
     uint32_t max_catch_up_ms{net::kMaxCatchUpMs};                   // one absence may spend this long catching up in all (--max-catch-up-seconds)
@@ -76,9 +81,50 @@ struct CreateResult {
     std::string code;                       // the room's code (generated when the spec had none)
 };
 
+/// What became of one restart record when the server started (RoomManager::restore_rooms)
+struct RestoreItem {
+    enum class Outcome : uint8_t {
+        Restored,           // the room is back: running, paused until its players come back
+        Ended,              // the record was read, but its match cannot go on: the room is there as a failed room with the reason (status, log, result file)
+        Unreadable          // the file is no record that can be read (corrupt, another format, too big, a code that is taken): nothing of it is left but a line in the log
+    };
+    std::string file;       // the record's file name (never a path)
+    std::string code;       // the room's code ("" when the file could not be read)
+    Outcome outcome{Outcome::Unreadable};
+    std::string note;       // why it was not restored (Restored: what came back)
+    uint32_t turns{0};      // the turns that the record held
+    uint32_t replay_ms{0};  // Restored: the replay's real time
+};
+struct RestoreReport {
+    std::vector<RestoreItem> items;
+    size_t count(RestoreItem::Outcome outcome) const noexcept {
+        size_t n = 0;
+        for (const RestoreItem& i : items) n += i.outcome == outcome ? 1u : 0u;
+        return n;
+    }
+};
+
 class RoomManager {
 public:
     RoomManager(MapStore store, ServerLimits limits = ServerLimits());
+    ~RoomManager();
+
+    /// Starts to keep restart records (restart_record.hpp): every room that holds seats keeps one from the start of its match to its end, and restore_rooms() can bring the rooms of the records of the
+    /// folder back. Call it before any room is made. False, with the reason, when the folder cannot be used (the server then keeps none). An empty `config.dir` keeps none and is true.
+    bool enable_restart_records(RestartConfig config, std::string& why);
+    /// The server's restart records (null when it keeps none)
+    const RestartStore* restart_store() const noexcept { return restart_.get(); }
+    /// Reads every record of the folder and brings its room back: the engine is made again from the match's start message and every sealed turn replayed (checked against the state hashes of the record),
+    /// the seats of the persons are held absent (the match is paused until the players come back with their keys: a Hello with a key finds the room by its code, as before the restart) and the bots start
+    /// again at the restored tick. A record that cannot be restored (another game version or protocol, a map that is gone or has changed, a replay that disagrees, too old, ...) becomes a FAILED room with
+    /// the reason, so that the control interface shows it and the log and the result file report it, and a record that cannot be read at all is only a line in the log; the file is deleted in both cases.
+    /// Call it once, after enable_restart_records() and before the first update(). Real time: the replay runs now (at most RestartConfig::replay_budget_ms for each room).
+    RestoreReport restore_rooms(uint32_t now_ms);
+    /// The server is told to stop: every room that keeps a record makes it durable (fsync) and leaves it on disk, the other rooms are closed. Returns the number of records that were kept. Nothing is
+    /// deleted: a record is deleted when its room is over, never because the server stops.
+    size_t shutdown(uint32_t now_ms);
+    /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not): once each, never a key
+    std::vector<std::string> take_notices();
 
     const MapStore& store() const noexcept { return store_; }
     const ServerLimits& limits() const noexcept { return limits_; }
@@ -130,6 +176,7 @@ private:
     MapStore store_;
     ServerLimits limits_;
     net::LogBudget log_budget_;                  // (declared before the rooms: they give their logs back when they are destroyed)
+    std::unique_ptr<RestartStore> restart_;      // (also before the rooms: their records point at it)
     std::map<std::string, std::unique_ptr<Room>> rooms_;
     std::vector<Pending> pending_;
     std::vector<Lingering> lingering_;
