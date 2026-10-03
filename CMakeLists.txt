@@ -20,12 +20,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
         -Wshadow
         -Wnon-virtual-dtor
     )
-    # GCC 13 and later: -Wdangling-reference (part of -Wall) calls `const ArenaResult& r = cached_result("MAP", level);` dangling because the std::string argument
-    # is a temporary, although the reference is into a static cache that outlives the statement (tests/test_ai/test_ai_worker.cpp): a known false positive of that warning
-    # (GCC 14 narrowed it). Found by the Linux job of .github/workflows/ci.yml; the other compilers have no such warning.
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13)
-        add_compile_options(-Wno-dangling-reference)
-    endif()
+    # (GCC 13 and later: -Wdangling-reference has one known false positive in this project, in tests/test_ai/test_ai_worker.cpp: it is switched off for that one source file in
+    # tests/test_ai/CMakeLists.txt, so that the product code and every other file keep the warning.)
     if(ANTS_WERROR)
         add_compile_options(-Werror)
     endif()

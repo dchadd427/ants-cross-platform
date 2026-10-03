@@ -36,6 +36,13 @@ add_executable(test_ai_worker
     test_ai_worker.cpp
 )
 
+# GCC 13 and later: -Wdangling-reference (part of -Wall) calls `const ArenaResult& r = alone_full(map, level);` dangling because the std::string argument is a temporary, although the
+# reference is into a static cache that outlives the statement: a known false positive of that warning (GCC 14 narrowed it), found by the Linux job of .github/workflows/ci.yml; the other
+# compilers have no such warning. It is switched off for this one source file only (a source file property is read by the targets of this directory), never for the product code.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13)
+    set_source_files_properties(test_ai_worker.cpp PROPERTIES COMPILE_OPTIONS "-Wno-dangling-reference")
+endif()
+
 target_link_libraries(test_ai_worker PRIVATE
     ants_ai
     ants_sim
