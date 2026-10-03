@@ -180,6 +180,8 @@ Each deliberate fault was put into a scratch copy of the sources (the library ob
 
 ## Start hold (v0.1.1): the bots wait for the "Get ready to play!" dialog
 
+*History: this section describes v0.1.1. In v0.2.0 the match clock itself waits for the dialog (the simulation does not run while it is up), which makes the bots' hold of 100 ticks unnecessary: see "The match clock waits for the dialog (v0.2.0)" below for what became of it. The text of this section is kept as it was written, except for the one note that was wrong (open item 1).*
+
 The owner, playing v0.1.0 against bots: "the bots are able to move before the players can move, which should not be the case." Cause: every match opens with the original's "Get ready to play!" dialog, which takes every click and key for 100 ticks (5 s) while the simulation already runs (`HUD::update` counts them; only the top window of the original gets input), and `BotController::add` seated a bot with a first look on tick 1 + seat and a FULL bucket, so every level moved before a person could (Hard about 0.5 s into the match, Medium 1.3 s, Easy 3 s; a Hard bot could send ten orders in one tick). Every bot goes through that controller (a local game, a LAN host's bot seats, the server's rooms, the arena), so one change covers all of them.
 
 **What changed.** One constant `sim::kMatchStartHoldTicks` = 100 (`include/ants_sim/sim_engine.hpp`, `static_assert`ed to 5000 ms), which the HUD's dialog uses (`HUD::MATCH_START_MODAL_DURATION_TICKS`: its behaviour is unchanged, the view fingerprints did not move) and which is the default of `BotController::set_start_hold` and of the new `ArenaSpec::start_hold`: (a) the first look of a seat is on tick `max(now + 1, 100) + seat`; (b) every release is clamped to at least tick 100; (c) the bucket starts with one token and does not refill up to tick 100 (the first refill is on tick 101); (d) a seat that comes after tick 100 has no hold and starts with one token as well. `set_start_hold(0)` switches all of it off and restores the opening of v0.1.0 exactly: the old pinned scripted match of AI4.5 keeps its hash (`0x60174838e5ae019f`) and its command counts (98 and 29) with `ArenaSpec::start_hold = 0`. No protocol change (`kProtocolVersion` stays 11) and no state hash of a match without bots moved (the quick tier and the application suites pass with their golden hashes as they were).
@@ -234,4 +236,74 @@ New tests: AI2.17 (every level and seat, a bot that acts at every look: no look 
 - the HUD's dialog lasts 99 ticks instead of the shared constant: 12.118 and 12.118b.
 - a product path without the hold: the local game (`Application::start_local_bots`, which the start menu and the flags lead to), the LAN host (`start_net_bots`) and the server room (`Room::start_bots`) each with `set_start_hold(0)`: AI6.9 (and A2.2), AI6.10 and S3.74 fail (the two application tests also with their own check of `start_hold()` removed, so that their behaviour assertions are what catches it).
 
-**Open, and noted rather than changed.** (1) The "Play again" button of the results screen starts a new local match without the dialog (`hud_.reset()` without `start_match_modal()`, as before); its bots still wait 100 ticks, which only favours the person. (2) On a dedicated server the referee, which runs the bots, is ahead of a person's screen by the link's delay and the runner's buffer, so a bot's first order can be applied a few ticks before a person's first click can be; the protocol is not touched for this. (3) In a network game the original's dialog is made at the local READY and its clock starts at GO, so the dialog there may cover less than 5 s of clock; the remake starts both at the barrier (section 21).
+**Open, and noted rather than changed.** (1) ~~The "Play again" button of the results screen starts a new local match without the dialog (`hud_.reset()` without `start_match_modal()`, as before); its bots still wait 100 ticks, which only favours the person.~~ **Corrected in v0.2.0: this note described a path that cannot be reached.** `Application::init` registers a replay callback on the results screen (`scorecard_.set_on_replay`), but nothing ever calls `ScorecardModal::on_replay_` (`include/ants_app/scorecard.hpp` stores it, `src/ants_app/scorecard.cpp` never invokes it): the results screen has only Leave, and a test pins that a replay does not trigger. Every real start of a match goes through `Application::enter_match()`, which opens the dialog, so there is no start without it to fix. (2) On a dedicated server the referee, which runs the bots, is ahead of a person's screen by the link's delay and the runner's buffer, so a bot's first order can be applied a few ticks before a person's first click can be; the protocol is not touched for this. (3) In a network game the original's dialog is made at the local READY and its clock starts at GO, so the dialog there may cover less than 5 s of clock; the remake starts both at the barrier (section 21). *(Gone in v0.2.0: the clock of the remake no longer starts at the barrier but with the first turn, 5 s after it.)*
+
+
+## The match clock waits for the dialog (v0.2.0): what became of the start hold
+
+The owner, after v0.1.1: "I believe on the original game when the get ready box appears the timer is already running, but can we make a change for this remake that the timer doesn't start until the ants actually are able to move? It wastes like five or six seconds." A deliberate deviation from the original (`docs/AUDIT_ONE_TO_ONE.md` 3b; `docs/GAME_REVERSE_ENGINEERING.md` section 21, re-read in the binary with Capstone: the GO handler `0x1022432` that releases the dialog also starts the clock), network protocol 12 (`docs/NETWORK_PORT.md` "Protocol 12"). Deep tier (the network protocol and who can act when).
+
+**What changed.** The dialog is as it was (picture, texts, 5 s, every click and key taken) but **the simulation does not run while it is up**. A local game counts it in real time (the HUD's 100 steps of 50 ms, stepped by `Application::update_simulation`; the simulation starts on the step after the last one). In a match of the network the host seals the first turn `net::kMatchStartDelayMs` = 5000 ms after the match began (`HostSession::Config::start_delay_ms`, set by `NetGame::begin_match` and `Room::begin_match`) and every machine closes its dialog when its first turn executes (`Application::post_tick`). Before the first turn nothing is sealed: no stall, no lag, no pause. **The idle rule of the lag policy counted those seconds (a defect that this change would have introduced, found on the way and fixed in `police_laggards`).** `kProtocolVersion` 12 (no message changed; a client of 11 would count its dialog in simulation ticks and be blocked for 100 ticks of the running match). The delay is a constant of the protocol, not a field of a message (no machine needs the number).
+
+**The bots.** The v0.1.1 hold of 100 ticks is gone: the controller acts on simulation ticks only, so no bot looks or orders while the dialog is up (asserted in a local game, a LAN host's room and a server's room). The mechanism stays (`set_start_hold(N)`: first look on tick N + seat, releases and refill from tick N, one token), with the product's value `ai::kStartHoldTicks` = 1 (a look on tick 1 + seat as in v0.1.0, ONE token and a refill from the first tick; the refill used to start on tick N + 1, now on tick N, so that the product's hold of 1 refills from the first tick). `set_start_hold(0)` is still the opening of v0.1.0 (a full bucket) for the tests that measure something else. The constants are split: `sim::kMatchStartDialogMs` (5000: the HUD's dialog and the hosts' start delay) and `ai::kStartHoldTicks` (the bots' hold). The arena's default follows the product's. The first orders now come at about 0.5 s (Hard), 1.3 s (Medium) and 3.1 s (Easy) into the match (v0.1.1: 5.4, 6.2 and 8 s; v0.1.0: the same as now, but with a burst of up to ten orders on one tick).
+
+**Existing tests (nothing deleted or weakened; each assertion that stays is as it was; an expectation that moved is derived from the new start).**
+
+(i) The premise is the start, so the test waits for it or counts it differently:
+- The HUD's dialog, 12.118 and 12.118b: steps of real time (`HUD::update` counts 50 ms steps; the title no longer says that the bots wait for the same number), and the untimed dialog of a match of the network is added to 12.118.
+- A local game (the dialog's 100 steps come first, the simulation waits): 9.11, AI6.3 (400 ticks take 100 + 400 steps: 20 and 100 looks, the v0.1.0 numbers), AI6.7, A2.1 and A2.2 (the state is compared after the dialog and 100 ticks, and the new `ticks_in_the_dialog == 0` and `ticks_after == 100`), AI6.4 (the direct start has no dialog: the numbers of v0.1.0 again).
+- A match of the network, whose first turn is sealed 5 s after it began (the scenario waits 5 s longer or until every machine has run a tick): `test_network_app` N5.3, N5.30 (and the dialog's end is asserted), N5.39 (the hidden page: the dialog's end on time is asserted too), N5.47, N5.69, N5.71, AI6.6 (+ A14.1 of the start menu's application suite); `test_netgame` N3.5 - N3.12 (`everybody_running`: playing and every machine past its first tick); `test_server` S3.11, S3.12, S3.28, S3.33 - S3.44, S3.46, S3.47, S3.49 - S3.52, S3.54 - S3.57, S3.59, S3.67, S3.72 (the first wait after the start is 5 s longer, `kPre`: the scenarios that cut a seat, freeze a window or count ticks keep their meaning only when play is under way); S3.73 (a Hello of protocol 12 is the current one now: 10, 11 and 13 are refused; and Cat connects before Dan, the order of two Hellos that are made together was left to the links' jitter), S3.74 (rewritten: the first turn exactly 5000 ms after the match began, no bot order in turn 0; v0.1.1's test counted ticks to 100).
+- The pinned protocol number: `test_lockstep` N2.1, N2.40, N2.89 (12, with the reason).
+- The bots' opening (a look on tick 1 + seat again; the mechanism is kept under test with a hold of 100): AI2.5 (three holds: the product's, 100, 0), AI2.11 (the count of looks from tick 1), AI2.17 - AI2.20 (rewritten: every assertion holds for both the product's hold and a hold of 100, with the refill starting on the hold's first tick: AI2.19's second command leaves 6, 13 and 49 ticks after the first, it was 7, 14 and 50), AI4.3 (75 and 3 looks with the default, 51 and 2 with a hold of 100), AI4.5 (the scripted match: hold 0 keeps its hash `0x60174838e5ae019f` and counts 98 / 29; the product's opening is pinned anew, `0x95c9094978ca5f46`, 91 / 29; a hold of 100 keeps its counts, 76 / 25, with the hash `0x6ce648347dbc5a25`: the refill one tick earlier), AI5.5 (the mesh runs 5 s again), AI3.2 (the worker's first command no sooner than 75 percent of the reaction time after tick 1) and AI3.12 (`tests/test_ai/baselines.inc` regenerated).
+- Unchanged: every other test of every suite, among them the fingerprints (the HUD still counts the dialog in `update()`, so the pictures did not move), all of the simulation suites and every state hash.
+
+(ii) Pinned numbers of whole matches, regenerated, not edited: `tests/test_ai/baselines.inc` is **byte for byte the file of v0.1.0**: the one token instead of a full bucket does not bind a harvesting bot. Shift against v0.1.1 (mean of the four seats; v0.1.1 -> v0.2.0, which is also v0.1.0; alone for two minutes, alone for the whole match, the sum of four workers):
+
+| Map | Level | Alone, 2 min | Alone, whole match | Four workers, sum |
+|---|---|---|---|---|
+| TINY | Easy | 508 -> 530 | 1510 -> 1530 | 4820 -> 4825 |
+| TINY | Medium | 593 -> 619 | 1763 -> 1789 | 4840 -> 4800 |
+| TINY | Hard | 608 -> 630 | 1808 -> 1823 | 4810 -> 4815 |
+| SMALL | Easy | 525 -> 550 | 1966 -> 1985 | 3025 -> 3000 |
+| SMALL | Medium | 531 -> 556 | 1994 -> 2019 | 3025 -> 3013 |
+| SMALL | Hard | 538 -> 560 | 1997 -> 2028 | 3013 -> 3038 |
+| MEDIUM | Easy | 312 -> 330 | 1778 -> 1794 | 4908 -> 4908 |
+| MEDIUM | Medium | 365 -> 385 | 1791 -> 1800 | 4900 -> 4908 |
+| MEDIUM | Hard | 368 -> 390 | 1790 -> 1804 | 4900 -> 4900 |
+| GAUNTLET | Easy | 109 -> 117 | 831 -> 842 | 1500 -> 1500 |
+| GAUNTLET | Medium | 109 -> 124 | 838 -> 846 | 1508 -> 1500 |
+| GAUNTLET | Hard | 113 -> 126 | 840 -> 844 | 1500 -> 1500 |
+| TREASURE | Easy | 471 -> 500 | 2765 -> 2779 | 8850 -> 8863 |
+| TREASURE | Medium | 509 -> 545 | 2947 -> 2977 | 8863 -> 8850 |
+| TREASURE | Hard | 501 -> 543 | 2950 -> 2977 | 8860 -> 8850 |
+| ISLANDS | all | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+
+Measured again with the new opening: 180 four-worker matches (12 seeds, three levels, five maps) sum to 100.00 to 101.67 percent of the pot, 600 matches (40 seeds) 100.00 to 102.50; no command refused, filtered, expired, pruned or superseded; at most 0.047 (180) and 0.049 (600) commands per second (v0.1.0's numbers).
+
+**New tests** (each shown to fail without the code it tests): `test_lockstep` N2.94, S2.15; `test_netgame` N3.22, N3.23; `test_network_app` N5.74, N5.75 and the added half of N5.38; `test_ai` AI4.14; `test_server` S3.75; the added cases of N4.2c, S3.3 and S3.73 (a Hello of 11 is refused); `test_canvas_layout` (the window's first size: a separate small change of the same branch, "The desktop window is created at the shape of the picture it will show").
+
+**Mutation proofs** (the deliberate fault, then the tests that failed; one fault at a time, the suites of the new tests run; `mutate.py` of the session, not kept):
+
+| Fault | Tests that fail |
+|---|---|
+| a local game ticks behind its dialog (the old behaviour) | AI6.9, N5.38, A2.1, A2.2 |
+| the first executed turn does not close the dialog | N5.74, N5.75, AI6.10, N5.39 |
+| the dialog of a match of the network is the timed one (closes itself after 5 s of steps, before the first tick) | N5.74, N5.75, AI6.10 |
+| the dialog is not stepped while it waits for the first turn | N5.74 |
+| a LAN host without the start delay | N3.22, N3.23, N5.74, AI6.10, N5.39 |
+| a server's room without the start delay | S3.74, N5.75 |
+| `HostSession::start` ignores the delay | N2.94, S2.15, N3.22, N3.23, S3.74, N5.74, N5.75 |
+| the idle rule counts the seconds before the first turn | S2.15 |
+| the protocol number stays 11 | N2.1, N2.40, N2.89, N4.2c, S3.3, S3.73, N3.22 |
+| the bots' hold is 100 by default | AI2.11, AI2.17, AI4.3, AI4.5, AI4.14, AI5.5, AI5.6, AI6.3, AI6.4, AI6.7, AI6.9 |
+| the bots' hold is 0 by default (a full bucket) | AI2.17, AI2.18, AI2.20, AI4.5, AI4.14 |
+| the refill skips the hold's first tick (`<=`) | AI2.18, AI2.19, AI2.20, AI4.5 |
+| the first look ignores the hold | AI2.5, AI2.17 - AI2.20, AI4.3, AI4.5 |
+| the clamp of the release time is gone | AI2.19 |
+| the arena opens with hold 0 by default | AI4.14 |
+| a server's room / a local game / a LAN host sets `set_start_hold(0)` on its controller | S3.75 and N5.75 / AI6.9 / AI6.10 |
+| the room's limit does not count the pre-start | S3.75 |
+| the HUD does not count the dialog in `update()` | 12.118, 12.118b, 7.7, 7.8, 7.8c, 7.8d, 9.11, AI6.9 and two fingerprints |
+| the window is created at the config's size again / a fullscreen game's window is created at the canvas's size | the canvas layout suite (2 checks / 1 check) |
+
+**Open, and noted rather than changed.** (1) `--map` (a game that starts straight into its match, for tests and screenshots) has no dialog and starts at once, as before. (2) A game that REJOINS a running match (release B of the reconnect, not built) must skip the dialog: it belongs to the start; the library's catch-up has none. (3) On a dedicated server the referee that runs the bots is still ahead of a person's screen by the link's delay and the runner's buffer (unchanged from v0.1.1). (4) A modified client that sends a command before the first turn gets it into turn 0 (an honest client sends none: its dialog takes every click and key). (5) A match that begins and loses its host before the first turn is handed to the lowest guest, which seals at once (the dialogs close sooner than 5 s there).
