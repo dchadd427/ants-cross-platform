@@ -73,13 +73,29 @@ struct LevelPlan {
     bool raids{false};                   // a Thief raids the hill of the leading team
     uint32_t max_combat{0};              // Combat Ants at a time (including those that are on their way to a power-up)
     uint32_t max_thief{0};
-    // Hard only
-    bool squads{false};                  // a fight is joined by Combat Ants first and by a larger group
-    bool harasses{false};                // enemy carriers near contested piles are attacked when it pays
-    uint32_t harassers{0};               // ants of the harassing squad (Combat Ants first); 0: none
-    uint32_t harass_min_workers{4};      // the squad is taken only from a workforce of at least this many (the economy keeps its harvesters)
-    int32_t harass_radius{14};           // carriers within this many tiles of an enemy hill are hunted
-    bool harass_idle_only{true};         // a worker joins the squad only when the economy has no pile for it (it costs nothing); false: taken from the harvest
+    // forced fights and hatching (Medium and Hard)
+    bool strikes{false};                 // clearly behind the leader (by the score boxes) and a fight looks winnable: a strike force hunts the leader's carriers (the owner's playbook)
+    uint32_t strike_margin{150};         // clearly behind: the leader's box is this many points above the own ...
+    uint32_t strike_margin_percent{12};  // ... and at least this percentage of the leader's own
+    uint32_t strike_min_leader{300};     // the leader holds at least this many points (below that a fight is not worth the trip)
+    uint32_t strike_force{3};            // ants of the force (Combat Ants first), never so many that fewer than strike_reserve stay at home
+    bool strike_workers{false};          // workers join the force too (an ant less at the piles for the whole fight); false: Combat Ants only (they do not harvest anyway)
+    uint32_t strike_reserve{3};
+    uint32_t strike_min_force{2};
+    uint32_t strike_odds_percent{150};   // the own strength (a Combat Ant counts 8, any other ant 4) against the enemy's near its hill (fighters 8 or 4, other ants 1), in percent, to start a strike; below 100 it is called off
+    int32_t strike_radius{14};           // carriers within this many tiles of the target hill's queue are hunted, and the enemy ants within this many are counted
+    uint32_t strike_stop_ticks{900};     // no strike in the last ticks of the match
+    bool wipe_focus{false};              // (Hard) an enemy team with very few ants left is hunted down by a force that is far stronger: its last ant forces a hatch (-200) or ends it
+    uint32_t wipe_max_ants{3};
+    bool hatches{false};                 // (Medium, Hard) an egg is hatched for a fight that is expected (a blow lately, a strike on, enemy fighters at the hill), never for the economy
+    uint32_t hatch_floor{4};             // the bot keeps at least this many ants up when it is hit (the replacements of a fight): the number of ants of its start counts too
+    uint32_t hatch_extra{0};             // ants more than at the start that it hatches while a strike is out (the strength of a fight that it chose)
+    uint32_t hatch_hits{3};              // a fight: this many own ants hit (or one lost) within hatch_window ticks; the replacements of the ants that a fight cost are hatched
+    uint32_t hatch_window{400};
+    uint32_t hatch_reserve{50};          // points that must be left over after the 200 of the egg
+    uint32_t hatch_min_left{600};        // ticks the match must still last (the newborn takes orders 171 ticks after the click and stands at the hill after 247)
+    uint32_t bench_idle_ticks{0};        // TOURNAMENTS ONLY (bot_arena --tune idle=N): the bot does nothing until this tick, so that it falls behind on purpose (a handicap); 0 in every level
+    uint32_t fight_reserve{2};           // no ant is sent to fight while the bot has no more than this many (one more when no egg is left): the last ants stay out of it
     bool avoids_guarded_hills{false};    // a raid does not go to a hill that has an enemy Combat Ant near it
 };
 
@@ -171,12 +187,27 @@ public:
     uint64_t combat_last_seen() const noexcept { return combat_last_seen_; }
     /// The tick of the last look at which an own ant had lost hit points (0: never)
     uint64_t last_hit() const noexcept { return last_hit_; }
+    /// How many own ants were hit (lost hit points) or lost at the looks of the last `window` ticks: the size of the fight that the bot is in
+    uint32_t hits_within(uint64_t window) const noexcept {
+        uint32_t n = 0;
+        for (const auto& h : hit_log_) n += now_ <= h.first + window ? h.second : 0u;
+        return n;
+    }
+    /// The tick of the last look at which an own ant was lost (0: never)
+    uint64_t last_loss() const noexcept { return last_loss_; }
     /// Whether any ant of the team has been seen doing something (not idle) at some look: an idle bot's ants never move, so nothing of that team is a threat
     bool plays(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS && seen_moving_[team] != 0; }
     /// The tick of the first look that saw a wall on the tile (0: no wall there now); the wall burns out 3,600 ticks after it was lit, which is at or before this tick plus 3,600
     uint64_t wall_seen(sim::TileCoord tile) const noexcept;
     /// The own ant's hit points at the previous look (0: it was not in that view)
     uint8_t hp_before(uint32_t ant) const noexcept;
+    /// The most ants of `team` that were in sight at one look (0 for the own team): a team that shows few ants now and has shown many has LOST them
+    uint32_t ants_peak(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS ? peak_ants_[team] : 0u; }
+    /// Whether the ant of another team was drawn in its attack clip within the last `window` ticks (a person sees who fights and who does not)
+    bool fought_lately(uint32_t ant, uint64_t window) const noexcept {
+        const auto it = attacking_.find(ant);
+        return it != attacking_.end() && now_ <= it->second + window;
+    }
 
 private:
     struct Last {
@@ -193,8 +224,24 @@ private:
     uint64_t combat_last_seen_{0};
     uint64_t last_hit_{0};
     std::array<uint64_t, sim::MAX_PLAYERS> seen_moving_{};
+    std::array<uint32_t, sim::MAX_PLAYERS> peak_ants_{};
+    std::map<uint32_t, uint64_t> attacking_;                   // ant of another team -> the tick it was last seen in its attack clip
+    std::vector<std::pair<uint64_t, uint32_t>> hit_log_;       // (tick of a look, own ants hit or lost at it)
+    uint64_t last_loss_{0};
     std::map<std::pair<int32_t, int32_t>, uint64_t> wall_seen_;   // (x, y) of a wall tile of the thief hole -> the tick it was first seen
 };
+
+/// Where the bot stands in the match by the score boxes (what a person reads on the screen): its own box (its score plus its ally's), the leader (the highest box of the teams that are
+/// not allies; with an alliance of enemies the member whose hill is nearest), and whether the bot is clearly behind it or not behind at all
+struct Standing {
+    int32_t mine{0};
+    int leader{-1};                      // the team, -1: no enemy plays
+    int32_t leader_score{0};
+    bool behind{false};                  // the leader's box is above the own by strike_margin points and by strike_margin_percent of itself, and holds strike_min_leader at least
+    bool ahead{false};                   // the own box is not below the leader's
+};
+
+Standing standing_of(const LevelPlan& plan, const BotView& view, const MapInfo& map);
 
 /// What every task of the standard bot is handed besides the TaskContext: the level's plan, the memory and the wishes that the bot formed at this look
 struct Tactics {
@@ -208,6 +255,8 @@ struct Tactics {
     /// Workers that stood idle with empty hands at the last look and that the economy could send nowhere (HarvestTask::unplaced: no pile left that they can reach in time): they
     /// cost nothing to use otherwise
     size_t surplus{0};
+    Standing standing;                   // where the bot stands at this look
+    bool strike_active{false};           // the strike force is out (set by the StrikeTask at its last step)
 };
 
 /// Whether the fire walls in front of the own thief hole are wanted at this look, by the level's trigger: an enemy Thief ant has been seen lately (Easy, Medium, Hard), an enemy that

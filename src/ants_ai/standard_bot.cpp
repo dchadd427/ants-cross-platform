@@ -21,7 +21,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kRaids, kRankPowerUps);
     ledger_.set_rank(kBombs, kRankWalls);
     ledger_.set_rank(kGuard, kRankGuard);
-    ledger_.set_rank(kHarass, kRankWalls);
+    ledger_.set_rank(kStrike, kRankWalls);
 }
 
 void StandardBot::think(const BotView& view, Orders& orders) {
@@ -40,6 +40,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         deny_after_ = now + longest + 2u;
     }
 
+    if (now < tactics_.plan.bench_idle_ticks) return;            // (the tournaments' handicap: asleep)
     const MapInfo* map = view.map() != nullptr ? view.map() : map_;
     if (map == nullptr) return;                                  // without the analysis of the map there is nothing to plan with (the controller always hands it over)
     ledger_.forget_missing(view.mine());
@@ -50,6 +51,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     const LevelPlan& plan = tactics_.plan;
     tactics_.wants.fill(0);
     tactics_.surplus = harvest_.unplaced();
+    tactics_.standing = standing_of(plan, view, *map);
     tactics_.wall_demand = wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
     if (plan.secure_side) {                                       // the power-ups of the own side are taken early (the owner's playbook): an enemy that steals the Fire can wall the piles in, the Bomber can mine the base, the Thief can raid twice
@@ -69,9 +71,13 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         // Combat Ants pay when the enemy fights (an own ant was hit lately, an enemy Combat Ant or Thief has been seen): against a passive economy they are an ant that does not harvest
         const Memory& m = tactics_.memory;
         // (or when the economy has workers that stand idle with nothing to harvest: they cost nothing)
-        const bool fists = (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0;
+        const bool fists = (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0 || (plan.strikes && tactics_.standing.behind);
         const bool free_ants = plan.combat_when_idle && tactics_.surplus > 0;
         if (plan.takes_combat && (fists || free_ants || !plan.combat_when_attacked)) tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(plan.max_combat);
+        // behind the leader, a strike needs its Combat Ants: as many as the force is
+        if (plan.takes_combat && plan.strikes && !plan.strike_workers && tactics_.standing.behind) {
+            tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(std::max<uint32_t>(plan.max_combat, plan.strike_force));
+        }
     }
 
     // 3. the tasks, the one that takes ants from the others first
@@ -81,7 +87,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     bombs_.step(context);
     if (plan.raids) raids_.step(context);
     if (plan.guards) guard_.step(context);
-    if (plan.harasses) harass_.step(context);
+    if (plan.strikes || plan.wipe_focus) strike_.step(context);
+    if (plan.hatches) hatch_.step(context);
     aid_.step(context);
     harvest_.step(context);
 }
@@ -113,7 +120,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     bombs_.on_command(command, fate, tick);
     raids_.on_command(command, fate, tick);
     guard_.on_command(command, fate, tick);
-    harass_.on_command(command, fate, tick);
+    strike_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);
 }

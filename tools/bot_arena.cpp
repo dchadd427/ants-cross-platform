@@ -461,7 +461,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid), for the tournaments\n"
+        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle avoid), for the tournaments\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -553,13 +553,16 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "combat_idle") return flag(p.combat_when_idle);
     if (key == "guard") return flag(p.guards);
     if (key == "raid") return flag(p.raids);
-    if (key == "squads") return flag(p.squads);
-    if (key == "harass") { p.harasses = v > 0; p.harassers = static_cast<uint32_t>(v); return true; }
-    if (key == "hidle") return flag(p.harass_idle_only);
-    if (key == "hminw") { p.harass_min_workers = static_cast<uint32_t>(v); return true; }
-    if (key == "hradius") { p.harass_radius = static_cast<int32_t>(v); return true; }
+    if (key == "strike") return flag(p.strikes);
+    if (key == "strikew") return flag(p.strike_workers);
+    if (key == "strikef") { p.strike_force = static_cast<uint32_t>(v); return true; }
+    if (key == "strikeres") { p.strike_reserve = static_cast<uint32_t>(v); return true; }
+    if (key == "strikeodds") { p.strike_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "wipe") return flag(p.wipe_focus);
+    if (key == "hatch") return flag(p.hatches);
+    if (key == "idle") { p.bench_idle_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "avoid") return flag(p.avoids_guarded_hills);
-    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid squads harass hminw hradius hidle avoid)";
+    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle avoid)";
     return false;
 }
 

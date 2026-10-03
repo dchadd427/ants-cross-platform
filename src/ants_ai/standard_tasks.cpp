@@ -93,6 +93,7 @@ void FightTask::start_fights(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const LevelPlan& plan = tactics_.plan;
+    if (v.mine().size() <= plan.fight_reserve + (v.eggs() == 0 ? 1u : 0u)) return;                 // the last ants stay out of every fight (a wipe-out forces a hatch of 200 points, or ends the team)
     // a blow: the attacker is the enemy ant that can be attacked and stands nearest to the place of the blow (within two tiles)
     for (const Hit& h : tactics_.memory.hits()) {
         const AntView* best = nullptr;
@@ -152,6 +153,10 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
     const uint64_t now = v.tick();
     const LevelPlan& plan = tactics_.plan;
     const AntView* target = find_ant(v.others(), f.target);
+    if (v.mine().size() <= plan.fight_reserve + (v.eggs() == 0 ? 1u : 0u)) {
+        end = true;                                                              // down to the last ants: they leave the fight
+        return;
+    }
     if (target == nullptr || !attackable(v, *target) || shunned(f.target, now)) {
         end = true;                                                              // it died, left sight, stands on a power-up or went into a hill
         return;
@@ -905,87 +910,177 @@ void RaidTask::step(TaskContext& c) {
     }
 }
 
-// ---- HarassTask -----------------------------------------------------------------------------------------------------------------------------------------
+// ---- StrikeTask -----------------------------------------------------------------------------------------------------------------------------------------
 
-void HarassTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
+void StrikeTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
     if (command.type != sim::CommandType::GroupAttack && command.type != sim::CommandType::GroupMove) return;
     for (const uint32_t ant : command.ants) {
-        const auto it = squad_.find(ant);
-        if (it == squad_.end() || it->second.sent != kPending) continue;
+        const auto it = force_.find(ant);
+        if (it == force_.end() || it->second.sent != kPending) continue;
         if (fate == Bot::Fate::Sent) it->second.sent = tick;
         else it->second.ordered = false;
     }
 }
 
-void HarassTask::step(TaskContext& c) {
+void StrikeTask::disband(TaskContext& c) {
+    for (const auto& m : force_) c.ledger.release(m.first, id());
+    force_.clear();
+    active_ = false;
+    wipe_ = false;
+    target_ = -1;
+    tactics_.strike_active = false;
+}
+
+namespace {
+// The strength of an own ant in a strike: a Combat Ant hits twice as hard as any other
+uint32_t own_weight(sim::AntType type) noexcept { return type == sim::AntType::Combat ? 8u : 4u; }
+}  // namespace
+
+// The strength of an enemy ant as far as a person can tell: a Combat Ant counts as much as an own one, an ant that was drawn in its attack clip lately fights, any other ant is taken
+// as one that would not fight back unless ordered (a quarter): the workers that queue at a gate are not an army
+uint32_t StrikeTask::enemy_weight(const AntView& e, uint64_t now) const {
+    if (e.type == sim::AntType::Combat) return 8u;
+    return tactics_.memory.fought_lately(e.id, 600) || e.state == sim::UnitState::Attacking ? 4u : (now != 0 ? 1u : 1u);
+}
+
+void StrikeTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const LevelPlan& plan = tactics_.plan;
-    const Memory& m = tactics_.memory;
-    if (!v.has_grid() || plan.harassers == 0) return;
+    const Standing& st = tactics_.standing;
+    tactics_.strike_active = false;
+    if (!v.has_grid() || !(plan.strikes || plan.wipe_focus) || plan.strike_force == 0) {
+        if (!force_.empty()) disband(c);
+        return;
+    }
     const sim::Grid& grid = v.grid();
-    // the squad's members that are still ours and fit; a member that was hit calls the squad off for a while (the enemy fights back: the hunt does not pay)
-    for (auto it = squad_.begin(); it != squad_.end();) {
+
+    // 1. the members that are still ours and fit
+    for (auto it = force_.begin(); it != force_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
-        const bool gone = a == nullptr || c.ledger.owner(it->first) != id() || a->hp < 5 || a->holding || a->carried_points > 0;
+        const bool gone = a == nullptr || c.ledger.owner(it->first) != id() || a->hp < 4 || a->holding || a->carried_points > 0;
         if (gone) {
-            if (a != nullptr) c.ledger.release(it->first, id());
-            it = squad_.erase(it);
+            if (a != nullptr && c.ledger.owner(it->first) == id()) c.ledger.release(it->first, id());
+            it = force_.erase(it);
         } else {
             ++it;
         }
     }
-    for (const Hit& h : m.hits()) {
-        if (squad_.count(h.ant) != 0) {
-            paused_until_ = now + 1200u;
-            ++calls_off_;
+
+    // 2. the ants that could be in the force, the strongest first (members, Combat Ants), and how many may go
+    std::vector<const AntView*> cands;
+    for (const AntView& a : v.mine()) {
+        if (force_.count(a.id) == 0) {
+            if (!can_fight(v, a) || a.hp < 7) continue;
+            if (!plan.strike_workers && a.type != sim::AntType::Combat) continue;
+            const TaskId owner = c.ledger.owner(a.id);
+            if (owner != kNoTask && c.ledger.rank(owner) >= 3) continue;           // the ants of a pick-up, a raid, a wall, a bomb or a fight are not taken
+        }
+        cands.push_back(&a);
+    }
+    const size_t total = v.mine().size();
+    const size_t limit = std::min<size_t>(plan.strike_force, total > plan.strike_reserve ? total - plan.strike_reserve : 0);
+    std::stable_sort(cands.begin(), cands.end(), [&](const AntView* x, const AntView* y) {
+        const bool mx = force_.count(x->id) != 0;
+        const bool my = force_.count(y->id) != 0;
+        if (mx != my) return mx;
+        return (x->type == sim::AntType::Combat) > (y->type == sim::AntType::Combat);
+    });
+    if (cands.size() > limit) cands.resize(limit);
+    uint32_t own = 0;
+    for (const AntView* a : cands) own += own_weight(a->type);
+
+    // 3. what to hunt: the leader's carriers when the bot is clearly behind, a team that shows very few ants when the force is far stronger
+    int target = -1;
+    bool wipe = false;
+    const bool time_ok = v.ticks_left() >= plan.strike_stop_ticks && now >= paused_until_;
+    if (time_ok && plan.wipe_focus && cands.size() >= 3) {
+        std::array<uint32_t, sim::MAX_PLAYERS> ants{};
+        std::array<uint32_t, sim::MAX_PLAYERS> strength{};
+        for (const AntView& e : v.others()) {
+            ++ants[e.team];
+            strength[e.team] += enemy_weight(e, now);
+        }
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            const TeamRow& row = v.rows()[t];
+            if (t == c.seat || !row.present || row.dropped || (v.ally() < sim::MAX_PLAYERS && t == v.ally()) || ants[t] == 0 || ants[t] > plan.wipe_max_ants) continue;
+            if (static_cast<uint64_t>(ants[t]) * 2u > tactics_.memory.ants_peak(t)) continue;      // "very few ants LEFT": the team has lost at least half of what it showed
+            if (!c.map.hill(t).present || own < strength[t] * 3u) continue;
+            if (target < 0 || ants[t] < ants[static_cast<size_t>(target)]) target = t;
+        }
+        wipe = target >= 0;
+    }
+    uint32_t enemy_near = 0;
+    if (!wipe && time_ok && plan.strikes && st.behind && st.leader >= 0 && c.map.hill(static_cast<uint8_t>(st.leader)).present) {
+        target = st.leader;
+        const HillInfo& hill = c.map.hill(static_cast<uint8_t>(target));
+        const uint8_t friend_of_target = v.rows()[static_cast<size_t>(target)].ally;
+        for (const AntView& e : v.others()) {
+            if (e.team != target && e.team != friend_of_target) continue;
+            if (e.tile.chebyshev_dist(hill.queue) <= plan.strike_radius) enemy_near += enemy_weight(e, now);
+        }
+        const uint32_t need = active_ ? 100u : plan.strike_odds_percent;
+        if (cands.size() < plan.strike_min_force || static_cast<uint64_t>(own) * 100u < static_cast<uint64_t>(enemy_near) * need) {
+            if (active_) {
+                ++calls_off_;
+                paused_until_ = now + 600u;
+            }
+            target = -1;                                                           // not winnable: no strike
         }
     }
-    const bool off = now < paused_until_ || m.combat_last_seen() != 0 || v.ticks_left() < 900;
-    if (off) {
-        for (const auto& s : squad_) c.ledger.release(s.first, id());
-        squad_.clear();
+    if (target < 0) {
+        if (active_) {
+            if (!wipe && !(st.behind)) ++calls_off_;
+            disband(c);
+        } else if (!force_.empty()) {
+            disband(c);
+        }
         return;
     }
-    // recruits: Combat Ants first, then the idle workers that the economy has no pile for (they cost nothing), from a workforce that can afford them
-    if (squad_.size() < plan.harassers && (tactics_.surplus > 0 || plan.harass_min_workers == 0 || squad_.empty() == false || true)) {
-        size_t workers = 0;
-        for (const AntView& a : v.mine()) workers += a.type == v.default_ant_type() ? 1u : 0u;
-        std::vector<const AntView*> cands;
-        for (const AntView& a : v.mine()) {
-            if (squad_.count(a.id) != 0 || !can_fight(v, a) || a.hp < 6) continue;
-            const TaskId owner = c.ledger.owner(a.id);
-            if (owner != kNoTask && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
-            if (a.type != sim::AntType::Combat && workers < plan.harass_min_workers) continue;
-            if (a.type != sim::AntType::Combat && plan.harass_idle_only && !(a.idle() && tactics_.surplus > 0)) continue;       // a worker joins only when the economy has nothing for it
-            cands.push_back(&a);
-        }
-        std::stable_sort(cands.begin(), cands.end(), [&](const AntView* x, const AntView* y) { return (x->type == sim::AntType::Combat) > (y->type == sim::AntType::Combat); });
-        for (const AntView* a : cands) {
-            if (squad_.size() >= plan.harassers) break;
-            if (!c.ledger.take(a->id, id())) continue;
-            squad_[a->id] = Member{};
+    if (!active_ || target != target_ || wipe != wipe_) {
+        if (!active_) ++strikes_started_;
+        active_ = true;
+        target_ = target;
+        wipe_ = wipe;
+    }
+    tactics_.strike_active = true;
+
+    // 4. the force: the members that fit, then the recruits, nearest to the target hill first among equals
+    const HillInfo& hill = c.map.hill(static_cast<uint8_t>(target));
+    for (auto it = force_.begin(); it != force_.end();) {
+        bool keep = false;
+        for (const AntView* a : cands) keep = keep || a->id == it->first;
+        if (!keep) {
+            c.ledger.release(it->first, id());
+            it = force_.erase(it);
+        } else {
+            ++it;
         }
     }
-    if (squad_.empty()) return;
-    // the carriers that can be hunted: on their way home near an enemy hill, attackable, not under the eyes of an enemy Combat Ant
-    std::vector<const AntView*> carriers;
+    for (const AntView* a : cands) {
+        if (force_.count(a->id) != 0) continue;
+        if (!c.ledger.take(a->id, id())) continue;
+        force_[a->id] = Member{};
+    }
+    if (force_.empty()) return;
+
+    // 5. the targets: carriers of the target team (and its ally) near its hill; in a wipe every attackable ant of the team
+    std::vector<const AntView*> targets;
+    const uint8_t friend_team = v.rows()[static_cast<size_t>(target)].ally;
     for (const AntView& e : v.others()) {
-        if (!e.holding || !attackable(v, e)) continue;
-        bool near_hill = false;
-        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
-            const HillInfo& hill = c.map.hill(t);
-            if (t == c.seat || !hill.present || (v.ally() < sim::MAX_PLAYERS && t == v.ally()) || e.team != t) continue;
-            near_hill = near_hill || e.tile.chebyshev_dist(hill.queue) <= plan.harass_radius;
+        if (!attackable(v, e)) continue;
+        if (wipe) {
+            if (e.team == target) targets.push_back(&e);
+        } else if ((e.team == target || e.team == friend_team) && e.holding && e.tile.chebyshev_dist(hill.queue) <= plan.strike_radius) {
+            targets.push_back(&e);
         }
-        if (near_hill) carriers.push_back(&e);
     }
-    std::map<uint32_t, std::vector<uint32_t>> groups;                    // target -> attackers
+    std::map<uint32_t, std::vector<uint32_t>> groups;                              // target -> attackers
     std::vector<uint32_t> waiting;
-    for (auto& s : squad_) {
-        const AntView* a = find_ant(v.mine(), s.first);
+    for (auto& f : force_) {
+        const AntView* a = find_ant(v.mine(), f.first);
         if (a == nullptr) continue;
-        Member& mem = s.second;
+        Member& mem = f.second;
         bool need = false;
         if (!mem.ordered) need = a->takes_orders();
         else if (mem.sent != kPending) need = a->idle() && now >= mem.sent + 6u && !v.has_pending_path(a->id);
@@ -993,7 +1088,7 @@ void HarassTask::step(TaskContext& c) {
         if (!need) continue;
         const AntView* best = nullptr;
         int32_t best_d = 0;
-        for (const AntView* e : carriers) {
+        for (const AntView* e : targets) {
             const int32_t d = a->tile.chebyshev_dist(e->tile);
             if (best == nullptr || d < best_d) {
                 best = e;
@@ -1017,31 +1112,51 @@ void HarassTask::step(TaskContext& c) {
         c.orders.attack(g.second, e->tile, Priority::Urgent);
         ++attacks_ordered_;
     }
-    // no carrier in sight: wait three tiles in front of the nearest enemy hill, on the side the carriers come from (towards the middle of the map)
+    // no target in sight: wait three tiles in front of the hill, on the side the carriers come from (towards the middle of the map)
     if (!waiting.empty()) {
+        const int32_t sx = hill.queue.x * 2 < static_cast<int32_t>(grid.width()) ? 1 : -1;
+        const int32_t sy = hill.queue.y * 2 < static_cast<int32_t>(grid.height()) ? 1 : -1;
+        sim::TileCoord station{hill.queue.x + sx * 3, hill.queue.y + sy * 3};
+        for (int32_t k = 0; k < 6 && (!MapInfo::walkable(grid, c.seat, station, v.walk_context()) || v.powerup_at(station) != nullptr); ++k) station = sim::TileCoord{station.x + sx, station.y + sy};
         for (const uint32_t id_ : waiting) {
             const AntView* a = find_ant(v.mine(), id_);
-            if (a == nullptr) continue;
-            const HillInfo* best = nullptr;
-            int32_t best_d = 0;
-            for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
-                const HillInfo& hill = c.map.hill(t);
-                if (t == c.seat || !hill.present || !v.rows()[t].present || v.rows()[t].dropped || (v.ally() < sim::MAX_PLAYERS && t == v.ally())) continue;
-                const int32_t d = a->tile.chebyshev_dist(hill.queue);
-                if (best == nullptr || d < best_d) {
-                    best = &hill;
-                    best_d = d;
-                }
-            }
-            if (best == nullptr) continue;
-            const int32_t sx = best->queue.x * 2 < static_cast<int32_t>(grid.width()) ? 1 : -1;
-            const int32_t sy = best->queue.y * 2 < static_cast<int32_t>(grid.height()) ? 1 : -1;
-            sim::TileCoord station{best->queue.x + sx * 3, best->queue.y + sy * 3};
-            for (int32_t k = 0; k < 6 && (!MapInfo::walkable(grid, c.seat, station, v.walk_context()) || v.powerup_at(station) != nullptr); ++k) station = sim::TileCoord{station.x + sx, station.y + sy};
-            if (a->tile.chebyshev_dist(station) <= 2) continue;
+            if (a == nullptr || a->tile.chebyshev_dist(station) <= 2) continue;
             c.orders.move({id_}, station, Priority::Normal);
         }
     }
+}
+
+// ---- HatchTask ------------------------------------------------------------------------------------------------------------------------------------------
+
+void HatchTask::step(TaskContext& c) {
+    const BotView& v = c.view;
+    const uint64_t now = v.tick();
+    const LevelPlan& plan = tactics_.plan;
+    const Memory& m = tactics_.memory;
+    if (start_ants_ == 0) start_ants_ = v.mine().size();
+    if (!plan.hatches || v.eggs() == 0 || now < next_after_ || v.ticks_left() < plan.hatch_min_left) return;
+    // a click that left the egg count where it was and started nothing was refused (the own score was below 200: an ally's points show in the box): leave it for a while
+    if (clicked_ && v.eggs() >= eggs_before_ && !v.hatching()) {
+        refused_until_ = now + 900u;
+        clicked_ = false;
+    } else if (clicked_) {
+        clicked_ = false;
+    }
+    if (now < refused_until_) return;
+    const bool allied = v.ally() < sim::MAX_PLAYERS;
+    // the box shows the own score plus the ally's, the click looks at the own: with an ally ask for a margin
+    const int32_t need = 200 + static_cast<int32_t>(plan.hatch_reserve) + (allied ? 400 : 0);
+    if (v.score() < need) return;
+    // a fight: several own ants hit within a short while, or one lost (a thief that raids the hill is no fight); and the strike force that the bot sent out
+    const bool fight = m.hits_within(plan.hatch_window) >= plan.hatch_hits || (m.last_loss() != 0 && now <= m.last_loss() + plan.hatch_window);
+    if (!(fight || tactics_.strike_active)) return;
+    const size_t want = std::max<size_t>(plan.hatch_floor, start_ants_ + (tactics_.strike_active ? plan.hatch_extra : 0u));
+    if (v.mine().size() + (v.hatching() ? 1u : 0u) >= want || v.hatching()) return;
+    c.orders.hatch();
+    ++hatches_ordered_;
+    clicked_ = true;
+    eggs_before_ = v.eggs();
+    next_after_ = now + 70u;
 }
 
 // ---- GuardTask ------------------------------------------------------------------------------------------------------------------------------------------

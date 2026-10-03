@@ -8,7 +8,9 @@
 //                 burn out): it takes a Fire power-up for that when one can be reached, the only power-up that Easy takes
 //   Medium, Hard  also attack an enemy Thief on its way to the hill, take Combat and Thief power-ups, park a Combat Ant where its reflex covers the hill, and raid the hill of the
 //                 leading team with a Thief that has points to take, is not shut by walls or bombs and can be reached
-//   Hard          also fights in larger groups, Combat Ants first, harasses enemy carriers near contested piles when it pays, and does not raid a hill that an enemy Combat Ant guards
+//   Hard          also hunts down a team that shows very few ants, and does not raid a hill that an enemy Combat Ant guards
+//   Medium, Hard  when clearly behind the leader (the score boxes) and a fight looks winnable, a strike force hunts the leader's carriers; they hatch an egg for a fight that is expected
+//                 (never for the economy), and no level sends its last ants into a fight
 //
 // It is a virtual client like every bot (project rule 8): it reads the world through the BotView, sends commands that a person could click, and has no knowledge that a person of its
 // seat could not have. It answers an invitation to team up by the accept rule (accepts_invitation), never invites and never breaks an alliance. The worker bot stays what it was: the
@@ -28,7 +30,7 @@ public:
     explicit StandardBot(Level level) : StandardBot(plan_for(level)) {}
     /// A bot with a plan of its own (the tournaments' ablations and the tests): the registry's bot of a level is StandardBot(plan_for(level))
     explicit StandardBot(const LevelPlan& plan)
-        : tactics_{plan, {}, {}, false, 0},
+        : tactics_(tactics_of(plan)),
           harvest_(kHarvest, harvest_params(plan)),
           fight_(kFight, tactics_),
           aid_(kAid, tactics_),
@@ -37,7 +39,8 @@ public:
           bombs_(kBombs, tactics_),
           raids_(kRaids, tactics_),
           guard_(kGuard, tactics_),
-          harass_(kHarass, tactics_) {}
+          strike_(kStrike, tactics_),
+          hatch_(kHatch, tactics_) {}
     const char* kind() const noexcept override { return "standard"; }
     void start(const BotContext& context) override;
     void think(const BotView& view, Orders& orders) override;
@@ -52,7 +55,8 @@ public:
     const BombTask& bombs() const noexcept { return bombs_; }
     const RaidTask& raids() const noexcept { return raids_; }
     const GuardTask& guard() const noexcept { return guard_; }
-    const HarassTask& harass() const noexcept { return harass_; }
+    const StrikeTask& strike() const noexcept { return strike_; }
+    const HatchTask& hatch() const noexcept { return hatch_; }
     const Tactics& tactics() const noexcept { return tactics_; }
     const AntLedger& ledger() const noexcept { return ledger_; }
     uint32_t denials() const noexcept { return denials_; }
@@ -71,10 +75,16 @@ public:
     static constexpr TaskId kPowerUps = 5;
     static constexpr TaskId kRaids = 6;
     static constexpr TaskId kGuard = 7;
-    static constexpr TaskId kHarass = 8;
+    static constexpr TaskId kStrike = 8;
     static constexpr TaskId kBombs = 9;
+    static constexpr TaskId kHatch = 10;
 
 private:
+    static Tactics tactics_of(const LevelPlan& plan) {
+        Tactics t;
+        t.plan = plan;
+        return t;
+    }
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
         HarvestTask::Params p;
         if (plan.typed_harvest) {
@@ -105,7 +115,8 @@ private:
     BombTask bombs_;
     RaidTask raids_;
     GuardTask guard_;
-    HarassTask harass_;
+    StrikeTask strike_;
+    HatchTask hatch_;
     uint32_t denials_{0};
     uint32_t accepts_{0};
     uint64_t deny_after_{0};

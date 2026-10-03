@@ -1572,7 +1572,7 @@ void run_b41_tests() {
             for (const bool enemy_combat : {false, true}) {
                 sim::SimulationEngine sim;
                 start_match(sim, "TREASURE", 5, 0x0F);
-                sim.set_player_score(1, 300);
+                sim.set_player_score(1, 100);                                                               // something to raid (30 at least), not enough to make the bot feel behind (300)
                 Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
                 if (enemy_combat) sim.spawn_unit(3, sim::AntType::Combat, rig.map().hill(3).queue);           // an enemy Combat Ant in sight (not at the hill that is raided: Hard would not go there)
                 const std::vector<uint32_t> theirs = ants_of(sim, 1);

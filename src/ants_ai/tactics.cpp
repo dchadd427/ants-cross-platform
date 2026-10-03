@@ -44,6 +44,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.raids = true;
             p.max_combat = 1;
             p.max_thief = 1;
+            p.hatch_extra = 1;
+            p.strike_force = 3;                  // (strikes, wipe_focus and hatches are OFF at every level: measured, they cost score, docs/BOTS.md; the numbers are for the flags)
             break;
         case Level::Hard:
             p.defenders = 3;
@@ -62,8 +64,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.raids = true;
             p.max_combat = 2;
             p.max_thief = 1;
-            p.squads = true;
-            p.harasses = true;
+            p.strike_force = 4;
+            p.hatch_extra = 2;
             p.avoids_guarded_hills = true;
             break;
     }
@@ -156,10 +158,23 @@ void Memory::update(const BotView& v, const MapInfo& map) {
         if (now_own.count(e.first) == 0) hits_.push_back(Hit{e.first, e.second.tile, e.second.hp, 0, e.second.carried});     // gone: it was killed (or drowned)
     }
     own_ = std::move(now_own);
-    if (!hits_.empty()) last_hit_ = v.tick();
+    if (!hits_.empty()) {
+        last_hit_ = v.tick();
+        hit_log_.emplace_back(v.tick(), static_cast<uint32_t>(hits_.size()));
+        for (const Hit& h : hits_) {
+            if (h.hp_now == 0) last_loss_ = v.tick();
+        }
+    }
+    while (!hit_log_.empty() && v.tick() > hit_log_.front().first + 2400u) hit_log_.erase(hit_log_.begin());
 
-    // the other teams: who moves, and the Thief ants in sight
+    // the other teams: who moves, how many ants each shows, and the Thief ants in sight
     std::map<uint32_t, sim::TileCoord> thief_now;
+    std::array<uint32_t, sim::MAX_PLAYERS> shown{};
+    for (const AntView& a : v.others()) ++shown[a.team];
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) peak_ants_[t] = std::max(peak_ants_[t], shown[t]);
+    for (const AntView& a : v.others()) {
+        if (a.state == sim::UnitState::Attacking) attacking_[a.id] = v.tick();
+    }
     for (const AntView& a : v.others()) {
         if (a.state != sim::UnitState::Idle && a.state != sim::UnitState::GuardIdle && seen_moving_[a.team] == 0) seen_moving_[a.team] = v.tick();
         if (a.type == sim::AntType::Combat) combat_last_seen_ = v.tick();
@@ -186,6 +201,34 @@ void Memory::update(const BotView& v, const MapInfo& map) {
             else wall_seen_.erase(key);
         }
     }
+}
+
+// ---- the standing -------------------------------------------------------------------------------------------------------------------------------------------
+
+Standing standing_of(const LevelPlan& plan, const BotView& view, const MapInfo& map) {
+    Standing st;
+    st.mine = view.score();
+    const uint8_t ally = view.ally();
+    int32_t best = -1;
+    int32_t best_distance = 0;
+    const HillInfo& own = map.hill(view.seat());
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        const TeamRow& row = view.rows()[t];
+        if (t == view.seat() || !row.present || row.dropped || (ally < sim::MAX_PLAYERS && t == ally)) continue;
+        const HillInfo& hill = map.hill(t);
+        const int32_t d = own.present && hill.present ? own.queue.chebyshev_dist(hill.queue) : 0;
+        if (row.score > best || (row.score == best && d < best_distance)) {                // (an alliance of enemies shows one box twice: the member whose hill is nearer)
+            best = row.score;
+            best_distance = d;
+            st.leader = t;
+        }
+    }
+    if (st.leader < 0) return st;
+    st.leader_score = best;
+    const int32_t margin = std::max<int32_t>(static_cast<int32_t>(plan.strike_margin), best * static_cast<int32_t>(plan.strike_margin_percent) / 100);
+    st.behind = best >= static_cast<int32_t>(plan.strike_min_leader) && st.mine + margin <= best;
+    st.ahead = st.mine >= best;
+    return st;
 }
 
 // ---- the threat to the thief hole ---------------------------------------------------------------------------------------------------------------------

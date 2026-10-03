@@ -5,7 +5,8 @@
 //
 //   rank 5  FightTask     strike back at an enemy that hit an own ant, and attack an enemy Thief that is on its way to the own hill
 //   rank 4  WallTask      the Fire Ant that keeps three fire walls in front of the own thief hole
-//   rank 3  PowerUpTask   one ant at a time is sent to take a power-up that the bot wants; RaidTask: a Thief raids the hill of the leading team
+//   rank 4  StrikeTask    a strike force hunts the carriers of the leading team when the bot is clearly behind and the fight looks winnable (the owner's playbook)
+//   rank 3  PowerUpTask   the ants that are sent to take the power-ups that the bot wants; RaidTask: a Thief raids the hill of the leading team
 //   rank 2  GuardTask     a Combat Ant is parked where its reflex covers the hill
 //   rank 1  HarvestTask   the economy (tasks.hpp, unchanged)
 //
@@ -290,24 +291,34 @@ private:
     int last_target_{-1};
 };
 
-// ---- rank 4: the harassment --------------------------------------------------------------------------------------------------------------------------------
+// ---- rank 4: the strike -------------------------------------------------------------------------------------------------------------------------------------
 
-/// A small squad (Combat Ants first, then workers) hunts the enemy carriers near the enemy hills: a blow on a carrier on its way home (or one that waits next to the gate) clears its
-/// walk (it stands idle with its food until its owner sends it on) and costs its team the time. One attack order is one blow, so a squad member is ordered again each time it is
-/// idle after a blow. Where it waits between targets: three tiles in front of the nearest enemy hill, on the side the carriers come from (towards the middle of the map).
-///   when it pays   the squad is called off for a while when one of its members was hit (the enemy fights back) and, once an enemy Combat Ant is in sight, for the match; it is never
-///                  taken from a workforce smaller than harass_min_workers, and not in the last 900 ticks
-///   never          an ant that stands on a power-up, a carrier within three tiles of an enemy Combat Ant (its reflex would hit the squad first)
-class HarassTask final : public Task {
+/// The owner's playbook: "if you're losing, forcing a team fight is a good way to swing the game back in your favour if you can win". When the bot (with its ally, by the score boxes) is
+/// clearly BEHIND the leader (Standing::behind) and a fight looks winnable, a strike force hunts the carriers of the leader near its hill: a blow on a carrier on its way home clears
+/// its walk (it stands idle with its food until its owner sends it on) and costs the leader the time, and a won fight costs it ants (and, at the last ant, an egg). One attack order is
+/// one blow, so a member is ordered again each time it is idle after a blow; between targets the force waits three tiles in front of the leader's hill on the side the carriers come from.
+///   the force   Combat Ants first, then healthy workers with empty hands, at most strike_force of them and never so many that fewer than strike_reserve ants stay at home; ants that a
+///               pick-up, a raid, a wall, a bomb or a fight holds are never taken
+///   winnable    the own strength (a Combat Ant counts 8, any other ant 4) is at least strike_odds_percent of the enemy's near the hill (the leader's ants, and its ally's, within
+///               strike_radius tiles of the queue row: a Combat Ant counts 8, an ant that was drawn in its attack clip lately 4, any other ant 1: the workers that queue at a gate are
+///               not an army); once the force is out it is called off when the own strength falls below the enemy's
+///   ahead       the bot that is not behind has no strike (the force goes back to the pool at once): it protects its lead
+///   wipe        (wipe_focus, Hard) an enemy team that shows at most wipe_max_ants ants and is far weaker than the force (three times, and the force at least three ants) is hunted
+///               down: every ant of it is a target, not only carriers; its last ant forces a hatch (the engine takes min(200, score) from it) and with no egg left it is out of the match
+class StrikeTask final : public Task {
 public:
-    HarassTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
-    const char* name() const noexcept override { return "harass"; }
+    StrikeTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
+    const char* name() const noexcept override { return "strike"; }
     void step(TaskContext& context) override;
     void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
 
     // ---- for the tests and the reports ----
-    size_t squad() const noexcept { return squad_.size(); }
+    size_t force() const noexcept { return force_.size(); }
+    bool active() const noexcept { return active_; }
+    bool wiping() const noexcept { return wipe_; }
+    int target() const noexcept { return target_; }
     uint32_t attacks_ordered() const noexcept { return attacks_ordered_; }
+    uint32_t strikes_started() const noexcept { return strikes_started_; }
     uint32_t calls_off() const noexcept { return calls_off_; }
 
 private:
@@ -318,11 +329,42 @@ private:
         uint32_t target{0};
         bool ordered{false};
     };
+    void disband(TaskContext& context);
+    uint32_t enemy_weight(const AntView& enemy, uint64_t now) const;
     Tactics& tactics_;
-    std::map<uint32_t, Member> squad_;
+    std::map<uint32_t, Member> force_;
+    bool active_{false};
+    bool wipe_{false};
+    int target_{-1};
     uint64_t paused_until_{0};
     uint32_t attacks_ordered_{0};
+    uint32_t strikes_started_{0};
     uint32_t calls_off_{0};
+};
+
+// ---- the hatch -----------------------------------------------------------------------------------------------------------------------------------------------------
+
+/// Medium and Hard hatch an egg (the hatch pedestal: 200 points, an egg, 160 ticks until the newborn exists, 171 until it takes orders) only for a fight, never for the economy (the
+/// hill's gate caps the income: a 7th worker adds nothing, docs/BOTS.md). A fight is expected when an own ant was hit within the last 600 ticks, the strike force is out, or an enemy
+/// Combat or Thief ant stands within 14 tiles of the own hill. Then the bot wants as many ants as it started with plus hatch_extra (Medium 1, Hard 2), and at least hatch_floor, and
+/// hatches one egg at a time until it has them (an egg that incubates counts): that replaces what a fight cost and adds the strength of the fight. Needed: the points (200 plus
+/// hatch_reserve; with an ally the box is not the own score: 400 more), an egg, nothing incubating, and hatch_min_left ticks left. One click per 70 ticks (the egg count falls only after
+/// the click has been released and applied). The task claims no ant.
+class HatchTask final : public Task {
+public:
+    HatchTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
+    const char* name() const noexcept override { return "hatch"; }
+    void step(TaskContext& context) override;
+    uint32_t hatches_ordered() const noexcept { return hatches_ordered_; }
+
+private:
+    Tactics& tactics_;
+    uint64_t next_after_{0};
+    uint32_t hatches_ordered_{0};
+    size_t start_ants_{0};               // the ants of the bot at the first look
+    bool clicked_{false};                // a click was proposed at the last eligible look
+    uint32_t eggs_before_{0};
+    uint64_t refused_until_{0};
 };
 
 // ---- rank 2: the guard -------------------------------------------------------------------------------------------------------------------------------------
