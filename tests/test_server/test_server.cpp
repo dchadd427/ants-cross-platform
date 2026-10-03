@@ -501,6 +501,7 @@ struct RClient {
     std::map<uint64_t, uint64_t> hash_at;
     std::function<void(sim::SimulationEngine&)> tamper;      // runs on the engine when the machine has loaded the map (to make its state differ)
     bool fail_load{false};                   // the machine cannot load the map: it says so, and the start is cancelled
+    uint16_t listen_port{0};                 // the port that the machine announces for the other guests (a game on the local network does; a server's room never uses it)
 
     void start(net::Connection* client_end, uint32_t seed) {
         end = client_end;
@@ -510,6 +511,7 @@ struct RClient {
         cc.room = room;
         cc.want_seat = want_seat;
         cc.key = key;
+        cc.listen_port = listen_port;
         lobby = std::make_unique<net::ClientLobby>(end, cc);
     }
     uint32_t next_random() {
@@ -869,6 +871,7 @@ struct PWorld : LinkSource {
         server_ends.push_back(ends.first);
         return ends.second;
     }
+    uint16_t announce_port{0};                              // the listen port that the machines made by connect() announce
     RClient& connect(const std::string& name, const std::string& room, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) {
         net::Connection* end = open_link();
         clients.push_back(std::make_unique<RClient>());
@@ -877,6 +880,7 @@ struct PWorld : LinkSource {
         c.room = room;
         c.want_seat = seat;
         c.key = key;
+        c.listen_port = announce_port;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
         return c;
     }
@@ -5576,6 +5580,16 @@ void run_persist_tests() {
                 }
             }
         }
+        {   // the last frame with a wrong checksum is a write that was interrupted: a torn tail (the record is the frames before it); the same fault with a frame behind it is corruption
+            std::vector<uint8_t> bad = good;
+            bad[frames.back().second - 6] = static_cast<uint8_t>(bad[frames.back().second - 6] ^ 0x55);
+            const RestartLoaded r = parse_restart_record(bad.data(), bad.size());
+            ASSERT_TRUE(r.ok() && r.torn && r.good_bytes == frames.back().first && r.turns.size() == 60 && r.checks.size() == 3 && prefix_of_reference(r));
+            std::vector<uint8_t> mid = good;
+            mid[frames[frames.size() - 2].second - 6] = static_cast<uint8_t>(mid[frames[frames.size() - 2].second - 6] ^ 0x55);
+            const RestartLoaded m = parse_restart_record(mid.data(), mid.size());
+            ASSERT_TRUE(!m.ok() && m.status == RestartLoaded::Status::Corrupt);
+        }
         {   // garbage: nothing is a record, nothing crashes (a third of them start with the magic, as a damaged record would)
             uint32_t rng = 12345;
             const auto next = [&rng]() {
@@ -6757,6 +6771,52 @@ void run_persist_server_tests_4() {
 }
 
 
+void run_persist_server_tests_5() {
+    TEST_CASE("S3.92 The Room's Wall-Clock Limit Counts The Play That Came Before The Restart (Not The Time The Match Waited For Its Players): A Room With A Limit Of 70 s Whose Match Had Been Played For 35 s When The Server Stopped Fails 35 s Of Play After The Players Are Back, Not 70") {
+        PWorld w("persist-92");
+        w.start_server(500);
+        RoomSpec spec = held_spec("L-1", 2);
+        spec.run_ms = 70000;
+        std::vector<RClient*> m = play_room(w, spec, 30000);                                   // 5 s of dialog and 30 s of play: 35 s of the match
+        ASSERT_EQ(w.status("L-1").state, RoomState::Running);
+        w.stop_server(true);
+        w.run(20000);                                                                          // the server is away for 20 s: that is no play
+        w.start_server(500);
+        ASSERT_TRUE(w.until([&]() { return !w.status("L-1").paused; }, 60000));
+        w.run(28000);
+        ASSERT_EQ(w.status("L-1").state, RoomState::Running);                                  // 28 s of play after the return: 63 s of the match, the limit is 70
+        w.run(12000);
+        const RoomStatus s = w.status("L-1");
+        ASSERT_TRUE(s.state == RoomState::Failed && s.reason.find("longer than the room's limit") != std::string::npos);
+        ASSERT_TRUE(w.record_files().empty());
+    } TEST_END();
+
+    TEST_CASE("S3.93 A Record Keeps No Address Of A Client: The Start Message That The Room Sent To Machines That Announce A Port Names Their Addresses (Host Migration's Business, A Game On The Local Network's); The Record's Start Message Has None, And Neither Has The Start That A Machine From Nothing Is Sent After A Restart")  {
+        PWorld w("persist-93");
+        w.announce_port = 4321;
+        w.start_server(500);
+        std::vector<RClient*> m = play_room(w, held_spec("E-1", 2), 3000);
+        const net::StartMsg& live = m[0]->lobby->start_info();
+        size_t named = 0;
+        for (const net::Endpoint& e : live.endpoints) named += e.port == 4321 && !e.address.empty() ? 1u : 0u;
+        ASSERT_EQ(named, size_t{2});                                                           // (the live Start names the two machines: the premise of the test)
+        const RestartLoaded rec = w.read_record("E-1");
+        ASSERT_TRUE(rec.ok());
+        for (const net::Endpoint& e : rec.head.start.endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
+        const net::SeatKey key = m[1]->lobby->key();
+        const uint8_t seat = m[1]->lobby->my_seat();
+        w.stop_server(false);
+        m[1]->reconnects = false;
+        w.start_server(500);
+        RClient& reloaded = w.connect("P1", "E-1", seat, key);                                 // a machine from nothing: it is sent the room's Start message
+        ASSERT_TRUE(w.until([&]() { return reloaded.lobby != nullptr && reloaded.lobby->phase() != net::ClientLobby::Phase::Connecting && reloaded.lobby->phase() != net::ClientLobby::Phase::Joining; }, 20000));
+        w.run(500);
+        for (const net::Endpoint& e : reloaded.lobby->start_info().endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
+        ASSERT_EQ(reloaded.lobby->start_info().seed, live.seed);
+    } TEST_END();
+}
+
+
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The real program: ants_server as a child process of the test, stopped with SIGTERM or killed with SIGKILL in the middle of a match and started again over the same folder, and two
@@ -7079,6 +7139,7 @@ int main() {
     run_persist_server_tests_2();
     run_persist_server_tests_3();
     run_persist_server_tests_4();
+    run_persist_server_tests_5();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();
 #endif
