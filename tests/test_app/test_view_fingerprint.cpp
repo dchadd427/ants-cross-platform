@@ -3386,6 +3386,7 @@ void app_pixel_wide_scenarios() {
             text.push_back({layout.chat.lines.x, layout.chat.lines.y, layout.chat.lines.x + layout.chat.lines.w, layout.chat.lines.y + layout.chat.lines.h});   // the lines
             text.push_back({layout.chat.input_text.x - 2, layout.chat.input_text.y - 2, layout.chat.input_text.x + layout.chat.input_text.w, layout.chat.input_text.y + 24});   // the typed line
             text.push_back({layout.footer_x - 2, layout.footer_y1 - 2, layout.footer_x + 200, layout.footer_y2 + 22});                                // the footer's two lines
+            text.push_back({layout.caption_centre_x - 154, layout.caption_y - 2, layout.caption_centre_x + 154, layout.caption_y + 22});               // the caption under the map preview (the room layouts' own place: the single screen's is in kWMaskSetup)
             rig.shot(leader ? "px.wide.app.setup.room_leader" : "px.wide.app.setup.room_guest", wide_masks({&text}));
         }
     }
@@ -4183,8 +4184,8 @@ const Golden kGoldens[] = {
     {"px.wide.app.setup.refreshed", 0x8177f35cb27351de, 518400},
     {"px.wide.app.setup.hover_start", 0xc91cdbb20a855a13, 518400},
     {"px.wide.app.setup.cursor", 0x821af42c439fcaf3, 518400},
-    {"px.wide.app.setup.room_leader", 0x584e971aba4bdb6d, 518400},
-    {"px.wide.app.setup.room_guest", 0x91b1e2a3f0147173, 518400},
+    {"px.wide.app.setup.room_leader", 0xa06a1b577f93ec06, 518400},
+    {"px.wide.app.setup.room_guest", 0xf8ed8630e8ced504, 518400},
     {"px.wide.app.quickhelp.rest", 0x174b067d6bc59e00, 518400},
     {"px.wide.app.quickhelp.hover_start", 0x76c3bbba45f90b9c, 518400},
     {"px.wide.app.results", 0x5e72ea394f3c73a0, 518400},

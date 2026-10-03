@@ -254,7 +254,9 @@ void world_scenarios(const assets::AssetArchive& arc) {
 const MaskRect kMaskPlate{470, 466, 640, 480};
 const std::vector<MaskRect> kMaskMatch = {{479, 252, 622, 268}, {480, 297, 622, 402}, {479, 422, 622, 438}, {310, 2, 402, 20}, {3, 462, 103, 480}, {161, 462, 253, 480}, {310, 462, 401, 480}};
 const MaskRect kWMaskPlate{790, 526, 960, 540};
-const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942, 462}, {799, 482, 942, 498}, {630, 2, 722, 20}, {323, 522, 423, 540}, {481, 522, 573, 540}, {630, 522, 722, 540}};
+// (the bottom score labels right aligned in [113, 209), [377, 465) and [632, 719) x 524 of the 960 x 540 picture: the masks of the two left ones lay at 323 .. 423 and 481 .. 573 in the first version of this
+// table, beside their labels, so "Red:" and "Blue:" were hashed, and SDL's alpha blit rounds differently on x86-64 and on ARM: the masks of tests/test_app/test_view_fingerprint.cpp's kWMaskMatch, corrected by the CI)
+const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942, 462}, {799, 482, 942, 498}, {630, 2, 722, 20}, {111, 522, 211, 540}, {375, 522, 467, 540}, {630, 522, 722, 540}};
 
 void app_scenarios() {
     for (const Shape& s : kShapes) {
@@ -604,20 +606,20 @@ const Golden kGoldens[] = {
     {"zoom.app.ants.classic.TINY.z0.5", 0x33b424e3be64836a, 307200},
     {"zoom.app.ants.classic.TINY.z1", 0x395b1b5428b0ef86, 307200},
     {"zoom.app.ants.classic.TINY.z2", 0x654d61ede4479dc0, 307200},
-    {"zoom.app.ants.wide.GAUNTLET.z0.5", 0xcf76e2e5ee67da19, 518400},
-    {"zoom.app.ants.wide.GAUNTLET.z1", 0x6d39d34463e133e2, 518400},
-    {"zoom.app.ants.wide.GAUNTLET.z2", 0x93a09c8efab61f62, 518400},
-    {"zoom.app.ants.wide.TINY.z0.5", 0xbeec5dcf8cc36e31, 518400},
-    {"zoom.app.ants.wide.TINY.z1", 0x748fc95bdfc2635f, 518400},
-    {"zoom.app.ants.wide.TINY.z2", 0x3bc372b4f52bc5b4, 518400},
+    {"zoom.app.ants.wide.GAUNTLET.z0.5", 0x86eb3b0f2d57563c, 518400},
+    {"zoom.app.ants.wide.GAUNTLET.z1", 0x1fe1af1bc5d13ae7, 518400},
+    {"zoom.app.ants.wide.GAUNTLET.z2", 0x037a90b9cd9d5067, 518400},
+    {"zoom.app.ants.wide.TINY.z0.5", 0x6b02b92ef6ff8bc4, 518400},
+    {"zoom.app.ants.wide.TINY.z1", 0x85a3d695f1432492, 518400},
+    {"zoom.app.ants.wide.TINY.z2", 0x32217ff583631ba9, 518400},
     {"zoom.app.classic.GAUNTLET.z0.5", 0x52ecda6eb4ca0562, 307200},
     {"zoom.app.classic.GAUNTLET.z2", 0x0752deb3e7e2313c, 307200},
     {"zoom.app.classic.TINY.z0.5", 0x51ad00b81a4182c3, 307200},
     {"zoom.app.classic.TINY.z2", 0x1f97ee96bf5bb05d, 307200},
-    {"zoom.app.wide.GAUNTLET.z0.5", 0xd3998072f1d74eca, 518400},
-    {"zoom.app.wide.GAUNTLET.z2", 0x6602e62ac27e859a, 518400},
-    {"zoom.app.wide.TINY.z0.5", 0x75285c3b64679214, 518400},
-    {"zoom.app.wide.TINY.z2", 0x3263651c13a5fbd5, 518400},
+    {"zoom.app.wide.GAUNTLET.z0.5", 0x755aaffcd02bd6df, 518400},
+    {"zoom.app.wide.GAUNTLET.z2", 0xc7817479071f3f8f, 518400},
+    {"zoom.app.wide.TINY.z0.5", 0xb98b45312ada3849, 518400},
+    {"zoom.app.wide.TINY.z2", 0x66678974b731f9f0, 518400},
     {"zoom.camera.classic.z0.5", 0x3a4dad0e646af9cc, 45},
     {"zoom.camera.classic.z2", 0x898a58705f5b9fc1, 45},
     {"zoom.camera.wide.z0.5", 0x4625c85a49d212b7, 45},
