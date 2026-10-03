@@ -28,9 +28,10 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DANTS_BUILD_APP=OFF -DBUILD_TESTS
 # of building the server again. The first of: the build argument ANTS_BUILD_ID (docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) -f Dockerfile.server .; a compose
 # file's build.args), the commit named by the HEAD and refs files of the repository's .git folder (a stack that a deployment tool builds from a clone has them: .dockerignore lets only
 # these three through, never .git/config), the UTC build time. docker/resolve_build_id.sh says which one it used in the build log.
+# (`COPY VERSION .git* ...` copies VERSION, the two files .gitattributes / .gitignore and, when the context has a .git folder, the three entries that .dockerignore lets through; it works with and without a .git folder.)
 ARG ANTS_BUILD_ID=
 COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
-COPY VERSION .git/HEA[D] .git/packed-ref[s] .git/ref[s] /src/gitinfo/
+COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
     cmake -B build "-DANTS_BUILD_ID=${BUILD_ID}" && \
     cmake --build build -j"$(nproc)" --target ants_server && \

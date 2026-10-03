@@ -8,7 +8,8 @@
 # 2. The short commit that GIT_INFO_DIR names: the files HEAD, packed-refs and refs/ of the repository's .git folder, as the Dockerfiles copy them (see .dockerignore:
 #    only these three are part of the build context, never .git/config, which can hold a password in a remote's address). A stack that a deployment tool builds from
 #    a clone of the repository (Portainer's "Repository" stack) has no git program in the image and no build argument, but it has these files.
-#    The Dockerfiles copy the folder flat (`COPY .git/ref[s] ...` copies the contents of refs/), so refs/heads/main is looked for as refs/heads/main and as heads/main.
+#    The Dockerfiles copy it with `COPY VERSION .git* <dir>/` (a copy of those three entries: HEAD, packed-refs, refs/), so refs/heads/main is found as <dir>/refs/heads/main;
+#    <dir>/heads/main is looked for too (a copy of the contents of refs/ on its own).
 # 3. The UTC time of the build, YYYYMMDD-HHMM: an image that was built from a source archive (no .git at all) is still told apart from the one before it.
 #
 # A valid id is 1 - 40 characters of letters, digits, dot, dash and underscore.

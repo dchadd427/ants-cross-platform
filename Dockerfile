@@ -42,16 +42,17 @@ RUN BUILD_TIME=$(date +%s) && \
 # (the page is the only place of the web build that shows it; the compiled game's own ants::BUILD_ID is "unknown" here and nothing in the browser prints it). The first of:
 # the build argument ANTS_BUILD_ID (docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) .; a compose file's build.args), the commit named by the HEAD and refs files
 # of the repository's .git folder (a stack that a deployment tool builds from a clone has them: .dockerignore lets only these three through, never .git/config), the UTC build time.
+# (`COPY VERSION .git* ...` copies VERSION, the two files .gitattributes / .gitignore and, when the context has a .git folder, the three entries that .dockerignore lets through; it works with and without a .git folder.)
 # docker/resolve_build_id.sh says which one it used in the build log.
 ARG ANTS_BUILD_ID=
 COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
-COPY VERSION .git/HEA[D] .git/packed-ref[s] .git/ref[s] /src/gitinfo/
+COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
     echo "${BUILD_ID}" > /src/build_id.txt && \
     PAGE=/src/build_web/src/ants_app/index.html && \
     sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g" "$PAGE" && \
     ! grep -q '@@BUILD_ID@@' "$PAGE" && \
-    grep -q "id=\"game-build-id\">${BUILD_ID}<" "$PAGE"
+    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" "$PAGE"
 
 # Build the changelog pages (CHANGELOG.md -> changelog.html, the short default page; docs/CHANGELOG_ARCHIVE.md -> changelog_archive.html, the detailed history; no dependencies)
 # after the compile layers so that editing the changelog does not rebuild the game

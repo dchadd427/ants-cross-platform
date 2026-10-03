@@ -285,7 +285,7 @@ jobs:
         run: |
           docker run --rm ants-beta nginx -t
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html index.js index.wasm index.data four.html changelog.html changelog_archive.html'
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && grep -o "id=\"game-version\">[^<]*<" index.html && grep -o "id=\"game-build-id\">[^<]*<" index.html && ! grep -q "@@" index.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && grep -Eo "id=.?game-version.?>[^<]*<" index.html && grep -Eo "id=.?game-build-id.?>[^<]*<" index.html && ! grep -q "@@" index.html'
 
       # The game server's image (Dockerfile.server): built the same way as the stack's, and it must say which build it is.
       - name: Build the game server image and run its --version

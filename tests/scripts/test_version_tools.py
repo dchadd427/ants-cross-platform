@@ -244,7 +244,7 @@ class ResolveBuildId(unittest.TestCase):
         return result.stdout.strip(), result.stderr
 
     def flat_copy(self, git_dir):
-        """What the Dockerfiles' `COPY .git/HEA[D] .git/packed-ref[s] .git/ref[s] /gitinfo/` makes of a .git folder: HEAD, packed-refs and the CONTENTS of refs/."""
+        """A copy of HEAD, packed-refs and the CONTENTS of refs/ side by side (heads/, tags/), the layout that the script also accepts."""
         flat = os.path.join(self.tmp.name, "gitinfo")
         os.makedirs(flat)
         shutil.copy(os.path.join(git_dir, "HEAD"), flat)
@@ -284,11 +284,25 @@ class ResolveBuildId(unittest.TestCase):
         self.assertEqual(out, commit[:7])
         self.assertIn("git commit", why)
 
+    def docker_copy(self, git_dir):
+        """What the Dockerfiles' `COPY VERSION .git* /gitinfo/` makes of a clone, given .dockerignore (.git, !.git/HEAD, !.git/packed-refs, !.git/refs): HEAD, packed-refs (when
+        there is one) and refs/ as they are in .git; nothing else of .git is in the build context."""
+        copy = os.path.join(self.tmp.name, "gitinfo-docker")
+        os.makedirs(copy)
+        for name in ("HEAD", "packed-refs"):
+            if os.path.exists(os.path.join(git_dir, name)):
+                shutil.copy(os.path.join(git_dir, name), copy)
+        shutil.copytree(os.path.join(git_dir, "refs"), os.path.join(copy, "refs"))
+        return copy
+
     @unittest.skipUnless(have("git"), "git is needed")
     def test_the_copy_the_dockerfiles_make_gives_the_short_commit(self):
         repo = os.path.join(self.tmp.name, "clone")
         os.makedirs(repo)
         commit = make_repo(repo)
+        out, _ = self.resolve("", self.docker_copy(os.path.join(repo, ".git")))
+        self.assertEqual(out, commit[:7])
+        shutil.rmtree(os.path.join(self.tmp.name, "gitinfo-docker"))
         out, _ = self.resolve("", self.flat_copy(os.path.join(repo, ".git")))
         self.assertEqual(out, commit[:7])
 
@@ -301,7 +315,7 @@ class ResolveBuildId(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(repo, ".git", "refs", "heads", "main")))
         out, _ = self.resolve("", os.path.join(repo, ".git"))
         self.assertEqual(out, commit[:7])
-        out, _ = self.resolve("", self.flat_copy(os.path.join(repo, ".git")))
+        out, _ = self.resolve("", self.docker_copy(os.path.join(repo, ".git")))
         self.assertEqual(out, commit[:7])
 
     @unittest.skipUnless(have("git"), "git is needed")

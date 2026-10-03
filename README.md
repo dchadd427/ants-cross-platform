@@ -374,7 +374,7 @@ docker build -t ants-beta .
 docker run -d -p 19980:80 --name ants-beta ants-beta
 ```
 
-The image serves the game at `/`, the asset catalog at `/asset_catalog/` and the changelog page at `/changelog.html` (built from `CHANGELOG.md` when the image is built).
+The image serves the game at `/`, the asset catalog at `/asset_catalog/`, the short changelog at `/changelog.html` and the detailed history at `/changelog_archive.html` (both built from `CHANGELOG.md` and `docs/CHANGELOG_ARCHIVE.md` when the image is built). The page's footer names the version and the **build**, "Version v0.1.0 - build abc1234": the build id is the build argument `ANTS_BUILD_ID` (`docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) -t ants-beta .`, or `args:` of the compose file), else the commit that the clone's `.git/HEAD` and `.git/refs` name (a stack that a tool builds from a clone of the repository has them; the build context holds those files and nothing else of `.git`), else the UTC build time. The game server's image has the same id (`ants_server --version`).
 
 ### Building the Web Port Locally
 ```bash
