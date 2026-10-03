@@ -40,7 +40,10 @@ cmake --build "${BUILD_DIR}" -j4
 
 echo "==> Packaging into ${DIST_DIR}..."
 mkdir -p "${DIST_DIR}"
-cp -f "${BUILD_DIR}/src/ants_app/index.html" "${DIST_DIR}/"
+# The page's footer names the version (the file VERSION) and the build (ANTS_BUILD_ID, else the commit of this checkout, else the time), as the Docker image does
+GAME_VERSION="v$(head -n 1 "${SCRIPT_DIR}/VERSION" | tr -d '[:space:]')"
+BUILD_ID="$(sh "${SCRIPT_DIR}/docker/resolve_build_id.sh" "${ANTS_BUILD_ID:-}" "${SCRIPT_DIR}/.git" 2>/dev/null)"
+sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" "${BUILD_DIR}/src/ants_app/index.html" > "${DIST_DIR}/index.html"
 cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"

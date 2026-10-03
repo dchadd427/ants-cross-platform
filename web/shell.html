@@ -851,7 +851,7 @@
     </div>
 
     <footer>
-        <span id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span>&#8197;&bull;&#8197;</span>Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2 &bull;&#8197;<a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Asset Catalog Viewer</a>&#8197;&bull;&#8197;<a href="/four.html" target="_blank" rel="noopener noreferrer">Play online</a>&#8197;&bull;&#8197;<a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>&#8197;&bull;&#8197;<a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+        <span id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span>&#8197;&bull;&#8197;</span>Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2 &bull;&#8197;<a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Asset Catalog Viewer</a>&#8197;&bull;&#8197;<a href="/four.html" target="_blank" rel="noopener noreferrer">Play online</a>&#8197;&bull;&#8197;<a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>&#8197;&bull;&#8197;<a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
     </footer>
 
     <script>
@@ -1546,6 +1546,11 @@
             if (ver && ver.textContent.indexOf('@') !== -1) {               // a build that did not fill the version in (a local build): say nothing
                 var line = document.getElementById('game-version-line');
                 if (line) line.style.display = 'none';
+            }
+            var buildId = document.getElementById('game-build-id');
+            if (buildId && buildId.textContent.indexOf('@') !== -1) {       // the same for the build id (the Docker image fills both in)
+                var build = document.getElementById('game-build');
+                if (build) build.style.display = 'none';
             }
         })();
 

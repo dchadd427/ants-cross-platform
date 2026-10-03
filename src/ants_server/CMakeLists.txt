@@ -26,7 +26,7 @@ set_target_properties(ants_server_core PROPERTIES
 )
 
 add_executable(ants_server main.cpp)
-target_link_libraries(ants_server PRIVATE ants_server_core)
+target_link_libraries(ants_server PRIVATE ants_server_core ants_version)     # ants_version: the generated ants_app/version.hpp and ants::BUILD_ID (root CMakeLists.txt)
 set_target_properties(ants_server PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON

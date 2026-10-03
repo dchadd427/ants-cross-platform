@@ -5,16 +5,18 @@ FROM emscripten/emsdk:3.1.58 AS builder
 
 WORKDIR /src
 
-# Copy build files and source code
-COPY CMakeLists.txt ./
+# Copy build files and source code (VERSION is the one source of the version: CMake generates the game's version header from it)
+COPY CMakeLists.txt VERSION ./
+COPY cmake/ ./cmake/
 COPY include/ ./include/
 COPY src/ ./src/
 COPY web/ ./web/
 COPY Original-Ants/ ./Original-Ants/
 
-# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text into shell.html
+# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text (the file VERSION) into shell.html
 RUN BUILD_TIME=$(date +%s) && \
-    GAME_VERSION=$(sed -n 's/.*VERSION_STRING = "\(v[0-9.]*\)".*/\1/p' include/ants_app/version.hpp) && \
+    GAME_VERSION="v$(head -n 1 VERSION | tr -d '[:space:]')" && \
+    case "${GAME_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION is not MAJOR.MINOR.PATCH: ${GAME_VERSION}" >&2; exit 1 ;; esac && \
     sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html
 
 # Configure and compile using default Makefiles
@@ -36,10 +38,31 @@ RUN BUILD_TIME=$(date +%s) && \
     ! grep -q '@@DATA_SIZE@@' "$PAGE" && \
     ! grep -Eq 'index\.js\?v=[0-9]+\?v=' "$PAGE"
 
-# Build the changelog page (CHANGELOG.md -> changelog.html, no dependencies) after the compile layers so that editing the changelog does not rebuild the game
+# Which build this is (the page's footer and the head of the changelog pages name it), found AFTER the compile layers so that a new commit does not recompile the game
+# (the page is the only place of the web build that shows it; the compiled game's own ants::BUILD_ID is "unknown" here and nothing in the browser prints it). The first of:
+# the build argument ANTS_BUILD_ID (docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) .; a compose file's build.args), the commit named by the HEAD and refs files
+# of the repository's .git folder (a stack that a deployment tool builds from a clone has them: .dockerignore lets only these three through, never .git/config), the UTC build time.
+# docker/resolve_build_id.sh says which one it used in the build log.
+ARG ANTS_BUILD_ID=
+COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
+COPY VERSION .git/HEA[D] .git/packed-ref[s] .git/ref[s] /src/gitinfo/
+RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
+    echo "${BUILD_ID}" > /src/build_id.txt && \
+    PAGE=/src/build_web/src/ants_app/index.html && \
+    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g" "$PAGE" && \
+    ! grep -q '@@BUILD_ID@@' "$PAGE" && \
+    grep -q "id=\"game-build-id\">${BUILD_ID}<" "$PAGE"
+
+# Build the changelog pages (CHANGELOG.md -> changelog.html, the short default page; docs/CHANGELOG_ARCHIVE.md -> changelog_archive.html, the detailed history; no dependencies)
+# after the compile layers so that editing the changelog does not rebuild the game
 COPY CHANGELOG.md /src/changelog/CHANGELOG.md
+COPY docs/CHANGELOG_ARCHIVE.md /src/changelog/CHANGELOG_ARCHIVE.md
 COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py
-RUN python3 /src/changelog/changelog_to_html.py /src/changelog/CHANGELOG.md /src/changelog/changelog.html
+RUN cd /src/changelog && \
+    GAME_VERSION="v$(head -n 1 /src/VERSION | tr -d '[:space:]')" && \
+    BUILD_ID="$(cat /src/build_id.txt)" && \
+    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog_archive.html --other-label "Detailed history" && \
+    python3 changelog_to_html.py CHANGELOG_ARCHIVE.md changelog_archive.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog.html --other-label "Short changelog"
 
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
@@ -58,8 +81,8 @@ COPY web/favicon.* /usr/share/nginx/html/
 # The Play online page: host a match on the game server or join one by its code (four.html; it embeds the game page for the seats that play on it)
 COPY web/four.html /usr/share/nginx/html/four.html
 
-# The changelog page (built from CHANGELOG.md, linked from the page header)
-COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/changelog.html
+# The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other)
+COPY --from=builder /src/changelog/changelog.html /src/changelog/changelog_archive.html /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/

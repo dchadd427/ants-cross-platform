@@ -79,6 +79,7 @@ target_link_libraries(ants_app PUBLIC
     ants_net
     ants_sim
     ants_assets
+    ants_version     # the generated ants_app/version.hpp (from the file VERSION) and ants::BUILD_ID: the root CMakeLists.txt
 )
 if(SDL2_LIBRARIES)
     target_link_libraries(ants_app PUBLIC ${SDL2_LIBRARIES})

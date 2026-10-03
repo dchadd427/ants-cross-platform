@@ -1,0 +1,23 @@
+// Template of the generated header ants_app/version.hpp. Do not include this file and do not edit a copy of the result:
+// CMake (CMakeLists.txt) reads the one line of the file VERSION at the root of the repository and writes
+// <build folder>/generated/ants_app/version.hpp from this template, so the version exists in ONE place only.
+// The build id (which commit this build is) is separate, see BUILD_ID below and cmake/ants_stamp_build_id.cmake.
+#pragma once
+
+#include <string_view>
+
+namespace ants {
+
+// The game's version: "v" + the line of the file VERSION (MAJOR.MINOR.PATCH). It is what the corner plate shows, what a game and a server compare
+// in the network handshake's text and what the web page and the changelog name. It changes for a batch or a milestone only (docs/WORKFLOW.md).
+inline constexpr std::string_view VERSION_STRING = "@ANTS_VERSION_STRING@";
+inline constexpr int VERSION_MAJOR = @ANTS_VERSION_MAJOR@;
+inline constexpr int VERSION_MINOR = @ANTS_VERSION_MINOR@;
+inline constexpr int VERSION_PATCH = @ANTS_VERSION_PATCH@;
+
+// Which build this is: the short git commit of a build made in a git checkout, else the build argument of the Docker images (-DANTS_BUILD_ID), else
+// "unknown". It is shown in `ants --version`, `ants_server --version` and the server's start-up line, never in the corner plate. Defined in a
+// generated source file (not here) so that a new commit recompiles one tiny file instead of everything that includes this header.
+extern const std::string_view BUILD_ID;
+
+}  // namespace ants

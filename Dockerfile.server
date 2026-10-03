@@ -15,13 +15,26 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
-COPY CMakeLists.txt ./
+COPY CMakeLists.txt VERSION ./
+COPY cmake/ ./cmake/
 COPY include/ ./include/
 COPY src/ ./src/
 COPY tools/ ./tools/
 
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DANTS_BUILD_APP=OFF -DBUILD_TESTS=OFF && \
     cmake --build build -j"$(nproc)" --target ants_server
+
+# Which build this is (`ants_server --version` and the first line of the log say it), found AFTER the compile so that a new commit recompiles one tiny file and links again instead
+# of building the server again. The first of: the build argument ANTS_BUILD_ID (docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) -f Dockerfile.server .; a compose
+# file's build.args), the commit named by the HEAD and refs files of the repository's .git folder (a stack that a deployment tool builds from a clone has them: .dockerignore lets only
+# these three through, never .git/config), the UTC build time. docker/resolve_build_id.sh says which one it used in the build log.
+ARG ANTS_BUILD_ID=
+COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
+COPY VERSION .git/HEA[D] .git/packed-ref[s] .git/ref[s] /src/gitinfo/
+RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
+    cmake -B build "-DANTS_BUILD_ID=${BUILD_ID}" && \
+    cmake --build build -j"$(nproc)" --target ants_server && \
+    /src/build/src/ants_server/ants_server --version
 
 # =============================================================================
 # The runtime image: the program and nothing else, run by an unprivileged user

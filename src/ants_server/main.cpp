@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
             usage(stdout);
             return 0;
         } else if (a == "--version") {
-            std::printf("ants_server %s (network protocol %u)\n", std::string(ants::VERSION_STRING).c_str(), static_cast<unsigned>(ants::net::kProtocolVersion));
+            std::printf("ants_server %s build %s (network protocol %u)\n", std::string(ants::VERSION_STRING).c_str(), std::string(ants::BUILD_ID).c_str(), static_cast<unsigned>(ants::net::kProtocolVersion));
             return 0;
         } else if (a == "--maps") {
             o.maps_dir = value("--maps");
@@ -345,7 +345,7 @@ int main(int argc, char** argv) {
 #ifdef SIGPIPE
     std::signal(SIGPIPE, SIG_IGN);
 #endif
-    log(std::string("ants_server ") + std::string(ants::VERSION_STRING) + " (network protocol " + std::to_string(ants::net::kProtocolVersion) + "), maps in " + o.maps_dir);
+    log(std::string("ants_server ") + std::string(ants::VERSION_STRING) + " build " + std::string(ants::BUILD_ID) + " (network protocol " + std::to_string(ants::net::kProtocolVersion) + "), maps in " + o.maps_dir);
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (--reconnect): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
             " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +

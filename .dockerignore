@@ -1,10 +1,15 @@
 .git
+# The build id (docker/resolve_build_id.sh) is read from these three entries of a clone's .git folder, and only these: never .git/config (it can hold a password in a remote's address)
+!.git/HEAD
+!.git/packed-refs
+!.git/refs
 .github
 build
 build_*
 dist
 tests
 docs
+!docs/CHANGELOG_ARCHIVE.md
 Original-Ants/*.exe
 Original-Ants/*.dll
 Original-Ants/ddraw.ini

@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # optional: which build this is (page footer, --version); without it the image takes the commit from the clone's .git files, else the build time
+        ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
     container_name: ants-beta
     restart: unless-stopped
     ports:

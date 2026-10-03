@@ -8070,12 +8070,48 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_EQ(snap->anim_state, static_cast<uint16_t>(UnitState::HarvestingFood));
     } TEST_END();
 
-    TEST_CASE("12.108: Version Invariant & Fog of War Cursor Concealment Parity") {
-        // 1. Verify semantic versioning components
-        ASSERT_EQ(ants::VERSION_STRING, "v0.1.0");
-        ASSERT_EQ(ants::VERSION_MAJOR, 0);
-        ASSERT_EQ(ants::VERSION_MINOR, 1);
-        ASSERT_EQ(ants::VERSION_PATCH, 0);
+    TEST_CASE("12.108: Version Format, Build Id & Fog of War Cursor Concealment Parity") {
+        // 1. Verify the FORMAT of the version, not its value. The value lives in one place, the file VERSION (CMake generates ants_app/version.hpp from it) and moves for a
+        // batch or a milestone only (docs/WORKFLOW.md), so a test that pinned "v0.1.0" failed at every release for no reason. What stays pinned: the text is
+        // "vMAJOR.MINOR.PATCH" (digits only, no leading zeros of a longer number, nothing after the third number), the three numbers agree with it, and the build id names the build.
+        {
+            const std::string text(ants::VERSION_STRING);
+            ASSERT_TRUE(text.size() >= 6);
+            ASSERT_EQ(text[0], 'v');
+            int numbers[3] = {0, 0, 0};
+            int field = 0;
+            bool digit_seen = false;
+            bool format_ok = true;
+            for (size_t i = 1; i < text.size(); ++i) {
+                const char c = text[i];
+                if (c >= '0' && c <= '9') {
+                    if (digit_seen && numbers[field] == 0) format_ok = false;     // "01": a leading zero
+                    numbers[field] = numbers[field] * 10 + (c - '0');
+                    if (numbers[field] > 100000) format_ok = false;
+                    digit_seen = true;
+                } else if (c == '.' && digit_seen && field < 2) {
+                    ++field;
+                    digit_seen = false;
+                } else {
+                    format_ok = false;
+                }
+            }
+            ASSERT_TRUE(format_ok);
+            ASSERT_EQ(field, 2);
+            ASSERT_TRUE(digit_seen);                                            // not "v1.2." and not "v1.2"
+            ASSERT_EQ(numbers[0], ants::VERSION_MAJOR);
+            ASSERT_EQ(numbers[1], ants::VERSION_MINOR);
+            ASSERT_EQ(numbers[2], ants::VERSION_PATCH);
+            ASSERT_TRUE(ants::VERSION_MAJOR >= 0 && ants::VERSION_MINOR >= 0 && ants::VERSION_PATCH >= 0);
+
+            const std::string build(ants::BUILD_ID);                            // a short commit, the Docker build argument, or "unknown": never empty
+            ASSERT_TRUE(!build.empty());
+            ASSERT_TRUE(build.size() <= 40);
+            for (const char c : build) {
+                const bool allowed = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' || c == '-' || c == '_';
+                ASSERT_TRUE(allowed);
+            }
+        }
 
         // 2. Setup simulation world with Fog of War enabled
         SimulationEngine sim;

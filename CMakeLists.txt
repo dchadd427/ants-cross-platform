@@ -5,6 +5,31 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Compiler cache. When ccache is found (on the PATH, or in ~/.local/bin, where an install without administrator rights puts it) it launches the C and
+# C++ compilers, so that a second build of the same sources (a fresh clone, another worktree, a clean build folder) takes seconds instead of minutes. It is
+# not used with MSVC (the Visual Studio generators do not support a launcher), when the build already names a launcher (CI passes
+# -DCMAKE_CXX_COMPILER_LAUNCHER=ccache itself) and never for Emscripten (the web image). -DANTS_USE_CCACHE=OFF switches it off. The result of a build
+# is the same with and without it (ccache replays the compiler's output, warnings included, so -DANTS_WERROR=ON behaves as before).
+option(ANTS_USE_CCACHE "Use ccache as the compiler launcher when it is found" ON)
+if(NOT EMSCRIPTEN)
+    if(NOT ANTS_USE_CCACHE)
+        message(STATUS "ccache: not used (ANTS_USE_CCACHE=OFF)")
+    elseif(MSVC)
+        message(STATUS "ccache: not used (MSVC)")
+    elseif(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
+        message(STATUS "ccache: not used (a compiler launcher is already set: '${CMAKE_CXX_COMPILER_LAUNCHER}')")
+    else()
+        find_program(CCACHE_PROGRAM ccache HINTS "$ENV{HOME}/.local/bin")
+        if(CCACHE_PROGRAM)
+            set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+            set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+            message(STATUS "ccache: using ${CCACHE_PROGRAM}")
+        else()
+            message(STATUS "ccache: not used (not found)")
+        endif()
+    endif()
+endif()
+
 # Compiler Warnings and Platform Flags
 # ANTS_WERROR turns every warning into an error (the project rule: -Wall -Wextra -Werror -Wsign-conversion, zero warnings). It is OFF by
 # default so that a newer compiler (or the Emscripten image) never breaks a plain build; the test runners and release builds switch it on:
@@ -84,6 +109,53 @@ endif()
 
 # Global Include Directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# The version: ONE source, the single line of the file VERSION (MAJOR.MINOR.PATCH). The header ants_app/version.hpp does not exist in the repository: it is
+# generated into <build folder>/generated from include/ants_app/version.hpp.in at configure time, and the library ants_version (below) puts that folder on
+# the include path of every target that links it (ants_app, ants_server and, through them, the tests). The include path is a target property, never a
+# global one, so every generator (Makefiles, Ninja, Xcode, the Visual Studio ones) finds the header the same way. The build id (which commit) is a second,
+# tiny generated source that is stamped at every build; -DANTS_BUILD_ID=<text> sets it by hand (the Docker images do); see docs/WORKFLOW.md.
+set(ANTS_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+if(NOT EXISTS "${ANTS_VERSION_FILE}")
+    message(FATAL_ERROR "The file VERSION is missing at the root of the source tree (one line: MAJOR.MINOR.PATCH, for example 0.1.0).")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ANTS_VERSION_FILE}")   # a new VERSION configures again by itself
+file(STRINGS "${ANTS_VERSION_FILE}" ANTS_VERSION_LINE LIMIT_COUNT 1)
+string(STRIP "${ANTS_VERSION_LINE}" ANTS_VERSION_LINE)
+if(NOT ANTS_VERSION_LINE MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+    message(FATAL_ERROR "The first line of the file VERSION must be MAJOR.MINOR.PATCH (digits only, for example 0.1.0), found: '${ANTS_VERSION_LINE}'")
+endif()
+set(ANTS_VERSION_MAJOR "${CMAKE_MATCH_1}")
+set(ANTS_VERSION_MINOR "${CMAKE_MATCH_2}")
+set(ANTS_VERSION_PATCH "${CMAKE_MATCH_3}")
+set(ANTS_VERSION_STRING "v${ANTS_VERSION_LINE}")
+set(ANTS_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/include/ants_app/version.hpp.in" "${ANTS_GENERATED_DIR}/ants_app/version.hpp" @ONLY)
+
+set(ANTS_BUILD_ID "" CACHE STRING "Build id shown by --version and the web page (empty: the short git commit when this is a git checkout, else \"unknown\")")
+find_package(Git QUIET)
+if(NOT GIT_EXECUTABLE)
+    set(GIT_EXECUTABLE "")
+endif()
+add_custom_target(ants_build_id
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DOUT_FILE=${ANTS_GENERATED_DIR}/build_id.cpp"
+        "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}"
+        "-DANTS_BUILD_ID=${ANTS_BUILD_ID}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ants_stamp_build_id.cmake"
+    BYPRODUCTS "${ANTS_GENERATED_DIR}/build_id.cpp"
+    COMMENT "Stamping the build id"
+    VERBATIM)
+# The file must exist at the first configure (some generators check their sources then); the build rewrites it when the commit changed.
+execute_process(COMMAND "${CMAKE_COMMAND}"
+    "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DOUT_FILE=${ANTS_GENERATED_DIR}/build_id.cpp"
+    "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}" "-DANTS_BUILD_ID=${ANTS_BUILD_ID}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ants_stamp_build_id.cmake")
+add_library(ants_version STATIC "${ANTS_GENERATED_DIR}/build_id.cpp")
+add_dependencies(ants_version ants_build_id)
+target_include_directories(ants_version PUBLIC "${ANTS_GENERATED_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set_target_properties(ants_version PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Subdirectories
 add_subdirectory(src/ants_assets)

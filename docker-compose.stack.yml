@@ -9,6 +9,8 @@
 #                                                   update that adds maps, remove that volume; to add maps, copy them into it)
 #   ANTS_PORT=19980                                 the host port of the web page (optional)
 #   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional; the browser page does not use it)
+#   ANTS_BUILD_ID=<text>                            which build this is (the page's footer, the changelog pages, `ants_server --version`); optional: without it the images
+#                                                   take the commit that the clone's .git/HEAD and .git/refs name, and the UTC build time when the clone has no such files
 #   ANTS_DEMO_ROOMS=12 ANTS_DEMO_MAP=TINY.LVL       how many demo rooms the page web/four.html may make at a time, and the map of a room whose code names none
 #                                                   (optional). ANTS_DEMO_ROOMS must be 1 to 255: 0, or 256 and more, make the server exit at its start, and with
 #                                                   restart: unless-stopped it then restarts again and again. There is no variable that switches the demo rooms off:
@@ -23,6 +25,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # optional: which build this is (page footer, --version); without it the image takes the commit from the clone's .git files, else the build time
+        ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
     container_name: ants-beta
     restart: unless-stopped
     ports:
@@ -34,6 +39,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
+      args:
+        # optional: which build this is (page footer, --version); without it the image takes the commit from the clone's .git files, else the build time
+        ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
     container_name: ants-server
     restart: unless-stopped
     # The page web/four.html (Play online) joins rooms named "demo-..." that it makes itself: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
