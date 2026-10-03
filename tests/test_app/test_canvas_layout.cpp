@@ -788,7 +788,10 @@ void test_centred_pixels() {
         const auto columns = [&](Application& app, int32_t dx, int32_t dy, int32_t x, int32_t y, int32_t w, int32_t h) { return read_canvas(app, x + dx, y + dy, w, h); };
         const bool left = columns(classic_setup.app, 0, 0, 10, 9, 257, 461) == columns(wide_setup.app, 160, 30, 10, 9, 257, 461);
         const bool right_top = columns(classic_setup.app, 0, 0, 267, 10, 362, 427) == columns(wide_setup.app, 160, 30, 267, 10, 362, 427);
-        const bool right_left = columns(classic_setup.app, 0, 0, 267, 437, 254, 36) == columns(wide_setup.app, 160, 30, 267, 437, 254, 36);
+        // (the 4:3 application draws its plate, the version and the frame rate, in the picture's bottom right corner: x 514 .. 631, y 467 .. 479. The rows from 467 on are compared only well to the left of it,
+        // so that the width of the version's text, which changes with a release, cannot decide this check: with v0.2.0 two pixels of its first letter reached x 519 .. 520 of row 472)
+        const bool right_left = columns(classic_setup.app, 0, 0, 267, 437, 254, 30) == columns(wide_setup.app, 160, 30, 267, 437, 254, 30) &&
+                                columns(classic_setup.app, 0, 0, 267, 467, 180, 6) == columns(wide_setup.app, 160, 30, 267, 467, 180, 6);
         check(left && right_top && right_left, "the quick help of the 16:9 canvas: the two columns are the 4:3 application's pixels, centred (moved by (160, 30))");
     }
 }
