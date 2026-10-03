@@ -1078,8 +1078,8 @@ void GuardTask::step(TaskContext& c) {
         if (it == posts_.end()) {
             Post p;
             p.tile = post_of(hill, index);
-            // a post must be a tile an ant can stand on (and not a power-up: a click on one takes it)
-            for (int32_t k = 0; k < 4 && (!MapInfo::walkable(grid, c.seat, p.tile, v.walk_context()) || v.powerup_at(p.tile) != nullptr); ++k) p.tile = sim::TileCoord{p.tile.x + (k % 2 == 0 ? 1 : -1) * (k / 2 + 1), p.tile.y};
+            // a post must be a tile an ant can stand on (walkable() leaves out every solid object, a power-up too: a click on one takes it)
+            for (int32_t k = 0; k < 4 && !MapInfo::walkable(grid, c.seat, p.tile, v.walk_context()); ++k) p.tile = sim::TileCoord{p.tile.x + (k % 2 == 0 ? 1 : -1) * (k / 2 + 1), p.tile.y};
             it = posts_.emplace(a.id, p).first;
         }
         Post& p = it->second;
@@ -1087,7 +1087,7 @@ void GuardTask::step(TaskContext& c) {
         if (!a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
         if (p.sent != kPending && now < p.sent + 400u && !a.idle()) continue;           // on its way
         if (p.decided != 0 && p.sent == kPending && now < p.decided + 150u) continue;   // the order has not left yet
-        if (v.powerup_at(p.tile) != nullptr || !MapInfo::walkable(grid, c.seat, p.tile, v.walk_context())) continue;
+        if (!MapInfo::walkable(grid, c.seat, p.tile, v.walk_context())) continue;
         c.orders.move({a.id}, p.tile, Priority::Normal);
         p.decided = now;
         p.sent = kPending;
