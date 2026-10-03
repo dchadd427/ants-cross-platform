@@ -34,7 +34,7 @@ SKIPS = [
     "STATUS.md", "README.md", "AGENTS.md", "THIRD_PARTY_NOTICES.md", "LICENSE", "docs/WORKFLOW.md", "docs/BOTS.md", "docs/NETWORK_PORT.md", "docs/audit/B3_notes.md",
     "docs/reverse_engineering/notes.txt", ".github/workflows/ci.yml", ".github/dependabot.yml",
     "tests/test_sim/test_sim_rules.cpp", "tests/scripts/test_run_tests.py", "tests/data/edge_scroll_samples.csv", "tests/common/ants_test_paths.hpp", "tests/TEST_INFRA.md",
-    "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py",
+    "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py", "tools/deploy_wait.py", "tools/deploy_webhook.sh",
     "run_tests.sh", "run_tests.bat", "start_game.sh", "start_game.bat", "build_web.sh", ".editorconfig", ".gitignore", ".gitattributes",
     "docker-compose.yml", "docker-compose.server.yml", "docker-compose.staging.yml",
     "Original-Ants/ddraw.ini", "Original-Ants/Ants.exe", "Original-Ants/chat.txt", "Original-Ants/Shaders/x.glsl",

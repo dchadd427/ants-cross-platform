@@ -7,7 +7,8 @@ is checked too):
 
   - the five required job names, MSVC 2022 for pull requests, pushes to main and manual runs and MSVC 2026 always, the triggers (no push to other branches)
   - the deploy job: after every other job, only for a push to main or staging, secrets only in `env:` and never in an argument or a message, the file filter and the webhook
-    script of tools/ are what it calls
+    script of tools/ are what it calls; it waits for an idle game server first (tools/deploy_wait.py, its variables, a job limit above the longest wait, a concurrency group of
+    its own that lets a newer deploy replace a waiting one)
   - the same suites as ./run_tests.sh: every test program of its table is registered with ctest (which Linux, macOS and Windows run), its other suites (tool self-tests, script
     suites, E2E runner, repository checks) are steps of the Linux and macOS jobs, and ctest has no test that the table lacks
   - every action is a first-party `actions/` one at a major version or a commit-pinned one; the sccache download is pinned and checked by its SHA-256
@@ -146,6 +147,37 @@ class Deploy(unittest.TestCase):
         self.assertIn("steps.filter.outputs.deploy == 'true'", call)
         self.assertIn("steps.tip.outputs.tip == 'true'", call)
 
+    def test_it_waits_for_an_idle_game_server_before_the_tip_is_checked_and_the_webhook_is_called(self):
+        block = "\n".join(job_block("deploy"))
+        order = [block.index("name: " + name) for name in ("Is the deploy secret set?", "Did the push change what the site serves or runs?", "Wait for an idle game server",
+                                                           "Is this push still the tip of the branch?", "Call the deploy webhook")]
+        self.assertEqual(order, sorted(order))                                             # the tip is checked after the wait, which may have taken hours
+        wait = block[block.index("name: Wait for an idle game server"):block.index("name: Is this push still the tip of the branch?")]
+        self.assertIn("if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'", wait)
+        self.assertIn("PRODUCTION_BUSY_URL: ${{ vars.DEPLOY_BUSY_URL || 'https://beta.playants.org/busy' }}", wait)
+        self.assertIn("STAGING_BUSY_URL: ${{ vars.STAGING_BUSY_URL }}", wait)
+        self.assertIn("MAX_WAIT_MINUTES: ${{ vars.DEPLOY_MAX_WAIT_MINUTES || '180' }}", wait)
+        self.assertIn('python3 tools/deploy_wait.py --label "$site" --url "$url" --max-wait-minutes "$MAX_WAIT_MINUTES"', wait)
+        self.assertNotIn("secrets.", wait)                                                 # the addresses are the sites' own: variables, not secrets
+        self.assertNotIn("WEBHOOK", wait)
+        self.assertTrue(os.path.isfile(os.path.join(REPO, "tools", "deploy_wait.py")))
+
+    def test_the_job_limit_is_above_the_longest_wait_so_that_the_deploy_is_never_cut_off_by_the_limit(self):
+        cap = float(re.search(r"^MAX_WAIT_CAP_MINUTES = ([\d.]+)", read(os.path.join(REPO, "tools", "deploy_wait.py")), re.M).group(1))
+        limit = int(next(re.match(r"^    timeout-minutes: (\d+)$", l).group(1) for l in job_block("deploy") if l.startswith("    timeout-minutes:")))
+        self.assertGreaterEqual(limit, cap + 20)                                           # the wait, the checkout, the filter and the call
+        self.assertLessEqual(limit, 360)                                                   # (what a hosted runner allows a job)
+
+    def test_only_the_deploy_job_has_a_concurrency_group_and_it_cancels_a_job_that_waits(self):
+        for job in job_ids():
+            has = any(l == "    concurrency:" for l in job_block(job))
+            self.assertEqual(has, job == "deploy", job)
+        block = "\n".join(job_block("deploy"))
+        self.assertIn("    concurrency:\n      group: deploy-${{ github.ref }}\n      cancel-in-progress: true\n", block)
+        workflow_group = re.search(r"(?m)^concurrency:\n  group: (.+)\n", TEXT).group(1)
+        self.assertNotEqual(workflow_group.split("-")[0], "deploy")                        # (the same group would cancel the run that the job is in)
+        self.assertTrue(workflow_group.startswith("ci-"))
+
 
 class SameSuitesAsTheRunner(unittest.TestCase):
     @classmethod
@@ -268,6 +300,16 @@ class Documents(unittest.TestCase):
             self.assertIn(needle, self.workflow)
         self.assertIn("PORTAINER_WEBHOOK_URL", self.readme)
 
+    def test_the_wait_and_every_variable_of_the_workflow_are_explained(self):
+        variables = set(re.findall(r"\bvars\.([A-Z_]+)\b", TEXT))
+        self.assertEqual(variables, {"DEPLOY_BUSY_URL", "STAGING_BUSY_URL", "DEPLOY_MAX_WAIT_MINUTES"})
+        for variable in variables:
+            self.assertIn(variable, self.workflow)
+        for needle in ("/busy", "tools/deploy_wait.py", "DEPLOYING ANYWAY", "deploy-<branch>", "cancel-in-progress", "five minutes", "180"):
+            self.assertIn(needle, self.workflow)
+        self.assertIn("DEPLOY_MAX_WAIT_MINUTES", self.readme)
+        self.assertIn("/busy", self.readme)
+
     def test_the_staging_ports_of_the_document_are_those_of_the_compose_file(self):
         defaults = re.findall(r"\$\{ANTS_STAGING_[A-Z_]+:-(\d+)\}", self.staging)
         self.assertEqual(sorted(defaults), ["19981", "4003", "4004", "4011"])
@@ -310,6 +352,16 @@ class Structure(unittest.TestCase):
         on = self.doc[True] if True in self.doc else self.doc["on"]                       # (YAML 1.1 reads `on` as true)
         self.assertEqual(sorted(on), ["pull_request", "push", "workflow_dispatch"])
         self.assertEqual(on["push"], {"branches": ["main", "staging"]})
+
+    def test_the_deploy_job_waits_cancels_and_has_a_limit_above_the_longest_wait(self):
+        job = self.doc["jobs"]["deploy"]
+        self.assertEqual(job["concurrency"], {"group": "deploy-${{ github.ref }}", "cancel-in-progress": True})
+        self.assertGreaterEqual(job["timeout-minutes"], 320)
+        for other in ("linux", "macos", "windows", "web"):
+            self.assertNotIn("concurrency", self.doc["jobs"][other])
+        names = [step.get("name") for step in job["steps"]]
+        self.assertEqual(names.index("Wait for an idle game server") + 1, names.index("Is this push still the tip of the branch?"))
+        self.assertGreater(names.index("Wait for an idle game server"), names.index("Did the push change what the site serves or runs?"))
 
     def test_every_step_of_the_deploy_job_that_needs_the_secret_depends_on_the_answer_of_the_first_step(self):
         steps = self.doc["jobs"]["deploy"]["steps"]

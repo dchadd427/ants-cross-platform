@@ -171,7 +171,8 @@ fi
 
 # ---- part rooms: the control secret, a room by code, the leader, bots that fill the seats, chat, flood control, closing a room, SIGTERM ---------------------------
 if part_enabled rooms; then
-ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ctl-port "$CTL_PORT" --results-dir "$WORK/results" > "$WORK/server.log" 2>&1 &
+WS_PORT="$(free_port)"
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ws-port "$WS_PORT" --ctl-port "$CTL_PORT" --results-dir "$WORK/results" > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!
 UP=1
 for _ in $(seq 1 50); do
@@ -180,6 +181,17 @@ for _ in $(seq 1 50); do
     sleep 0.1
 done
 check "the server is up and answers /healthz without a secret" "$UP"
+# the busy answer (GET /busy on the WebSocket port; the site's nginx routes /busy to it): public, read-only, plain counts, GET only; the deploy job of CI waits for matches to be 0
+BUSY="http://127.0.0.1:$WS_PORT/busy"
+busy_json_ok() {      # busy_json_ok MATCHES PLAYERS: the answer is 200 JSON that nobody may cache, with exactly these two counts and nothing else (no name, no code, no secret)
+    local head body
+    head="$(curl -s -i -m 3 "$BUSY" | tr -d '\r')"
+    body="$(curl -s -m 3 "$BUSY")"
+    echo "$head" | head -1 | grep -q '^HTTP/1.1 200 OK$' && echo "$head" | grep -qi '^content-type: application/json$' && echo "$head" | grep -qi '^cache-control: no-store$' &&
+        echo "$body" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if sorted(d) == ["matches", "players"] and d["matches"] == int(sys.argv[1]) and d["players"] == int(sys.argv[2]) else 1)' "$1" "$2"
+}
+check "GET /busy on the WebSocket port needs no secret and says 200 JSON, no-store, {\"matches\":0,\"players\":0} while nothing runs" "$(busy_json_ok 0 0; echo $?)"
+check "the busy answer is GET only (a POST is 405) and takes no parameter (a query is no status request: 426), and no other path answers it" "$([ "$(code_of -X POST "$BUSY")" = "405" ] && [ "$(code_of "$BUSY?x=1")" = "426" ] && [ "$(code_of "http://127.0.0.1:$WS_PORT/busy/")" = "426" ] && [ "$(code_of "http://127.0.0.1:$WS_PORT/rooms")" = "426" ]; echo $?)"
 [ "$UP" -ne 0 ] && { cat "$WORK/server.log"; echo "server e2e: $CHECKS checks, $FAILS failures"; exit 1; }
 
 # the secret
@@ -208,6 +220,7 @@ for _ in $(seq 1 150); do
 done
 check "both clients joined and the match started by itself (state running)" "$RUNNING"
 check "both players are in the room list" "$(echo "$STATUS" | grep -q 'Player1' && echo "$STATUS" | grep -q 'Player2'; echo $?)"
+check "while their match runs /busy says one match and two people" "$(busy_json_ok 1 2; echo $?)"
 sleep 1
 TICKS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))')"
 check "the referee's clock runs" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
@@ -419,6 +432,7 @@ code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$VICTIM" > /dev
 
 # closing the room writes its result; SIGTERM stops the server
 check "the owner closes the room: 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE")" = "200" ]; echo $?)"
+check "with every room closed /busy says no match and nobody again" "$(busy_json_ok 0 0; echo $?)"
 sleep 0.5
 kill -TERM "$SERVER_PID" 2> /dev/null
 wait "$SERVER_PID" 2> /dev/null

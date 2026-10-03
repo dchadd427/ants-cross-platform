@@ -11,8 +11,10 @@
 # --asan, locally) and the browser-based checks are opt-in (tests/TEST_INFRA.md).
 #
 # The last job, `deploy`, runs for a push to main (a merged pull request) or to staging, after every other job of the run passed, and only when the push changed what an image contains
-# or the stack file (tools/deploy_filter.py). It calls the Portainer webhook that the repository secret PORTAINER_WEBHOOK_URL (staging: PORTAINER_STAGING_WEBHOOK_URL) holds
-# (tools/deploy_webhook.sh); without the secret it says so and does nothing, so nothing is deployed from here until the owner sets it (docs/WORKFLOW.md: the steps).
+# or the stack file (tools/deploy_filter.py). A deploy restarts the game server and ends the matches that run, so the job first waits for an idle server (the site's public GET /busy,
+# tools/deploy_wait.py: at most DEPLOY_MAX_WAIT_MINUTES, 180 by default), then calls the Portainer webhook that the repository secret PORTAINER_WEBHOOK_URL (staging:
+# PORTAINER_STAGING_WEBHOOK_URL) holds (tools/deploy_webhook.sh). Without the secret it says so and does nothing, so nothing is deployed from here until the owner sets it
+# (docs/WORKFLOW.md: the steps).
 name: CI
 
 on:
@@ -362,7 +364,12 @@ jobs:
     needs: [linux, macos, windows, web]
     if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The job may wait for a quiet server for hours (tools/deploy_wait.py waits 300 minutes at the most, whatever DEPLOY_MAX_WAIT_MINUTES says): its limit is above that.
+    timeout-minutes: 330
+    # One deploy per branch, and a newer one replaces an older one that still waits (the group is not the workflow's, which would cancel the run this job is in).
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: true
     permissions:
       contents: read
       actions: read
@@ -404,7 +411,27 @@ jobs:
           echo "comparing ${base:0:12} with ${GITHUB_SHA:0:12}"
           python3 tools/deploy_filter.py --base "$base" --head "$GITHUB_SHA" --compose "$compose" --github-output "$GITHUB_OUTPUT"
 
-      # The webhook makes Portainer pull the branch as it is now: a push that is not the tip any more (a newer one is on its way, its own run decides) is not deployed from here.
+      # A deploy recreates the game server and ends every match that runs, so it waits for a quiet moment: the site's public GET /busy ({"matches": N, "players": M}) is polled every minute
+      # and the deploy goes on when no match runs, after DEPLOY_MAX_WAIT_MINUTES (a repository variable, 180 by default) whatever runs, or when the address has not answered for five
+      # minutes (the first deploy of a site that has no /busy yet). The addresses are the sites' own, public, so they are variables and not secrets: DEPLOY_BUSY_URL (the production
+      # site's address, the public beta site's by default) and STAGING_BUSY_URL (none by default: the staging site is deployed without a wait). A newer push cancels a job that waits.
+      - name: Wait for an idle game server
+        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'
+        env:
+          PRODUCTION_BUSY_URL: ${{ vars.DEPLOY_BUSY_URL || 'https://beta.playants.org/busy' }}
+          STAGING_BUSY_URL: ${{ vars.STAGING_BUSY_URL }}
+          MAX_WAIT_MINUTES: ${{ vars.DEPLOY_MAX_WAIT_MINUTES || '180' }}
+        run: |
+          site=production
+          url="$PRODUCTION_BUSY_URL"
+          if [ "$BRANCH" = staging ]; then
+            site=staging
+            url="$STAGING_BUSY_URL"
+          fi
+          python3 tools/deploy_wait.py --label "$site" --url "$url" --max-wait-minutes "$MAX_WAIT_MINUTES"
+
+      # The webhook makes Portainer pull the branch as it is now: a push that is not the tip any more (a newer one is on its way, its own run decides) is not deployed from here. This is
+      # checked after the wait, which may have taken hours.
       - name: Is this push still the tip of the branch?
         if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'
         id: tip

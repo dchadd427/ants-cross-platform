@@ -404,6 +404,12 @@ public:
     }
     bool eof() const { return eof_; }
     size_t waiting() const { return in_.size(); }
+    // What is left of the received bytes, as text, taken off (the body of an answer, after take_head)
+    std::string take_text() {
+        std::string text(in_.begin(), in_.end());
+        in_.clear();
+        return text;
+    }
 
     // The HTTP response head (through the blank line), taken off the front
     bool take_head(std::string& head) {
@@ -1447,6 +1453,9 @@ int main() {
                     ASSERT_TRUE(res.response.empty());
                     ASSERT_TRUE(r.find("\r\n\r\n") == std::string::npos);
                     break;
+                case WsHandshakeResult::Status::Answered:
+                    ASSERT_TRUE(false);                                                   // (these options have no status path)
+                    break;
             }
         }
         ASSERT_TRUE(accepted_n > 1000);
@@ -2184,6 +2193,98 @@ int main() {
         const size_t held = rig.listener->pending();
         for (const sock_t s : socks) sock_close(s);
         ASSERT_EQ(held, kBurst);                                                  // all of them were waiting (with a backlog of 32, 32 were, on macOS)
+    } TEST_END();
+
+    TEST_CASE("W1.24 The status path (the server's /busy): a plain GET of exactly that path is answered 200 with the status text, JSON and no-store, whatever the other options say; nothing else is, and over a real socket the answer arrives whole, the socket closes, nothing reaches the game and an upgrade still works") {
+        const std::string body = "{\"matches\":2,\"players\":5}";
+        WsServerOptions o;
+        o.status_path = "/busy";
+        int calls = 0;
+        o.status_body = [&calls, &body]() {
+            ++calls;
+            return body;
+        };
+        const std::string get = "GET /busy HTTP/1.1\r\nHost: play.example.org\r\n\r\n";
+        {
+            const WsHandshakeResult r = handshake(get, o);
+            ASSERT_TRUE(r.status == WsHandshakeResult::Status::Answered && r.http_status == 200 && r.consumed == get.size());
+            ASSERT_TRUE(r.response.find("HTTP/1.1 200 OK\r\n") == 0);
+            ASSERT_TRUE(r.response.find("Content-Type: application/json\r\n") != std::string::npos);
+            ASSERT_TRUE(r.response.find("Cache-Control: no-store\r\n") != std::string::npos);
+            ASSERT_TRUE(r.response.find("X-Content-Type-Options: nosniff\r\n") != std::string::npos);
+            ASSERT_TRUE(r.response.find("Content-Length: " + std::to_string(body.size()) + "\r\n") != std::string::npos);
+            ASSERT_TRUE(r.response.find("Connection: close\r\n") != std::string::npos);
+            ASSERT_TRUE(r.response.size() > body.size() && r.response.compare(r.response.size() - body.size(), body.size(), body) == 0);
+            ASSERT_EQ(calls, 1);
+        }
+        calls = 0;                                                                          // not a status request: the usual answers, and the text is never asked for
+        ASSERT_TRUE(refused_with("GET /busy?x=1 HTTP/1.1\r\nHost: x\r\n\r\n", 426, o));          // no query: a path with a query is no status request
+        ASSERT_TRUE(refused_with("GET /busy/ HTTP/1.1\r\nHost: x\r\n\r\n", 426, o));
+        ASSERT_TRUE(refused_with("GET /Busy HTTP/1.1\r\nHost: x\r\n\r\n", 426, o));
+        ASSERT_TRUE(refused_with("GET /other HTTP/1.1\r\nHost: x\r\n\r\n", 426, o));
+        ASSERT_TRUE(refused_with("POST /busy HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n", 405, o));
+        ASSERT_TRUE(refused_with("HEAD /busy HTTP/1.1\r\nHost: x\r\n\r\n", 405, o));
+        ASSERT_TRUE(refused_with("PUT /busy HTTP/1.1\r\nHost: x\r\n\r\n", 405, o));
+        ASSERT_TRUE(refused_with("GET /busy HTTP/1.1\r\n\r\n", 400, o));                           // no Host
+        ASSERT_TRUE(refused_with("GET /busy HTTP/1.1\r\nHost: x\r\nHost: y\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("GET /busy HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhello", 400, o));
+        ASSERT_TRUE(refused_with("GET /busy HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("GET /busy HTTP/1.0\r\nHost: x\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("GET /busy HTTP/1.1\nHost: x\n\n", 400, o));
+        ASSERT_EQ(calls, 0);
+        ASSERT_TRUE(handshake("GET /busy HTTP/1.1\r\nHost: x\r\n", o).status == WsHandshakeResult::Status::NeedMore);   // an incomplete request is waited for
+        ASSERT_EQ(calls, 0);
+        ASSERT_TRUE(accepted(upgrade_request("", "/busy"), o));                             // with an Upgrade header it is the usual handshake: the status path takes nothing from the door
+        ASSERT_EQ(calls, 0);
+        {
+            WsServerOptions none = o;                                                       // no path, or no function: no status
+            none.status_path.clear();
+            ASSERT_TRUE(refused_with(get, 426, none));
+            WsServerOptions nofn = o;
+            nofn.status_body = nullptr;
+            ASSERT_TRUE(refused_with(get, 426, nofn));
+            WsServerOptions strict = o;                                                     // the path, origin and the other options of the door do not matter to it
+            strict.path = "/ws";
+            strict.allowed_origins = {"https://play.example.org"};
+            const WsHandshakeResult r = handshake("GET /busy HTTP/1.1\r\nHost: x\r\nOrigin: https://evil.example.net\r\n\r\n", strict);
+            ASSERT_TRUE(r.status == WsHandshakeResult::Status::Answered);
+            ASSERT_TRUE(refused_with(upgrade_request("Origin: https://evil.example.net\r\n", "/ws"), 403, strict));     // (and the door itself is as strict as before)
+        }
+        {
+            WsServerOptions big = o;                                                        // a text that is too long is a 500, never a long answer; the longest allowed goes out
+            big.status_body = []() { return std::string(kWsMaxStatusBytes + 1, 'x'); };
+            ASSERT_TRUE(refused_with(get, 500, big));
+            WsServerOptions edge = o;
+            edge.status_body = []() { return std::string(kWsMaxStatusBytes, 'x'); };
+            ASSERT_TRUE(handshake(get, edge).status == WsHandshakeResult::Status::Answered);
+        }
+        {
+            Rig rig;                                                                        // over a real socket
+            ASSERT_TRUE(rig.start(o));
+            RawClient client;
+            const std::string head = connect_and_ask(rig, client, get);
+            ASSERT_TRUE(head.find("HTTP/1.1 200 OK\r\n") == 0);
+            ASSERT_TRUE(rig.wait([&]() {
+                client.pull();
+                return client.eof();
+            }));
+            ASSERT_EQ(client.take_text(), body);
+            ASSERT_TRUE(rig.conns.empty());                                                 // nothing reached the game
+            ASSERT_EQ(rig.listener->pending(), 0u);
+            RawClient socket;                                                               // and the door still opens for a game
+            const std::string upgrade = connect_and_ask(rig, socket, upgrade_request());
+            ASSERT_TRUE(upgrade.find("HTTP/1.1 101 ") == 0);
+            ASSERT_TRUE(rig.wait([&]() { return rig.conns.size() == 1; }));
+        }
+        {
+            Rig rig;                                                                        // set_status after the listener exists (the server does it once its rooms exist)
+            ASSERT_TRUE(rig.start());
+            RawClient before;
+            ASSERT_TRUE(connect_and_ask(rig, before, get).find("HTTP/1.1 426 ") == 0);
+            rig.listener->set_status("/busy", [&body]() { return body; });
+            RawClient after;
+            ASSERT_TRUE(connect_and_ask(rig, after, get).find("HTTP/1.1 200 OK\r\n") == 0);
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n";

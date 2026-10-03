@@ -58,6 +58,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -72,6 +73,7 @@ inline constexpr size_t kWsMaxControlBytes = 125;               // a ping / pong
 inline constexpr size_t kWsMaxBacklogBytes = 1024 * 1024;       // more than this waiting to be written: the peer is stuck, the connection fails
 inline constexpr uint32_t kWsHandshakeTimeoutMs = 5000;         // a handshake that takes longer is dropped
 inline constexpr uint32_t kWsPingIntervalMs = 20000;            // a connection that sent nothing for this long gets a ping
+inline constexpr size_t kWsMaxStatusBytes = 512;                // the body of the status answer (WsServerOptions::status_body)
 
 inline constexpr uint16_t kWsCloseNormal = 1000;
 inline constexpr uint16_t kWsCloseGoingAway = 1001;
@@ -156,13 +158,18 @@ struct WsServerOptions {
     uint32_t handshake_timeout_ms{kWsHandshakeTimeoutMs};
     uint32_t ping_interval_ms{kWsPingIntervalMs};               // 0 = never ping
     size_t max_pending{64};                                     // handshakes in progress at once; further sockets are closed at once
+    // A public, read-only status (the game server's /busy: how many matches run, so that a deploy can wait for a quiet moment): a plain GET of exactly `status_path` (no query, no Upgrade
+    // header, nothing but GET: every other method is 405) is answered 200 with the text that `status_body()` returns (JSON, at most kWsMaxStatusBytes; Cache-Control: no-store), and the
+    // connection closes. A reverse proxy routes the path like /ws. Empty path or no function: none.
+    std::string status_path;
+    std::function<std::string()> status_body;
 };
 
 struct WsHandshakeResult {
-    enum class Status : uint8_t { NeedMore, Accepted, Rejected };
+    enum class Status : uint8_t { NeedMore, Accepted, Rejected, Answered };
     Status status{Status::NeedMore};
     int http_status{0};                 // 101 or the error's status (400, 403, 404, 405, 426, 431)
-    std::string response;               // Accepted: the 101 answer; Rejected: the whole HTTP error response (always closing the connection)
+    std::string response;               // Accepted: the 101 answer; Rejected: the whole HTTP error response; Answered: the whole 200 answer of the status path (both close the connection)
     size_t consumed{0};                 // the request's length through the blank line; what follows belongs to the WebSocket frames
     bool subprotocol{false};            // "ants" was offered and echoed
 };
@@ -232,6 +239,11 @@ public:
     /// is complete; call it until it returns nullptr.
     std::unique_ptr<WsConnection> accept();
     uint16_t port() const noexcept { return port_; }
+    /// Sets the status path and its text after the listener exists (WsServerOptions::status_path and status_body)
+    void set_status(std::string path, std::function<std::string()> body) {
+        options_.status_path = std::move(path);
+        options_.status_body = std::move(body);
+    }
     /// Sockets whose handshake has not finished (diagnostics)
     size_t pending() const noexcept { return pending_.size(); }
 
