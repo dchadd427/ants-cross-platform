@@ -8437,6 +8437,200 @@ void run_persist_review_process_tests_2() {
 #endif
 
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The restore that never blocks the server (docs/NETWORK_PORT.md "Restart records", "Restoring"): S3.113 and on
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+struct WalkedTurns {
+    std::vector<net::TurnMsg> turns;
+    bool failed{false};
+    std::string why;
+    uint32_t read{0};
+    bool stays_ended{true};
+};
+
+// Every turn that a RestartTurnReader gives for a record, and how it ended
+WalkedTurns walk_turns(const RestartLoaded& rec) {
+    WalkedTurns out;
+    RestartTurnReader reader(rec);
+    net::TurnMsg t;
+    while (reader.next(t)) out.turns.push_back(t);
+    out.failed = reader.failed();
+    out.why = reader.why();
+    out.read = reader.turns_read();
+    out.stays_ended = !reader.next(t) && !reader.next(t);                                      // (a reader that has ended, or failed, says no again)
+    return out;
+}
+
+}  // namespace
+
+void run_restore_tests() {
+    TEST_CASE("S3.113 The Turn Reader (RestartTurnReader, The Pull Reader That A Replay In Slices Needs): It Gives Exactly The Turns Of A Record, One At A Time And In Order, Of Every Kind That The Record Tests Make (A Writer's Record With A Turn To A Frame And Checkpoints Between, Frames Of 20 And Of 4096 Turns, A Match That Was Really Played, A Record With No Turn), Read Whole Or Streaming; It Stops At A Torn Tail Where The Streaming Read Stops; It Fails (failed(), why()) For A Record That Was Not Judged Good And For Bytes That Are Not What Was Judged (Cut Inside A Frame Or At The End Of One, Renumbered, A Frame With Bytes After Its Last Turn, A Turn With Too Many Commands); Two Readers Of One Record Do Not Disturb Each Other; for_each_restart_turn Is The Same Walk") {
+        RestartConfig cfg = test_restart_config("restore-113");
+        RestartStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const auto read_both = [&](const std::string& path) { return std::make_pair(read_restart_record(path, cfg.max_record_bytes), read_restart_record(path, cfg.max_record_bytes, RestartRead::Streaming)); };
+        // the reader gives exactly the turns that the whole read keeps, from the whole record and from the streamed one, and ends without a fault
+        const auto expect_all = [&](const std::string& path, uint32_t expected, const char* what) {
+            const auto both = read_both(path);
+            ASSERT_MSG(both.first.ok() && both.second.ok() && both.first.turn_count == expected && both.second.turn_count == expected && both.first.turns.size() == expected, what);
+            for (const RestartLoaded* rec : {&both.first, &both.second}) {
+                const WalkedTurns w = walk_turns(*rec);
+                ASSERT_MSG(!w.failed && w.why.empty() && w.turns.size() == expected && w.read == expected && w.stays_ended, what);
+                ASSERT_MSG(same_turns(w.turns, both.first.turns, expected), what);
+                for (uint32_t i = 0; i < expected; ++i) ASSERT_MSG(w.turns[i].turn == i, what);       // (numbered from 0 without a hole)
+                uint32_t seen = 0;                                                                     // for_each_restart_turn is the same walk
+                ASSERT_MSG(for_each_restart_turn(*rec, [&](const net::TurnMsg& t) { return t.turn == seen++; }) && seen == expected, what);
+            }
+        };
+        // ---- a record that the writer made: one turn to a frame, a checkpoint after every 20th turn, commands of every kind that sample_turn makes (a Drop among them) -------------------------------
+        std::string path_a;
+        {
+            auto writer = store.create(sample_head("RD-A"), why);
+            ASSERT_TRUE(writer != nullptr);
+            for (uint32_t n = 0; n < 200; ++n) {
+                ASSERT_TRUE(writer->append_turn(sample_turn(n)));
+                if ((n + 1) % net::kHashEveryTurns == 0) ASSERT_TRUE(writer->append_check(n, 0x1000u + n));
+            }
+            ASSERT_TRUE(writer->sync());
+            path_a = writer->path();
+        }
+        expect_all(path_a, 200, "the writer's record");
+        // ---- frames of many turns (20, then 4096 empty ones) and no turn at all ------------------------------------------------------------------------------------------------------------------
+        const std::string path_b = store.path_for("RD-B");
+        {
+            std::vector<net::TurnMsg> twenty;
+            std::vector<net::TurnMsg> next_ten;
+            for (uint32_t n = 0; n < 20; ++n) twenty.push_back(sample_turn(n));
+            for (uint32_t n = 20; n < 30; ++n) next_ten.push_back(sample_turn(n));
+            const std::vector<uint8_t> head = encode_restart_head(sample_head("RD-B"));
+            write_all_bytes(path_b, with_magic(concat({head, test_frame(2, turns_payload(0, twenty)), test_frame(3, check_payload(19, 77)), test_frame(2, turns_payload(20, next_ten))})));
+        }
+        expect_all(path_b, 30, "frames of 20 and of 10 turns with a checkpoint between");
+        const std::string path_big = store.path_for("REC-1");
+        write_all_bytes(path_big, empty_turns_record(10000, 4096));                                    // (4096 + 4096 + 1808)
+        expect_all(path_big, 10000, "frames of 4096 turns");
+        const std::string path_none = store.path_for("RD-E");
+        write_all_bytes(path_none, with_magic(encode_restart_head(sample_head("RD-E"))));
+        expect_all(path_none, 0, "a record that holds no turn");
+        // ---- a match that was really played (the turns of a real room: orders of every kind that the machines give) -----------------------------------------------------------------------------------
+        {
+            PWorld w("restore-113w");
+            w.start_server(500);
+            crash_with_record_of(w, "RD-C", 16000);
+            const RestartLoaded real = w.read_record("RD-C");
+            ASSERT_TRUE(real.ok() && real.turn_count > 250 && !real.checks.empty());
+            expect_all(w.record_path("RD-C"), real.turn_count, "a match that was played");
+        }
+        // ---- a torn tail: the reader stops where the streaming read stops, without a fault -------------------------------------------------------------------------------------------------------------
+        {
+            std::vector<uint8_t> bytes = read_all_bytes(path_a);
+            const std::vector<uint8_t> next = test_frame(2, turns_payload(200, {sample_turn(200)}));
+            bytes.insert(bytes.end(), next.begin(), next.begin() + 9);
+            const std::string torn_path = store.path_for("RD-T");
+            write_all_bytes(torn_path, bytes);
+            const auto both = read_both(torn_path);
+            ASSERT_TRUE(both.first.ok() && both.second.ok() && both.first.torn && both.second.torn && both.second.good_bytes < both.second.file_bytes);
+            for (const RestartLoaded* rec : {&both.first, &both.second}) {
+                const WalkedTurns w = walk_turns(*rec);
+                ASSERT_TRUE(!w.failed && w.turns.size() == 200 && w.read == 200 && w.stays_ended);        // (the bytes of the torn frame are not read as a turn)
+                ASSERT_TRUE(same_turns(w.turns, both.first.turns, 200));
+            }
+        }
+        // ---- bytes that are not what was judged ------------------------------------------------------------------------------------------------------------------------------------------------------
+        const RestartLoaded base = read_restart_record(path_a, cfg.max_record_bytes, RestartRead::Streaming);
+        ASSERT_TRUE(base.ok() && !base.bytes.empty());
+        const std::vector<std::pair<size_t, size_t>> frames = frames_of(base.bytes);
+        std::vector<size_t> turn_frames;
+        for (size_t i = 0; i < frames.size(); ++i) {
+            if (base.bytes[frames[i].first] == 2) turn_frames.push_back(i);
+        }
+        ASSERT_EQ(turn_frames.size(), size_t{200});
+        {   // cut inside a frame: the turns before it are given, then the reader fails (and says so again)
+            RestartLoaded cut = base;
+            cut.bytes.resize(frames[turn_frames[50]].second - 3);
+            const WalkedTurns w = walk_turns(cut);
+            ASSERT_TRUE(w.failed && w.why.find("end inside a frame") != std::string::npos && w.turns.size() == 50 && w.read == 50 && w.stays_ended);
+            size_t seen = 0;
+            ASSERT_FALSE(for_each_restart_turn(cut, [&](const net::TurnMsg&) { ++seen; return true; }));       // the walk that fails is no complete walk
+            ASSERT_EQ(seen, size_t{50});
+        }
+        {   // cut at the end of a frame: every frame that is left is whole, but the record held more turns than that
+            RestartLoaded cut = base;
+            cut.bytes.resize(frames[turn_frames[50]].second);
+            const WalkedTurns w = walk_turns(cut);
+            ASSERT_TRUE(w.failed && w.why.find("fewer turns") != std::string::npos && w.turns.size() == 51 && w.read == 51 && w.stays_ended);
+            size_t seen = 0;
+            ASSERT_FALSE(for_each_restart_turn(cut, [&](const net::TurnMsg&) { ++seen; return true; }));
+            ASSERT_EQ(seen, size_t{51});
+        }
+        {   // a whole record whose turn list is shorter than the count that it was judged to hold
+            RestartLoaded shorter = read_restart_record(path_a, cfg.max_record_bytes);
+            shorter.turns.resize(120);
+            const WalkedTurns w = walk_turns(shorter);
+            ASSERT_TRUE(w.failed && w.why.find("fewer turns") != std::string::npos && w.turns.size() == 120);
+        }
+        {   // renumbered: the first turn of a frame is not the next turn
+            RestartLoaded renumbered = base;
+            renumbered.bytes[frames[turn_frames[30]].first + 5] = static_cast<uint8_t>(renumbered.bytes[frames[turn_frames[30]].first + 5] + 1);
+            const WalkedTurns w = walk_turns(renumbered);
+            ASSERT_TRUE(w.failed && w.why.find("not numbered") != std::string::npos && w.turns.size() == 30 && w.stays_ended);
+        }
+        {   // a frame of 20 turns that says 19: the bytes of the twentieth are after its last turn
+            RestartLoaded shortened = read_restart_record(path_b, cfg.max_record_bytes, RestartRead::Streaming);
+            ASSERT_TRUE(shortened.ok());
+            const auto b_frames = frames_of(shortened.bytes);
+            ASSERT_TRUE(shortened.bytes[b_frames[1].first] == 2 && shortened.bytes[b_frames[1].first + 9] == 20);
+            shortened.bytes[b_frames[1].first + 9] = 19;
+            const WalkedTurns w = walk_turns(shortened);
+            ASSERT_TRUE(w.failed && w.why.find("bytes after its last turn") != std::string::npos && w.turns.size() == 19 && w.stays_ended);
+        }
+        {   // a turn that says it holds more commands than a turn may
+            RestartLoaded greedy = read_restart_record(path_big, cfg.max_record_bytes, RestartRead::Streaming);
+            ASSERT_TRUE(greedy.ok());
+            const auto g_frames = frames_of(greedy.bytes);
+            const size_t at = g_frames[1].first + 5 + 6 + 2 * 5;                                       // the command count of the sixth turn of the first frame
+            ASSERT_TRUE(greedy.bytes[at] == 0 && greedy.bytes[at + 1] == 0);
+            greedy.bytes[at] = 0xFF;
+            greedy.bytes[at + 1] = 0xFF;
+            const WalkedTurns w = walk_turns(greedy);
+            ASSERT_TRUE(w.failed && w.why.find("more commands than a turn may") != std::string::npos && w.turns.size() == 5 && w.stays_ended);
+        }
+        {   // a record that was not judged good gives nothing and says why (a flipped bit in its head)
+            std::vector<uint8_t> bytes = read_all_bytes(path_a);
+            bytes[sizeof(kRestartMagic) + 9] ^= 0x10;
+            const std::string rotten_path = store.path_for("RD-R");
+            write_all_bytes(rotten_path, bytes);
+            const RestartLoaded rotten = read_restart_record(rotten_path, cfg.max_record_bytes, RestartRead::Streaming);
+            ASSERT_FALSE(rotten.ok());
+            const WalkedTurns w = walk_turns(rotten);
+            ASSERT_TRUE(w.failed && w.turns.empty() && w.why.find("not read as a good one") != std::string::npos && w.stays_ended);
+            ASSERT_FALSE(for_each_restart_turn(rotten, [](const net::TurnMsg&) { return true; }));
+        }
+        {   // two readers of one record, taken turn by turn in turns: each gives the whole record (the state of a reader is its own: the manager holds several jobs)
+            RestartTurnReader first(base);
+            RestartTurnReader second(base);
+            std::vector<net::TurnMsg> a;
+            std::vector<net::TurnMsg> b;
+            net::TurnMsg t;
+            for (int round = 0; round < 400; ++round) {
+                RestartTurnReader& r = (round % 3 == 0) ? second : first;
+                std::vector<net::TurnMsg>& into = (round % 3 == 0) ? b : a;
+                if (r.next(t)) into.push_back(t);
+            }
+            while (first.next(t)) a.push_back(t);
+            while (second.next(t)) b.push_back(t);
+            ASSERT_TRUE(!first.failed() && !second.failed() && a.size() == 200 && b.size() == 200);
+            const RestartLoaded kept = read_restart_record(path_a, cfg.max_record_bytes);
+            ASSERT_TRUE(same_turns(a, kept.turns, 200) && same_turns(b, kept.turns, 200));
+        }
+    } TEST_END();
+}
+
+
 int main() {
     std::cout << "=======================================================\n";
     std::cout << " Dedicated game server: map store, rooms, the door, control calls\n";
@@ -8461,6 +8655,7 @@ int main() {
     run_persist_server_tests_5();
     run_persist_server_tests_6();
     run_persist_review_tests();
+    run_restore_tests();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();
     run_persist_review_process_tests();

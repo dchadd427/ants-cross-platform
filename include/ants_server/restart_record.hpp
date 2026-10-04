@@ -156,8 +156,41 @@ RestartLoaded parse_restart_record(const uint8_t* data, size_t size, bool keep_t
 /// Reads the file at `path` (a regular file, not a symbolic link, at most `max_bytes` bytes) and parses it. `path` is kept in the result. The file is opened once, without following a link and without
 /// waiting on a pipe, and the open file is what is checked (its type, its size) and read: nothing can be swapped in between a look at the name and the read.
 RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes, RestartRead mode = RestartRead::Whole);
-/// Gives `fn` every turn of a record that was read, in order, until it says false: the kept turns, or (a Streaming record) the turns decoded again from the file's bytes, one at a time. True when `fn`
-/// was given every turn; false when it said stop, or when the bytes cannot be decoded (cannot be: they were checked when the record was read).
+/// The turns of a record that was read, one at a time, in order, as a PULL reader: the kept turns of a Whole record, or (Streaming) the turns decoded again from the file's bytes when they are asked for,
+/// so that a replay can stop after any turn and go on later (Room::replay_step) and never holds more than one decoded turn. It reads what read_restart_record judged good (the frames are not checked
+/// again, but the numbering of the turns and the sizes are, so that bytes that were changed afterwards fail the reader and are never handed out as turns). The record must outlive the reader.
+class RestartTurnReader {
+public:
+    explicit RestartTurnReader(const RestartLoaded& record);
+    /// The next turn into `out`. False when there is none (the end of the good frames: a torn tail is not read) or the reader failed (failed(), why()).
+    bool next(net::TurnMsg& out);
+    /// The bytes could not be decoded (a record that was not judged good, or whose bytes are not what was judged): next() has said false and says it from now on
+    bool failed() const noexcept { return failed_; }
+    const std::string& why() const noexcept { return why_; }
+    /// The turns that next() has given
+    uint32_t turns_read() const noexcept { return given_; }
+
+private:
+    bool fail(const char* why);
+    bool finish();
+    const RestartLoaded& rec_;
+    bool kept_{false};                                      // a Whole record: the turns are rec_.turns
+    bool failed_{false};
+    bool done_{false};
+    std::string why_;
+    uint32_t given_{0};                                     // the turns handed out (the number of the next one)
+    size_t pos_{0};                                         // Streaming: where the next frame starts
+    size_t end_{0};                                         // ... and where the good frames end
+    bool in_frame_{false};                                  // ... inside a turns frame: its place, its turns and where the next turn starts in its payload
+    size_t frame_pos_{0};
+    size_t frame_end_{0};
+    size_t frame_length_{0};
+    size_t frame_off_{0};
+    uint32_t frame_left_{0};
+};
+
+/// Gives `fn` every turn of a record that was read, in order, until it says false (a RestartTurnReader walk). True when `fn` was given every turn; false when it said stop, or when the bytes cannot be
+/// decoded (cannot be: they were checked when the record was read).
 bool for_each_restart_turn(const RestartLoaded& rec, const std::function<bool(const net::TurnMsg&)>& fn);
 
 /// What a server is told about its restart records
