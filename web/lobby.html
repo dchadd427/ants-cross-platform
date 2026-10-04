@@ -162,7 +162,9 @@
         .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
         .row label { color: var(--text-dim); font-size: 0.85rem; }
         .fillchoice { display: flex; flex-direction: column; gap: 3px; }
-        .fillline { display: flex; align-items: center; gap: 12px; }
+        .fillline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+        .linelabel { color: var(--text-dim); font-size: 0.85rem; }
+        .seatpick { display: flex; align-items: center; gap: 6px; }
         select, input[type=text] {
             background: var(--bg-color); color: var(--text-main); border: 1px solid var(--panel-border);
             border-radius: 6px; padding: 8px 10px; min-height: 38px; font-size: 0.9rem;
@@ -227,14 +229,36 @@
                 <option value="4">4</option>
             </select>
             <div class="fillchoice">
-                <div class="fillline" id="solo-line" hidden>
-                    <label for="opponents">Opponents</label>
-                    <select id="opponents">
-                        <option value="">None</option>
-                        <option value="easy">Easy bots</option>
-                        <option value="medium">Medium bots</option>
-                        <option value="hard">Hard bots</option>
-                    </select>
+                <div class="fillline" id="solo-line" role="group" aria-labelledby="opponents-label" hidden>
+                    <span class="linelabel" id="opponents-label">Opponents</span>
+                    <label class="seatpick" for="opponent-1">Red
+                        <select id="opponent-1">
+                            <option value="">None</option>
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+                    </label>
+                    <label class="seatpick" for="opponent-2">Blue
+                        <select id="opponent-2">
+                            <option value="">None</option>
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+                    </label>
+                    <label class="seatpick" for="opponent-3">Black
+                        <select id="opponent-3">
+                            <option value="">None</option>
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="fillline" id="teams-line" hidden>
+                    <label for="teams">Teams</label>
+                    <select id="teams"></select>
                 </div>
                 <div class="fillline" id="fill-line">
                     <label for="fill">Empty seats at START</label>
@@ -249,7 +273,7 @@
             </div>
             <button id="create" type="button" class="btn go">Create the match</button>
         </div>
-        <div class="hint" id="setup-hint-solo" hidden>You play on this computer, in this tab: no game server, no room. <strong>Opponents</strong> are computer players in every other base of the map; with <strong>None</strong> you play alone, as in the original. The Menu button over the game brings you back here.</div>
+        <div class="hint" id="setup-hint-solo" hidden>You play on this computer, in this tab: no game server, no room. <strong>Opponents</strong> are computer players, one level for each of the other three bases (Red, Blue, Black); a base set to <strong>None</strong> stays empty, and with all three None you play alone, as in the original. With two or more bots you can choose your <strong>Teams</strong>: you and one bot play as a team, and the other two bots too when both play. Bots team up with you only while three or more teams play. The Menu button over the game brings you back here.</div>
         <div class="hint" id="setup-hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken, and a running match takes nobody new. The first player in the room can start early with START (it is the room's leader): with at least 2 players in, and with <strong>Easy, Medium or Hard bots</strong> chosen above even alone, when every empty seat gets a bot of that level (bots do not play with Fog of War, and the leader's START is the only thing that seats them). Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
     </section>
 
@@ -425,15 +449,46 @@
         var LOCAL_PAGE = 'play.html';
         // 1 .. 4 from a text (the form's value, a remembered value, the address's &players=), else `fallback`
         function playersChoice(text, fallback) { return text === '1' || text === '2' || text === '3' || text === '4' ? Number(text) : fallback; }
-        // The opponents of a game on this computer, from what the browser remembered (the key ants-solo-bots holds 'none' or a level): nothing remembered is Medium (a first visit); anything that is no
-        // level is none (the original's single player, alone).
+        // The opponents of a game on this computer, from what the browser remembered by the first versions (the key ants-solo-bots holds 'none' or one level for all three bases): nothing remembered is
+        // Medium (a first visit); anything that is no level is none (the original's single player, alone). That key is read and never written any more: see soloSeats.
         function soloBots(stored) { return stored === null || stored === undefined ? 'medium' : validFill(stored); }
-        // The query of a game on this computer: ?map=<key>[&bots=<level>]&name=<name>&aspect=<shape>. A key that is no map's is Treasure (the default of everything), a level that is none of the three
-        // words is left out, an empty name is Player, the name goes in URL-encoded (a name is never put into an address any other way), the shape is 16:9 or 4:3.
-        function localGameQuery(mapKey, level, name, shape) {
+        // The three other seats, in the order of the form and of the game's --bot: seat 1 Red, 2 Blue, 3 Black (the player is seat 0, green)
+        var SOLO_SEATS = ['Red', 'Blue', 'Black'];
+        // The level of each of those seats ('' is none) from what the browser remembered: the key ants-solo-seats holds three words, none or a level each ("easy,medium,none"); without it (or with a text
+        // that is not three such words) the old key gives its one level to all three seats, and a first visit is Medium for all three.
+        function soloSeats(stored, legacy) {
+            var words = typeof stored === 'string' ? stored.split(',') : [];
+            if (words.length === 3 && words.every(function (w) { return w.toLowerCase() === 'none' || validFill(w) !== ''; })) return words.map(validFill);
+            var one = soloBots(legacy);
+            return [one, one, one];
+        }
+        // What the three levels are called in an address and in the settings: the three words, none for none
+        function soloSeatsText(levels) { return [0, 1, 2].map(function (i) { return validFill(levels[i]) || 'none'; }).join(','); }
+        // The choices of the Teams select for those levels, as {value, text}: free for all, and (only while two or more bots play: with one the team would be the whole match, which ends at once) the player
+        // with each bot. The value is what the game page's address and the game's --teams take: ffa, or 0+N for the player (seat 0) and seat N.
+        function soloTeamChoices(levels) {
+            var out = [{ value: 'ffa', text: 'Free for all' }];
+            var filled = [0, 1, 2].filter(function (i) { return validFill(levels[i]) !== ''; });
+            if (filled.length < 2) return out;
+            filled.forEach(function (i) { out.push({ value: '0+' + (i + 1), text: 'You + ' + SOLO_SEATS[i] }); });
+            return out;
+        }
+        // The team that is chosen: `wanted` (what the select or the settings say) when it is one of the choices for those levels, else free for all
+        function soloTeam(wanted, levels) {
+            var choices = soloTeamChoices(levels);
+            for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
+            return 'ffa';
+        }
+        // The query of a game on this computer: ?map=<key>[&bots=<levels>][&teams=0%2BN]&name=<name>&aspect=<shape>. A key that is no map's is Treasure (the default of everything). `levels` is one word
+        // (all three bases: the first versions' addresses) or three, for seats 1, 2, 3; a word that is none of the three levels is none; no bot at all leaves &bots= out, three of one level are written as that
+        // one word, else the three words with none. The teams are written when they are one of the choices for those levels (a + would be read as a blank: it is %2B); an empty name is Player, the name
+        // goes in URL-encoded (a name is never put into an address any other way), the shape is 16:9 or 4:3.
+        function localGameQuery(mapKey, levels, name, shape, teams) {
             var map = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
-            var bots = validFill(level);
-            return '?map=' + map.key + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9');
+            var seats = Array.isArray(levels) ? [validFill(levels[0]), validFill(levels[1]), validFill(levels[2])] : [validFill(levels), validFill(levels), validFill(levels)];
+            var bots = !(seats[0] || seats[1] || seats[2]) ? '' : (seats[0] === seats[1] && seats[1] === seats[2] ? seats[0] : soloSeatsText(seats));
+            var team = soloTeam(teams, seats);
+            return '?map=' + map.key + (bots ? '&bots=' + bots : '') + (team !== 'ffa' ? '&teams=' + encodeURIComponent(team) : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9');
         }
         // LOBBY_END
 
@@ -708,7 +763,7 @@
         // ---- what the address says ----
         // ?room=<code>  a room that was made elsewhere (a shared code, the lobby, the control interface): its panel at once; a page-made code says its map and players
         // ?map=<name>   host a match on that map at once (&players=2|3|4, default 4; &fill=easy|medium|hard seats bots in the empty seats at the leader's START; &play=here plays every seat on this page, as the page used to do);
-        //               with &players=1 a game on this computer (&fill= is then the opponents' level)
+        //               with &players=1 a game on this computer (&fill= is then the level of all three opponents)
         // ?fill=...     with ?room=: the same choice for a room that was made elsewhere (its links carry it)
         // nothing       the setup: choose the map and the players, or join with a code
         var params = new URLSearchParams(window.location.search);
@@ -722,40 +777,64 @@
         var last = recall('ants-four-map');
         if (last && mapByKey(last)) mapSelect.value = last;
         // The players: 1 plays on this computer, 2 to 4 is a match on the game server. A browser that never chose starts with 1 player (the owner: single player is on this page, by setting the players to 1).
-        // Each mode has its own choice of bots, remembered on its own: the OPPONENTS of a game on this computer (ants-solo-bots: none, easy, medium or hard; a first visit has Medium) and the bots that
-        // fill the EMPTY SEATS of a room at START (ants-four-fill, as ever: leave empty, easy, medium or hard).
+        // Each mode has its own choice of bots, remembered on its own: the OPPONENTS of a game on this computer, one level per seat (ants-solo-seats: "easy,medium,none"; a first visit has Medium for all
+        // three; the key of the first versions, ants-solo-bots, is read when the new one is absent and is never written) with the TEAMS (ants-solo-teams: ffa or 0+N), and the bots that fill the EMPTY SEATS
+        // of a room at START (ants-four-fill, as ever: leave empty, easy, medium or hard).
         var playersSelect = $('players');
         playersSelect.value = String(playersChoice(recall('ants-four-players'), 1));
         var fillSelect = $('fill');
         fillSelect.value = validFill(recall('ants-four-fill'));
-        var opponentsSelect = $('opponents');
-        opponentsSelect.value = soloBots(recall('ants-solo-bots'));
+        var seatSelects = [$('opponent-1'), $('opponent-2'), $('opponent-3')];
+        var teamsSelect = $('teams');
+        (function () { var levels = soloSeats(recall('ants-solo-seats'), recall('ants-solo-bots')); seatSelects.forEach(function (select, i) { select.value = levels[i]; }); })();
+        function soloLevels() { return seatSelects.map(function (select) { return validFill(select.value); }); }
+        var soloTeamWanted = recall('ants-solo-teams');       // the team that was remembered or chosen last (free for all while the bots do not allow it)
+        function showTeams() {                      // the Teams select has the choices that the bots allow; the team stays while it is still one of them, else it is free for all
+            var levels = soloLevels();
+            var choices = soloTeamChoices(levels);
+            soloTeamWanted = soloTeam(soloTeamWanted, levels);
+            while (teamsSelect.firstChild) teamsSelect.removeChild(teamsSelect.firstChild);
+            choices.forEach(function (choice) {
+                var o = document.createElement('option');
+                o.value = choice.value; o.textContent = choice.text;
+                teamsSelect.appendChild(o);
+            });
+            teamsSelect.value = soloTeamWanted;
+            $('teams-line').hidden = !soloMode() || choices.length < 2;
+        }
         function soloMode() { return Number(playersSelect.value) === 1; }
         function showMode() {                       // what the form says for the players that it has: the button, the row of bots, the hint
             var solo = soloMode();
             $('solo-line').hidden = !solo;
             $('fill-line').hidden = solo;
+            showTeams();
             $('create').textContent = solo ? 'Play' : 'Create the match';
             $('setup-hint-solo').hidden = !solo;
             $('setup-hint').hidden = solo;
         }
         playersSelect.addEventListener('change', showMode);
+        seatSelects.forEach(function (select) { select.addEventListener('change', showTeams); });
+        teamsSelect.addEventListener('change', function () { soloTeamWanted = soloTeam(teamsSelect.value, soloLevels()); });
         showMode();
-        // A game on this computer: this tab goes to the game page (never a new tab) with the map, the opponents, the typed name and the picture's shape (the game page's own parameters)
-        function startLocal(mapKey, level) {
+        // A game on this computer: this tab goes to the game page (never a new tab) with the map, the opponents, the teams, the typed name and the picture's shape (the game page's own parameters)
+        function startLocal(mapKey, levels, team) {
             var checked = nameCheck(nameInput.value);
-            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, level, checked.ok ? checked.name : '', aspect), window.location.href).href);
+            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, checked.ok ? checked.name : '', aspect, team), window.location.href).href);
         }
-        // The code carries the choice (the server reads it: demo-<map>-<n>p-<random>)
-        function create(mapKey, play, n, fillLevel) {
+        // The code carries the choice (the server reads it: demo-<map>-<n>p-<random>). `solo` is the form's own choice for a game on this computer ({levels, team}); an address that asks for one
+        // (&players=1&fill=) gives one level to all three bases and no teams.
+        function create(mapKey, play, n, fillLevel, solo) {
             var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
             var players = playersChoice(String(n), 4);
             var level = validFill(fillLevel);
             remember('ants-four-map', m.key);
             remember('ants-four-players', String(players));
             if (players === 1) {
-                remember('ants-solo-bots', level || 'none');
-                startLocal(m.key, level);
+                var levels = solo ? solo.levels : [level, level, level];
+                var team = solo ? soloTeam(solo.team, levels) : 'ffa';
+                remember('ants-solo-seats', soloSeatsText(levels));
+                if (solo) remember('ants-solo-teams', team);
+                startLocal(m.key, levels, team);
                 return;
             }
             remember('ants-four-fill', level);
@@ -811,7 +890,7 @@
         $('create').addEventListener('click', function () {
             if (!readName().ok) return;               // a bad name starts nothing (the field says why)
             var n = Number(playersSelect.value);
-            create(mapSelect.value, '', n, n === 1 ? opponentsSelect.value : fillSelect.value);
+            create(mapSelect.value, '', n, n === 1 ? '' : fillSelect.value, n === 1 ? { levels: soloLevels(), team: soloTeamWanted } : null);
         });
 
         // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat, under the name of the field above (the game

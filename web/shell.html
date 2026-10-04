@@ -852,7 +852,7 @@
                         <li><strong>Goal:</strong>&#8197;get the most points by getting&#8197;<strong>food</strong>. Send your ants to food: they pick it up and carry it home to your anthill, one piece at a time.</li>
                         <li><strong>Score:</strong>&#8197;yours is at the top of the screen, the other players' at the bottom. When the clock reaches 0:00 the highest score wins.</li>
                         <li><strong>Power-ups</strong>&#8197;dropped by special flowers give an ant a special power (see below); an ant holds one at a time.</li>
-                        <li><strong>Opponents:</strong>&#8197;the Menu button starts a game on this computer against Easy, Medium or Hard bots, or alone as in the original; there you can also host or join a match on the game server to play against friends.</li>
+                        <li><strong>Opponents:</strong>&#8197;the Menu button starts a game on this computer against Easy, Medium or Hard bots, each base at its own level, with you and one bot as a team if you like, or alone as in the original; there you can also host or join a match on the game server to play against friends.</li>
                         <li><strong>Help:</strong>&#8197;<kbd>F1</kbd>&#8197;or the Help button shows the original's quick help.</li>
                         <li><strong>Picture:</strong>&#8197;16:9 by default;&#8197;<em>Classic 4:3</em>&#8197;is the original's picture. Choose it under the game (the game restarts), or add&#8197;<kbd>?aspect=4:3</kbd>&#8197;to the address (<kbd>?aspect=16:9</kbd>&#8197;for the wide one).&#8197;<kbd>&#x26F6;</kbd>&#8197;Fullscreen makes the picture as big as your screen allows.</li>
                     </ul>
@@ -956,7 +956,7 @@
         //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
         //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
-        //   localArguments the arguments of a game on THIS computer (?map= &bots= &name=: the front page's Play), through a whitelist
+        //   localArguments the arguments of a game on THIS computer (?map= &bots= &teams= &name=: the front page's Play), through a whitelist
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
 
@@ -1159,12 +1159,31 @@
                 return out;
             }
 
-            // A game on THIS computer (the front page's Play opens play.html?map=<key>[&bots=<level>]&name=<name>): the game's arguments come only from this whitelist, never from the address text.
-            // map: one of the six shipped maps, by key; bots: easy|medium|hard in seats 1-3 (the player is seat 0); name: printable ASCII, 32 characters (the address's, else the remembered ants.name).
+            // A game on THIS computer (the front page's Play opens play.html?map=<key>[&bots=<levels>][&teams=0+N]&name=<name>): the game's arguments come only from this whitelist, never from the address text.
+            // map: one of the six shipped maps, by key; bots: ONE level word (easy|medium|hard: all of seats 1-3, the player is seat 0) or THREE words for seats 1, 2, 3 joined by commas (none|easy|medium|hard each),
+            // in any case, all or nothing: a text that is neither is no bots at all; teams: ffa (nothing) or 0+N (the + may arrive as a blank) with N a seat that has a bot, then the game makes the teams itself
+            // (--teams); name: printable ASCII, 32 characters (the address's, else the remembered ants.name).
             // `--play` starts the map as the setup screen's START does (Get ready dialog, start sound, music) once the loading screen and quick help are done. No map, bots or name: no arguments (the setup screen).
             var LOCAL_MAPS = { tiny: 'TINY.LVL', small: 'SMALL.LVL', medium: 'MEDIUM.LVL', gauntlet: 'GAUNTLET.LVL', treasure: 'TREASURE.LVL', islands: 'ISLANDS.LVL' };
+            // The levels of seats 1, 2, 3 ('' for none) that a ?bots= text says, or null when it says none: only the tested lower case words come back, never the text of the address
+            function localBots(value) {
+                if (typeof value !== 'string') return null;
+                var words = value.toLowerCase().split(',');
+                if (words.length === 1) {
+                    var one = antsFillArg(words[0]);
+                    return one ? [one, one, one] : null;
+                }
+                if (words.length !== 3) return null;
+                var levels = [];
+                for (var i = 0; i < 3; i++) {
+                    if (words[i] === 'none') levels.push('');
+                    else if (antsFillArg(words[i])) levels.push(words[i]);
+                    else return null;
+                }
+                return levels;
+            }
             function localArguments(search, remembered) {
-                var out = { args: [], map: '', bots: '', name: '' };
+                var out = { args: [], map: '', bots: '', teams: '', name: '' };
                 var q;
                 try { q = new URLSearchParams(search); } catch (e) { return out; }
                 var map = (q.get('map') || '').toLowerCase();
@@ -1172,10 +1191,15 @@
                     out.map = map;
                     out.args.push('--map', 'Original-Ants/Maps/' + LOCAL_MAPS[map], '--play');
                 }
-                var bots = antsFillArg(q.get('bots'));
-                if (bots) {
-                    out.bots = bots;
-                    for (var seat = 1; seat <= 3; seat++) out.args.push('--bot', seat + ':' + bots);
+                var levels = localBots(q.get('bots'));
+                if (levels) {
+                    if (levels[0] || levels[1] || levels[2]) out.bots = levels[0] === levels[1] && levels[1] === levels[2] ? levels[0] : levels.map(function (l) { return l || 'none'; }).join(',');
+                    for (var seat = 1; seat <= 3; seat++) if (levels[seat - 1]) out.args.push('--bot', seat + ':' + levels[seat - 1]);
+                }
+                var teams = levels ? /^0[+ ]([1-3])$/.exec(q.get('teams') || '') : null;
+                if (teams && levels[Number(teams[1]) - 1]) {
+                    out.teams = '0+' + teams[1];
+                    out.args.push('--teams', out.teams);
                 }
                 var name = q.has('name') ? q.get('name') : ((q.has('map') || q.has('bots')) ? remembered : '');
                 name = typeof name === 'string' ? name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32) : '';
