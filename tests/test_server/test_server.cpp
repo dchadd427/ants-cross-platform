@@ -5936,7 +5936,6 @@ void run_persist_server_tests() {
             write_all_bytes(w.record_path(code), out);
         };
         const std::vector<Refusal> cases = {
-            {"another game version", [](PWorld& w) { w.restart.identity.game_version = "v9.9.9"; }, "v9.9.9"},
             {"another protocol", [](PWorld& w) { w.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1); }, "protocol"},
             {"the map file changed", [](PWorld& w) { std::ofstream(fs::path(w.maps) / "TINY.LVL", std::ios::binary | std::ios::app).put('x'); }, "not the one"},
             {"the map is gone", [](PWorld& w) { fs::remove(fs::path(w.maps) / "TINY.LVL"); }, "not on this server"},
@@ -5981,6 +5980,17 @@ void run_persist_server_tests() {
             ASSERT_MSG(!w.mgr->status("R-1", gone, w.server_now()), c.what);
             fs::copy_file(maps_dir() + "/TINY.LVL", fs::path(w.maps) / "TINY.LVL", fs::copy_options::overwrite_existing);          // (the map is as it was: a room needs it)
             ASSERT_MSG(w.mgr->create_room(held_spec("R-1", 2), w.server_now()).ok, c.what);
+        }
+        {   // M4 of the review: the game version moves with every release, the protocol with every change of the rules: a record of another game version and build and the same protocol IS restored, with the
+            // checkpoint-verified replay as the safety net (and the log says who wrote it); another protocol is refused (the cases above)
+            PWorld w("persist-79v");
+            w.start_server(500);
+            crash_with_record(w, "R-6", 8000);
+            w.restart.identity.game_version = "v9.9.9";
+            w.restart.identity.build_id = "other-build";
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 1 && w.status("R-6").restored && w.status("R-6").state == RoomState::Running);
+            ASSERT_TRUE(w.report.items[0].note.find("written by " + std::string(kTestVersion)) != std::string::npos);
         }
         {   // a record that is within its hour is restored (59 minutes old)
             PWorld w("persist-79b");
@@ -6505,11 +6515,11 @@ void run_persist_server_tests_3() {
         collect();
         // a second room whose record cannot be restored (another version): the failed room and its report
         w.stop_server(false);
-        w.restart.identity.game_version = "v1.2.3";
+        w.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1);
         w.start_server(500);
         collect();
         for (const RoomStatus& ended : w.mgr->take_ended(w.server_now())) texts.push_back(ctl::to_json(status_to_json(ended)));
-        w.restart.identity.game_version = kTestVersion;
+        w.restart.identity.protocol = net::kProtocolVersion;
         size_t looked_at = 0;
         for (const std::string& t : texts) {
             for (const net::SeatKey& k : keys) ASSERT_TRUE(t.find(hex_of(k)) == std::string::npos);
@@ -6992,9 +7002,9 @@ void run_persist_server_tests_6() {
         }
         ASSERT_EQ(busy().matches, 2u);
         ASSERT_EQ(busy().players, 3u);                                                         // (nobody is connected: the held seats are the people that a restart now would interrupt again)
-        // ---- a restart that cannot bring them back (the game's version is another one): they are failed rooms, and a failed room counts nothing --------------------------------------------------
+        // ---- a restart that cannot bring them back (the network protocol is another one): they are failed rooms, and a failed room counts nothing ---------------------------------------------------
         w.stop_server(false);
-        w.restart.identity.game_version = "v9.9.9";
+        w.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1);
         w.start_server(500);
         ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Ended) == 2);
         ASSERT_TRUE(w.status("BZ-1").state == RoomState::Failed && w.status("BZ-2").state == RoomState::Failed);

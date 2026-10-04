@@ -116,7 +116,7 @@ public:
     const RestartStore* restart_store() const noexcept { return restart_.get(); }
     /// Reads every record of the folder and brings its room back: the engine is made again from the match's start message and every sealed turn replayed (checked against the state hashes of the record),
     /// the seats of the persons are held absent (the match is paused until the players come back with their keys: a Hello with a key finds the room by its code, as before the restart) and the bots start
-    /// again at the restored tick. A record that cannot be restored (another game version or protocol, a map that is gone or has changed, a replay that disagrees, too old, ...) becomes a FAILED room with
+    /// again at the restored tick. A record that cannot be restored (another network protocol, a map that is gone or has changed, a replay that disagrees, too old, ...) becomes a FAILED room with
     /// the reason, so that the control interface shows it and the log and the result file report it, and a record that cannot be read at all is only a line in the log; the file is deleted in both cases.
     /// Call it once, after enable_restart_records() and before the first update(). Real time: the replay runs now (at most RestartConfig::replay_budget_ms for each room).
     RestoreReport restore_rooms(uint32_t now_ms);

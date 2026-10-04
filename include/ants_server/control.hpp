@@ -28,7 +28,7 @@
 // and the referee's state hash at the restored tick),
 // "result": {"quitter": seat | null, "rows": [{"names": [..], "score", "lost", "killed", "hatched", "winner"}]}}
 // All the reconnect and record keys are additions: a lobby that ignores them works as before. A seat's key is never in any of it, nor in a result file, nor in a log line. A match that a restart could
-// not bring back (another version of the game, a changed map, ...) is a FAILED room whose "reason" says so, from the moment the server has started.
+// not bring back (another network protocol, a changed map, ...) is a FAILED room whose "reason" says so, from the moment the server has started.
 
 #include <cstdint>
 #include <string>

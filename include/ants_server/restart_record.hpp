@@ -11,7 +11,7 @@
 //   file  := magic frame*                   magic: "ANTSRST1" (8 bytes; the digit is the format: a file of another format is refused as such)
 //   frame := u8 type, u32 length, payload, u32 crc32   (the CRC-32 of the type, the length and the payload; a payload is at most 1 MiB)
 //
-//   HEAD   (1)  the first frame, exactly one: the identity of the build that wrote it (game version, protocol, build id: only the first two decide), the room's specification (code, map and its hash, players,
+//   HEAD   (1)  the first frame, exactly one: the identity of the build that wrote it (game version, protocol, build id: only the protocol decides), the room's specification (code, map and its hash, players,
 //               fog, early start, the times, the reconnect settings, the limit of the turn log), the bots that sit in the room (the specification's and the leader's fill), the start message of the match (seed,
 //               roster, names, fog: net::StartMsg in its wire form: the strict decoder of the protocol reads it back) and the KEYS of the four seats. The keys are secrets (a key is all that a seat's owner needs
 //               to take it back): the file is for its owner only (POSIX: mode 600 in a folder of mode 700; on Windows it takes the permissions of its folder), and a key is never in a log line, a status or a result file.
@@ -34,7 +34,7 @@
 // reaches the end of the file and does not fit it, one whose CRC is wrong and that is the last, or nothing but zero bytes) is a torn tail: it is dropped, and the record is the frames before it. Any
 // other fault, a bad CRC or length or order in the MIDDLE of the file, is corruption: the record is refused (the room is lost, as it was before records existed). A refused record is deleted.
 //
-// WHAT IS NOT RESTORED. A record of another game version or protocol is not (a rules change would play the match out differently: the room is closed with that reason, in the log and in the status JSON);
+// WHAT IS NOT RESTORED. A record of another network protocol is not (a rules change would play the match out differently: the room is closed with that reason, in the log and in the status JSON);
 // nor is one whose map file is gone or has changed, whose last write is older than RestartConfig::max_age_ms (its players are gone), or whose replay does not agree with the stored state hashes (the rules
 // of this build are not those that played the match). A room that holds no seats (reconnect off) has no record, a room that has not started (waiting) has none either, and a room whose turn log passed
 // its limit (RoomSpec::max_log_bytes) or whose record the disk refused stops keeping one (and says so in its status).
@@ -70,13 +70,13 @@ enum class RestartFrame : uint8_t { Head = 1, Turns = 2, Check = 3 };
 /// CRC-32 (IEEE 802.3, the one of zlib and PNG: CRC-32 of "123456789" is 0xCBF43926). `crc` is the value so far (0 to start): the CRC of a long message can be made in pieces.
 uint32_t restart_crc32(const uint8_t* data, size_t size, uint32_t crc = 0) noexcept;
 
-/// What the build that wrote a record was. The game version ("v0.2.0") and the protocol decide whether a record is restored (the state hash of a play changes with the rules, and the rules change with
-/// a version); the build id (the commit) is only for the log: a deploy that changes a page and no rule must not end the matches.
+/// What the build that wrote a record was. The network protocol decides whether a record is restored (it moves with every change of the rules that the peers of a match must share, and the replay's state
+/// hashes are the safety net); the game version and the build id are only for the log: a deploy that changes no rule must not end the matches.
 struct RestartIdentity {
     std::string game_version;
     uint16_t protocol{0};
     std::string build_id;
-    bool same_rules_as(const RestartIdentity& other) const noexcept { return game_version == other.game_version && protocol == other.protocol; }
+    bool same_rules_as(const RestartIdentity& other) const noexcept { return protocol == other.protocol; }       // (the protocol moves with every change of the rules; the version moves every release: it is only for the log)
 };
 
 /// The first frame of a record (see above). The plain data of a room that is to be built again.
@@ -145,7 +145,7 @@ RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes);
 /// What a server is told about its restart records
 struct RestartConfig {
     std::string dir;                                        // where the records are kept; empty: the server keeps none
-    RestartIdentity identity;                               // what this server is: a record of another game version or protocol is not restored
+    RestartIdentity identity;                               // what this server is: a record of another network protocol is not restored
     uint64_t budget_bytes{256ull * 1024 * 1024};            // all the records together may take this much disk
     uint64_t max_record_bytes{48ull * 1024 * 1024};         // one record may
     uint32_t restart_vote_after_ms{net::kRestartVoteAfterMs};   // after a restart the others may vote on a seat that has not come back once it has been away this long (never less than the room's own time)

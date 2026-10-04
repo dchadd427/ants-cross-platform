@@ -41,8 +41,8 @@
 //   --restart-dir DIR  where the rooms that hold seats keep their RESTART RECORDS (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"): from the start of its match to its end a room
 //                      writes every sealed turn to a file here (mode 600: it holds the keys of the seats) BEFORE the turn is sent to anybody, so that a server that is stopped, crashes or is
 //                      redeployed does not end the matches that run: the server that starts again finds the records, replays them (checked against stored state hashes), holds every seat
-//                      and the players come back with their keys. Default: the folder "restart" in --results-dir; without a results folder the server keeps none. A record of another game
-//                      version or protocol is not restored (the room is closed with that reason). Only rooms that hold seats (--reconnect, a room's "reconnect") keep one
+//                      and the players come back with their keys. Default: the folder "restart" in --results-dir; without a results folder the server keeps none. A record of another network
+//                      protocol is not restored (the room is closed with that reason). Only rooms that hold seats (--reconnect, a room's "reconnect") keep one
 //   --no-restart-records
 //                      keep no restart records (a running match ends with the server, as it did before records), whatever --results-dir says
 //   --restart-vote-seconds N

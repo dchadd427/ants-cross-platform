@@ -367,8 +367,8 @@ RestoreReport RoomManager::restore_rooms(uint32_t now_ms) {
         // The things that make a match impossible to go on with. What each says is what the status shows for the room, and the log.
         std::string refusal;
         if (!head.identity.same_rules_as(cfg.identity)) {
-            refusal = "ended by a restart of the server: the match was started by " + head.identity.game_version + " (protocol " + std::to_string(head.identity.protocol) + "), this server is " + cfg.identity.game_version +
-                      " (protocol " + std::to_string(cfg.identity.protocol) + "), and a match cannot go on across a change of the rules";
+            refusal = "ended by a restart of the server: the match was started with network protocol " + std::to_string(head.identity.protocol) + " (" + head.identity.game_version + "), this server speaks protocol " +
+                      std::to_string(cfg.identity.protocol) + " (" + cfg.identity.game_version + "), and a match cannot go on across a change of the rules";
         }
         RoomSpec spec = room_spec_of(head);
         MapEntry entry;
@@ -414,7 +414,8 @@ RestoreReport RoomManager::restore_rooms(uint32_t now_ms) {
             item.outcome = RestoreItem::Outcome::Restored;
             item.replay_ms = replay_ms;
             item.note = "restored: " + std::to_string(item.turns) + " turns (" + seconds_text(uint64_t{item.turns} * net::kTurnMs) + " of play) replayed in " + std::to_string(replay_ms) + " ms, state hash " + hex16(st.restored_hash) + ", " +
-                        std::to_string(st.absent.size()) + " seat(s) waiting for their players" + (st.state == RoomState::Finished ? "; the match had ended" : std::string());
+                        std::to_string(st.absent.size()) + " seat(s) waiting for their players" + (st.state == RoomState::Finished ? "; the match had ended" : std::string()) +
+                        (head.identity.game_version != cfg.identity.game_version || head.identity.build_id != cfg.identity.build_id ? "; the record was written by " + head.identity.game_version + " build " + head.identity.build_id : std::string());
             restart_->note("room " + head.code + " " + item.note);
             rooms_.emplace(head.code, std::move(room));
             report.items.push_back(item);

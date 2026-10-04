@@ -36,7 +36,7 @@
 // that a server that is stopped, crashes or is redeployed does not end the match. A server that starts again calls Room::restore with the record (RoomManager::restore_rooms does, for every record
 // of its folder): the engine is made from the start message, every sealed turn is replayed and checked against the stored hashes, every seat of a person is held ABSENT (the match is paused until its
 // player comes back with its key, protocol 10, with a longer wait before the others may vote than for a lost link), the bots sit down again at the restored tick (their tasks are soft: they look at the
-// world and go on), and the room keeps its code, so that the players' clients find it. A record that cannot be restored (another game version or protocol, a map that has changed, a replay that does not
+// world and go on), and the room keeps its code, so that the players' clients find it. A record that cannot be restored (another network protocol, a map that has changed, a replay that does not
 // agree with the hashes, too old) ends the room with the reason (Room::refused: a failed room that the status shows and the log reports). A finished or failed room deletes its record; a server that is told
 // to stop (RoomManager::shutdown) makes the records durable and leaves them where they are.
 
