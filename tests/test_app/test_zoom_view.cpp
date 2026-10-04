@@ -1305,6 +1305,104 @@ void test_pass_state(const assets::AssetArchive& arc) {
 }
 
 // =====================================================================================================================================================
+// HUD: a click goes to the tile that covers most of the pixel
+// =====================================================================================================================================================
+
+// Below 1 (and at 1.19, 1.41, 1.68) a screen pixel is not a whole world pixel and many pixels straddle a tile edge: the tile that a click picks there has to be the one that covers most of
+// the pixel (a pixel's centre is in it), not the one under the pixel's left edge. The oracle is the coverage itself, in long doubles: the footprint of the screen pixel at `offset` is
+// [origin + offset / z, origin + (offset + 1) / z); when an edge of a tile (a multiple of 32) lies inside it, the tile with the larger part wins; an exact tie says nothing.
+// The model alone cannot say whether the picture agrees: SDL's software renderer places the last copy on whole pixels, up to a pixel off, which is as much as the difference between the rules.
+struct Majority {
+    int32_t tile{0};              // the tile that has most of the pixel
+    int32_t left_tile{0};         // the tile under the pixel's left edge (the rule that was)
+    bool straddles{false};        // an edge of a tile lies inside the pixel
+    bool tie{false};
+};
+Majority majority_tile(double origin, float z, int32_t offset) {
+    if (z == 1.0f) origin = std::floor(origin);                     // (the camera at the zoom 1 keeps its own arithmetic: the whole part of the origin; in play it is whole)
+    const long double lo = static_cast<long double>(origin) + static_cast<long double>(offset) / static_cast<long double>(z);
+    const long double hi = static_cast<long double>(origin) + static_cast<long double>(offset + 1) / static_cast<long double>(z);
+    Majority m;
+    m.left_tile = static_cast<int32_t>(std::floor(lo / 32.0L));
+    const int32_t last = static_cast<int32_t>(std::floor((hi - 1e-9L) / 32.0L));
+    m.tile = m.left_tile;
+    if (last > m.left_tile) {                                       // (a pixel is never wider than a tile at the levels of the series)
+        const long double edge = static_cast<long double>(last) * 32.0L;
+        const long double before = edge - lo;
+        const long double after = hi - edge;
+        m.straddles = true;
+        m.tie = std::fabs(static_cast<double>(before - after)) < 1e-6;
+        m.tile = before > after ? m.left_tile : last;
+    }
+    return m;
+}
+
+void test_click_centre(const assets::AssetArchive& arc) {
+    group("centre", "a click goes to the tile that covers most of the pixel, at every level, in both pictures: every pixel column and row of the view");
+    for (const bool wide : {false, true}) {
+        HudRig rig(arc, wide);
+        const LayoutRect view = rig.layout.view();
+        for (const float z : zooms_for(wide)) {
+            const std::string at = std::string(wide ? "wide" : "classic") + " at " + zoom::level_name(z) + ": ";
+            long straddling = 0;
+            long differing = 0;                                     // the straddling pixels where the left edge's tile is not the majority's: what the rule changed
+            for (const auto& cam : {std::pair<double, double>{0.0, 0.0}, std::pair<double, double>{700.25, 300.5}, std::pair<double, double>{1.0e9, 1.0e9}}) {
+                rig.look(cam.first, cam.second, z);
+                const double ox = static_cast<double>(rig.camera.x);
+                const double oy = static_cast<double>(rig.camera.y);
+                // a row and a column away from the ants of the HUD's world (tile rows 3, 30, 55; columns 3, 28, 33, 55), so that every click is a move order
+                const auto clear_of = [](const Majority& m, std::initializer_list<int32_t> ants) {
+                    bool ok = !m.straddles;
+                    for (const int32_t a : ants) ok = ok && std::abs(m.tile - a) > 1;
+                    return ok;
+                };
+                int32_t row = -1;
+                for (int32_t y = view.y + 10; y < view.bottom() - 10 && row < 0; ++y) {
+                    if (clear_of(majority_tile(oy, z, y - view.y), {3, 30, 55})) row = y;
+                }
+                int32_t col = -1;
+                for (int32_t x = view.x + 10; x < view.right() - 10 && col < 0; ++x) {
+                    if (clear_of(majority_tile(ox, z, x - view.x), {3, 28, 33, 55})) col = x;
+                }
+                check(row >= 0 && col >= 0, at + "a row and a column away from the ants were found");
+                if (row < 0 || col < 0) continue;
+                int wrong = 0;
+                for (int32_t x = view.x; x < view.right(); ++x) {
+                    const Majority m = majority_tile(ox, z, x - view.x);
+                    rig.hud.select_ant(rig.mine);
+                    rig.sink.commands.clear();
+                    rig.click(x, row);
+                    if (rig.sink.commands.size() != 1 || rig.sink.commands[0].type != sim::CommandType::GroupMove) {
+                        ++wrong;
+                        continue;
+                    }
+                    straddling += m.straddles ? 1 : 0;
+                    differing += m.straddles && !m.tie && m.tile != m.left_tile ? 1 : 0;
+                    if (!m.tie && rig.sink.commands[0].tile_x != m.tile) ++wrong;
+                }
+                for (int32_t y = view.y; y < view.bottom(); ++y) {
+                    const Majority m = majority_tile(oy, z, y - view.y);
+                    rig.hud.select_ant(rig.mine);
+                    rig.sink.commands.clear();
+                    rig.click(col, y);
+                    if (rig.sink.commands.size() != 1 || rig.sink.commands[0].type != sim::CommandType::GroupMove) {
+                        ++wrong;
+                        continue;
+                    }
+                    straddling += m.straddles ? 1 : 0;
+                    differing += m.straddles && !m.tie && m.tile != m.left_tile ? 1 : 0;
+                    if (!m.tie && rig.sink.commands[0].tile_y != m.tile) ++wrong;
+                }
+                check(wrong == 0, at + "from (" + num(cam.first) + ", " + num(cam.second) + ") every pixel column and row goes to the tile with most of the pixel: " + std::to_string(wrong) + " wrong");
+            }
+            if (z == 1.0f || z == 2.0f || z == 0.5f || z == 0.25f) check(straddling == 0, at + "an exact level has no pixel that straddles a tile edge");
+            else check(straddling >= 30 && differing >= 10, at + "the sweep has pixels that straddle an edge, and in some of them the left edge's tile is not the one that covers most: " + std::to_string(straddling) + ", " + std::to_string(differing));
+        }
+    }
+}
+
+
+// =====================================================================================================================================================
 // HUD: the pointer, the orders, the rubber band, the minimap, the edge scroll and the radar's frame at a zoom
 // =====================================================================================================================================================
 
@@ -1450,8 +1548,8 @@ void test_hud_rubber_band(const assets::AssetArchive& arc) {
             auto expected_selected = [&](int32_t left, int32_t top, int32_t right, int32_t bottom) {
                 const int32_t wl = world_under_f(rig.camera.x, z, left - view.x);
                 const int32_t wt = world_under_f(rig.camera.y, z, top - view.y);
-                const int32_t wr = edge_under_f(rig.camera.x, z, right - view.x);
-                const int32_t wb = edge_under_f(rig.camera.y, z, bottom - view.y);
+                const int32_t wr = world_under_f(rig.camera.x, z, right - view.x);
+                const int32_t wb = world_under_f(rig.camera.y, z, bottom - view.y);
                 return std::max(wl, target.px - 20) < std::min(wr, target.px + 20) && std::max(wt, target.py - 32) < std::min(wb, target.py + 16);
             };
             int selected = 0;
@@ -3033,6 +3131,7 @@ int main(int argc, char* argv[]) {
     if (run("levels")) test_level_pictures(arc);
     if (run("place")) test_lattice_placement(arc);
     if (run("fog")) test_fog_levels(arc);
+    if (run("centre")) test_click_centre(arc);
     if (run("state")) test_pass_state(arc);
     if (run("cursor")) test_hud_cursor(arc);
     if (run("orders")) test_hud_orders(arc);

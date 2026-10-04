@@ -501,14 +501,8 @@ void radar_and_camera_scenarios(const assets::AssetArchive& arc) {
                             h.i32(cam.world_y);
                             h.i32(cam.centre_world_x());
                             h.i32(cam.centre_world_y());
-                            for (int32_t d = 0; d < view.w; d += 37) {
-                                h.i32(cam.world_x_at(d));
-                                h.i32(cam.world_x_edge(d));
-                            }
-                            for (int32_t d = 0; d < view.h; d += 41) {
-                                h.i32(cam.world_y_at(d));
-                                h.i32(cam.world_y_edge(d));
-                            }
+                            for (int32_t d = 0; d < view.w; d += 37) h.i32(cam.world_x_at(d));
+                            for (int32_t d = 0; d < view.h; d += 41) h.i32(cam.world_y_at(d));
                             for (int32_t wx = 0; wx < tiles * 32; wx += 211) {
                                 int32_t sx = 0;
                                 int32_t sy = 0;
@@ -633,19 +627,19 @@ const Golden kGoldens[] = {
     {"zoom.app.wide.GAUNTLET.z0.5", 0x68abadbf0c489c48, 518400},
     {"zoom.app.wide.GAUNTLET.z2", 0x76c6a986c4a3548b, 518400},
     {"zoom.app.wide.TINY.z2", 0x3cbc4ec63a606f98, 518400},
-    {"zoom.camera.classic.z0.5", 0x3a4dad0e646af9cc, 45},
-    {"zoom.camera.classic.z2", 0x898a58705f5b9fc1, 45},
-    {"zoom.camera.wide.z0.5", 0x4625c85a49d212b7, 45},
-    {"zoom.camera.wide.z2", 0x46de1d5d789f8c16, 45},
-    {"zoom.ptr.click.classic.z0.5.cam_br", 0x5a0ee4fe8ab188c7, 5632},
-    {"zoom.ptr.click.classic.z0.5.cam_mid", 0xeb731e609ddbea9e, 5632},
-    {"zoom.ptr.click.classic.z0.5.cam_tl", 0x2570b6bdcc0951ae, 5632},
+    {"zoom.camera.classic.z0.5", 0x9f2b4596198e664a, 45},
+    {"zoom.camera.classic.z2", 0x3dc85b4971334956, 45},
+    {"zoom.camera.wide.z0.5", 0xd5bfb4d2d388771d, 45},
+    {"zoom.camera.wide.z2", 0xb4953231f3024ae6, 45},
+    {"zoom.ptr.click.classic.z0.5.cam_br", 0xf3aee7c5af4af34f, 5632},
+    {"zoom.ptr.click.classic.z0.5.cam_mid", 0x7284bcb51469ad16, 5632},
+    {"zoom.ptr.click.classic.z0.5.cam_tl", 0xe5dfa78f1f0671ce, 5632},
     {"zoom.ptr.click.classic.z2.cam_br", 0x5e647d100a64f416, 5632},
     {"zoom.ptr.click.classic.z2.cam_mid", 0x5c60354ea96ce691, 5632},
     {"zoom.ptr.click.classic.z2.cam_tl", 0x62ca1855979f1f9e, 5632},
-    {"zoom.ptr.click.wide.z0.5.cam_br", 0x771fb3733232e422, 10900},
-    {"zoom.ptr.click.wide.z0.5.cam_mid", 0xda46613a8c62622c, 10900},
-    {"zoom.ptr.click.wide.z0.5.cam_tl", 0xf6aa5d1f53643c7d, 10900},
+    {"zoom.ptr.click.wide.z0.5.cam_br", 0x79fe52b8490a2f9a, 10900},
+    {"zoom.ptr.click.wide.z0.5.cam_mid", 0x89fb2132ca21a64c, 10900},
+    {"zoom.ptr.click.wide.z0.5.cam_tl", 0x5ef0ea9461603b65, 10900},
     {"zoom.ptr.click.wide.z2.cam_br", 0xd20702b90f9c1a89, 10900},
     {"zoom.ptr.click.wide.z2.cam_mid", 0x1ae7411aed09eb7a, 10900},
     {"zoom.ptr.click.wide.z2.cam_tl", 0x3b83cb8107d3f5d9, 10900},

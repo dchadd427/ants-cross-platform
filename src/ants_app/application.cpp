@@ -2126,8 +2126,8 @@ void Application::update_simulation(float dt) {
     }
 
     // Update spatial audio listener position
-    audio_mixer_.set_listener_position(renderer_->camera().world_x_at(layout_.view().w / 2),
-                                       renderer_->camera().world_y_at(layout_.view().h / 2));      // (the middle of the world that the view shows, at any zoom)
+    audio_mixer_.set_listener_position(renderer_->camera().centre_world_x(),
+                                       renderer_->camera().centre_world_y());      // (the middle of the world that the view shows, at any zoom: the exact middle, not the world pixel under a pixel's centre)
 
     if (renderer_) {
         renderer_->update_transient_effects(dt);

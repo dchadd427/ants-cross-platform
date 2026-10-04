@@ -324,16 +324,18 @@ inline Picture average2(const Picture& direct, const LayoutRect& big_view, int32
 /// half world pixels per screen pixel: 4 at 0.5, 2 at 1, 1 at 2
 inline int hpp_of(float z) { return z == 0.5f ? 4 : z == 1.0f ? 2 : 1; }
 inline int64_t floor_div(int64_t a, int64_t b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
-/// the world pixel under the screen offset `offset` (from the view's corner), the origin in half pixels
-inline int32_t world_under(int64_t origin2, float z, int32_t offset) { return static_cast<int32_t>(floor_div(origin2 + static_cast<int64_t>(offset) * hpp_of(z), 2)); }
-/// the world coordinate of the edge of the screen pixel at `offset`, rounded up
-inline int32_t edge_under(int64_t origin2, float z, int32_t offset) { return static_cast<int32_t>(floor_div(origin2 + static_cast<int64_t>(offset) * hpp_of(z) + 1, 2)); }
+/// the world pixel under the CENTRE of the screen pixel at `offset` (from the view's corner), the origin in half pixels: the centre is origin2 / 2 + (offset + 0.5) * hpp / 2 world pixels, in quarter
+/// pixels 2 * origin2 + (2 * offset + 1) * hpp
+inline int32_t world_under(int64_t origin2, float z, int32_t offset) { return static_cast<int32_t>(floor_div(2 * origin2 + (2 * static_cast<int64_t>(offset) + 1) * hpp_of(z), 4)); }
 inline int64_t origin2_of(double v) { return static_cast<int64_t>(std::llround(v * 2.0)); }
 
-/// The same for ANY zoom (the levels in between too), from the camera's own origin, in long doubles: the world pixel under the screen offset is the floor of origin + offset / z (the point under
-/// the pixel's left edge), the edge of the screen pixel at `offset` rounded up is its ceiling
-inline int32_t world_under_f(double origin, float z, int32_t offset) { return static_cast<int32_t>(std::floor(static_cast<long double>(origin) + static_cast<long double>(offset) / static_cast<long double>(z))); }
-inline int32_t edge_under_f(double origin, float z, int32_t offset) { return static_cast<int32_t>(std::ceil(static_cast<long double>(origin) + static_cast<long double>(offset) / static_cast<long double>(z))); }
+/// The same for ANY zoom (the levels in between too), from the camera's own origin, in long doubles: the world pixel under the screen offset is the floor of origin + (offset + 0.5) / z (the point
+/// under the pixel's CENTRE, which is what a click, the cursor and both edges of a rubber band mean). The zoom 1 keeps the camera's own arithmetic, the whole part of the origin plus the offset (a
+/// camera at the zoom 1 has a whole origin in play; a test that gives it a fraction gets the whole part, as the picture draws it)
+inline int32_t world_under_f(double origin, float z, int32_t offset) {
+    if (z == 1.0f) return static_cast<int32_t>(std::floor(origin)) + offset;
+    return static_cast<int32_t>(std::floor(static_cast<long double>(origin) + (static_cast<long double>(offset) + 0.5L) / static_cast<long double>(z)));
+}
 /// the world pixels that `len` screen pixels show at the zoom z (rounded up)
 inline int32_t seen_f(int32_t len, float z) { return static_cast<int32_t>(std::ceil(static_cast<long double>(len) / static_cast<long double>(z))); }
 /// the levels that a view (wide: 762 x 500, else 442 x 440) over a square map of `tiles` x `tiles` tiles has: what a local game offers (view_zoom.hpp)
