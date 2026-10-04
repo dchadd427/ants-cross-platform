@@ -3,6 +3,7 @@
 //
 //   AI13.1  the cost of a look: the worker's and the standard bot's, at every level, on every shipped map after 3,000 ticks of a match
 //   AI13.2  whole matches of four standard bots (A5): the budget in every window of releases, nothing filtered or rejected, bit-reproducible, replayed without any bot
+//   AI13.3  unknown worlds: random terrain, lakes, rocks, piles that nobody can reach and power-ups anywhere, four standard bots of random levels: nothing refused, bit-reproducible
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -179,5 +180,87 @@ void run_b41_cost_tests() {
             const ReplayResult replay = replay_commands(spec, r);
             ASSERT_TRUE(replay.ok && replay.hash == r.hash);                                               // the commands alone: no bot is needed to replay the match
         }
+    } TEST_END();
+
+    TEST_CASE("AI13.3 Unknown Worlds (Robustness, For The Community Maps That A Server Hosts): Sixteen Random Worlds (Patches Of Sand, Mud, Dirt And Water, Rocks, Piles That Nobody May Reach, Power-Ups Anywhere, Even Inside A Rock) Played For 2,400 Ticks By Four Standard Bots Of Random Levels And Styles: No Command Filtered Or Rejected, Nothing Crashes, The Bots Act, And A Second Run Ends On The Same State Hash")
+    {
+        const auto random_world = [&](sim::SimulationEngine& sim, uint32_t seed) {
+            build_world(sim, seed, 6);                                                                         // four hills at the corners, six workers in front of each
+            BotRng wr(mix64(0xF00Du + seed * 7919u));
+            static const TileCoord kHills[4] = {{4, 4}, {50, 4}, {4, 50}, {50, 50}};
+            const auto near_a_hill = [&](int32_t x, int32_t y) {
+                for (const TileCoord& h : kHills) {
+                    if (std::abs(x - h.x) <= 13 && std::abs(y - h.y) <= 13) return true;
+                }
+                return false;
+            };
+            const auto spot = [&]() {
+                for (int tries = 0; tries < 200; ++tries) {
+                    const int32_t x = 3 + static_cast<int32_t>(wr.below(54));
+                    const int32_t y = 3 + static_cast<int32_t>(wr.below(54));
+                    if (!near_a_hill(x, y)) return TileCoord{x, y};
+                }
+                return TileCoord{30, 30};
+            };
+            for (int patch = 0; patch < 24; ++patch) {                                                         // blobs of one terrain class (water among them)
+                const TileCoord c = spot();
+                const int r = 2 + static_cast<int>(wr.below(5));
+                const uint8_t cls = static_cast<uint8_t>(std::array<uint8_t, 6>{1, 3, 4, 3, 2, 2}[wr.below(6)]);
+                for (int y = std::max(1, c.y - r); y <= std::min(58, c.y + r); ++y) {
+                    for (int x = std::max(0, c.x - r); x <= std::min(59, c.x + r); ++x) {
+                        if ((x - c.x) * (x - c.x) + (y - c.y) * (y - c.y) <= r * r && !near_a_hill(x, y)) sim.grid_mut().set_terrain_class(x, y, cls);
+                    }
+                }
+            }
+            for (int rock = 0; rock < 60; ++rock) {
+                const TileCoord c = spot();
+                sim.set_terrain(c.x, c.y, sim::TERRAIN_OBSTACLE);
+            }
+            for (int pile = 0; pile < 8; ++pile) {
+                const TileCoord c = spot();
+                add_pile(sim, c.x, c.y, static_cast<uint16_t>(20 + wr.below(30)), static_cast<uint16_t>(10 + wr.below(30)));
+            }
+            for (int powerup = 0; powerup < 8; ++powerup) {                                                    // anywhere, a rock or a lake included
+                const TileCoord c = spot();
+                sim.grid_mut().place_powerup(c.x, c.y, static_cast<uint8_t>(1 + wr.below(5)));
+            }
+        };
+        const auto play = [&](uint32_t seed, ai::BotController::SeatStats stats[4]) {
+            sim::SimulationEngine sim;
+            random_world(sim, seed);
+            RecordingSink sink(sim, true);
+            BotController controller(sim, seed);
+            BotRng pick(mix64(0xBEEFu + seed));
+            std::string why;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec spec;
+                spec.seat = seat;
+                spec.kind = "standard";
+                spec.level = static_cast<Level>(pick.below(3));
+                if (!controller.add(spec, sink, why)) return uint64_t{0};
+            }
+            for (int t = 0; t < 2400; ++t) {
+                sim.tick();
+                sim.clear_news_events();
+                sim.clear_audio_events();
+                controller.on_tick(sim);
+            }
+            for (uint8_t seat = 0; seat < 4; ++seat) stats[seat] = controller.stats(seat);
+            return sim.state_hash().total;
+        };
+        size_t acting = 0;
+        for (uint32_t seed = 1; seed <= 16; ++seed) {
+            ai::BotController::SeatStats a[4];
+            ai::BotController::SeatStats b[4];
+            const uint64_t first = play(seed, a);
+            ASSERT_TRUE(first != 0);
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                ASSERT_TRUE(a[seat].filtered == 0 && a[seat].rejected == 0);
+                acting += a[seat].released > 0 ? 1u : 0u;
+            }
+            const uint64_t second = play(seed, b);
+            ASSERT_EQ(first, second);                                                                          // the same world and seeds: the same match, bit for bit
+        }
+        ASSERT_TRUE(acting >= 48);                                                                             // (most of the 64 seats gave at least one order)
     } TEST_END();
 }
