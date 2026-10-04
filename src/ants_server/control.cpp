@@ -112,6 +112,25 @@ JsonValue status_to_json(const RoomStatus& s) {
     log.set("bytes", JsonValue::make_int(s.log_bytes));
     log.set("usable", JsonValue::make_bool(s.log_usable));
     o.set("log", std::move(log));
+    // Restart records (restart_record.hpp): whether a restart of the server would bring this match back, and, for a room that came back from a record, what was replayed. Never a key.
+    JsonValue record = JsonValue::make_object();
+    record.set("kept", JsonValue::make_bool(s.record_kept));
+    record.set("stale", JsonValue::make_bool(s.record_stale));
+    record.set("bytes", JsonValue::make_int(static_cast<int64_t>(s.record_bytes)));
+    record.set("note", JsonValue::make_string(s.record_note));
+    o.set("record", std::move(record));
+    if (s.restored) {
+        static const char kHex[] = "0123456789abcdef";
+        std::string hex(16, '0');
+        for (int i = 0; i < 16; ++i) hex[static_cast<size_t>(15 - i)] = kHex[(s.restored_hash >> (4 * i)) & 0xFu];
+        JsonValue restored = JsonValue::make_object();
+        restored.set("turns", JsonValue::make_int(s.restored_turns));
+        restored.set("replay_ms", JsonValue::make_int(s.restore_ms));
+        restored.set("state_hash", JsonValue::make_string(hex));
+        o.set("restored", std::move(restored));
+    } else {
+        o.set("restored", JsonValue::make_null());
+    }
     if (s.state == RoomState::Finished) {
         JsonValue result = JsonValue::make_object();
         result.set("quitter", s.quitter < 4 ? JsonValue::make_int(s.quitter) : JsonValue::make_null());

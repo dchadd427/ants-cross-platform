@@ -30,9 +30,19 @@
 // `run_ms` counts the time since the match began (the five seconds of the start dialog before the first turn included, protocol 12), not the time that it waited for a seat. The log of the match, which the stream of a returning player is cut from, is bounded per room and by the
 // server's budget (net::LogBudget), and is freed when the match is over. A room without `reconnect` is exactly what it was before: keys are zero, a Hello for a running match is
 // MatchRunning, a lost connection is a drop at once. No key is ever in a status, a result file or a log line.
+//
+// Restart records (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"). A room that holds seats keeps a RESTART RECORD on the server's results volume from the moment its match is being
+// started (the start message and the keys are known) until the room is over: every sealed turn is written to it BEFORE the turn is sent to anybody, the referee's state hash every 20th turn, so
+// that a server that is stopped, crashes or is redeployed does not end the match. A server that starts again calls Room::replay with the record (RoomManager::restore_rooms does, for every record
+// of its folder, inside a budget) and then Room::begin_restored: the engine is made from the start message, every sealed turn is replayed and checked against the stored hashes, every seat of a person is held ABSENT (the match is paused until its
+// player comes back with its key, protocol 10, with a longer wait before the others may vote than for a lost link), the bots sit down again at the restored tick (their tasks are soft: they look at the
+// world and go on), and the room keeps its code, so that the players' clients find it. A record that cannot be restored (another network protocol, a map that has changed, a replay that does not
+// agree with the hashes, too old) ends the room with the reason (Room::refused: a failed room that the status shows and the log reports). A finished or failed room deletes its record; a server that is told
+// to stop (RoomManager::shutdown) makes the records durable and leaves them where they are.
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -45,6 +55,7 @@
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/restart_record.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 namespace ants::server {
@@ -95,6 +106,17 @@ inline constexpr size_t kMaxLogBytes = size_t{1} << 30;
 enum class RoomState : uint8_t { Waiting, Loading, Running, Finished, Failed };
 const char* room_state_name(RoomState state) noexcept;
 
+/// What a restart of the server would interrupt in one room, as the public /busy answer counts it (RoomManager::busy adds the rooms up; plain numbers: no name, no code)
+struct RoomBusy {
+    bool match{false};                      // a match loads or runs and a person is in it (present or catching up), or the room was brought back by a restart a moment ago (kRestoredBusyWindowMs)
+    uint32_t players{0};                    // the people: in a room that waits or loads, the persons in its lobby; in a match, the persons who are there and, in that window, the seats that are held for those who are not
+};
+
+/// How long after a restart a restored room still counts as a match that runs although none of its players is back (its players need that long to notice, wait for the server and come back; a
+/// restart now would interrupt them again). Beyond it a room that nobody has come back to counts nothing: a room whose players never come back must not hold a deploy for the pause cap (30 minutes
+/// to 24 hours).
+inline constexpr uint32_t kRestoredBusyWindowMs = 5u * 60u * 1000u;
+
 /// One row of the result, as the results screen shows it (an alliance is one row)
 struct RoomRow {
     uint8_t first{255};
@@ -128,6 +150,8 @@ struct RoomStatus {
     std::vector<Bot> bots;
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
     uint32_t bot_start_hold{0};             // ... and its start hold in ticks (BotController::start_hold: ai::kStartHoldTicks, the product's opening; 0 without a controller): for the tests, not shown by the control interface
+    uint32_t bot_decisions{0};              // how many times the room's bots have looked at the match since its controller was made (the sum of BotController::SeatStats::decisions): a controller that is called after every tick
+                                            // counts up, one that is not does not (a room that was restored has a new controller: it starts from 0): for the tests, not shown by the control interface
     RoomState state{RoomState::Waiting};
     std::string reason;                     // why a room failed, or how it ended ("" while it runs)
     uint8_t joined{0};
@@ -169,6 +193,15 @@ struct RoomStatus {
     uint32_t log_bytes{0};
     bool log_usable{true};
     uint32_t connections{0};                // the connections that the room keeps (diagnostics: at most kMaxConnections of the lobby's, and those that came back)
+    // Restart records (restart_record.hpp). Never a key.
+    bool record_kept{false};                // a restart record of this room is on disk: a restart of the server would bring the match back (also a file that could not be deleted: record_stale)
+    bool record_stale{false};               // the room is over (or its record ended) and the file of the record could not be deleted yet: the server tries again every 10 s, and a restart before that would bring the room back
+    std::string record_note;                // when it is not: why (the server keeps none, the room holds no seats, the turn log passed its limit, the disk refused ...); "" while it is kept
+    uint64_t record_bytes{0};               // the size of the record
+    bool restored{false};                   // the room came back from a record after a restart of the server
+    uint32_t restored_turns{0};             // ... holding this many turns
+    uint32_t restore_ms{0};                 // ... which the replay took this long to run (real time)
+    uint64_t restored_hash{0};              // ... and the referee's state hash (StateHash::total) was this at the restored tick
 };
 
 class Room {
@@ -182,6 +215,39 @@ public:
 
     /// `log_budget` is the server's memory for the turn logs of all its rooms (shared; it must outlive the room); null: no budget beyond the room's own limit
     Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms, net::LogBudget* log_budget = nullptr);
+    ~Room();
+
+    /// The server's restart records (restart_record.hpp; it must outlive the room): a room that holds seats and whose match starts keeps a record there. Set it right after the room is made, before its
+    /// match is started. Null (the default): the room keeps none.
+    void set_restart_store(RestartStore* store) noexcept { restart_store_ = store; }
+    /// What replay() asks its caller at every 20th turn: go on, stop (the server was told to stop: everything stays as it is), or defer (the time of the whole restore is used up: this room is restored later)
+    enum class ReplayCheck : uint8_t { Go, Stop, Defer };
+    struct ReplayLimits {
+        uint32_t budget_ms{20u * 1000u};                    // this room's replay may take this long by `clock` (the room's own cap): beyond it the record is refused as too slow
+        std::function<uint32_t()> clock;                    // real milliseconds (empty: restart_steady_ms)
+        std::function<ReplayCheck()> check;                 // empty: always Go
+    };
+    enum class ReplayResult : uint8_t { Replayed, Refused, Stopped, Deferred };
+    /// The first half of bringing a match back (a server that starts again: RoomManager::restore_rooms, or the first Hello for a deferred room): the engine is made from the start message and every sealed
+    /// turn of `record` is replayed, checked against the record's state hashes (the room's clocks are not touched: nothing here knows what time it is). The room must be fresh (Waiting, made from
+    /// room_spec_of(record.head)). Replayed: the match is rebuilt and waits for begin_restored(). Refused, with the reason in `why`: the match cannot be brought back (the replay does not agree with the
+    /// hashes, the turn log cannot hold it, it is too slow for `limits.budget_ms`, ...): the room is to be thrown away, it holds a half-built match. Stopped and Deferred are the answers of `limits.check`
+    /// (not a fault of the record: nothing is said against it): the room is to be thrown away as well, and the record must be left as it is. `restart_vote_after_ms` is how long the others wait before
+    /// they may vote on a seat that has not come back (never less than the room's own time).
+    ReplayResult replay(const RestartLoaded& record, uint32_t restart_vote_after_ms, const ReplayLimits& limits, std::string& why);
+    /// The second half: the match that replay() rebuilt begins at `now_ms`, the server's clock now. Every seat of a person is held absent from `now_ms` on (the match is paused until the players come back with
+    /// their keys), the room's clocks (the wall-clock limit, the vote's wait, the pause cap) start at `now_ms` and not when the restore began, the bots sit down again at the restored tick, and the room goes
+    /// on writing the same record. A match that had ended when the server stopped is Finished at once. False, with the reason, when it cannot begin.
+    bool begin_restored(uint32_t now_ms, std::string& why);
+    /// A room that could not be brought back: Failed from the start, with `reason`, so that the status shows it (and the log and the result file report it) and its code is not taken by a new room
+    /// until its keep time is over. `head` names the room (its code, map, players and the names of the match); no engine, no record.
+    static std::unique_ptr<Room> refused(const RestartHead& head, const std::string& reason, uint32_t turns, uint32_t now_ms);
+    /// The room keeps a restart record now
+    bool keeps_record() const noexcept { return record_ != nullptr; }
+    /// Makes the record durable now (fsync): the server is told to stop. A failure ends the record (the status says why).
+    void flush_record();
+    /// The server stops: the record stays on disk as it is and the room writes nothing more to it (the file is closed). The room is not over.
+    void release_record();
 
     const std::string& code() const noexcept { return spec_.code; }
     RoomState state() const noexcept { return state_; }
@@ -206,6 +272,8 @@ public:
     /// The owner closes the room: every client is dropped, the state is Failed with `reason`
     void close(const std::string& reason, uint32_t now_ms);
     RoomStatus status(uint32_t now_ms) const;
+    /// What a restart would interrupt here (see RoomBusy): cheap, no status is built
+    RoomBusy busy(uint32_t now_ms) const;
 
 private:
     void fail(const std::string& reason, uint32_t now_ms);
@@ -214,6 +282,14 @@ private:
     void close_connections();
     void prune_connections();
     void end_log(uint32_t now_ms);
+    // Restart records
+    RestartHead make_head() const;                           // the record's head from what the room is and what its lobby gave out (the keys): after the start was accepted
+    void record_open(uint32_t now_ms);                       // the match is being started: make the record (when the server keeps records and the room holds seats)
+    void record_hook_up();                                   // the session writes every sealed turn and the referee's hashes to the record
+    void record_stop(const std::string& note);               // the record can no longer be kept: delete it, say why, go on
+    void record_discard();                                   // the room is over (or the start was cancelled): delete the record
+    void drop_record();                                      // delete the record and let the writer go; a delete that fails is remembered (stale_path_)
+    void build_session(uint32_t restart_vote_after_ms);      // the session of the match, as begin_match and restore both make it (the engine is made already)
     // Bots (docs/BOTS.md B6): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
     class BotSink;
     void unseat_fill();
@@ -253,6 +329,30 @@ private:
     uint16_t quitter_{0xFFFF};
     uint64_t final_hash_{0};                 // the referee's state hash when the match ended
     std::array<std::string, 4> names_{};
+    // Restart records
+    RestartStore* restart_store_{nullptr};
+    std::unique_ptr<RestartWriter> record_;
+    std::string record_note_;                // why there is no record (the status says it)
+    std::string stale_path_;                 // the file of a record that could not be deleted: the status says kept and stale until the store has deleted it
+    uint32_t next_sync_ms_{0};
+    uint8_t roster_{0};                      // the seats of the match (a restored room has no lobby that knows them)
+    bool from_record_{false};                // the room has no lobby that knows its players: it was made from a restart record (restored, or refused)
+    bool restored_{false};
+    uint32_t restored_turns_{0};
+    uint32_t restore_ms_{0};
+    uint64_t restored_hash_{0};
+    uint32_t restored_at_ms_{0};             // when the room was brought back (the server's clock): /busy counts the room as a match for kRestoredBusyWindowMs after it
+    // what replay() hands to begin_restored()
+    bool replayed_{false};
+    uint8_t replay_humans_{0};               // the seats of persons, and those of them that the match had dropped already
+    uint8_t replay_dropped_{0};
+    std::string replay_path_;                // the record, to be opened again for appending: its file, the end of its last good frame, its turns
+    uint64_t replay_good_bytes_{0};
+    uint32_t replay_turns_{0};
 };
+
+/// The room's specification as a restart record's head says it (the bots of the specification only: the leader's fill is the record's `fill_mask`, seated by Room::replay). A restored room always
+/// holds seats. The caller checks the ranges (RoomManager does, as create_room does).
+RoomSpec room_spec_of(const RestartHead& head);
 
 }  // namespace ants::server

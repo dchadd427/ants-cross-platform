@@ -109,6 +109,33 @@ void HostSession::resume(uint32_t now_ms, uint32_t resume_turn, uint8_t old_host
     }
 }
 
+// A turn of the record of a match that is being restored: into the log (what a returning player is given) and into the runner (what the referee executes), in order
+bool HostSession::restore_turn(const TurnMsg& turn) {
+    if (started_ || !cfg_.hold_seats || turn.turn != restored_turns_) return false;
+    if (!log_.append(turn)) return false;                // the log is full or the server's budget is used up (the log is dead now): this match cannot be given to anybody again
+    if (!runner_->on_catch_up_turn(turn)) return false;
+    ++restored_turns_;
+    return true;
+}
+
+void HostSession::start_restored(uint32_t now_ms, uint8_t humans, uint8_t dropped) {
+    if (started_) return;
+    started_ = true;
+    last_ms_ = now_ms;
+    next_seal_ms_ = now_ms;                              // (the match is paused: the schedule slides until the players are back)
+    sequencer_.resume(restored_turns_);                  // the next turn is the one after the record's last; nothing is queued, nobody is active
+    sequencer_.set_host_player(cfg_.host_player);
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (is_bot_seat(p)) sequencer_.set_active(p, true);        // a bot's seat is level with the match (the host acknowledges every turn for it)
+    }
+    attendance_.seat_restored(humans, dropped, now_ms);
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {   // a seat without a key can never be taken back: it is gone, as a lost link without a key is (its Drop is sealed after the pause)
+        if ((humans & bit(p)) != 0 && (dropped & bit(p)) == 0 && key_is_zero(keys_[p]) && attendance_.dropped(p, now_ms)) announce_drop(p);
+    }
+    next_presence_ms_ = now_ms;
+    presence_dirty_ = true;
+}
+
 void HostSession::send_turns(Connection* conn, uint32_t from_turn, uint32_t to_turn) {
     if (conn == nullptr || from_turn >= to_turn || runner_->logged_turn(from_turn) == nullptr) return;
     for (uint32_t t = from_turn; t < to_turn; ++t) {
@@ -385,6 +412,7 @@ void HostSession::run_local(uint32_t dt_ms) {
             if (is_bot_seat(p)) sequencer_.on_ack(p, e.turn);                  // a bot has no connection to say it: it has executed what this machine has
         }
         if (!e.has_hash) continue;
+        if (seatless() && on_referee_hash_) on_referee_hash_(e.turn, e.hash);         // (the restart record's checkpoint)
         if (seatless()) {                                 // the referee: its own engine's hash is what every client is compared with
             for (const DesyncMsg& d : sequencer_.on_referee_hash(e.turn, e.hash)) {
                 desyncs_.push_back(d);
@@ -445,6 +473,7 @@ void HostSession::update(uint32_t now_ms) {
         stall_player_ = 255;
         const TurnMsg turn = sequencer_.seal();
         if (cfg_.hold_seats) log_.append(turn);              // before it is sent: the log is the match (a log that is full stops being usable, and a lost seat is dropped at once from then on)
+        if (on_seal_) on_seal_(turn);                        // the restart record, also before it is sent: no client may run a turn that the record lacks (set_on_seal)
         broadcast(encode(turn));
         runner_->on_turn(turn);
         next_seal_ms_ += kTurnMs;

@@ -5,6 +5,7 @@ add_library(ants_server_core STATIC
     room_manager.cpp
     control.cpp
     secret.cpp
+    restart_record.cpp
 )
 target_include_directories(ants_server_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include

@@ -2584,6 +2584,90 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("N4.21 The Hook Before The Start (L3 Of The Review): HostLobby::start Calls set_before_start's Function Once, With The Start Message That Is About To Go Out And The Time Of The Start, After The Roster And The Keys Are Fixed And BEFORE The First Byte Of The Start Has Been Sent To Any Guest (The Order Of The Sends Is Recorded); A Start That Is Refused Does Not Call It; A Cancelled Start And The Next Start Call It Again; A Lobby Without The Function Starts As It Did") {
+        // the sends of the host's side of every link, in order, with the hook's call among them
+        std::vector<std::string> log;
+        class OrderTap final : public Connection {
+        public:
+            OrderTap(Connection* inner, std::vector<std::string>* sends) : inner_(inner), log_(sends) {}
+            bool send(const std::vector<uint8_t>& m) override {
+                log_->push_back(peek_type(m) == MsgType::Start ? "Start" : "other");
+                return inner_->send(m);
+            }
+            bool poll(std::vector<uint8_t>& m) override { return inner_->poll(m); }
+            State state() const override { return inner_->state(); }
+            void close() override { inner_->close(); }
+
+        private:
+            Connection* inner_;
+            std::vector<std::string>* log_;
+        };
+        std::vector<std::unique_ptr<OrderTap>> taps;
+        Room room(keyed_server_config(77));
+        const auto join_tapped = [&](const std::string& name) {
+            auto ends = room.net.connect({10, 0});
+            room.guests.emplace_back();
+            Room::Guest& g = room.guests.back();
+            g.host_end = ends.first;
+            g.client_end = ends.second;
+            ClientLobby::Config cc;
+            cc.name = name;
+            g.lobby = std::make_unique<ClientLobby>(ends.second, cc);
+            taps.push_back(std::make_unique<OrderTap>(ends.first, &log));
+            room.host.add_connection(taps.back().get(), room.now);
+            room.run(100);
+        };
+        join_tapped("Ann");
+        int calls = 0;
+        room.host.set_before_start([&](const StartMsg&, uint32_t) { ++calls; });
+        ASSERT_FALSE(room.host.start(1, 2, room.now));                                          // one player: the start is refused, and nothing is called
+        ASSERT_EQ(calls, 0);
+        join_tapped("Bob");
+        StartMsg seen;
+        uint32_t seen_at = 0;
+        bool keys_known = false;
+        bool info_is_the_message = false;
+        bool phase_loading = false;
+        room.host.set_before_start([&](const StartMsg& start, uint32_t now_ms) {
+            ++calls;
+            seen = start;
+            seen_at = now_ms;
+            log.push_back("hook");
+            keys_known = !key_is_zero(room.host.key_of(0)) && !key_is_zero(room.host.key_of(1));
+            info_is_the_message = encode(room.host.start_info()) == encode(start);
+            phase_loading = room.host.phase() == HostLobby::Phase::Loading;
+        });
+        log.clear();
+        ASSERT_TRUE(room.host.start(777, 0xABCDEFull, room.now));
+        ASSERT_EQ(calls, 1);
+        ASSERT_TRUE(seen.seed == 777 && seen.map_hash == 0xABCDEFull && seen.roster == 0x03 && seen.map_name == "TINY.LVL" && seen_at == room.now);
+        ASSERT_TRUE(keys_known && info_is_the_message && phase_loading);
+        const auto hook_at = std::find(log.begin(), log.end(), "hook");
+        const auto first_start = std::find(log.begin(), log.end(), "Start");
+        ASSERT_TRUE(hook_at != log.end() && first_start != log.end());
+        ASSERT_TRUE(hook_at < first_start);                                                      // the hook was called before the first Start was sent
+        ASSERT_EQ(std::count(log.begin(), log.end(), "Start"), 2);                               // ... and both guests were sent it
+        room.run(100);
+        ASSERT_TRUE(room.guests[0].lobby->phase() == ClientLobby::Phase::Loading && room.guests[1].lobby->phase() == ClientLobby::Phase::Loading);
+        ASSERT_FALSE(room.host.start(5, 6, room.now));                                           // a start while one is under way is refused: not called again
+        ASSERT_EQ(calls, 1);
+        // a cancelled start, and the next one
+        room.host.cancel();
+        room.run(100);
+        ASSERT_TRUE(room.host.phase() == HostLobby::Phase::Room);
+        log.clear();
+        ASSERT_TRUE(room.host.start(888, 0xABCDEFull, room.now));
+        ASSERT_EQ(calls, 2);
+        ASSERT_TRUE(seen.seed == 888 && std::find(log.begin(), log.end(), "hook") < std::find(log.begin(), log.end(), "Start"));
+        // a lobby with no function starts as it did
+        Room plain(keyed_server_config(78));
+        plain.join_seat("Cy");
+        plain.join_seat("Di");
+        ASSERT_TRUE(plain.host.start(9, 9, plain.now));
+        plain.run(100);
+        ASSERT_TRUE(plain.guests[0].lobby->phase() == ClientLobby::Phase::Loading);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
