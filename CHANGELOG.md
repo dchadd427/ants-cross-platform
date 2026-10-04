@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.3.0 - 2026-10-04 - Computer players that fight; the front page is the lobby
+
+**For players:**
+- **Computer players gather food, raid and fight back.** At every level a bot answers a blow on one of its ants (with one, two or three ants at Easy, Medium and Hard), sends a hit carrier home, guards its thief hole with fire walls, puts out your fire walls and defuses your bombs, and keeps its last ants out of fights; Medium and Hard also take their side's power-ups at the start, contest the middle of the map and raid the leader with a Thief.
+- **Hard bots guide their carriers at the hill's gate by hand** and steal an unguarded Thief power-up for a second thief, and every bot draws one of four styles for the match (aggressive, economic, raider, defensive; `--bot 2:hard:raider` pins one), so bots do not all play alike. A bot that gets stuck (a refused click, a hill that its carriers cannot reach) backs off instead of repeating the same order.
+- **The front page is the lobby:** [beta.playants.org](https://beta.playants.org) opens it, with single player in it. Players 1 plays on this computer in this tab, alone or against Easy, Medium or Hard bots; 2 to 4 host a match as before. The game page's "Play online" button is now "Menu", and every old game link still works (`/four.html` goes to `/`).
+- **The map keeps scrolling when the mouse goes a little past the game's edge** in a browser window (about an inch, corners included); farther out, over a button of the page or out of the window, it stops.
+- For whoever runs a server: a match in a room that holds seats survives a restart of the game server (restart records, [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md) "Restart records"); rooms hold seats only when asked, so nothing changes by default.
+
+**Fixes:**
+- Behind the "Get ready to play!" dialog the ants are drawn again, standing, as in the original (since v0.2.0 only their hit-point numbers were).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/888e788...e57833b), [the bots](docs/audit/B4_1_notes.md), [the front page](docs/audit/web_home_notes.md), [restart records](docs/audit/persist_notes.md)
+
 ## v0.2.0 - 2026-10-03 - The clock waits for the start dialog; every screen in 16:9; fullscreen mouse
 
 **For players:**
