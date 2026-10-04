@@ -208,6 +208,9 @@ void test_levels() {
     check(zoom::snap_toward_zero(-125.9, 1.0f) == -125.0 && zoom::snap_toward_zero(125.9, 1.0f) == 125.0 && zoom::snap_toward_zero(-14.7, 2.0f) == -14.5 && zoom::snap_toward_zero(-505.0, 0.5f) == -504.0 &&
               zoom::snap_toward_zero(-0.9, 1.0f) == 0.0,
           "snap_toward_zero truncates to the grid, as the original's integer division does");
+    check(zoom::snap_down(7.0, 1.0f) == 7.0 && zoom::snap_down(7.9, 1.0f) == 7.0 && zoom::snap_down(-0.5, 1.0f) == -1.0 && zoom::snap_down(9.0, 0.5f) == 8.0 && zoom::snap_down(8.0 - 1e-6, 0.5f) == 6.0 &&
+              zoom::snap_down(8.0 - 1e-12, 0.5f) == 8.0 && zoom::snap_down(3.0 - 1e-12, 2.0f) == 3.0,
+          "snap_down rounds down to the grid, and a coordinate a hair below a point of the grid (the rounding of a division) counts as on it");
 
     // the world pixel under a screen pixel
     for (float z : kExact) {
@@ -436,6 +439,8 @@ void test_offered_levels() {
         // ties (the geometric middle between two levels) go to the more zoomed in one
         const double middle = std::sqrt(static_cast<double>(list[4]) * static_cast<double>(list[5]));
         check(zoom::nearest(static_cast<float>(middle * (1.0 + 1e-6)), list) == list[4] && zoom::nearest(static_cast<float>(middle * (1.0 - 1e-6)), list) == list[5], "the geometric middle of 1 and 0.84 decides at the middle");
+        // ... and an exact tie (1 is as far from 2 as from 0.5 in ratio) goes to the first level of the list, the more zoomed in one
+        check(zoom::nearest(1.0f, std::vector<float>{2.0f, 0.5f}) == 2.0f && zoom::nearest(0.5f, std::vector<float>{1.0f, 0.25f}) == 1.0f, "an exact tie goes to the more zoomed in level: 1 between 2 and 0.5, 0.5 between 1 and 0.25");
     }
 
     // the next level in a direction
@@ -478,6 +483,12 @@ void test_offered_levels() {
         }
     }
     check(zoom::step(1.0f, +1, fit_of(MapSize{"t", 1920, 1920}, kViews[1]), only_one) == 1.0f && zoom::step(1.0f, -1, fit_of(MapSize{"t", 1920, 1920}, kViews[1]), only_one) == 1.0f, "step stays at 1 where nothing else is allowed");
+    {   // a zoom that is a float step off a level (the rounding of a camera's number) counts as being at that level: the step goes past it, never back to it
+        const zoom::Fit fit = fit_of(MapSize{"TREASURE", 1920, 1920}, kViews[1]);
+        check(zoom::step(std::nextafter(1.0f, 2.0f), -1, fit, any) == ref_series(-1) && zoom::step(std::nextafter(1.0f, 0.0f), +1, fit, any) == ref_series(1) &&
+                  zoom::step(std::nextafter(0.5f, 1.0f), -1, fit, any) == ref_series(-5) && zoom::step(std::nextafter(2.0f, 1.0f), +1, fit, any) == std::nextafter(2.0f, 1.0f),
+              "a zoom a float step above 1 steps out to 0.84, one a float step below 1 steps in to 1.19, a float step above 0.5 steps out to 0.42, a float step below 2 has no level to step in to");
+    }
     // a map that fits skips the zoom-out: from 1 there is nothing below
     check(zoom::step(1.0f, -1, fit_of(MapSize{"12x12", 384, 384}, kViews[1]), any) == 1.0f && zoom::step(2.0f, -1, fit_of(MapSize{"12x12", 384, 384}, kViews[1]), any) == ref_series(3), "a 12 x 12 map in the wide view: out stays at 1");
     check(zoom::step(0.5f, +1, fit_of(MapSize{"12x12", 384, 384}, kViews[1]), any) == 1.0f, "... and a level that was left over from another map goes in to 1");
@@ -1331,6 +1342,17 @@ void test_plan() {
         check(lim.depth == 1 && lim.align == 4 && lim.x0 == 0 && lim.w == 1920 && lim.cap_w == 1920 && std::fabs(lim.scale - 0.79375) < 1e-6 && lim.left == 0.0, "TREASURE at its limit, wide: one halving, the whole width, 0.79 screen pixels per texel");
         const zoom::Pass empty = zoom::plan(5000.0, 5000.0, 1.0f, 762, 500, 1920, 1920);
         check(empty.w == 0 || empty.h == 0, "an origin far beyond the map: nothing of it is in view (the renderer then draws the zoom 1 picture)");
+    }
+    // a map whose size is not a multiple of the alignment (the maps of the game are whole 32 pixel tiles, but the plan does not rely on that): the target still ends at the last multiple of the
+    // alignment inside the map, so that every halving is exact
+    {
+        const MapSize odd{"odd", 1001, 777};
+        for (const float z : {0.5946036f, 0.5f, 0.3535534f, 0.25f, 0.2302f}) {
+            const zoom::Pass p = zoom::plan(0.0, 0.0, z, 762, 500, odd.w, odd.h);
+            const int64_t u = p.align;
+            check(u >= 2 && p.x0 == 0 && p.y0 == 0 && p.w == (odd.w / u) * u && p.h == (odd.h / u) * u && p.cap_w == p.w && p.cap_h == p.h,
+                  "a map of 1001 x 777 at " + num(static_cast<double>(z)) + ": the target is the map less the part after its last multiple of " + std::to_string(u) + ": " + std::to_string(p.w) + " x " + std::to_string(p.h));
+        }
     }
 }
 

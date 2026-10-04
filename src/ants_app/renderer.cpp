@@ -763,9 +763,12 @@ void Renderer::note_world_target_error(const char* what) {
 
 int32_t Renderer::max_world_extent() const noexcept {
     if (!renderer_) return 0;
-    SDL_RendererInfo info{};
-    if (SDL_GetRendererInfo(renderer_, &info) != 0) return 0;
-    const int32_t side = std::min(info.max_texture_width, info.max_texture_height);
+    int32_t side = texture_side_override_;
+    if (side <= 0) {
+        SDL_RendererInfo info{};
+        if (SDL_GetRendererInfo(renderer_, &info) != 0) return 0;
+        side = std::min(info.max_texture_width, info.max_texture_height);
+    }
     return side > 0 ? std::max(0, side - kPassMargin) : 0;
 }
 

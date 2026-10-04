@@ -404,6 +404,8 @@ public:
     /// The most world pixels on one axis that the offscreen target can hold (the device's texture size less the margins of the pass), 0 when the renderer does not say: the limit of the zoom-out
     /// of a map that is bigger than a texture (view_zoom.hpp Fit::max_world)
     int32_t max_world_extent() const noexcept;
+    /// A test hook: the device's texture size (texels on a side) as the pass sees it; 0 (the default) is what SDL says, which SDL's software renderer leaves unlimited (max_world_extent() is 0)
+    void set_texture_side_for_test(int32_t side) noexcept { texture_side_override_ = side; }
     /// A test hook: the offscreen target cannot be made (what the fall-back to the zoom 1 picture is for); and a count of the world passes that went through the target (the zoom 1
     /// never does, unless it is forced: a test that compares the two paths can see that the pass really took the one it asks for)
     void set_fail_world_target(bool fail) noexcept { fail_world_target_ = fail; }
@@ -689,6 +691,7 @@ private:
     bool fail_world_target_{false};
     bool fail_world_target_creation_{false};
     bool smooth_upscale_{zoom::kSmoothUpscale};
+    int32_t texture_side_override_{0};        // the test hook of set_texture_side_for_test()
     bool software_{false};                    // SDL's software renderer: it truncates the fractional rectangle of a copy (and cuts a scaled copy that a clip cuts with a rounding of its source)
     uint64_t world_target_passes_{0};
     LayoutRect target_view_{};

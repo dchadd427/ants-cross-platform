@@ -4,9 +4,10 @@
 //     direct picture pixel for pixel; at 2 the view is the nearest-neighbour 2 x 2 enlargement of the direct picture of the same origin (and, from a half-pixel origin, the same shifted by
 //     one screen pixel); at 0.5 it is the 2 x 2 average of the direct picture of a view twice as large (0.25: the 4 x 4 average). Group "levels": EVERY level of a map (the series 2^(k/4)
 //     from 2 to the map's limit) against the picture that the design specifies, built from the zoom 1 picture of the whole map: the exact levels pixel for pixel, the others as the smooth
-//     picture (the software renderer is a pixel off at most), never a gap in the view, a scroll that only moves the picture, frames of the levels in any order. Ants of every type, effects,
-//     score bubbles, selection markers, the click marker, the fog of war, the hill's brackets, and the small maps (centred, black around them) all pass through it. The hit point digits
-//     are one size at every zoom; nothing is drawn outside the view.
+//     picture (the software renderer is a pixel off at most), never a gap in the view, a scroll that only moves the picture, frames of the levels in any order. Group "place": where the
+//     software renderer puts the picture of a level (the smallest whole-pixel rectangle that holds the exact one), and that the pass paints the margins around a small map itself. Ants of
+//     every type, effects, score bubbles, selection markers, the click marker, the fog of war, the hill's brackets, and the small maps (centred, black around them) all pass through it. The
+//     hit point digits are one size at every zoom; nothing is drawn outside the view.
 //   * HUD: the cursor, the clicks and orders (also at the first and the last pixel of the view), the rubber band, the minimap and the edge scroll follow the zoom, each against an
 //     independent computation; a dialog, a captured press and the panels do not zoom.
 //   * APPLICATION: the wheel (up zooms in, down out, one level a notch, natural scrolling, the precise deltas, over the map only, not during a drag or with a dialog open), the middle
@@ -541,6 +542,65 @@ void test_level_pictures(const assets::AssetArchive& arc) {
             }
         }
     }
+}
+
+
+// =====================================================================================================================================================
+// Renderer: where the software renderer puts the picture of a level, and what is left of the view around a small map
+// =====================================================================================================================================================
+
+// SDL's software renderer cannot place a copy at a fraction of a pixel, so the pass scales the last level into the smallest rectangle of whole lattice pixels that holds the exact one:
+// [floor(left), ceil(left + width)) on each axis, `left` and `width` being the plan's (a renderer that places a rectangle at a fraction puts it at the exact place). On a map that the view shows
+// whole (TINY at 0.5 and below: the picture's four edges are inside the view) these are the columns and rows of the view that are not black, so the rule is seen directly: at the levels with
+// a fraction in their numbers as well as at the exact ones (a whole place and size). And the pass paints the whole view itself: what the view held before (here a loud red) is gone, the
+// margins around the small map are black.
+void test_lattice_placement(const assets::AssetArchive& arc) {
+    group("place", "the picture of a level is the whole-pixel rectangle that holds the exact one (the software renderer); the margins around a small map are painted black by the pass");
+    PixelRig rig(arc, "TINY", kWideW, kWideH);
+    check(rig.ok, "the rig for TINY in the wide picture is up");
+    if (!rig.ok) return;
+    const LayoutRect view = rig.layout.view();
+    const int32_t map_px = static_cast<int32_t>(rig.tiles_w) * 32;
+    int fractional = 0;
+    for (int k = -4; k >= -11; --k) {                                       // 0.5 (an exact level), 0.42, 0.35, 0.30, 0.25 (exact), ... 0.15, 0.125 (exact): the 992 px map is smaller than the view
+        const float z = zoom::series(k);
+        const std::string at = "TINY at " + zoom::level_name(z) + ": ";
+        rig.look(0.0, 0.0, z);                                                // (the small map is centred: the camera's origin is negative)
+        const zoom::Pass p = zoom::plan(static_cast<double>(rig.cam().x), static_cast<double>(rig.cam().y), z, view.w, view.h, map_px, map_px);
+        const double width = static_cast<double>(p.w) * static_cast<double>(z);
+        const double height = static_cast<double>(p.h) * static_cast<double>(z);
+        if (p.left != std::floor(p.left) || p.top != std::floor(p.top) || width != std::floor(width) || height != std::floor(height)) ++fractional;
+        const Picture pic = rig.shoot(-1, {}, 0, false);
+        int32_t c0 = view.w;
+        int32_t c1 = -1;
+        int32_t r0 = view.h;
+        int32_t r1 = -1;
+        for (int32_t y = 0; y < view.h; ++y) {
+            for (int32_t x = 0; x < view.w; ++x) {
+                const uint8_t* q = pic.at(view.x + x, view.y + y);
+                if (q[0] == 0 && q[1] == 0 && q[2] == 0) continue;
+                c0 = std::min(c0, x);
+                c1 = std::max(c1, x);
+                r0 = std::min(r0, y);
+                r1 = std::max(r1, y);
+            }
+        }
+        const int32_t want_c0 = static_cast<int32_t>(std::floor(p.left));
+        const int32_t want_c1 = static_cast<int32_t>(std::ceil(p.left + width));
+        const int32_t want_r0 = static_cast<int32_t>(std::floor(p.top));
+        const int32_t want_r1 = static_cast<int32_t>(std::ceil(p.top + height));
+        check(c0 == want_c0 && c1 + 1 == want_c1 && r0 == want_r0 && r1 + 1 == want_r1,
+              at + "the picture covers the columns " + std::to_string(c0) + " .. " + std::to_string(c1) + " and the rows " + std::to_string(r0) + " .. " + std::to_string(r1) + " of the view, the plan says [" + std::to_string(want_c0) + ", " +
+                  std::to_string(want_c1) + ") x [" + std::to_string(want_r0) + ", " + std::to_string(want_r1) + ")");
+        // the pass paints the whole view: the same picture when the view held something else before
+        rig.renderer.set_show_hp(false);
+        rig.renderer.begin_frame();
+        rig.renderer.fill_rect(view.x, view.y, view.w, view.h, ants::assets::ColorRGBA{200, 40, 40, 255});
+        rig.renderer.render_world(rig.world, rig.engine.grid(), -1, {}, false, false, -1, -1, 0, 0.0f);
+        const Picture over_red = rig.read();
+        check(differ(over_red, pic, view) == 0, at + "the margins around the small map are black whatever the view held before: " + std::to_string(differ(over_red, pic, view)) + " pixels differ");
+    }
+    check(fractional >= 4, "the levels checked include ones with a fraction in the place or the size of the picture: " + std::to_string(fractional));
 }
 
 
@@ -1657,6 +1717,19 @@ void test_app_zoom_api() {
     app.set_zoom(2.0f, view.x + 400, view.y + 250);
     check(rig.world_at(view.x + 400, view.y + 250) == before, "the anchor of set_zoom is a point of the picture: its world point stays");
     check(app.zoom_levels() == levels, "the levels that are offered now are the same (a local game on a big map)");
+    {   // the device's texture size: the world seen can be no more than a texture holds less the pass's margins, so a small texture raises the limit of the zoom-out (the software renderer says
+        // no limit; the test hook says one)
+        check(app.renderer().max_world_extent() == 0 && app.zoom_fit().max_world == 0, "the software renderer reports no texture limit: nothing is raised");
+        app.renderer().set_texture_side_for_test(1100);
+        const int32_t room = 1100 - 64;                                      // (the 64 texels that the pass keeps free of a texture: Renderer::kPassMargin)
+        check(app.renderer().max_world_extent() == room && app.zoom_fit().max_world == room, "a device whose textures hold 1100 texels a side leaves a world of 1100 less the margins of the pass: " + std::to_string(room));
+        const std::vector<float> small_device = app.zoom_levels();
+        const float raised = zoom::floor_zoom(app.zoom_fit());
+        check(std::fabs(static_cast<double>(raised) - 762.0 / static_cast<double>(room)) < 1e-6 && small_device.size() == 7 && small_device.front() == 2.0f && small_device[5] == zoom::series(-1) && small_device.back() == raised,
+              "GAUNTLET in the wide view on that device: the limit rises to 762 / " + std::to_string(room) + ", the levels end there (2 ... 0.84, 0.7355): " + std::to_string(small_device.size()) + " levels");
+        app.renderer().set_texture_side_for_test(0);
+        check(app.renderer().max_world_extent() == 0 && app.zoom_levels() == levels, "the device's own answer is back with 0: no limit, the same levels");
+    }
     // not in a screen that is not a match
     AppRig setup(Aspect::Wide16x9, 1.0f, false, std::string(), false);
     check(setup.ok && setup.app.state() == AppState::MapSelect, "the setup screen is up");
@@ -2495,7 +2568,7 @@ void test_network_match() {
 
 int main(int argc, char* argv[]) {
     // (SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one)
-    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, levels, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net, guard, garbage)
+    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, levels, place, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net, guard, garbage)
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
             only = argv[++i];
@@ -2516,6 +2589,7 @@ int main(int argc, char* argv[]) {
     if (run("pass")) test_world_pass(arc);
     if (run("out")) test_zoom_out_pass(arc);
     if (run("levels")) test_level_pictures(arc);
+    if (run("place")) test_lattice_placement(arc);
     if (run("state")) test_pass_state(arc);
     if (run("cursor")) test_hud_cursor(arc);
     if (run("orders")) test_hud_orders(arc);
