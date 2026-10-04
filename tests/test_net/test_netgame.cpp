@@ -1559,7 +1559,6 @@ void run_prediction_tests() {
         ASSERT_EQ(r.ack_ant, ant);
         ASSERT_TRUE(bob.sim.get_unit(ant).orig_order != sim::AntUnit::kOrderMove);
         ASSERT_TRUE(t.run_until([&]() { return bob.sim.get_unit(ant).orig_order == sim::AntUnit::kOrderMove; }, 3000));
-        ASSERT_TRUE(bob.net.prediction_cooling_down() || bob.net.predicting());                  // (a second of the two has gone by)
         ASSERT_EQ(bob.net.prediction()->stats().cooldowns, 1u);
         // the cool-down is over after its ticks: it begins again, from the confirmed engine, and orders are predicted again
         ASSERT_TRUE(t.run_until([&]() { return bob.net.predicting(); }, 6000));

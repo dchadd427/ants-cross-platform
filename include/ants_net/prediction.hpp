@@ -25,10 +25,11 @@
 // An own order that no turn carries (the server refused it: flood control, a host change) is dropped after pending_timeout_ticks, and the prediction is rebuilt without it.
 //
 // WHEN IT IS OFF. The owner (NetGame) suspends it (set_suspended) in every state in which the confirmed engine is not simply following the live stream: before the first turn has run (the "Get
-// ready" dialog), a pause, a catch-up, a rejoin, a host change, a desync, a hidden page's background step; and the user can turn it off. While it is off the engine that is shown is the confirmed
-// one, as it always was, and nothing is predicted. It never touches the confirmed engine, the network or the hashes.
+// ready" dialog), a pause, a catch-up, a rejoin, a host change, a desync, a hidden page's background step; and the user can turn it off. It also switches itself off for a cool-down when its
+// work costs more than its budget too often (Config::budget_ns). While it is off the engine that is shown is the confirmed one, as it always was, and nothing is predicted. It never touches
+// the confirmed engine, the network or the hashes.
 //
-// The class has no clock, no sockets and no SDL: the owner calls on_turn() for every live turn that the runner queues (LockstepRunner::set_on_turn), on_tick() after every tick that the runner
+// The class has no sockets and no SDL, and its only clock is the thread's CPU time, for the budget: the owner calls on_turn() for every live turn that the runner queues (LockstepRunner::set_on_turn), on_tick() after every tick that the runner
 // executes (set_on_tick), and submit() for the player's commands.
 
 #include <chrono>
@@ -159,7 +160,7 @@ public:
     void on_tick();
 
     // ---- the output ---------------------------------------------------------------------------------------------------------------------------------
-    /// True while the predicted engine is the one that the screen shows (it exists, is not suspended and has not given up). When it is false the confirmed engine is shown.
+    /// True while the predicted engine is the one that the screen shows (it exists, is not suspended and is not cooling down). When it is false the confirmed engine is shown.
     bool active() const noexcept { return running_; }
     /// True during a cool-down: the prediction switched itself off because its work cost more than the budget (Config::budget_ns) too often. The confirmed engine is shown, orders go as they did
     /// before the prediction, and it begins again by itself when the cool-down is over
