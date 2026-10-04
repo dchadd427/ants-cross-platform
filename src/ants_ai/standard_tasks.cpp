@@ -1257,10 +1257,10 @@ void StrikeTask::step(TaskContext& c) {
         const int32_t sy = hill.queue.y * 2 < static_cast<int32_t>(grid.height()) ? 1 : -1;
         sim::TileCoord station{hill.queue.x + sx * 3, hill.queue.y + sy * 3};
         for (int32_t k = 0; k < 6 && (!MapInfo::walkable(grid, c.seat, station, v.walk_context()) || v.powerup_at(station) != nullptr); ++k) station = sim::TileCoord{station.x + sx, station.y + sy};
-        for (const uint32_t id_ : waiting) {
-            const AntView* a = find_ant(v.mine(), id_);
+        for (const uint32_t waiting_id : waiting) {
+            const AntView* a = find_ant(v.mine(), waiting_id);
             if (a == nullptr || a->tile.chebyshev_dist(station) <= 2) continue;
-            c.orders.move({id_}, station, Priority::Normal);
+            c.orders.move({waiting_id}, station, Priority::Normal);
         }
     }
 }
@@ -1669,12 +1669,12 @@ void HarassTask::step(TaskContext& c) {
             }
             if (MapInfo::walkable(grid, c.seat, station, v.walk_context()) && v.powerup_at(station) == nullptr) {
                 std::vector<uint32_t> go;
-                for (const uint32_t id_ : waiting) {
-                    const AntView* a = find_ant(v.mine(), id_);
-                    Member& mem = squad_[id_];
+                for (const uint32_t waiting_id : waiting) {
+                    const AntView* a = find_ant(v.mine(), waiting_id);
+                    Member& mem = squad_[waiting_id];
                     if (a == nullptr || a->type != sim::AntType::Combat || mem.station_sent || a->tile.chebyshev_dist(station) <= 2) continue;
                     mem.station_sent = true;
-                    go.push_back(id_);
+                    go.push_back(waiting_id);
                 }
                 if (!go.empty()) c.orders.move(go, station, Priority::Normal);
             }
