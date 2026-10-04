@@ -24,6 +24,8 @@ import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TOOL = os.path.join(REPO, "tools", "mutate.py")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import process_state  # noqa: E402  (a zombie, a stopped process that is not collected yet, counts as stopped)
 CMAKE = shutil.which("cmake")
 COMPILER = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
 
@@ -180,11 +182,7 @@ class Project(unittest.TestCase):
         self.run_tool(spec, "--timeout", "1")
         pid = int(read(pid_file).strip())
         time.sleep(0.3)
-        try:
-            os.kill(pid, 0)
-            alive = True
-        except OSError:
-            alive = False
+        alive = process_state.running(pid)
         if alive:
             os.kill(pid, signal.SIGKILL)
         self.assertFalse(alive, "the process that the test command started is still running after the time limit")
