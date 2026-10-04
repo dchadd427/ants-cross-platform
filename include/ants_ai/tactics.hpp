@@ -145,9 +145,8 @@ struct LevelPlan {
     uint32_t ambush_thieves{1};          // ... at most this many thieves wait at a time (the others harvest between raids)
     uint32_t raid_min_loot{30};          // a hill whose score box shows less is not raided (RaidTask)
     uint32_t raid_black_ticks{600};      // a hill that could not be reached is left alone this long
-    // the stall detector (StandardBot, every level; 0 switches a trigger off): a seat whose banked score has not risen for stall_ticks (while it has ants and food lies on the map), or that sent the same
-    // order (type, tile, first ant) repeat_limit times within repeat_window ticks while nothing was banked for that whole time, plays the plain economy for fallback_ticks (no gate, no raids, no contested piles;
-    // doubled at every stall, at most 9,600)
+    // the stall detector (StandardBot, docs/BOTS.md; 0 switches a trigger off): stall_ticks without a point, or repeat_limit equal orders within repeat_window with nothing banked, send the seat to the
+    // plain economy for fallback_ticks (doubled at every stall, at most 9,600)
     uint32_t stall_ticks{3600};
     uint32_t repeat_limit{12};
     uint32_t repeat_window{1200};

@@ -488,8 +488,7 @@ private:
 ///   exit       the tile that the empty ants leave the hill by is seen from the looks (the queue-row tile an ant steps on right after the mound): it and the lane behind it stay free
 ///   fails      a clicked ant that is neither on the mound nor nearer after 30 ticks, or that takes longer than its walk and 40 ticks, was refused: it is taken over again
 /// A click that the controller refused (Fate::Filtered: a power-up on the tile) blocks that tile for Params::blocked_ticks; with the entrance blocked the gate does not guide (the engine's flow stays).
-/// So does a run of Params::user_fail_limit clicks onto the entrance that delivered nothing (the carriers are boxed in: a causeway jammed head on): the gate stops for blocked_ticks, which turns the
-/// economy's rescue and the aid of a hit carrier on, instead of ordering the same ants every 24 ticks for the rest of the match.
+/// So does a run of Params::user_fail_limit clicks onto the entrance that delivered nothing (the carriers are boxed in, e.g. a causeway jammed head on): the economy's rescue and the carrier aid take over.
 /// Without an entry in the plan (Easy and Medium, and every level until the tournaments say so) the engine's flow stays. It claims no ant in the ledger (carriers are nobody's task); the
 /// economy's own rescue of idle carriers and the carrier aid are off while it runs.
 class GateTask final : public Task {

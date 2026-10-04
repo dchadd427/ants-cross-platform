@@ -20,11 +20,8 @@
 // thieves, hatching, the strict contest order, the strike and the wipe-out focus (the strike is part of the Hard Aggressive style), the ambush at a thief hole, the sabotage with a
 // single Fire Ant, the harassment squad (but in the Aggressive style) (docs/BOTS.md, "Aggression").
 //
-// THE STALL DETECTOR (every level, the safety net of a seat that burns its command budget and banks nothing: a jammed causeway, a hill that the carriers cannot reach, an order that the world
-// never carries out): the only progress is the score rising. A seat whose score has not risen for plan.stall_ticks while it has ants and food lies on the map, or that sent the same order (type,
-// tile, first ant; attacks are one blow each and are not counted) plan.repeat_limit times within plan.repeat_window ticks while nothing was banked for that whole time, plays the PLAIN ECONOMY for
-// plan.fallback_ticks: the worker's harvest with its default parameters (no contested piles, the rescue on), no gate, no raids. Defence and fights go on. Every later stall doubles the time
-// (at most kMaxFallbackTicks). No clock and no randomness: ticks of the view and the release ticks of the controller.
+// THE STALL DETECTOR (every level): a seat that banks nothing for a while, or sends the same order again and again with nothing banked, plays the plain economy for a time
+// (docs/BOTS.md, "The stall detector"); it counts ticks of the views and of the release, nothing else.
 //
 // It is a virtual client like every bot (project rule 8): it reads the world through the BotView, sends commands that a person could click, and has no knowledge that a person of its
 // seat could not have. It answers an invitation to team up by the accept rule (accepts_invitation), never invites and never breaks an alliance. The worker bot stays what it was: the
