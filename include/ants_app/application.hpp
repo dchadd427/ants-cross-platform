@@ -258,9 +258,11 @@ public:
     /// not while a dialog or a page is open (options, quick help, quit, alliance, "get ready"), a rubber band or a button holds the mouse, or the results are up (`view_zoom_allowed`). The level is
     /// remembered in the settings (key `zoom`). THE API THAT OTHER INPUT USES (a touch screen's pinch calls it): `zoom_levels()` says what is offered now, `set_zoom(level, anchor)` goes to the
     /// nearest of them (the anchor is a point of the picture, the pointer's own coordinates: the screen pixel that keeps its world point), `step_zoom(direction, anchor)` goes one level in or out.
-    /// FAIRNESS: the zoom is the player's own view and nothing else (the simulation, the network, the bots and every state hash never see it), and every player of a match runs the same game and has
-    /// the same levels for the same picture: a match of the network offers the zoom-out as a local game does (before the batch after v0.2.0 it did not: it showed more of the map than the other
-    /// players saw; now the minimap already shows the whole map to everybody, and a modified game could zoom out anyway).
+    /// FAIRNESS: the zoom is the player's own view and nothing else (the simulation, the network, the bots and every state hash never see it), and every kind of match has the same levels for the
+    /// same picture, a match of the network included (up to v0.2.0 it had no zoom-out). With Fog of War on every level draws exactly what the zoom 1 draws (one world pass, the same culling and
+    /// gates; the minimap respects the fog too), so the zoom-out adds breadth and no new kind of information: the types and states of the ants, bombs, effects and hit point digits that are visible,
+    /// over a wider area at once (positions were already on the minimap). THE PICTURE'S SHAPE decides the limit: on TREASURE a player in the 4:3 picture can zoom out to the whole map (0.230), one in
+    /// the 16:9 picture to two thirds of it (0.397; at the zoom 1 that picture already shows about twice the area), and every player can choose either shape.
     float zoom() const noexcept { return renderer_ ? renderer_->camera().zoom : zoom::kNormal; }
     /// What the renderer allows now: while it cannot make the offscreen target of a zoom (Renderer::world_target_failed) only the zoom 1 can be drawn, and only that level is offered.
     /// enforce_zoom_limits() holds the camera to this and to the map's limit at every frame (a camera that is outside it, by whatever way, is taken to the nearest level that is allowed, anchored at

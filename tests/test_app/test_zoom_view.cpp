@@ -2806,7 +2806,7 @@ void test_local_determinism(const assets::AssetArchive&) {
 }
 
 // =====================================================================================================================================================
-// A match of the network: no zoom-out, and the view is the client's own
+// A match of the network: the same levels as a local game, and the view is the client's own
 // =====================================================================================================================================================
 
 void test_network_match() {

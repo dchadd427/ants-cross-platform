@@ -6,7 +6,8 @@
 // one world pixel is z screen pixels, so the view shows view / z world pixels. THE LEVELS are the series 2^(k/4), four to a doubling, from 2 (every world pixel a crisp 2 x 2 square, the
 // most that the view zooms in) down to the map's own limit: 2, 1.68, 1.41, 1.19, 1 (the original's picture, drawn exactly as it always was), 0.84, 0.71, 0.59, 0.5, 0.42, 0.35, 0.30, 0.25 ...
 // THE LIMIT of the zoom-out is the map's: the view never shows anything outside the map, so the smallest zoom is max(view_w / map_w, view_h / map_h) (the map's width or its height just fills
-// the view, whichever comes first; a map that the view already covers at 1 has no zoom-out) and that exact number is the last level. 2, 1, 0.5, 0.25 ... are exact in a float: their
+// the view, whichever comes first; a map that the view already covers at 1 has no zoom-out) and that exact number is the last level. It depends on the view's shape: on TREASURE it is 0.230 in the
+// original's 4:3 picture (the whole map) and 0.397 in the 16:9 one (two thirds of it). 2, 1, 0.5, 0.25 ... are exact in a float: their
 // pictures are exact (nearest, or the average of 2 x 2 world pixels at every halving). This header is the model of all that and nothing else (pure, no SDL): the levels, the nearest and the
 // next one, the camera after a zoom that keeps the world point under the pointer where it is, the clamps, the scroll model in screen pixels, the plan of the renderer's world pass, the
 // accumulation of a wheel's precise deltas and the text of the settings key. The renderer draws it, the HUD converts the pointer with it, the application gives it its input
