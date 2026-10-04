@@ -1712,9 +1712,12 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-9"), w.server_now()).ok);
         const fs::path dir = scratch_dir("ra9");
         Application& app = w.start_app(w.config(dir, "RA-9", "Ann"));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->phase() == NetGame::Phase::Room && app.net()->my_seat() == 0; }, 5000));
+        ASSERT_TRUE(app.net()->chat("see you in the match"));                                     // (said in the waiting room: the log of the first begin has it)
         Machine& bob = w.join("Bob", "RA-9");
         ASSERT_TRUE(w.run_until([&]() { return app.state() == AppState::Playing; }, 12000));
         ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.audio_mixer().active_channel_count() >= 1);          // (the first begin: the dialog and the start sound)
+        ASSERT_TRUE(chat_has(app, "see you in the match"));
         ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
         w.run(5000);
         const std::vector<uint32_t> mine = own_ants(app);
@@ -1752,7 +1755,7 @@ void run_way_back_tests() {
         ASSERT_EQ(app.net()->phase(), NetGame::Phase::Playing);
         ASSERT_TRUE(w.status("RA-9").rejoins == 1 && w.status("RA-9").absent.empty());
         ASSERT_TRUE(app.net()->turns_executed() >= sealed);
-        // the HUD starts clean: the selection and the log of the old session are gone, and there is no start news
+        // the HUD starts clean: the selection and the log of the old session are gone (the waiting room's talk is not said again), and there is no start news
         ASSERT_TRUE(app.hud().get_selected_ant_id() == 0 && app.hud().get_chat_log().empty());
         ASSERT_FALSE(app.hud().is_match_start_modal_active());
         ASSERT_TRUE(app.rejoin_store()->entries().size() == 1 && net::key_matches(app.rejoin_store()->entries()[0].key, key));
