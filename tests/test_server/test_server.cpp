@@ -8802,6 +8802,19 @@ void run_restore_tests() {
             for (const RestoreItem& i : w.report.items) ASSERT_TRUE(i.note.find("longer than the 1 s") != std::string::npos);
             ASSERT_TRUE(w.status("CAP-1").state == RoomState::Failed && w.status("CAP-1").reason.find("longer than the 1 s") != std::string::npos && w.record_files().empty());
         }
+        {   // what the report, the status and the log say of a room's replay is its own work, the sum of its slices (a clock that costs 100 ms a reading: a real clock says 0 ms for a record this short)
+            PWorld w("persist-106e");
+            w.start_server(500);
+            crash_with_record_of(w, "WK-1", 20000, 2);
+            FakeClock clock;
+            w.restart.clock_ms = clock.as_function();
+            w.restart.restore_slice_ms = 0;                                                        // (every piece of work is a slice of its own: 19 of them for a record of 399 turns)
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 1 && w.report.items.size() == 1);
+            const RestoreItem& item = w.report.items[0];
+            ASSERT_TRUE(item.replay_ms >= 1500 && item.replay_ms == w.status("WK-1").restore_ms);
+            ASSERT_TRUE(item.note.find("replayed in " + std::to_string(item.replay_ms) + " ms") != std::string::npos);
+        }
         {   // the server is told to stop while the records are judged: before the first one, between two; every record stays as it was and nothing is restored; the restart then restores all three
             PWorld w("persist-106d");
             w.start_server(500);
@@ -9039,8 +9052,10 @@ void run_restore_tests() {
             for (int i = 0; i < 10; ++i) a[1]->send(net::encode_ping(ping));
             w.run(300);
             ASSERT_TRUE(w.mgr->parked_count() == 4 && !a[1]->is_open());
-            // what has waited for park_timeout_ms (3 s here) is dropped: every one of them, with no answer
-            w.run(3000);
+            // what has waited for park_timeout_ms (3 s here) is dropped, counted from the moment it was parked and not before (the oldest has waited 2.8 s after the first run): every one of them, with no answer
+            w.run(1500);
+            ASSERT_EQ(w.mgr->parked_count(), size_t{4});
+            w.run(1500);
             ASSERT_EQ(w.mgr->parked_count(), size_t{0});
             for (net::Connection* link : {a[2], b[0], b[1], again}) ASSERT_TRUE(!link->is_open() && reject_on(link) == 0);
             ASSERT_TRUE(w.mgr->restoring_count() == 2 && w.mgr->pending_count() == 0);
@@ -9178,6 +9193,25 @@ void run_restore_tests() {
             ASSERT_TRUE(fs::exists(fs::path(w.restart.dir) / "refused" / fs::path(w.record_path("CS-2")).filename()));
             ASSERT_TRUE(w.record_files().size() == 1 && fs::exists(w.record_path("CS-1")));
         }
+        {   // a record that got more turns while it waited (the same room's file, good all through, and not the record that was judged: the turns that were counted are not these): refused as changed, the Hello that waited is told NoSuchRoom
+            PWorld w("restore-119e");
+            w.start_server(500);
+            crash_with_record_of(w, "LG-1", 20000, 2);
+            const RestartLoaded original = w.read_record("LG-1");
+            w.restart.restore_slice_ms = 0;
+            w.start_server(500, false);
+            ASSERT_EQ(w.mgr->restoring_count(), size_t{1});
+            net::Connection* link = say_hello(w, "LG-1", original.head.keys[0]);
+            lengthen_record(w, "LG-1", 100);
+            ASSERT_TRUE(w.until([&]() { return w.mgr->restoring_count() == 0; }, 10000));
+            w.collect();
+            ASSERT_TRUE(w.mgr->restore_report().items.size() == 1 && w.mgr->restore_report().items[0].outcome == RestoreItem::Outcome::Unreadable && w.mgr->restore_report().items[0].note.find("changed since it was judged") != std::string::npos);
+            RoomStatus none;
+            ASSERT_FALSE(w.mgr->status("LG-1", none, w.server_now()));
+            w.run(300);
+            ASSERT_EQ(reject_on(link), static_cast<int>(net::RejectReason::NoSuchRoom));
+            ASSERT_TRUE(w.record_files().empty() && fs::exists(fs::path(w.restart.dir) / "refused" / fs::path(w.record_path("LG-1")).filename()));
+        }
         {   // a map that changed while the record waited: the room is refused when its turn comes, with the reason (a failed room), the record is put by, the Hello that waited is told NoSuchRoom; the room that was made before the change is restored
             const std::string maps_copy = (fs::path(temp_dir_for("restore-119c-maps")) / "Maps").string();
             fs::create_directories(maps_copy);
@@ -9293,9 +9327,25 @@ void run_restore_tests() {
         w.start_server(500);
         ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 3 && !w.report.stopped && w.mgr->restoring_count() == 0);
         for (const char* code : {"G-0", "G-1", "G-2"}) ASSERT_TRUE(w.status(code).restored && w.status(code).restored_turns == w.read_record(code).turn_count);
+        {   // the Hellos that wait for a room that is not back are let go with the stop (the server leaves: its links close), and the records are as they were
+            PWorld p("restore-121b");
+            p.start_server(500);
+            crash_with_record_of(p, "H-0", 20000, 2);
+            lengthen_record(p, "H-0", 4000);
+            const std::map<std::string, std::vector<uint8_t>> before = folder_bytes(p);
+            p.restart.restore_slice_ms = 0;
+            p.start_server(500, false);
+            net::Connection* link = say_hello(p, "H-0");
+            p.run(50);
+            ASSERT_TRUE(p.mgr->parked_count() == 1 && p.mgr->restoring_count() == 1);
+            ASSERT_EQ(p.mgr->shutdown(p.server_now()), size_t{0});
+            ASSERT_TRUE(p.mgr->parked_count() == 0 && p.mgr->restoring_count() == 0);
+            p.stop_server(false);
+            ASSERT_TRUE(folder_bytes(p) == before && reject_on(link) == 0);                      // (no answer: the link was let go, not rejected)
+        }
     } TEST_END();
 
-    TEST_CASE("S3.122 A Room's Clocks Start When ITS Replay Ends, Not When The Restore Began And Not When Another Room's Replay Ended: Two Rooms Whose Replays End Ten Seconds Apart Hold Their Seats For As Long As Each Has Been Back (The Seconds Of Absence Of Each Are The Seconds Since Its Own Restore), The Vote About An Absent Seat Opens 90 s After A Room's OWN Restore (The Earlier Room's Is Open When The Later Room's Is Not Yet), And The Wall-Clock Limit Counts The Play And Not The Wait For The Replays Of The Others") {
+    TEST_CASE("S3.122A Room's Clocks Start When ITS Replay Ends, Not When The Restore Began And Not When Another Room's Replay Ended: Two Rooms Whose Replays End Ten Seconds Apart Hold Their Seats For As Long As Each Has Been Back (The Seconds Of Absence Of Each Are The Seconds Since Its Own Restore), The Vote About An Absent Seat Opens 90 s After A Room's OWN Restore (The Earlier Room's Is Open When The Later Room's Is Not Yet), And The Wall-Clock Limit Counts The Play And Not The Wait For The Replays Of The Others") {
         PWorld w("restore-122");
         w.start_server(500);
         crash_with_record_of(w, "CK-1", 20000, 2);

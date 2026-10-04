@@ -8,8 +8,8 @@
 # a small TCP proxy (flaky_proxy.py) between a client and the server is cut, the room pauses and names the absent seat, nothing runs while it waits, and at the cap the seat is dropped
 # and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence and finds its link closed when it wakes up. The part ends with the RESTART RECORDS (docs/NETWORK_PORT.md): the server keeps
 # a record of a running match in a folder of its own (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of it and killed with SIGKILL, and started again over the same folder: the room
-# comes back with its code, paused, every seat held, and the record goes when the owner closes the room; a hundred records of a long match are replayed while the server answers /busy and takes a new room's
-# player within a second of its start (the restore does not block it); the options of the records are refused or accepted in the options part.
+# comes back with its code, paused, every seat held, and the record goes when the owner closes the room; a thousand records of a long match are replayed while the server answers /busy within 2 s of its
+# launch and takes a new room's player at once (the restore does not block it); the options of the records are refused or accepted in the options part.
 # The sections below are PARTS: they run one after the other (the default), or alone with `--part NAME` (repeatable), each with its own server on its own ports and its own
 # scratch folder, so that ./run_tests.sh and the CI can run them at the same time. `--list-parts` prints the names.
 PART_NAMES="options rooms secret demo reconnect"
