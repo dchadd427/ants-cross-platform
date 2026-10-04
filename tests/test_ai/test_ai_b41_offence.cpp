@@ -185,7 +185,18 @@ void run_b41_offence_tests() {
             ASSERT_EQ(walls_east(sim, kFightHills[0]), 3u);                                                // the own walls stand
             ASSERT_TRUE(sim.get_unit(fire).type == sim::AntType::Fire);
         }
-        {   // (c) nobody has 100 points: nothing to sabotage; no Fire Ant: nothing either
+        {   // (c) nobody has 100 points: nothing to sabotage (a Fire Ant that is free to go: the keeper is not spared in this plan; at 100 points the same ant goes); no Fire Ant: nothing either
+            LevelPlan free_ant = plan;
+            free_ant.sabotage_spare_keeper = false;
+            for (const int32_t score : {50, 100}) {
+                sim::SimulationEngine poor;
+                empty_field(poor, 62);
+                poor.set_player_score(1, score);
+                poor.spawn_unit(0, sim::AntType::Fire, TileCoord{30, 30});
+                Rig rigp(poor, 0, Level::Hard, std::make_unique<StandardBot>(free_ant), 4, 4);
+                rigp.run(400);
+                ASSERT_EQ(rigp.as<StandardBot>().sabotage().walls_ordered() >= 1u, score >= 100);
+            }
             sim::SimulationEngine sim;
             empty_field(sim, 62);
             sim.set_player_score(1, 50);
@@ -201,6 +212,23 @@ void run_b41_offence_tests() {
             rig2.run(400);
             ASSERT_EQ(rig2.as<StandardBot>().sabotage().walls_ordered(), 0u);
             ASSERT_EQ(lit(sim2), 0u);
+        }
+        {   // (e) the richest team is the ally: it is no victim, the next one is (team 2 with 150 points)
+            LevelPlan free_ant = plan;
+            free_ant.sabotage_spare_keeper = false;
+            sim::SimulationEngine sim;
+            empty_field(sim, 62);
+            sim.form_alliance(0, 1);
+            sim.set_player_score(1, 400);
+            sim.set_player_score(2, 150);
+            sim.spawn_unit(0, sim::AntType::Fire, TileCoord{30, 30});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(free_ant), 4, 4);
+            rig.run(1500);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().target(), 2);
+            ASSERT_EQ(lit(sim), 0u);                                                                       // (the ring of the ally's gate stays dark)
+            size_t round_two = 0;
+            for (const TileCoord& t : SabotageTask::ring_of(MapInfo(sim).hill(2))) round_two += sim.grid().has_fire_at(t) ? 1u : 0u;
+            ASSERT_TRUE(round_two >= 6);
         }
         {   // (d) the shipped plans light nothing at another gate
             for (const Level level : {Level::Medium, Level::Hard}) {

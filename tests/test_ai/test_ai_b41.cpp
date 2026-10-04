@@ -1795,4 +1795,32 @@ void run_b41_tests() {
             ASSERT_TRUE(ordered);
         }
     } TEST_END();
+
+    TEST_CASE("AI7.26 A Raid That Never Got Going Blacklists The Hill: The Third Fire Wall Is Lit After The Thief Was Ordered And Before The Order Left, The Raid Order Is Refused And The Thief Stands Where It Stood, And For raid_black_ticks The Hill Is Left Alone Even Though The Wall Burns Out After 120 Ticks (Without The Blacklist The Thief Is Sent Again At Once)")
+    {
+        for (const bool learn : {true, false}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 77);
+            sim.set_player_score(1, 200);
+            const std::array<TileCoord, 3> east = {TileCoord{54, 5}, TileCoord{54, 6}, TileCoord{54, 7}};          // the three tiles in front of the hole of the hill at (50, 4)
+            sim.set_fire_at(east[0], 14000);
+            sim.set_fire_at(east[1], 14000);
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 10});
+            LevelPlan plan = plan_for(Level::Hard);
+            if (!learn) plan.raid_black_ticks = 1;                                                                // (a wait of one tick: the same code path without the memory)
+            plan.gate = false;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            int guard = 0;
+            while (rig.proposed_count(CommandType::GroupSpecial) == 0 && guard++ < 200) rig.tick();
+            ASSERT_EQ(rig.proposed_count(CommandType::GroupSpecial), 1u);                                         // the raid is decided (two walls leave the hole open) ...
+            sim.set_fire_at(east[2], 120);                                                                        // ... and the third wall comes up before the order leaves
+            rig.run(400);
+            const RaidTask& raids = rig.as<StandardBot>().raids();
+            ASSERT_EQ(raids.failures(), 1u);                                                                      // it stood where it stood: the way is shut
+            ASSERT_TRUE(raids.black(1, sim.current_tick()) == learn);                                             // (the blacklist of 600 ticks is still running)
+            ASSERT_TRUE(alive(sim, thief));
+            if (learn) ASSERT_EQ(raids.raids_ordered(), 1u);                                                      // the wall burned out after 120 ticks and the hill was left alone
+            else ASSERT_TRUE(raids.raids_ordered() >= 2u);                                                        // without the memory the thief goes again at once
+        }
+    } TEST_END();
 }
