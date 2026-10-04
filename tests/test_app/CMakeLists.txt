@@ -286,9 +286,7 @@ target_link_libraries(test_prediction_app PRIVATE
     ants_app
 )
 
-target_compile_definitions(test_prediction_app PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_prediction_app PRIVATE ants_test_paths)
 
 if(APPLE)
     target_link_libraries(test_prediction_app PRIVATE

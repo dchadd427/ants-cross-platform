@@ -230,9 +230,7 @@ target_include_directories(test_engine_copy PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_engine_copy PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_engine_copy PRIVATE ants_test_paths)
 
-add_test(NAME test_engine_copy COMMAND test_engine_copy)
-add_test(NAME test_engine_copy_whole_matches COMMAND test_engine_copy --whole-matches)
+# (one ctest entry per test program, which tests/scripts/test_ci_workflow.py holds the CI to: the CI's run is the quick tests AND the whole matches; run_tests.sh has them as two suites, 2.25 and 2.26)
+add_test(NAME test_engine_copy COMMAND test_engine_copy --all)

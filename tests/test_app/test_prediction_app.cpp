@@ -19,12 +19,14 @@
 #include "ants_net/protocol.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -33,12 +35,16 @@
 #include <thread>
 #include <vector>
 
+#if defined(_WIN32)
+#include <process.h>
+#define getpid _getpid
+#else
+#include <unistd.h>
+#endif
+
 using namespace ants;
 using namespace ants::app;
 
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 static int g_test_count = 0;
 static int g_test_failures = 0;
@@ -525,7 +531,7 @@ int main(int argc, char* argv[]) {
         c = parse({"ants", "--prediction", "off", "--prediction", "on"});
         ASSERT_TRUE(c.prediction && c.prediction_given);                                   // the last one wins
         // the settings' key: an Application that remembers its options in a file
-        const std::string settings = "test_prediction_app_settings.ini";
+        const std::string settings = (std::filesystem::temp_directory_path() / ("ants_prediction_app_settings_" + std::to_string(static_cast<long long>(::getpid())) + ".ini")).string();
         const auto with_settings = [&](const std::string& line, bool given, bool given_value, bool expect_wanted) {
             {
                 std::ofstream out(settings);
@@ -545,7 +551,8 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(with_settings("prediction=on", true, false, false));                   // ... and --prediction off over the key's on
         ASSERT_TRUE(with_settings("prediction=maybe", false, true, true));                 // a value that is no switch is reported and ignored: the default
         ASSERT_TRUE(with_settings("Music Volume=40", false, true, true));                  // no key: on
-        std::remove(settings.c_str());
+        std::error_code removed;
+        std::filesystem::remove(settings, removed);
         // off: the match shows the confirmed engine, nothing is predicted, an order waits for its turn, and the confirmed engines are the same
         {
             ApplicationConfig cfg = host_config();

@@ -18,6 +18,7 @@
 #include "ants_sim/command.hpp"
 #include "ants_sim/path_planner.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -44,9 +45,6 @@
 
 using namespace ants::sim;
 
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 // An instrumented build (ASan / UBSan) runs five to ten times slower: the whole-match tier then plays the first part of each match only.
 #if defined(__SANITIZE_ADDRESS__)
