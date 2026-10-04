@@ -103,6 +103,7 @@ void HUD::init(uint8_t local_player_id) {
 
     show_match_start_modal_ = false;
     match_start_modal_ticks_ = 0;
+    match_start_modal_until_dismissed_ = false;
     show_quit_dialog_ = false;
     show_quick_help_ = false;
     options_.close();
@@ -170,12 +171,11 @@ void HUD::reset() {
 }
 
 void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
-    // 0. Match Start Modal Countdown (5.0 s / sim::kMatchStartHoldTicks = 100 ticks at 20 Hz: the original's task KWFO, Ants.exe 0x10254b0, first run 5000 ms after the dialog was made)
+    // 0. The "Get ready" dialog's clock: steps of 50 ms (the original's task KWFO closes it 5000 ms after it was made, Ants.exe 0x10254b0). The application steps the HUD in real time while the
+    // dialog is up, since the simulation waits for it (see start_match_modal); a match of the network keeps the dialog until its first turn has executed
     if (show_match_start_modal_) {
-        match_start_modal_ticks_ += delta_ticks;
-        if (match_start_modal_ticks_ >= MATCH_START_MODAL_DURATION_TICKS) {
-            show_match_start_modal_ = false;
-        }
+        match_start_modal_ticks_ = delta_ticks > UINT32_MAX - match_start_modal_ticks_ ? UINT32_MAX : match_start_modal_ticks_ + delta_ticks;
+        if (!match_start_modal_until_dismissed_ && match_start_modal_ticks_ >= kMatchStartModalSteps) show_match_start_modal_ = false;
     }
     update_alliance_dialog(world);
 

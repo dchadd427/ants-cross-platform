@@ -3,6 +3,7 @@
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/net_overlay.hpp"
+#include "ants_app/page_layout.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/version.hpp"
@@ -164,6 +165,24 @@ bool os_fullscreen(SDL_Window* window) {
     return false;
 #endif
 }
+
+#if defined(__APPLE__)
+// -[NSApplication setPresentationOptions:] through the runtime, as os_fullscreen asks the window (NSApplicationPresentationOptions: HideDock 1 << 1, HideMenuBar 1 << 3, FullScreen 1 << 10).
+// What a fullscreen Space needs so that the Dock and the menu bar do not come up when the pointer touches the edge of the screen (wants_hidden_dock_and_menu_bar). An exception of the
+// call (the runtime raises one for an invalid combination) is caught: the game plays on with what the system gave it.
+constexpr unsigned long kPresentationHideDock = 1ul << 1;
+constexpr unsigned long kPresentationHideMenuBar = 1ul << 3;
+constexpr unsigned long kPresentationFullScreen = 1ul << 10;
+void set_presentation_options(unsigned long options) {
+    try {
+        using SharedFn = id (*)(Class, SEL);
+        using SetFn = void (*)(id, SEL, unsigned long);
+        const id app = reinterpret_cast<SharedFn>(objc_msgSend)(objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
+        if (app != nullptr) reinterpret_cast<SetFn>(objc_msgSend)(app, sel_registerName("setPresentationOptions:"), options);
+    } catch (...) {
+    }
+}
+#endif
 #endif
 
 } // anonymous namespace
@@ -472,10 +491,11 @@ bool Application::init(const ApplicationConfig& config) {
     if (config_.fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
     if (config_.headless)   win_flags = SDL_WINDOW_HIDDEN;
 
+    window_created_ = initial_window_rect();                 // (the shape of the picture that it will show: no frame is ever shown in another shape)
     window_ = SDL_CreateWindow(
         config_.title.c_str(),
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        config_.window_width, config_.window_height,
+        window_created_.x, window_created_.y,
+        window_created_.w, window_created_.h,
         win_flags
     );
     if (!window_) {
@@ -504,7 +524,7 @@ bool Application::init(const ApplicationConfig& config) {
 
     renderer_->set_canvas_size(canvas_width_of(aspect_), canvas_height_of(aspect_));         // SDL's logical size: the picture that the window shows
     layout_ = ScreenLayout::with_size(canvas_width_of(aspect_), canvas_height_of(aspect_)); // the match screen is as big as the canvas (the original's own screen for 4:3, the wide frame for 16:9)
-    picture_ = picture_for_state();                                                          // the match screen is the whole canvas, the original's pages are its 640 x 480 picture, centred
+    picture_ = picture_for_state();                                                          // every screen is the whole canvas (a match of a smaller layout is centred in it)
     renderer_->set_picture(picture_);
     renderer_->set_layout(layout_);
     renderer_->set_level(current_level_);
@@ -743,25 +763,40 @@ void Application::set_layout(const ScreenLayout& layout) {
     hud_.set_layout(layout_);
 }
 
-// Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), and so is the setup screen and the room of a 960 x 540 canvas
-// (its own wide version), everything else is a page of the original's own 640 x 480 screen (the loading screen, the quick help, the results; the setup screen of another canvas), centred
+// Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), and so is every other screen: the setup screen and the room, the
+// loading screen, the quick help, the results and the start menu of a 960 x 540 canvas are composed for it (setup_layout.hpp, page_layout.hpp, results_layout.hpp, start_menu.hpp), and in the
+// 640 x 480 canvas the original's own pages are the whole canvas
 LayoutRect Application::picture_for_state() const {
     if (match_running()) return canvas().centred(layout_.width, layout_.height);
-    if (state_ == AppState::MapSelect && wide_setup()) return canvas().rect();            // the setup screen of a 960 x 540 canvas is composed for it (setup_layout.hpp)
-    return canvas().centred(ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight);
+    return canvas().rect();
 }
 
-// The setup screen has a wide version for the 16:9 canvas of 960 x 540 (and for no other size: any other canvas draws the original's page centred)
+// The setup screen has a wide version for the 16:9 canvas of 960 x 540 (and for no other size: any other canvas draws the original's page)
 bool Application::wide_setup() const {
     const CanvasLayout c = canvas();
     return SetupLayout::supports(c.width, c.height);
 }
 
-// The picture changes when the screen does (a match starts, the results open, the setup screen comes back). The pointer stays where it is on the canvas, so its coordinates, which are the
-// picture's own, move with the corner; a pointer that was beside the new picture (on the clay of a page, left of x = 160) is at the picture's nearest edge pixel, which is where the
-// original's one-monitor pointer is when it is pushed against an edge (pointer_clamp.hpp), and not outside the picture, where the cursor would vanish.
+// ... and so have the loading screen, the quick help at the start, the results and the start menu: the same canvas
+bool Application::wide_pages() const {
+    const CanvasLayout c = canvas();
+    return wide_pages_supported(c.width, c.height);
+}
+
+// The picture changes when the layout does (a match of another layout: the original's own 640 x 480 picture centred in a 960 x 540 canvas, a test hook; every screen is the whole canvas, so
+// no screen changes it). The pointer stays where it is on the canvas, so its coordinates, which are the picture's own, move with the corner; a pointer that was beside the new picture is at
+// the picture's nearest edge pixel, which is where the original's one-monitor pointer is when it is pushed against an edge (pointer_clamp.hpp), and not outside the picture, where the
+// cursor would vanish. The screens that have a wide version are told which version to be (the canvas decides: wide_pages).
 void Application::update_picture() {
     map_select_.set_wide_layout(wide_setup());                                              // (the screen is drawn and answers the pointer as its wide version when the canvas is 960 x 540)
+    const bool wide = wide_pages();
+    scorecard_.set_wide_layout(wide);                                                       // (so are the results, the start menu and the quick help's button: they stand where the wide pages put them)
+    start_menu_.set_wide_layout(wide);
+    if (wide != quick_help_wide_) {
+        quick_help_wide_ = wide;
+        const QuickHelpLayout& q = QuickHelpLayout::of(wide);
+        quick_help_start_ = ScreenButton(ButtonRect{q.start.x, q.start.y, q.start.w, q.start.h}, ButtonRect{q.start_pressed.x, q.start_pressed.y, q.start_pressed.w, q.start_pressed.h});
+    }
     const LayoutRect want = picture_for_state();
     if (want == picture_) return;
     mouse_screen_x_ = std::clamp(mouse_screen_x_ + picture_.x - want.x, 0, want.w - 1);
@@ -908,6 +943,12 @@ bool Application::write_chat_transcript(const std::string& path) const {
 void Application::shutdown() {
     is_running_ = false;
     if (menu_enabled_) start_menu_.flush();
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    if (presentation_hidden_) {                           // (closed inside a fullscreen Space that the game made the Dock and the menu bar leave: the system's own behaviour comes back)
+        presentation_hidden_ = false;
+        set_presentation_options(0ul);
+    }
+#endif
 #if !defined(__EMSCRIPTEN__)
     if (!config_.headless && match_started_) {
         const std::string folder = ConfigStore::default_folder();
@@ -1007,7 +1048,9 @@ void Application::enter_match() {
     // Reset HUD & Scorecard
     hud_.init(local_player_id_);
     hud_.reset();
-    hud_.start_match_modal();
+    hud_.start_match_modal(network_active());                               // (the simulation waits for it: update_simulation, post_tick)
+    tick_accumulator_ = 0.0f;                                               // the dialog and the match are counted from now
+    start_dialog_clock_ms_ = 0.0;
     scorecard_.hide();
     match_over_handled_ = false;
     state_ = AppState::Playing;
@@ -1151,7 +1194,7 @@ void Application::quit() {
 // The setup screen is created (again): its labels stay empty until its refresh, 500 ms later
 void Application::enter_map_select() {
     state_ = AppState::MapSelect;
-    update_picture();                                        // (a page of the original's: centred in the canvas)
+    update_picture();                                        // (the whole canvas, as every screen)
     closing_click_pending_ = false;                          // (close_quick_help() sets it after this call)
     map_select_.enter();
     // The new screen's buttons are fresh objects in the up state; the INPUT task of the original sends the pointer to the top window in the very input run that
@@ -1172,7 +1215,7 @@ void Application::finish_loading() {
 void Application::show_opening_screens() {
     if (hud_.is_quick_help_enabled()) {
         state_ = AppState::QuickHelp;
-        update_picture();                                    // (the quick help is a page of the original's, centred; the setup screen of a 960 x 540 canvas is not)
+        update_picture();                                    // (the quick help is the whole canvas too: its wide page, or the original's own page)
         quick_help_start_.reset();
         if (mouse_has_moved_ && !pointer_outside_) quick_help_start_.on_move(mouse_screen_x_, mouse_screen_y_);       // the pointer goes to the new window at once (see enter_map_select)
     } else {
@@ -1403,6 +1446,24 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
 // (the picture is made when the game starts), so it asks the player first when this says 1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
     return (g_web_app != nullptr && g_web_app->match_running()) ? 1 : 0;
+}
+
+// For the page's browser check (tests/scripts/web_edge_check.py): what the game believes about the pointer and the view, read-only. 0 and 1: the pointer's x and y on the picture (what the
+// game draws its cursor at and scrolls from); 2: 1 while the game takes the pointer as gone from its window (no cursor, no scrolling); 3 and 4: the map view's origin in world pixels
+// (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
+// Anything else, or no game: -1.
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
+    if (g_web_app == nullptr) return -1;
+    switch (what) {
+        case 0: return g_web_app->mouse_screen_x();
+        case 1: return g_web_app->mouse_screen_y();
+        case 2: return g_web_app->pointer_outside() ? 1 : 0;
+        case 3: return g_web_app->match_running() ? g_web_app->renderer().camera().world_x : -1;
+        case 4: return g_web_app->match_running() ? g_web_app->renderer().camera().world_y : -1;
+        case 5: return g_web_app->match_running() ? (g_web_app->hud().is_modal_open() ? 1 : 0) : -1;
+        case 6: return static_cast<int>(g_web_app->zoom() * 100.0f + 0.5f);
+        default: return -1;
+    }
 }
 #endif
 
@@ -1683,6 +1744,15 @@ void Application::update_mouse_grab() {
     const bool want = wants_mouse_grab(sdl_fullscreen, space, config_.headless);
     const bool asked = (flags & SDL_WINDOW_MOUSE_GRABBED) != 0;                              // the request (SDL_GetWindowMouseGrab is its effect: no while unfocused)
     if (asked != want) SDL_SetWindowMouseGrab(window_, want ? SDL_TRUE : SDL_FALSE);
+#if defined(__APPLE__)
+    // The Dock and the menu bar of a fullscreen Space that SDL's flags do not describe (the green button, Cmd+Ctrl+F): hidden for good while the window is in it, the system's own
+    // behaviour given back when it leaves (SDL's own fullscreen needs none of this: its delegate asks for both to be hidden, see wants_hidden_dock_and_menu_bar)
+    const bool hide = wants_hidden_dock_and_menu_bar(sdl_fullscreen, space, config_.headless);
+    if (hide != presentation_hidden_) {
+        presentation_hidden_ = hide;
+        set_presentation_options(hide ? (kPresentationFullScreen | kPresentationHideDock | kPresentationHideMenuBar) : 0ul);
+    }
+#endif
 #endif
 }
 
@@ -1707,6 +1777,52 @@ WindowRect Application::window_rect() const {
         SDL_GetWindowPosition(window_, &r.x, &r.y);
         SDL_GetWindowSize(window_, &r.w, &r.h);
     }
+    return r;
+}
+
+// The window that is CREATED: its size, and its place where that is known. The size is the shape of the picture that it will show, so that no frame is ever shown in another shape: a window
+// that was created 4:3 (the config's 1280 x 960) and made 16:9 by apply_window_layout before the first frame was seen on screen as a 4:3 window for a moment at the start. An explicit
+// --window-size is that size; a canvas that is not the original's 4:3 is the size that apply_window_layout would give it (the largest scale in steps of 0.5 that fits the display's usable
+// area, with the title bar of a typical window system, as its own fallback assumes: the borders of a window that does not exist yet cannot be asked), the canvas itself at 1x when the display
+// cannot be asked; the original's own 4:3 (--aspect 4:3, the settings' key) is the config's 1280 x 960. A cell of the start scripts' grid (--grid CxR --cell N) is created AT ITS rectangle,
+// the one that apply_window_layout gives it (the largest rectangle of the canvas's shape that fits the cell, with the same assumed title bar): the four windows of start_game.sh used to be
+// created at the config's 4:3 and cut to their cell once they existed, so that a 4:3 window was there at the start, for good on a system that does not apply the cut at once. Fullscreen (the
+// config's size, the way back is sized by apply_window_layout) and the web build, whose window is the page's canvas, are as they always were.
+WindowRect Application::initial_window_rect() const {
+    WindowRect r{SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, config_.window_width, config_.window_height};
+#if !defined(__EMSCRIPTEN__)
+    const bool in_grid = config_.grid_cols > 0 && config_.grid_rows > 0;
+    if (in_grid && !config_.fullscreen) {                    // (as in apply_window_layout the cell wins over --window-size and --window-pos)
+        SDL_Rect area{0, 0, 0, 0};
+        const int display = std::max(0, config_.display_index);
+        if (SDL_GetDisplayUsableBounds(display, &area) == 0 || SDL_GetDisplayBounds(display, &area) == 0) {
+            r = grid_cell_window(WindowRect{area.x, area.y, area.w, area.h}, config_.grid_cols, config_.grid_rows, config_.grid_cell, 28, 0, 0, 0, canvas_width_of(aspect_), canvas_height_of(aspect_));
+        } else if (aspect_ != Aspect::Classic4x3) {          // (the display cannot be asked: the canvas at 1x, never the config's 4:3)
+            r.w = canvas_width_of(aspect_);
+            r.h = canvas_height_of(aspect_);
+        }
+        return r;
+    }
+    if (!config_.fullscreen) {
+        if (config_.has_window_size) {
+            r.w = config_.window_w;
+            r.h = config_.window_h;
+        } else if (aspect_ != Aspect::Classic4x3) {
+            SDL_Rect area{0, 0, 0, 0};
+            const int display = std::max(0, config_.display_index);
+            if (SDL_GetDisplayUsableBounds(display, &area) == 0 || SDL_GetDisplayBounds(display, &area) == 0) {
+                r = default_canvas_window(WindowRect{area.x, area.y, area.w, area.h}, canvas_width_of(aspect_), canvas_height_of(aspect_), config_.headless ? 0 : 28, 0, 0, 0);
+            } else {
+                r.w = canvas_width_of(aspect_);
+                r.h = canvas_height_of(aspect_);
+            }
+        }
+    }
+    if (config_.has_window_pos) {
+        r.x = config_.window_x;
+        r.y = config_.window_y;
+    }
+#endif
     return r;
 }
 
@@ -1862,10 +1978,24 @@ void Application::update_simulation(float dt) {
     if (network_active() && net_->phase() == net::NetGame::Phase::Playing) {
         // The ticks come from the lock-step runner (pump_network); only what shows between two ticks is advanced here
         tick_accumulator_ = static_cast<float>(net_->sub_tick_ms()) / 1000.0f;
+        // The "Get ready" dialog of the match's start: no tick runs while it is up (the host seals the first turn kMatchStartDelayMs after the match began) and it ends with the first turn that
+        // runs (post_tick). Meanwhile the HUD is stepped in real time, 50 ms at a time, so that its portrait moves and the wait does not look like a hang.
+        if (hud_.is_match_start_modal_active()) {
+            start_dialog_clock_ms_ += static_cast<double>(dt) * 1000.0;
+            while (start_dialog_clock_ms_ >= static_cast<double>(sim::TICK_MS) && hud_.is_match_start_modal_active()) {
+                start_dialog_clock_ms_ -= static_cast<double>(sim::TICK_MS);
+                hud_.update(sim_.get_world_state(), 1);
+            }
+        }
     } else {
         tick_accumulator_ += dt;
         while (tick_accumulator_ >= 0.050f) {
-            if (!sim_.is_match_over()) {
+            if (hud_.is_match_start_modal_active()) {
+                // A local game: the "Get ready" dialog counts REAL time, in the 50 ms steps of this clock (the HUD closes it after kMatchStartDialogMs of them), and the simulation waits for it: tick 0
+                // runs on the step after the dialog's last one, the match's clock shows its full time behind the dialog, and the whole time of the match is playable (the original runs the clock
+                // behind the dialog: a deliberate deviation, sim_engine.hpp)
+                hud_.update(sim_.get_world_state(), 1);
+            } else if (!sim_.is_match_over()) {
                 sim_.tick();
                 post_tick();
             }
@@ -1885,6 +2015,9 @@ void Application::update_simulation(float dt) {
 
 // What one simulation tick shows: the HUD, the events of the tick, the sounds and, once, the end of the match.
 void Application::post_tick() {
+    // The first turn of a match of the network has executed: the ants can move now, and the "Get ready" dialog (which every machine opened when the match began, while the host waited for it)
+    // is gone. (A local game's dialog ends before its first tick, in update_simulation.)
+    if (hud_.is_match_start_modal_active()) hud_.dismiss_match_start_modal();
     const auto& world = sim_.get_world_state();
     hud_.update(world, 1);
     hud_.poll_sim_events(sim_);
@@ -1911,7 +2044,7 @@ void Application::check_match_over() {
     match_over_handled_ = true;
     const auto& world = sim_.get_world_state();
     scorecard_.show(world.match_result, local_player_id_);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
-    update_picture();                                            // the results are a page of the original's
+    update_picture();                                            // the results are the whole canvas (their wide page, or the original's own page)
     if (background_stepping_) pending_music_ = PendingMusic::Closed;     // (a hidden page changes no sound: the music closes when the page is shown)
     else close_music();                                          // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
     music_resume_on_activate_ = false;
@@ -1921,7 +2054,7 @@ void Application::check_match_over() {
 // Once per frame: a match that has ended without a tick of this application (a command, a drop-out) opens the results screen too; the screen's clock builds its
 // rows, and with them the one cue of the machine, 250 ms after it opened
 void Application::update_results(float dt) {
-    update_picture();                                            // (the results screen is a page of the original's, whoever opened it)
+    update_picture();                                            // (the results screen is the whole canvas, whoever opened it)
     if (state_ == AppState::Playing) check_match_over();
     if (!scorecard_.is_open()) return;
     scorecard_.update(dt);
@@ -2270,8 +2403,8 @@ void Application::net_end_session(const std::string& notice) {
 
 // The waiting and out-of-sync messages of a network match (remake UI: the original has no such text). A machine that waits for the next turn
 // says so after one second; a desync stops the match and says so.
-void Application::render_net_overlay() {
-    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return;
+NetOverlayLine Application::net_overlay_now() const {
+    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return NetOverlayLine{};
     NetOverlayInput in;
     in.desynced = net_->desynced();
     in.electing = net_->electing();
@@ -2286,7 +2419,11 @@ void Application::render_net_overlay() {
         in.lag_behind_ms = lag->behind_ms;
     }
     in.notice = net_->match_notice();                                   // "Bob is the host now." for a few seconds
-    const NetOverlayLine line = net_overlay_line(in);
+    return net_overlay_line(in);
+}
+
+void Application::render_net_overlay() {
+    const NetOverlayLine line = net_overlay_now();
     const std::string& text = line.text;
     const ants::assets::ColorRGBA colour = line.alarm ? ants::assets::ColorRGBA{255, 90, 90, 255} : ants::assets::ColorRGBA{255, 255, 255, 255};
     if (text.empty()) return;
@@ -2317,11 +2454,7 @@ void Application::render_frame() {
     renderer_->begin_frame();
     last_latency_layout_.reset();                        // (set again when this frame draws the network's readout)
     update_picture();
-    if (picture_ != canvas().rect()) {                   // a page of the original's own screen in a bigger canvas: the clay of its pages fills what is around it
-        renderer_->set_picture(canvas().rect());
-        renderer_->fill_rect(0, 0, renderer_->canvas_w(), renderer_->canvas_h(), kPageMargin);
-    }
-    renderer_->set_picture(picture_);                    // the screens are the picture (the match: the whole canvas; a page of the original's: centred in it)
+    renderer_->set_picture(picture_);                    // the screens are the picture (the whole canvas; a match of a smaller layout is centred in it)
 
     if (state_ == AppState::Loading) {
         render_loading_screen();
@@ -2500,42 +2633,12 @@ void Application::hold_music(bool hold) {
 }
 
 void Application::render_loading_screen() {
-    // 1. Fill the entire page (the original's 640x480 screen) with authentic solid orange #DB4B13
-    renderer_->fill_rect(0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight, ants::assets::ColorRGBA{219, 75, 19, 255});
-
-    // 2. Draw outer border frame tiles from antslogo sequence (excluding dclay tiles and content bitmaps)
-    const auto* seq = assets_.find_animation("antslogo");
-    if (seq && !seq->subitems.empty()) {
-        for (const auto& fr : seq->subitems[0].frames) {
-            // Exclude dclay48 (0), dclay96 (2), strip (160), credits (161), logo (162)
-            if (fr.sprite_index != 0 && fr.sprite_index != 2 &&
-                fr.sprite_index != 160 && fr.sprite_index != 161 && fr.sprite_index != 162) {
-                renderer_->draw_sprite(fr.sprite_index, fr.dx, fr.dy);
-            }
-        }
-    }
-
-    // 3. Draw authentic logo.bmp at (25, 23)
-    renderer_->draw_named_sprite("logo.bmp", 25, 23);
-
-    // 4. Draw credits.bmp at (32, 299)
-    renderer_->draw_named_sprite("credits.bmp", 32, 299);
-
-    // 5. Draw strip.bmp at (40, 315) on top of credits to authentically mask the subtitle line
-    renderer_->draw_named_sprite("strip.bmp", 40, 315);
-
-    // 6. Loading progress bar inside designated indicator slot at x=229, y=448, w=234, h=8 in authentic #1F1733
-    int32_t fill_w = std::min(234, static_cast<int32_t>((intro_ticks_ * 234) / 25));
-    if (fill_w > 0) {
-        renderer_->fill_rect(229, 448, fill_w, 8, ants::assets::ColorRGBA{31, 23, 51, 255});
-    }
+    draw_loading_screen(*renderer_, assets_, wide_pages(), static_cast<int32_t>(intro_ticks_));       // (page_layout.hpp: the original's page, or the wide one)
 }
 
 void Application::render_quick_help_screen() {
-    // qh_screen composite (last part first) and the START button animations qh_start1 / qh_start2 (hover) / qh_start3
-    // (pressed) with absolute coordinates
-    draw_animation_frame0(*renderer_, assets_, "qh_screen");
-    draw_animation_frame0(*renderer_, assets_, quick_help_start_.pressed() ? "qh_start3" : (quick_help_start_.hovered() ? "qh_start2" : "qh_start1"));
+    // qh_screen and the START button animations qh_start1 / qh_start2 (hover) / qh_start3 (pressed): the original's page, or the wide one (page_layout.hpp)
+    draw_quick_help_screen(*renderer_, assets_, wide_pages(), quick_help_start_.pressed() ? QuickHelpStart::Pressed : (quick_help_start_.hovered() ? QuickHelpStart::Hover : QuickHelpStart::Up));
 }
 
 // The pointer is one global in the original (GetCursorPos): every screen's events record it, and the next screen replays it into its buttons

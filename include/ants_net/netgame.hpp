@@ -155,6 +155,10 @@ public:
     /// place of the original's "Press START when all players' thumbs have appeared.": "Press START: the empty seats get Medium bots." and, in a room with Fog of War (bots and fog never
     /// mix), "Fog of War is on, so START seats no bots."
     static std::string start_prompt(FillLevel level, bool fog);
+    /// The words of a refusal, as the status line shows them when a join fails (the original's text for a dropped machine, the remake's for the rest). `in_browser`: the game runs in a web page,
+    /// where reloading the page is how a player gets the current version (a tab that was opened before the server was updated is the old game), so the refusal for another version says so; every
+    /// other refusal is the same words everywhere (the desktop start menu has texts of its own, Application::menu_failure_text).
+    static std::string reject_text(RejectReason reason, bool in_browser);
 
     // ---- the waiting room's chat (protocol 11) ------------------------------------------------------------------------------------------------------
     /// Says a line to everybody in the room: in the waiting room and while the map loads (and, as ever, during the match: then `team` counts; before it nobody has a team and the flag is

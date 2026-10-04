@@ -59,6 +59,10 @@ using namespace ants;
 using namespace ants::server;
 namespace fs = std::filesystem;
 
+// The first turn of a match is sealed this long after the match began (protocol 12: the "Get ready to play!" dialog of every machine, in which no simulation runs): a test that wants play to
+// be under way waits this much longer than it did before
+constexpr uint32_t kPre = net::kMatchStartDelayMs;
+
 static int g_test_count = 0;
 static int g_test_failures = 0;
 static int g_assert_count = 0;
@@ -792,7 +796,9 @@ void run_manager_tests() {
         // the engine's rules changed in 9 (the community-map rules), and the number is all that the door has to tell the two games apart
         // (the door decides the version before it looks for the room, so an old game that asks for a room that does not exist is refused for its version, not told "no such room")
         ASSERT_TRUE(net::kProtocolVersion != 8);
-        for (const uint16_t old_version : {uint16_t{4}, uint16_t{8}}) {
+        // (and so is a game of protocol 11, v0.1.0 or v0.1.1: its Hello is a Hello of 12 byte for byte, the number alone refuses it; it would count its dialog in simulation ticks and be blocked for
+        // 100 ticks of the match after the server's late first turn)
+        for (const uint16_t old_version : {uint16_t{4}, uint16_t{8}, uint16_t{11}}) {
             for (const char* room : {"AAA-1", "NOPE-9"}) {
                 auto ends = w.net.connect({10, 0});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "x", w.now);
@@ -1119,7 +1125,7 @@ void run_hardening_tests() {
             w.connect("Bob", "CLOCK-1");
             w.run(2500);
             ASSERT_MSG(w.status("CLOCK-1").state == RoomState::Running, "the room started at origin " + std::to_string(origin));
-            w.run(20000);
+            w.run(20000 + kPre);
             const RoomStatus s = w.status("CLOCK-1");
             ASSERT_MSG(s.state == RoomState::Running && s.ticks > 300, "the match runs at origin " + std::to_string(origin));
             ASSERT_FALSE(w.clients[0]->session->desynced());
@@ -1134,7 +1140,7 @@ void run_hardening_tests() {
             Client& a = w.connect("Ann", "LAG-1");
             Client& b = w.connect("Bob", "LAG-1");
             Client& c = w.connect("Cat", "LAG-1");
-            w.run(3000);
+            w.run(3000 + kPre);
             ASSERT_TRUE(w.status("LAG-1").state == RoomState::Running);
             const uint8_t bob = b.lobby->my_seat();
             const uint32_t ticks_before = w.status("LAG-1").ticks;
@@ -1165,7 +1171,7 @@ void run_hardening_tests() {
             ASSERT_TRUE(w.mgr.create_room(spec_of("LAG-2", 2), w.now).ok);
             w.connect("Ann", "LAG-2");
             Client& b = w.connect("Bob", "LAG-2");
-            w.run(3000);
+            w.run(3000 + kPre);
             ASSERT_TRUE(w.status("LAG-2").state == RoomState::Running);
             b.freeze = true;
             w.run(40000);
@@ -1194,7 +1200,7 @@ void run_hardening_tests() {
         Client& b = w.connect("Bob", "END-1");
         Throttled* slow = nullptr;
         Client& c = w.connect("Cat", "END-1", 255, {20, 10}, &slow);
-        w.run(4000);
+        w.run(4000 + kPre);
         ASSERT_TRUE(w.status("END-1").state == RoomState::Running);
         slow->period_ms = 150;                                                       // Cat's downlink hands the game 7 of the 21 messages a second that the room sends
         w.run(82000);                                                                // it falls behind by two thirds of a second each second: 55 s behind (not 60: not dropped), and it still makes progress
@@ -1237,7 +1243,7 @@ void run_hardening_tests() {
             ASSERT_TRUE(w.mgr.create_room(spec_of("END-2", 2), w.now).ok);
             Client& a = w.connect("Ann", "END-2");
             Client& b = w.connect("Bob", "END-2");
-            w.run(4000);
+            w.run(4000 + kPre);
             w.net.cut(b.end);
             for (int i = 0; i < 100 && w.status("END-2").state == RoomState::Running; ++i) w.run(100);
             ASSERT_TRUE(w.status("END-2").state == RoomState::Finished);
@@ -1590,7 +1596,7 @@ void run_leader_tests() {
         ASSERT_TRUE(ann.session == nullptr && bob.session == nullptr);
         ASSERT_TRUE(ann.lobby->is_leader() && ann.lobby->phase() == net::ClientLobby::Phase::InRoom);
         ASSERT_TRUE(ann.lobby->request_start());
-        w.run(3000);
+        w.run(3000 + kPre);
         ASSERT_TRUE(w.status("LEAD-LAG").state == RoomState::Running);
         ASSERT_TRUE(ann.session != nullptr && bob.session != nullptr);
         ASSERT_EQ(w.status("LEAD-LAG").leader, 255);                                        // once the match runs nobody leads: the lobby is over
@@ -1707,7 +1713,7 @@ void run_leader_tests() {
         ASSERT_TRUE(s.state == RoomState::Running);
         ASSERT_TRUE(s.names[0].empty() && s.names[1] == "Bob" && s.names[2] == "Cat" && s.names[3].empty());
         ASSERT_TRUE(bob.sim.roster_mask() == 0x06 && cat.sim.roster_mask() == 0x06);
-        w.run(5000);
+        w.run(5000 + kPre);
         ASSERT_FALSE(bob.session->desynced() || cat.session->desynced());
         ASSERT_TRUE(w.status("LEFT-1").state == RoomState::Running && w.status("LEFT-1").ticks > 60);
         {   // a leader who asks and leaves in the same breath (both reach the room in one pass) asked for nothing: the room does not start with the two who are left
@@ -2670,7 +2676,7 @@ void run_reconnect_tests() {
             RClient& a = w.connect("Ann", "K-1");
             RClient& b = w.connect("Bob", "K-1");
             RClient& c = w.connect("Cat", "K-1");
-            w.run(3000);
+            w.run(3000 + kPre);
             const RoomStatus s = w.status("K-1");
             ASSERT_TRUE(s.state == RoomState::Running && s.reconnect && !s.paused && s.absent.empty() && s.rejoins == 0);
             ASSERT_TRUE(!net::key_is_zero(a.lobby->key()) && !net::key_is_zero(b.lobby->key()) && !net::key_is_zero(c.lobby->key()));
@@ -2707,7 +2713,7 @@ void run_reconnect_tests() {
         RClient& a = w.connect("Ann", "R-1");
         RClient& b = w.connect("Bob", "R-1");
         RClient& c = w.connect("Cat", "R-1");
-        w.run(6000);
+        w.run(6000 + kPre);
         ASSERT_TRUE(w.status("R-1").state == RoomState::Running);
         const uint8_t bob = b.lobby->my_seat();
         b.reconnects = false;
@@ -2747,7 +2753,7 @@ void run_reconnect_tests() {
         RClient& a = w.connect("Ann", "L-1");
         RClient& b = w.connect("Bob", "L-1");
         RClient& c = w.connect("Cat", "L-1");
-        w.run(40000);                                                                    // more than the 600 turns that every machine keeps
+        w.run(40000 + kPre);                                                                    // more than the 600 turns that every machine keeps
         ASSERT_TRUE(w.status("L-1").state == RoomState::Running && w.status("L-1").turns > 700);
         const net::SeatKey key = b.lobby->key();
         const uint8_t seat = b.lobby->my_seat();
@@ -2791,7 +2797,7 @@ void run_reconnect_tests() {
         ASSERT_TRUE(w.mgr.create_room(held_spec("V-1", 2), w.now).ok);
         RClient& a = w.connect("Ann", "V-1");
         RClient& b = w.connect("Bob", "V-1");
-        w.run(6000);
+        w.run(6000 + kPre);
         const uint8_t bob = b.lobby->my_seat();
         b.reconnects = false;
         w.cut(b);
@@ -2820,7 +2826,7 @@ void run_reconnect_tests() {
             RClient& x = v.connect("Xan", "V-2");
             RClient& y = v.connect("Yan", "V-2");
             RClient& z = v.connect("Zed", "V-2");
-            v.run(4000);
+            v.run(4000 + kPre);
             z.reconnects = false;
             v.cut(z);
             v.run(6500);
@@ -2839,7 +2845,7 @@ void run_reconnect_tests() {
         ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
         w.connect("Ann", "T-1");
         RClient& b = w.connect("Bob", "T-1");
-        w.run(5000);
+        w.run(5000 + kPre);
         b.reconnects = false;
         w.cut(b);
         w.run(60000);                                                                    // a minute of waiting: more than the limit
@@ -2860,7 +2866,7 @@ void run_reconnect_tests() {
         RClient& a = w.connect("Ann", "E-1");
         RClient& b = w.connect("Bob", "E-1");
         RClient& c = w.connect("Cat", "E-1");
-        w.run(4000);
+        w.run(4000 + kPre);
         for (RClient* p : {&a, &b, &c}) {
             p->reconnects = false;
             w.cut(*p);
@@ -2891,7 +2897,7 @@ void run_reconnect_tests() {
         RClient& a = w.connect("Ann", "C-1");
         RClient& b = w.connect("Bob", "C-1");
         RClient& c = w.connect("Cat", "C-1");
-        w.run(6000);
+        w.run(6000 + kPre);
         const uint8_t bob = b.lobby->my_seat();
         b.reconnects = false;
         w.cut(b);
@@ -2925,7 +2931,7 @@ void run_reconnect_tests() {
         RClient& a = w.connect("Ann", "P-1");
         RClient& b = w.connect("Bob", "P-1");
         RClient& c = w.connect("Cat", "P-1");
-        w.run(4000);
+        w.run(4000 + kPre);
         RClient* const seats[3] = {&b, &c, &a};
         // (a seat may be taken back three times a minute: the three of them take turns, one cut every 7 s, so that each is cut every 21 s)
         for (int i = 0; i < 80 && w.status("P-1").connections != Room::kMaxConnections - 1; ++i) {        // until the room keeps 31 connections: the next one fills it
@@ -2973,7 +2979,7 @@ void run_reconnect_tests() {
         RClient& a = w.connect("Ann", "F-1");
         RClient& b = w.connect("Bob", "F-1");
         RClient& c = w.connect("Cat", "F-1");
-        w.run(4000);
+        w.run(4000 + kPre);
         RClient* const seats[3] = {&b, &c, &a};
         for (int i = 0; i < 40; ++i) {
             w.cut(*seats[i % 3]);
@@ -2996,7 +3002,7 @@ void run_reconnect_tests() {
         ASSERT_TRUE(w.mgr.create_room(held_spec("X-1", 2), w.now).ok);
         RClient& a = w.connect("Ann", "X-1");
         RClient& b = w.connect("Bob", "X-1");
-        w.run(4000);
+        w.run(4000 + kPre);
         ASSERT_TRUE(w.status("X-1").state == RoomState::Running);
         const auto hello_for = [&](const std::string& room, const net::SeatKey& key, uint32_t have) {
             net::Connection* end = w.open_link();
@@ -3099,7 +3105,7 @@ void run_reconnect_tests() {
             RClient& a = w.connect("Ann", "J-1");
             RClient& b = w.connect("Bob", "J-1");
             RClient& c = w.connect("Cat", "J-1");
-            w.run(5000);
+            w.run(5000 + kPre);
             const std::vector<net::SeatKey> keys = {a.lobby->key(), b.lobby->key(), c.lobby->key()};
             const auto status_json = [&](const std::string& code) {
                 ctl::HttpRequest rq;
@@ -3264,7 +3270,7 @@ void run_reconnect_tests() {
                 RWorld w(limits);
                 RClient& a = w.connect("Ann", "demo-tiny-2p-held");
                 RClient& b = w.connect("Bob", "demo-tiny-2p-held");
-                w.run(4000);
+                w.run(4000 + kPre);
                 const RoomStatus s = w.status("demo-tiny-2p-held");
                 ASSERT_TRUE(s.state == RoomState::Running && s.reconnect == hold);
                 ASSERT_EQ(!net::key_is_zero(a.lobby->key()) && !net::key_is_zero(b.lobby->key()), hold);
@@ -3346,7 +3352,7 @@ void run_reconnect_tests() {
         RClient& a = w.connect("Ann", "S-1");
         RClient& b = w.connect("Bob", "S-1");
         RClient& c = w.connect("Cat", "S-1");
-        w.run(4000);
+        w.run(4000 + kPre);
         const uint8_t bob = b.lobby->my_seat();
         b.frame_every_ms = 4000;
         bool paused_ever = false;
@@ -3382,7 +3388,7 @@ void run_reconnect_tests() {
             RClient& a = w.connect("A", "DROP-1");
             RClient& b = w.connect("B", "DROP-1");
             RClient& c = w.connect("C", "DROP-1");
-            w.run(4000);
+            w.run(4000 + kPre);
             ASSERT_TRUE(w.status("DROP-1").state == RoomState::Running);
             w.cut(b);
             bool paused_ever = false;
@@ -3409,7 +3415,7 @@ void run_reconnect_tests() {
             RClient& a = w.connect("Ann", "LAG-1");
             RClient& b = w.connect("Bob", "LAG-1");
             RClient& c = w.connect("Cat", "LAG-1");
-            w.run(3000);
+            w.run(3000 + kPre);
             const uint8_t bob = b.lobby->my_seat();
             const uint32_t ticks_before = w.status("LAG-1").ticks;
             b.hung = true;                                                               // Bob's program hangs: it neither acks nor answers
@@ -3434,7 +3440,7 @@ void run_reconnect_tests() {
             ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
             w.connect("Ann", "LAG-2");
             RClient& b = w.connect("Bob", "LAG-2");
-            w.run(3000);
+            w.run(3000 + kPre);
             b.hung = true;
             w.run(40000);
             ASSERT_TRUE(w.status("LAG-2").state == RoomState::Finished);                 // two players: the one that is left has won, the room ends
@@ -3448,7 +3454,7 @@ void run_reconnect_tests() {
             RClient& a = w.connect("Ann", "Z-1");
             RClient& b = w.connect("Bob", "Z-1");
             RClient& c = w.connect("Cat", "Z-1");
-            w.run(4000);
+            w.run(4000 + kPre);
             const uint8_t bob = b.lobby->my_seat();
             b.hung = true;
             const uint32_t at = w.now;
@@ -3509,7 +3515,7 @@ void run_reconnect_tests() {
             RClient& a = w.connect("Ann", "N-1");
             RClient& b = w.connect("Bob", "N-1");
             RClient& c = w.connect("Cat", "N-1");
-            w.run(12000);                                                                // 12 s of play (the match began about a second after the clients came)
+            w.run(12000 + kPre);                                                                // 12 s of play (the match began about a second after the clients came)
             ASSERT_TRUE(w.status("N-1").state == RoomState::Running);
             b.reconnects = false;
             w.cut(b);
@@ -3663,7 +3669,7 @@ void run_reconnect_tests() {
         RClient& a = w.connect("Ann", "W-1");
         RClient& b = w.connect("Bob", "W-1");
         RClient& c = w.connect("Cat", "W-1");
-        w.run(6000);
+        w.run(6000 + kPre);
         ASSERT_TRUE(w.status("W-1").state == RoomState::Running);
         const net::SeatKey key = c.lobby->key();
         const uint8_t cat = c.lobby->my_seat();
@@ -3746,7 +3752,7 @@ void run_reconnect_tests() {
             RClient& a = w.connect("Ann", "M-1");
             RClient& b = w.connect("Bob", "M-1");
             RClient& c = w.connect("Cat", "M-1");
-            w.run(6000);
+            w.run(6000 + kPre);
             ASSERT_TRUE(w.status("M-1").state == RoomState::Running);
             a.orders = false;
             b.orders = false;
@@ -3837,7 +3843,7 @@ void run_reconnect_tests() {
             hostile.push_back(&w.connect("A" + std::to_string(i), "H" + std::to_string(i)));
             hostile.push_back(&w.connect("B" + std::to_string(i), "H" + std::to_string(i)));
         }
-        w.run(4000);
+        w.run(4000 + kPre);
         for (int i = 0; i < 16; ++i) ASSERT_TRUE(w.status("H" + std::to_string(i)).state == RoomState::Running);
         for (RClient* c : hostile) c->orders = false;
         std::vector<uint32_t> many;
@@ -3873,7 +3879,7 @@ void run_reconnect_tests() {
         ASSERT_TRUE(w.mgr.create_room(held_spec("GOOD", 2), w.now).ok);
         w.connect("Ann", "GOOD");
         RClient& bob = w.connect("Bob", "GOOD");
-        w.run(5000);
+        w.run(5000 + kPre);
         RoomStatus g = w.status("GOOD");
         ASSERT_TRUE(g.state == RoomState::Running && g.log_usable && g.log_bytes > 0 && w.mgr.log_bytes() > 0);
         bob.reconnects = false;
@@ -3896,7 +3902,7 @@ void run_reconnect_tests() {
             RClient& a = w.connect("Ann", "L-1");
             RClient& b = w.connect("Bob", "L-1");
             RClient& c = w.connect("Cat", "L-1");
-            w.run(5000);
+            w.run(5000 + kPre);
             ASSERT_TRUE(w.status("L-1").state == RoomState::Running);
             ASSERT_EQ(w.status("L-1").connections, 3u);
             b.reconnects = true;
@@ -4311,7 +4317,7 @@ void run_bot_tests() {
             RClient& ann = w.connect("Ann", "BH-1", 0);
             RClient& bob = w.connect("Bob", "BH-1", 1);
             ann.record_hashes = true;
-            w.run(6000);                                                                     // the room is full (two people and two bots): it started by itself
+            w.run(6000 + kPre);                                                                     // the room is full (two people and two bots): it started by itself
             ASSERT_TRUE(w.status("BH-1").state == RoomState::Running);
             ASSERT_TRUE(ann.sim.roster_mask() == 0x0F);
             const uint8_t bob_seat = bob.lobby->my_seat();
@@ -4633,7 +4639,7 @@ void run_bot_tests() {
         w.run(300);
         for (Client* c : {&ann, &bob, &cat}) ASSERT_TRUE(!c->room_chat.empty() && c->room_chat.back().text == "before the match");
         ASSERT_TRUE(ann.lobby->is_leader() && ann.lobby->request_start());
-        w.run(3000);
+        w.run(3000 + kPre);
         ASSERT_TRUE(w.status("TEAM-1").state == RoomState::Running);
         ASSERT_TRUE(ann.session && bob.session && cat.session);
         cat.freeze = true;                                                                   // Cat's session stops: nothing filters, nothing acknowledges; the test reads its link
@@ -4695,10 +4701,11 @@ void run_bot_tests() {
         ASSERT_EQ(raw.size(), size_t{1});                                                    // and the raw client still only the line for all
     } TEST_END();
 
-    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10 Or 12 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
+    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog) Or 13 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
         {   // the door's own check of the protocol, for a code that no room has
             World w;
-            for (const uint16_t version : {uint16_t{10}, uint16_t{12}, uint16_t{1}, uint16_t{0}}) {
+            ASSERT_EQ(net::kProtocolVersion, uint16_t{12});                  // (11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match)
+            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{13}, uint16_t{1}, uint16_t{0}}) {
                 auto ends = w.net.connect({20, 10});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
                 net::HelloMsg hello;
@@ -4732,6 +4739,7 @@ void run_bot_tests() {
             // a leader's START without a fill: the same
             ASSERT_TRUE(w.mgr.create_room(spec_of("NOBOT-2", 4), w.now).ok);
             Client& cat = w.connect("Cat", "NOBOT-2");
+            w.run(300);                                                                                // (Cat first: the Hellos of two links that are made together arrive in either order, whatever the link's jitter says, and the first to arrive leads)
             w.connect("Dan", "NOBOT-2");
             w.run(500);
             ASSERT_TRUE(cat.lobby->request_start(net::FillLevel::None));
@@ -4827,7 +4835,7 @@ void run_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.74 The Start Hold In A Server's Room: A Room That The Leader's START Fills With Hard Bots Has No Command Of A Bot Seat In Any Turn Before Tick 100 (As The Person's Own Engine Applies The Turn Stream: The Bots Wait For The Dialog That Opens Every Match), And The Bots Do Play After It") {
+    TEST_CASE("S3.76 The Opening Of A Server's Room: The First Turn Is Sealed 5000 ms After The Match Began (Protocol 12: Nobody's Clock Runs Behind The Dialog, Nothing Is Sealed, Run Or Late Before It); A Room That The Leader's START Fills With Hard Bots Has No Command Of A Bot Seat In Turn 0 And Before A Bot's First Look (Tick 1 + Seat) And Its Reaction Time Are Over, And The Bots Do Play After It") {
         World w;
         ASSERT_TRUE(w.mgr.create_room(spec_of("HOLD-1", 4), w.now).ok);
         Client& ann = w.connect("Ann", "HOLD-1", 2);                      // the person sits in seat 2: the bots take 0, 1 and 3
@@ -4835,23 +4843,152 @@ void run_bot_tests() {
         w.run(500);
         ASSERT_TRUE(ann.lobby->is_leader());
         ASSERT_TRUE(ann.lobby->request_start(net::FillLevel::Hard));
-        w.run(2000);
+        uint32_t begin = 0;                                                  // the time of the room's begin_match: the first pass after which the room runs (one pass is one 10 ms step here)
+        for (int i = 0; i < 400 && begin == 0; ++i) {
+            w.run(10);
+            if (w.status("HOLD-1").state == RoomState::Running) begin = w.now;
+        }
+        ASSERT_TRUE(begin != 0);
         RoomStatus s = w.status("HOLD-1");
-        ASSERT_TRUE(s.state == RoomState::Running && s.bots.size() == 3 && s.bots[0].level == "hard");
+        ASSERT_TRUE(s.state == RoomState::Running && s.bots.size() == 3 && s.bots[0].level == "hard" && s.bot_controller);
+        ASSERT_TRUE(s.turns == 0 && s.ticks == 0);
+        // the pre-start: for 5 s nothing is sealed and nothing runs (the referee's engine, the person's engine), nobody is announced as lagging, no pause, no command of anybody
+        uint32_t first_turn_ms = 0;
+        while (w.now - begin < 20000 && first_turn_ms == 0) {
+            w.run(10);
+            s = w.status("HOLD-1");
+            if (s.turns > 0) {
+                first_turn_ms = w.now - begin;
+            } else {
+                ASSERT_TRUE(s.ticks == 0 && !s.paused && s.state == RoomState::Running);
+                ASSERT_TRUE(ann.sim.current_tick() == 0 && ann.saw.empty());
+                if (ann.session == nullptr) continue;                         // (the Begin is on its way to the client: its session starts a link delay after the room's)
+                ASSERT_TRUE(!ann.session->catching_up() && ann.session->lagging_seat() == 255 && ann.session->self_lag_behind_ms() == 0);
+                ASSERT_TRUE(ann.session->runner().stalled_ms() == 0 && ann.session->runner().buffer_turns() == 1 && !ann.session->runner().stalled());   // not a stall of the link, no growth of the jitter buffer
+            }
+        }
+        ASSERT_TRUE(first_turn_ms >= net::kMatchStartDelayMs && first_turn_ms <= net::kMatchStartDelayMs + net::kTurnMs);   // the first turn: 5000 ms after the match began (one turn, 50 ms, at the most more)
         w.run(25000);                                                       // some 500 ticks
         ASSERT_TRUE(ann.sim.current_tick() > 400);
+        ASSERT_TRUE(ann.session->runner().buffer_turns() == 1 && !ann.session->catching_up());     // (the pre-start left the buffer as it was)
         size_t per_seat[4] = {0, 0, 0, 0};
         uint64_t first = ~0ull;
         for (const auto& e : ann.saw) {
             if (e.second.issuer == 2) continue;                              // the person's own (this test client orders from the first turn on: it knows no dialog)
             ASSERT_TRUE(e.second.issuer == 0 || e.second.issuer == 1 || e.second.issuer == 3);
-            ASSERT_TRUE(e.first >= sim::kMatchStartHoldTicks);               // no turn before tick 100 carries a command of a bot
+            ASSERT_TRUE(e.first >= 1u);                                      // no turn 0 carries a command of a bot (the first tick that a person's engine runs is 1)
             ++per_seat[e.second.issuer];
             first = std::min(first, e.first);
         }
         ASSERT_TRUE(per_seat[0] >= 1 && per_seat[1] >= 1 && per_seat[3] >= 1);        // every bot played (a harvesting bot needs well under a command per second)
-        ASSERT_TRUE(first >= sim::kMatchStartHoldTicks + 6u);                 // a Hard bot looks on tick 100 + seat and its first order leaves 6 to 10 ticks later (then it is sealed into a turn)
+        ASSERT_TRUE(first >= 1u + 6u);                                       // a Hard bot looks on tick 1 + seat and its first order leaves 6 to 10 ticks later (then it is sealed into a turn)
         ASSERT_FALSE(ann.session->desynced());
+    } TEST_END();
+    TEST_CASE("S3.75 What The Room's Limit And Status Say About The Start (Protocol 12): run_ms Counts From The Moment The Match Began, The 5 s Before The First Turn Included (A Room With A Limit Of 8 s Fails 8 s After It Began, Not 13); A Room With A Bot Of Its Specification Opens Its Bots Like The Product Does (The Status Says The Controller's Hold Is kStartHoldTicks), A Room Without Bots Has No Controller") {
+        {
+            World w;
+            RoomSpec spec = spec_of("RUNLIM-1", 2);
+            spec.run_ms = 8000;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            w.connect("Ann", "RUNLIM-1");
+            w.connect("Bob", "RUNLIM-1");
+            uint32_t begin = 0;
+            for (int i = 0; i < 400 && begin == 0; ++i) {
+                w.run(10);
+                if (w.status("RUNLIM-1").state == RoomState::Running) begin = w.now;
+            }
+            ASSERT_TRUE(begin != 0);
+            uint32_t failed_after = 0;
+            while (w.now - begin < 20000 && failed_after == 0) {
+                w.run(10);
+                const RoomStatus s = w.status("RUNLIM-1");
+                if (s.state == RoomState::Failed) {
+                    failed_after = w.now - begin;
+                    ASSERT_TRUE(s.reason.find("longer") != std::string::npos);
+                    ASSERT_TRUE(s.turns > 0 && s.turns < 100);                                       // (3 s of turns: the first one was sealed 5 s into the 8)
+                }
+            }
+            ASSERT_TRUE(failed_after >= 8000 && failed_after <= 8000 + net::kTurnMs);             // the limit counts from the begin of the match, the 5 s of the dialog in it
+        }
+        {
+            World w;
+            RoomSpec own = spec_of("HOLDSPEC-1", 2);
+            own.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+            ASSERT_TRUE(w.mgr.create_room(own, w.now).ok);
+            w.connect("Fay", "HOLDSPEC-1");
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PLAIN-1", 2), w.now).ok);
+            w.connect("Gus", "PLAIN-1");
+            w.connect("Hal", "PLAIN-1");
+            w.run(1500);
+            const RoomStatus with_bot = w.status("HOLDSPEC-1");
+            const RoomStatus plain = w.status("PLAIN-1");
+            ASSERT_TRUE(with_bot.state == RoomState::Running && with_bot.bot_controller && with_bot.bot_start_hold == ai::kStartHoldTicks);
+            ASSERT_TRUE(plain.state == RoomState::Running && !plain.bot_controller && plain.bot_start_hold == 0u);
+        }
+    } TEST_END();
+    TEST_CASE("S3.77 Protocol 12, A Command That Reaches A Server's Room Before Its First Turn Is Sealed Is Discarded (The Product Path: Room::begin_match Sets The Start Delay): A Raw Connection That Writes Seventy Orders At 100 ms And One At 4,500 ms Of The Dialog Has Them In No Turn On Any Machine And Stays In The Room; Its Order After The First Seal And An Honest Client's Order After Its First Tick Are Applied On Both Machines At The Same Tick") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("EARLY-1", 2), w.now).ok);
+        Client& ann = w.connect("Ann", "EARLY-1");                       // honest: it orders after its first tick
+        Client& bob = w.connect("Bob", "EARLY-1");                       // a raw connection in the dialog (a modified client): it writes CommandMsg itself
+        ann.record_commands = true;
+        bob.record_commands = true;
+        ann.next_order_ms = bob.next_order_ms = 0xFFFFFFFFu;             // (the rig's own orders, one every 700 ms from its first moment because it knows no dialog, are off: this test sends its own, at chosen times)
+        uint32_t begin = 0;
+        for (int i = 0; i < 400 && begin == 0; ++i) {
+            w.run(10);
+            if (w.status("EARLY-1").state == RoomState::Running) begin = w.now;
+        }
+        ASSERT_TRUE(begin != 0);
+        ASSERT_TRUE(ann.sim.get_world_state().ants.size() > 0);
+        const auto order_of = [&](Client& who, int16_t x) {
+            sim::Command c;
+            c.type = sim::CommandType::GroupMove;
+            c.issuer = who.lobby->my_seat();
+            c.tile_x = x;
+            c.tile_y = 12;
+            for (const auto& a : who.sim.get_world_state().ants) {
+                if (a.player_id == c.issuer && c.ants.size() < 3) c.ants.push_back(a.id);
+            }
+            return c;
+        };
+        const auto step_to = [&](uint32_t ms_after_begin) {
+            while (w.now - begin < ms_after_begin) w.run(10);
+        };
+        step_to(100);
+        ASSERT_TRUE(bob.session != nullptr && !order_of(bob, 10).ants.empty());
+        for (int i = 0; i < 70; ++i) bob.end->send(net::encode(net::CommandMsg{order_of(bob, static_cast<int16_t>(10 + i % 5))}));   // a scripted opening, seventy orders
+        step_to(4500);
+        bob.end->send(net::encode(net::CommandMsg{order_of(bob, 30)}));                                                              // one more, half a second before the first turn
+        step_to(4700);
+        RoomStatus s = w.status("EARLY-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.turns == 0 && s.ticks == 0);      // the dialog is still up: nothing sealed
+        uint32_t sealed_at = 0;
+        for (int i = 0; i < 100 && sealed_at == 0; ++i) {
+            w.run(10);
+            if (w.status("EARLY-1").turns > 0) sealed_at = w.now - begin;
+        }
+        ASSERT_TRUE(sealed_at >= net::kMatchStartDelayMs && sealed_at <= net::kMatchStartDelayMs + net::kTurnMs);   // the first turn is 5000 ms after the match began
+        // after the first seal: the raw connection's order is an order like any other, and so is an honest client's, sent after its own first tick
+        step_to(sealed_at + 200);
+        bob.end->send(net::encode(net::CommandMsg{order_of(bob, 31)}));
+        bool ann_sent = false;
+        for (int i = 0; i < 600 && !ann_sent; ++i) {
+            if (ann.sim.current_tick() >= 1) ann_sent = ann.session->submit(order_of(ann, 20));
+            if (!ann_sent) w.run(10);
+        }
+        ASSERT_TRUE(ann_sent);
+        w.run(3000);
+        ASSERT_TRUE(ann.saw.size() == 2 && bob.saw.size() == 2);                         // Bob's late order and Ann's, and none of Bob's seventy-one orders of the dialog (their tiles are 10 - 14 and 30)
+        for (size_t i = 0; i < 2; ++i) {
+            ASSERT_TRUE(ann.saw[i].second.tile_x == 31 || ann.saw[i].second.tile_x == 20);
+            ASSERT_TRUE(ann.saw[i].first >= 1u);                                         // not turn 0 (no tick had run)
+            ASSERT_TRUE(ann.saw[i].first == bob.saw[i].first && ann.saw[i].second.issuer == bob.saw[i].second.issuer && ann.saw[i].second.tile_x == bob.saw[i].second.tile_x);   // the same tick on both machines
+        }
+        ASSERT_TRUE(!ann.lost && !bob.lost && !ann.session->lost() && !bob.session->lost());      // a discarded command is no violation: Bob stays in the room
+        ASSERT_FALSE(ann.session->desynced() || bob.session->desynced());
+        s = w.status("EARLY-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.ticks > 50);                      // (some 3 s of play after the first turn)
     } TEST_END();
 }
 

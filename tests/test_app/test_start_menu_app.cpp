@@ -4,7 +4,7 @@
 // a join can fail, cancel, and the way back to the menu after a network game. One Application per test (SDL is initialised once per process).
 //
 //   test_start_menu_app                         runs the tests
-//   test_start_menu_app --shots DIR             writes the screenshots of every panel and state of the menu as DIR/*.png (they are what the menu looks like; nothing is compared)
+//   test_start_menu_app --shots DIR [--wide]    writes the screenshots of every panel and state of the menu as DIR/*.png (they are what the menu looks like; nothing is compared); --wide: the 16:9 picture (960 x 540)
 //   test_start_menu_app --real-server H:P       runs the host / join / START scenario against a game server that is already running (the gate "a real server": a native ants_server
 //                                               on localhost started with --demo-rooms 4 --demo-map TINY.LVL ...), then exits
 //   test_start_menu_app --real-fill H:P         hosts a room through the menu with "Empty seats at START" = Medium bots, starts it ALONE (the server seats three bots) and plays it
@@ -499,8 +499,8 @@ char** argv_of(std::vector<std::string>& args, std::vector<char*>& storage) {
     return storage.data();
 }
 
-// What a match looks like when it has just started and has run for the 100 ticks of the "Get ready" dialog and 100 more (the bots look from the end of the dialog on): what two ways
-// into the same game must agree on
+// What a match looks like when it has just started and has run for the 5 s of the "Get ready" dialog (100 steps of 50 ms, in which the simulation waits: the match clock shows its full time) and
+// 100 ticks more (the bots look from the first tick on): what two ways into the same game must agree on
 struct Played {
     uint8_t roster{0};
     uint64_t hash{0};
@@ -512,9 +512,11 @@ struct Played {
     uint8_t seat{0};
     uint32_t decisions1{0};
     uint32_t decisions3{0};
-    bool dialog_up_during_99_ticks{false};     // the "Get ready" dialog was up after each of the ticks 1 .. 99, and gone after the 100th
-    uint32_t looks_in_the_dialog{0};           // the looks of the bots during those ticks: none (the start hold)
+    bool dialog_up_during_99_steps{false};     // the "Get ready" dialog was up after each of the steps 1 .. 99 (50 ms of real time each), and gone after the 100th
+    uint64_t ticks_in_the_dialog{0};           // the simulation's ticks during those steps: none, the match clock waits for the dialog
+    uint32_t looks_in_the_dialog{0};           // the looks of the bots during those steps: none (no tick, no look)
     uint32_t orders_in_the_dialog{0};          // and the orders they released
+    uint64_t ticks_after{0};                   // the simulation's ticks after the 100 steps and 100 more: 100
     AppState state{AppState::MapSelect};
 };
 
@@ -528,19 +530,22 @@ Played snapshot(Application& app) {
     p.fog = app.sim().is_fog_of_war_enabled();
     for (uint8_t s = 0; s < 4; ++s) p.names[s] = app.sim().get_player_name(s);
     p.seat = app.local_player_id();
-    p.dialog_up_during_99_ticks = app.hud().is_match_start_modal_active();
-    for (uint32_t i = 1; i <= 100u + sim::kMatchStartHoldTicks; ++i) {
+    p.dialog_up_during_99_steps = app.hud().is_match_start_modal_active();
+    for (uint32_t i = 1; i <= HUD::kMatchStartModalSteps + 100u; ++i) {
         app.update_simulation(0.05f);
-        if (i < sim::kMatchStartHoldTicks) {
-            p.dialog_up_during_99_ticks = p.dialog_up_during_99_ticks && app.hud().is_match_start_modal_active();
+        if (i < HUD::kMatchStartModalSteps) {
+            p.dialog_up_during_99_steps = p.dialog_up_during_99_steps && app.hud().is_match_start_modal_active();
+            p.ticks_in_the_dialog += app.sim().current_tick();
             if (p.bots) {
                 p.looks_in_the_dialog += app.bots()->stats(1).decisions + app.bots()->stats(3).decisions;
                 p.orders_in_the_dialog += app.bots()->stats(1).released + app.bots()->stats(3).released;
             }
-        } else if (i == sim::kMatchStartHoldTicks) {
-            p.dialog_up_during_99_ticks = p.dialog_up_during_99_ticks && !app.hud().is_match_start_modal_active();
+        } else if (i == HUD::kMatchStartModalSteps) {
+            p.dialog_up_during_99_steps = p.dialog_up_during_99_steps && !app.hud().is_match_start_modal_active();
+            p.ticks_in_the_dialog += app.sim().current_tick();
         }
     }
+    p.ticks_after = app.sim().current_tick();
     p.hash = app.sim().state_hash().total;
     if (p.bots) {
         p.decisions1 = app.bots()->stats(1).decisions;
@@ -551,13 +556,13 @@ Played snapshot(Application& app) {
 
 bool same(const Played& a, const Played& b) {
     return a.roster == b.roster && a.hash == b.hash && a.ants == b.ants && a.bots == b.bots && a.bot_seats == b.bot_seats && a.fog == b.fog && a.names == b.names && a.seat == b.seat &&
-           a.decisions1 == b.decisions1 && a.decisions3 == b.decisions3 && a.state == b.state && a.dialog_up_during_99_ticks == b.dialog_up_during_99_ticks &&
-           a.looks_in_the_dialog == b.looks_in_the_dialog && a.orders_in_the_dialog == b.orders_in_the_dialog;
+           a.decisions1 == b.decisions1 && a.decisions3 == b.decisions3 && a.state == b.state && a.dialog_up_during_99_steps == b.dialog_up_during_99_steps &&
+           a.ticks_in_the_dialog == b.ticks_in_the_dialog && a.looks_in_the_dialog == b.looks_in_the_dialog && a.orders_in_the_dialog == b.orders_in_the_dialog && a.ticks_after == b.ticks_after;
 }
 
 // ---- the screenshots ---------------------------------------------------------------------------------------------------------------------------------------------------
 
-int make_shots(const std::string& dir) {
+int make_shots(const std::string& dir, bool wide) {
     std::error_code ec;
     fs::create_directories(dir, ec);
     TempDir temp;
@@ -566,6 +571,13 @@ int make_shots(const std::string& dir) {
     Hall hall{&server, &app, {}, nullptr, false};
     const auto slow = std::make_shared<Lookup>();                    // a name that is slow to resolve: the "Connecting" panel stays
     ApplicationConfig cfg = menu_config(server.address(), temp.file("settings.ini"));
+    if (wide) {                                                      // the 16:9 picture: the hand-made config is the original's 4:3 unless it says so
+        cfg.aspect = Aspect::Wide16x9;
+        cfg.aspect_given = true;
+        cfg.has_window_size = true;
+        cfg.window_w = 960;
+        cfg.window_h = 540;
+    }
     cfg.host_resolver = lookup_of(slow);
     cfg.clipboard_set = [](const std::string&) { return true; };
     if (!app.init(cfg)) return 1;
@@ -797,7 +809,11 @@ int run_probe(const std::string& address) {
 
 int main(int argc, char** argv) {
     for (int i = 1; i + 1 < argc; ++i) {
-        if (std::strcmp(argv[i], "--shots") == 0) return make_shots(argv[i + 1]);
+        if (std::strcmp(argv[i], "--shots") == 0) {
+            bool wide = false;
+            for (int k = 1; k < argc; ++k) wide = wide || std::strcmp(argv[k], "--wide") == 0;
+            return make_shots(argv[i + 1], wide);
+        }
         if (std::strcmp(argv[i], "--real-server") == 0) return run_real_server(argv[i + 1]);
         if (std::strcmp(argv[i], "--real-fill") == 0) return run_real_fill(argv[i + 1]);
         if (std::strcmp(argv[i], "--probe") == 0) return run_probe(argv[i + 1]);
@@ -927,7 +943,7 @@ int main(int argc, char** argv) {
         ASSERT_FALSE(refused.init(bad));
     } TEST_END();
 
-    TEST_CASE("A2.1 Single player with nobody: the match is the original's single-player game exactly: the same four teams, no bot code, the same state at tick 200 (the 100 ticks of the get-ready dialog and 100 more) as the game that never saw the menu") {
+    TEST_CASE("A2.1 Single player with nobody: the match is the original's single-player game exactly: the same four teams, no bot code, the same state after the get-ready dialog (5 s in which the simulation waits) and 100 ticks as the game that never saw the menu") {
         TempDir temp;
         Server server;
         write_no_quick_help(temp.file("a.ini"));
@@ -961,6 +977,7 @@ int main(int argc, char** argv) {
         ASSERT_EQ(via_menu.roster, 0x0F);
         ASSERT_FALSE(via_menu.bots);
         ASSERT_TRUE(same(via_menu, plain));
+        ASSERT_TRUE(via_menu.dialog_up_during_99_steps && via_menu.ticks_in_the_dialog == 0 && via_menu.ticks_after == 100u);      // the dialog, in which the match did not start, and 100 ticks after it
         // with the quick help on (the default), it comes between: Continue, the quick help, the setup screen
         {
             Application app;
@@ -974,7 +991,7 @@ int main(int argc, char** argv) {
         }
     } TEST_END();
 
-    TEST_CASE("A2.2 Single player with two bots: the match starts with exactly the bots that --bot 1:medium --bot 3:hard gives (same roster, names, bot seats, state at tick 200, decisions); the fog option refuses START with the reason, without fog it starts") {
+    TEST_CASE("A2.2 Single player with two bots: the match starts with exactly the bots that --bot 1:medium --bot 3:hard gives (same roster, names, bot seats, state after the dialog and 100 ticks, decisions); the fog option refuses START with the reason, without fog it starts") {
         TempDir temp;
         Server server;
         write_no_quick_help(temp.file("a.ini"));
@@ -1030,8 +1047,10 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(via_menu.bots && via_menu.bot_seats == 0x0A);
         ASSERT_TRUE(same(via_menu, by_flags));
         ASSERT_TRUE(via_menu.decisions1 >= 4 && via_menu.decisions3 >= 20);                  // the bots ran
-        // and only after the "Get ready" dialog: it was up for the ticks 1 .. 99 and gone on the 100th, and in those ticks neither bot looked or sent anything (the start hold), by the menu and by the flags
-        ASSERT_TRUE(via_menu.dialog_up_during_99_ticks && by_flags.dialog_up_during_99_ticks);
+        // and only after the "Get ready" dialog: it was up for the steps 1 .. 99 and gone on the 100th, the simulation did not run in them (the match clock waits for the dialog), and so neither bot
+        // looked or sent anything, by the menu and by the flags; the bots then ran for the 100 ticks that followed
+        ASSERT_TRUE(via_menu.dialog_up_during_99_steps && by_flags.dialog_up_during_99_steps);
+        ASSERT_TRUE(via_menu.ticks_in_the_dialog == 0 && by_flags.ticks_in_the_dialog == 0 && via_menu.ticks_after == 100u && by_flags.ticks_after == 100u);
         ASSERT_TRUE(via_menu.looks_in_the_dialog == 0 && via_menu.orders_in_the_dialog == 0 && by_flags.looks_in_the_dialog == 0 && by_flags.orders_in_the_dialog == 0);
         // the player's own seat can be another one (--player 2): the rows are the other three
         {
@@ -1875,7 +1894,7 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(green * 100 >= total * 8);                                                // and the four buttons and the banner on it
     } TEST_END();
 
-    TEST_CASE("A10.1b The same screenshot in the 16:9 picture (the default of a desktop): the 960 x 540 canvas with the menu's own 640 x 480 page centred at (160, 30) over the clay of the original's pages, the page pixel for pixel the 4:3 picture's") {
+    TEST_CASE("A10.1b The same screenshot in the 16:9 picture (the default of a desktop): the 960 x 540 canvas is the menu's own wide page (the wide frame at its edge, tile clay, the controls centred: the title plate at the top, the buttons 30 lower), and the title plate and the four buttons are pixel for pixel the 4:3 picture's, moved") {
         TempDir temp;
         struct Shot {
             int32_t width{0};
@@ -1917,12 +1936,23 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(classic.width == 640 && classic.height == 480);
         ASSERT_TRUE(wide.width == 960 && wide.height == 540);
         const std::array<uint8_t, 3> clay{219, 75, 19};
-        for (const std::pair<int, int>& p : {std::pair<int, int>{0, 0}, {159, 100}, {800, 100}, {400, 10}, {400, 29}, {959, 539 - 20}, {80, 300}}) ASSERT_TRUE(wide.at(p.first, p.second) == clay);   // the clay around the page
-        int64_t differ = 0;
-        for (int32_t y = 0; y < 465; ++y) {                                                    // (the rows of the frame rate's plate, which is the canvas's corner, are left out)
-            for (int32_t x = 0; x < 640; ++x) differ += wide.at(160 + x, 30 + y) != classic.at(x, y) ? 1 : 0;
+        // (this used to compare the 640 x 480 page, centred at (160, 30) over a margin of flat clay, with the 4:3 picture; the page is the wide page now: the frame of the canvas, the tile clay)
+        for (const std::pair<int, int>& p : {std::pair<int, int>{2, 2}, {957, 2}, {2, 537}, {957, 537}, {480, 2}, {2, 270}, {957, 270}, {600, 537}}) ASSERT_TRUE(wide.at(p.first, p.second) != clay);    // the frame is at the canvas's edge
+        int64_t clay_pixels = 0;
+        const int64_t margin_pixels = int64_t{250} * 410;                                      // the clay left of the controls (x 20 .. 269, y 90 .. 499): the tile is 97 % flat clay with isolated speckles
+        for (int32_t y = 90; y < 500; ++y) {
+            for (int32_t x = 20; x < 270; ++x) clay_pixels += wide.at(x, y) == clay ? 1 : 0;
         }
-        ASSERT_EQ(differ, int64_t{0});
+        ASSERT_TRUE(clay_pixels * 100 >= margin_pixels * 95 && clay_pixels < margin_pixels);   // clay, and not flat: the tile's speckles are there
+        // the plates are the same pixels: the title plate (120, 28, 400 x 44) stays at the top (+160, +0), the four buttons (160, y, 320 x 50) move to the middle (+160, +30); the 1 pixel drop shadow is in
+        for (const ButtonRect& r : {ButtonRect{120, 28, 401, 45}, ButtonRect{160, 118, 321, 51}, ButtonRect{160, 184, 321, 51}, ButtonRect{160, 250, 321, 51}, ButtonRect{160, 316, 321, 51}}) {
+            const int32_t dy = r.y == 28 ? 0 : 30;
+            int64_t differ = 0;
+            for (int32_t y = 0; y < r.h; ++y) {
+                for (int32_t x = 0; x < r.w; ++x) differ += wide.at(r.x + 160 + x, r.y + dy + y) != classic.at(r.x + x, r.y + y) ? 1 : 0;
+            }
+            ASSERT_EQ(differ, int64_t{0});
+        }
     } TEST_END();
 
     TEST_CASE("A10.2 --start-menu together with --bot SEAT:LEVEL (the way the tests and the screenshots show bots): the single-player rows start as the command line says, Continue offers exactly those bots, and a bot of another kind than the standard one is no row") {
@@ -2657,7 +2687,7 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(s.names[0] == "Solo" && s.names[1] == "Bot (Medium)" && s.names[2] == "Bot (Medium)" && s.names[3] == "Bot (Medium)");
             ASSERT_TRUE(s.bots[0].fill && s.bots[0].level == "medium" && s.bots[0].kind == "standard");
             ASSERT_EQ(app.sim().roster_mask(), 0x0F);
-            hall.step(4000);
+            hall.step(net::kMatchStartDelayMs + 4000);                                         // (the server seals the first turn kMatchStartDelayMs after the match began: 4 s of play follow)
             ASSERT_FALSE(app.net()->desynced());
             ASSERT_TRUE(server.status(code).ticks > 40);
         }

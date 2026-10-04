@@ -23,6 +23,23 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.2.0 - 2026-10-03 - The clock waits for the start dialog; every screen in 16:9; fullscreen mouse
+
+**For players:**
+- **The match clock waits for the "Get ready to play!" dialog.** Every match still opens with the original's dialog for 5 s, but the clock and the ants only start when it closes, so all 12 minutes (or the map's own time) are playable. On the network the host seals the first turn 5 s after the match began and every machine closes its dialog when its first turn runs. Computer players do not move while the dialog is up either, and their first orders come one by one at the speed of their level: about 0.5 s into the match at Hard, 1.3 s at Medium and 3.1 s at Easy (the machine that runs the bots is ahead of a remote person's screen by the link's delay and the buffer, 20 - 290 ms measured, not seconds).
+- **Every screen is composed for 16:9:** the loading screen, the quick help at the start, the results and the desktop start menu use the whole 960 x 540 canvas, built from the original's own art, instead of a 640 x 480 page centred on clay. Classic 4:3 (`--aspect 4:3`, `?aspect=4:3`) is as it was.
+- **Fullscreen mouse.** On a screen that is not 16:9 the black bars count as the picture's edge: push the mouse into a bar and the map scrolls. On the web page the browser holds the mouse inside the game in fullscreen (the setting "Fullscreen mouse: Locked / Free" under the game, remembered), so every edge and corner scrolls and a Mac's Dock and menu bar stay away; the desktop game keeps the Dock and the menu bar hidden in a fullscreen Space of the green button too.
+- **The window opens in 16:9 from the first frame:** the desktop window and each of the four windows of `start_game.sh` / `start_game.bat` are created at the shape of the picture (a 4:3 window used to flash up first). `start_game.sh` builds the game every time it starts and stops when the build fails; it used to launch an old binary for ever.
+- **Your name on beta.playants.org:** one "Your name" field on the Play online page, shared by Host and Join and remembered in the browser, puts your name into the game instead of a random one. A link that somebody sends you asks for your name first.
+
+**Rules / network:** The rules did not change. Network protocol 12: v0.1.x games cannot join (refused with a version message; from this release the web page's message says "Reload the page to update.").
+
+**Fixes:**
+- A command that reaches the host before the first turn is sealed is discarded: a modified client could script an opening of up to 64 orders per seat that ran at the first tick, ahead of every person. Honest clients are not affected.
+- The loading screen drew the frame's pieces in the wrong order (145 pixels), and the results' numbers ran together ("20", "4", "10" as "204 10").
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ddf134f...f29c2f9), [network notes](docs/NETWORK_PORT.md), [notes](docs/audit/B3_notes.md)
+
 ## v0.1.3 - 2026-10-03 - Deploys wait for an idle server; faster checks
 
 **For players:**

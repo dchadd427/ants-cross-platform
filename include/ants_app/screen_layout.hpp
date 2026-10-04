@@ -171,9 +171,6 @@ struct ScreenLayout {
     /// delay stand right of it; the original's 640 x 480 picture: 460)
     constexpr int32_t score_row_right() const noexcept { return score_slot(kBottomSlots).box_left + kScoreCoverReach + kScoreRowMargin; }
 
-    /// Where a page of the original's 640 x 480 screens sits when the picture is bigger and nothing of the match is around it (the loading screen, the quick help at the start, the setup
-    /// screen and the room, the results): centred, on the clay of its pages (the application's picture is centred in the canvas by the same numbers). The original's own screen when it is not.
-    constexpr LayoutPoint page_offset() const noexcept { return LayoutPoint{dx() / 2, dy() / 2}; }
     /// What a dialog of the original (the frame at (100, 100) 320 x 224) is moved by during a match: its centre goes to the centre of the map view. The original's own
     /// place is the classic picture's (no move), so a layout without extra size gives (0, 0).
     constexpr LayoutPoint modal_offset() const noexcept { return centred_in_view(kDialogX, kDialogY, kDialogW, kDialogH); }

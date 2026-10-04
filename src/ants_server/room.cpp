@@ -198,9 +198,10 @@ void Room::begin_match(uint32_t now_ms) {
         names_[seat] = start.names[seat];
         sim_->set_player_name(seat, start.names[seat]);
     }
-    started_ms_ = now_ms;
+    started_ms_ = now_ms;                                        // (run_ms counts from here: the 5 s before the first turn count, the match's pauses do not)
     net::HostSession::Config hc;
     hc.host_player = net::kNoSeat;
+    hc.start_delay_ms = net::kMatchStartDelayMs;                  // protocol 12: the first turn is sealed when the "Get ready to play!" dialog of every machine has had its 5 s (session.hpp)
     // (no waiting for a seat that falls behind: the room keeps its pace, the seat catches up alone, and one that is 60 s behind or has run nothing for 30 s is dropped:
     // the lag policy of a host without a seat, session.hpp)
     // A room that holds seats pauses the match for a player whose connection is lost (and whose key it knows) instead of dropping it: the vote, the cap and the log are the room's settings
@@ -385,6 +386,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.reason = reason_;
     s.joined = static_cast<uint8_t>(lobby_.players());
     s.bot_controller = bot_controller_ != nullptr;
+    s.bot_start_hold = bot_controller_ != nullptr ? bot_controller_->start_hold() : 0u;
     for (const ai::BotSpec& b : bot_specs_) {
         RoomStatus::Bot row;
         row.seat = b.seat;

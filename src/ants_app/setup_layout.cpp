@@ -13,10 +13,6 @@ namespace {
 // identical lines (tests/test_app/test_wide_setup.cpp checks each one against ants.chd). Found by the mock-up tool (a search for the fewest jumps between identical lines; the widened and narrowed pieces repeat or drop columns inside runs of identical columns).
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-// The side strips of the frame (96 x 16 pieces stacked as whole pieces, five times 96 rows, then a short run from the piece's start and one jump at a row identical to its neighbour): 508 rows
-constexpr LineSpan kFrameLeftSpans[] = {{0, 96, 96}, {0, 96, 96}, {0, 96, 96}, {0, 96, 96}, {0, 96, 96}, {0, 25, 25}, {45, 3, 3}};
-constexpr LineSpan kFrameRightSpans[] = {{0, 96, 96}, {0, 96, 96}, {0, 96, 96}, {0, 96, 96}, {0, 96, 96}, {0, 23, 23}, {24, 5, 5}};
-
 // The bottom edges of the black boxes (efram4100: 5 rows of dithered shadow, 100 columns, tiled; the corners cover the first and the last 32 columns) and their side strips (efram2100 /
 // efram3100: 4 columns, 100 rows, tiled)
 constexpr LineSpan kPlayersBottomSpans[] = {{19, 81, 81}, {0, 63, 63}};                                      // 144 columns
@@ -48,9 +44,7 @@ constexpr int32_t total_lines(const LineSpan (&spans)[N]) {
 #define ANTS_STRIP(id, sprite, columns, cross_first, cross_count, spans) \
     SetupStrip { id, sprite, columns, cross_first, cross_count, total_lines(spans), spans, sizeof(spans) / sizeof(spans[0]) }
 
-const std::array<SetupStrip, 18> kStrips = {{
-    ANTS_STRIP("frame.left", "dfram496.bmp", false, 0, 0, kFrameLeftSpans),
-    ANTS_STRIP("frame.right", "dfram596.bmp", false, 0, 0, kFrameRightSpans),
+const std::array<SetupStrip, 16> kStrips = {{
     ANTS_STRIP("box.players.bottom", "efram4100.bmp", true, 0, 0, kPlayersBottomSpans),
     ANTS_STRIP("box.players.left", "efram2100.bmp", false, 0, 0, kPlayersSideSpans),
     ANTS_STRIP("box.players.right", "efram3100.bmp", false, 0, 0, kPlayersSideSpans),
@@ -71,52 +65,14 @@ const std::array<SetupStrip, 18> kStrips = {{
 
 #undef ANTS_STRIP
 
-const SetupStrip& strip(const char* id) {
-    for (const SetupStrip& s : kStrips) {
-        const char* a = s.id;
-        const char* b = id;
-        while (*a != '\0' && *a == *b) {
-            ++a;
-            ++b;
-        }
-        if (*a == '\0' && *b == '\0') return s;
-    }
-    return kStrips[0];
-}
-
-constexpr ants::assets::ColorRGBA kBlack{7, 11, 15, 255};      // the flat fill inside every black box of the original (the colour of the efram construction)
-
-/// Draws a strip at (x, y): the spans one after the other along the strip's axis
-void draw_strip(IRenderer& renderer, const ants::assets::AssetArchive& archive, const SetupStrip& s, int32_t x, int32_t y) {
-    const int32_t id = archive.find_sprite_id(s.sprite);
-    if (id < 0) return;
-    const auto& sprite = archive.get_sprite(static_cast<uint32_t>(id));
-    const int32_t cross = s.cross_count > 0 ? s.cross_count : (s.columns ? static_cast<int32_t>(sprite.height) : static_cast<int32_t>(sprite.width));
-    int32_t pos = 0;
-    for (size_t i = 0; i < s.span_count; ++i) {
-        const LineSpan& span = s.spans[i];
-        if (s.columns) renderer.draw_sprite_region(static_cast<uint32_t>(id), x + pos, y, span.dst_count, cross, span.src, s.cross_first, span.src_count, cross);
-        else renderer.draw_sprite_region(static_cast<uint32_t>(id), x, y + pos, cross, span.dst_count, s.cross_first, span.src, cross, span.src_count);
-        pos += span.dst_count;
-    }
-}
-
-/// One piece of art drawn whole, or a part of it clipped to the picture
-void draw_piece(IRenderer& renderer, const char* name, int32_t x, int32_t y) { renderer.draw_named_sprite(name, x, y); }
-
-/// A line of one column (or row) of a piece repeated over a length: the top line of the black boxes (every column of efram1100 is the same)
-void draw_top_line(IRenderer& renderer, const ants::assets::AssetArchive& archive, int32_t x, int32_t y, int32_t length) {
-    const int32_t id = archive.find_sprite_id("efram1100.bmp");
-    if (id < 0 || length <= 0) return;
-    renderer.draw_sprite_region(static_cast<uint32_t>(id), x, y, length, 4, 0, 0, 1, 4);
-}
+const SetupStrip& strip(const char* id) { return find_strip(kStrips.data(), kStrips.size(), id); }
 
 /// The black box of the Players' Status / preview / chat kind (the construction of st_screen frames 8 .. 24, Ants.exe): the outer rectangle is (iw + 8) x (ih + 9) at (x, y). At iw = ih = 200 it is the
 /// original's box pixel for pixel; the top is one line repeated, the bottom edge and the sides are strips.
 void draw_box_100(IRenderer& renderer, const ants::assets::AssetArchive& archive, int32_t x, int32_t y, int32_t iw, int32_t ih, const SetupStrip& bottom, const SetupStrip& left,
                   const SetupStrip& right) {
     const int32_t ow = iw + 8;
-    renderer.fill_rect(x + 4, y + 4, iw, ih, kBlack);
+    renderer.fill_rect(x + 4, y + 4, iw, ih, kBoxBlack);
     draw_top_line(renderer, archive, x + 32, y, ow - 64);
     draw_strip(renderer, archive, bottom, x + 32, y + 4 + ih);
     draw_strip(renderer, archive, left, x, y + 4);
@@ -130,7 +86,7 @@ void draw_box_100(IRenderer& renderer, const ants::assets::AssetArchive& archive
 /// The Map Info box (st_screen frames 9 .. 38): inner iw x 30, outer (iw + 9) x 38
 void draw_box_info(IRenderer& renderer, const ants::assets::AssetArchive& archive, int32_t x, int32_t y, int32_t iw) {
     const int32_t ow = iw + 9;
-    renderer.fill_rect(x + 4, y + 4, iw, 30, kBlack);
+    renderer.fill_rect(x + 4, y + 4, iw, 30, kBoxBlack);
     draw_top_line(renderer, archive, x + 32, y, ow - 64);
     draw_strip(renderer, archive, strip("box.info.bottom"), x + 33, y + 33);
     draw_piece(renderer, "efram2b.bmp", x, y + 3);
@@ -139,54 +95,6 @@ void draw_box_info(IRenderer& renderer, const ants::assets::AssetArchive& archiv
     draw_piece(renderer, "efram2c.bmp", x + ow - 32, y);
     draw_piece(renderer, "efram3c.bmp", x + 1, y + 33);
     draw_piece(renderer, "efram4c.bmp", x + ow - 32, y + 33);
-}
-
-/// The clay: dclay96 at its own pitch of 96 over the whole picture (the last row of tiles is cut at the picture's edge; the tile has isolated speckles only, so no join can show)
-void draw_clay(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
-    const int32_t id = archive.find_sprite_id("dclay96.bmp");
-    if (id < 0) return;
-    for (int32_t y = 0; y < SetupLayout::kHeight; y += 96) {
-        for (int32_t x = 0; x < SetupLayout::kWidth; x += 96) {
-            const int32_t w = std::min(96, SetupLayout::kWidth - x);
-            const int32_t h = std::min(96, SetupLayout::kHeight - y);
-            renderer.draw_sprite_region(static_cast<uint32_t>(id), x, y, w, h, 0, 0, w, h);
-        }
-    }
-}
-
-/// The frame: the four corners, the top (nine pieces of 96 then four of 16), the bottom (four, two 16 pieces, three, two 16 pieces, two) and the two side strips
-void draw_frame(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
-    constexpr int32_t kW = SetupLayout::kWidth;
-    constexpr int32_t kH = SetupLayout::kHeight;
-    draw_piece(renderer, "dfram1.bmp", 0, 0);
-    draw_piece(renderer, "dfram3.bmp", kW - 16, 0);
-    draw_piece(renderer, "dfram6.bmp", 0, kH - 16);
-    draw_piece(renderer, "dfram8.bmp", kW - 16, kH - 16);
-    int32_t x = 16;
-    for (int i = 0; i < 9; ++i) {
-        draw_piece(renderer, "dfram296.bmp", x, 0);
-        x += 96;
-    }
-    for (int i = 0; i < 4; ++i) {
-        draw_piece(renderer, "dfram2.bmp", x, 0);
-        x += 16;
-    }
-    x = 16;
-    const int groups[3] = {4, 3, 2};
-    for (int g = 0; g < 3; ++g) {
-        for (int i = 0; i < groups[g]; ++i) {
-            draw_piece(renderer, "dfram796.bmp", x, kH - 16);
-            x += 96;
-        }
-        if (g < 2) {
-            for (int i = 0; i < 2; ++i) {
-                draw_piece(renderer, "dfram7.bmp", x, kH - 16);
-                x += 16;
-            }
-        }
-    }
-    draw_strip(renderer, archive, strip("frame.left"), 0, 16);
-    draw_strip(renderer, archive, strip("frame.right"), kW - 16, 16);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -308,8 +216,7 @@ void draw_setup_art(IRenderer& renderer, const ants::assets::AssetArchive& archi
     const SetupLayout& l = SetupLayout::of(options.variant);
     const bool guest = options.variant == SetupVariant::Guest;
     renderer.set_hud_team(0);
-    draw_clay(renderer, archive);
-    draw_frame(renderer, archive);
+    draw_wide_background(renderer, archive, PageClay::Tiles);
     // the banner (it covers the top of the frame, as in the original), the left column
     draw_piece(renderer, guest ? "nhbanr.bmp" : "hostbanr.bmp", l.title.x, l.title.y);
     draw_piece(renderer, guest ? "waiting.bmp" : "gamesetup.bmp", l.art.x, l.art.y);

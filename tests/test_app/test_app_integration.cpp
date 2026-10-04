@@ -1920,6 +1920,111 @@ void run_suite_7_input_controls() {
         std::error_code ignore;
         std::filesystem::remove(settings, ignore);
     } TEST_END();
+
+    TEST_CASE("7.8f A FULLSCREEN Window Whose Shape Is Not The Picture's Has Bars Inside The Window (SDL Maps A Position Over A Bar To One Outside The Picture): The Pointer Over A Bar Is On The Picture's Nearest Edge Pixel, Corners Included, And Is Not Gone; A Window Of Another Shape (4:3 Picture In A Wide Window) Does The Same At The Sides (A Real Fullscreen Window Of SDL's Dummy Video Driver, The 16:9 Canvas, The Setup Screen)") {
+        // The same clamp as 7.8 .. 7.8d, but in a window that is FULLSCREEN (SDL_WINDOW_FULLSCREEN_DESKTOP, which is how the owner's 16:10 screen shows the 16:9 picture: bars of 45 rows above and
+        // below at 1440 x 900, of 66 at 1512 x 982): the clamp does not look at fullscreen, so the bars of a window and the bars of a fullscreen screen are the same rule. The dummy driver's
+        // display is 4:3 (1024 x 768 with SDL 2.32), so a 16:9 canvas has bars above and below (96 rows) and the 4:3 canvas none; what the window really is decides the geometry (CanvasLayout::fit is
+        // SDL's own arithmetic, pinned in test_canvas_layout), and a driver whose display happens to have the canvas's shape has no bars to test.
+        const std::filesystem::path settings = temp_path_of_this_run("ants_bars_settings").replace_extension(".ini");
+        auto open = [&](Application& app, Aspect aspect) {
+            SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");                            // (SDL_Quit clears the hints: set before every start)
+            SDL_SetHint(SDL_HINT_AUDIODRIVER, "dummy");
+            ApplicationConfig cfg;
+            cfg.headless = false;
+            cfg.skip_intro = true;                                                 // the setup screen at once (no match: nothing is written at the end)
+            cfg.fullscreen = true;
+            cfg.aspect = aspect;
+            cfg.aspect_given = true;
+            cfg.settings_path = settings.string();
+            return app.init(cfg);
+        };
+        {
+            Application app;
+            ASSERT_TRUE(open(app, Aspect::Wide16x9));
+            SDL_Window* window = SDL_GetWindowFromID(1);
+            ASSERT_TRUE(window != nullptr);
+            ASSERT_TRUE((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP);
+            app.run_frame_with_delta(0.001f);
+            int w = 0;
+            int h = 0;
+            SDL_GetWindowSize(window, &w, &h);
+            const CanvasFit fit = app.canvas().fit(w, h);
+            ASSERT_EQ(app.picture(), (LayoutRect{0, 0, 960, 540}));               // (the wide setup screen is the whole canvas)
+            if (fit.bar_top() >= 4 && fit.bar_bottom() >= 4) {
+                auto at = [&](int wx, int wy) {
+                    SDL_Event e{};
+                    e.type = SDL_MOUSEMOTION;
+                    e.motion.windowID = SDL_GetWindowID(window);
+                    e.motion.x = wx;
+                    e.motion.y = wy;
+                    SDL_PushEvent(&e);
+                    app.run_frame_with_delta(0.001f);
+                };
+                const int mid_x = w / 2;
+                const int mid_picture = static_cast<int>(static_cast<double>(mid_x - fit.viewport.x) / fit.scale);
+                at(mid_x, fit.bar_top() / 2);                                      // in the middle of the top bar, level with the window's middle
+                ASSERT_EQ(app.mouse_screen_y(), 0);
+                ASSERT_TRUE(std::abs(app.mouse_screen_x() - mid_picture) <= 1);
+                ASSERT_FALSE(app.pointer_outside());
+                at(mid_x, fit.out_h - fit.bar_bottom() / 2);                       // the bottom bar
+                ASSERT_EQ(app.mouse_screen_y(), 539);
+                ASSERT_TRUE(std::abs(app.mouse_screen_x() - mid_picture) <= 1);
+                ASSERT_FALSE(app.pointer_outside());
+                at(0, 1);                                                          // the window's top left corner, over the top bar: the picture's first pixel
+                ASSERT_TRUE(app.mouse_screen_x() <= 1 && app.mouse_screen_y() == 0);
+                at(w - 1, h - 1);                                                  // the window's bottom right corner: the picture's last pixel
+                ASSERT_EQ(app.mouse_screen_x(), 959);
+                ASSERT_EQ(app.mouse_screen_y(), 539);
+                ASSERT_FALSE(app.pointer_outside());
+            } else {
+                std::cout << "(7.8f: this driver's display has the 16:9 canvas's shape: no bars to test) ";
+            }
+            app.shutdown();
+        }
+        {                                                                          // the other way: the original's 4:3 picture in a wide window has its bars at the sides
+            Application app;
+            ASSERT_TRUE(open(app, Aspect::Classic4x3));
+            SDL_Window* window = SDL_GetWindowFromID(1);
+            ASSERT_TRUE(window != nullptr);
+            app.run_frame_with_delta(0.001f);
+            SDL_SetWindowFullscreen(window, 0);                                    // a window of the shape of a 16:10 screen (what the way out of fullscreen can give, and the shape that fullscreen has there)
+            SDL_SetWindowSize(window, 1440, 900);
+            app.run_frame_with_delta(0.001f);
+            int w = 0;
+            int h = 0;
+            SDL_GetWindowSize(window, &w, &h);
+            const CanvasFit fit = app.canvas().fit(w, h);
+            if (w == 1440 && h == 900 && fit.bar_left() > 4) {
+                auto at = [&](int wx, int wy) {
+                    SDL_Event e{};
+                    e.type = SDL_MOUSEMOTION;
+                    e.motion.windowID = SDL_GetWindowID(window);
+                    e.motion.x = wx;
+                    e.motion.y = wy;
+                    SDL_PushEvent(&e);
+                    app.run_frame_with_delta(0.001f);
+                };
+                ASSERT_EQ(fit.viewport.w, 1200);                                   // the picture 1200 x 900 (scale 1.875), bars of 120 columns at the sides
+                ASSERT_EQ(fit.bar_left(), 120);
+                at(40, 450);                                                       // the left bar, level with the middle
+                ASSERT_EQ(app.mouse_screen_x(), 0);
+                ASSERT_EQ(app.mouse_screen_y(), 240);
+                ASSERT_FALSE(app.pointer_outside());
+                at(1400, 450);                                                     // the right bar
+                ASSERT_EQ(app.mouse_screen_x(), 639);
+                ASSERT_EQ(app.mouse_screen_y(), 240);
+                at(10, 899);                                                       // the bottom left corner of the window
+                ASSERT_EQ(app.mouse_screen_x(), 0);
+                ASSERT_EQ(app.mouse_screen_y(), 479);
+            } else {
+                std::cout << "(7.8f: this driver would not give the window a 16:10 shape: the pillarbox part is not run) ";
+            }
+            app.shutdown();
+        }
+        std::error_code ignore;
+        std::filesystem::remove(settings, ignore);
+    } TEST_END();
 }
 
 // ============================================================================
@@ -2881,7 +2986,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_TRUE(mixer.is_music_playing());
         ASSERT_TRUE(mixer.music_filepath().find("INTRO") == std::string::npos);
         app.sim().init_test_world(60, 60, 5, 100);                                // a match of 100 ms
-        for (int i = 0; i < 12 && !app.sim().is_match_over(); ++i) app.update_simulation(0.05f);
+        for (int i = 0; i < 100 + 12 && !app.sim().is_match_over(); ++i) app.update_simulation(0.05f);      // (the first 100 steps are the "Get ready" dialog, in which the simulation waits)
         ASSERT_TRUE(app.sim().is_match_over());
         ASSERT_FALSE(mixer.is_music_playing());                                   // closed at once, not faded out over a second
         app.update_music(0.016f);
@@ -8702,24 +8807,34 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         ASSERT_TRUE(consumed_key);
         ASSERT_TRUE(hud.is_match_start_modal_active());
 
-        // Advance 99 ticks (4.95s @ 20Hz): modal remains active
+        // Advance 99 steps of 50 ms (4.95 s: the application steps the HUD in real time while the dialog is up, the simulation waits for it): modal remains active
         WorldState dummy_world{};
         for (uint32_t t = 1; t < 100; ++t) {
             hud.update(dummy_world, 1);
             ASSERT_TRUE(hud.is_match_start_modal_active());
         }
 
-        // At tick 100 (exactly 5.0s elapsed: the first tick of the original's timer task), modal auto-dismisses
+        // At step 100 (exactly 5.0s elapsed: the first run of the original's timer task), modal auto-dismisses
         hud.update(dummy_world, 1);
+        ASSERT_FALSE(hud.is_match_start_modal_active());
+
+        // The dialog of a match of the network (start_match_modal(true)) does not close by itself, however long it waits for the first turn: only dismiss_match_start_modal() ends it
+        hud.start_match_modal(true);
+        ASSERT_TRUE(hud.is_match_start_modal_active());
+        for (uint32_t t = 0; t < 1000; ++t) hud.update(dummy_world, 1);
+        ASSERT_TRUE(hud.is_match_start_modal_active() && hud.match_start_modal_ticks() == 1000u);
+        ASSERT_TRUE(hud.handle_mouse_down(200, 200, 1, sim, camera) && hud.is_match_start_modal_active());            // (and it takes the clicks as long as it is up)
+        hud.dismiss_match_start_modal();
         ASSERT_FALSE(hud.is_match_start_modal_active());
     } TEST_END();
 
     // ------------------------------------------------------------------------
-    // 12.118b: The Dialog Lasts Exactly sim::kMatchStartHoldTicks Ticks (The Computer Players Wait For The Same Number)
+    // 12.118b: The Dialog Lasts Exactly sim::kMatchStartDialogMs (100 Steps Of 50 Ms Of HUD Time: The Simulation Waits For It, The Host's Start Delay Is The Same Number)
     // ------------------------------------------------------------------------
-    TEST_CASE("12.118b The \"Get Ready\" Dialog Closes On The Very Tick That sim::kMatchStartHoldTicks Names (Open After 99 Updates, Closed After 100): The Number The Computer Players Wait For; A Click On An Own Ant Is Swallowed On Tick 99 And Selects On Tick 100") {
-        ASSERT_EQ(ants::sim::kMatchStartHoldTicks, 100u);                                    // 5.0 s of 50 ms ticks: the original's task KWFO (Ants.exe 0x10254b0), first run 5000 ms after the dialog was made
-        ASSERT_EQ(ants::sim::kMatchStartHoldTicks * ants::sim::TICK_MS, 5000u);
+    TEST_CASE("12.118b The \"Get Ready\" Dialog Closes On The Very Step That sim::kMatchStartDialogMs Names (Open After 99 Updates, Closed After 100): The Number The Hosts Of A Match Of The Network Wait For Before They Seal The First Turn; A Click On An Own Ant Is Swallowed On Step 99 And Selects On Step 100") {
+        ASSERT_EQ(ants::sim::kMatchStartDialogMs, 5000u);                                    // the original's task KWFO (Ants.exe 0x10254b0), first run 5000 ms after the dialog was made
+        ASSERT_EQ(HUD::kMatchStartModalSteps * ants::sim::TICK_MS, ants::sim::kMatchStartDialogMs);
+        ASSERT_EQ(HUD::kMatchStartModalSteps, 100u);
         SimulationEngine sim;
         sim.init_test_world(60, 60, 100, 60000);
         const uint32_t ant = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
@@ -8732,11 +8847,11 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
         WorldState world{};
         const int32_t sx = 176 + HUD::PLAYFIELD_X;                                           // the middle of the ant at tile (5, 5), as test 7.1 clicks it
         const int32_t sy = 176 + HUD::PLAYFIELD_Y;
-        for (uint32_t t = 1; t < ants::sim::kMatchStartHoldTicks; ++t) {                     // 99 updates: the dialog is up after each of them
+        for (uint32_t t = 1; t < HUD::kMatchStartModalSteps; ++t) {                          // 99 updates: the dialog is up after each of them
             hud.update(world, 1);
             ASSERT_TRUE(hud.is_match_start_modal_active());
         }
-        hud.handle_mouse_down(sx, sy, 1, sim, camera);                                        // the click of tick 99 is swallowed whole
+        hud.handle_mouse_down(sx, sy, 1, sim, camera);                                        // the click of step 99 is swallowed whole
         hud.handle_mouse_up(sx, sy, 1, sim, camera);
         ASSERT_TRUE(hud.get_selected_ant_ids().empty() && hud.get_selected_ant_id() == 0u && !hud.is_ant_selected(ant));
         hud.update(world, 1);                                                                 // the 100th: the dialog is gone

@@ -22,6 +22,9 @@ namespace ants::app {
  * team or alliance (MatchResult::rows: "A & B" with the columns added up, the quitter last, the local team first on equal scores), each with a name label, four
  * number labels and the animated ant portrait of its team (two portraits for an alliance). The winner or loser cue plays once, at that moment, and the Leave button
  * exists from then on. Enter, C, Q and X leave at any time (Application); every other key does nothing.
+ *
+ * In a 960 x 540 canvas the page is recomposed for the whole picture (results_layout.hpp): the layout is `ResultsLayout::of(wide_layout())`, and the Leave button, the rows and the label of the
+ * waiting phase stand where it puts them. The four numbers of a row are the original's single-line labels (left aligned, a surface that clips what is wider), drawn in the original's 8 px digits.
  */
 class ScorecardModal {
 public:
@@ -76,6 +79,10 @@ public:
     bool is_waiting() const noexcept { return is_active_ && phase_ == Phase::Waiting; }
     const std::vector<Row>& rows() const noexcept { return rows_; }
 
+    /// The screen as the 16:9 page (the whole 960 x 540 picture, results_layout.hpp) or the original's 640 x 480 page; the Leave button's rectangles move with it
+    void set_wide_layout(bool wide);
+    bool wide_layout() const noexcept { return wide_; }
+
     /// The Leave button only exists once the rows do
     bool handle_mouse_down(int32_t x, int32_t y);
     bool handle_mouse_up(int32_t x, int32_t y);
@@ -109,6 +116,7 @@ private:
     std::array<std::string, 4> player_names_{};
     uint8_t shown_mask_{0x0F};
 
+    bool wide_{false};                    // the page is the 16:9 one
     bool is_active_{false};
     Phase phase_{Phase::Waiting};
     double elapsed_ms_{0.0};              // the screen's own clock since it was created

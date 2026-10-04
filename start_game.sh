@@ -15,7 +15,10 @@
 #   so that `./start_game.sh --host --name Alice` and `./start_game.sh --join 192.168.1.20` still do what the README says. --bot cannot be combined with --players
 #   (the other windows are guests, and a guest runs no bots: a game against bots is one window; use --host --bot and let others join it)
 #
-# Environment: ANTS_PORT (the room's TCP port, default 4001), ANTS_NAMES_SEED (makes the random names repeatable).
+# Environment: ANTS_PORT (the room's TCP port, default 4001), ANTS_NAMES_SEED (makes the random names repeatable), ANTS_CMAKE (the cmake command, default cmake).
+#
+# Every start makes sure that the game is built (cmake --build build --target ants, incremental: quick when nothing changed) and stops with the compiler's messages when that fails, so a
+# game from an older build is never launched. --dry-run builds nothing.
 #
 # The windows do not grab the pointer: the game's own cursor shows only inside a window, the edge of the screen scrolls only the window the pointer is in,
 # and only the window that has the focus makes sound (--audio-focus), so four games on one machine can be played one after the other.
@@ -77,10 +80,23 @@ if [ "$DRY_RUN" -eq 0 ]; then
     echo "======================================================================"
     echo "                      ANTS ENGINE REMAKE (macOS)                      "
     echo "======================================================================"
+    # The game is built on EVERY start, not only when its binary is missing: a binary that an older checkout left in ./build would be launched for ever and none of the code since would show
+    # (a game that kept opening in 4:3 after the 16:9 change was exactly that). ./build is configured when it does not exist; the build of the one target is incremental, a second when nothing
+    # changed. A failed configure or build STOPS the script: a game from an older build is never started after one (start_game.bat does the same). ANTS_CMAKE names another cmake command
+    # (the test of this script puts a fake one there).
+    CMAKE="${ANTS_CMAKE:-cmake}"
+    if [ ! -f build/CMakeCache.txt ]; then
+        echo "[LAUNCHER] Configuring the release build..."
+        "$CMAKE" -B build -DCMAKE_BUILD_TYPE=Release || { echo "[LAUNCHER] The build could not be configured (see the messages above). Nothing was started." >&2; exit 1; }
+    fi
+    echo "[LAUNCHER] Making sure the game is up to date..."
+    "$CMAKE" --build build --target ants -j"$( (sysctl -n hw.ncpu || nproc) 2>/dev/null || echo 4)" || {
+        echo "[LAUNCHER] The build failed (see the messages above). Nothing was started: a game from an older build is never launched." >&2
+        exit 1
+    }
     if [ ! -f "$BIN" ]; then
-        echo "[LAUNCHER] Game binary not found. Building release binary now..."
-        cmake -B build -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --target ants -j"$( (sysctl -n hw.ncpu || nproc) 2>/dev/null || echo 4)"
+        echo "[LAUNCHER] The build made no game at $BIN. Nothing was started." >&2
+        exit 1
     fi
 
     echo ""

@@ -34,6 +34,27 @@ private:
     BotRng rng_;
 };
 
+// A bot that sends six orders (six ants, six tiles: a team of TREASURE has six) at its first look and nothing after it: the opening bucket decides how they leave (a full one: all on one
+// tick; one token: one by one)
+class BurstBot final : public Bot {
+public:
+    const char* kind() const noexcept override { return "burst"; }
+    void start(const BotContext&) override {}
+    void think(const BotView& view, Orders& orders) override {
+        if (done_ || view.mine().size() < 6) return;
+        done_ = true;
+        const int32_t w = static_cast<int32_t>(view.grid().width());
+        const int32_t h = static_cast<int32_t>(view.grid().height());
+        for (size_t i = 0; i < 6; ++i) {
+            const AntView& a = view.mine()[i];
+            orders.move({a.id}, TileCoord{std::clamp(a.tile.x + 3 + static_cast<int32_t>(i), 0, w - 1), std::clamp(a.tile.y + 5, 0, h - 1)});
+        }
+    }
+
+private:
+    bool done_{false};
+};
+
 BotSpec seat_spec(uint8_t seat, const char* kind, Level level) {
     BotSpec s;
     s.seat = seat;
@@ -209,16 +230,23 @@ void run_arena_tests() {
         ASSERT_TRUE(p.error.empty() && p.seats.size() == 3);
         ASSERT_TRUE(p.seats[0].runs == "worker" && p.seats[1].runs == "worker" && p.seats[2].runs == "idle");
         ASSERT_TRUE(p.seats[0].spec.kind == "worker" && p.seats[1].spec.kind == "standard");
-        // With the start hold (the arena's default: the 100 ticks of the "Get ready to play!" dialog) the first look of seat s is on tick 100 + s: Hard looks on 100, 104, ... 300 (51 looks
-        // in 300 ticks), Easy (seat 1) on 101 and 201. Without it (the opening of v0.1.0) the first look is on tick 1 + s: 75 and 3.
-        ASSERT_EQ(p.seats[0].stats.decisions, 51u);
-        ASSERT_EQ(p.seats[1].stats.decisions, 2u);
+        // The arena's default opening is the product's (kStartHoldTicks = 1: the match clock waits for the "Get ready to play!" dialog in the game, so the arena's tick 0 is the game's): the first
+        // look of seat s is on tick 1 + s, Hard looks on 1, 5, ... 297 (75 looks in 300 ticks), Easy (seat 1) on 2, 102 and 202. With the hold off (the opening of v0.1.0) the looks are the same: the
+        // two differ in the bucket only. A longer hold (v0.1.1 had 100 ticks) moves the first look to tick 100 + s: Hard looks on 100, 104, ... 300 (51 looks), Easy on 101 and 201.
+        ASSERT_EQ(p.seats[0].stats.decisions, 75u);                                              // Hard looks every 4 ticks (the first look is on tick 1)
+        ASSERT_EQ(p.seats[1].stats.decisions, 3u);                                               // Easy every 100
         ArenaSpec no_hold = placeholders;
         no_hold.start_hold = 0;
         const ArenaResult n = play_match(no_hold);
         ASSERT_TRUE(n.error.empty() && n.seats.size() == 3);
-        ASSERT_EQ(n.seats[0].stats.decisions, 75u);                                              // Hard looks every 4 ticks (the first look is on tick 1)
-        ASSERT_EQ(n.seats[1].stats.decisions, 3u);                                               // Easy every 100
+        ASSERT_EQ(n.seats[0].stats.decisions, 75u);
+        ASSERT_EQ(n.seats[1].stats.decisions, 3u);
+        ArenaSpec long_hold = placeholders;
+        long_hold.start_hold = 100;
+        const ArenaResult l = play_match(long_hold);
+        ASSERT_TRUE(l.error.empty() && l.seats.size() == 3);
+        ASSERT_EQ(l.seats[0].stats.decisions, 51u);
+        ASSERT_EQ(l.seats[1].stats.decisions, 2u);
         // commands per second: the released commands of the whole match
         ArenaSpec w = walkers("TINY", 6, 1200, 3, 0x03);
         const ArenaResult wr = play_match(w);
@@ -247,5 +275,44 @@ void run_arena_tests() {
         ASSERT_TRUE(fine.error.empty() && fine.ticks == 10);
         // seats 1 and 2 only: seats 0 and 3 have no hill and no ants
         ASSERT_EQ(fine.seats.size(), 2u);
+    } TEST_END();
+    TEST_CASE("AI4.14 The Arena Opens A Match Like The Product Does: ArenaSpec's Default Start Hold And A Bare BotController's Are The Product's (kStartHoldTicks = 1: The First Look On Tick 1 + Seat, A Bucket Of ONE Token); A Hard Bot's Six Orders Of One Look Leave Within A Few Ticks One By One (At Most Three On The First Tick), With The Opening Of v0.1.0 (Hold 0, A Full Bucket) All Six On One Tick, With A Long Hold Nothing Before Tick 100; The Default Is The Number Spelled Out") {
+        ASSERT_EQ(kStartHoldTicks, 1u);
+        ASSERT_EQ(ArenaSpec{}.start_hold, kStartHoldTicks);                                      // the arena's default is the product's ...
+        {
+            sim::SimulationEngine sim;
+            sim.init(level_of("TREASURE"), 1, 0x03);
+            BotController c(sim, 1);
+            ASSERT_EQ(c.start_hold(), kStartHoldTicks);                                          // ... and so is the controller's, which every product path uses (the application, the LAN host, the server's rooms)
+        }
+        const auto play = [&](bool set, uint32_t hold) {
+            ArenaSpec s;
+            s.level = &level_of("TREASURE");
+            s.seed = 5;
+            s.max_ticks = 400;
+            s.latency_ticks = 0;                                                                  // (a command is applied the tick it leaves: the log says when the bucket let it go)
+            s.record = true;
+            s.bots = {seat_spec(0, "worker", Level::Hard), seat_spec(1, "idle", Level::Hard)};
+            s.factory = [](const BotSpec& b) { return b.seat == 0 ? std::unique_ptr<Bot>(std::make_unique<BurstBot>()) : make_bot(b); };
+            if (set) s.start_hold = hold;
+            return play_match(s);
+        };
+        const ArenaResult by_default = play(false, 0);
+        const ArenaResult spelled = play(true, kStartHoldTicks);
+        const ArenaResult v010 = play(true, 0);
+        const ArenaResult long_hold = play(true, 100);
+        for (const ArenaResult* r : {&by_default, &spelled, &v010, &long_hold}) ASSERT_TRUE(r->error.empty() && r->log.size() == 6);
+        ASSERT_TRUE(by_default.hash == spelled.hash && same_log(by_default, spelled));        // the default is the product's number, spelled out
+        const auto at_first_tick = [](const ArenaResult& r) {
+            size_t n = 0;
+            for (const RecordedCommand& c : r.log) n += c.tick == r.log.front().tick ? 1u : 0u;
+            return n;
+        };
+        ASSERT_TRUE(at_first_tick(by_default) >= 1 && at_first_tick(by_default) <= 3);           // one token and a refill from the first tick: the order that waited the reaction time may find a second token, never six
+        ASSERT_TRUE(by_default.log.back().tick > by_default.log.front().tick + 20);              // the rest follow one token at a time (a Hard bot: one in about 7 ticks)
+        ASSERT_TRUE(by_default.log.front().tick >= 1 + 6 && by_default.log.front().tick <= 1 + 10 + 1);   // the first look is on tick 1 (seat 0), its reaction time 6 to 10 ticks
+        ASSERT_EQ(at_first_tick(v010), 6u);                                                     // the opening of v0.1.0: a full bucket, a burst of six on one tick
+        ASSERT_TRUE(by_default.hash != v010.hash);
+        ASSERT_TRUE(long_hold.log.front().tick >= 100 && long_hold.hash != by_default.hash);     // a long hold holds back: nothing before tick 100
     } TEST_END();
 }

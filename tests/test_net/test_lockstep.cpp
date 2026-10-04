@@ -927,7 +927,7 @@ struct LoneSession {
 
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
-        ASSERT_EQ(kProtocolVersion, 11);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room
+        ASSERT_EQ(kProtocolVersion, 12);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed)
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
         ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::CaughtUp));
@@ -1404,7 +1404,7 @@ void run_protocol_tests() {
 
     TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence (With The Resume Countdown), Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
         // ---- the numbers ----
-        ASSERT_EQ(kProtocolVersion, 11);                                 // (the layouts of protocol 10 below are still the layouts of protocol 11: 11 changed the StartRequest only)
+        ASSERT_EQ(kProtocolVersion, 12);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 and 12: 11 changed the StartRequest only, 12 no message)
         ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
                     static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::Last) == 30);
         ASSERT_TRUE(static_cast<int>(RejectReason::Dropped) == 7 && static_cast<int>(RejectReason::RejoinFailed) == 8 && static_cast<int>(RejectReason::Superseded) == 9);
@@ -9120,7 +9120,7 @@ void run_reconnect_session_tests() {
 
 void run_protocol11_tests() {
     TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
-        ASSERT_EQ(kProtocolVersion, 11);
+        ASSERT_EQ(kProtocolVersion, 12);                                 // (the StartRequest and the Chat of protocol 11 are those of protocol 12: it changed no message)
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
         const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
@@ -9508,6 +9508,212 @@ void run_team_chat_tests() {
 
 }  // namespace
 
+// ---- protocol 12: the start of a match (the first turn is sealed kMatchStartDelayMs after the match began: the "Get ready to play!" dialog of every machine) -------------------------------
+
+namespace {
+
+// The turns of a host's own runner that carry a command of `issuer` (it keeps the last 30 s of turns: the first seconds of a test are in it)
+std::vector<uint32_t> turns_with(HostSession& host, uint8_t issuer) {
+    std::vector<uint32_t> out;
+    for (uint32_t t = 0; t < host.turns_sealed(); ++t) {
+        const TurnMsg* turn = host.runner().logged_turn(t);
+        if (turn == nullptr) continue;
+        for (const Command& c : turn->commands) {
+            if (c.issuer == issuer) out.push_back(t);
+        }
+    }
+    return out;
+}
+
+// The turn that a command is sealed into when it reaches the host at `arrive_ms` on a host that sealed its first turn at `first_seal_ms` (a turn every 50 ms; the host reads what has arrived before it seals, so
+// a command that arrives on the very pass of a seal is in that turn)
+uint32_t turn_for_arrival(uint32_t arrive_ms, uint32_t first_seal_ms) { return (arrive_ms - first_seal_ms + kTurnMs - 1) / kTurnMs; }
+
+}  // namespace
+
+void run_protocol12_tests() {
+    TEST_CASE("N2.94 Protocol 12, The Start Of A Match (A Host With A Seat): The Host Seals The First Turn Exactly start_delay_ms After start() And Nothing Before It; The Seconds Before Are No Stall, No Lag, No Pause And No Growth Of The Jitter Buffer; The First Turn Runs On Every Machine A Link's Delay And One Turn Of Buffer Later; The Match Is Then Identical Everywhere; With The Default Of 0 The First Turn Is Sealed At Once (The Rigs)") {
+        ASSERT_EQ(kMatchStartDelayMs, 5000u);                                       // the dialog's 5 s (the original's task KWFO: Ants.exe 0x10254b0)
+        ASSERT_EQ(kMatchStartDelayMs, sim::kMatchStartDialogMs);
+        {   // the default is a host that seals at once, as every rig of this suite wants it
+            Match m(3, 3, {40, 10});
+            m.run(20, false);
+            ASSERT_TRUE(m.host->turns_sealed() >= 1);
+        }
+        HostSession::Config hc;
+        hc.start_delay_ms = kMatchStartDelayMs;
+        Match m(5, 4, {40, 10}, hc);
+        uint32_t first_seal = 0;
+        uint32_t first_tick = 0;
+        uint32_t first_tick_client = 0;
+        while (m.now < 30000 && (first_seal == 0 || first_tick == 0 || first_tick_client == 0)) {
+            m.run(10, false);
+            if (first_seal == 0 && m.host->turns_sealed() >= 1) first_seal = m.now;
+            if (first_tick == 0 && m.sims[0]->current_tick() >= 1) first_tick = m.now;
+            if (first_tick_client == 0 && m.sims[3]->current_tick() >= 1) first_tick_client = m.now;
+            if (first_seal == 0) {                                                  // the seconds before the first turn: nothing is sealed, run, waited for or reported
+                ASSERT_EQ(m.host->turns_sealed(), 0u);
+                ASSERT_TRUE(!m.host->paused() && !m.host->waiting() && m.host->lagging_mask() == 0 && m.host->laggard() == 255 && m.host->desyncs().empty());
+                ASSERT_EQ(m.host->runner().next_turn_to_execute(), 0u);
+                for (auto& c : m.clients) {
+                    ASSERT_TRUE(c->mode() == ClientSession::Mode::Normal && c->connected() && !c->paused() && !c->catching_up());
+                    ASSERT_TRUE(c->lagging_seat() == 255 && c->self_lag_behind_ms() == 0);
+                    ASSERT_TRUE(c->runner().queued() == 0 && c->runner().next_turn_to_execute() == 0 && c->runner().next_turn_expected() == 0);
+                    ASSERT_TRUE(c->runner().stalled_ms() == 0 && !c->runner().stalled() && !c->runner().rebuilding() && c->runner().buffer_turns() == 1);   // not a stall of the link
+                }
+                for (auto& sm : m.sims) ASSERT_EQ(sm->current_tick(), 0u);
+            }
+        }
+        ASSERT_EQ(first_seal, kMatchStartDelayMs);                                  // sealed on the very pass that is 5 s after start()
+        ASSERT_TRUE(first_tick >= kMatchStartDelayMs && first_tick <= kMatchStartDelayMs + 2 * kTurnMs);                       // the host's own runner begins with two turns in hand
+        ASSERT_TRUE(first_tick_client >= kMatchStartDelayMs + 30 && first_tick_client <= kMatchStartDelayMs + 400);             // a client: the link's delay, the second turn, a few steps of jitter
+        m.run(10000, false);
+        for (auto& c : m.clients) ASSERT_TRUE(c->runner().buffer_turns() == 1 && !c->runner().stalled() && c->lagging_seat() == 255);   // the wait before the start left the buffer as it was
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        for (auto& c : m.clients) ASSERT_FALSE(c->desynced());
+        ASSERT_TRUE(m.all_equal());
+        ASSERT_TRUE(m.sims[0]->current_tick() > 150);
+    } TEST_END();
+
+    TEST_CASE("S2.15 Protocol 12, A Dedicated Server's Start: The Referee's First Turn Is Sealed Exactly start_delay_ms After start() And Nothing Before It, Nobody Is Behind, Announced As Lagging Or Paused In The Seconds Before It (A Room That Holds Seats Included); The Idle Rule Of The Lag Policy Does Not Count Those Seconds: A Seat That Never Acks Is Dropped Its Idle Time After The First Turn, Not After start()") {
+        {   // the idle rule: seat 3's window never runs (no acks, no pings), the rule is 8 s (30 s by default: a shorter rule makes the difference visible)
+            HostSession::Config hc;
+            hc.start_delay_ms = kMatchStartDelayMs;
+            hc.lag_drop_idle_ms = 8000;
+            ServerMatch m(4, 4, {40, 10}, hc);
+            m.frozen_mask = 1u << 3;
+            uint32_t first_seal = 0;
+            while (m.now < 5200 && first_seal == 0) {
+                m.run(10, false);
+                if (m.host->turns_sealed() >= 1) first_seal = m.now;
+                if (first_seal == 0) {                                              // the quiet seconds: nothing is sealed, run or waited for
+                    ASSERT_TRUE(m.host->turns_sealed() == 0 && m.referee.current_tick() == 0 && !m.host->paused() && m.host->lagging_mask() == 0);
+                    ASSERT_TRUE(m.clients[0]->lagging_seat() == 255 && !m.clients[0]->catching_up() && !m.clients[0]->paused() && m.clients[0]->runner().stalled_ms() == 0);
+                }
+            }
+            ASSERT_EQ(first_seal, kMatchStartDelayMs);
+            m.run(7000, false);                                                     // 12 s after start(): the idle rule would have dropped the seat at 8 s if the quiet seconds counted
+            ASSERT_TRUE(m.host->client_present(3));
+            ASSERT_TRUE(m.clients[0]->lagging_seat() == 3);                         // (the others are told who lags once it is 3 s behind)
+            m.run(2000, false);                                                     // 14 s: 9 s after the first turn, the idle time of 8 s is over
+            ASSERT_FALSE(m.host->client_present(3));                                // dropped, the others play on
+            for (auto& c : m.clients) ASSERT_FALSE(c->lost());
+            m.run(1500, false);
+            ASSERT_TRUE(m.sims[0]->is_player_dropped(3) && m.referee.is_player_dropped(3));
+            ASSERT_TRUE(m.sims[0]->current_tick() > 100);
+        }
+        {   // a room that holds seats: the seconds before the first turn are no pause (nobody is missing, nothing is announced), and the first turn comes on time
+            HostSession::Config hc;
+            hc.start_delay_ms = kMatchStartDelayMs;
+            hc.hold_seats = true;
+            ServerMatch m(5, 3, {40, 10}, hc);
+            uint32_t first_seal = 0;
+            while (m.now < 5200 && first_seal == 0) {
+                m.run(10, false);
+                if (m.host->turns_sealed() >= 1) first_seal = m.now;
+                if (first_seal == 0) {
+                    ASSERT_TRUE(!m.host->paused() && !m.host->attendance().paused() && m.host->rejoiners() == 0);
+                    for (auto& c : m.clients) ASSERT_TRUE(!c->paused() && c->presence().missing.empty() && c->presence().resume_s == 0 && c->mode() == ClientSession::Mode::Normal);
+                }
+            }
+            ASSERT_EQ(first_seal, kMatchStartDelayMs);
+            m.run(8000, false);
+            ASSERT_TRUE(!m.host->paused() && m.referee.current_tick() > 100);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.95 Protocol 12, A Command That Reaches The Host Before Its First Turn Is Sealed Is Discarded, Not Counted As A Violation (A Host With A Seat): A Guest's Orders At 100 ms (Seventy At Once), 4,900 ms And 4,950 ms Of The 5 s Wait Are In No Turn, One That Arrives 10 ms After The First Seal Is In Turn 1, An Honest Guest's First Order Is Not Delayed By The Gate, And With start_delay_ms 0 A Command Is Accepted At Once") {
+        const uint32_t link = 40;                                                   // one way, no jitter: what is sent at t arrives at t + 40
+        HostSession::Config hc;
+        hc.start_delay_ms = kMatchStartDelayMs;
+        Match m(7, 3, {link, 0}, hc);                                               // the host plays seat 0; seat 1 is the guest that orders in the wait (a modified client, or a rig: a client has no gate of its own), seat 2 is honest
+        const auto order = [&](uint8_t seat, int16_t x) { return cmd(CommandType::GroupMove, seat, 255, x, 12, m.ids.ants[seat]); };
+        bool all_sent = true;
+        uint32_t sealed_before_the_seal = 99;
+        bool honest_sent = false;
+        uint32_t honest_sent_at = 0;
+        m.run(5400, false, [&](uint32_t now) {
+            if (now == 100) {
+                for (int i = 0; i < 70; ++i) all_sent = m.clients[0]->submit(order(1, static_cast<int16_t>(10 + i % 5))) && all_sent;       // seventy at once: a turn takes 64, the rest would be carried into the next ones
+            }
+            if (now == 4900) all_sent = m.clients[0]->submit(order(1, 30)) && all_sent;
+            if (now == 4950) all_sent = m.clients[0]->submit(order(1, 11)) && all_sent;                                                    // arrives at 4990, 10 ms before the first seal
+            if (now == 4970) all_sent = m.clients[0]->submit(order(1, 31)) && all_sent;                                                    // arrives at 5010, 10 ms after it
+            if (now == 4990) sealed_before_the_seal = m.host->turns_sealed();
+            if (!honest_sent && m.sims[2]->current_tick() >= 1) {                                                                          // seat 2's earliest order: the frame after its dialog is gone (its first turn has run)
+                honest_sent = m.clients[1]->submit(order(2, 20));
+                honest_sent_at = now;
+            }
+        });
+        ASSERT_TRUE(all_sent && honest_sent);
+        ASSERT_EQ(sealed_before_the_seal, 0u);                                      // nothing was sealed until 5000 ms
+        ASSERT_TRUE(m.host->turns_sealed() >= 8);
+        ASSERT_TRUE(turns_with(*m.host, 1) == std::vector<uint32_t>{1});            // of seat 1's seventy-three orders only the one that arrived at 5010 ms is in a turn: turn 1, sealed at 5050 ms; the others are in no turn (not turn 0, and none was kept for later)
+        for (uint32_t t : {0u, 1u, 2u}) {
+            const TurnMsg* turn = m.host->runner().logged_turn(t);
+            ASSERT_TRUE(turn != nullptr);
+            for (const Command& c : turn->commands) ASSERT_TRUE(t == 1 && c.issuer == 1 && c.tile_x == 31);        // the late order and nothing else in the first three turns
+        }
+        for (uint8_t seat : {uint8_t{1}, uint8_t{2}}) ASSERT_TRUE(m.host->client_present(seat) && m.host->violations(seat) == 0u);      // a discarded command is no offence: the seat is not on its way out
+        const std::vector<uint32_t> honest = turns_with(*m.host, 2);                // seat 2 sent nothing in the wait, and its first order is not held back by the gate
+        ASSERT_TRUE(honest.size() == 1);
+        ASSERT_EQ(honest[0], turn_for_arrival(honest_sent_at + link, kMatchStartDelayMs));      // the first turn after its arrival (turn 3 on a link of 40 ms)
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty());
+        for (auto& c : m.clients) ASSERT_FALSE(c->desynced());
+        ASSERT_TRUE(m.all_equal());
+        {   // the default delay of 0 (every rig of this suite): the first pass reads what has arrived before it seals turn 0, and the command is in turn 0 (the gate is not "before turn 0 was sealed" for a match that does not wait)
+            Match z(8, 2, {0, 0});
+            bool sent = false;
+            z.run(30, false, [&](uint32_t now) {
+                if (now == 10) sent = z.clients[0]->submit(cmd(CommandType::GroupMove, 1, 255, 10, 12, z.ids.ants[1]));
+            });
+            ASSERT_TRUE(sent);
+            ASSERT_TRUE(turns_with(*z.host, 1) == std::vector<uint32_t>{0});
+            ASSERT_EQ(z.host->violations(1), 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.16 Protocol 12, A Command That Reaches A Dedicated Server's Referee Before Its First Turn Is Sealed Is Discarded Without A Violation: A Raw Seat (A Modified Client) That Writes Seventy Orders At 100 ms And One That Arrives 100 ms Before The First Seal Has Them In No Turn, A Raw Order After The First Seal Is Accepted, And The Honest Seats' First Orders Are Sealed Into The First Turn After They Arrive (On Links Of 40, 120 And 300 ms): The Raw Seat Has No Opening Ahead Of Them") {
+        for (const uint32_t link : {40u, 120u, 300u}) {
+            HostSession::Config hc;
+            hc.start_delay_ms = kMatchStartDelayMs;
+            ServerMatch m(11, 3, {link, 0}, hc);                                    // seats 0 and 1 play honestly, seat 2 is a raw connection that writes CommandMsg itself
+            const auto order = [&](uint8_t seat, int16_t x) { return cmd(CommandType::GroupMove, seat, 255, x, 12, m.ids.ants[seat]); };
+            bool honest_sent[2] = {false, false};
+            uint32_t honest_sent_at[2] = {0, 0};
+            m.run(7000 + 2 * link, false, [&](uint32_t now) {
+                if (now == 100) {
+                    for (int i = 0; i < 70; ++i) m.client_ends[2]->send(encode(CommandMsg{order(2, static_cast<int16_t>(10 + i % 5))}));   // a scripted opening (seventy orders)
+                }
+                if (now == 4900 - link) m.client_ends[2]->send(encode(CommandMsg{order(2, 30)}));          // timed to arrive at 4,900 ms, 100 ms before the first seal (on any link)
+                if (now == 5100) m.client_ends[2]->send(encode(CommandMsg{order(2, 31)}));       // after the first seal: an order like any other
+                for (size_t p = 0; p < 2; ++p) {
+                    if (!honest_sent[p] && m.sims[p]->current_tick() >= 1) {                 // an honest client's earliest order: the frame after its dialog is gone (its first turn has run)
+                        honest_sent[p] = m.clients[p]->submit(order(static_cast<uint8_t>(p), 20));
+                        honest_sent_at[p] = now;
+                    }
+                }
+            });
+            ASSERT_TRUE(honest_sent[0] && honest_sent[1]);
+            ASSERT_TRUE(turns_with(*m.host, 2) == std::vector<uint32_t>{turn_for_arrival(5100 + link, kMatchStartDelayMs)});   // only the order after the first seal, in the first turn that follows its arrival
+            for (uint8_t seat : {uint8_t{0}, uint8_t{1}}) {
+                const std::vector<uint32_t> turns = turns_with(*m.host, seat);
+                ASSERT_TRUE(turns.size() == 1);
+                ASSERT_EQ(turns[0], turn_for_arrival(honest_sent_at[seat] + link, kMatchStartDelayMs));      // not held back: the turn after its arrival
+            }
+            for (uint8_t seat : {uint8_t{0}, uint8_t{1}, uint8_t{2}}) ASSERT_TRUE(m.host->client_present(seat) && m.host->violations(seat) == 0u);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            for (auto& c : m.clients) ASSERT_FALSE(c->desynced());
+            ASSERT_TRUE(m.all_equal());
+        }
+    } TEST_END();
+}
+
 int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: lock-step core (protocol, sequencer, runner, sessions)\n"
                  "=======================================================\n";
@@ -9524,6 +9730,7 @@ int main() {
     run_reconnect_session_tests();
     run_protocol11_tests();
     run_team_chat_tests();
+    run_protocol12_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

@@ -77,11 +77,22 @@ std::string host_part(const std::string& peer) {
 }
 #endif
 
-// Why a join failed: the original's words where it has them (dropped from the game, unable to connect), the remake's for the rest
-std::string reject_text(RejectReason r) {
+#ifdef __EMSCRIPTEN__
+constexpr bool kInBrowser = true;          // the game runs in a web page (the page's own Reload is a click away)
+#else
+constexpr bool kInBrowser = false;
+#endif
+
+}  // namespace
+
+// Why a join failed: the original's words where it has them (dropped from the game, unable to connect), the remake's for the rest. In a web page the refusal for another version says what a player
+// can do about it: the game that is open is the one that was loaded when the tab was opened, and after an update of the server only a reload fetches the current one (the desktop game has its own
+// text for this, the start menu's: "Update the game, or wait until the server is updated").
+std::string NetGame::reject_text(RejectReason r, bool in_browser) {
     switch (r) {
         case RejectReason::Full: return "The room is full.";
-        case RejectReason::VersionMismatch: return "This version cannot play with the host's version.";
+        case RejectReason::VersionMismatch:
+            return in_browser ? "This version cannot play with the host's version. Reload the page to update." : "This version cannot play with the host's version.";
         case RejectReason::MatchRunning: return "The match has already started.";
         case RejectReason::Kicked: return str::text(str::kDroppedFromGame);
         case RejectReason::NoSuchRoom: return "There is no such room on this server.";
@@ -91,8 +102,6 @@ std::string reject_text(RejectReason r) {
         default: return "The host refused the connection.";
     }
 }
-
-}  // namespace
 
 NetGame::NetGame(sim::SimulationEngine& sim) : sim_(sim) {}
 
@@ -505,7 +514,7 @@ void NetGame::update_client() {
                     phase_ = Phase::Failed;
                     fail_reason_ = FailReason::Rejected;
                     reject_reason_ = client_lobby_->reject_reason();
-                    status_ = reject_text(client_lobby_->reject_reason());
+                    status_ = reject_text(client_lobby_->reject_reason(), kInBrowser);
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
                 case ClientLobby::Event::Type::Disconnected:
@@ -671,6 +680,7 @@ void NetGame::begin_match() {
     if (role_ == Role::Host) {
         HostSession::Config hc;
         hc.host_player = seat_;
+        hc.start_delay_ms = kMatchStartDelayMs;                 // protocol 12: the first turn is sealed when the "Get ready to play!" dialog of every machine has had its 5 s (session.hpp)
         host_session_ = std::make_unique<HostSession>(sim_, hc);
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
             if (Connection* c = host_lobby_->connection_of(s)) host_session_->add_client(s, c);

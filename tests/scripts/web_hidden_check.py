@@ -349,6 +349,13 @@ def main():
         if hidden is not True:
             print("  SKIP: this browser does not hide a tab that another tab covers (document.hidden is %r): the check would say nothing" % (hidden,))
             return 3
+        # the match opens with the "Get ready to play!" dialog and its simulation waits for it (network protocol 12): the room's ticks count from the first turn, which the server seals
+        # 5 s after the match began; the rate is measured from there (a window that began inside the dialog would count its seconds as a slow clock)
+        for _ in range(60):
+            room = control_room(args.ctl, args.secret, code)
+            if room is None or room.get("ticks", 0) > 0:
+                break
+            time.sleep(0.5)
         time.sleep(3)
         first = control_room(args.ctl, args.secret, code)
         t_first = time.time()

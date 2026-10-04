@@ -19,11 +19,13 @@ constexpr uint32_t TICK_MS      = 50u;
 
 /// The start of a match. The original opens every match with the "Get ready to play!" dialog (string 105): its constructor (Ants.exe 0x1017127) adds the task KWFO, delay 5000 ms and
 /// interval 200 ms (0x10174a9, body 0x10254b0), which closes the dialog at the first run that finds it released, so it stays up at least 5 s. While it is up it is the top window and
-/// takes every click and key (0x1012b5b - 0x1012c97): a person can neither select an ant nor give an order, while the match clock and the ants already run (section 21 of
-/// docs/GAME_REVERSE_ENGINEERING.md). 100 ticks of 50 ms are those 5 s. The HUD keeps its dialog up for this many ticks (HUD::MATCH_START_MODAL_DURATION_TICKS), and the computer players
-/// of ants_ai wait for the same ticks (BotController::set_start_hold): a bot must not move before the people it plays against can.
-constexpr uint32_t kMatchStartHoldTicks = 100u;
-static_assert(kMatchStartHoldTicks * TICK_MS == 5000u, "the original's dialog stays up at least 5 s");
+/// takes every click and key (0x1012b5b - 0x1012c97): a person can neither select an ant nor give an order. In the ORIGINAL the match clock and the ants already run behind it (the GO handler
+/// 0x1022432 that releases the dialog also starts the clock): the dialog costs a player five seconds of the match. THE REMAKE DEVIATES ON PURPOSE, at the owner's request (v0.2.0, section 21
+/// of docs/GAME_REVERSE_ENGINEERING.md): the dialog is the original's picture and stays up this long, but the simulation does not run while it is up: tick 0 runs when it closes, and the clock
+/// shows the match's full time. A local game counts the dialog in real time (Application::update_simulation, steps of 50 ms); in a network match the host seals the first turn this long after
+/// the match begins (net::kMatchStartDelayMs, protocol 12) and every machine closes its dialog when its first turn executes.
+constexpr uint32_t kMatchStartDialogMs = 5000u;
+static_assert(kMatchStartDialogMs % TICK_MS == 0u, "the dialog is a whole number of 50 ms steps");
 
 namespace SoundID {
     constexpr uint32_t ButtonClick    = 0;  // buttonclick.wav

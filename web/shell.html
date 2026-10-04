@@ -156,7 +156,8 @@
         }
 
         /* Fullscreen (the browser's, on the stage) and the page's own fullscreen where the browser has none (an iPhone): the stage fills the screen, black, and the script
-           sizes the box to the largest picture that fits, centred; the bars of a screen of another shape are the stage's black. */
+           sizes the box to the largest picture that fits, centred; the bars of a screen of another shape are the stage's black. The pointer over a bar is the game's pointer at the
+           picture's edge (see "The pointer in fullscreen" in the script), and the game draws its own cursor there: the browser's arrow is hidden over the bars as it is over the picture. */
         #game-stage:fullscreen,
         #game-stage:-webkit-full-screen,
         #game-stage.pseudo-fullscreen {
@@ -167,6 +168,7 @@
             min-width: 0;
             aspect-ratio: auto;
             background: #000;
+            cursor: none;
         }
 
         #game-stage.pseudo-fullscreen {
@@ -280,6 +282,13 @@
             }
         }
 
+        /* The fullscreen mouse (the pointer lock) is for a mouse: a screen with no pointer that hovers (a phone, a tablet) has no use for the control */
+        @media (hover: none) {
+            .lock-part {
+                display: none;
+            }
+        }
+
         /* The loading screen: shows the download of the game's data and goes away by itself when the game is ready (there is no start button; a failure puts its
            message here and the button of that message must work, see showCacheError). It takes no clicks and no keys while it is up. */
         #splash-overlay {
@@ -298,6 +307,54 @@
         #splash-overlay.failed {
             pointer-events: auto;
         }
+
+        /* The name step of a link that somebody shared (see runNameStep): a card over the whole page, so that it fits any screen (the loading screen's box of a phone held upright is small). The game
+           does not start, and so does not connect, before its button (or Enter). */
+        .name-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(8, 12, 9, 0.84);
+        }
+        .name-modal[hidden] { display: none; }
+        .name-step {
+            padding: 16px 18px;
+            width: min(380px, 100%);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            background: #1c231e;
+            text-align: left;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+        }
+        .name-step-title { color: var(--accent-gold); font-weight: bold; margin-bottom: 10px; overflow-wrap: anywhere; }
+        .name-step label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 4px; }
+        .name-step-row { display: flex; gap: 8px; }
+        .name-step input {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 8px 10px;
+            font-size: 16px;
+            color: #d0e0d4;
+            background: #0f1411;
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+        }
+        .name-step button {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #fff;
+            background: #22c55e;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .name-step-msg { min-height: 1.1em; margin-top: 6px; font-size: 0.8rem; color: #fca5a5; }
+        .name-step-hint { margin-top: 6px; font-size: 0.78rem; color: var(--text-dim); }
 
         .splash-card {
             text-align: center;
@@ -751,11 +808,29 @@
         <button type="button" id="pseudo-exit" aria-label="Leave fullscreen" title="Leave fullscreen">&times;</button>
     </div>
 
+    <div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>
+        <div class="name-step">
+            <div class="name-step-title" id="name-step-title">Join the match</div>
+            <label for="name-step-input">Your name</label>
+            <div class="name-step-row">
+                <input type="text" id="name-step-input" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="name-step-msg">
+                <button type="button" id="name-step-go">Join</button>
+            </div>
+            <div class="name-step-msg" id="name-step-msg" role="alert"></div>
+            <div class="name-step-hint">The name the other players see. Leave it empty to play as Player.</div>
+        </div>
+    </div>
+
     <div class="view-bar" id="view-bar">
         <span id="view-bar-label">Picture</span>
         <div class="seg" role="radiogroup" aria-labelledby="view-bar-label">
             <button type="button" role="radio" id="aspect-16-9" data-aspect="16:9" aria-checked="true" title="The wide picture (960 x 540)">16:9</button>
             <button type="button" role="radio" id="aspect-4-3" data-aspect="4:3" aria-checked="false" title="The original's picture (640 x 480)">Classic 4:3</button>
+        </div>
+        <span id="lock-bar-label" class="lock-part">Fullscreen mouse</span>
+        <div class="seg lock-part" role="radiogroup" aria-labelledby="lock-bar-label">
+            <button type="button" role="radio" id="lock-on" data-lock="on" aria-checked="true" title="Fullscreen holds the mouse inside the game: your cursor cannot leave the picture, and on a Mac the Dock and the menu bar stay away. In Chrome and Edge Esc goes to the game (hold it to leave fullscreen); in other browsers Esc gives the mouse back first.">Locked</button>
+            <button type="button" role="radio" id="lock-off" data-lock="off" aria-checked="false" title="Fullscreen as the browser makes it: the mouse is free (a mouse over the black bars still scrolls the map at the picture's edge)">Free</button>
         </div>
     </div>
 
@@ -800,6 +875,8 @@
                 <div class="info-content">
                     <ul>
                         <li><strong>Edge scrolling:</strong>&#8197;move the pointer to the edge of the map: an arrow shows and the map scrolls. Options &rarr; Map Scroll Rate sets the speed.</li>
+                        <li><strong>Fullscreen:</strong>&#8197;<kbd>&#x26F6;</kbd>&#8197;in the header. The black bars of a screen that is not 16:9 count as the picture's edge: the map scrolls with the pointer anywhere beyond it, corners included. The mouse is held inside the game (<em>Fullscreen mouse: Locked</em>, under the game, is the default): your cursor cannot leave the picture, so every edge of the screen scrolls the map, and a Mac's Dock and menu bar stay away. A click on the game takes the mouse again if the browser let it go (that click does nothing else).</li>
+                        <li class="note"><strong>Esc in fullscreen:</strong>&#8197;in Chrome and Edge Esc goes to the game (deselect, close a dialog) and&#8197;<em>holding</em>&#8197;it leaves fullscreen; in Safari and Firefox Esc gives the mouse back first (Safari leaves fullscreen with it). <em>Free</em>&#8197;under the game gives the browser's plain fullscreen.</li>
                         <li><strong>Minimap:</strong>&#8197;hold the left button on it and the view follows the pointer.</li>
                         <li><strong>Jump to an ant:</strong>&#8197;<kbd>Ctrl</kbd>+<kbd>N</kbd>&#8197;/&#8197;<kbd>Ctrl</kbd>+<kbd>P</kbd>&#8197;select the next / previous ant and scroll to it;&#8197;<kbd>Ctrl</kbd>+<kbd>H</kbd>&#8197;selects your anthill.</li>
                         <li><strong>Zoom:</strong>&#8197;the mouse wheel (a trackpad's two-finger scroll or pinch) over the map zooms in and out towards the pointer: 0.5&times;, 1&times; (the original's picture) and 2&times;; the middle button goes back to 1&times;. In an online match you can zoom in but not out: it would show more of the map than the other players see.</li>
@@ -875,7 +952,9 @@
         //   fitBox  the picture's box: the largest whole number of canvas steps (16 x 9, or 4 x 3 for the classic picture) that fits an area, in device pixels
         //   limiter the frame cap (a rolling median of the display's gaps)
         //   snapOffset where the box must stand for an exact pointer
-        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; badDownload whether a download is not the game data
+        //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
+        //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
+        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
 
@@ -929,6 +1008,44 @@
                 var whole = Math.abs(size - Math.round(size)) < 1 / 128;
                 var target = whole ? Math.round(pos) : Math.round(pos + 1 / 64) - 1 / 64;
                 return target - pos;
+            }
+
+            // The pointer of a FULLSCREEN page that is over a bar (the stage's black around a picture of another shape than the screen's) is, for the game, at the nearest pixel of the
+            // picture: the screen's edge is the picture's edge, as on a machine whose display mode is the picture (the original's) and as in the desktop game, where the window's bars map to
+            // positions outside the picture that the game holds to its edge pixel. The game reads the browser's pointer as the whole CSS pixel `trunc(clientX - trunc(left))` of its canvas (see
+            // snapOffset); edgePixel is that reading held to 0 .. floor(size) - 1, the last pixel being the one that SDL still counts as inside its window (an edge position of `size` would be a
+            // pointer that left it), and clientFor is a client position that the game reads as exactly that pixel (a position that the page hands to the game itself).
+            function edgePixel(left, top, width, height, clientX, clientY) {
+                var w = Math.max(1, Math.floor(width));
+                var h = Math.max(1, Math.floor(height));
+                var x = Math.trunc(clientX - Math.trunc(left));
+                var y = Math.trunc(clientY - Math.trunc(top));
+                if (!isFinite(x)) x = 0;
+                if (!isFinite(y)) y = 0;
+                return { x: Math.min(Math.max(x, 0), w - 1), y: Math.min(Math.max(y, 0), h - 1) };
+            }
+            function clientFor(left, top, pixel) {
+                return { clientX: Math.trunc(left) + pixel.x, clientY: Math.trunc(top) + pixel.y };
+            }
+
+            // THE POINTER LOCK. While the browser holds the pointer for the game (fullscreen) it reports only how far the pointer moved (movementX / movementY, in CSS pixels, with the
+            // system's own acceleration: the same distance that the pointer would have moved), and the game's cursor is the page's: it starts in the middle of the picture (lockStart) and
+            // moves by those distances, held to the picture (moveLocked: a cursor that is pushed against an edge stays on the edge's last pixel, so the game scrolls there; two edges
+            // are a corner). The result is in CSS pixels of the canvas, fractions kept (a slow pointer's steps of less than a pixel add up); the game is handed its whole pixel
+            // (trunc) as the position of an ordinary pointer, so it cannot tell the lock from a pointer that never leaves the picture.
+            function lockStart(width, height) {
+                return { x: width / 2, y: height / 2 };
+            }
+            function moveLocked(pos, dx, dy, width, height) {
+                var w = Math.max(1, Math.floor(width));
+                var h = Math.max(1, Math.floor(height));
+                var x = pos.x + (isFinite(dx) ? dx : 0);
+                var y = pos.y + (isFinite(dy) ? dy : 0);
+                return { x: Math.min(Math.max(x, 0), w - 0.001), y: Math.min(Math.max(y, 0), h - 0.001) };           // (trunc of the largest value is the last pixel, w - 1)
+            }
+            // The player's choice (the key ants.pointerlock, written by the control next to the picture's selector and by nothing else): only "off" turns the lock off.
+            function lockSetting(stored) {
+                return stored !== 'off';
             }
 
             // The frame cap (the original ran at 60 frames a second; a display of 120 Hz or more would draw the game two or more times as often for nothing, at the full
@@ -1018,6 +1135,31 @@
                 return out;
             }
 
+            // Does this address make the page ASK for a name before the game connects? A link that somebody shared does: a join of a room (a door and a room code that joinArguments accepts), not a
+            // frame of another page (embed), and with no `name` parameter at all. The page that makes an address of its own (web/four.html: its frames, its windows and its Join button) always puts
+            // the name in, empty or not, because its player chose it there ("name=" with nothing behind it is a name that was chosen: none), so such an address asks nobody.
+            function asksForName(search) {
+                var q;
+                try { q = new URLSearchParams(search); } catch (e) { return false; }
+                var join = q.get('join');
+                var room = q.get('room');
+                if (!(join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1)) return false;
+                if (!(room && /^[A-Za-z0-9_-]{1,32}$/.test(room))) return false;
+                return q.get('embed') !== '1' && !q.has('name');
+            }
+            // The address without its `name` parameter: a game that was given a name by the page that opened it must not hand that name on to whoever is sent the address from its address bar
+            // (the person that opens the copy is asked, like for any shared link).
+            function withoutName(search) {
+                var text = String(search);
+                if (text.charAt(0) !== '?') return text;
+                var kept = text.slice(1).split('&').filter(function (part) {
+                    var key = part.split('=')[0];
+                    try { key = decodeURIComponent(key.replace(/\+/g, ' ')); } catch (e) { /* a key that does not decode is not `name` */ }
+                    return key !== 'name';
+                });
+                return kept.length ? '?' + kept.join('&') : '';
+            }
+
             // Is what came back for index.data the data? A captive portal or an error page is served with "200 OK" and a body that is not the package: its type is HTML and it is far
             // smaller than the package. null: it is the data; else the reason. `expected` is the package's exact size in bytes when the build knows it (the Dockerfile writes it into
             // the page; 0 when it does not), else anything under a megabyte (the package is 14.7 MB) is not it.
@@ -1046,7 +1188,9 @@
                 return go();
             }
 
-            return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, badDownload: badDownload, downloadWithRetries: downloadWithRetries };
+            return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
+                     lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, asksForName: asksForName, withoutName: withoutName, badDownload: badDownload,
+                     downloadWithRetries: downloadWithRetries };
         })();
 
         // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&fill=easy|medium|hard (any case)][&embed=1] (ANTS_PAGE.joinArguments reads it)
@@ -1085,6 +1229,101 @@
             });
         })();
         // ANTS_PAGE_END
+        // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/four.html and web/shell.html carry the same text)
+        // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
+        // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
+        // 32 characters, and nothing that starts with "Bot (" (blanks and case ignored: a computer player is always shown as one, so a room would rename such a name; here it is refused, with the reason).
+        // An empty name is fine on the web: it means that none was chosen (the game's own "Player", or a random name where the page has seats to name). nameCheck(text) is { ok: true, name } or
+        // { ok: false, why }, why being a short line for the person. A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
+        var NAME_KEY = 'ants.name';
+        var NAME_MAX = 32;
+        function nameCheck(text) {
+            var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
+            if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
+            var name = raw.replace(/^ +/, '').replace(/ +$/, '');
+            if (name.length > NAME_MAX) return { ok: false, why: 'A name has at most ' + NAME_MAX + ' characters.' };
+            if (name.replace(/ /g, '').toLowerCase().indexOf('bot(') === 0) return { ok: false, why: 'A name that starts with "Bot (" is for computer players. Please choose another name.' };
+            return { ok: true, name: name };
+        }
+        // THE NAME STEP of a link that somebody else shared (the owner: "when joining a link from somebody else, it should ask you first what you want your name to be"): the field is filled in with
+        // the name that this browser remembered (ants.name), the person sees it and may change it, and only the button (or Enter) with a name that nameCheck accepts goes on: onDone(name) is called
+        // once with the name ('' for none, which is fine) and the name is remembered. A bad name is explained in ui.message and nothing happens. ui is { input, button, message, show(), hide() }, store
+        // is { recall(key), remember(key, value) } (the browser's storage, which may refuse: neither may throw).
+        function runNameStep(ui, store, onDone) {
+            var done = false;
+            var remembered = nameCheck(store.recall(NAME_KEY));
+            ui.input.value = remembered.ok ? remembered.name : '';
+            ui.show();
+            function confirm() {
+                if (done) return;
+                var checked = nameCheck(ui.input.value);
+                if (!checked.ok) { ui.message.textContent = checked.why; return; }
+                done = true;
+                ui.message.textContent = '';
+                store.remember(NAME_KEY, checked.name);
+                ui.hide();
+                onDone(checked.name);
+            }
+            ui.button.addEventListener('click', confirm);
+            ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
+            ui.input.addEventListener('input', function () { ui.message.textContent = ''; });
+            return confirm;
+        }
+        // NAME_END
+
+        // NAMEGATE_BEGIN (tests/scripts/web_name_check.js runs this block)
+        // The game of a link that somebody shared starts only when its player has chosen a name: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after the
+        // name step is done, which puts the name into the game's arguments (--name; none for an empty name: the game's own Player) and opens the gate. The game does not connect before it starts.
+        function makeNameGate(pending, args, ui, store) {
+            var open = !pending;
+            var waiting = [];
+            var gate = {
+                pending: function () { return !open; },
+                when: function (fn) { if (open) fn(); else waiting.push(fn); },
+                open: function () { open = true; var run = waiting; waiting = []; run.forEach(function (fn) { fn(); }); }
+            };
+            if (pending) {
+                runNameStep(ui, store, function (name) {
+                    if (name) args.push('--name', name);
+                    gate.open();
+                });
+            }
+            return gate;
+        }
+        // NAMEGATE_END
+
+        // The name step of a shared link (the gate above): a card in the loading screen, filled in with the name that this browser remembered. The address of a game that was opened with a name by
+        // web/four.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
+        var ANTS_NAME_GATE = (function () {
+            var asks = !ANTS_EMBED && ANTS_PAGE.asksForName(window.location.search);
+            if (!ANTS_EMBED) {
+                var stripped = ANTS_PAGE.withoutName(window.location.search);
+                if (stripped !== window.location.search) {
+                    try { window.history.replaceState(null, '', window.location.pathname + stripped + window.location.hash); } catch (e) { /* the address stays as it is */ }
+                }
+            }
+            var card = document.getElementById('name-step');
+            var ui = {
+                input: document.getElementById('name-step-input'),
+                button: document.getElementById('name-step-go'),
+                message: document.getElementById('name-step-msg'),
+                show: function () {
+                    var room = '';
+                    try { room = new URLSearchParams(window.location.search).get('room') || ''; } catch (e) { /* no address to read */ }
+                    document.getElementById('name-step-title').textContent = 'Join the match ' + room;      // (text: the room code passed asksForName's rule)
+                    card.hidden = false;
+                    try { ui.input.focus(); } catch (e) { /* nothing to focus */ }
+                },
+                hide: function () {
+                    card.hidden = true;
+                }
+            };
+            var store = {
+                recall: function (key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } },
+                remember: function (key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
+            };
+            return makeNameGate(asks, ANTS_ARGS, ui, store);
+        })();
 
         var Module = {
             arguments: ANTS_ARGS,
@@ -1385,12 +1624,15 @@
             var key = fit.bw + 'x' + fit.bh + '@' + dpr;
             boxElement.style.width = fit.cssW + 'px';
             boxElement.style.height = fit.cssH + 'px';
+            var told = false;
             if (force || key !== pageBoxKey) {
                 pageBoxKey = key;
                 pageDispatching = true;
                 try { window.dispatchEvent(new Event('resize')); } finally { pageDispatching = false; }
+                told = true;
             }
             snapBox();
+            if (told) keepLockedCursor();                                   // (the game's cursor of a locked pointer stays on the same place of the picture: see "The pointer in fullscreen")
         }
         // Put the box where the game's pointer is exact (ANTS_PAGE.snapOffset says where): the layout centres it, at whatever fraction of a pixel that gives, and a relative shift of
         // at most half a pixel moves it. Done after every layout and whenever the page scrolls (the position is the box's place in the window).
@@ -1454,6 +1696,7 @@
             stageElement.classList.toggle('pseudo-fullscreen', on);
             document.body.classList.toggle('pseudo-fullscreen', on);
             if (!on) window.scrollTo(0, 0);
+            if (!on) fullscreenEnded();
             relayout(true);
             setTimeout(function () { relayout(true); }, 150);
         }
@@ -1462,10 +1705,11 @@
             if (!request) { setPageFullscreen(true); return; }
             var result;
             try { result = request.call(stageElement); } catch (e) { setPageFullscreen(true); return; }
-            if (result && result.catch) result.catch(function () { setPageFullscreen(true); });          // refused (a frame without permission, a policy): the page's own
+            if (result && result.catch) result.catch(function () { releaseLock(); setPageFullscreen(true); });          // refused (a frame without permission, a policy): the page's own (and no lock: the lock is for the browser's fullscreen)
             if (screen.orientation && screen.orientation.lock) {
                 screen.orientation.lock('landscape').catch(function () { /* the browser may not lock */ });
             }
+            requestLock(null);                                              // (this click is the user's gesture that the browser asks for; see "The pointer in fullscreen")
         }
         function leaveFullscreen() {
             if (pageFullscreen) { setPageFullscreen(false); return; }
@@ -1476,6 +1720,205 @@
             if (isFullscreen()) leaveFullscreen(); else enterFullscreen();
         });
         document.getElementById('pseudo-exit').addEventListener('click', leaveFullscreen);
+
+        // ---- The pointer in fullscreen: the bars, and the pointer lock ----
+        // Only a FULLSCREEN page (the browser's, or the page's own) does anything here; the windowed page behaves as it always did (a window never holds the pointer: a pointer that
+        // leaves the game's box stops the scrolling).
+        //
+        // THE BARS. A screen of another shape than the picture has bars (the stage's black: the top and bottom on a 16:10 screen, the sides on a 21:9 or 4:3 one). They are part of the
+        // screen, so a pointer over a bar is at the nearest edge of the picture, as in the desktop game, whose window maps the bars to positions outside the picture that it holds to
+        // the edge pixel: the map scrolls with the pointer anywhere beyond the picture's edge, corners included. The browser sends the game nothing over a bar (its mouse events belong to
+        // the canvas; the stage under the bars is not the game's), and says that the pointer LEFT the canvas, which the game takes for a pointer that went away (SDL_WINDOWEVENT_LEAVE: no
+        // more scrolling). So the page does what the browser does not: (1) a pointer that moves over a bar is handed to the game as a motion at the nearest pixel of the picture (the
+        // game reads it as an ordinary pointer: ANTS_PAGE.edgePixel / clientFor), (2) the canvas's leave towards a bar is not passed on (the pointer is still on the screen), and a
+        // pointer that really goes (another monitor, the page's own fullscreen left, the stage left) is reported as a leave of the canvas, (3) a click or a wheel over a bar is the stage's
+        // and reaches nobody: no order, no selection, no zoom. Touch is left alone (a tap's emulated mouse events are not a pointer over a bar).
+        var edgeForwarded = false;          // the game was handed a pointer position that its canvas never saw (the pointer is over a bar)
+        var edgeLast = { x: 0, y: 0 };      // ... and this is it
+        var handingOver = false;            // the page is handing the game an event of its own: the listeners below let that one through
+        var lockCursor = null;              // the game's cursor while the pointer is locked (CSS pixels of the canvas, fractions kept), else null
+        var lockStartAt = null;             // where the cursor of the next lock starts ({x, y} in CSS pixels of the canvas); null: the middle of the picture
+        var lockHeldOnce = false;           // the browser has given the page the lock at least once (a click that takes it again is then only that: see below)
+        var lockRefused = false;            // ... and its last request was refused (the click is then an ordinary click)
+        var quietAfterRelease = null;       // the lock was let go: the first position that the free pointer is seen at (null: not waiting; {} the next event tells it), see (1)
+
+        function isRealFullscreen() {
+            return !!(document.fullscreenElement || document.webkitFullscreenElement);
+        }
+        function isLocked() {
+            return (document.pointerLockElement || document.webkitPointerLockElement || document.mozPointerLockElement) === canvas;
+        }
+
+        // Hand the game an event as the browser would have made it over its canvas: a pointer at a pixel of the picture (whole CSS pixels of the canvas, see ANTS_PAGE.edgePixel). The event
+        // is not trusted, and the page's own listeners know it (handingOver).
+        // The FIRST pointer that the page hands over is preceded by a leave of the same pixel. SDL's Emscripten window (2.28.4) starts with the mouse focus (the game has no LEAVE to wait for)
+        // but with its window flag SDL_WINDOW_MOUSE_FOCUS clear (measured: flag 0, focus 1, right after the game is ready), and a LEAVE that finds the flag clear is dropped: the first
+        // leave of a page's life never reaches the game (the baseline: the first time the pointer leaves the box the map goes on scrolling), and a leave that the page hands over later,
+        // when the pointer goes for good, would be the first. The leave first takes the focus away (dropped, no event), the motion after it gives it back (an ENTER, which sets the flag):
+        // from then on SDL's flag and focus agree and every leave, the browser's and the page's, is delivered. (If they agreed already, the game sees a leave, an enter and the motion in
+        // one frame: it ends with the pointer in the window at that pixel.)
+        var focusPrimed = false;
+        function handToGame(type, pixel, buttons) {
+            if (!isReadyToPlay) return;                                     // (the game's window system listens once the game runs: nothing to hand to before that, and the first pointer must wait for it)
+            var rect = canvas.getBoundingClientRect();
+            var at = ANTS_PAGE.clientFor(rect.left, rect.top, pixel);
+            var send = function (kind) {
+                canvas.dispatchEvent(new MouseEvent(kind, { bubbles: kind === 'mousemove', cancelable: false, view: window, clientX: at.clientX, clientY: at.clientY, buttons: buttons || 0 }));
+            };
+            handingOver = true;
+            try {
+                if (type === 'mousemove' && !focusPrimed) {
+                    focusPrimed = true;
+                    send('mouseleave');
+                }
+                send(type);
+            } finally {
+                handingOver = false;
+            }
+        }
+        // (1) A pointer over a bar. It is the pointer events that are watched (a mouse, a pen; their `pointerType` tells them from a finger), over the stage outside the game's box.
+        // When the browser has just let the pointer lock go, the pointer is where it was when the lock began (on the Mac: wherever the Fullscreen button was, in a bar), and a browser may
+        // report it there without any motion: nothing is handed to the game for that, only for a pointer that has moved by a pixel from the place it was first seen at (no jump at the release).
+        window.addEventListener('pointermove', function (e) {
+            if (handingOver || e.pointerType === 'touch' || isLocked() || !isFullscreen()) return;
+            if (!stageElement.contains(e.target) || boxElement.contains(e.target)) return;
+            if (quietAfterRelease) {
+                if (quietAfterRelease.x === undefined) { quietAfterRelease = { x: e.clientX, y: e.clientY }; return; }
+                if (Math.abs(e.clientX - quietAfterRelease.x) < 1 && Math.abs(e.clientY - quietAfterRelease.y) < 1) return;
+                quietAfterRelease = null;
+            }
+            var rect = canvas.getBoundingClientRect();
+            edgeLast = ANTS_PAGE.edgePixel(rect.left, rect.top, rect.width, rect.height, e.clientX, e.clientY);
+            handToGame('mousemove', edgeLast, e.buttons);
+            edgeForwarded = true;
+        }, true);
+        // ... and over the canvas the game has the browser's own position again
+        canvas.addEventListener('mousemove', function (e) { if (e.isTrusted) edgeForwarded = false; }, true);
+        // (2) The canvas's leave. Window capture, so that it comes before the game's own listener whenever that one was added.
+        window.addEventListener('mouseleave', function (e) {
+            if (handingOver || e.target !== canvas || !isFullscreen()) return;
+            if (isLocked() || (e.relatedTarget && stageElement.contains(e.relatedTarget))) e.stopPropagation();       // (towards a bar, or the page's own button: the pointer is still on the screen)
+        }, true);
+        function handLeaveToGame() {
+            edgeForwarded = false;
+            handToGame('mouseleave', edgeLast, 0);
+        }
+        stageElement.addEventListener('mouseleave', function () {          // the pointer left the screen from a bar (another monitor): the game's pointer is gone
+            if (isFullscreen() && edgeForwarded && !isLocked()) handLeaveToGame();
+        });
+        function fullscreenEnded() {                                        // the page left fullscreen (the browser's or its own): a pointer that the game believes to be on an edge is not
+            releaseLock();
+            lockKeys(false);
+            quietAfterRelease = null;
+            if (edgeForwarded) handLeaveToGame();
+        }
+        // (3) needs nothing: a click over a bar is the stage's (SDL listens on the canvas), and the wheel and the context menu over a bar are cancelled so that nothing else happens
+        // either (the browser's page zoom of a ctrl + wheel, its menu)
+        stageElement.addEventListener('wheel', function (e) { if (isFullscreen() && !boxElement.contains(e.target)) e.preventDefault(); }, { passive: false });
+        stageElement.addEventListener('contextmenu', function (e) { if (isFullscreen()) e.preventDefault(); });
+
+        // THE POINTER LOCK. On the Mac a pointer at the bottom or top edge of the screen makes the Dock or the menu bar appear, even in fullscreen, and a web page cannot stop that unless
+        // the pointer is LOCKED: then the pointer stays where it was, the browser hides it and reports only how far the mouse moved. The page asks for the lock when the player's click on
+        // the Fullscreen button makes the browser's fullscreen (the browser wants a user's gesture for it), and holds the game's own cursor in the meantime: it starts in the middle of
+        // the picture and moves by the distance of the mouse's motion, held to the picture (ANTS_PAGE.moveLocked, in fractions of a pixel); the game is handed that cursor as an
+        // ordinary pointer position, so every edge and corner of the picture scrolls the map from the clamped cursor, a click goes where the game's cursor is, and the game cannot
+        // tell the lock from a pointer that never leaves the picture. The game's window system (SDL) is NOT told of the lock: it would read all motion as relative, and as whole
+        // numbers of pixels (Emscripten stores movementX as an integer: a browser that reports fractions of a pixel, as some do on a screen of a device ratio above 1, would lose them
+        // on every event and a slow mouse would crawl), and it would need the focus and a start position of its own, so the page swallows the browser's lock events and the locked
+        // mouse motion and hands the game its own.
+        // When the browser lets the lock go (Esc in a browser without the Keyboard Lock API, another window with the focus, the page's own fullscreen left) the pointer is the normal
+        // one at once: nothing is handed to the game at that moment (its cursor stays where it is until the pointer moves: no jump, no click), and the bars' rules above go on. A click on
+        // the game takes the lock again (the browser may have refused the first request, or the focus was away): where the page has held the lock before, that click is only that (the game
+        // does not get it: the player wanted the mouse back, not an order), where it has not (the first request was refused: Safari wants its gesture inside the fullscreen) the click is an
+        // ordinary click as well; where there is no lock (an iPhone's page-own fullscreen: no Fullscreen API for an element, no pointer lock) the bars' rules above are all there is.
+        // ESC: in the Chromium browsers the page also locks the Escape key (the Keyboard Lock API, fullscreen only): Esc then reaches the game (deselect, close a dialog) and HOLDING Esc
+        // leaves fullscreen, as the browser says; elsewhere Esc gives the pointer back first (and Safari leaves fullscreen with it).
+        function requestLock(startAt) {                                     // true: the lock was asked for
+            var request = canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock;
+            if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;
+            lockStartAt = startAt || null;
+            try {
+                var result = request.call(canvas);
+                if (result && result.catch) result.catch(function () { lockRefused = true; /* refused: the bars' rules are what the player has */ });
+            } catch (e) {
+                lockRefused = true;
+                return false;
+            }
+            return true;
+        }
+        function releaseLock() {
+            lockStartAt = null;
+            if (!isLocked()) return;
+            var exit = document.exitPointerLock || document.webkitExitPointerLock || document.mozExitPointerLock;
+            try { if (exit) exit.call(document); } catch (e) { /* nothing to release */ }
+        }
+        function lockKeys(on) {
+            var keyboard = navigator.keyboard;
+            if (!keyboard || !keyboard.lock) return;
+            try {
+                if (on) keyboard.lock(['Escape']).catch(function () { /* the browser may not lock */ });
+                else keyboard.unlock();
+            } catch (e) { /* the same */ }
+        }
+        function startLockedCursor() {
+            var rect = canvas.getBoundingClientRect();
+            lockCursor = ANTS_PAGE.moveLocked(lockStartAt || ANTS_PAGE.lockStart(rect.width, rect.height), 0, 0, rect.width, rect.height);
+            lockStartAt = null;
+            edgeForwarded = false;
+            handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, 0);       // (an absolute position first: the game's window system reads it, and has the pointer on its window)
+        }
+        // The box changed (the lock was asked for while the page was still a window; the window of a locked page was resized): the cursor stays on the same place of the picture
+        var lockSize = null;
+        function keepLockedCursor() {
+            if (!lockCursor || !isLocked()) { lockSize = null; return; }
+            var rect = canvas.getBoundingClientRect();
+            if (lockSize && lockSize.w > 0 && lockSize.h > 0 && (lockSize.w !== rect.width || lockSize.h !== rect.height)) {
+                lockCursor = ANTS_PAGE.moveLocked({ x: lockCursor.x * rect.width / lockSize.w, y: lockCursor.y * rect.height / lockSize.h }, 0, 0, rect.width, rect.height);
+            }
+            lockSize = { w: rect.width, h: rect.height };
+            handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, 0);
+        }
+        ['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(function (name) {
+            window.addEventListener(name, function (e) {
+                e.stopPropagation();                                        // (window capture: before SDL's listener of the document, whenever that was added)
+                if (isLocked()) {
+                    lockHeldOnce = true;
+                    lockRefused = false;
+                    quietAfterRelease = null;
+                    if (!lockCursor) startLockedCursor();
+                    keepLockedCursor();
+                } else {
+                    if (lockCursor && isFullscreen()) quietAfterRelease = {};     // (the browser let go: the free pointer is quiet until it has moved)
+                    lockCursor = null;
+                    lockSize = null;
+                }
+            }, true);
+        });
+        ['pointerlockerror', 'webkitpointerlockerror', 'mozpointerlockerror'].forEach(function (name) {
+            window.addEventListener(name, function (e) { e.stopPropagation(); lockRefused = true; }, true);
+        });
+        window.addEventListener('mousemove', function (e) {
+            if (handingOver || !e.isTrusted || !isLocked()) return;
+            e.stopPropagation();                                            // the game gets the page's cursor, not the lock's relative motion
+            var rect = canvas.getBoundingClientRect();
+            if (!lockCursor) startLockedCursor();
+            lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height);
+            handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, e.buttons);
+        }, true);
+        canvas.addEventListener('mousedown', function (e) {                // a click on the game takes the lock again where the browser let it go
+            if (!e.isTrusted || handingOver || !isRealFullscreen() || isLocked()) return;
+            var rect = canvas.getBoundingClientRect();
+            var retake = lockHeldOnce && !lockRefused;
+            if (requestLock({ x: e.clientX - rect.left, y: e.clientY - rect.top }) && retake) e.stopPropagation();      // (the click that takes the mouse back is only that)
+        }, true);
+        ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) {
+            document.addEventListener(name, function () {
+                if (!isRealFullscreen()) { fullscreenEnded(); return; }
+                if (!ANTS_POINTER_LOCK) return;
+                lockKeys(true);
+                requestLock(null);                                          // (the request of the click may have come too early for this browser: once more, the click's gesture is still valid)
+            });
+        });
 
         // The selector: the choice is remembered by the browser (under ANTS_ASPECT_KEY: nothing else writes it) and the page reloads with ?aspect= (the game's picture is made when it starts).
         // Other parts of the address (the room of a match, the seat) stay.
@@ -1504,6 +1947,35 @@
             });
         })();
         // ANTS_SELECTOR_END
+
+        // The fullscreen mouse: Locked (the default) or Free, the control next to the picture's selector. The browser remembers the choice under ANTS_LOCK_KEY (nothing else writes it; only
+        // "off" turns the lock off, see ANTS_PAGE.lockSetting); the pointer lock above reads ANTS_POINTER_LOCK whenever the player enters fullscreen. A browser without a pointer lock
+        // (an iPhone) does not show the control.
+        // ANTS_LOCK_BEGIN (tests/scripts/web_edge_check.js runs this block with a page of fakes: what it stores and what the control shows)
+        var ANTS_LOCK_KEY = 'ants.pointerlock';
+        var ANTS_POINTER_LOCK = true;
+        (function () {
+            var stored = null;
+            try { stored = window.localStorage.getItem(ANTS_LOCK_KEY); } catch (e) { /* private window: nothing was remembered */ }
+            ANTS_POINTER_LOCK = ANTS_PAGE.lockSetting(stored);
+            var buttons = document.querySelectorAll('.seg button[data-lock]');
+            var show = function () {
+                buttons.forEach(function (button) { button.setAttribute('aria-checked', (button.getAttribute('data-lock') === 'on') === ANTS_POINTER_LOCK ? 'true' : 'false'); });
+            };
+            show();
+            buttons.forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var value = button.getAttribute('data-lock');
+                    ANTS_POINTER_LOCK = value === 'on';
+                    try { window.localStorage.setItem(ANTS_LOCK_KEY, value); } catch (e) { /* private window: not remembered */ }
+                    show();
+                });
+            });
+            if (!(canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock)) {
+                document.querySelectorAll('.lock-part').forEach(function (part) { part.style.display = 'none'; });
+            }
+        })();
+        // ANTS_LOCK_END
 
         // The frame cap (ANTS_PAGE.makeFrameLimiter): the game's loop is the browser's requestAnimationFrame
         (function () {
@@ -1634,7 +2106,7 @@
                     if (!isReadyToPlay) showDownloadError(new Error('the game did not start within ' + Math.round(START_TIMEOUT_MS / 1000) + ' s'), 'program');
                 }, START_TIMEOUT_MS);
             }
-            if (!window.fetch || !window.Promise || !window.Uint8Array) { startGame(); return; }
+            if (!window.fetch || !window.Promise || !window.Uint8Array) { ANTS_NAME_GATE.when(startGame); return; }
 
             function rememberedSize() {
                 if (ANTS_DATA_SIZE > 0) return ANTS_DATA_SIZE;
@@ -1725,7 +2197,8 @@
                 remember(bytes.byteLength);
                 progressFill.style.width = '100%';
                 antsDataPackage = bytes;
-                startGame();
+                if (ANTS_NAME_GATE.pending() && statusElement) statusElement.textContent = 'The game is ready. Choose your name to join the match.';
+                ANTS_NAME_GATE.when(startGame);                              // (a link that somebody shared waits for the name: the game does not connect before)
             }, function(error) {
                 console.error('[download] the game data could not be downloaded:', error);
                 showDownloadError(error, 'data');

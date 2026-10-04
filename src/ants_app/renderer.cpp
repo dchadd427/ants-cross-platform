@@ -2163,7 +2163,7 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
         auto it = text_cache_.find(key);
         if (it != text_cache_.end()) {
             it->second.last_frame = text_frame_counter_;
-            const SDL_Rect dst = placed(x, y, it->second.width, it->second.height);
+            const SDL_Rect dst = placed(x, y, squeezed(it->second.width), it->second.height);
             SDL_RenderCopy(renderer_, it->second.texture, nullptr, &dst);
             return;
         }
@@ -2179,7 +2179,7 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
                 int32_t lh = (surf->h + 1) / 2;
                 CachedTextEntry entry{tex, lw, lh, text_frame_counter_};
                 text_cache_[key] = entry;
-                const SDL_Rect dst = placed(x, y, lw, lh);
+                const SDL_Rect dst = placed(x, y, squeezed(lw), lh);
                 SDL_RenderCopy(renderer_, tex, nullptr, &dst);
                 SDL_FreeSurface(surf);
                 return;
@@ -2219,6 +2219,13 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
     }
+}
+
+// The text squeezed horizontally to `max_width` when it is wider (the cached texture is the same: only the rectangle that it is copied into is narrower; the linear filter does the rest)
+void Renderer::draw_text_squeezed(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, FontSize size, int32_t max_width) {
+    squeeze_width_ = max_width;
+    draw_text(text, x, y, color, size);
+    squeeze_width_ = 0;
 }
 
 int32_t Renderer::get_text_width(const std::string& text, FontSize size) const {

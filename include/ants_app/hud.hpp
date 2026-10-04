@@ -356,9 +356,23 @@ public:
     /// The ally pedestal's click (FUN_0100c7ac): without an ally the offer goes out at once, with one the confirmation comes first
     void request_team_up(sim::SimulationEngine& sim, uint8_t target);
 
+    /// The "Get ready to play!" dialog that every match opens with (Ants.exe 0x1017127: the original's picture, text and footer, and it takes every click and key while it is up). Its clock is
+    /// the HUD's own: update() counts it in steps of 50 ms. The application calls update() for every simulation tick AND for every 50 ms of real time while the dialog is up, because the simulation
+    /// does not run while it is (the remake's deliberate deviation from the original, which runs the match clock behind the dialog: sim::kMatchStartDialogMs). A local game's dialog (the default)
+    /// closes itself after kMatchStartDialogMs of those steps; the dialog of a match of the network (`until_dismissed`) stays until dismiss_match_start_modal(), which the application calls when
+    /// the match's first turn has executed (the host seals it kMatchStartDelayMs after the match began). No click or key closes it.
     bool is_match_start_modal_active() const noexcept { return show_match_start_modal_; }
-    void start_match_modal() noexcept { release_capture(); show_match_start_modal_ = true; match_start_modal_ticks_ = 0; }
+    void start_match_modal(bool until_dismissed = false) noexcept {
+        release_capture();
+        show_match_start_modal_ = true;
+        match_start_modal_ticks_ = 0;
+        match_start_modal_until_dismissed_ = until_dismissed;
+    }
+    /// The 50 ms steps that the dialog has been up (update() counts them; 0 once it was opened)
+    uint32_t match_start_modal_ticks() const noexcept { return match_start_modal_ticks_; }
     void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
+    /// The dialog's length in steps of 50 ms (a local game's dialog closes itself after this many)
+    static constexpr uint32_t kMatchStartModalSteps = sim::kMatchStartDialogMs / sim::TICK_MS;
     bool is_shift_held() const noexcept;
     void set_shift_held(bool held) noexcept { shift_held_ = held; }
 
@@ -538,10 +552,8 @@ private:
 
     // Dialog & Modal State
     bool show_match_start_modal_{false};
-    uint32_t match_start_modal_ticks_{0};
-    // 5.0 s at 20 Hz: the original's task KWFO (delay 5000 ms, interval 200 ms, added by the dialog's constructor 0x1017127, body 0x10254b0) closes the dialog at the first run
-    // that finds it released. The number is shared with the computer players, who wait for the same ticks (ants_sim/sim_engine.hpp).
-    static constexpr uint32_t MATCH_START_MODAL_DURATION_TICKS = sim::kMatchStartHoldTicks;
+    uint32_t match_start_modal_ticks_{0};                // 50 ms steps since the dialog opened (update)
+    bool match_start_modal_until_dismissed_{false};      // a match of the network: the dialog does not close by itself (its first turn closes it, dismiss_match_start_modal)
 
     bool show_quit_dialog_{false};
     UIButton yes_button_{};

@@ -36,6 +36,7 @@
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
+#include "ants_app/net_overlay.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
 #include "ants_app/room_chat.hpp"
@@ -60,9 +61,10 @@ struct ApplicationConfig {
     int window_height{960};
     bool fullscreen{false};
     /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas; 16:9 is a fixed
-    /// 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and the original's own pages
-    /// (the loading screen, the quick help at the start, the results) are still its 640 x 480 pages, centred over a clay margin, the setup screen and the room are the wide setup screen
-    /// (setup_layout.hpp: the whole canvas, with a map preview); the options window and the quick help of a match sit over the map view with the frame around them. SDL scales the canvas into the window by
+    /// 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and every screen outside a match is
+    /// composed for the whole canvas from the original's own art: the setup screen and the room (setup_layout.hpp, with a map preview), the loading screen and the quick help at the start
+    /// (page_layout.hpp), the results (results_layout.hpp) and the desktop start menu (start_menu.hpp), all on the wide pages' clay and frame (wide_page.hpp); the options window and the quick help of
+    /// a match sit over the map view with the frame around them. SDL scales the canvas into the window by
     /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest scale in steps of 0.5
     /// of the canvas that fits the display's usable area, at least 1x (--window-size and --grid still win; a game that starts in fullscreen has this size for the way back, Alt+Enter),
     /// and fullscreen is the same canvas filling as much of the monitor as fits. A desktop game that is
@@ -225,8 +227,8 @@ public:
     const ScreenLayout& layout() const noexcept { return layout_; }
     /// The aspect the game runs in (the command line's, else the settings', else the platform's default: 16:9 on a desktop), the canvas that the window shows (SDL's logical size) and
     /// where the picture on screen sits in it (the pointer's coordinates are the picture's, the canvas's bars around it count as its nearest edge pixel): a match is the picture of
-    /// `layout()`, the whole canvas of its aspect, and so is the setup screen / room when the canvas is 960 x 540 (its own wide version); every other screen (the loading screen,
-    /// the quick help, the results, and the setup screen of any other canvas) is the original's own 640 x 480 page, centred in the canvas
+    /// `layout()`, the whole canvas of its aspect, and so is every other screen: in the 960 x 540 canvas each is composed for it (its own wide version), in the 640 x 480 canvas each is
+    /// the original's own page
     Aspect aspect() const noexcept { return aspect_; }
     CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
     const LayoutRect& picture() const noexcept { return picture_; }
@@ -392,8 +394,14 @@ public:
     bool pointer_outside() const noexcept { return pointer_outside_; }
     /// Where the last frame put the network's ping and delay (none when it drew none: a game of one machine, a screen without the readout); for the tests
     const std::optional<LatencyCornerLayout>& last_latency_layout() const noexcept { return last_latency_layout_; }
+    /// The line that a match of the network shows at the top of the playfield right now (an empty text: nothing, and always for a game that is not a match of the network): the one that
+    /// render_net_overlay draws, from what the network layer reports. Public for the tests (the seconds before the first turn of a match must say nothing)
+    NetOverlayLine net_overlay_now() const;
     /// Where the window is now (client area, screen coordinates)
     WindowRect window_rect() const;
+    /// The window as it was CREATED (client area; x and y are SDL's centred position where the place was not known): its size already has the shape of the picture (16:9 by default, 4:3 with
+    /// --aspect 4:3), so that no frame is ever shown in another shape before apply_window_layout runs. For the tests.
+    WindowRect window_created_rect() const noexcept { return window_created_; }
     void update_simulation(float dt);
     /// The music of the original is one sequencer device (docs 5.24e): the intro plays once, every piece that ends is followed by a random in-game piece, the match
     /// start, the activation of the program and the release of the music slider start one, the deactivation of the program and the end of a match close the device.
@@ -430,7 +438,7 @@ private:
     Aspect aspect_{Aspect::Classic4x3};
     float zoom_wanted_{zoom::kNormal};                    // the level the player chose last: remembered in the settings (key `zoom`), what the next match starts with
     zoom::WheelAccumulator wheel_;                        // the wheel's precise deltas
-    LayoutRect picture_{0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight};     // where the picture that is on screen sits in the canvas (picture_for_state: the match is the whole canvas, a page of the original's is centred)
+    LayoutRect picture_{0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight};     // where the picture that is on screen sits in the canvas (picture_for_state: the whole canvas, in every screen)
     AppState state_{AppState::MapSelect};
     bool is_running_{false};
     bool match_started_{false};                           // a match screen was built (the original writes the chat transcript only then)
@@ -438,6 +446,7 @@ private:
     bool show_tile_grid_{false};
 
     SDL_Window* window_{nullptr};
+    WindowRect window_created_{};                          // the window as it was created (initial_window_rect)
     std::unique_ptr<Renderer> renderer_;
 
     ants::assets::AssetArchive assets_;
@@ -554,8 +563,10 @@ private:
     void stop_bots();
 
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
-    LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture, so is the setup screen of a 960 x 540 canvas, every other screen the original's 640 x 480, centred
+    bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same canvas: wide_page.hpp)
+    LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture (the whole canvas, the original's own 640 x 480 in a 4:3 canvas), and so is every other screen
     void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
+    WindowRect initial_window_rect() const;                // what the window is created as: the picture's shape (see the definition)
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered
@@ -563,6 +574,9 @@ private:
     void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() (a network match never below 1; no zoom while the offscreen target cannot be made), one report when that failure begins
     bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
+#if defined(__APPLE__)
+    bool presentation_hidden_{false};                     // macOS: the game has made the Dock and the menu bar leave the fullscreen Space that the window is in (update_mouse_grab gives them back)
+#endif
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile
     void enter_map_select();                              // the setup screen is created (again): its labels stay empty until its refresh
@@ -584,6 +598,7 @@ private:
     // Intro & Loading state
     uint32_t intro_ticks_{0};
     ScreenButton quick_help_start_{ButtonRect{529, 437, 98, 27}, ButtonRect{528, 438, 97, 24}};   // START!: the pictures qh_start1 / 2 and qh_start3 (the hit test is the rectangle of the picture that shows)
+    bool quick_help_wide_{false};                          // ... at the wide page's place (page_layout.hpp: the bottom right corner), not the original's
     bool closing_click_pending_{false};                    // the quick help was closed by a click, on a machine that joined a room, or a click closed the chat input of a room: the rest of that click sequence is not for the screen
     uint32_t closing_click_ms_{0};                         // ... closed at this time (SDL's ticks)
     bool menu_gesture_pending_{false};                     // a click changed the screen of a run with a menu: the rest of that click sequence is not for the screen that is up now
@@ -593,6 +608,7 @@ private:
     uint64_t last_frame_time_{0};
     int headless_frame_count_{0};
     float tick_accumulator_{0.0f};
+    double start_dialog_clock_ms_{0.0};  // a match of the network: the real milliseconds of the "Get ready" dialog that are not handed to the HUD yet (its portrait moves in real time while it waits for the first turn)
     float input_accumulator_{0.0f};     // the 50 ms input task (edge scrolling, minimap drag)
     float current_fps_{60.0f};
     int last_music_track_{-1};

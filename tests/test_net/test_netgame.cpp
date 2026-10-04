@@ -10,6 +10,7 @@
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -77,6 +78,7 @@ struct Machine {
     std::vector<NetGame::Event> events;
     std::vector<ChatMsg> chats;
     std::vector<uint64_t> drop_ticks;       // the sim tick at which a Drop command was applied
+    std::vector<std::pair<uint64_t, Command>> applied;     // every other command that a turn applied on this machine, with the sim tick it was applied at
     uint64_t ticks{0};
     uint32_t loads{0};
 
@@ -123,6 +125,7 @@ struct Table {
         m.net.set_on_tick([&m]() { ++m.ticks; });
         m.net.set_on_command([&m](const Command& c, const sim::CommandResult&) {
             if (c.type == CommandType::Drop) m.drop_ticks.push_back(m.sim.current_tick());
+            else m.applied.emplace_back(m.sim.current_tick(), c);
         });
         return m;
     }
@@ -230,6 +233,17 @@ bool everybody_playing(Table& t) {
     }
     return true;
 }
+
+// The match is under way: everybody plays AND every machine has executed its first turn. The host seals the first turn kMatchStartDelayMs after the match began (protocol 12: the "Get ready to
+// play!" dialog of every machine, in which no simulation runs), so this is later than everybody_playing (the Begin) by that much.
+bool everybody_running(Table& t) {
+    if (!everybody_playing(t)) return false;
+    for (auto& m : t.machines) {
+        if (m->ticks == 0) return false;
+    }
+    return true;
+}
+constexpr uint32_t kUntilRunning = 5000 + kMatchStartDelayMs;
 
 bool all_equal(Table& t, size_t skip = 99) {
     const sim::StateHash h = t.machines[0]->sim.state_hash();
@@ -430,7 +444,7 @@ void run_match_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(99, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         int predicted_acks = 0;
         int orders = 0;
         uint32_t next_order_ms = t.now + 500;
@@ -488,7 +502,7 @@ void run_match_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(5, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(5000);
         t.machines[2]->net.leave();                                          // Carol quits
         ASSERT_EQ(t.machines[2]->net.phase(), NetGame::Phase::Off);
@@ -519,7 +533,7 @@ void run_match_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
         ASSERT_TRUE(host.net.start_match(3, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(2000);
         host.net.leave();
         ASSERT_EQ(host.net.phase(), NetGame::Phase::Off);
@@ -547,7 +561,7 @@ void run_match_tests() {
         // before the match nothing can be submitted
         ASSERT_EQ(host.net.submit(order(0, 1, 5, 5)).status, sim::CommandResult::Status::Ignored);
         ASSERT_TRUE(host.net.start_match(11, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         for (auto& m : t.machines) {
             ASSERT_EQ(m->sim.roster_mask(), 0x03);
             ASSERT_EQ(m->sim.grid().anthills().size(), 2u);
@@ -709,7 +723,7 @@ void run_migration_tests() {
         ASSERT_TRUE(host.net.start_info().endpoints[1].address == "127.0.0.1" && host.net.start_info().endpoints[1].port == bob.net.peer_port());
         ASSERT_TRUE(host.net.start_info().endpoints[2].address == "127.0.0.1" && host.net.start_info().endpoints[2].port == carol.net.peer_port());
         ASSERT_TRUE(bob.net.peer_port() != 0 && carol.net.peer_port() != 0 && bob.net.peer_port() != carol.net.peer_port());
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(4000);
         bool electing_seen = false;
         host.net.leave();
@@ -769,7 +783,7 @@ void run_migration_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(6, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(4000);
         Machine& carol = *t.machines[2];
         Machine& dave = *t.machines[3];
@@ -800,7 +814,7 @@ void run_migration_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(7, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(3000);
         for (auto& m : t.machines) m->net.freeze();                                 // the application does this when the match is over
         t.run(1000);
@@ -822,7 +836,7 @@ void run_migration_tests() {
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(8, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(2000);
         Machine& carol = *t.machines[2];                                            // seat 2: only seat 1 may connect to it
         const std::vector<std::vector<uint8_t>> claims = {encode(PeerHelloMsg{3}),   // no such player
@@ -1134,6 +1148,133 @@ void run_room_chat_tests() {
 
 }  // namespace
 
+// Protocol 12: the first turn of a match is sealed kMatchStartDelayMs after the match began (the "Get ready to play!" dialog of every machine), on a game of the local network too
+void run_start_delay_tests() {
+    TEST_CASE("N3.22 Protocol 12, The Start Of A Match On The Local Network: No Machine Runs A Tick For 5 s After The Match Began, Nobody Waits Or Is Told Anything Meanwhile (No Stall, No Lag, No Election, No Notice), Then Every Machine's First Tick Comes And The Match Is Identical; A Guest Of Protocol 11 Is Refused By The Host's Door") {
+        ASSERT_EQ(kProtocolVersion, 12);
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(21, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        const uint32_t begun = t.now;                                                // (within one step of the host's own Begin)
+        std::array<uint32_t, 3> first_tick{0, 0, 0};
+        for (uint32_t elapsed = 0; elapsed < 20000 && (first_tick[0] == 0 || first_tick[1] == 0 || first_tick[2] == 0); elapsed += 10) {
+            t.run(10);
+            for (size_t i = 0; i < 3; ++i) {
+                if (first_tick[i] == 0 && t.machines[i]->ticks >= 1) first_tick[i] = t.now - begun;
+            }
+            for (size_t i = 0; i < 3; ++i) {
+                Machine& m = *t.machines[i];
+                if (first_tick[i] != 0) continue;
+                ASSERT_TRUE(m.sim.current_tick() == 0 && m.net.turns_executed() == 0);   // nothing runs ...
+                ASSERT_TRUE(m.net.stalled_ms() == 0 && !m.net.stalled() && m.net.laggard() == 255 && !m.net.lag_notice() && !m.net.catching_up() && !m.net.self_lag_behind_ms());   // ... and nobody waits, lags or is told
+                ASSERT_TRUE(!m.net.electing() && m.net.match_notice().empty() && !m.net.desynced() && m.net.phase() == NetGame::Phase::Playing);
+            }
+        }
+        for (size_t i = 0; i < 3; ++i) ASSERT_TRUE(first_tick[i] >= kMatchStartDelayMs && first_tick[i] <= kMatchStartDelayMs + 250);       // the host's runner starts with two turns in hand, a guest's adds the link
+        t.run(5000);
+        for (auto& m : t.machines) ASSERT_TRUE(m->net.stalled_ms() == 0 && !m->net.lag_notice() && m->ticks > 60);
+        host.net.freeze();
+        t.run(2000);
+        ASSERT_TRUE(all_equal(t));
+        // a guest of protocol 11 (a raw connection that says its Hello) is refused with the existing refusal, in a room that is open for a match of the same protocol
+        Table room;
+        ASSERT_TRUE(make_room(room, 1));
+        Machine& open_host = *room.machines[0];
+        auto raw = TcpConnection::connect("127.0.0.1", open_host.net.listen_port());
+        ASSERT_TRUE(raw != nullptr);
+        HelloMsg old;
+        old.version = static_cast<uint16_t>(kProtocolVersion - 1);
+        old.name = "Old";
+        bool sent = false;
+        bool refused = false;
+        ASSERT_TRUE(room.run_until([&]() {
+            std::vector<uint8_t> msg;
+            RejectMsg rj;
+            while (raw->poll(msg)) refused = refused || (decode(msg, rj) && rj.reason == RejectReason::VersionMismatch);
+            if (raw->is_open() && !sent) sent = raw->send(encode(old));
+            return refused;
+        }, 5000));
+        ASSERT_EQ(open_host.net.room().slots[2].state, SlotState::Empty);            // nobody sat down for it
+    } TEST_END();
+
+    TEST_CASE("N3.23 Protocol 12, The Host Leaves While The Dialogs Are Up (Before The First Turn Was Sealed): The Lowest Guest Takes Over, Seals The First Turn At Once (A Host That Was Never Seen Seal Anything Has No Schedule To Keep), And The Two Guests Play On Identical; The Match Is Not Lost") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        Machine& carol = *t.machines[2];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(22, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        t.run(1500);                                                                // still inside the 5 s: nothing was sealed
+        ASSERT_TRUE(host.sim.current_tick() == 0 && bob.sim.current_tick() == 0 && carol.sim.current_tick() == 0);
+        host.net.leave();
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.is_host() && carol.net.host_seat() == 1; }, 10000));
+        ASSERT_TRUE(t.run_until([&]() { return bob.ticks >= 40 && carol.ticks >= 40; }, 10000));      // the new host seals from turn 0 on, at once: the match plays on
+        ASSERT_FALSE(carol.saw(NetGame::Event::Type::HostLeft));
+        ASSERT_TRUE(t.run_until([&]() { return bob.count(NetGame::Event::Type::PlayerLeft) == 1 && carol.count(NetGame::Event::Type::PlayerLeft) == 1; }, 5000));      // the old host's team drops out
+        ASSERT_TRUE(bob.sim.is_player_dropped(0) && carol.sim.is_player_dropped(0));
+        bob.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(bob.sim.state_hash() == carol.sim.state_hash());
+        ASSERT_EQ(bob.sim.current_tick(), carol.sim.current_tick());
+        ASSERT_FALSE(bob.net.desynced() || carol.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("N3.24 Protocol 12, A Command That Reaches A LAN Host Before Its First Turn Is Sealed Is Discarded (The Product Path: NetGame::begin_match Sets The Start Delay): A Guest's Orders At 100 ms (Seventy At Once) And 2,500 ms Of The Dialog Are Applied On No Machine And Cost It Neither Its Seat Nor A Desync; Its Order After Every Machine Has Run Its First Tick Is Applied On All Of Them At The Same Tick") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(24, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+        const uint32_t begun = t.now;
+        const uint32_t ant = first_ant(bob, 1);
+        int16_t goal_x = 0, goal_y = 0;
+        ASSERT_TRUE(ant != 0 && open_goal_near_hill(bob.sim, 1, goal_x, goal_y));
+        // Bob is a modified client (or a rig: a NetGame has no dialog of its own, the application's dialog is what keeps a person's client quiet): he orders in the dialog's seconds, seventy at once and one more later
+        bool sent = true;
+        t.run(2600, [&](uint32_t now) {
+            const uint32_t at = now - begun;
+            if (at != 100 && at != 2500) return;
+            for (int i = 0; i < (at == 100 ? 70 : 1); ++i) sent = bob.net.submit(order(1, ant, static_cast<int16_t>(goal_x + i % 3), goal_y)).status == sim::CommandResult::Status::Applied && sent;
+        });
+        ASSERT_TRUE(sent);
+        for (auto& m : t.machines) ASSERT_TRUE(m->sim.current_tick() == 0 && m->ticks == 0);          // still inside the 5 s: nothing runs (the orders are in the host's hands, or gone)
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+        for (auto& m : t.machines) {
+            for (const auto& a : m->applied) ASSERT_TRUE(a.second.issuer != 1);                          // none of the seventy-one was applied, on any machine, in any turn
+            ASSERT_FALSE(m->net.desynced());
+        }
+        ASSERT_FALSE(host.sim.is_player_dropped(1) || bob.sim.is_player_dropped(1));                     // a discarded command is no violation: the seat stays
+        // the same order once every machine has run its first tick (the point from which a person can give one) is applied everywhere, at the same tick
+        ASSERT_EQ(bob.net.submit(order(1, ant, goal_x, goal_y)).status, sim::CommandResult::Status::Applied);
+        t.run(1500);
+        std::array<std::vector<uint64_t>, 3> ticks;
+        for (size_t i = 0; i < 3; ++i) {
+            for (const auto& a : t.machines[i]->applied) {
+                if (a.second.issuer == 1) ticks[i].push_back(a.first);
+            }
+        }
+        ASSERT_TRUE(ticks[0].size() == 1 && ticks[1] == ticks[0] && ticks[2] == ticks[0]);
+        ASSERT_EQ(bob.sim.get_unit(ant).orig_order, sim::AntUnit::kOrderMove);
+        host.net.freeze();
+        t.run(2000);
+        ASSERT_TRUE(all_equal(t));
+        for (auto& m : t.machines) ASSERT_FALSE(m->net.desynced());
+    } TEST_END();
+}
+
 int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: NetGame (room, start barrier, match) over real sockets\n"
                  "=======================================================\n";
@@ -1146,6 +1287,7 @@ int main() {
     run_migration_tests();
     run_reject_tests();
     run_room_chat_tests();
+    run_start_delay_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)
