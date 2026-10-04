@@ -1130,6 +1130,10 @@ void Application::enter_match() {
     hud_.init(local_player_id_);
     hud_.reset();
     hud_.start_match_modal(network_active());                               // (the simulation waits for it: update_simulation, post_tick)
+    held_since_ms_ = -1.0;                                                  // (nothing of an earlier match's pauses and votes)
+    prev_missing_.clear();
+    back_name_.clear();
+    vote_press_ = 0;
     cue_router_.reset();                                                    // (no cue of an earlier match is waited for)
     felt_delay_ = net::FeltDelayMeter();
     orders_seen_ = 0;                                                       // (the match's own prediction counts its orders from none)
@@ -2083,6 +2087,8 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
+    if (handle_vote_key(key)) return;                        // F2 and F3 are the vote block's keys while a vote is open (the original's keys are F1 and F9 - F12)
+
     bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
 
     // Only the original's keys exist (HUD::handle_key_down, FUN_0102609a): there are no screenshot, tile grid, mute, team switch or fullscreen keys.
@@ -2128,6 +2134,8 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
         return;
     }
 
+    if (handle_vote_mouse(button)) return;                               // a press and a release on a button of the vote block are that choice (nothing of it reaches the map)
+
     if (button.button == SDL_BUTTON_MIDDLE) {                            // the original has no use for it; the remake's: back to the zoom 1, towards the pointer (the release is nobody's)
         if (button.type == SDL_MOUSEBUTTONDOWN && view_zoom_allowed(button.x, button.y)) set_zoom(zoom::kNormal, button.x, button.y);
         return;
@@ -2139,6 +2147,41 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
     } else if (button.type == SDL_MOUSEBUTTONUP) {
         hud_.handle_mouse_up(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     }
+}
+
+// The vote block's keys: F2 keeps waiting, F3 goes on without the seat. A fresh press of the other key changes the vote (the server counts the last choice of every player). Only while a vote is open
+// on this machine's screen and no dialog is over it; a held key sends once.
+bool Application::handle_vote_key(const SDL_KeyboardEvent& key) {
+    if (key.keysym.sym != SDLK_F2 && key.keysym.sym != SDLK_F3) return false;
+    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) return false;
+    if (hud_.is_modal_open() && !hud_.is_match_start_modal_active()) return false;               // a dialog takes every key
+    if (!net_->pause_info().vote_open) return false;
+    if (key.repeat == 0) net_->vote(key.keysym.sym == SDLK_F2);
+    return true;
+}
+
+// The vote block's buttons are the button class of the original's screens: the press captures, the release inside the same button is the choice, and what the button took never reaches the map
+bool Application::handle_vote_mouse(const SDL_MouseButtonEvent& button) {
+    if (button.button != SDL_BUTTON_LEFT) return false;
+    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) {
+        vote_press_ = 0;
+        return false;
+    }
+    if (button.type == SDL_MOUSEBUTTONDOWN) {
+        vote_press_ = 0;
+        if (hud_.is_modal_open() && !hud_.is_match_start_modal_active()) return false;
+        const NetVoteButtons buttons = net_vote_buttons();
+        if (!buttons.open) return false;
+        if (buttons.keep.contains(button.x, button.y)) vote_press_ = 1;
+        else if (buttons.go_on.contains(button.x, button.y)) vote_press_ = 2;
+        return vote_press_ != 0;
+    }
+    if (vote_press_ == 0) return false;
+    const uint8_t pressed = vote_press_;
+    vote_press_ = 0;
+    const NetVoteButtons buttons = net_vote_buttons();
+    if (buttons.open && (pressed == 1 ? buttons.keep : buttons.go_on).contains(button.x, button.y)) net_->vote(pressed == 1);
+    return true;                                                         // (the release of a press that this took is nobody else's)
 }
 
 // The orders that input has given the predicted engine since the last look are felt from this frame (net::FeltDelayMeter). Every order of the player is a mouse button or a key, and those two
@@ -2329,6 +2372,7 @@ void Application::pump_network(float dt, double gap_seconds) {
     if (gap_seconds > 0.0) net_->note_gap(static_cast<uint32_t>(std::min(gap_seconds * 1000.0, 4.0e9)));   // a host that said nothing has been silent for the gap too
     handle_net_events();
     if (!net_) return;                                           // (a lost game brought the player back to the start menu, which let go of the net)
+    track_net_state();
     if (menu_enabled_ && state_ == AppState::MapSelect && (net_->phase() == net::NetGame::Phase::Failed || net_->phase() == net::NetGame::Phase::Over)) {
         return_to_start_menu(net_->status_text());               // the room is dead (the server closed it, the connection is gone): not a room screen that nothing can happen on
         return;
@@ -2613,6 +2657,10 @@ void Application::net_begin_match() {
 // The session is over (the player left, the host left, a match ended and its results were closed): back to the local setup screen.
 void Application::net_end_session(const std::string& notice) {
     stop_bots();
+    held_since_ms_ = -1.0;
+    prev_missing_.clear();
+    back_name_.clear();
+    vote_press_ = 0;
     room_chat_.close();
     room_chat_press_taken_ = false;
     fill_specs_.clear();
@@ -2631,11 +2679,13 @@ void Application::net_end_session(const std::string& notice) {
     apply_team_names(config_.team_names, 0x0F);
 }
 
-// The waiting and out-of-sync messages of a network match (remake UI: the original has no such text). A machine that waits for the next turn
-// says so after one second; a desync stops the match and says so.
-NetOverlayLine Application::net_overlay_now() const {
-    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return NetOverlayLine{};
+// The lines of a network match (net_overlay.hpp: the way back, the vote, the seats that are missing, the countdown, and today's waiting, lag and out-of-sync lines): remake UI, the original has
+// no such text. What the network layer says is looked at here, the rules and the words are the model's.
+NetOverlayLine Application::net_overlay_now() const { return net_overlay_line(net_overlay_input()); }
+
+NetOverlayInput Application::net_overlay_input() const {
     NetOverlayInput in;
+    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return in;
     in.desynced = net_->desynced();
     in.electing = net_->electing();
     in.stalled_ms = net_->stalled_ms();
@@ -2649,19 +2699,115 @@ NetOverlayLine Application::net_overlay_now() const {
         in.lag_behind_ms = lag->behind_ms;
     }
     in.notice = net_->match_notice();                                   // "Bob is the host now." for a few seconds
-    return net_overlay_line(in);
+    // the way back and the held match
+    const net::PauseInfo pause = net_->pause_info();
+    in.reconnecting = pause.reconnecting;
+    in.away_s = pause.away_s;
+    in.attempts = pause.attempts;
+    in.way_back_catching_up = pause.catching_up;
+    in.held_ms = held_since_ms_ >= 0.0 ? static_cast<uint32_t>(std::max(0.0, net_time_ms_ - held_since_ms_)) : 0u;
+    for (const net::PauseInfo::Seat& seat : pause.missing) in.missing.push_back(NetOverlaySeat{seat.seat, seat.name, seat.away_s, seat.catching_up, seat.progress});
+    in.vote_open = pause.vote_open;
+    in.vote_seat = pause.vote_seat;
+    in.vote_name = pause.vote_name;
+    in.votes_continue = pause.votes_continue;
+    in.voters = pause.voters;
+    in.my_vote = pause.my_vote == net::PauseInfo::Choice::KeepWaiting ? NetOverlayInput::Choice::KeepWaiting
+                 : pause.my_vote == net::PauseInfo::Choice::Continue  ? NetOverlayInput::Choice::Continue
+                                                                       : NetOverlayInput::Choice::None;
+    in.resume_seconds_left = pause.resume_seconds_left;
+    in.back_name = back_name_;
+    in.max_width = net_overlay_max_width(layout_.view());               // (a name that does not fit is cut: every line and every label fits the overlay at either picture)
+    if (renderer_) in.measure = [this](const std::string& text) { return renderer_->get_text_width(text, FontSize::Px14); };
+    return in;
+}
+
+NetOverlayMetrics Application::net_overlay_metrics(const NetOverlayLine& line) const {
+    NetOverlayMetrics m;
+    if (!renderer_) return m;
+    for (const std::string& text : line.lines) m.line_w.push_back(renderer_->get_text_width(text, FontSize::Px14));
+    m.text_h = renderer_->get_text_height(FontSize::Px14);
+    if (line.vote.open) {
+        m.count_w = renderer_->get_text_width(line.vote.count, FontSize::Px14);
+        m.keep_w = renderer_->get_text_width(line.vote.keep, FontSize::Px14);
+        m.go_on_w = renderer_->get_text_width(line.vote.go_on, FontSize::Px14);
+    }
+    return m;
+}
+
+Application::NetVoteButtons Application::net_vote_buttons() const {
+    NetVoteButtons out;
+    const NetOverlayLine line = net_overlay_now();
+    if (!line.vote.open) return out;
+    const NetOverlayLayout where = net_overlay_layout(layout_.view(), net_overlay_metrics(line), true);
+    out.open = true;
+    out.keep = where.keep;
+    out.go_on = where.go_on;
+    return out;
 }
 
 void Application::render_net_overlay() {
     const NetOverlayLine line = net_overlay_now();
-    const std::string& text = line.text;
-    const ants::assets::ColorRGBA colour = line.alarm ? ants::assets::ColorRGBA{255, 90, 90, 255} : ants::assets::ColorRGBA{255, 255, 255, 255};
-    if (text.empty()) return;
-    const int32_t w = renderer_->get_text_width(text, FontSize::Px14);
-    const int32_t h = renderer_->get_text_height(FontSize::Px14);
-    const NetOverlayBox where = net_overlay_box(layout_.view(), w, h);   // centred in the map view, 5 rows below its top (the original's (17 + (441 - w) / 2, 26))
-    renderer_->fill_rect(where.box.x, where.box.y, where.box.w, where.box.h, ants::assets::ColorRGBA{0, 0, 0, 170});
-    renderer_->draw_text(text, where.text_x, where.text_y, colour, FontSize::Px14);
+    if (line.lines.empty() && !line.vote.open) return;
+    using ants::assets::ColorRGBA;
+    const ColorRGBA white{255, 255, 255, 255};
+    const ColorRGBA red{255, 90, 90, 255};
+    const ColorRGBA shade{0, 0, 0, 170};                                // (the dark box that every line has)
+    const NetOverlayLayout where = net_overlay_layout(layout_.view(), net_overlay_metrics(line), line.vote.open);   // centred in the map view, 5 rows below its top (the original's (17 + (441 - w) / 2, 26))
+    for (size_t i = 0; i < line.lines.size() && i < where.lines.size(); ++i) {
+        renderer_->fill_rect(where.lines[i].box.x, where.lines[i].box.y, where.lines[i].box.w, where.lines[i].box.h, shade);
+        renderer_->draw_text(line.lines[i], where.lines[i].text_x, where.lines[i].text_y, i == 0 && line.alarm ? red : white, FontSize::Px14);
+    }
+    if (!where.has_vote) return;
+    renderer_->fill_rect(where.count.box.x, where.count.box.y, where.count.box.w, where.count.box.h, shade);
+    renderer_->draw_text(line.vote.count, where.count.text_x, where.count.text_y, white, FontSize::Px14);
+    // the two buttons: the choice that this player made is the one that is pressed (a lit face and a white edge); the other is dark
+    const auto button = [&](const LayoutRect& rect, const std::string& label, int32_t text_x, bool pressed) {
+        renderer_->fill_rect(rect.x, rect.y, rect.w, rect.h, pressed ? ColorRGBA{52, 124, 102, 240} : ColorRGBA{24, 40, 36, 215});
+        renderer_->draw_rect(rect.x, rect.y, rect.w, rect.h, pressed ? ColorRGBA{235, 245, 240, 255} : ColorRGBA{90, 130, 110, 255});
+        renderer_->draw_text(label, text_x, where.button_text_y, white, FontSize::Px14);
+    };
+    button(where.keep, line.vote.keep, where.keep_text_x, line.vote.keep_pressed);
+    button(where.go_on, line.vote.go_on, where.go_on_text_x, line.vote.go_on_pressed);
+}
+
+// Every frame of a match of the network: how long the match has been held on this screen (the missing seats are shown after a second), and who came back (the countdown that follows a return
+// names the seat: "Bob is back: the match goes on in 7"). A seat that was catching up when the list of the missing emptied is back; one that was still absent was dropped by the vote or the
+// cap, and nobody is named. This machine's own way back says nothing of the others: what was known of them is old.
+void Application::track_net_state() {
+    if (!net_ || !net_->active() || net_->phase() != net::NetGame::Phase::Playing) {
+        held_since_ms_ = -1.0;
+        prev_missing_.clear();
+        back_name_.clear();
+        return;
+    }
+    const net::PauseInfo p = net_->pause_info();
+    const bool own_way_back = p.reconnecting || p.catching_up;
+    const bool held = !own_way_back && (!p.missing.empty() || p.resume_seconds_left > 0);
+    if (!held) held_since_ms_ = -1.0;
+    else if (held_since_ms_ < 0.0) held_since_ms_ = net_time_ms_;
+    if (own_way_back) {
+        prev_missing_.clear();
+        back_name_.clear();
+        return;
+    }
+    if (!p.missing.empty()) {
+        prev_missing_ = p.missing;
+        back_name_.clear();
+        return;
+    }
+    if (!prev_missing_.empty()) {
+        size_t back = 0;
+        std::string name;
+        for (const net::PauseInfo::Seat& seat : prev_missing_) {
+            if (!seat.catching_up) continue;
+            ++back;
+            name = seat.name.empty() ? "Player " + std::to_string(static_cast<unsigned>(seat.seat) + 1u) : seat.name;
+        }
+        back_name_ = back == 1 ? name : std::string();
+        prev_missing_.clear();
+    }
+    if (p.resume_seconds_left == 0) back_name_.clear();                  // (the countdown is over, or there was none: a blip)
 }
 
 // The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" and "delay NN ms" while a room or a match of a network game is on screen. A game of one

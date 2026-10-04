@@ -37,6 +37,7 @@
 #include <random>
 #include <sstream>
 #include <stdexcept>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <utility>
@@ -750,14 +751,495 @@ void run_menu_tests() {
     } TEST_END();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The overlay, the vote and the countdown
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+SDL_KeyboardEvent key_event(SDL_Keycode sym, bool repeat = false) {
+    SDL_KeyboardEvent ke{};
+    ke.type = SDL_KEYDOWN;
+    ke.keysym.sym = sym;
+    ke.repeat = repeat ? 1 : 0;
+    return ke;
+}
+
+SDL_MouseButtonEvent mouse_event(uint32_t type, int32_t x, int32_t y) {
+    SDL_MouseButtonEvent be{};
+    be.type = type;
+    be.button = SDL_BUTTON_LEFT;
+    be.x = x;
+    be.y = y;
+    be.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+    be.clicks = 1;
+    return be;
+}
+
+// A click on a rectangle of the picture: the pointer goes there, the left button goes down and up
+void click(Application& app, const LayoutRect& r) {
+    const int32_t x = r.x + r.w / 2;
+    const int32_t y = r.y + r.h / 2;
+    app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONDOWN, x, y));
+    app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONUP, x, y));
+}
+
+// The machine is dead for good: it makes no new link (a person who closed the lid), whatever its NetGame tries
+void make_dead(Machine& m) {
+    m.net.set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
+}
+
+bool begins(const std::string& text, const std::string& start) { return text.compare(0, start.size(), start) == 0; }
+
+std::string first_line(Application& app) {
+    const NetOverlayLine l = app.net_overlay_now();
+    return l.lines.empty() ? std::string() : l.lines[0];
+}
+
+}  // namespace
+
+void run_screen_tests() {
+    TEST_CASE("RA1.2 The Application's Own Link Is Cut: The Overlay Says \"Connection lost. Reconnecting... 0:03\" With The Seconds Since The Loss And, From The Second Link On, The Attempt (And \"Esc leaves the match\" Under It); \"Waiting For The Other Players...\" Never Shows Meanwhile; The Words Are Gone When The Match Is Back") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-12"), w.server_now()).ok);
+        Application& app = w.start_app(w.config(scratch_dir("ra12"), "RA-12", "Ann"));
+        Machine& bob = w.join("Bob", "RA-12");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(2000);
+        ASSERT_TRUE(app.net_overlay_now().lines.empty());                                       // (a match that runs says nothing)
+        app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });           // (the network is down: no new link can be made)
+        ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        std::vector<std::string> seen;                                                           // every first line, in order, without repeats
+        bool waiting_shown = false;
+        bool second_line_ok = true;
+        for (int step = 0; step < 520; ++step) {                                                 // 5.2 s
+            w.run(10);
+            const NetOverlayLine l = app.net_overlay_now();
+            if (!l.lines.empty() && (seen.empty() || seen.back() != l.lines[0])) seen.push_back(l.lines[0]);
+            for (const std::string& t : l.lines) waiting_shown = waiting_shown || begins(t, "Waiting for");
+            if (!l.lines.empty()) second_line_ok = second_line_ok && l.lines.size() == 2 && l.lines[1] == "Esc leaves the match" && !l.alarm;
+        }
+        ASSERT_TRUE(app.net()->paused() && app.net()->pause_info().reconnecting && app.net()->phase() == NetGame::Phase::Playing);
+        ASSERT_FALSE(waiting_shown);
+        ASSERT_TRUE(second_line_ok);
+        ASSERT_TRUE(seen.size() >= 6);                                                           // a new line at least every second
+        ASSERT_EQ(seen.front(), std::string("Connection lost. Reconnecting... 0:00"));
+        bool has_one = false;
+        bool has_two = false;
+        bool has_three = false;
+        for (const std::string& t : seen) {
+            has_one = has_one || t == "Connection lost. Reconnecting... 0:01";
+            has_two = has_two || t == "Connection lost. Reconnecting... 0:02 (attempt 2)";
+            has_three = has_three || t == "Connection lost. Reconnecting... 0:04 (attempt 3)";
+        }
+        ASSERT_TRUE(has_one && has_two && has_three);                                            // the first attempt is no "attempt"; the second link is (at 2 s), the third (at 4 s)
+        for (const std::string& t : seen) ASSERT_TRUE(begins(t, "Connection lost. Reconnecting... 0:0"));
+        // the network is back: the machine finds its way back by itself, and the words are gone
+        app.net()->set_link_maker_for_test(nullptr);
+        ASSERT_TRUE(w.run_until([&]() { return !app.net()->paused(); }, 15000));
+        ASSERT_TRUE(app.net_overlay_now().lines.empty() || !begins(first_line(app), "Connection lost"));
+        w.run(500);
+        ASSERT_TRUE(app.net_overlay_now().lines.empty());
+        ASSERT_TRUE(w.status("RA-12").rejoins == 1);
+    } TEST_END();
+
+    TEST_CASE("RA2.1 The Other Player's Link Is Cut (Three In The Room): No Banner For A Blip, After A Second \"Bob (Red) lost the connection, waiting 0:NN\" With The Seconds; When The Vote Opens The Block Shows \"0 of 2 voted to continue\" With F2 Keep waiting And F3 Continue without Bob; F3 Votes To Continue (The Count And The Pressed Button Change, The Server Counts It, The Seat Stays), F2 Takes It Back, F3 Again, And The Mouse Does The Same Without Touching The Map; A Dialog Over The Match Takes The Keys") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        server::RoomSpec spec = held_spec("RA-21", 3);
+        spec.vote_after_ms = 5000;
+        ASSERT_TRUE(w.server.mgr->create_room(spec, w.server_now()).ok);
+        Application& app = w.start_app(w.config(scratch_dir("ra21"), "RA-21", "Ann"));
+        Machine& bob = w.join("Bob", "RA-21");
+        Machine& cat = w.join("Cat", "RA-21");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob, &cat}); }, 12000 + kPre));
+        w.run(1000);
+        ASSERT_EQ(bob.net.my_seat(), uint8_t{1});
+        make_dead(bob);
+        ASSERT_TRUE(w.server.cut_wire(1));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->paused(); }, 3000));
+        ASSERT_TRUE(app.net_overlay_now().lines.empty());                                        // the first moments of the pause: no banner
+        w.run(500);
+        ASSERT_TRUE(app.net_overlay_now().lines.empty() && !app.net_overlay_now().vote.open);
+        ASSERT_TRUE(w.run_until([&]() { return !app.net_overlay_now().lines.empty(); }, 2000));  // a second after the pause began
+        ASSERT_TRUE(begins(first_line(app), "Bob (Red) lost the connection, waiting 0:0"));
+        ASSERT_FALSE(app.net_overlay_now().vote.open);
+        ASSERT_FALSE(app.net_vote_buttons().open);
+        // the seconds go up
+        ASSERT_TRUE(w.run_until([&]() { return first_line(app) == "Bob (Red) lost the connection, waiting 0:03"; }, 4000));
+        // the vote opens after 5 s of absence
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.open; }, 8000));
+        NetOverlayLine l = app.net_overlay_now();
+        ASSERT_TRUE(l.lines.size() == 1 && begins(l.lines[0], "Bob (Red) lost the connection, waiting 0:0") && l.vote.count == "0 of 2 voted to continue" && l.vote.keep == "F2 Keep waiting" &&
+                    l.vote.go_on == "F3 Continue without Bob" && !l.vote.keep_pressed && !l.vote.go_on_pressed);
+        Application::NetVoteButtons buttons = app.net_vote_buttons();
+        ASSERT_TRUE(buttons.open && buttons.keep.w > 0 && buttons.go_on.w > 0 && buttons.keep.x + buttons.keep.w < buttons.go_on.x);
+        ASSERT_TRUE(buttons.keep.contains(buttons.keep.x + 2, buttons.keep.y + 2) && !buttons.keep.contains(buttons.go_on.x + 2, buttons.go_on.y + 2));
+        // the keys: F3 goes on without Bob
+        app.handle_key_down(key_event(SDLK_F3));
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.go_on_pressed; }, 3000));
+        l = app.net_overlay_now();
+        ASSERT_TRUE(l.vote.count == "1 of 2 voted to continue" && !l.vote.keep_pressed);
+        ASSERT_TRUE(w.status("RA-21").votes_continue == 1 && w.status("RA-21").voters == 2 && w.status("RA-21").vote_seat == 1);                      // the server counted it
+        ASSERT_TRUE(w.status("RA-21").drops_by_vote == 0 && w.status("RA-21").paused);                                                              // (one of two is not more than half)
+        // F2 takes it back, a held F3 (a key repeat) does nothing, F3 again
+        app.handle_key_down(key_event(SDLK_F2));
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.keep_pressed; }, 3000));
+        ASSERT_TRUE(app.net_overlay_now().vote.count == "0 of 2 voted to continue" && !app.net_overlay_now().vote.go_on_pressed && w.status("RA-21").votes_continue == 0);
+        app.handle_key_down(key_event(SDLK_F3, true));
+        w.run(300);
+        ASSERT_TRUE(app.net_overlay_now().vote.keep_pressed && w.status("RA-21").votes_continue == 0);                                              // (a repeat is not a press)
+        app.handle_key_down(key_event(SDLK_F3));
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.go_on_pressed; }, 3000));
+        ASSERT_TRUE(app.net_overlay_now().vote.count == "1 of 2 voted to continue");
+        // a dialog over the match takes the keys: the quit dialog is open, F2 does nothing; closed, it works again
+        app.hud().open_quit_dialog();
+        app.handle_key_down(key_event(SDLK_F2));
+        w.run(300);
+        ASSERT_TRUE(app.net_overlay_now().vote.go_on_pressed && w.status("RA-21").votes_continue == 1);
+        app.hud().close_quit_dialog();
+        // the mouse: a press and a release on the button; a release elsewhere is nothing; the map under the block gets nothing (a selected ant stays selected)
+        const std::vector<uint32_t> mine = [&]() {
+            std::vector<uint32_t> ids;
+            for (const auto& a : app.sim().get_world_state().ants) {
+                if (a.player_id == app.local_player_id() && a.hp > 0) ids.push_back(a.id);
+            }
+            return ids;
+        }();
+        ASSERT_FALSE(mine.empty());
+        app.hud().select_ant(mine[0]);
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);
+        buttons = app.net_vote_buttons();
+        click(app, buttons.keep);
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.keep_pressed; }, 3000));
+        ASSERT_TRUE(app.net_overlay_now().vote.count == "0 of 2 voted to continue" && w.status("RA-21").votes_continue == 0);
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);                                     // the click did not reach the map
+        app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONDOWN, buttons.go_on.x + 3, buttons.go_on.y + 3));
+        app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONUP, buttons.go_on.x - 40, buttons.go_on.y + 3));    // released beside it: nothing
+        w.run(300);
+        ASSERT_TRUE(app.net_overlay_now().vote.keep_pressed && w.status("RA-21").votes_continue == 0);
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);
+        click(app, buttons.go_on);
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.go_on_pressed; }, 3000));
+        ASSERT_TRUE(app.net_overlay_now().vote.count == "1 of 2 voted to continue" && w.status("RA-21").votes_continue == 1);
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);
+        // Cat votes too: two of two go on without Bob; the room drops the seat and the match goes on (no countdown in this room)
+        ASSERT_TRUE(cat.net.vote(false));
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RA-21").drops_by_vote == 1; }, 5000));
+        ASSERT_TRUE(w.run_until([&]() { return !app.net()->paused() && app.net_overlay_now().lines.empty() && !app.net_overlay_now().vote.open; }, 5000));
+        ASSERT_FALSE(app.net_vote_buttons().open);
+        const uint32_t ticks = w.status("RA-21").ticks;
+        w.run(2000);
+        ASSERT_TRUE(w.status("RA-21").ticks > ticks + 20);                                       // the match goes on
+    } TEST_END();
+
+    TEST_CASE("RA3.1 The Countdown That Follows A Pause: When The Missing Player Is Back, \"Bob is back: the match goes on in 10\" Counts Down Once A Second To The Match's First Turn; After A Vote That Dropped The Seat Nobody Is Named (\"The match goes on in 3\"); A Blip Has None") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        server::RoomSpec spec = held_spec("RA-31");
+        spec.resume_countdown_ms = 10000;
+        ASSERT_TRUE(w.server.mgr->create_room(spec, w.server_now()).ok);
+        Application& app = w.start_app(w.config(scratch_dir("ra31"), "RA-31", "Ann"));
+        Machine& bob = w.join("Bob", "RA-31");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(1000);
+        // a blip: Bob's link is cut and he comes back at once: no pause of 3 s, no countdown, and nothing was ever on the screen
+        std::vector<std::string> blip_lines;
+        ASSERT_TRUE(w.server.cut_wire(1));
+        for (int i = 0; i < 400; ++i) {
+            w.run(10);
+            const NetOverlayLine l = app.net_overlay_now();
+            if (!l.lines.empty()) blip_lines.push_back(l.lines[0]);
+        }
+        ASSERT_TRUE(w.status("RA-31").rejoins == 1 && !w.status("RA-31").paused && w.status("RA-31").resume_s == 0);
+        ASSERT_TRUE(blip_lines.empty());
+        // a pause of more than 3 s: Bob is held away, then comes back
+        make_dead(bob);
+        ASSERT_TRUE(w.server.cut_wire(2));                                                       // (Bob's second link is the third that the door accepted)
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RA-31").paused; }, 3000));
+        w.run(4000);
+        ASSERT_TRUE(begins(first_line(app), "Bob (Red) lost the connection, waiting 0:0"));
+        bob.net.set_link_maker_for_test(nullptr);                                                // the network is back
+        ASSERT_TRUE(w.run_until([&]() { return first_line(app) == "Bob is back: the match goes on in 10"; }, 20000));
+        std::vector<std::string> counted;
+        for (int i = 0; i < 1300 && !app.net_overlay_now().lines.empty(); ++i) {
+            const std::string t = first_line(app);
+            if (counted.empty() || counted.back() != t) counted.push_back(t);
+            w.run(10);
+        }
+        ASSERT_TRUE(counted.size() >= 8);                                                        // 10, 9, 8 ... (the last second or two may pass between two looks)
+        ASSERT_EQ(counted.front(), std::string("Bob is back: the match goes on in 10"));
+        for (const std::string& t : counted) ASSERT_TRUE(begins(t, "Bob is back: the match goes on in "));
+        for (size_t i = 1; i < counted.size(); ++i) ASSERT_TRUE(counted[i] != counted[i - 1]);
+        ASSERT_TRUE(app.net_overlay_now().lines.empty() && !app.net()->paused());                // then the line is gone and the match goes on
+        const uint32_t ticks = w.status("RA-31").ticks;
+        w.run(1500);
+        ASSERT_TRUE(w.status("RA-31").ticks > ticks + 15);
+    } TEST_END();
+
+    TEST_CASE("RA3.2 After A Vote Dropped The Seat The Countdown Names Nobody: \"The match goes on in 3\", Counting Down To The First Turn") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        server::RoomSpec spec = held_spec("RA-32", 3);
+        spec.vote_after_ms = 5000;
+        spec.resume_countdown_ms = 3000;
+        ASSERT_TRUE(w.server.mgr->create_room(spec, w.server_now()).ok);
+        Application& app = w.start_app(w.config(scratch_dir("ra32"), "RA-32", "Ann"));
+        Machine& bob = w.join("Bob", "RA-32");
+        Machine& cat = w.join("Cat", "RA-32");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob, &cat}); }, 12000 + kPre));
+        make_dead(bob);
+        ASSERT_TRUE(w.server.cut_wire(1));
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.open; }, 12000));
+        app.handle_key_down(key_event(SDLK_F3));
+        ASSERT_TRUE(cat.net.vote(false));
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RA-32").drops_by_vote == 1; }, 5000));
+        ASSERT_TRUE(w.run_until([&]() { return first_line(app) == "The match goes on in 3"; }, 5000));
+        ASSERT_FALSE(app.net_overlay_now().vote.open);
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().lines.empty(); }, 6000));
+        const uint32_t ticks = w.status("RA-32").ticks;
+        w.run(1500);
+        ASSERT_TRUE(w.status("RA-32").ticks > ticks + 15 && !app.net()->paused());
+    } TEST_END();
+}
+
+void run_overlay_table_tests() {
+    TEST_CASE("RA8.1 The Overlay's Priorities In A Real Match: Whatever Is Added To The State (A Desync, An Election, A Wait, Catching Up, A Slow Link, A Lagging Player, A Notice) Shows Only While Nothing Above It Does - The Way Back, The Vote And The Missing Seats, The Countdown - And Is Red Only For A Desync; With Nothing Above It Each Shows Its Own Words") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        server::RoomSpec spec = held_spec("RA-81", 3);
+        spec.vote_after_ms = 5000;
+        spec.resume_countdown_ms = 3000;
+        ASSERT_TRUE(w.server.mgr->create_room(spec, w.server_now()).ok);
+        Application& app = w.start_app(w.config(scratch_dir("ra81"), "RA-81", "Ann"));
+        Machine& bob = w.join("Bob", "RA-81");
+        Machine& cat = w.join("Cat", "RA-81");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob, &cat}); }, 12000 + kPre));
+        w.run(1000);
+        struct Injected {
+            const char* what;
+            std::function<void(NetOverlayInput&)> add;
+            std::string words;                               // what it says when nothing above it does
+            bool alarm;
+        };
+        const std::vector<Injected> injected = {
+            {"a desync", [](NetOverlayInput& in) { in.desynced = true; }, "Out of sync: the match has stopped.", true},
+            {"an election", [](NetOverlayInput& in) { in.electing = true; }, "The host left. Choosing a new host...", false},
+            {"a wait of 5 s", [](NetOverlayInput& in) { in.stalled_ms = 5000; }, "Waiting for the other players...", false},
+            {"a wait for Cat", [](NetOverlayInput& in) { in.stalled_ms = 5000; in.waiting_for = "Cat"; }, "Waiting for Cat...", false},
+            {"catching up", [](NetOverlayInput& in) { in.catching_up = true; }, "Catching up...", false},
+            {"a slow link", [](NetOverlayInput& in) { in.self_lag_behind_ms = 9000; }, "You are lagging (9 s behind)", false},
+            {"a lagging player", [](NetOverlayInput& in) { in.lag_seat = 2; in.lag_name = "Cat"; in.lag_behind_ms = 12000; }, "Cat is lagging (12 s behind)", false},
+            {"a notice", [](NetOverlayInput& in) { in.notice = "Cat is the host now."; }, "Cat is the host now.", false},
+        };
+        // `own`: the first line of the state's own words (begins with it; "" for no line at all), `vote`: the block is open
+        const auto table = [&](const char* state, const std::string& own, bool vote) -> bool {
+            const NetOverlayInput real = app.net_overlay_input();
+            const NetOverlayLine alone = net_overlay_line(real);
+            const std::string first = alone.lines.empty() ? std::string() : alone.lines[0];
+            if (own.empty() ? !first.empty() : !begins(first, own)) {
+                std::cout << "\n    [" << state << "] the state's own line is \"" << first << "\"";
+                return false;
+            }
+            if (alone.vote.open != vote) return false;
+            for (const Injected& extra : injected) {
+                NetOverlayInput in = real;
+                extra.add(in);
+                const NetOverlayLine l = net_overlay_line(in);
+                const std::string got = l.lines.empty() ? std::string() : l.lines[0];
+                const bool ok = own.empty() ? (got == extra.words && l.alarm == extra.alarm && !l.vote.open) : (got == first && !l.alarm && l.vote.open == vote && l.lines.size() == alone.lines.size());
+                if (!ok) std::cout << "\n    [" << state << ", " << extra.what << "] the first line is \"" << got << "\"";
+                if (!ok) return false;
+            }
+            return true;
+        };
+        ASSERT_TRUE(table("running", "", false));
+        // Bob's link is cut for good: after a second the seat is named, after 5 s the vote is open
+        make_dead(bob);
+        ASSERT_TRUE(w.server.cut_wire(1));
+        ASSERT_TRUE(w.run_until([&]() { return !app.net_overlay_now().lines.empty(); }, 4000));
+        ASSERT_TRUE(table("a seat that is missing", "Bob (Red) lost the connection, waiting 0:", false));
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.open; }, 8000));
+        ASSERT_TRUE(table("a vote", "Bob (Red) lost the connection, waiting 0:", true));
+        // Ann and Cat go on without Bob: the countdown names nobody
+        app.handle_key_down(key_event(SDLK_F3));
+        ASSERT_TRUE(cat.net.vote(false));
+        ASSERT_TRUE(w.run_until([&]() { return first_line(app) == "The match goes on in 3"; }, 8000));
+        ASSERT_TRUE(table("the countdown", "The match goes on in 3", false));
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().lines.empty(); }, 6000));
+        ASSERT_TRUE(table("running again", "", false));
+        // this machine's own link is cut: the way back says so, whatever else is true
+        app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
+        ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->pause_info().reconnecting; }, 3000));
+        w.run(1500);
+        ASSERT_TRUE(table("the way back", "Connection lost. Reconnecting... 0:0", false));
+        ASSERT_TRUE(app.net_overlay_now().lines.size() == 2 && !app.net_vote_buttons().open);
+    } TEST_END();
+
+    TEST_CASE("RA8.2 Every Text Fits The Overlay At Both Picture Shapes (The Original's 4:3 With Its 442 Px View, The 16:9 With Its 762): A Player With A Name Of 32 Of The Widest Letters Is Missing, Is Voted On, And Comes Back; Every Line, The Count And Both Buttons Lie Inside The Map View, The Buttons Do Not Overlap, And A Frame Is Drawn") {
+        for (const Aspect aspect : {Aspect::Classic4x3, Aspect::Wide16x9}) {
+            const Captured output;
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            server::RoomSpec spec = held_spec("RA-82", 3);
+            spec.vote_after_ms = 5000;
+            spec.resume_countdown_ms = 10000;
+            ASSERT_TRUE(w.server.mgr->create_room(spec, w.server_now()).ok);
+            ApplicationConfig cfg = w.config(scratch_dir(aspect == Aspect::Classic4x3 ? "ra82-classic" : "ra82-wide"), "RA-82", "Ann");
+            cfg.aspect = aspect;
+            cfg.aspect_given = true;
+            Application& app = w.start_app(cfg);
+            const std::string long_name(32, 'W');
+            Machine& bob = w.join(long_name, "RA-82");
+            Machine& cat = w.join("Cat", "RA-82");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&bob, &cat}); }, 12000 + kPre));
+            ASSERT_EQ(app.aspect(), aspect);
+            const LayoutRect view = app.layout().view();
+            ASSERT_EQ(view.w, aspect == Aspect::Classic4x3 ? 442 : 762);
+            const auto fit_check = [&](const char* state) -> bool {
+                const NetOverlayLine l = app.net_overlay_now();
+                const NetOverlayLayout where = net_overlay_layout(view, app.net_overlay_metrics_for_test(l), l.vote.open);
+                const int32_t max = net_overlay_max_width(view);
+                bool ok = !l.lines.empty();
+                for (const std::string& t : l.lines) {
+                    const int32_t width = app.renderer().get_text_width(t, FontSize::Px14);
+                    if (width > max) std::cout << "\n    [" << state << ", view " << view.w << "] \"" << t << "\" is " << width << " px, the limit is " << max;
+                    ok = ok && width <= max;
+                }
+                for (const NetOverlayBox& b : where.lines) ok = ok && b.box.x >= view.x && b.box.x + b.box.w <= view.x + view.w && b.box.y >= view.y && b.box.y + b.box.h <= view.y + view.h;
+                if (l.vote.open) {
+                    const bool count_fits = app.renderer().get_text_width(l.vote.count, FontSize::Px14) <= max;
+                    const bool row_inside = where.keep.x >= view.x && where.go_on.x + where.go_on.w <= view.x + view.w && where.keep.x + where.keep.w < where.go_on.x && where.go_on.y + where.go_on.h <= view.y + view.h;
+                    const bool count_inside = where.count.box.x >= view.x && where.count.box.x + where.count.box.w <= view.x + view.w;
+                    const bool words = l.vote.go_on.compare(0, 20, "F3 Continue without ") == 0 && (l.vote.go_on.find("...") != std::string::npos) == (aspect == Aspect::Classic4x3);      // (cut at the 442 px view, whole in the 762 px one)
+                    if (!(count_fits && row_inside && count_inside && words)) std::cout << "\n    [" << state << ", view " << view.w << "] count " << count_fits << " row " << row_inside << " count box " << count_inside << " words " << words << " (\"" << l.vote.go_on << "\")";
+                    ok = ok && count_fits && row_inside && count_inside && words;
+                }
+                app.render_frame();
+                return ok;
+            };
+            make_dead(bob);
+            ASSERT_TRUE(w.server.cut_wire(1));
+            ASSERT_TRUE(w.run_until([&]() { return !app.net_overlay_now().lines.empty(); }, 4000));
+            ASSERT_TRUE(begins(first_line(app), "WWW") && first_line(app).find(" (Red) lost the connection, waiting 0:") != std::string::npos);
+            ASSERT_EQ(first_line(app).find("...") != std::string::npos, aspect == Aspect::Classic4x3);      // the 32 letters do not fit the original's picture, and fit the 16:9 one
+            ASSERT_TRUE(fit_check("missing"));
+            ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.open; }, 8000));
+            ASSERT_TRUE(fit_check("vote"));
+            // the click on the wide-name button works where it is drawn
+            click(app, app.net_vote_buttons().go_on);
+            ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.go_on_pressed; }, 3000));
+            ASSERT_TRUE(fit_check("vote, chosen"));
+            // Bob comes back: the countdown names him, cut to fit
+            bob.net.set_link_maker_for_test(nullptr);
+            ASSERT_TRUE(w.run_until([&]() { return first_line(app).find(" is back: the match goes on in ") != std::string::npos; }, 20000));
+            ASSERT_TRUE(begins(first_line(app), "WWW") && (first_line(app).find("...") != std::string::npos) == (aspect == Aspect::Classic4x3));
+            const std::string line = first_line(app);
+            ASSERT_TRUE(app.renderer().get_text_width(line, FontSize::Px14) <= net_overlay_max_width(view));
+            app.render_frame();
+        }
+    } TEST_END();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The screenshots (test_rejoin_app --shots DIR [--wide]): what the screens look like; nothing is compared
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+void shot(Application& app, const std::string& path) {
+    SDL_WindowEvent we;
+    std::memset(&we, 0, sizeof(we));
+    we.event = SDL_WINDOWEVENT_LEAVE;
+    app.handle_window_event(we);                                    // (the pointer is outside: the game's cursor is not drawn on the picture)
+    app.renderer().request_screenshot(path);
+    app.render_frame();
+}
+
+ApplicationConfig shots_config(World& w, const fs::path& dir, const std::string& room, const std::string& name, bool wide) {
+    ApplicationConfig cfg = w.config(dir, room, name);
+    if (wide) {
+        cfg.aspect = Aspect::Wide16x9;
+        cfg.aspect_given = true;
+        cfg.has_window_size = true;
+        cfg.window_w = 960;
+        cfg.window_h = 540;
+    }
+    return cfg;
+}
+
+int make_shots(const std::string& out, bool wide) {
+    std::error_code ec;
+    fs::create_directories(out, ec);
+    {   // the other player is missing: the seat, the vote, the countdown
+        World w;
+        if (!w.server.start(w.now)) return 1;
+        server::RoomSpec spec = held_spec("SHOT-1", 3);
+        spec.vote_after_ms = 5000;
+        spec.resume_countdown_ms = 10000;
+        w.server.mgr->create_room(spec, w.server_now());
+        Application& app = w.start_app(shots_config(w, scratch_dir("shots-a"), "SHOT-1", "Ann", wide));
+        Machine& bob = w.join("Bob", "SHOT-1");
+        Machine& cat = w.join("Cat", "SHOT-1");
+        if (!w.run_until([&]() { return w.running({&bob, &cat}); }, 12000 + kPre)) return 1;
+        w.run(2000);
+        make_dead(bob);
+        w.server.cut_wire(1);
+        w.run(2500);
+        shot(app, out + "/01_a_seat_is_missing.bmp");
+        if (!w.run_until([&]() { return app.net_overlay_now().vote.open; }, 8000)) return 1;
+        shot(app, out + "/02_the_vote.bmp");
+        app.handle_key_down(key_event(SDLK_F3));
+        w.run(300);
+        shot(app, out + "/03_the_vote_f3.bmp");
+        app.handle_key_down(key_event(SDLK_F2));
+        w.run(300);
+        shot(app, out + "/04_the_vote_f2.bmp");
+        bob.net.set_link_maker_for_test(nullptr);
+        if (!w.run_until([&]() { return first_line(app).find(" is back: the match goes on in ") != std::string::npos; }, 20000)) return 1;
+        shot(app, out + "/05_the_countdown.bmp");
+    }
+    {   // this machine's own link is cut
+        World w;
+        if (!w.server.start(w.now)) return 1;
+        w.server.mgr->create_room(held_spec("SHOT-2"), w.server_now());
+        Application& app = w.start_app(shots_config(w, scratch_dir("shots-b"), "SHOT-2", "Ann", wide));
+        Machine& bob = w.join("Bob", "SHOT-2");
+        if (!w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre)) return 1;
+        w.run(2000);
+        app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
+        w.server.cut_wire(w.app_wire);
+        w.run(3200);
+        shot(app, out + "/06_the_way_back.bmp");
+    }
+    std::cout << "screenshots written to " << out << "\n";
+    return 0;
+}
+
+}  // namespace
+
 int main(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--shots") == 0) {
+            bool wide = false;
+            for (int k = 1; k < argc; ++k) wide = wide || std::strcmp(argv[k], "--wide") == 0;
+            return make_shots(argv[i + 1], wide);
+        }
+    }
     net::NetGame::default_prediction_budget_ns() = UINT64_MAX;
     std::cout << "\n=======================================================\n [THE WAY BACK IN THE APPLICATION] the screens, the keys' storage, the start menu's Rejoin\n=======================================================\n";
     run_key_tests();
     run_use_tests();
     run_menu_tests();
+    run_screen_tests();
+    run_overlay_table_tests();
     std::cout << "\n" << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
     if (g_test_failures == 0) {
         std::cout << "ALL TESTS PASSED\n";

@@ -441,6 +441,18 @@ public:
     /// The line that a match of the network shows at the top of the playfield right now (an empty text: nothing, and always for a game that is not a match of the network): the one that
     /// render_net_overlay draws, from what the network layer reports. Public for the tests (the seconds before the first turn of a match must say nothing)
     NetOverlayLine net_overlay_now() const;
+    /// What net_overlay_now is made from: the network layer's state as the overlay's model takes it (the tests add states that no rig reaches, a desync or a lag notice, and see which line wins)
+    NetOverlayInput net_overlay_input() const;
+    /// The renderer's width of every text of the overlay (what the drawing and the mouse lay it out with): for the tests
+    NetOverlayMetrics net_overlay_metrics_for_test(const NetOverlayLine& line) const { return net_overlay_metrics(line); }
+    /// The vote block's buttons where the screen draws them now (net_overlay_layout over the lines of net_overlay_now): `open` is false, and the rectangles are empty, when no vote is on screen.
+    /// A click inside one is that choice (F2 keeps waiting, F3 goes on without the seat: NetGame::vote). Public for the tests.
+    struct NetVoteButtons {
+        bool open{false};
+        LayoutRect keep;
+        LayoutRect go_on;
+    };
+    NetVoteButtons net_vote_buttons() const;
     /// Where the window is now (client area, screen coordinates)
     WindowRect window_rect() const;
     /// The window as it was CREATED (client area; x and y are SDL's centred position where the place was not known): its size already has the shape of the picture (16:9 by default, 4:3 with
@@ -544,6 +556,10 @@ private:
     void close_room_chat();                               // closes the input and starts the guard
     std::vector<ai::BotSpec> fill_specs_;                 // the bots that this machine's START seated in the empty seats of a room on the local network (taken out again when the start is cancelled)
     bool match_over_handled_{false};
+    double held_since_ms_{-1.0};                          // net_time_ms_ when the match began to be held on this screen (a seat missing, or the countdown after a pause): -1 when it is not (track_net_state)
+    std::vector<net::PauseInfo::Seat> prev_missing_;      // the seats that were missing at the last look: who came back when the list empties
+    std::string back_name_;                               // the seat that came back, while the countdown that follows its return runs ("" when nobody did)
+    uint8_t vote_press_{0};                               // a left press went down on a button of the vote block: 1 keep waiting, 2 go on without the seat (its release is the choice)
     std::string net_notice_;
     std::string player_name_;
     std::string local_player_name_;                       // the name of a local game (the system user, --name): what a single-player game after a network game shows again
@@ -612,6 +628,10 @@ private:
     void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
     void sync_room_view();
     void render_net_overlay();
+    void track_net_state();                               // every frame of a match of the network: how long the match has been held, who came back (the overlay's seconds and names)
+    NetOverlayMetrics net_overlay_metrics(const NetOverlayLine& line) const;    // the renderer's width of every text of the overlay
+    bool handle_vote_key(const SDL_KeyboardEvent& key);   // F2 / F3 while a vote is open
+    bool handle_vote_mouse(const SDL_MouseButtonEvent& button);   // a click on a button of the vote block
     void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
     std::optional<LatencyCornerLayout> last_latency_layout_;                                         // where the last frame put the network's readout (none: it drew none)
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
