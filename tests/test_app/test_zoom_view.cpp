@@ -611,8 +611,9 @@ void test_lattice_placement(const assets::AssetArchive& arc) {
 
 // With Fog of War on, every level has to draw what the zoom 1 draws: the fog over every unexplored tile and nothing that the fog hides (every level goes through the one world pass; a level that
 // skipped the fog or a gate would show what the zoom 1 cannot). For every level of GAUNTLET and TINY, both pictures, four cameras: a scene that is unexplored except a window at the view's top left,
-// with every class of thing on unexplored tiles and two that are always drawn. R1 = everything, R2 = without the hidden things, R3 = nothing but the fog, R4 = nothing and no fog, R5 = all and no fog:
-// R1 = R2 (pixel for pixel), the two always drawn are in R2 and not in R3, the hidden things are in R5 (the first check is not empty), and R3 against R4 is the fog itself, block by block.
+// with every class of thing on unexplored tiles and two that are always drawn. R1 = everything, R2 = without the hidden things, R3 = nothing but the fog, R4 = nothing and no fog, R5 = only the hidden
+// things and no fog: R1 = R2 (pixel for pixel), the two always drawn are in R2 and not in R3, the hidden things are in R5 and not in R4 (so R1 = R2 is no empty check), and R3 against R4 is the fog itself,
+// block by block (R1 = R2 alone could not notice a fog that is missing: the gates hide the things with or without it).
 
 /// An ant standing at (px, py), drawn from its idle clip (populate() puts them at random places; this one where it is told to)
 sim::AntSnapshot fog_ant(const assets::AssetArchive& arc, uint32_t id, uint8_t player, int type, int32_t px, int32_t py) {
@@ -987,6 +988,7 @@ void test_fog_levels(const assets::AssetArchive& arc) {
                     for (int k = 0; k < FogScene::kKinds; ++k) all_classes = all_classes && (sc.placed[k] > 0 || k == FogScene::kPile);       // (a view may have no hidden food of the map's)
                     check(all_classes, at + "the scene has a thing of every class (an ant, a bomb, a power-up, an effect, a lunchbox, a fire wall, a falling power-up) and the two that are always drawn");
 
+                    const uint64_t passes = rig.renderer.world_target_passes();
                     fog_set(rig, sc, true, true, true);
                     const Picture r1 = rig.shoot(-1, {}, -1, true);
                     fog_set(rig, sc, false, true, true);
@@ -995,9 +997,11 @@ void test_fog_levels(const assets::AssetArchive& arc) {
                     const Picture r3 = rig.shoot(-1, {}, -1, true);
                     fog_set(rig, sc, false, false, false);
                     const Picture r4 = rig.shoot(-1, {}, -1, true);
-                    fog_set(rig, sc, true, true, false);
+                    fog_set(rig, sc, true, false, false);
                     const Picture r5 = rig.shoot(-1, {}, -1, true);
                     fog_reset(rig, sc);                                      // (the cells of the map as they were: the next scene starts from them)
+                    // the pictures are those of the world pass through the offscreen target (none at the zoom 1): a level that fell back to the zoom 1 picture would prove nothing
+                    check(rig.renderer.world_target_passes() == passes + (z == 1.0f ? 0u : 5u) && !rig.renderer.world_target_failed(), at + "the five pictures went through the offscreen target (none at the zoom 1) and the pass did not fail");
 
                     // 1. what the fog hides is not drawn: the picture with the hidden things is the picture without them
                     const DiffBox hidden = diff_box(r1, r2, canvas);
@@ -1012,7 +1016,7 @@ void test_fog_levels(const assets::AssetArchive& arc) {
                         const DiffBox shown = diff_box(r2, r3, box);
                         check(shown.count >= 3, at + std::string(a.player_id == 0 ? "the own ant on an unexplored tile" : "the enemy ant on an explored tile") + " is drawn: " + std::to_string(shown.count) + " pixels of its box differ from the picture without it");
                     }
-                    // 3. the hidden things are there to be hidden: with the fog off they are drawn
+                    // 3. the hidden things are there to be hidden: with the fog off they alone make a picture (R5 against R4)
                     const DiffBox there = diff_box(r5, r4, view);
                     check(there.count >= 50, at + "without the fog the hidden things are drawn (so the first check is not an empty one): " + std::to_string(there.count) + " pixels");
                     // 4. the fog is the fog: the same over explored ground, half of it deep in the fog, in every block of the view
