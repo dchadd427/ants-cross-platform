@@ -70,6 +70,10 @@
         .intro .lead { font-size: 22px; line-height: 1.2; margin-bottom: 4px; }
         .top .banner { color: var(--gold); text-shadow: 0 2px 0 #0b2a22, 0 0 1px #0b2a22; }
         .intro p { font-size: 16px; max-width: 60ch; }
+        /* the numbers under the welcome banner: a plate like the game's black boxes; the dot is green while a match is being played */
+        .intro .stats { display: flex; width: fit-content; max-width: 100%; align-items: center; flex-wrap: wrap; gap: 2px 8px; margin: 0 0 12px; padding: 4px 12px; font-size: 14px; line-height: 1.3; color: var(--cream); background: var(--inset); border: 2px solid var(--edge); border-radius: 3px; box-shadow: inset 0 0 0 1px var(--frame-lo), 2px 3px 0 var(--shadow); }
+        .live { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #8b9a93; box-shadow: 0 0 0 1px #000; }
+        .live.on { background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
         .links { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-top: 16px; align-items: center; }
         .tv { margin: 0; border: 3px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
         .tv img { width: 100%; aspect-ratio: 761 / 497; object-fit: cover; }
@@ -273,13 +277,16 @@
         }
         @media (max-width: 700px) {
             .wrap { padding: 18px 18px 0; }
-            .top { grid-template-columns: minmax(0, 1fr); gap: 10px; justify-items: center; text-align: center; }
+            .top { grid-template-columns: minmax(0, 1fr); gap: 6px; justify-items: center; text-align: center; }
             .logo img { width: 150px; }
             .banner { font-size: 22px; padding: 7px 14px; margin-bottom: 6px; }
             .intro .lead { font-size: 18px; margin: 0; }
-            .intro p:not(.lead), .links { display: none; }
+            .intro p:not(.lead):not(.stats), .links { display: none; }
+            .intro .stats { margin: 0 auto 4px; padding: 3px 10px; font-size: 13.5px; flex-wrap: nowrap; }
+            #stats-sep, #stats-played { display: none; }
+            .stats:not([hidden]) + .lead { display: none; }
             .page { grid-template-columns: minmax(0, 1fr); grid-template-areas: "who" "cols" "room" "pic" "how"; }
-            .myname { grid-template-columns: auto minmax(0, 1fr) auto; margin: 16px 0 16px; }
+            .myname { grid-template-columns: auto minmax(0, 1fr) auto; margin: 12px 0 12px; }
             .myname .lab { margin-right: 14px; }
             .myname .hint { grid-column: 1 / -1; margin: 5px 0 0; font-size: 13.5px; line-height: 1.3; }
             .lab { margin-bottom: 4px; }
@@ -321,6 +328,7 @@
         <div class="logo"><img src="front/logo.png" alt="ants!" width="581" height="218"></div>
         <div class="intro">
             <h1 class="banner">Welcome to Ants!</h1>
+            <p class="stats" id="stats" hidden><span id="stats-dot" class="live" aria-hidden="true"></span><span id="stats-live"></span><span id="stats-sep" aria-hidden="true" hidden>&middot;</span><span id="stats-played"></span></p>
             <p class="lead">Four colonies, one picnic.</p>
             <p id="subtitle">The 1998 ant war game, rebuilt for your browser: gather food, raid your neighbours, guard your hill.</p>
             <nav class="links" aria-label="More about the game">
@@ -1134,10 +1142,107 @@ their music and their sound: only the window you are in is heard). The match is 
         });
         // SELECTOR_END
 
+        // STATS_BEGIN (tests/scripts/web_stats_check.js runs this block)
+        // THE LINE OF NUMBERS in the header: how many matches are being played, how many players are online, how many games were played and how many of them today. They come from the game server through
+        // this site's own address /stats: {"now":{"matches":N,"players":M},"online":{"day":D,"total":T},"local":{"day":d,"total":t},"since":"YYYY-MM-DD"} (online: matches that were played on the server;
+        // local: games against the computer that browsers reported; day: the last 24 hours). A site that has no /stats (it answers with some page, or not at all) is asked for /busy,
+        // {"matches":N,"players":M}, and the line then holds the live part only; when neither answers the line is not there (no text of an error). What comes back is checked before it is shown: whole
+        // numbers from 0 up and nothing else, and it is put into the page as text only.
+        var STATS_EVERY = 30000;                 // a new look every 30 seconds while the page is in front
+        function wholeNumber(v) { return typeof v === 'number' && isFinite(v) && v >= 0 && v === Math.floor(v) && v <= 999999999999 ? v : null; }
+        // { matches, players } of a "now" (or of the answer of /busy), or null
+        function liveOf(now) {
+            if (!now || typeof now !== 'object') return null;
+            var matches = wholeNumber(now.matches);
+            var players = wholeNumber(now.players);
+            return matches === null || players === null ? null : { matches: matches, players: players };
+        }
+        // the answer of /stats: { matches, players, played, today, since } (played and today are the sums of online and local), or null when it is not that shape
+        function statsOf(data) {
+            if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+            var live = liveOf(data.now);
+            var online = data.online && typeof data.online === 'object' ? { day: wholeNumber(data.online.day), total: wholeNumber(data.online.total) } : null;
+            var local = data.local && typeof data.local === 'object' ? { day: wholeNumber(data.local.day), total: wholeNumber(data.local.total) } : null;
+            if (!live || !online || !local || online.day === null || online.total === null || local.day === null || local.total === null) return null;
+            return { matches: live.matches, players: live.players, played: online.total + local.total, today: online.day + local.day, since: typeof data.since === 'string' && /^\d{4}-\d{2}-\d{2}/.test(data.since) ? data.since.slice(0, 10) : '' };
+        }
+        // the answer of /busy: the live part only (played and today are null), or null
+        function busyOf(data) {
+            var live = !data || typeof data !== 'object' || Array.isArray(data) ? null : liveOf(data);
+            return live ? { matches: live.matches, players: live.players, played: null, today: null, since: '' } : null;
+        }
+        function groupDigits(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+        function counted(n, one, many) { return groupDigits(n) + ' ' + (n === 1 ? one : many); }
+        // the words of the line: on (a match is being played: the dot is green), live, played ('' while only /busy answered) and the title that says since when it is counted
+        function statsWords(stats) {
+            return {
+                on: stats.matches > 0,
+                live: counted(stats.matches, 'match', 'matches') + ' being played · ' + counted(stats.players, 'player', 'players') + ' online',
+                played: stats.played === null ? '' : counted(stats.played, 'game', 'games') + ' played (' + groupDigits(stats.today) + ' today)',
+                title: stats.since ? 'Counted since ' + stats.since + '. Today means the last 24 hours.' : ''
+            };
+        }
+        // Looks at once and then every STATS_EVERY ms while the page is visible; a hidden page asks nothing, and asks again as soon as it is shown. io: get(url) is a promise of the parsed answer
+        // (it fails for anything that is not a 200 answer with JSON), show(stats or null), later(fn, ms) and cancel(handle) are the clock, hidden() says whether the page is out of sight.
+        // A look is /stats, else /busy, else null; an answer that arrives after a newer look began (or while the page was hidden) is dropped.
+        function makeStatsPoller(io) {
+            var timer = null;
+            var round = 0;
+            function cancel() { if (timer !== null) { io.cancel(timer); timer = null; } }
+            function look() {
+                var mine = ++round;
+                cancel();
+                function done(stats) {
+                    if (mine !== round) return;
+                    io.show(stats);
+                    if (!io.hidden()) timer = io.later(look, STATS_EVERY);
+                }
+                new Promise(function (resolve) { resolve(io.get('/stats')); }).then(statsOf, function () { return null; }).then(function (stats) {
+                    return stats || new Promise(function (resolve) { resolve(io.get('/busy')); }).then(busyOf, function () { return null; });
+                }).then(done, function () { done(null); });
+            }
+            return {
+                start: function () { if (!io.hidden()) look(); },
+                visibility: function () { if (io.hidden()) { round++; cancel(); } else look(); }
+            };
+        }
+        // STATS_END
+
         $('new-room').addEventListener('click', function () {
             // the front page again, with its two cards (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
             window.location.assign(window.location.origin + window.location.pathname.replace(/^\/+/, '/'));
         });
+
+        // THE LINE OF NUMBERS in the header (the block STATS above has its rules): the page asks its own site, /stats and /busy, with no cookies and no cache, and gives up after 8 seconds; a browser
+        // without fetch has no line
+        function getJson(url) {
+            var controller = typeof AbortController === 'function' ? new AbortController() : null;
+            var timer = setTimeout(function () { if (controller) controller.abort(); }, 8000);
+            return fetch(url, { cache: 'no-store', credentials: 'omit', signal: controller ? controller.signal : undefined }).then(function (response) {
+                clearTimeout(timer);
+                if (response.status !== 200) throw new Error('the site answered ' + response.status);
+                return response.json();
+            }, function (e) { clearTimeout(timer); throw e; });
+        }
+        function showStats(stats) {
+            var line = $('stats');
+            if (!stats) { line.hidden = true; return; }
+            var words = statsWords(stats);
+            $('stats-dot').className = words.on ? 'live on' : 'live';
+            $('stats-live').textContent = words.live;
+            $('stats-sep').hidden = words.played === '';
+            $('stats-played').textContent = words.played;
+            if (words.title) line.setAttribute('title', words.title); else line.removeAttribute('title');
+            line.hidden = false;
+        }
+        if (typeof fetch === 'function') {
+            var poller = makeStatsPoller({
+                get: getJson, show: showStats, hidden: function () { return !!document.hidden; },
+                later: function (fn, ms) { return setTimeout(fn, ms); }, cancel: function (handle) { clearTimeout(handle); }
+            });
+            document.addEventListener('visibilitychange', poller.visibility);
+            poller.start();
+        }
 
         // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
         if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';

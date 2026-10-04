@@ -319,6 +319,8 @@ function runLobby(search, stored, options) {
         createTextNode(text) { return { isText: true, textContent: String(text), parent: null }; },
         activeElement: null,
         execCommand() { return true; },
+        hidden: false, listeners: {},
+        addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); },
     };
     const data = stored === THROWS ? {} : Object.assign({}, stored);
     const storage = {
@@ -339,7 +341,12 @@ function runLobby(search, stored, options) {
     const history = { replaceState(...a) { env.replaced.push(a); } };
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
     const code = scripts[scripts.length - 1][1];
-    new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', code)(win, doc, history, nav, function () { return 0; }, function () { return 0; });
+    // the site's answers (options.fetch(url, init) -> a promise of a response; the default is no network at all; options.noFetch is a browser that has no fetch)
+    env.fetches = [];
+    const network = options.fetch || (() => Promise.reject(new Error('the test has no network')));
+    const fetchSpy = options.noFetch ? undefined : (url, init) => { env.fetches.push({ url, init }); return network(url, init); };
+    new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', 'fetch', code)(win, doc, history, nav, function () { return 0; }, function () { return 0; }, fetchSpy);
+    env.doc = doc;
     env.storage = storage;
     env.win = win;
     env.body = doc.body;
@@ -802,5 +809,87 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
 }
 check('the front page says no more that the page opens a window by default (its only window.open is the seat\'s explicit one)', (lobbyText.match(/window\.open\(/g) || []).length === 1);
 
-console.log('web name check: ' + checks + ' checks, ' + failures + ' failures');
-process.exit(failures === 0 ? 0 : 1);
+
+// ---- the line of numbers in the header (the block STATS has its own check, web_stats_check.js; here is the page as a whole: what it asks, what it shows, when it looks)
+const settle = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
+const answers = (table) => (url) => {
+    const a = table[url];
+    if (a === undefined) return Promise.reject(new TypeError('Failed to fetch'));
+    if (a === 'page') return Promise.resolve({ status: 200, json: () => Promise.reject(new SyntaxError('Unexpected token < in JSON')) });      // a site with no /stats answers with the game page
+    if (typeof a === 'number') return Promise.resolve({ status: a, json: () => Promise.resolve({}) });
+    return Promise.resolve({ status: 200, json: () => Promise.resolve(a) });
+};
+const GOOD_STATS = { now: { matches: 3, players: 7 }, online: { day: 5, total: 900 }, local: { day: 16, total: 384 }, since: '2026-10-04' };
+const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-dot').className, live: env.$('stats-live').textContent, sepHidden: env.$('stats-sep').hidden, played: env.$('stats-played').textContent, title: env.$('stats').getAttribute('title') });
+(async () => {
+    {
+        const env = runLobby('', {}, { firstVisit: true });
+        await settle();
+        same('no network: the line is not there and says nothing (no text of an error), the page itself works', [statsView(env).hidden, statsView(env).live, statsView(env).played, env.fetches.map((f) => f.url)], [true, '', '', ['/stats', '/busy']]);
+        env.$('play').click();
+        check('... and START plays', env.assigned.length === 1);
+    }
+    {
+        const env = runLobby('', {}, { firstVisit: true, fetch: answers({ '/stats': GOOD_STATS }) });
+        check('before the answer the line is hidden (the markup says so)', /<p class="stats" id="stats" hidden>/.test(lobbyText) && env.$('stats').hidden === true);
+        await settle();
+        same('/stats answers: the line is shown, the dot is green, the numbers are the owner\'s example', statsView(env), { hidden: false, dot: 'live on', live: '3 matches being played · 7 players online', sepHidden: false, played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
+        same('... one request, to the site\'s own /stats, with no cache and no cookies', env.fetches.map((f) => [f.url, f.init.cache, f.init.credentials]), [['/stats', 'no-store', 'omit']]);
+        check('... and the page made no markup from the numbers', env.innerHTMLWrites.length === 0);
+    }
+    {
+        const env = runLobby('', {}, { firstVisit: true, fetch: answers({ '/stats': 'page', '/busy': { matches: 0, players: 2 } }) });
+        await settle();
+        same('/stats is the game page (the site has no such route) and /busy answers: the live part, a grey dot, no totals', [env.fetches.map((f) => f.url), statsView(env)],
+             [['/stats', '/busy'], { hidden: false, dot: 'live', live: '0 matches being played · 2 players online', sepHidden: true, played: '', title: null }]);
+    }
+    for (const [label, table] of [['/stats answers 404 and /busy 200', { '/stats': 404, '/busy': { matches: 1, players: 1 } }], ['/stats fails and /busy answers', { '/busy': { matches: 1, players: 1 } }]]) {
+        const env = runLobby('', {}, { firstVisit: true, fetch: answers(table) });
+        await settle();
+        same(label + ': 1 match, 1 player, singular', [statsView(env).hidden, statsView(env).live], [false, '1 match being played · 1 player online']);
+    }
+    {
+        const env = runLobby('', {}, { firstVisit: true, fetch: answers({ '/stats': { now: { matches: '<img src=x onerror=alert(1)>', players: 1 }, online: { day: 0, total: 0 }, local: { day: 0, total: 0 } }, '/busy': 500 }) });
+        await settle();
+        check('an answer with text where numbers belong shows nothing, and nothing of it is in the page', statsView(env).hidden === true && !/[<>]/.test(env.$('stats').textContent + env.$('stats-live').textContent + env.$('stats-played').textContent) && env.innerHTMLWrites.length === 0);
+    }
+    {   // the page looks again when it is shown after being hidden, and not while it is hidden
+        let now = GOOD_STATS;
+        const env = runLobby('', {}, { firstVisit: true, fetch: (url) => answers({ '/stats': now })(url) });
+        await settle();
+        check('the page listens for its visibility', (env.doc.listeners.visibilitychange || []).length === 1);
+        const before = env.fetches.length;
+        env.doc.hidden = true;
+        env.doc.listeners.visibilitychange.forEach((fn) => fn());
+        await settle();
+        check('hidden: it asks nothing', env.fetches.length === before);
+        now = { now: { matches: 0, players: 0 }, online: { day: 0, total: 1000 }, local: { day: 0, total: 234 }, since: '2026-10-04' };
+        env.doc.hidden = false;
+        env.doc.listeners.visibilitychange.forEach((fn) => fn());
+        await settle();
+        same('shown again: it looks at once and shows the new numbers (a grey dot, no match, 1,234 games, 0 today)', [env.fetches.length - before, statsView(env).dot, statsView(env).live, statsView(env).played], [1, 'live', '0 matches being played · 0 players online', '1,234 games played (0 today)']);
+        now = undefined;                                                                  // the site stops answering: the next look finds neither /stats nor /busy
+        env.doc.hidden = true;
+        env.doc.listeners.visibilitychange.forEach((fn) => fn());
+        env.doc.hidden = false;
+        env.doc.listeners.visibilitychange.forEach((fn) => fn());
+        await settle();
+        same('... and when the site stops answering the line goes away again (it was shown before)', [statsView(env).hidden, env.fetches.length - before], [true, 3]);
+    }
+    {
+        const env = runLobby('', {}, { firstVisit: true, noFetch: true });
+        await settle();
+        check('a browser with no fetch has no line and the page works', statsView(env).hidden === true && env.fetches.length === 0 && (env.$('play').click(), env.assigned.length === 1));
+    }
+    {   // a page that is a room, or asks for a name, has the line too (it is the header's)
+        const room = runLobby('?room=demo-small-2p-abc12&play=here', {}, { firstVisit: true, fetch: answers({ '/stats': GOOD_STATS }) });
+        await settle();
+        check('a room has the line too', room.roomStarted() && statsView(room).hidden === false);
+    }
+})().then(() => {
+    console.log('web name check: ' + checks + ' checks, ' + failures + ' failures');
+    process.exit(failures === 0 ? 0 : 1);
+}, (e) => {
+    console.log('FAIL ' + e.message + '\n' + e.stack);
+    process.exit(1);
+});
