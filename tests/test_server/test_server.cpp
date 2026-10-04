@@ -40,6 +40,13 @@
 #include <vector>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #include <process.h>
 #endif
 #ifndef _WIN32
@@ -50,6 +57,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #endif
 #include <cstring>
@@ -399,6 +407,21 @@ double peak_memory_mb() {
 #endif
 }
 #endif
+
+// The CPU time (user and system, milliseconds) that the calling thread has used so far; -1 when the system cannot say. It does not run while the thread waits for the machine or sleeps, so the
+// difference of two readings is the thread's own work, however busy the machine of the test is (a wall clock around a call counts the time that other programs took, too).
+double thread_cpu_ms() {
+#ifdef _WIN32
+    FILETIME created, exited, kernel, user;
+    if (!GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user)) return -1.0;
+    const auto hundred_ns = [](const FILETIME& t) { return static_cast<double>((static_cast<uint64_t>(t.dwHighDateTime) << 32) | t.dwLowDateTime); };
+    return (hundred_ns(kernel) + hundred_ns(user)) / 10000.0;
+#else
+    timespec ts;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0) return -1.0;
+    return static_cast<double>(ts.tv_sec) * 1000.0 + static_cast<double>(ts.tv_nsec) / 1.0e6;
+#endif
+}
 
 // A folder of this process alone, `ants_server_test_<pid>_<random hex>`, made new (create_directory says no when the name exists, and another is drawn) and removed with everything in it when
 // the object goes. The folders of the suite used to be `ants_server_test_<tag>` and `ants_secret_test_<tag>` under the temp folder, the same for every run on the machine: two runs at the
@@ -4546,7 +4569,17 @@ void run_bot_tests() {
         ASSERT_TRUE(clients[0]->lobby->chat_log().size() == 2);                              // the waiting room's lines are still there
     } TEST_END();
 
-    TEST_CASE("S3.71 Server CPU With Bots (Measured): Twelve Rooms Of One Person And Three Bots Each Cost The Server's Thread A Few Milliseconds A Second (Only mgr.update Is Timed: The Clients' Work Is Not The Server's), On TINY And On TREASURE, With Idle, Medium And Hard Bots; The Start Of Twelve Rooms Is Not A Stall (Each Room Analyses Its Map Once)") {
+    TEST_CASE("S3.71 Server CPU With Bots (Measured): Twelve Rooms Of One Person And Three Bots Each Cost The Server's Thread A Few Milliseconds A Second (Only mgr.update Is Timed, As The Thread's CPU Time: The Clients' Work Is Not The Server's, A Busy Machine Is Not Either), On TINY And On TREASURE, With Idle, Medium And Hard Bots; The Start Of Twelve Rooms Is Not A Stall (Each Room Analyses Its Map Once)") {
+        // the clock of the measurement: it works, it does not run while the thread sleeps (a wall clock would read the whole 60 ms) and it runs while the thread works
+        const double cpu_start = thread_cpu_ms();
+        ASSERT_TRUE(cpu_start >= 0.0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        ASSERT_TRUE(thread_cpu_ms() - cpu_start < 30.0);
+        volatile uint64_t spin = 0;
+        const auto give_up = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (thread_cpu_ms() - cpu_start < 30.0 && std::chrono::steady_clock::now() < give_up) spin = spin + 1;
+        static_cast<void>(spin);
+        ASSERT_TRUE(thread_cpu_ms() - cpu_start >= 30.0);
         struct Result {
             double ms_per_second{0};
             double worst_pass_ms{0};
@@ -4569,9 +4602,9 @@ void run_bot_tests() {
             const auto pass = [&](double& timed_ms) {
                 w.now += 10;
                 w.net.set_time(w.now);
-                const auto t0 = std::chrono::steady_clock::now();
+                const double cpu0 = thread_cpu_ms();                                          // the thread's CPU time, not the wall clock: a loaded machine delays the thread, it does not make the pass cost more
                 w.mgr.update(w.now);
-                timed_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+                timed_ms = thread_cpu_ms() - cpu0;
                 for (auto& c : w.clients) c->update(w.now, maps_dir());
             };
             double ms = 0;
