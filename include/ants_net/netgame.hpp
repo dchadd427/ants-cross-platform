@@ -19,6 +19,10 @@
 //
 // Raw TCP (LAN and development) is the transport of native builds; a WebAssembly build has none yet (host() and join() return false there) until the
 // WebRTC transport of the network port arrives. The class does not care which Connection it talks to.
+//
+// The way back (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A client of a dedicated server's room that holds seats is given a key with its Welcome; its ClientSession is then built to come
+// back by itself when its link is lost (the room is not left: Phase stays Playing), and this class makes the new links that the session asks for (a JoinTarget keeps how the first one was made).
+// LAN and direct games are exactly what they were (host migration).
 
 #include <cstdint>
 #include <functional>
@@ -44,6 +48,58 @@ bool hash_file(const std::string& path, uint64_t& out);
 /// What the player is told when the match is lost to this machine (NetGame::status_text after the event HostLeft): the reason as the session knows it. A server that closed
 /// the link of a machine that held half a minute of the match unplayed dropped it for being away (a hidden tab, a process that was stopped); anything else is a link that is gone.
 std::string match_lost_text(ClientSession::LostReason reason);
+
+/// How a client reached its server, kept by join() and join_url() so that the way back can make the same link again: the TCP address and port of a native client, or the WebSocket URL of the
+/// browser build, and what the Hello said (the name, the seat that was asked for, the room's code, the token: carried, never interpreted, never written to a log).
+struct JoinTarget {
+    std::string address;               // native: the host to connect to (empty in the browser)
+    uint16_t port{0};
+    std::string url;                   // the browser build: the ws:// or wss:// URL (empty natively)
+    std::string name;
+    uint8_t want_seat{255};
+    std::string room;
+    std::string token;
+};
+
+/// A seat's key as the player's machine has to keep it (NetGame::set_on_key) and let go of it (set_on_forget_key). A SECRET: whoever has it can take the seat. The place that keeps it (a file that only its
+/// owner can read, the browser's local storage) keeps it private, and it is never written to a log, a status line or an address.
+struct RejoinKey {
+    std::string room;                  // the room's code
+    uint8_t seat{255};                 // the seat that the key holds
+    SeatKey key{};
+    std::string server;                // where the room is: "host:port" of a native client, the URL of the browser build (never the token)
+};
+
+/// What the screens of a match that is held, or whose machine is on its way back, draw (NetGame::pause_info). Everything is the last word of the server or of this machine's own session; nothing here is
+/// a decision. The fields about the server's pause are those of the last Presence and are only filled while this machine follows the match (not while it is on its way back: they would be old).
+struct PauseInfo {
+    // this machine's way back: its link to the server was lost and the session makes a new one (docs/NETWORK_PORT.md "Reconnect")
+    bool reconnecting{false};          // the link is lost and a new one is being made or says Hello
+    bool catching_up{false};           // the server gives this machine the match, which it runs without drawing it (the loading screen's "Catching up N%")
+    uint8_t catch_up_percent{0};       // 0 .. 100 while catching_up
+    uint32_t away_s{0};                // whole seconds since the link was lost (reconnecting or catching_up)
+    uint32_t attempts{0};              // the new links that were made since (reconnecting or catching_up)
+    uint32_t give_up_s{0};             // whole seconds left before the way back is given up (reconnecting): the cap that the room named and a minute, from the loss
+    // the match as the server holds it: the seats that are missing from it, longest away first
+    struct Seat {
+        uint8_t seat{255};
+        std::string name;              // as the match's roster names it
+        uint32_t away_s{0};            // the seat's total absence in this match, in whole seconds
+        bool catching_up{false};       // the seat is back and is being given the match (false: its connection is lost)
+        uint8_t progress{0};           // catching_up: 0 .. 100
+    };
+    std::vector<Seat> missing;
+    // the vote of the others about the seat that has been away longest (or that flaps)
+    bool vote_open{false};
+    uint8_t vote_seat{255};
+    std::string vote_name;
+    uint8_t votes_continue{0};         // the connected players who chose to go on without it
+    uint8_t voters{0};                 // the connected players that vote (not the seat itself): the vote is won by more than half of them
+    enum class Choice : uint8_t { None, KeepWaiting, Continue };
+    Choice my_vote{Choice::None};      // this machine's own choice
+    // the countdown that follows a pause: the match goes on in this many seconds (0: none)
+    uint8_t resume_seconds_left{0};
+};
 
 class NetGame final : public sim::CommandSink {
 public:
@@ -72,10 +128,13 @@ public:
             Desync,           // two machines disagree: the match is frozen
             Failed,           // joining failed, see status_text()
             HostChanged,      // during the match: the host left and `seat` is the new host (this machine when it is our own seat)
-            Chat              // in the room (protocol 11): a line was said, `seat` is its sender (kRoomSender: the room itself); take_pregame_chat() has it
+            Chat,             // in the room (protocol 11): a line was said, `seat` is its sender (kRoomSender: the room itself); take_pregame_chat() has it
+            Rejoined          // this machine's way back is over: it has caught up, the server gave it its seat again and it follows the live match (the screen leaves the catch-up view)
         };
         Type type{Type::RoomChanged};
         uint8_t seat{255};
+        bool rejoin{false};   // StartRequested and Begun: this machine starts from nothing and is given a match that runs (it joined with its key, or took the way back again after a server that had lost
+                              // the last turns answered it BadRequest): the screen skips the start dialog and the start sound, the catch-up is its loading
     };
 
     explicit NetGame(sim::SimulationEngine& sim);
@@ -89,12 +148,40 @@ public:
     bool host(uint16_t port, const std::string& name, bool loopback_only = false);
     /// Starts joining the room at address:port. False when the address cannot be used or there is no transport; the outcome arrives as events.
     /// `want_seat` (0 .. 3) asks the host for that seat (the colour: 0 green, 1 red, 2 blue, 3 black); a seat that is taken gives the first free one; 255 = any.
-    bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string());
+    /// `key` (all zero: a new player, as it always was) is the key of a seat of a dedicated server's room that this machine had (a game that was started again, a page that was reloaded: the place
+    /// that keeps it gave it back): the Hello shows it, and a room whose match runs gives the machine its seat and the match from the server's log (the event StartRequested, then Begun, both with
+    /// `rejoin`). A room that is over, that does not hold the seat or that has dropped it refuses, with the reasons of the way back (status_text()).
+    bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
+              const SeatKey& key = SeatKey{});
     /// The same through a WebSocket (ws:// or wss:// URL, the game server's door behind its proxy): the browser build's only way to join. False when the URL cannot
     /// be used or there is no WebSocket (every native build: it joins with TCP). A server's room has no host migration and no links between guests.
-    bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string());
-    /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone.
+    bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
+                  const SeatKey& key = SeatKey{});
+    /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone. This works in every state of the way back: a machine whose link is up
+    /// (during a pause too, when no Quit command would be sealed) says Leave; one that has no link cannot tell the server (its seat is held until the others vote or the cap drops it). The key is forgotten,
+    /// unless the session had ended by itself (Over, Failed): its end decided about the key (a refusal that keeps it, a link that never opened), and the application's way back to its menu only cleans up.
     void leave();
+
+    // ---- the way back (docs/NETWORK_PORT.md "Reconnect") ---------------------------------------------------------------------------------------------
+    /// Told when a Welcome has handed this machine a key (a dedicated server's room that holds seats): where to keep it so that the match can be taken up again if the game is closed or the page reloaded
+    /// (join / join_url with the key). Told again at the Welcome of every rejoin, with the same key. Never for a room that gives none (a game on the local network, a room that holds no seats).
+    /// The function may end the session (leave()).
+    void set_on_key(std::function<void(const RejoinKey&)> fn) { on_key_ = std::move(fn); }
+    /// Told once per key when it can no longer be used and is to be let go of: the match ended (freeze), the server dropped the seat or has no such match any more or does not hold the seat, the time to
+    /// wait ran out, the player left (leave), or the room that took the code does not know the key (a new room). Not told when another window has the seat (Superseded) or when the server would not take
+    /// the machine back just now (RejoinFailed): the player may use Rejoin later. The function may end the session (leave()) too.
+    void set_on_forget_key(std::function<void(const RejoinKey&)> fn) { on_forget_key_ = std::move(fn); }
+    /// The match is held for this machine: a seat is missing from it or the countdown after a pause runs (the server's word), or this machine is not following the live match itself (its link is lost, a new one
+    /// is being made, or it catches up). Nothing is sealed meanwhile, so a Quit command would be lost: the application leaves with leave() instead.
+    bool paused() const;
+    /// What the screens draw: this machine's way back, the missing seats, the vote, the countdown. Empty (every field at its default) outside a match as a client.
+    PauseInfo pause_info() const;
+    /// This machine's choice in the vote that is open: keep waiting for the seat that is missing, or go on without it (the server counts the last choice of every player). False (nothing is sent) when no vote
+    /// is open or this machine does not follow the live match.
+    bool vote(bool keep_waiting);
+    /// What a player is told when a refusal ends a way back (status_text()): the reasons that the way back has words of its own for (the seat was dropped, the match is over, the server does not hold the seat,
+    /// the server would not take the machine back now), and the words of reject_text() for the rest
+    static std::string way_back_text(RejectReason reason);
 
     // ---- the room on the local network -------------------------------------------------------------------------------------------------------------
     /// Before host(): the UDP port on which the open room announces itself to the games of the local network (see lan.hpp; 0 = not at all, the default is
@@ -116,6 +203,8 @@ public:
     /// background step from here (Application::background_pump), which calls update() and take_events() like a frame does. The function may end the session (leave()).
     /// A native build never calls it (its transports are polled by the frame loop).
     void set_on_wake(std::function<void()> fn) { on_wake_ = std::move(fn); }
+    /// The tests: the way back asks this function for every new link instead of connecting to the JoinTarget; null means that no link could be made (the name does not resolve: the network is down)
+    void set_link_maker_for_test(std::function<std::unique_ptr<Connection>()> fn) { link_maker_ = std::move(fn); }
 
     // ---- state -----------------------------------------------------------------------------------------------------------------------------------
     Phase phase() const noexcept { return phase_; }
@@ -286,6 +375,8 @@ public:
     uint32_t turns_executed() const;
     /// The host is gone and the guests are agreeing on a new one: no turns arrive meanwhile (the game shows a message)
     bool electing() const;
+    /// How this machine reached its server (valid after a successful join() or join_url(); empty before): the way back makes its new links from it
+    const JoinTarget& join_target() const noexcept { return target_; }
     /// The seat that seals the turns now
     uint8_t host_seat() const noexcept { return known_host_; }
     /// What just happened in the match ("Bob is the host now."), for five seconds; empty otherwise
@@ -299,7 +390,9 @@ private:
     void pump_peers();
     void begin_peer_links();
     /// The part of joining that every transport shares: the uplink is ready, the lobby asks for its room and seat
-    void begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_port, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token);
+    void begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_port, const SeatKey& key);
+    /// The lobby's Hello for the join target: `key` (all zero for a new player) and the seat that it asks for
+    ClientLobby::Config lobby_config(const SeatKey& key, uint8_t want_seat) const;
     void close_peer_links();
     void refresh_status();
     void set_notice(std::string text);
@@ -315,6 +408,29 @@ private:
     void announce_room();
     /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
     void collect_room_chat();
+    // The way back (see the head of this file)
+    /// A new link to the server, made the way the first one was (TCP natively, a WebSocket in the browser); null when none can be made (the session tries again in two seconds). `for_lobby`: the link
+    /// is the lobby's, not the session's (a machine that starts the match from nothing): the browser's socket then says the lobby's Hello when it opens
+    std::unique_ptr<Connection> make_link(bool for_lobby = false);
+    /// The session wants a new link: makes one and hands it over (attach), a failed attempt too (null)
+    void attach_new_link();
+    /// The browser's connections tell the application that they have news (set_on_wake); the same function for the first link and every new one
+    std::function<void()> wake_function();
+    /// What a new link says as its Hello (the session adds the version, the key and the number of turns): the name, the room, the token and this machine's seat
+    HelloMsg way_back_hello() const;
+    /// The session is lost: a server that restored the match from a record that lost its last turns (docs/NETWORK_PORT.md, "start from nothing") answered BadRequest to a Hello that carried more
+    /// turns than it holds; the machine starts the match from nothing with the same key (begin_reload), once per match. True when it did; false: the session ended some other way (end_lost_match)
+    bool reload_after_bad_request();
+    void begin_reload();
+    void end_lost_match();
+    /// The key of the seat: handed out (on_key) and let go of (on_forget_key), once per key
+    void announce_key(const SeatKey& key, uint8_t seat);
+    void forget_key();
+    std::string server_text() const;
+    /// The lobby's Welcome came: a key that it handed out is announced; a Hello that showed a key and was answered as a new player's (the match is gone, a new room took the code) forgets the old one
+    void note_lobby_welcome();
+    /// The session's mode changed: a rejoin's Welcome (the key again), the end of the way back (Rejoined)
+    void note_session_mode();
 
     sim::SimulationEngine& sim_;
     Role role_{Role::None};
@@ -341,11 +457,22 @@ private:
     [[maybe_unused]] uint32_t room_id_{0};              // names the room in the announcements (native builds)
     std::string game_version_;
     FillLevel fill_{FillLevel::None};       // the bots that this machine's START asks for (protocol 11)
+    JoinTarget target_;                     // client: how the first link was made (join, join_url)
+    bool way_back_{false};                  // client: the session was built to come back by itself (a dedicated server's room that gave this machine a key)
+    bool reload_used_{false};               // client: the BadRequest fallback (reload_after_bad_request) was taken in this match
+    SeatKey join_key_{};                    // client: the key that the lobby's Hello showed (all zero: a new player)
+    bool have_key_{false};                  // client: a key is out (announced, or given to join): the place that keeps it has it until forget_key()
+    RejoinKey rejoin_key_;                  // ... and which
+    bool welcomed_{false};                  // client: the lobby's Welcome has been looked at (note_lobby_welcome)
+    ClientSession::Mode last_mode_{ClientSession::Mode::Normal};      // client: the session's mode at the last look (note_session_mode)
+    std::function<void(const RejoinKey&)> on_key_;
+    std::function<void(const RejoinKey&)> on_forget_key_;
     std::vector<ChatLine> pending_chat_;    // the waiting room's lines that take_pregame_chat() has not handed out
     bool chat_status_mirror_{true};         // the lines of the room are shown on the status line too (set_chat_status_mirror)
 
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void()> on_wake_;
+    std::function<std::unique_ptr<Connection>()> link_maker_;      // (the tests: make_link)
     std::function<void()> on_tick_;
     std::function<void()> on_prediction_dropped_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;

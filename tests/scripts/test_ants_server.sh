@@ -6,10 +6,12 @@
 # dropped within seconds while a match in another room keeps its clock, the control interface answers, and the process neither grows nor stays busy; the server stops cleanly on
 # SIGTERM and writes the result file of a room that was closed. The last section is the server that HOLDS the seat of a player whose connection is lost (protocol 10, --reconnect):
 # a small TCP proxy (flaky_proxy.py) between a client and the server is cut, the room pauses and names the absent seat, nothing runs while it waits, and at the cap the seat is dropped
-# and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence and finds its link closed when it wakes up. The part ends with the RESTART RECORDS (docs/NETWORK_PORT.md): the server keeps
+# and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence, and when it wakes up it finds its link closed and comes back by itself (the game's own
+# way back: a new link, a Hello with its key). The part ends with the RESTART RECORDS (docs/NETWORK_PORT.md): the server keeps
 # a record of a running match in a folder of its own (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of it and killed with SIGKILL, and started again over the same folder: the room
-# comes back with its code, paused, every seat held, and the record goes when the owner closes the room; a thousand records of a long match are replayed while the server answers /busy within 2 s of its
-# launch and takes a new room's player at once (the restore does not block it); the options of the records are refused or accepted in the options part.
+# comes back with its code, paused, every seat held, the two real games (stopped meanwhile, so that they do not come back before the room is looked at) wake up and find the room by themselves, and the
+# record goes when the owner closes the room; a thousand records of a long match are replayed while the server answers /busy within 2 s of its launch and takes a new room's player at once
+# (the restore does not block it); the options of the records are refused or accepted in the options part.
 # The sections below are PARTS: they run one after the other (the default), or alone with `--part NAME` (repeatable), each with its own server on its own ports and its own
 # scratch folder, so that ./run_tests.sh and the CI can run them at the same time. `--list-parts` prints the names.
 PART_NAMES="options rooms secret demo reconnect"
@@ -623,9 +625,9 @@ fi
 
 # ---- part reconnect: the server that holds the seat of a player whose connection is lost (protocol 10, --reconnect) -----------------------------------------------
 if part_enabled reconnect; then
-# The game's own clients do not come back yet (that is release B: a native client whose link is cut is lost, the message below says so). What is tested here is the SERVER, with
-# real programs: a client behind a proxy that is cut, a client that is stopped. The room pauses for everybody and names the seat, nothing runs while it waits, the cap (60 s here)
-# drops the seat and the match goes on for the others.
+# What is tested here is the SERVER, with real programs: a client behind a proxy that is cut (and that refuses it for an hour: its way back finds no door), a client that is stopped. The room
+# pauses for everybody and names the seat, nothing runs while it waits, the cap (60 s here) drops the seat and the match goes on for the others. The game's own way back is the clients' part: the
+# victim keeps trying (it does not leave the match), the stopped client comes back by itself when it wakes up.
 RC_PORT="$(free_port)"
 RC_CTL="$(free_port)"
 RC_PROXY_PORT="$(free_port)"
@@ -709,7 +711,7 @@ RC_TB="$(rc_field "$RC_CODE" ticks)"
 check "nothing advances while the room waits (ticks $RC_TA, $RC_TB six seconds later)" "$([ "$((RC_TB - RC_TA))" -le 2 ]; echo $?)"
 check "the others are still in the match, paused, not dropped: the room is running and still holds the seat" "$([ "$(rc_field "$RC_CODE" state)" = "running" ] && [ "$(rc_field "$RC_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_CODE" drops_by_cap)" = "0" ]; echo $?)"
 check "the paused time grows (paused_seconds at least 5)" "$([ "$(rc_field "$RC_CODE" paused_seconds)" -ge 5 ]; echo $?)"
-check "the victim's game says that the connection was lost (a native client does not rejoin yet: release B)" "$(grep -q 'connection to the other players was lost' "$WORK/hv.log"; echo $?)"
+check "the victim's game does not leave the match: it keeps trying to come back (no lost-connection message), though the proxy has refused it since the cut" "$(grep -q 'connection to the other players was lost' "$WORK/hv.log"; [ $? -ne 0 ]; echo $?)"
 
 # the second room: stop a client for 15 s
 kill -STOP "$RC_FROZEN_PID"
@@ -726,14 +728,22 @@ check "10 s of silence is a loss: the second room pauses, $RC_STOP_PAUSED_AFTER 
 check "... between 9.5 and 13 s after it (its last word, and the check every pass)" "$(python3 -c "print(0 if 9.5 <= $RC_STOP_PAUSED_AFTER <= 13 else 1)")"
 check "the absent seat is the stopped client (Frozen), absent and not lagging" "$(rc_field "$RC_STOP_CODE" absent | python3 -c 'import sys, json; a = json.load(sys.stdin); sys.exit(0 if len(a) == 1 and a[0]["name"] == "Frozen" and a[0]["state"] == "absent" else 1)'; echo $?)"
 sleep 5
+check "the second room holds the seat of the stopped client until it wakes up: paused, running, nobody dropped" "$([ "$(rc_field "$RC_STOP_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ] && [ "$(rc_field "$RC_STOP_CODE" rejoins)" = "0" ]; echo $?)"
 kill -CONT "$RC_FROZEN_PID"
-RC_FROZEN_LOST=1
-for _ in $(seq 1 100); do
-    grep -q 'connection to the other players was lost' "$WORK/sf.log" && { RC_FROZEN_LOST=0; break; }
+RC_FROZEN_BACK=1
+for _ in $(seq 1 150); do
+    [ "$(rc_field "$RC_STOP_CODE" rejoins)" = "1" ] && { RC_FROZEN_BACK=0; break; }
     sleep 0.2
 done
-check "the client that wakes up finds its old link closed and ends with the lost connection message (release B will make it rejoin)" "$RC_FROZEN_LOST"
-check "the second room is still paused and holds the seat" "$([ "$(rc_field "$RC_STOP_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ]; echo $?)"
+check "the client that wakes up finds its old link closed and comes back by itself with its key: the second room counts the rejoin" "$RC_FROZEN_BACK"
+check "... its game did not leave the match: no lost-connection message" "$(grep -q 'connection to the other players was lost' "$WORK/sf.log"; [ $? -ne 0 ]; echo $?)"
+RC_STOP_RESUMED=1
+for _ in $(seq 1 150); do
+    [ "$(rc_field "$RC_STOP_CODE" paused)" = "false" ] && { RC_STOP_RESUMED=0; break; }
+    sleep 0.2
+done
+check "the second room goes on after its resume countdown (8 s here): not paused, nobody absent, still running, nobody dropped" "$RC_STOP_RESUMED"
+check "... and its three players are in it again: nobody absent, no drop by the cap or a vote" "$([ "$(rc_field "$RC_STOP_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ] && [ "$(rc_field "$RC_STOP_CODE" drops_by_cap)" = "0" ] && [ "$(rc_field "$RC_STOP_CODE" drops_by_vote)" = "0" ]; echo $?)"
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RC_STOP_CODE" > /dev/null
 
 # the cap: 60 s after the cut the absent seat is dropped, the match goes on
@@ -781,9 +791,10 @@ check "the server's log names the rooms' ends with what the pause came to, and n
 
 # ---- restart records (docs/NETWORK_PORT.md "Restart records"): a match survives a restart of the server ---------------------------------------------------------------
 # The real program with real game clients. The server keeps a record of the running room (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of the match
-# (it exits at once and leaves the record), is started again over the same folder (the room is back, paused, every seat held: the clients' game cannot rejoin by itself yet, so they ended
-# with the lost-connection message), is killed with SIGKILL and started once more (the record that the restored room went on writing restores again), and when the owner closes the room
-# its record goes. The C++ test of the suite (S3.95, S3.96) does the same with two machines that DO find the room again; here the players are the real games.
+# (it exits at once and leaves the record), is started again over the same folder (the room is back, paused, every seat held), is killed with SIGKILL and started once more (the record that the
+# restored room went on writing restores again), and when the owner closes the room its record goes. The two games are stopped (kill -STOP) the moment the server is gone, so that they do not
+# come back before the restored room has been looked at; when they are let go (kill -CONT) they find the room by themselves, with their keys, and the match goes on (the game's own way back:
+# the C++ tests S3.95, S3.96 do the same with machines of the test, RJ1.2 with the NetGame).
 RR_PORT="$(free_port)"
 RR_CTL="$(free_port)"
 RR_CODE="E2E-KEEP-$RANDOM"
@@ -851,8 +862,9 @@ SERVER_PID=""
 check "SIGTERM stops the server with status 0, $RR_STOPPED_AFTER s after the signal (well inside docker's grace)" "$([ "$RR_STOP_RC" = "0" ] && python3 -c "import sys; sys.exit(0 if $RR_STOPPED_AFTER < 3 else 1)"; echo $?)"
 check "its log says that the record was made durable and kept" "$(grep -q 'stopped: 1 restart record(s) made durable and kept' "$WORK/rr_server.log"; echo $?)"
 check "the record is still there" "$([ "$(ls "$RR_DIR" | grep -c '\.restart$')" = "1" ]; echo $?)"
+for p in $RR_PIDS; do kill -STOP "$p" 2> /dev/null; done      # (the games look for the server every two seconds: stopped, they do not come back before the room is looked at)
 sleep 1
-check "the two games saw their connection lost and ended (they cannot rejoin by themselves yet: the next release)" "$(grep -q 'connection to the other players was lost' "$WORK/k1.log" && grep -q 'connection to the other players was lost' "$WORK/k2.log"; echo $?)"
+check "the two games did not leave the match when the server went (no lost-connection message): they are stopped here, waiting for it" "$(grep -q 'connection to the other players was lost' "$WORK/k1.log" "$WORK/k2.log"; [ $? -ne 0 ]; echo $?)"
 # started again over the same folder: the room is back, paused, both seats held
 rr_start
 check "the server started again over the same results folder is up" "$?"
@@ -873,6 +885,18 @@ check "the server killed with SIGKILL and started again is up" "$?"
 rr_wait_room "$RR_CODE"
 check "the room is restored a second time from the same record, with the same turns" "$([ "$(rr_field "$RR_CODE" restored.turns)" = "$RR_RESTORED_TURNS" ] && [ "$(rr_field "$RR_CODE" paused)" = "true" ]; echo $?)"
 cp "$RR_DIR"/*.restart "$WORK/rr_source.restart"      # (the record of the room that was restored twice: the section at the end makes many of it)
+# the two games wake up: each finds its link closed, makes a new one and says Hello with its key; the restored room gives them the match and goes on
+for p in $RR_PIDS; do kill -CONT "$p" 2> /dev/null; done
+RR_BACK=1
+for _ in $(seq 1 200); do
+    [ "$(rr_field "$RR_CODE" rejoins)" = "2" ] && [ "$(rr_field "$RR_CODE" paused)" = "false" ] && { RR_BACK=0; break; }
+    sleep 0.2
+done
+check "the two games find the restored room by themselves with their keys: two rejoins, the room is not paused any more" "$RR_BACK"
+RR_TE="$(rr_field "$RR_CODE" turns)"
+sleep 2
+check "the match goes on after the restart: the room seals turns again ($RR_TE, then $(rr_field "$RR_CODE" turns) two seconds later)" "$([ "$(rr_field "$RR_CODE" turns)" -gt "$RR_TE" ]; echo $?)"
+check "neither game ended with the lost-connection message, nor reported an error" "$(grep -qiE 'connection to the other players was lost|out of sync|failed|error' "$WORK/k1.log" "$WORK/k2.log"; [ $? -ne 0 ]; echo $?)"
 # the owner closes the room: its record goes
 check "closing the room (DELETE) answers 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RR_URL/rooms/$RR_CODE")" = "200" ]; echo $?)"
 check "... and its record is gone" "$([ "$(ls "$RR_DIR" | grep -c '\.restart$')" = "0" ]; echo $?)"
@@ -995,7 +1019,7 @@ wait "$SERVER_PID" 2> /dev/null
 SERVER_PID=""
 
 echo "  [reconnect e2e] the link cut: the room paused after $RC_PAUSED_AFTER s; the cap dropped the seat $RC_CAPPED_AFTER s after the cut (60 s of pause); a client stopped: the room paused $RC_STOP_PAUSED_AFTER s later"
-echo "  [restart e2e] SIGTERM $RR_STOPPED_AFTER s to exit with the record kept; the room came back with $RR_RESTORED_TURNS turns, held its two seats, and came back again after a SIGKILL"
+echo "  [restart e2e] SIGTERM $RR_STOPPED_AFTER s to exit with the record kept; the room came back with $RR_RESTORED_TURNS turns, held its two seats, and came back again after a SIGKILL; the two games found it by themselves"
 echo "  [restore e2e] $RR_CLONES records of a long match were replayed in $RR_RESTORE_S s of the server's launch; meanwhile /busy answered after $RR_BUSY_S s (${RR_BUSY_MATCHES:-?} matches waited) and a new room's player had its Welcome $RR_WELCOME_S s after the launch"
 fi
 
