@@ -107,7 +107,12 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.sabotage) sabotage_.step(context);
     if (plan.hatches) hatch_.step(context);
     if (plan.gate) gate_.step(context);
-    else aid_.step(context);                                                          // (the gate task owns every carrier, a hit one included)
+    if (plan.gate) {                                                                   // (review experiment) the economy's rescue is only off while the gate really guides
+        HarvestTask::Params hp = harvest_.params();
+        hp.rescue = !gate_.usable();
+        harvest_.set_params(hp);
+    }
+    if (!plan.gate || !gate_.usable()) aid_.step(context);                                                          // (the gate task owns every carrier, a hit one included)
     harvest_.step(context);
 }
 

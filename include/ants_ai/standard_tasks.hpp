@@ -516,6 +516,8 @@ public:
     uint32_t parks() const noexcept { return parks_; }
     uint32_t user_failures() const noexcept { return user_failures_; }
     uint32_t user() const noexcept { return user_; }
+    /// (review experiment) the gate could guide at the last look: the hill has room at its doorstep
+    bool usable() const noexcept { return usable_; }
     const std::deque<int>& exits() const noexcept { return exits_; }
     /// The order in which the queue-row tiles (0, 1, 2) are used as slots, -1 for none
     std::array<int, 3> slot_order() const noexcept { return {slot_order_[0], slot_order_[1], slot_order_[2]}; }
@@ -564,6 +566,7 @@ private:
     uint32_t takeovers_{0};
     uint32_t parks_{0};
     uint32_t user_failures_{0};
+    bool usable_{false};
 };
 
 // ---- rank 2: the guard -------------------------------------------------------------------------------------------------------------------------------------

@@ -1813,6 +1813,7 @@ void GateTask::choose_slots(TaskContext& c, const Geometry& g) {
 void GateTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
+    usable_ = false;
     const HillInfo& hill = c.map.hill(c.seat);
     if (!hill.present || !v.has_grid()) return;
     Geometry g;
@@ -1839,6 +1840,7 @@ void GateTask::step(TaskContext& c) {
         }
     }
     if (slots_walkable < 2 || !buffer_found) return;                                   // no room at the doorstep: the engine's flow stays
+    usable_ = true;
     track_exits(c, g);
 
     // what the ants do: a bite that runs, the entrance occupied, a clip that was first seen now

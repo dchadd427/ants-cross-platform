@@ -474,6 +474,7 @@ void HarvestTask::step(TaskContext& c) {
             ap = ask_now(p.index);                                                          // a pile that has been eaten into has another footprint: its click tile of the start may no longer be food; one with a fire wall near it may be cut off
             if (!ap.reachable()) continue;
         }
+        if (v.has_grid() && v.grid().has_powerup_at(ap.click)) continue;                  // (review experiment) the controller refuses a plain click onto a power-up tile: such a pile cannot be worked
         const int32_t trip = MapInfo::trip_ticks_for_cost(ap.cost);
         if (trip < 0) continue;
         // The endgame veto: points that an ant carries when the clock runs out are lost, and the order leaves up to max_delay ticks from now
