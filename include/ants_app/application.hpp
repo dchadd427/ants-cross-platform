@@ -87,6 +87,12 @@ struct ApplicationConfig {
     std::string settings_path;
     uint32_t random_seed{1337};
     bool start_in_map_select{true};
+    /// --play: the setup screen's own START at its first visit. A game that was chosen elsewhere (the web page's Play button, with a map and opponents) goes through the loading screen and the
+    /// quick help as every game does, and then starts `default_map_path` (--map; else the map that the setup screen highlights) the way the setup screen's START does: the "Get ready" dialog,
+    /// the start sound, the music, --bot's seats (--map alone is the direct start of the tests and the screenshots, which has none of that). Only that first visit is skipped (the way back to the
+    /// setup screen after a match is the setup screen), and only for a game of this machine without the start menu: --host, --join, --join-url and the menu leave it alone. parse_arguments
+    /// gives a game that names its map with --map the setup screen's way (start_in_map_select).
+    bool play_at_once{false};
     bool skip_intro{false};
     std::string screenshot_path{""};
     int screenshot_frames{5};
@@ -603,6 +609,7 @@ private:
     uint32_t closing_click_ms_{0};                         // ... closed at this time (SDL's ticks)
     bool menu_gesture_pending_{false};                     // a click changed the screen of a run with a menu: the rest of that click sequence is not for the screen that is up now
     uint32_t menu_gesture_ms_{0};                          // ... at this time (SDL's ticks)
+    bool play_pending_{false};                             // --play: the first visit of the setup screen starts the chosen map at once (enter_map_select), once
 
     // 20 Hz Discrete Simulation Timing
     uint64_t last_frame_time_{0};

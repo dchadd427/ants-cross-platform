@@ -377,8 +377,12 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--bot " + std::string(argv[i]) + ": " + why;
             }
+        } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
+            cfg.play_at_once = true;
+            mode_given = true;
         }
     }
+    if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
 #if !defined(__EMSCRIPTEN__)
     if (menu_forced) {
         // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
@@ -673,6 +677,7 @@ bool Application::init(const ApplicationConfig& config) {
     menu_enabled_ = config_.start_menu && config_.start_in_map_select && !networked;
 #endif
     if (menu_enabled_) init_start_menu();
+    play_pending_ = config_.play_at_once && !networked && !menu_enabled_;      // --play: a game of this machine, without the menu, starts its map at the first visit of the setup screen
 
     // --audio-focus: a window that opened behind the others never receives "focus lost": it starts silent and holds its music until it gets the focus
     if (config_.audio_follows_focus && !config_.headless && window_ != nullptr) {
@@ -1200,6 +1205,10 @@ void Application::enter_map_select() {
     // The new screen's buttons are fresh objects in the up state; the INPUT task of the original sends the pointer to the top window in the very input run that
     // follows (FUN_0102653f), so a button under the pointer shows its hover picture before the first frame. Nothing is reset or moved: the pointer is one global.
     if (mouse_has_moved_ && !pointer_outside_) map_select_.handle_mouse_motion(mouse_screen_x_, mouse_screen_y_);
+    if (play_pending_) {                                     // --play: the first visit of the setup screen is its START (the match, the dialog, the sounds); the way back after it is the screen
+        play_pending_ = false;
+        start_game(config_.default_map_path);
+    }
 }
 
 // The loading screen ends: the start menu when this run has one, else the screens that follow it

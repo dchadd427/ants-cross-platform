@@ -863,6 +863,20 @@ int main(int argc, char** argv) {
         }
     } TEST_END();
 
+    TEST_CASE("A1.1b --play does not skip the start menu: a game with the menu starts at the menu, whatever --play says (the flag is for a game that was chosen elsewhere: the web page's Play button)") {
+        TempDir temp;
+        Server server;
+        Application app;
+        ApplicationConfig cfg = menu_config(server.address(), temp.file("settings.ini"));
+        cfg.play_at_once = true;
+        cfg.default_map_path = "Original-Ants/Maps/TINY.LVL";
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_menu_enabled());
+        ASSERT_EQ(app.state(), AppState::StartMenu);
+        ASSERT_FALSE(app.match_running());
+        ASSERT_TRUE(app.net() == nullptr && app.bots() == nullptr);
+    } TEST_END();
+
     TEST_CASE("A1.2 Settings: the name, the bots and the host's map and players survive a restart (two Application instances on one settings file); the server key is read, never written, and --server beats it; --name beats the stored name; a bad stored server is the default") {
         TempDir temp;
         const std::string settings = temp.file("settings.ini");

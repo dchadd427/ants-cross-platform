@@ -1532,6 +1532,86 @@ void run_suite_7_input_controls() {
         std::filesystem::remove(unplayable, ignore);
     } TEST_END();
 
+    TEST_CASE("7.6d --play: the first visit of the setup screen starts the chosen map at once, through the setup screen's own START path (the \"get ready\" dialog, --bot's seats), in the web page's order too (loading screen, quick help, the match); nothing else changes: no flag keeps the setup screen, the direct start of --map has no dialog, and the way back to the setup screen after a match is the setup screen") {
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        std::vector<ants::ai::BotSpec> bots(3);
+        for (uint8_t i = 0; i < 3; ++i) {
+            bots[i].seat = static_cast<uint8_t>(i + 1);
+            bots[i].level = ants::ai::Level::Medium;
+        }
+        const auto config = [&](bool play, bool with_bots) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            cfg.default_map_path = tiny;
+            cfg.play_at_once = play;
+            if (with_bots) cfg.bots = bots;
+            return cfg;
+        };
+        {   // without the flag: the setup screen, as ever
+            Application app;
+            ASSERT_TRUE(app.init(config(false, true)));
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            ASSERT_FALSE(app.match_running());
+            ASSERT_TRUE(app.bots() == nullptr);
+            app.shutdown();
+        }
+        {   // with it, alone: the match of the chosen map, through START's path: its dialog is up
+            Application app;
+            ASSERT_TRUE(app.init(config(true, false)));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_TRUE(app.match_running());
+            ASSERT_TRUE(app.hud().is_match_start_modal_active());
+            ASSERT_TRUE(app.bots() == nullptr);
+            ASSERT_EQ(app.sim().grid().width(), 31);                                  // TINY.LVL is 31 x 31 tiles (the setup screen's own choice would have been TREASURE)
+            // the one visit is the first: the way back to the setup screen is the setup screen, and a second visit starts nothing
+            app.return_to_map_select();
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            ASSERT_FALSE(app.match_running());
+            app.shutdown();
+        }
+        {   // with it and the three bots: they are seated and run
+            Application app;
+            ASSERT_TRUE(app.init(config(true, true)));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_TRUE(app.match_running());
+            ASSERT_TRUE(app.hud().is_match_start_modal_active());
+            ASSERT_TRUE(app.bots() != nullptr);
+            app.shutdown();
+        }
+        {   // the direct start of --map (the tests' and the screenshots'): the match at once, without that dialog
+            Application app;
+            ApplicationConfig cfg = config(false, false);
+            cfg.start_in_map_select = false;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_FALSE(app.hud().is_match_start_modal_active());
+            app.shutdown();
+        }
+        {   // the web page's order: the loading screen, then the quick help, then the match, with no setup screen in between
+            const std::filesystem::path settings = temp_path_of_this_run("ants_play_settings").replace_extension(".ini");
+            SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");
+            SDL_SetHint(SDL_HINT_AUDIODRIVER, "dummy");
+            Application app;
+            ApplicationConfig cfg = config(true, true);
+            cfg.headless = false;
+            cfg.skip_intro = false;
+            cfg.settings_path = settings.string();
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Loading);
+            app.finish_loading();
+            ASSERT_EQ(app.state(), AppState::QuickHelp);
+            app.quick_help_key(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_TRUE(app.match_running());
+            ASSERT_TRUE(app.hud().is_match_start_modal_active());
+            ASSERT_TRUE(app.bots() != nullptr);
+            app.shutdown();
+            std::error_code ignore;
+            std::filesystem::remove(settings, ignore);
+        }
+    } TEST_END();
+
     TEST_CASE("7.7 Cursor Simulated in Screen Middle On Game Start (No Unwanted Edge Panning)") {
         Application app;
         ApplicationConfig cfg;
