@@ -7360,6 +7360,58 @@ void run_persist_review_tests() {
         }
 #endif
     } TEST_END();
+
+    TEST_CASE("S3.112 A Record Is Opened Without A Race (L8 Of The Review): The File That Is Looked At Is The File That Is Read (One Open, Then The Descriptor Is Asked What It Is And How Big): A Link, A Folder And A Pipe Named Like A Record Are Refused As Not Regular Files (The Pipe Without Waiting On It: The Read Happens In A Child With An Alarm), A Missing Name Is Unreadable, A File Over The Limit Is Refused From The Size Of The Open File, An Empty File Is No Record, A Good One Reads In Both Modes") {
+        RestartConfig cfg = test_restart_config("persist-112");
+        RestartStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        auto w = store.create(sample_head("OP-1"), why);
+        ASSERT_TRUE(w != nullptr);
+        for (uint32_t n = 0; n < 30; ++n) ASSERT_TRUE(w->append_turn(sample_turn(n)));
+        ASSERT_TRUE(w->sync());
+        const std::string path = w->path();
+        w.reset();
+        const RestartLoaded good = read_restart_record(path, cfg.max_record_bytes);
+        ASSERT_TRUE(good.ok() && good.turn_count == 30);
+        const fs::path dir = cfg.dir;
+        const auto read_at = [&](const char* name) { return read_restart_record((dir / name).string(), uint64_t{1} << 20); };
+        // a folder, a name that is not there
+        fs::create_directories(dir / "room-DIR-00000002.restart");
+        const RestartLoaded folder = read_at("room-DIR-00000002.restart");
+        ASSERT_TRUE(folder.status == RestartLoaded::Status::Unreadable);
+        ASSERT_TRUE(read_at("room-NONE-00000003.restart").status == RestartLoaded::Status::Unreadable);
+        // the limit comes from the size of the file that was opened, to the byte
+        ASSERT_TRUE(read_restart_record(path, good.file_bytes - 1).status == RestartLoaded::Status::TooBig);
+        ASSERT_TRUE(read_restart_record(path, good.file_bytes).ok());
+        // an empty file is no record; a good one reads in both modes, and the bytes are those of the file
+        write_all_bytes(dir / "room-EMPTY-00000005.restart", {});
+        ASSERT_TRUE(read_at("room-EMPTY-00000005.restart").status == RestartLoaded::Status::NotARecord);
+        const RestartLoaded streamed = read_restart_record(path, cfg.max_record_bytes, RestartRead::Streaming);
+        ASSERT_TRUE(streamed.ok() && streamed.turn_count == 30 && streamed.bytes.size() == good.file_bytes && streamed.turns.empty());
+#ifndef _WIN32
+        ASSERT_TRUE(folder.why.find("not a regular file") != std::string::npos && folder.why.find("a folder") != std::string::npos);
+        // a link to a good record is not followed (a followed link would read as that record)
+        fs::create_symlink(path, dir / "room-LINK-00000001.restart");
+        const RestartLoaded linked = read_at("room-LINK-00000001.restart");
+        ASSERT_TRUE(linked.status == RestartLoaded::Status::Unreadable && linked.why.find("not a regular file") != std::string::npos && linked.why.find("a link") != std::string::npos);
+        fs::create_symlink((dir / "room-NONE-00000003.restart").string(), dir / "room-DANGLING-00000006.restart");      // (and a link to nothing is the same refusal)
+        ASSERT_TRUE(read_at("room-DANGLING-00000006.restart").why.find("a link") != std::string::npos);
+        // a pipe that nobody writes to: opening it for reading would wait for ever; the child has five seconds (the alarm ends a hang)
+        const std::string fifo = (dir / "room-FIFO-00000004.restart").string();
+        ASSERT_EQ(::mkfifo(fifo.c_str(), 0600), 0);
+        const pid_t pid = ::fork();
+        ASSERT_TRUE(pid >= 0);
+        if (pid == 0) {
+            ::alarm(5);
+            const RestartLoaded r = read_restart_record(fifo, uint64_t{1} << 20);
+            ::_exit(r.status == RestartLoaded::Status::Unreadable && r.why.find("not a regular file") != std::string::npos ? 0 : 3);
+        }
+        int wait_status = 0;
+        ASSERT_EQ(::waitpid(pid, &wait_status, 0), pid);
+        ASSERT_TRUE(WIFEXITED(wait_status) && WEXITSTATUS(wait_status) == 0);
+#endif
+    } TEST_END();
 }
 
 

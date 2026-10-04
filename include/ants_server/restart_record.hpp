@@ -153,7 +153,8 @@ enum class RestartRead : uint8_t { Whole, Streaming };
 /// Parses the bytes of a record (no file: the tests and the fuzzer). Never crashes, whatever the bytes are; what it keeps is bounded by the input and by kRestartMaxTurns (the turns of a record
 /// that passes are at most that many: about 58 MB decoded); with `keep_turns` false they are checked and counted and not kept (turn_count, checks, good_bytes are all the same).
 RestartLoaded parse_restart_record(const uint8_t* data, size_t size, bool keep_turns = true);
-/// Reads the file at `path` (a regular file, not a symbolic link, at most `max_bytes` bytes) and parses it. `path` is kept in the result.
+/// Reads the file at `path` (a regular file, not a symbolic link, at most `max_bytes` bytes) and parses it. `path` is kept in the result. The file is opened once, without following a link and without
+/// waiting on a pipe, and the open file is what is checked (its type, its size) and read: nothing can be swapped in between a look at the name and the read.
 RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes, RestartRead mode = RestartRead::Whole);
 /// Gives `fn` every turn of a record that was read, in order, until it says false: the kept turns, or (a Streaming record) the turns decoded again from the file's bytes, one at a time. True when `fn`
 /// was given every turn; false when it said stop, or when the bytes cannot be decoded (cannot be: they were checked when the record was read).

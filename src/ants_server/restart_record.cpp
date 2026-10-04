@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <system_error>
 #include <utility>
 
@@ -354,31 +353,6 @@ RestartLoaded parse_restart_record(const uint8_t* data, size_t size, bool keep_t
     return r;
 }
 
-RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes, RestartRead mode) {
-    RestartLoaded r;
-    r.path = path;
-    const auto fail = [&](RestartLoaded::Status status, std::string why) {
-        r.status = status;
-        r.why = std::move(why);
-        return r;
-    };
-    std::error_code ec;
-    const fs::file_status st = fs::symlink_status(path, ec);
-    if (ec || !fs::is_regular_file(st)) return fail(RestartLoaded::Status::Unreadable, "the record is not a regular file");
-    const uint64_t size = static_cast<uint64_t>(fs::file_size(path, ec));
-    if (ec) return fail(RestartLoaded::Status::Unreadable, "the record cannot be looked at");
-    if (size > max_bytes) return fail(RestartLoaded::Status::TooBig, "the record is bigger than a record may be (" + std::to_string(size) + " bytes)");
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return fail(RestartLoaded::Status::Unreadable, "the record cannot be opened");
-    std::vector<uint8_t> bytes(static_cast<size_t>(size));
-    if (size > 0) in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
-    if (!in && size > 0) return fail(RestartLoaded::Status::Unreadable, "the record cannot be read");
-    RestartLoaded loaded = parse_restart_record(bytes.data(), bytes.size(), mode == RestartRead::Whole);
-    loaded.path = path;
-    if (mode == RestartRead::Streaming && loaded.ok()) loaded.bytes = std::move(bytes);        // (the replay decodes the turns from these, one at a time)
-    return loaded;
-}
-
 bool for_each_restart_turn(const RestartLoaded& rec, const std::function<bool(const net::TurnMsg&)>& fn) {
     if (rec.bytes.empty()) {                                                      // the turns were kept
         for (const net::TurnMsg& turn : rec.turns) {
@@ -590,6 +564,100 @@ void native_sync_dir(const std::string& dir) {
 #endif
 }
 
+// Opens a file for reading so that the file that is looked at is the file that is read. POSIX: O_NOFOLLOW (a link is not followed), O_NONBLOCK (a pipe cannot hold the open), and the DESCRIPTOR is
+// asked what it is and how big (fstat). Windows: a link (a reparse point) is opened as itself and not followed, and the handle is asked. False, with nothing left open, when the file cannot be
+// opened; `regular` is false when it can and is no regular file (`why` says what it is).
+bool native_open_read(const std::string& path, NativeFile& f, uint64_t& size, bool& regular, std::string& why) {
+    regular = true;
+#ifdef _WIN32
+    HANDLE h = INVALID_HANDLE_VALUE;
+    for (int tries = 0; tries < 100; ++tries) {                       // (a virus scanner may hold a file for a moment: a sharing violation is tried again for up to half a second)
+        h = CreateFileW(fs::path(path).wstring().c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (h != INVALID_HANDLE_VALUE || GetLastError() != ERROR_SHARING_VIOLATION) break;
+        Sleep(5);
+    }
+    if (h == INVALID_HANDLE_VALUE) {
+        why = windows_error("cannot open the file");
+        return false;
+    }
+    BY_HANDLE_FILE_INFORMATION info;
+    if (!GetFileInformationByHandle(h, &info)) {
+        why = windows_error("cannot look at the file");
+        CloseHandle(h);
+        return false;
+    }
+    if ((info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0) {
+        CloseHandle(h);
+        regular = false;
+        why = (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 ? "a link" : "a folder";
+        return false;
+    }
+    size = (static_cast<uint64_t>(info.nFileSizeHigh) << 32) | static_cast<uint64_t>(info.nFileSizeLow);
+    f.handle = h;
+    return true;
+#else
+    int flags = O_RDONLY | O_CLOEXEC | O_NONBLOCK;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    const int fd = ::open(path.c_str(), flags);
+    if (fd < 0) {
+        if (errno == ELOOP || errno == EMLINK) {                      // (what O_NOFOLLOW says of a symbolic link)
+            regular = false;
+            why = "a link";
+        } else {
+            why = "cannot open the file (" + errno_text(errno) + ")";
+        }
+        return false;
+    }
+    struct stat st;
+    if (::fstat(fd, &st) != 0) {
+        why = "cannot look at the file (" + errno_text(errno) + ")";
+        ::close(fd);
+        return false;
+    }
+    if (!S_ISREG(st.st_mode)) {
+        ::close(fd);
+        regular = false;
+        why = S_ISDIR(st.st_mode) ? "a folder" : "not a file of data";
+        return false;
+    }
+    size = static_cast<uint64_t>(st.st_size);
+    f.fd = fd;
+    return true;
+#endif
+}
+
+// Reads exactly `size` bytes; a file that has become shorter than it was when it was opened fails
+bool native_read_exact(NativeFile& f, uint8_t* out, size_t size, std::string& why) {
+    size_t done = 0;
+#ifdef _WIN32
+    while (done < size) {
+        DWORD got = 0;
+        if (!ReadFile(static_cast<HANDLE>(f.handle), out + done, static_cast<DWORD>(std::min<size_t>(size - done, size_t{1} << 20)), &got, nullptr)) {
+            why = windows_error("cannot read");
+            return false;
+        }
+        if (got == 0) {
+            why = "the file is shorter than it was";
+            return false;
+        }
+        done += static_cast<size_t>(got);
+    }
+#else
+    while (done < size) {
+        const ssize_t n = ::read(f.fd, out + done, size - done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) {
+            why = n < 0 ? "cannot read (" + errno_text(errno) + ")" : "the file is shorter than it was";
+            return false;
+        }
+        done += static_cast<size_t>(n);
+    }
+#endif
+    return true;
+}
+
 // Deletes a file; false, with the reason, when the delete failed (a file that is not there is deleted already)
 bool native_remove(const std::string& path, std::string* why = nullptr) {
     std::error_code ec;
@@ -665,6 +733,34 @@ constexpr const char* kRefusedName = "refused";
 bool has_suffix(const std::string& s, const std::string& suffix) { return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0; }
 
 }  // namespace
+
+RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes, RestartRead mode) {
+    RestartLoaded r;
+    r.path = path;
+    const auto fail = [&r](RestartLoaded::Status status, std::string reason) {
+        r.status = status;
+        r.why = std::move(reason);
+        return r;
+    };
+    // The file that is opened is the file that is looked at and read: no path is looked at twice, so there is nothing to swap in between.
+    NativeFile f;
+    uint64_t size = 0;
+    bool regular = true;
+    std::string why;
+    if (!native_open_read(path, f, size, regular, why)) return fail(RestartLoaded::Status::Unreadable, regular ? "the record cannot be opened: " + why : "the record is not a regular file (" + why + ")");
+    if (size > max_bytes) {
+        native_close(f);
+        return fail(RestartLoaded::Status::TooBig, "the record is bigger than a record may be (" + std::to_string(size) + " bytes)");
+    }
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    const bool read_ok = size == 0 || native_read_exact(f, bytes.data(), bytes.size(), why);
+    native_close(f);
+    if (!read_ok) return fail(RestartLoaded::Status::Unreadable, "the record cannot be read: " + why);
+    RestartLoaded loaded = parse_restart_record(bytes.data(), bytes.size(), mode == RestartRead::Whole);
+    loaded.path = path;
+    if (mode == RestartRead::Streaming && loaded.ok()) loaded.bytes = std::move(bytes);        // (the replay decodes the turns from these, one at a time)
+    return loaded;
+}
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The writer
