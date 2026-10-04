@@ -1536,6 +1536,52 @@ void run_prediction_tests() {
         ASSERT_TRUE(all_equal(t));
         ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
     } TEST_END();
+
+    TEST_CASE("N3.30 Prediction: The Lead Begins At The Lag That The Jitter Buffer And The Round Trip Promise (One Tick Less Than The Delay Counts, Plus The Bias), Then Learns The Lag Of The Orders That Really Came Back: Twelve Orders Of A Guest, The Lead Stands One Tick Above The Median Lag, Nothing Is Lost, Nothing Is Chased, And The Machines End Identical") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(30, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting(); }, kUntilRunning));
+        t.run(1000);
+        Prediction& p = *bob.net.prediction();
+        // before the first order: the promise. The jitter buffer holds one turn and the round trip of a loopback is a few ms: the delay that an order is going to have is 25 + 50 + the ping,
+        // 50 ms of which are the tick that the delay counts and the lag does not; the lag is one tick, and the lead one tick above it
+        ASSERT_TRUE(bob.net.runner() != nullptr && bob.net.runner()->buffer_turns() == 1u);
+        ASSERT_TRUE(bob.net.ping_ms().value_or(0u) < 30u);
+        ASSERT_EQ(p.learned_lag_ticks(), 0u);
+        ASSERT_EQ(p.lead_ticks(), 2u);
+        // twelve orders, 400 ms apart, to the ants of Bob's in turn
+        std::vector<uint32_t> ants;
+        for (const auto& a : bob.sim.get_world_state().ants) {
+            if (a.player_id == 1) ants.push_back(a.id);
+        }
+        ASSERT_TRUE(ants.size() >= 2);
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(open_goal_near_hill(bob.sim, 1, gx, gy));
+        for (int i = 0; i < 12; ++i) {
+            ASSERT_EQ(bob.net.submit(order(1, ants[static_cast<size_t>(i) % ants.size()], static_cast<int16_t>(gx + i % 3), static_cast<int16_t>(gy + i % 2))).status, sim::CommandResult::Status::Applied);
+            t.run(400);
+            if (i == 0) ASSERT_TRUE(p.learned_lag_ticks() >= 1u);                                // the first order came back and taught its lag
+        }
+        t.run(2500);                                                                            // (a lead that has to fall does so after 40 ticks)
+        const uint32_t lag = p.learned_lag_ticks();
+        ASSERT_TRUE(lag >= 1u && lag <= 3u);                                                     // a loopback: a turn or two
+        ASSERT_EQ(p.lead_ticks(), lag + 1u);                                                     // the lag and the bias
+        const Prediction::Stats& st = p.stats();
+        ASSERT_EQ(st.commands_lost, 0u);
+        ASSERT_TRUE(st.commands_predicted >= 12u);
+        ASSERT_TRUE(st.rebuilds <= 12u + 4u);                                                    // at most one correction an order (its own timing), and what the first orders cost before the lead had learned
+        ASSERT_TRUE(st.rebuilds >= 1u);
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+        ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
+    } TEST_END();
 }
 
 int main() {

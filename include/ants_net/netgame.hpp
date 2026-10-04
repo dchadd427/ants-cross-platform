@@ -300,7 +300,8 @@ private:
     void install_hooks();
     void make_prediction();
     void refresh_prediction();
-    /// What the player's order is going to take to reach the engine, in ms: the measured delay of the last orders, else the round trip, half a seal and the jitter buffer
+    /// The lag of the player's orders, as a delay in ms, until the prediction has learned it from the orders: the measured delay of the last orders, else the round trip, half a seal and the
+    /// jitter buffer, less the tick that the delay counts and the lag does not
     uint32_t expected_command_delay_ms() const;
     void shutdown_transport();
     void announce_room();

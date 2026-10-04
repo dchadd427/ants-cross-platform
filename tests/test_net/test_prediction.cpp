@@ -177,10 +177,15 @@ struct Scenario {
     bool predict{true};
     bool oracle_hashes{true};      // record the oracle's hash of every tick (the tests that compare with the oracle); off: only the engine runs (the property tests)
     uint32_t match_ms{720000};
-    Prediction::Config prediction{no_budget()};
-    static Prediction::Config no_budget() {                 // (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the budget set their own)
+    Prediction::Config prediction{rig_config()};
+    // The rig's prediction has the lead that the scenario names and keeps it (the tests hold a wrong lead to account, and the exact one to exactness): it does not learn its lead and has no bias
+    // (the tests of the learning and of the bias switch them on), and no budget (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the
+    // budget set their own)
+    static Prediction::Config rig_config() {
         Prediction::Config c;
         c.budget_ns = UINT64_MAX;
+        c.learn_lead = false;
+        c.lead_bias_ticks = 0;
         return c;
     }
 };
@@ -236,6 +241,8 @@ public:
     }
     // Hold the link: no turn reaches the client before step `until` (they arrive in a burst then)
     void hold_link_until(uint32_t until) { hold_until_ = until; }
+    // The orders that the player gives from now on are sealed this many steps after they were given (a link that got slower or faster)
+    void set_uplink(uint32_t steps) { sc_.uplink = steps; }
 
     void step(bool frame = true) {
         // 1. the server seals the turn of this step; the oracle runs it at once
@@ -1255,6 +1262,224 @@ void run_cue_tests() {
         ASSERT_TRUE(p.active() && !p.gave_up());
         ASSERT_TRUE(p.stats().over_budget >= 50);                                              // every tick was a strike ...
         ASSERT_EQ(p.stats().rebuilds, 0u);
+    } TEST_END();
+
+    TEST_CASE("RP8.1 The Lead Learns The Lag Of The Player's Own Orders: A Lead That Starts Too Low (One Tick Where The Orders Need Six) Costs The First Order A Chase And Then Is The Lag, With No Rebuild For The Orders That Follow; With A Bias Of One Every Order Costs One Rebuild That Moves The Ordered Ants On By A Tick, And Never Chases") {
+        for (uint32_t bias : {0u, 1u}) {
+            Scenario sc;
+            sc.seed = 110 + bias;
+            sc.buffer_turns = 3;
+            sc.down_delay = 1;
+            sc.uplink = 2;                                                                       // the lag of an order is 3 + 1 + 2 = 6 ticks
+            sc.lead_ms = 50;                                                                     // the estimate: one tick
+            sc.prediction.learn_lead = true;
+            sc.prediction.lead_bias_ticks = bias;
+            Rig rig(sc);
+            Lcg rng(110 + bias);
+            Prediction& p = *rig.prediction();
+            rig.check_derived(1);
+            rig.run(16);
+            ASSERT_EQ(p.lead_ticks(), 1u + bias);                                                // (no order yet: the estimate and the bias)
+            ASSERT_EQ(p.learned_lag_ticks(), 0u);
+            rig.issue(random_order(rng, rig.ids, 0));
+            rig.run(30);
+            ASSERT_EQ(p.learned_lag_ticks(), 6u);                                                // the first order taught it
+            ASSERT_EQ(p.lead_ticks(), 6u + bias);                                                // (it rises at once)
+            const uint64_t after_first = p.stats().rebuilds;
+            ASSERT_TRUE(after_first >= 1);                                                       // (the first order was chased: its turns passed it)
+            for (uint32_t i = 0; i < 10; ++i) {
+                rig.issue(random_order(rng, rig.ids, 0));
+                rig.run(18);
+            }
+            rig.run_quiet(30);
+            const uint64_t later = p.stats().rebuilds - after_first;
+            if (bias == 0) ASSERT_EQ(later, 0u);                                                 // the lead is the lag: every order lands where it is run
+            else ASSERT_EQ(later, 10u);                                                          // one tick too late for each: a rebuild, and never more
+            ASSERT_EQ(rig.derived_mismatches, 0u);
+            ASSERT_EQ(p.pending_orders(), 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("RP8.2 The Lag Is The Median Of The Last Five Orders: One Order That A Stall Held Up Does Not Move The Lead (Its Lag Is Bounded By The Longest Lead), A Lag That Has Changed For Good Does, And The Lead Rises At Once") {
+        Scenario sc;
+        sc.seed = 120;
+        sc.buffer_turns = 1;
+        sc.down_delay = 1;
+        sc.uplink = 1;                                                                           // the lag is 1 + 1 + the uplink: 3
+        sc.lead_ms = 150;
+        sc.prediction.learn_lead = true;
+        sc.prediction.lead_bias_ticks = 0;
+        sc.prediction.lag_fresh_ticks = 5000;
+        Rig rig(sc);
+        Lcg rng(120);
+        Prediction& p = *rig.prediction();
+        rig.run(16);
+        const auto order_with_uplink = [&](uint32_t uplink) {
+            rig.set_uplink(uplink);
+            rig.issue(random_order(rng, rig.ids, 0));
+            rig.run(uplink + 25);                                                                // (sealed, back, run)
+            return p.learned_lag_ticks();
+        };
+        // lags 3 3 3, then a stall (32: held to 12), 3 3, then the link is slower for good: 5 5 5 5
+        const uint32_t uplinks[10] = {1, 1, 1, 30, 1, 1, 3, 3, 3, 3};
+        const uint32_t expected[10] = {3, 3, 3, 3, 3, 3, 3, 5, 5, 5};                              // [3] [3 3] [3 3 3] [3 3 3 12] [.. 3] [3 3 12 3 3] [3 12 3 3 5] [12 3 3 5 5] ...
+        for (int i = 0; i < 10; ++i) {
+            const uint32_t learned = order_with_uplink(uplinks[i]);
+            ASSERT_EQ(learned, expected[i]);
+            if (i == 3) ASSERT_EQ(p.lead_ticks(), 3u);                                           // the stall did not move the lead
+            if (i == 7) ASSERT_EQ(p.lead_ticks(), 5u);                                           // the change did, at once
+        }
+    } TEST_END();
+
+    TEST_CASE("RP8.3 A Lag That Is Not Fresh Is Forgotten (lag_fresh_ticks): The Lead Goes Back To The Owner's Estimate Once The Orders Are Old, And The Orders That Come After A Quiet Spell Teach It Again") {
+        Scenario sc;
+        sc.seed = 121;
+        sc.buffer_turns = 1;
+        sc.down_delay = 1;
+        sc.uplink = 3;                                                                           // the lag is 5
+        sc.lead_ms = 100;                                                                        // the estimate: 2
+        sc.prediction.learn_lead = true;
+        sc.prediction.lead_bias_ticks = 0;
+        sc.prediction.lag_fresh_ticks = 60;
+        Rig rig(sc);
+        Lcg rng(121);
+        Prediction& p = *rig.prediction();
+        rig.run(16);
+        ASSERT_EQ(p.lead_ticks(), 2u);
+        rig.issue(random_order(rng, rig.ids, 0));
+        rig.run(30);
+        ASSERT_EQ(p.learned_lag_ticks(), 5u);
+        ASSERT_EQ(p.lead_ticks(), 5u);
+        rig.run_quiet(61);                                                                       // the lag is older than 60 ticks now
+        ASSERT_EQ(p.learned_lag_ticks(), 0u);
+        rig.run_quiet(5 * 40 + 5);                                                               // (the lead falls to the estimate one tick at a time, as it always does)
+        ASSERT_EQ(p.lead_ticks(), 2u);
+        rig.issue(random_order(rng, rig.ids, 0));
+        rig.run(30);
+        ASSERT_EQ(p.learned_lag_ticks(), 5u);                                                    // it learns again
+        ASSERT_EQ(p.lead_ticks(), 5u);
+    } TEST_END();
+
+    TEST_CASE("RP8.5 The Lead's Edges: A Prediction Told Nothing Starts At Two Ticks Of Lag Plus The Bias (Never Outside Its Bounds); Two Orders That Disagree Give The Upper One (A Lead Too Low Is The Worse Mistake); An Order Held Up For Ever Is Counted As The Longest Lead; The Bias On A Long Lag Stops At The Longest Lead") {
+        Rig rig(Scenario{});
+        Prediction::Config c = Scenario::rig_config();
+        {
+            Prediction fresh(rig.confirmed(), rig.runner(), c);                                  // no bias, nothing told: the estimate that stands in for a delay that is not known yet
+            ASSERT_EQ(fresh.lead_ticks(), 2u);
+            ASSERT_EQ(fresh.learned_lag_ticks(), 0u);
+        }
+        c.lead_bias_ticks = 3;
+        {
+            Prediction fresh(rig.confirmed(), rig.runner(), c);
+            ASSERT_EQ(fresh.lead_ticks(), 5u);
+        }
+        c.lead_bias_ticks = 9;
+        c.max_lead_ticks = 4;
+        {
+            Prediction fresh(rig.confirmed(), rig.runner(), c);
+            ASSERT_EQ(fresh.lead_ticks(), 4u);                                                   // 2 + 9 is out of bounds: the longest lead
+        }
+        c.max_lead_ticks = 12;
+        c.min_lead_ticks = 7;
+        c.lead_bias_ticks = 0;
+        {
+            Prediction fresh(rig.confirmed(), rig.runner(), c);
+            ASSERT_EQ(fresh.lead_ticks(), 7u);                                                   // ... and 2 is below the shortest
+        }
+        // two orders that disagree (lags 3 and 5): the median of two is the upper one
+        {
+            Scenario sc;
+            sc.seed = 125;
+            sc.buffer_turns = 1;
+            sc.down_delay = 1;
+            sc.lead_ms = 150;
+            sc.prediction.learn_lead = true;
+            sc.prediction.lead_bias_ticks = 0;
+            Rig two(sc);
+            Lcg rng(125);
+            two.run(16);
+            two.set_uplink(1);
+            two.issue(random_order(rng, two.ids, 0));
+            two.run(30);
+            ASSERT_EQ(two.prediction()->learned_lag_ticks(), 3u);
+            two.set_uplink(3);
+            two.issue(random_order(rng, two.ids, 0));
+            two.run(30);
+            ASSERT_EQ(two.prediction()->learned_lag_ticks(), 5u);
+        }
+        // orders that a stall holds up for ever (an uplink of 30 steps) are lags of the longest lead, however long they really took
+        {
+            Scenario sc;
+            sc.seed = 126;
+            sc.buffer_turns = 1;
+            sc.down_delay = 1;
+            sc.uplink = 30;
+            sc.lead_ms = 150;
+            sc.prediction.learn_lead = true;
+            sc.prediction.lead_bias_ticks = 0;
+            Rig stalled(sc);
+            Lcg rng(126);
+            stalled.run(16);
+            for (int i = 0; i < 3; ++i) {
+                stalled.issue(random_order(rng, stalled.ids, 0));
+                stalled.run(60);
+            }
+            ASSERT_EQ(stalled.prediction()->learned_lag_ticks(), 12u);
+            ASSERT_EQ(stalled.prediction()->lead_ticks(), 12u);
+        }
+        // a lag of 11 and a bias of 3: the lead stops at the longest one
+        {
+            Scenario sc;
+            sc.seed = 127;
+            sc.buffer_turns = 1;
+            sc.down_delay = 1;
+            sc.uplink = 9;
+            sc.lead_ms = 150;
+            sc.prediction.learn_lead = true;
+            sc.prediction.lead_bias_ticks = 3;
+            Rig edge(sc);
+            Lcg rng(127);
+            edge.run(16);
+            edge.issue(random_order(rng, edge.ids, 0));
+            edge.run(40);
+            ASSERT_EQ(edge.prediction()->learned_lag_ticks(), 11u);
+            ASSERT_EQ(edge.prediction()->lead_ticks(), 12u);
+        }
+    } TEST_END();
+
+    TEST_CASE("RP8.4 The Lead That Learns And Is Biased Keeps The Prediction Derived State: 16 Random Matches (a lag that changes, bursts, orders of every kind from every seat), The Predicted Engine Equals The One A Rebuild Would Make At Every Third Frame, And It Converges") {
+        uint32_t checks = 0;
+        for (uint32_t seed = 300; seed < 316; ++seed) {
+            Lcg rng(seed * 7919u);
+            Scenario sc;
+            sc.oracle_hashes = false;
+            sc.seed = seed;
+            sc.buffer_turns = 1 + rng.below(3);
+            sc.down_delay = rng.below(3);
+            sc.down_jitter = rng.below(3);
+            sc.uplink = rng.below(4);
+            sc.lead_ms = 50 * (1 + rng.below(5));
+            sc.prediction.learn_lead = true;
+            sc.prediction.lead_bias_ticks = rng.below(3);
+            Rig rig(sc);
+            rig.check_derived(3);
+            rig.run(sc.buffer_turns + sc.down_delay + 6);
+            for (uint32_t s = 0; s < 160; ++s) {
+                const uint32_t roll = rng.below(100);
+                if (roll < 12) rig.issue(random_order(rng, rig.ids, 0));
+                else if (roll < 24) rig.schedule(rig.step_no() + rng.below(5), random_order(rng, rig.ids, static_cast<uint8_t>(1 + rng.below(3))));
+                else if (roll < 27) rig.schedule(rig.step_no() + rng.below(5), random_unpredicted(rng, static_cast<uint8_t>(1 + rng.below(3))));
+                if (s % 50 == 25) rig.set_uplink(rng.below(6));
+                if (s % 60 == 30) rig.hold_link_until(rig.step_no() + 1 + rng.below(6));
+                rig.step();
+            }
+            rig.run_quiet(60);
+            checks += rig.derived_checks;
+            ASSERT_EQ(rig.derived_mismatches, 0u);
+            ASSERT_EQ(rig.prediction()->pending_orders(), 0u);
+            ASSERT_FALSE(rig.prediction()->stale());
+        }
+        ASSERT_TRUE(checks > 600);
     } TEST_END();
 }
 

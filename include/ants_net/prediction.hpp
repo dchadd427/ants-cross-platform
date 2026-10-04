@@ -34,6 +34,7 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <utility>
 #include <vector>
 
 #include "ants_net/lockstep.hpp"
@@ -58,6 +59,18 @@ public:
         uint64_t budget_ns{12ull * 1000ull * 1000ull};     // 12 ms: three quarters of a frame at 60 Hz (a rebuild is a few hundred microseconds on the shipped maps, R1)
         uint32_t budget_strikes{4};                        // (not one: a machine that is busy with something else stalls a frame now and then, and that is not the prediction's cost)
         uint32_t budget_window_ticks{200};                 // 10 s
+        // The lead learns from the player's own orders. When an order comes back in a turn, the number of ticks between the confirmed tick that it was given at and the tick that the host
+        // sealed it into is its LAG (it does not depend on the lead). The lead is the MEDIAN lag (the upper one of an even number) of the last `lag_samples` orders that are not older than
+        // `lag_fresh_ticks`, plus `lead_bias_ticks`: one odd order (a stall) does not move the lead for the orders that follow it. The delay that the owner measures (set_expected_delay_ms, as a
+        // lag) is what it is until there is an order to learn from. Off, the lead is the owner's estimate alone (the tests that hold a wrong lead to account).
+        bool learn_lead{true};
+        uint32_t lag_samples{5};
+        uint32_t lag_fresh_ticks{400};                     // 20 s
+        // The display stands this many ticks further ahead than the lag of the player's orders. An order is put at the display tick; with a bias of one it is run by the confirmed engine one tick
+        // BEFORE that, so when its turn comes it is corrected by one tick for the ordered ants (a rebuild that moves them one tick on, a few pixels) and the picture has had the order's first
+        // tick from the moment of the click: it shows what an order does 50 ms sooner than the lag alone would (measured: the ants stand up at 143 ms instead of 192), and the jitter of one
+        // tick in the lag never makes an order late, which is the correction that is seen (the ordered ants hover while the order is put at a later tick). With 0 an order lands where it will be run.
+        uint32_t lead_bias_ticks{1};
     };
 
     /// What the prediction did (for the tests and the measurements; nothing here is state)
@@ -111,10 +124,14 @@ public:
     /// the next on_tick().
     void set_suspended(bool suspended);
     bool suspended() const noexcept { return suspended_; }
-    /// The delay of the player's orders as the owner knows it (the measured one, or an estimate from the round trip and the jitter buffer), in ms: the lead is that many ticks, rounded. It rises
+    /// The lag of the player's orders as the owner knows it (the measured delay less the tick that it counts, or an estimate from the round trip and the jitter buffer), in ms: the lead is that
+    /// many ticks, rounded, plus Config::lead_bias_ticks, until the orders themselves have taught it their lag (Config::learn_lead). It rises
     /// at once and falls slowly (Config::lead_fall_after_ticks), so that the picture does not jump back and forth with the phase of the server's seals.
     void set_expected_delay_ms(uint32_t ms);
     uint32_t lead_ticks() const noexcept { return lead_; }
+    /// What the lead has learned from the player's own orders: the median lag of the fresh ones (see Config::learn_lead), 0 when there is none. The lead is this plus the bias, else the estimate
+    /// plus the bias
+    uint32_t learned_lag_ticks() const noexcept;
     /// Compare the picture before and after every rebuild (Stats::corrections...): costs a copy of the ants' positions, off by default
     void set_measure_corrections(bool on) noexcept { measure_corrections_ = on; }
     /// The runner moved to another session (host migration): the same runner object, but a caller that holds another one says so
@@ -177,6 +194,7 @@ private:
     void apply_commands_for(uint64_t tick);
     void capture_events(uint64_t tick, bool replay);
     void update_lead();
+    uint32_t wanted_lead() const noexcept;
     /// A rebuild or a run of predicted ticks took `ns`: over the budget it is a strike, and enough of them within the window end the prediction for this match
     void note_cost(uint64_t ns);
     void drop_lost_orders(uint64_t confirmed_tick);
@@ -199,6 +217,8 @@ private:
     std::deque<Pending> pending_;
     uint32_t lead_{3};
     uint32_t target_lead_{3};
+    uint32_t estimate_lag_{2};                    // the owner's estimate of the lag of an order (set_expected_delay_ms), in ticks
+    std::deque<std::pair<uint32_t, uint64_t>> lags_;      // (lag in ticks, the confirmed tick at which it was seen) of the last orders that came back in a turn
     uint32_t lead_low_ticks_{0};
     uint32_t generation_{0};
     bool measure_corrections_{false};

@@ -764,10 +764,18 @@ void NetGame::make_prediction() {
 // What an order of this player takes to reach the engine, in ms. The measured delay of the last orders when there is one (it includes everything: the way to the host, the wait for the
 // seal, the way back and the jitter buffer); before the first order, an estimate of the same things.
 uint32_t NetGame::expected_command_delay_ms() const {
-    if (const std::optional<uint32_t> measured = command_delay_ms()) return *measured;
-    const LockstepRunner* r = runner();
-    const uint32_t buffer = r != nullptr ? r->buffer_turns() : 1u;
-    return ping_ms().value_or(0u) + kTurnMs / 2u + buffer * kTurnMs;
+    uint32_t delay = 0;
+    if (const std::optional<uint32_t> measured = command_delay_ms()) {
+        delay = *measured;
+    } else {
+        const LockstepRunner* r = runner();
+        const uint32_t buffer = r != nullptr ? r->buffer_turns() : 1u;
+        delay = ping_ms().value_or(0u) + kTurnMs / 2u + buffer * kTurnMs;
+    }
+    // The LAG of an order is the number of ticks from the confirmed tick that it is given at to the tick that runs it, one tick fewer than the delay counts (the delay is measured up to the
+    // moment that the tick which applies the order runs, the lag stops at its start), as real orders show: a round trip of 0 ms has a delay of 83 ms and a lag of 1 tick, 60 ms 133 ms
+    // and 2, 200 ms 283 ms and 5. The prediction learns the lags themselves once there are orders (Prediction::Config::learn_lead); this is what it takes until then.
+    return delay > kTurnMs ? delay - kTurnMs : 0u;
 }
 
 // Once per update: the prediction is on only while the match simply follows the live stream. Every state in which the confirmed engine does not (a pause, a catch-up, a rejoin, a host

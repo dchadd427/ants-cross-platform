@@ -18,7 +18,7 @@ Prediction::Prediction(const sim::SimulationEngine& confirmed, const LockstepRun
     : confirmed_(&confirmed), runner_(&runner), cfg_(config) {
     cfg_.max_lead_ticks = std::max<uint32_t>(cfg_.max_lead_ticks, 1u);
     cfg_.min_lead_ticks = std::min(cfg_.min_lead_ticks, cfg_.max_lead_ticks);
-    lead_ = target_lead_ = std::clamp<uint32_t>(3u, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
+    lead_ = target_lead_ = std::clamp<uint32_t>(estimate_lag_ + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
 }
 
 const std::vector<sim::Command>& Prediction::applied_at_display() const noexcept {
@@ -61,12 +61,30 @@ void Prediction::set_suspended(bool suspended) {
 
 void Prediction::set_expected_delay_ms(uint32_t ms) {
     const uint32_t ticks = (ms + sim::TICK_MS / 2u) / sim::TICK_MS;
-    target_lead_ = std::clamp<uint32_t>(ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
+    estimate_lag_ = ticks;
+    target_lead_ = wanted_lead();
+}
+
+uint32_t Prediction::learned_lag_ticks() const noexcept {
+    const uint64_t c = confirmed_tick();
+    std::vector<uint32_t> fresh;
+    for (const auto& lag : lags_) {
+        if (c <= lag.second + cfg_.lag_fresh_ticks) fresh.push_back(lag.first);
+    }
+    if (fresh.empty()) return 0;
+    std::sort(fresh.begin(), fresh.end());
+    return fresh[fresh.size() / 2];                                  // (the middle one; the upper of the two in the middle when there is an even number)
+}
+
+uint32_t Prediction::wanted_lead() const noexcept {
+    const uint32_t learned = learned_lag_ticks();
+    return std::clamp<uint32_t>((learned != 0 ? learned : estimate_lag_) + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
 }
 
 // The lead rises at once and falls slowly: a lead that followed the phase of the server's seals (the delay of an order varies by one tick with the moment it was given) would move the whole
 // picture back and forth by a tick
 void Prediction::update_lead() {
+    target_lead_ = wanted_lead();
     if (target_lead_ > lead_) {
         lead_ = target_lead_;
         lead_low_ticks_ = 0;
@@ -294,6 +312,10 @@ void Prediction::on_turn(const TurnMsg& turn) {
         size_t i = 0;
         while (i < pending_.size() && !(pending_[i].command == cmd)) ++i;
         if (i == pending_.size()) continue;                          // (an order of a kind that is not predicted, or one that was given while the prediction was off)
+        if (cfg_.learn_lead) {                                       // what the lead should have been for this order: the ticks from the confirmed tick that it was given at to its own
+            lags_.emplace_back(static_cast<uint32_t>(std::min<uint64_t>(n >= pending_[i].born ? n - pending_[i].born : 0u, cfg_.max_lead_ticks)), confirmed_tick());
+            while (lags_.size() > cfg_.lag_samples) lags_.pop_front();
+        }
         if (pending_[i].tick != n) own_timing = true;                // sealed at another tick than the one at which the prediction applied it
         if (i > 0) {                                                 // the orders before it were given earlier and have not been sealed: the host did not take them
             stats_.commands_lost += i;
