@@ -265,3 +265,101 @@ All killed. Three of the first run's verdicts changed when the tests did: K3 (re
 
 - **The picture of other players' things is ahead of their sound.** A fight, an explosion, a hit is shown by the predicted engine `lead` ticks ahead of the confirmed one and heard when the confirmed engine makes it: at a round trip of 60 ms the lead is 3 - 4 ticks, so the sound of a blow comes 150 - 200 ms after its picture (before the prediction both were late together). Playing the cues that the predicted engine makes from turns that are already in hand (certain: the jitter buffer's turns, no guess) would shorten that by the buffer's one or two ticks, and is not built: it is a second class of cues with the same bookkeeping, for a gain of 50 - 100 ms of a skew that the owner can judge first.
 - A phantom (a cue of an own ant's action that the confirmed engine never made) is possible only after a correction, is counted, and costs one short sound: a harvest heard for food that another player's ant took first.
+
+## R5: the switches and the safety (`--prediction`, the settings' key, the budget, the hidden page, the felt delay)
+
+### Built
+
+| Item | Where |
+|---|---|
+| **The switch**: `--prediction on \| off` and `--no-prediction` (the same as `off`), the settings' key `prediction` (`on` / `off`, `yes` / `no`, `true` / `false`, `1` / `0`, in any case: a key that the owner of the settings file writes, nothing in the game does), and `?prediction=off` in the web page's address (the page gives the game `--prediction off`; nothing else of the address reaches the game through it). On by default. The command line beats the settings; a bad value is refused on the command line (the game does not start, with the reason) and reported and ignored in the settings. A game of one machine never predicts (it has no delay): the switch is for matches of the network. The choice goes to every `NetGame` that the application makes (`attach_net`). The settings' key is `prediction` inside the game's own settings (the browser keeps those in its local storage under the game's one key), so it cannot collide with the page's keys (`ants.aspect.v2`, `ants.pointerlock`, `ants.name`) | `parse_switch`, `Application::choose_prediction`, `ApplicationConfig::prediction` / `prediction_given`, `attach_net` (`src/ants_app/application.cpp`, `application_menu.cpp`), `web/shell.html` |
+| **The states in which it is off** (`NetGame::refresh_prediction`, once per update; it begins again with the first tick after the cause is gone): the user's switch, the application's (`set_prediction_suspended`), a match that is not in its Playing phase, a desync, a client session that is not in its Normal mode (a host change, a rejoin), a client that is catching up (a server's lag policy), a held runner (a pause), and **the pre-start**: nothing is predicted before the first executed turn, so the "Get ready to play!" dialog of protocol 12 has no predicted engine. **A hidden web page** suspends it too: its wake-ups step the match and no picture needs the predicted engine | `src/ants_net/netgame.cpp`, `Application::pump_network` (`page_hidden_ \|\| background_stepping_`) |
+| **The budget** (the automatic fallback): a rebuild, or the ticks that a confirmed tick makes the prediction run, that take longer than `Prediction::Config::budget_ns` (12 ms: three quarters of a frame at 60 Hz; a rebuild is 0.04 ms on the shipped maps) is a strike; 4 strikes within 200 confirmed ticks (10 s) end the prediction **for the rest of the match** (`gave_up()`: the confirmed engine is shown, orders go as they did before the prediction, the console says so once). It does not come back: a prediction that flapped on and off would be worse than none, and a machine that cannot afford it once will not be able to later in a bigger match. The budget is per machine (one machine giving up does not touch the others). `NetGame::set_prediction_budget` and `default_prediction_budget_ns` are for the tests: a test process that plays matches on a busy machine stalls now and then, which is not the prediction's cost, so the mains of the suites that play matches raise the default | `Prediction::note_cost`, `src/ants_net/prediction.cpp`, `NetGame` |
+| **The felt delay** (`net::FeltDelayMeter`, `include/ants_net/latency.hpp`): what the click feels while the prediction is on, from the frame that took the order to the end of the first frame after the predicted engine's next tick (the median of the last five; the orders are found by the count of predicted commands). The corner's "delay" shows it while predicting (a dash until an order has been felt, and ten seconds after the last one) and the network's delay otherwise (`Application::corner_delay_ms`). The network's delay is not shown while the prediction is on: it is the time that the confirmed engine waits, which the picture no longer does (`NetGame::command_delay_ms()` still measures it, and the prediction's estimate of the lag starts from it) | `include/ants_net/latency.hpp`, `Application::note_orders` (`OrdersNoted` in the mouse and key handlers), `post_tick`, `render_frame` |
+| Tests: RP7.1 - RP7.3 (suite 2.27), N3.29 (`test_netgame`), N9.37 - N9.39 (`test_latency`), PA4 - PA6 (suite 3.21) | `tests/test_net/test_prediction.cpp`, `tests/test_net/test_netgame.cpp`, `tests/test_net/test_latency.cpp`, `tests/test_app/test_prediction_app.cpp` |
+
+### What the tests hold the switches to
+
+- **RP7.1** the budget (a budget of one nanosecond): four strikes end the prediction at once and for good, the confirmed engine is shown, an order is left to the caller (`submit` returns false and applies nothing), a suspension and a resume do not bring it back, and the match (the confirmed engine, the turns, the hashes) is untouched. **RP7.2** the budget runs out in the middle of an order (the rebuild that the order asks for is the strike that ends it): the order is left to the caller and nothing is applied to an engine that was dropped. **RP7.3** strikes that are spread out do not add up (a window of nothing forgets each at the next tick: a prediction whose every tick is over the budget but whose ticks come alone never gives up).
+- **N3.29** a real `NetGame` whose budget nothing meets loses the prediction and nothing else (it shows its confirmed engine, an order goes the old way with `predict_order_ack`'s answer, the match runs on and every machine ends identical); the other machine of the room goes on predicting.
+- **N9.37 - N9.39** the meter: the time from the frame that took the order to the end of the first frame after the next predicted tick, orders of one frame share it and each is felt from its own frame, the median of five (one odd order does not show), an order whose effect is never drawn is forgotten after five seconds, the waiting list is bounded.
+- **PA4** `parse_switch` (every spelling, anything else refused), the command line (`--prediction on` / `off`, `--no-prediction`, a missing or bad value is a start-up error), the settings' key (read, a bad value ignored and reported), the command line wins; off, the match shows the confirmed engine and nothing is predicted. **PA5** a hidden page: suspended at once, again with the next tick when it is shown. **PA6** the corner: a dash until an order has been felt, then the felt delay (less than a tick and a frame), a dash again when it is stale, the network's delay when the prediction is off.
+
+### Mutants (G1 - G8, G7b, G7c edit `prediction.cpp`, run against `test_prediction`; N13 edits `netgame.cpp`, run against `test_netgame`; H1 - H10 edit `application.cpp` / `application_menu.cpp`, run against `test_prediction_app`)
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `G1_never_gives_up` | the strikes never end the prediction | KILLED by RP7.1, RP7.2 |
+| `G2_one_strike_ends_it` | a single strike ends the prediction | KILLED by RP7.1, RP7.2, RP7.3 |
+| `G3_window_not_pruned` | strikes of any age add up | KILLED by RP7.3 |
+| `G4_gives_up_but_keeps_running` | the prediction that has given up is not stopped | KILLED by RP7.1, RP7.2 |
+| `G5_begins_again_after_giving_up` | a prediction that has given up begins again with the next tick | KILLED by RP7.1, RP7.2 |
+| `G6_rebuilds_are_free` | the cost of a rebuild is not counted | KILLED by RP7.1, RP7.2 |
+| `G7_submit_uses_a_prediction_that_ended` | an order goes on with a prediction that its own rebuild has ended | SURVIVED (alone; killed with G7b, see below) |
+| `G7b_submit_applies_the_order_to_a_prediction_that_ended` | an order is applied to a prediction that its own run of ticks has ended | SURVIVED (alone; killed with G7) |
+| `G7c_submit_goes_on_after_the_prediction_ended` | both guards gone | KILLED by RP7.2 |
+| `G8_runs_are_free` | the cost of the ticks that are run on is not counted | KILLED by RP7.1, RP7.3 |
+| `N13_budget_not_given` | the `NetGame`'s budget is not given to the prediction | KILLED by N3.29 |
+| `H1_prediction_wanted_ignored` | the application's choice is not given to the `NetGame` | KILLED by PA4 |
+| `H2_no_prediction_option_ignored` | `--no-prediction` does not turn it off | KILLED by PA4 |
+| `H3_settings_key_ignored` | the settings' key `prediction` is not read | KILLED by PA4 |
+| `H4_settings_beat_the_command_line` | the settings' key wins over the command line | KILLED by PA4 |
+| `H5_hidden_page_keeps_predicting` | a hidden page's prediction is not suspended | KILLED by PA5 |
+| `H6_felt_ticks_not_told` | the felt delay is not told that a tick of the predicted engine has run | KILLED by PA6 |
+| `H7_felt_frames_not_told` | the felt delay is not told that a frame has been drawn | KILLED by PA6 |
+| `H8_mouse_orders_not_noted` | an order that a mouse button gives is not looked at | KILLED by PA6 |
+| `H9_corner_delay_is_always_the_network` | the corner shows the network's delay while predicting | KILLED by PA6 |
+| `H10_corner_delay_never_a_dash` | the corner shows the network's delay while predicting and nothing has been felt (no dash) | KILLED by PA6 |
+
+G7 and G7b are the two guards that an order needs after the budget has ended the prediction (the first after the rebuild that the order asks for, the second after the ticks that it runs): each covers for the other, because either guard alone stops the order from being applied to an engine that was dropped, so no test can tell one from the other. Together (G7c) they are killed (RP7.2). They are redundant by design (a guard at each place that can end the prediction), and each stays.
+
+### Where this differs from the design, and why
+
+- **The fallback is for the rest of the match, not a flap.** The design said "an automatic fallback to off when a rebuild exceeds a frame budget". A prediction that switched itself back on when the load fell would pull the picture back and forth by `lead` ticks each time; a machine that cannot afford the rebuilds once will not afford them in a larger match later. The console says so once.
+- **The readout shows the felt delay while the prediction is on, and the network's delay only while it is off** ("and the network delay where it helps": it does not help: with the prediction on, the network's delay is the time that the confirmed engine waits, which the screen no longer does, so showing it next to the felt one would suggest that the click still waits that long).
+- **The pre-start is not a state that is switched off, it is the absence of the engine**: the prediction begins with the first executed turn (protocol 12's dialog has not run one), so there is nothing to suspend.
+
+## R6: the lead that learns, the measurements, and the chain from the click to the picture
+
+### The lead learns the lag of the player's own orders
+
+R2 gave the lead from the owner's delay estimate (`NetGame::command_delay_ms()`: the median of the last five measured delays, else the ping, half a seal and the jitter buffer), rounded to ticks. Measured on real orders (the application over real sockets with a relay of a chosen delay, virtual time), that estimate is **one tick longer than the order's lag**: the corner's delay is measured up to the moment the tick that applies the order has run, the lag (the confirmed ticks from the one the order was given at to the tick the host sealed it into) stops at its start. A round trip of 0 ms has a delay of 83 ms and a lag of 1, 60 ms 133 ms and 2, 200 ms 283 ms and 5. A lead of `round(delay / 50)` therefore was `lag + 1` by accident, and the measured gain of the prediction (the ants stand up at 143 ms) came from that extra tick; a lead exactly equal to the lag (the "obvious" fix) gives 192 ms, the same as a game of one machine. The design decision is to keep the tick **on purpose** and make the lead exact:
+
+| Item | Where |
+|---|---|
+| `Prediction` records the **lag of every own order that comes back in a turn** (`n - born`: the sealed tick minus the confirmed tick at which the order was given; bounded by the longest lead) with the confirmed tick at which it was seen. `learned_lag_ticks()`: the **median of the last five** that are not older than 400 ticks (20 s), the upper one of an even number (a lead that is too low, which makes the order chased, is the worse mistake: R2), 0 when there is none. The lead is that lag **plus `lead_bias_ticks` (1)**, else the owner's estimate plus the bias; it rises at once and falls after 40 ticks, as before, and stays between 1 and 12. One order that a stall held up does not move the lead for the orders after it, a lag that has changed for good does after three orders | `include/ants_net/prediction.hpp` (`learn_lead`, `lag_samples`, `lag_fresh_ticks`, `lead_bias_ticks`), `src/ants_net/prediction.cpp` (`on_turn`, `learned_lag_ticks`, `wanted_lead`, `update_lead`) |
+| `NetGame::expected_command_delay_ms()` (the estimate until an order has taught the lag, and after a quiet spell of 20 s) is now the **lag as a delay**: the measured delay, or ping + half a seal + the jitter buffer, less the tick that the delay counts and the lag does not | `src/ants_net/netgame.cpp` |
+| **The bias, and what it costs**: an order is put at the display tick; with a bias of one it is put one tick after the tick that the host seals it into, so when its turn arrives one cheap rebuild moves the ordered ants one tick on (about 4 px, `rebuilds_own_timing`: one per order, 0.04 ms), and in exchange the picture has shown the order's first tick from the click (the ants stand up at 143 ms instead of 192), a lag that jitters by one tick never makes an order late (the correction that IS seen then is the ordered ants hovering back and forth while the order is chased turn by turn) and a lead one tick too long costs less than one a tick too short | measured below |
+| Tests: RP8.1 - RP8.6 (suite 2.27) and N3.30 (`test_netgame`); the rig's own configuration keeps learning and bias off, so RP1 - RP7 hold the lead to account as before | `tests/test_net/test_prediction.cpp`, `tests/test_net/test_netgame.cpp` |
+
+What the tests hold: **RP8.1** a lead that starts too low (one tick where the orders need six) costs the first order a chase and is then the lag, with no rebuild for the orders after it (bias 0), exactly one rebuild an order with the bias; **RP8.2** the median of the last five over a sequence with a stall, then a lag that changes for good (the lead rises at once); **RP8.3** a lag that is not fresh is forgotten and the owner's estimate is the lead again, and new orders teach it again; **RP8.4** 16 random matches with learning and a random bias keep the predicted engine equal to its derivation (`derived_hash`) at every third frame, and converge; **RP8.5** the edges (a prediction told nothing starts at two ticks of lag plus the bias and stays inside its bounds, two orders that disagree give the upper one, orders held up for ever count as the longest lead, the bias on a long lag stops at the longest lead); **RP8.6** the product's defaults are the documented numbers (five orders, 400 ticks, bias 1, bounds 1 and 12, fall after 40, lost after 100, budget 12 ms, four strikes in 200); **N3.30** in a real match of two `NetGame`s the lead begins at the lag that the jitter buffer promises (two ticks: a lag of one plus the bias) and, after twelve real orders, is the learned lag plus one, with no order lost and at most one correction an order.
+
+### Mutants (L1 - L18 edit `prediction.cpp`, run against `test_prediction`; N14, N16 - N18 edit `netgame.cpp` / `prediction.hpp`, run against `test_netgame`)
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `L1_learning_off` | the orders that come back teach the lead nothing | KILLED by RP8.1, RP8.2, RP8.3, RP8.5 |
+| `L2_lag_is_the_largest` | the lag of the last orders is the largest of them (a stall moves the lead) | KILLED by RP8.2 |
+| `L3_lag_is_the_smallest` | the lag of the last orders is the smallest of them | KILLED by RP8.2, RP8.5 |
+| `L4_lag_is_the_lower_median` | the lag of an even number of orders is the lower one in the middle | KILLED by RP8.5 |
+| `L5_no_bias` | the lead is the lag itself (no tick of bias) | KILLED by RP8.1, RP8.5 |
+| `L6_old_lags_never_forgotten` | a lag that is not fresh is counted all the same | KILLED by RP8.3 |
+| `L6b_lags_stamped_with_tick_zero` | a lag is stamped with the tick 0 (it is old as soon as the match is) | KILLED by RP8.3 |
+| `L7_lag_counted_from_the_display_tick` | the lag is counted from the tick at which the order was put in the predicted engine, not from the confirmed tick that it was given at | KILLED by RP8.1, RP8.2, RP8.3, RP8.5 |
+| `L8_window_unbounded` | every order that ever came back counts | KILLED by RP8.2 |
+| `L9_window_of_one` | only the last order counts | KILLED by RP8.2 |
+| `L10_window_keeps_the_oldest` | the window forgets the newest order, not the oldest | KILLED by RP8.2 |
+| `L11_estimate_fixed` | before the first order the lead ignores the owner's estimate | KILLED by RP1.3, RP2.1, RP2.3, RP3.1, RP3.2, RP6.3, RP6.5, RP8.1 |
+| `L12_learned_lag_ignored` | the lead is always the owner's estimate | KILLED by RP8.1, RP8.2, RP8.3, RP8.5 |
+| `L13_lag_not_bounded` | a lag is not bounded by the longest lead | KILLED by RP8.5 |
+| `L14_lead_not_bounded_above` | the lead has no longest value | KILLED by RP1.3, RP8.5 |
+| `L15_lead_not_bounded_below` | the lead has no shortest value | KILLED by RP1.3 |
+| `L16_constructor_ignores_the_estimate` | a prediction that has been told nothing starts at three ticks, as the first version did | KILLED by RP8.5 |
+| `L17_estimate_one_tick_high` | the owner's delay is turned into a lag one tick too long | KILLED by RP1.3, RP2.1, RP2.3, RP3.1, RP3.2, RP6.3, RP6.5, RP8.1, RP8.3 |
+| `L18_target_not_refreshed_by_the_tick` | the lead's target follows the owner's delay only, not the orders | KILLED by RP8.1, RP8.2, RP8.3, RP8.5 |
+| `N14_estimate_counts_the_turn` | the delay that the owner tells is the delay itself (a tick more than the lag) | KILLED by N3.30 |
+| `N16_default_does_not_learn` | the lead of a match does not learn from the orders | KILLED by N3.30 |
+| `N17_default_has_no_bias` | the lead of a match has no bias | KILLED by N3.30 |
+| `N18_default_window_of_one` | the lead of a match counts the last order only | SURVIVED the first run (every real order of N3.30 has the same lag); killed by RP8.6 (the defaults are pinned) |
+
+(Equivalent mutants that were not run: the `0u` of `n >= born ? n - born : 0u` is unreachable (an order cannot be sealed in a tick before the confirmed tick that it was given at: the turns that were sealed before were already run), the guard is there against an unsigned underflow; the `<=` of the freshness test against `<` differs for an order that is exactly 400 ticks old, one tick of twenty seconds.)

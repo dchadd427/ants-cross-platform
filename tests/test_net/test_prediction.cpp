@@ -597,6 +597,7 @@ void run_correction_tests() {
         ASSERT_EQ(st.corrections, 1u);
         ASSERT_TRUE(st.corrections_visible == 1u && st.ants_moved >= 1u);                    // the foreign ants stood elsewhere after the correction
         ASSERT_TRUE(st.max_move_px > 0 && st.max_move_px <= 64);                             // by a few ticks of walking, never more
+        ASSERT_TRUE(st.move_px_total >= st.max_move_px && st.move_px_total <= st.ants_moved * st.max_move_px);      // (the sum of the moves lies between the largest one and the count times it)
         ASSERT_OK(verify_min(rig, t + sc.down_delay + 1, 20));                                  // from the frame of the turn's arrival on, every frame is the oracle's
     } TEST_END();
 
@@ -1447,6 +1448,21 @@ void run_cue_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Median Of The Last Five Orders No Older Than 400 Ticks Plus One Tick Of Bias, Between 1 And 12 Ticks, Falls After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks") {
+        const Prediction::Config c;
+        ASSERT_TRUE(c.learn_lead);
+        ASSERT_EQ(c.lag_samples, 5u);
+        ASSERT_EQ(c.lag_fresh_ticks, 400u);
+        ASSERT_EQ(c.lead_bias_ticks, 1u);
+        ASSERT_EQ(c.min_lead_ticks, 1u);
+        ASSERT_EQ(c.max_lead_ticks, 12u);
+        ASSERT_EQ(c.lead_fall_after_ticks, 40u);
+        ASSERT_EQ(c.pending_timeout_ticks, 100u);
+        ASSERT_EQ(c.budget_ns, 12ull * 1000ull * 1000ull);
+        ASSERT_EQ(c.budget_strikes, 4u);
+        ASSERT_EQ(c.budget_window_ticks, 200u);
+    } TEST_END();
+
     TEST_CASE("RP8.4 The Lead That Learns And Is Biased Keeps The Prediction Derived State: 16 Random Matches (a lag that changes, bursts, orders of every kind from every seat), The Predicted Engine Equals The One A Rebuild Would Make At Every Third Frame, And It Converges") {
         uint32_t checks = 0;
         for (uint32_t seed = 300; seed < 316; ++seed) {
@@ -1483,11 +1499,86 @@ void run_cue_tests() {
     } TEST_END();
 }
 
+// --measure: how often and how much the prediction corrects the picture (not a test: it prints tables and checks nothing). Seat 0 is the player whose screen it is; the other seats up to the
+// number of players give random orders at a steady rate (a person gives one every second or two: the table has 0.5 and 2 a second for each of them), and the player's own orders come at the
+// rate in the table. The link has a round trip of about 60 - 100 ms (a jitter buffer of one turn, a turn that takes one step to arrive and an order that takes one step to be sealed, a step
+// of jitter unless the line says none), the prediction is the product's (it learns its lead; bias one unless the line says another), and a ten minute match is played (12,000 ticks) for
+// every line. What a correction is: a rebuild after which at least one ant stands elsewhere at the display tick than it did before (Prediction::set_measure_corrections).
+struct MeasureLine {
+    double own_rate;
+    uint32_t players;
+    double foreign_rate;
+    uint32_t bias;
+    uint32_t jitter;
+    bool stops{true};       // false: no Stop orders (the orders of a match are mostly moves and attacks; a Stop is the one order whose tick decides on which tile an ant halts)
+};
+
+void measure_line(const MeasureLine& line, uint32_t seed) {
+    Scenario sc;
+    sc.seed = seed;
+    sc.buffer_turns = 1;
+    sc.down_delay = 1;
+    sc.down_jitter = line.jitter;
+    sc.uplink = 1;
+    sc.oracle_hashes = false;
+    sc.prediction.learn_lead = true;
+    sc.prediction.lead_bias_ticks = line.bias;
+    sc.prediction.lag_fresh_ticks = 400;
+    Rig rig(sc);
+    rig.prediction()->set_measure_corrections(true);
+    Lcg rng(sc.seed * 31u + 7u);
+    const uint32_t steps = 12000;
+    uint32_t foreign_orders = 0;
+    rig.run(16);
+    for (uint32_t s = 0; s < steps; ++s) {
+        if (rng.below(100000) < static_cast<uint32_t>(line.own_rate * 5000.0)) {                                                   // a rate a second, 20 ticks a second: probability rate / 20 per tick
+            Command order = random_order(rng, rig.ids, 0);
+            while (!line.stops && order.type == CommandType::Stop) order = random_order(rng, rig.ids, 0);
+            rig.issue(order);
+        }
+        for (uint32_t seat = 1; seat < line.players; ++seat) {
+            if (rng.below(100000) < static_cast<uint32_t>(line.foreign_rate * 5000.0)) {
+                Command order = random_order(rng, rig.ids, static_cast<uint8_t>(seat));
+                while (!line.stops && order.type == CommandType::Stop) order = random_order(rng, rig.ids, static_cast<uint8_t>(seat));
+                rig.schedule(rig.step_no() + 1 + rng.below(2), order);
+                ++foreign_orders;
+            }
+        }
+        rig.step();
+    }
+    const Prediction::Stats& st = rig.prediction()->stats();
+    const double minutes = static_cast<double>(steps) * 0.05 / 60.0;
+    std::cout << std::fixed << std::setprecision(1) << " " << std::setw(5) << line.own_rate << " | " << std::setw(7) << line.players << " x " << std::setw(4) << line.foreign_rate << " | " << std::setw(4) << line.bias
+              << " | " << std::setw(6) << line.jitter << (line.stops ? "" : " (no Stop)") << " | " << std::setw(10) << rig.own_orders << " | " << std::setw(14) << foreign_orders << " | " << std::setw(8) << st.rebuilds_own_timing << " / "
+              << std::setw(4) << st.rebuilds_foreign << " / " << st.rebuilds_other << " | " << std::setw(10) << static_cast<double>(st.corrections_visible) / minutes << " | " << std::setw(8)
+              << (st.corrections_visible != 0 ? static_cast<double>(st.ants_moved) / static_cast<double>(st.corrections_visible) : 0.0) << " | " << std::setw(6)
+              << (st.ants_moved != 0 ? static_cast<double>(st.move_px_total) / static_cast<double>(st.ants_moved) : 0.0) << " / " << std::setw(2) << st.max_move_px << " | " << std::setprecision(3)
+              << (st.rebuilds != 0 ? static_cast<double>(st.rebuild_ns_total) / 1e6 / static_cast<double>(st.rebuilds) : 0.0) << " / " << static_cast<double>(st.rebuild_ns_max) / 1e6 << " | "
+              << (st.ticks_advanced != 0 ? static_cast<double>(st.advance_ns_total) / 1e6 / static_cast<double>(st.ticks_advanced) : 0.0) << " / " << static_cast<double>(st.advance_ns_max) / 1e6 << "\n";
+}
+
+void run_measure() {
+    const char* head =
+        "\n own/s | players x foreign/s | bias | jitter | own orders | foreign orders | rebuilds: own timing / foreign / other | visible/min | ants/corr | px mean / max | rebuild ms mean / max | tick ms mean / max\n"
+        " ------|---------------------|------|--------|------------|----------------|----------------------------------------|-------------|-----------|---------------|-----------------------|-------------------\n";
+    std::cout << head;
+    const MeasureLine foreign_lines[] = {{1.0, 1, 0.0, 1, 1}, {0.0, 2, 0.5, 1, 1}, {0.0, 2, 2.0, 1, 1}, {0.0, 4, 0.5, 1, 1}, {0.0, 4, 2.0, 1, 1},
+                                         {1.0, 2, 0.5, 1, 1}, {1.0, 2, 2.0, 1, 1}, {1.0, 3, 0.5, 1, 1}, {1.0, 3, 2.0, 1, 1}, {1.0, 4, 0.5, 1, 1}, {1.0, 4, 2.0, 1, 1}};
+    uint32_t n = 0;
+    for (const MeasureLine& line : foreign_lines) measure_line(line, 1000u + 17u * n++);
+    std::cout << "\n the bias, own orders only (the same orders, the same link; a jitter of one step is the lag changing by a tick from order to order):\n" << head;
+    const MeasureLine bias_lines[] = {{1.0, 1, 0.0, 0, 0}, {1.0, 1, 0.0, 1, 0}, {1.0, 1, 0.0, 0, 1}, {1.0, 1, 0.0, 1, 1}, {1.0, 1, 0.0, 0, 2}, {1.0, 1, 0.0, 1, 2},
+                                      {1.0, 1, 0.0, 0, 0, false}, {1.0, 1, 0.0, 1, 0, false}, {1.0, 1, 0.0, 0, 2, false}, {1.0, 1, 0.0, 1, 2, false}};
+    for (const MeasureLine& line : bias_lines) measure_line(line, 2000u + 17u * n++);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
+    if (argc > 1 && std::string(argv[1]) == "--measure") {      // (not a test: prints how often and how much the prediction corrects the picture; takes a minute)
+        run_measure();
+        return 0;
+    }
     std::cout << "\n=======================================================\n [PREDICTION SUITE] client-side prediction of one's own orders\n=======================================================\n";
     run_basic_tests();
     run_exactness_tests();

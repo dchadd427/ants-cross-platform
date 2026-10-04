@@ -95,6 +95,7 @@ public:
         uint64_t corrections_visible{0};          // ... in which at least one ant stood elsewhere afterwards
         uint64_t ants_moved{0};                   // ants that stood elsewhere, over all corrections
         uint32_t max_move_px{0};                  // the largest distance that an ant was moved, in pixels (the larger of the two axes)
+        uint64_t move_px_total{0};                // the sum of the distances that the moved ants were moved, in pixels (the larger of the two axes of each): over ants_moved, the usual size of a correction
     };
 
     /// A cue or a line of news that the predicted engine made at `tick` (the tick that produced it); `generation` counts the rebuilds. `replay` is true for what a rebuild's REPLAY made: a tick

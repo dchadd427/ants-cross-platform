@@ -261,6 +261,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
                 if (dx != 0 || dy != 0) {
                     ++moved;
                     stats_.max_move_px = std::max(stats_.max_move_px, std::max(dx, dy));
+                    stats_.move_px_total += std::max(dx, dy);
                 }
                 break;
             }

@@ -1473,10 +1473,23 @@ void Application::background_run(double elapsed) {
 }
 
 #if defined(__EMSCRIPTEN__)
+namespace {
+// What the frames cost, for the page's browser checks (ants_probe 12 - 15): the time that the game's own frame function takes (input, network, ticks, the picture), not what the browser does
+// with the canvas afterwards
+double g_frame_work_sum_ms = 0.0;
+double g_frame_work_max_ms = 0.0;
+uint32_t g_frame_work_frames = 0;
+}  // namespace
+
 extern "C" void emscripten_main_loop_iter(void* arg) {
     auto* app = static_cast<Application*>(arg);
     if (app && app->is_running()) {
+        const double began = emscripten_get_now();
         app->run_frame();
+        const double took = emscripten_get_now() - began;
+        g_frame_work_sum_ms += took;
+        g_frame_work_max_ms = std::max(g_frame_work_max_ms, took);
+        ++g_frame_work_frames;
     }
 }
 
@@ -1495,6 +1508,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // For the page's browser check (tests/scripts/web_edge_check.py): what the game believes about the pointer and the view, read-only. 0 and 1: the pointer's x and y on the picture (what the
 // game draws its cursor at and scrolls from); 2: 1 while the game takes the pointer as gone from its window (no cursor, no scrolling); 3 and 4: the map view's origin in world pixels
 // (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
+// The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the corner's "delay" in ms as the player reads it (the felt delay while the prediction is on, the
+// network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 ended by its budget; 10: the
+// orders that it has predicted; 11: the rebuilds that it has made; 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
+// 15: reads 0 and starts again).
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
     if (g_web_app == nullptr) return -1;
@@ -1506,6 +1523,36 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 4: return g_web_app->match_running() ? g_web_app->renderer().camera().world_y : -1;
         case 5: return g_web_app->match_running() ? (g_web_app->hud().is_modal_open() ? 1 : 0) : -1;
         case 6: return static_cast<int>(g_web_app->zoom() * 100.0f + 0.5f);
+        case 7: {
+            const std::optional<uint32_t> delay = g_web_app->corner_delay_ms();
+            return delay ? static_cast<int>(*delay) : -1;
+        }
+        case 8: {
+            const net::NetGame* game = g_web_app->net();
+            const std::optional<uint32_t> delay = game != nullptr ? game->command_delay_ms() : std::nullopt;
+            return delay ? static_cast<int>(*delay) : -1;
+        }
+        case 9: {
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return 0;
+            return game->prediction_gave_up() ? 2 : (game->predicting() ? 1 : 0);
+        }
+        case 10: {
+            const net::NetGame* game = g_web_app->net();
+            return game != nullptr && game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().commands_predicted) : -1;
+        }
+        case 11: {
+            const net::NetGame* game = g_web_app->net();
+            return game != nullptr && game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().rebuilds) : -1;
+        }
+        case 12: return g_frame_work_frames != 0 ? static_cast<int>(g_frame_work_sum_ms * 1000.0 / static_cast<double>(g_frame_work_frames)) : -1;
+        case 13: return static_cast<int>(g_frame_work_max_ms * 1000.0);
+        case 14: return static_cast<int>(g_frame_work_frames);
+        case 15:
+            g_frame_work_sum_ms = 0.0;
+            g_frame_work_max_ms = 0.0;
+            g_frame_work_frames = 0;
+            return 0;
         default: return -1;
     }
 }
