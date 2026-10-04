@@ -1280,7 +1280,7 @@ void run_start_delay_tests() {
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 void run_prediction_tests() {
-    TEST_CASE("N3.24 Prediction: On By Default In Every Machine Of A Match (The View Engine Stands Ahead Of The Confirmed One), Off Where The User Turned It Off; Orders From Everybody, And All Confirmed Engines End Identical") {
+    TEST_CASE("N3.25 Prediction: On By Default In Every Machine Of A Match (The View Engine Stands Ahead Of The Confirmed One), Off Where The User Turned It Off; Orders From Everybody, And All Confirmed Engines End Identical") {
         Table t;
         ASSERT_TRUE(make_room(t, 2));
         Machine& host = *t.machines[0];
@@ -1337,7 +1337,7 @@ void run_prediction_tests() {
         ASSERT_EQ(host.sim.current_tick(), carol.sim.current_tick());
     } TEST_END();
 
-    TEST_CASE("N3.25 Prediction: An Order Given Through The HUD's Sink Is In The View Engine In The Same Call, Long Before The Confirmed Engine Has It; A Machine That Does Not Predict Waits For The Turn; The Switch Works At Run Time") {
+    TEST_CASE("N3.26 Prediction: An Order Given Through The HUD's Sink Is In The View Engine In The Same Call, Long Before The Confirmed Engine Has It; A Machine That Does Not Predict Waits For The Turn; The Switch Works At Run Time") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
@@ -1391,7 +1391,7 @@ void run_prediction_tests() {
         ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
     } TEST_END();
 
-    TEST_CASE("N3.26 Prediction: A Host Change Switches It Off While The Guests Elect (The Confirmed Engine Is Shown), It Begins Again Under The New Host, And Both Machines End Identical") {
+    TEST_CASE("N3.27 Prediction: A Host Change Switches It Off While The Guests Elect (The Confirmed Engine Is Shown), It Begins Again Under The New Host, And Both Machines End Identical") {
         Table t;
         ASSERT_TRUE(make_room(t, 2));
         Machine& host = *t.machines[0];
@@ -1435,7 +1435,7 @@ void run_prediction_tests() {
         ASSERT_FALSE(bob.net.desynced() || carol.net.desynced());
     } TEST_END();
 
-    TEST_CASE("N3.27 Prediction: The Application's Switch And A Held Match (A Pause: The Sessions Hold The Runner) Turn It Off At Once, The Confirmed Engine Is Shown Meanwhile, And It Begins Again With The Next Tick After They Are Gone") {
+    TEST_CASE("N3.28 Prediction: The Application's Switch And A Held Match (A Pause: The Sessions Hold The Runner) Turn It Off At Once, The Confirmed Engine Is Shown Meanwhile, And It Begins Again With The Next Tick After They Are Gone") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
@@ -1478,7 +1478,7 @@ void run_prediction_tests() {
         ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
     } TEST_END();
 
-    TEST_CASE("N3.28 Prediction: A Machine Whose Match Has Gone Out Of Sync Shows The Confirmed Engine (The Hash Exchange Finds A State That Was Changed Behind The Turns' Back)") {
+    TEST_CASE("N3.29 Prediction: A Machine Whose Match Has Gone Out Of Sync Shows The Confirmed Engine (The Hash Exchange Finds A State That Was Changed Behind The Turns' Back)") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
@@ -1502,7 +1502,7 @@ void run_prediction_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N3.29 Prediction: A Machine Whose Prediction Costs More Than Its Budget Loses The Prediction And Nothing Else (It Switches Itself Off, The Confirmed Engine Is Shown, Orders Go As They Did Before, The Match Runs On And Ends Identical); The Other Machine Goes On Predicting") {
+    TEST_CASE("N3.30 Prediction: A Machine Whose Prediction Costs More Than Its Budget Loses The Prediction And Nothing Else (It Switches Itself Off, The Confirmed Engine Is Shown, Orders Go As They Did Before, The Match Runs On And Ends Identical); The Other Machine Goes On Predicting") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
@@ -1537,7 +1537,7 @@ void run_prediction_tests() {
         ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
     } TEST_END();
 
-    TEST_CASE("N3.30 Prediction: The Lead Begins At The Lag That The Jitter Buffer And The Round Trip Promise (One Tick Less Than The Delay Counts, Plus The Bias), Then Learns The Lag Of The Orders That Really Came Back: Twelve Orders Of A Guest, The Lead Stands One Tick Above The Median Lag, Nothing Is Lost, Nothing Is Chased, And The Machines End Identical") {
+    TEST_CASE("N3.31 Prediction: The Lead Begins At The Lag That The Jitter Buffer And The Round Trip Promise (One Tick Less Than The Delay Counts, Plus The Bias), Then Learns The Lag Of The Orders That Really Came Back: Twelve Orders Of A Guest, The Lead Stands One Tick Above The Median Lag, Nothing Is Lost, Nothing Is Chased, And The Machines End Identical") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
