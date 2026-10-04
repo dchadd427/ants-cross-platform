@@ -52,6 +52,12 @@ public:
         uint32_t lead_fall_after_ticks{40};       // the lead falls by one tick when the delay has asked for less for this long (2 s): it rises at once
         uint32_t pending_timeout_ticks{100};      // an own order that no turn has carried after this many ticks (5 s) is lost
         size_t max_events{4096};                  // the cues and news of the predicted ticks that are kept for the application
+        // The budget. The prediction is work that a frame pays for: a rebuild (a copy and a replay of `lead` ticks), or the ticks that it runs for one confirmed tick, that takes longer than
+        // `budget_ns` is a STRIKE, and `budget_strikes` of them within `budget_window_ticks` confirmed ticks switch it off for the rest of the match (gave_up(): the confirmed engine is shown
+        // from then on, as without the prediction). A machine that cannot afford it (a slow browser, a very large map) loses the prediction, never the frame rate.
+        uint64_t budget_ns{12ull * 1000ull * 1000ull};     // 12 ms: three quarters of a frame at 60 Hz (a rebuild is a few hundred microseconds on the shipped maps, R1)
+        uint32_t budget_strikes{4};                        // (not one: a machine that is busy with something else stalls a frame now and then, and that is not the prediction's cost)
+        uint32_t budget_window_ticks{200};                 // 10 s
     };
 
     /// What the prediction did (for the tests and the measurements; nothing here is state)
@@ -70,6 +76,7 @@ public:
         uint64_t rebuild_ns_max{0};
         uint64_t advance_ns_total{0};             // time of the predicted ticks run one by one, and the longest
         uint64_t advance_ns_max{0};
+        uint64_t over_budget{0};                  // strikes: rebuilds or runs of predicted ticks that took longer than Config::budget_ns
         // Corrections (measure_corrections only): what a rebuild changed in the picture, compared at the display tick before and after
         uint64_t corrections{0};                  // rebuilds that were measured
         uint64_t corrections_visible{0};          // ... in which at least one ant stood elsewhere afterwards
@@ -124,8 +131,10 @@ public:
     void on_tick();
 
     // ---- the output ---------------------------------------------------------------------------------------------------------------------------------
-    /// True while the predicted engine is the one that the screen shows (it exists and is not suspended). When it is false the confirmed engine is shown.
+    /// True while the predicted engine is the one that the screen shows (it exists, is not suspended and has not given up). When it is false the confirmed engine is shown.
     bool active() const noexcept { return running_; }
+    /// True when the prediction switched itself off for the rest of the match because its work took longer than the budget (Config::budget_ns) too often: it never begins again
+    bool gave_up() const noexcept { return gave_up_; }
     /// The predicted engine, up to date (a stale one is rebuilt first); only while active(). The player's orders go through submit(), never to this engine directly.
     sim::SimulationEngine& engine();
     /// The tick that the predicted engine stands at, and how far it is ahead of the confirmed engine (0 when not active)
@@ -168,6 +177,8 @@ private:
     void apply_commands_for(uint64_t tick);
     void capture_events(uint64_t tick, bool replay);
     void update_lead();
+    /// A rebuild or a run of predicted ticks took `ns`: over the budget it is a strike, and enough of them within the window end the prediction for this match
+    void note_cost(uint64_t ns);
     void drop_lost_orders(uint64_t confirmed_tick);
     uint64_t confirmed_tick() const noexcept { return confirmed_->current_tick(); }
 
@@ -177,6 +188,8 @@ private:
     sim::SimulationEngine pred_;
     bool running_{false};
     bool suspended_{false};
+    bool gave_up_{false};
+    std::deque<uint64_t> strikes_;                // the confirmed ticks at which the budget was exceeded, within the window
     bool stale_{false};
     bool stale_foreign_{false};                   // why it went stale (the statistics)
     bool stale_own_timing_{false};

@@ -23,7 +23,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -142,8 +144,8 @@ ApplicationConfig host_config() {
 }
 
 // The application hosts a room with Bob in it, SMALL.LVL, START: both play, the application is seat 0 and Bob seat 1. Returns when the match screen is up on both.
-bool begin_match(Application& app, Peer& bob, Duo& duo) {
-    if (!app.init(host_config()) || !app.network_active()) return false;
+bool begin_match(Application& app, Peer& bob, Duo& duo, const ApplicationConfig& config = host_config()) {
+    if (!app.init(config) || !app.network_active()) return false;
     if (!bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob")) return false;
     if (!duo.until([&]() { return app.net()->can_start(); }, 8000)) return false;
     int32_t small_index = -1;
@@ -280,6 +282,7 @@ uint32_t walk_one_ant_ahead(Application& app, Peer& bob, Duo& duo, int32_t gap) 
 int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
+    net::NetGame::default_prediction_budget_ns() = UINT64_MAX;      // (a busy machine stalls the test process now and then: that is not the prediction's cost, and no test is to lose its prediction to it)
     std::cout << "\n=======================================================\n [PREDICTION IN THE APPLICATION] what the match screen reads\n=======================================================\n";
 
     TEST_CASE("PA1 The Match Screen Shows The Predicted Engine: The Order Of A Right Click Is In It In The Same Call (Not In The Confirmed Engine), The Frame Drawn Is Its Picture, A Click Picks An Ant Where It Stands, And The Switch Gives The Confirmed Engine Back At Once") {
@@ -481,6 +484,185 @@ int main(int argc, char* argv[]) {
         duo.step(1500);
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+    } TEST_END();
+
+
+    TEST_CASE("PA4 The Switches: --prediction on / off (and --no-prediction), The Settings' Key `prediction`, The Command Line Wins; Anything Else Is Refused On The Command Line And Ignored In The Settings; Off, The Match Shows The Confirmed Engine And Nothing Is Predicted") {
+        bool on = false;
+        ASSERT_TRUE(parse_switch("on", on) && on);
+        ASSERT_TRUE(parse_switch("OFF", on) && !on);
+        ASSERT_TRUE(parse_switch("Yes", on) && on);
+        ASSERT_TRUE(parse_switch("no", on) && !on);
+        ASSERT_TRUE(parse_switch("true", on) && on);
+        ASSERT_TRUE(parse_switch("False", on) && !on);
+        ASSERT_TRUE(parse_switch("1", on) && on);
+        ASSERT_TRUE(parse_switch("0", on) && !on);
+        on = true;
+        ASSERT_FALSE(parse_switch("maybe", on) || parse_switch("", on) || parse_switch("onn", on) || parse_switch("2", on));
+        ASSERT_TRUE(on);                                                                   // (untouched by a text that is no switch)
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parse = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            st.clear();
+            for (std::string& x : args) st.push_back(x.data());
+            st.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(args.size()), st.data());
+        };
+        ApplicationConfig c = parse({"ants"});
+        ASSERT_TRUE(c.prediction && !c.prediction_given && c.startup_error.empty());       // on by default, the command line said nothing
+        c = parse({"ants", "--prediction", "off"});
+        ASSERT_TRUE(!c.prediction && c.prediction_given && c.startup_error.empty());
+        c = parse({"ants", "--prediction", "on"});
+        ASSERT_TRUE(c.prediction && c.prediction_given && c.startup_error.empty());
+        c = parse({"ants", "--no-prediction"});
+        ASSERT_TRUE(!c.prediction && c.prediction_given && c.startup_error.empty());
+        c = parse({"ants", "--prediction", "maybe"});
+        ASSERT_EQ(c.startup_error, std::string("--prediction needs on or off"));           // refused with the reason: the game does not start
+        ASSERT_FALSE(c.prediction_given);
+        c = parse({"ants", "--prediction"});
+        ASSERT_EQ(c.startup_error, std::string("--prediction needs on or off"));
+        c = parse({"ants", "--prediction", "off", "--prediction", "on"});
+        ASSERT_TRUE(c.prediction && c.prediction_given);                                   // the last one wins
+        // the settings' key: an Application that remembers its options in a file
+        const std::string settings = "test_prediction_app_settings.ini";
+        const auto with_settings = [&](const std::string& line, bool given, bool given_value, bool expect_wanted) {
+            {
+                std::ofstream out(settings);
+                out << "Sound Volume=50\n" << line << "\n";
+            }
+            ApplicationConfig cfg = host_config();
+            cfg.settings_path = settings;
+            cfg.prediction_given = given;
+            cfg.prediction = given_value;
+            Application app;
+            if (!app.init(cfg)) return false;
+            return app.prediction_wanted() == expect_wanted && app.net() != nullptr && app.net()->prediction_enabled() == expect_wanted;
+        };
+        ASSERT_TRUE(with_settings("prediction=off", false, true, false));                  // the key says off, the command line says nothing: off
+        ASSERT_TRUE(with_settings("prediction=on", false, true, true));
+        ASSERT_TRUE(with_settings("prediction=off", true, true, true));                    // the command line (on) wins over the key
+        ASSERT_TRUE(with_settings("prediction=on", true, false, false));                   // ... and --prediction off over the key's on
+        ASSERT_TRUE(with_settings("prediction=maybe", false, true, true));                 // a value that is no switch is reported and ignored: the default
+        ASSERT_TRUE(with_settings("Music Volume=40", false, true, true));                  // no key: on
+        std::remove(settings.c_str());
+        // off: the match shows the confirmed engine, nothing is predicted, an order waits for its turn, and the confirmed engines are the same
+        {
+            ApplicationConfig cfg = host_config();
+            cfg.prediction_given = true;
+            cfg.prediction = false;
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(begin_match(app, bob, duo, cfg));
+            ASSERT_TRUE(duo.until([&]() { return app.sim().current_tick() > 60; }, 20000));
+            ASSERT_FALSE(app.prediction_wanted());
+            ASSERT_FALSE(app.net()->prediction_enabled() || app.net()->predicting());
+            ASSERT_TRUE(&app.view_sim() == &app.sim());
+            ASSERT_TRUE(app.net()->prediction() == nullptr || app.net()->prediction()->stats().commands_predicted == 0);
+            sim::Command go;
+            go.type = sim::CommandType::GroupMove;
+            go.issuer = 0;
+            go.tile_x = 10;
+            go.tile_y = 10;
+            go.ants = {ants_of(app.sim(), 0)[0]};
+            ASSERT_EQ(app.net()->submit(go).status, sim::CommandResult::Status::Applied);        // (the answer is the guess of predict_order_ack, as before)
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        }
+    } TEST_END();
+
+    TEST_CASE("PA5 A Hidden Page Shows Nothing: The Prediction Is Suspended While It Is Hidden (The Wake-Ups Step The Match, No Picture Needs The Predicted Engine) And Begins Again, With The Next Tick, When The Page Is Shown") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        const uint64_t starts = app.net()->prediction()->stats().starts;
+        app.set_page_hidden(true);
+        duo.step(200);
+        ASSERT_FALSE(app.net()->predicting());                                              // suspended at the next pump of the net
+        ASSERT_TRUE(&app.view_sim() == &app.sim());
+        duo.step(500);
+        ASSERT_EQ(app.net()->prediction()->stats().starts, starts);                         // (not begun again meanwhile)
+        app.set_page_hidden(false);
+        ASSERT_TRUE(duo.until([&]() { return app.net()->predicting(); }, 2000));
+        ASSERT_EQ(app.net()->prediction()->stats().starts, starts + 1);
+        ASSERT_TRUE(&app.view_sim() != &app.sim());
+        app.net()->freeze();
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("PA6 The Corner's \"delay\" Is What The Click Feels While The Prediction Is On: A Dash Until An Order Has Been Felt, Then The Time From The Frame That Took It To The Frame That Shows It (Less Than A Tick And A Frame), The Network's Delay (The Confirmed Engine's) When It Is Off") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        uint64_t counter = 1000;                                                            // a virtual clock of frames: 10 ms for every frame that is run below
+        const uint64_t per_frame = SDL_GetPerformanceFrequency() / 100;
+        app.set_clock([&]() { return counter; });
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        // a frame as the window runs it (the input is handled at its start, then the net, the simulation and the drawing), the peer alongside
+        const auto frame = [&]() {
+            counter += per_frame;
+            app.pump_network(0.010f);
+            app.update_simulation(0.010f);
+            app.render_frame();
+            bob.now += 10;
+            bob.update();
+        };
+        for (int i = 0; i < 20; ++i) frame();
+        ASSERT_TRUE(app.net()->predicting());
+        ASSERT_FALSE(app.corner_delay_ms().has_value());                                    // no order has been felt: a dash (the network's delay is not what the click feels)
+        // select an own ant and order it with the right button
+        const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
+        ASSERT_TRUE(!mine.empty());
+        const sim::AntSnapshot* ant = ant_in(app.view_sim(), mine[0]);
+        ASSERT_TRUE(ant != nullptr);
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(far_goal(app.sim(), 0, gx, gy));
+        int32_t sx = 0, sy = 0;
+        ASSERT_TRUE(place_camera(app, ant->px, ant->py, 0, 0));
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(ant->px, ant->py, sx, sy));
+        counter += per_frame;                                                               // (the input of a frame is handled at its start)
+        click(app, SDL_BUTTON_LEFT, sx, sy);
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);
+        ASSERT_EQ(app.felt_delay().pending(), size_t{0});                                   // (a selection is no order)
+        const int32_t goal_wx = gx * 32 + 16;
+        const int32_t goal_wy = gy * 32 + 16;
+        ASSERT_TRUE(place_camera(app, goal_wx, goal_wy, (ant->px - goal_wx) / 2, (ant->py - goal_wy) / 2));
+        int32_t gsx = 0, gsy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(goal_wx, goal_wy, gsx, gsy));
+        frame();
+        const uint64_t predicted_before = app.net()->prediction()->stats().commands_predicted;
+        counter += per_frame;
+        click(app, SDL_BUTTON_RIGHT, gsx, gsy);                                             // the frame that takes the order ...
+        ASSERT_EQ(app.net()->prediction()->stats().commands_predicted, predicted_before + 1);
+        ASSERT_EQ(app.felt_delay().pending(), size_t{1});
+        ASSERT_FALSE(app.felt_delay().measured());
+        for (int i = 0; i < 12 && !app.felt_delay().measured(); ++i) frame();               // ... and the frame that shows it: the predicted engine's next tick, then a drawn frame
+        ASSERT_TRUE(app.felt_delay().measured());
+        ASSERT_EQ(app.felt_delay().samples(), size_t{1});
+        ASSERT_EQ(app.felt_delay().pending(), size_t{0});
+        ASSERT_TRUE(app.felt_delay().felt_ms() <= 60);                                      // within a tick (50 ms) and the frame that draws it
+        ASSERT_TRUE(app.corner_delay_ms().has_value() && *app.corner_delay_ms() == app.felt_delay().felt_ms());
+        // the number is about now only for ten seconds: the frame clock runs on (the net's clock does not, so the network's delay is still the fresh number that it was), and the corner
+        // says nothing rather than the network's delay, which is not what the click feels
+        for (int i = 0; i < 30; ++i) frame();                                               // (the order reaches the confirmed engine meanwhile)
+        ASSERT_TRUE(app.net()->command_delay_ms().has_value());
+        counter += 11ull * 1000ull * (SDL_GetPerformanceFrequency() / 1000ull);
+        ASSERT_FALSE(app.corner_delay_ms().has_value());
+        ASSERT_TRUE(app.net()->command_delay_ms().has_value());
+        // off: the corner says what the confirmed engine's delay is (a dash while no order has been applied there; the order is by now)
+        ASSERT_TRUE(duo.until([&]() { return app.net()->command_delay_ms().has_value(); }, 3000));
+        app.net()->set_prediction_enabled(false);
+        app.pump_network(0.0f);
+        ASSERT_FALSE(app.net()->predicting());
+        ASSERT_TRUE(app.corner_delay_ms().has_value() && *app.corner_delay_ms() == *app.net()->command_delay_ms());
+        app.net()->freeze();
+        for (int i = 0; i < 150; ++i) frame();
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

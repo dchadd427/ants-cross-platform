@@ -756,6 +756,8 @@ void NetGame::make_prediction() {
     if (r == nullptr || seat_ >= sim::MAX_PLAYERS) return;
     Prediction::Config pc;
     pc.seat = seat_;
+    pc.budget_ns = prediction_budget_ns_;
+    pc.budget_strikes = prediction_budget_strikes_;
     prediction_ = std::make_unique<Prediction>(sim_, *r, pc);
 }
 
@@ -779,6 +781,11 @@ void NetGame::refresh_prediction() {
     if (const LockstepRunner* r = runner()) off = off || r->held();
     prediction_->set_suspended(off);
     if (!off) prediction_->set_expected_delay_ms(expected_command_delay_ms());
+}
+
+uint64_t& NetGame::default_prediction_budget_ns() noexcept {
+    static uint64_t budget = Prediction::Config{}.budget_ns;
+    return budget;
 }
 
 sim::SimulationEngine& NetGame::view_engine() {

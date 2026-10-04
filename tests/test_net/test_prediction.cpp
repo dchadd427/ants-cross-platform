@@ -177,7 +177,12 @@ struct Scenario {
     bool predict{true};
     bool oracle_hashes{true};      // record the oracle's hash of every tick (the tests that compare with the oracle); off: only the engine runs (the property tests)
     uint32_t match_ms{720000};
-    Prediction::Config prediction{};
+    Prediction::Config prediction{no_budget()};
+    static Prediction::Config no_budget() {                 // (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the budget set their own)
+        Prediction::Config c;
+        c.budget_ns = UINT64_MAX;
+        return c;
+    }
 };
 
 struct View {
@@ -232,7 +237,7 @@ public:
     // Hold the link: no turn reaches the client before step `until` (they arrive in a burst then)
     void hold_link_until(uint32_t until) { hold_until_ = until; }
 
-    void step() {
+    void step(bool frame = true) {
         // 1. the server seals the turn of this step; the oracle runs it at once
         TurnMsg t;
         t.turn = step_;
@@ -255,8 +260,8 @@ public:
         }
         // 3. the client's runner runs a tick if one is due (50 ms of its clock)
         runner_.update(sim::TICK_MS);
-        // 4. a frame: the screen asks for the engine that it shows
-        if (pred_ && pred_->active()) {
+        // 4. a frame: the screen asks for the engine that it shows (a step without one leaves a prediction that a turn has shown to be wrong as it is: stale)
+        if (frame && pred_ && pred_->active()) {
             View v;
             v.step = step_;
             sim::SimulationEngine& e = pred_->engine();
@@ -1162,6 +1167,94 @@ void run_cue_tests() {
             ASSERT_EQ(router.stats().phantoms, 0u);
             ASSERT_EQ(router.outstanding(), size_t{0});
         }
+    } TEST_END();
+
+    TEST_CASE("RP7.1 The Budget: A Prediction Whose Work Takes Longer Than Its Budget Four Times (here: a budget of one nanosecond) Switches Itself Off For The Rest Of The Match, At Once And For Good: The Confirmed Engine Is Shown, Orders Are Left To The Caller, A Suspension Does Not Bring It Back, And The Match Is Not Touched") {
+        const Prediction::Config defaults;
+        ASSERT_TRUE(defaults.budget_ns == 12ull * 1000ull * 1000ull && defaults.budget_strikes == 4 && defaults.budget_window_ticks == 200);
+        Scenario with;
+        with.seed = 97;
+        with.down_jitter = 1;
+        with.prediction.budget_ns = 1;                                                        // every rebuild and every run of ticks is over it
+        with.prediction.budget_strikes = 4;
+        Scenario without = with;
+        without.predict = false;
+        Rig a(with);
+        Rig b(without);
+        Lcg ra(97);
+        Lcg rb(97);
+        a.run(8);
+        b.run(8);
+        Prediction& p = *a.prediction();
+        ASSERT_TRUE(p.gave_up() || p.active());
+        for (uint32_t s = 0; s < 120; ++s) {
+            if (s % 9 == 0) {
+                a.issue(random_order(ra, a.ids, 0));
+                b.issue(random_order(rb, b.ids, 0));
+            }
+            if (s % 20 == 5) {
+                const Command fa = random_order(ra, a.ids, 2);
+                const Command fb = random_order(rb, b.ids, 2);
+                a.schedule(a.step_no() + 2, fa);
+                b.schedule(b.step_no() + 2, fb);
+            }
+            a.step();
+            b.step();
+            ASSERT_TRUE(a.confirmed().state_hash() == b.confirmed().state_hash());            // (it never touches the confirmed engine: before, while it gave up, and after)
+        }
+        ASSERT_TRUE(p.gave_up());                                                              // four strikes, a tick each, and it was over
+        ASSERT_FALSE(p.active());
+        ASSERT_EQ(p.stats().over_budget, 4u);
+        ASSERT_EQ(p.stats().ticks_advanced, 3u);                                               // (the first tick's copy and replay, and the three ticks that followed it: one strike each)
+        ASSERT_EQ(p.stats().starts, 1u);
+        sim::CommandResult r;
+        ASSERT_FALSE(p.submit(make_command(CommandType::GroupMove, 0, 255, 10, 10, {a.ids.ants[0][0]}), r));      // an order is left to the caller
+        p.set_suspended(true);
+        p.set_suspended(false);
+        a.run(10);
+        ASSERT_FALSE(p.active());                                                              // (resumed, it does not begin again)
+        ASSERT_EQ(p.stats().starts, 1u);
+        ASSERT_EQ(p.pending_orders(), 0u);
+    } TEST_END();
+
+    TEST_CASE("RP7.2 The Budget Runs Out In The Middle Of An Order (The Rebuild That The Order Asks For Is The Strike That Ends The Prediction): The Order Is Left To The Caller, Nothing Is Touched That The Prediction Has Dropped, The Match Goes On") {
+        Scenario sc;
+        sc.seed = 98;
+        sc.down_delay = 0;                                                                     // (a turn arrives in the step that seals it: the step of the test says when)
+        sc.prediction.budget_ns = 1;
+        sc.prediction.budget_strikes = 2;                                                      // the first tick's copy and replay is one strike; the rebuild that the order asks for is the second
+        sc.oracle_hashes = false;
+        Rig rig(sc);
+        Prediction& p = *rig.prediction();
+        for (uint32_t i = 0; i < 30 && !p.active(); ++i) rig.step();                           // (the first tick: the prediction begins, one strike)
+        ASSERT_TRUE(p.active() && !p.gave_up() && p.stats().over_budget == 1);
+        rig.schedule(rig.step_no(), make_command(CommandType::GroupMove, 1, 255, 20, 40, rig.ids.ants[1]));
+        rig.step(false);                                                                       // (no frame: nobody asks for the engine; the turn of another player has marked it stale)
+        ASSERT_TRUE(p.stale() && p.active() && p.stats().over_budget == 1);
+        const sim::CommandResult r = rig.issue(make_command(CommandType::GroupMove, 0, 255, 12, 44, {rig.ids.ants[0][0]}));
+        ASSERT_TRUE(p.gave_up());                                                              // the rebuild that the order asked for was the second strike, and it ended the prediction
+        ASSERT_FALSE(p.active());
+        ASSERT_TRUE(r.status != sim::CommandResult::Status::Applied);                          // (the order is the caller's: the answer is the default one, nothing was predicted)
+        ASSERT_EQ(p.stats().commands_predicted, 0u);
+        ASSERT_EQ(p.pending_orders(), 0u);
+        rig.run(40);
+        ASSERT_FALSE(p.active());
+        ASSERT_TRUE(rig.confirmed().current_tick() > 30);                                      // (the match went on)
+    } TEST_END();
+
+    TEST_CASE("RP7.3 Strikes That Are Spread Out Do Not Add Up: With A Window Of Nothing Each Strike Is Forgotten At The Next Tick, So That A Prediction Whose Every Tick Is Over The Budget But Whose Ticks Come Alone Never Gives Up (The Window Counts)") {
+        Scenario sc;
+        sc.seed = 99;
+        sc.prediction.budget_ns = 1;
+        sc.prediction.budget_strikes = 2;
+        sc.prediction.budget_window_ticks = 0;
+        sc.oracle_hashes = false;
+        Rig rig(sc);
+        rig.run(60);                                                                           // (no foreign command, no order: nothing is rebuilt, one run of ticks for every tick)
+        Prediction& p = *rig.prediction();
+        ASSERT_TRUE(p.active() && !p.gave_up());
+        ASSERT_TRUE(p.stats().over_budget >= 50);                                              // every tick was a strike ...
+        ASSERT_EQ(p.stats().rebuilds, 0u);
     } TEST_END();
 }
 

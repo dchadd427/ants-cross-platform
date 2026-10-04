@@ -166,6 +166,19 @@ void Prediction::advance_to(uint64_t target) {
     const uint64_t ns = ns_since(t0);
     stats_.advance_ns_total += ns;
     stats_.advance_ns_max = std::max(stats_.advance_ns_max, ns);
+    note_cost(ns);
+}
+
+void Prediction::note_cost(uint64_t ns) {
+    if (ns <= cfg_.budget_ns || gave_up_) return;
+    ++stats_.over_budget;
+    const uint64_t c = confirmed_tick();
+    strikes_.push_back(c);
+    while (!strikes_.empty() && strikes_.front() + cfg_.budget_window_ticks < c) strikes_.pop_front();
+    if (strikes_.size() >= cfg_.budget_strikes) {
+        gave_up_ = true;
+        stop();
+    }
 }
 
 // A copy of the confirmed engine, run to the display tick with the turns in hand and the waiting orders: the prediction as it should be now.
@@ -237,6 +250,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
         if (moved > 0) ++stats_.corrections_visible;
         stats_.ants_moved += moved;
     }
+    note_cost(ns);                                                   // (last: over the budget often enough, it ends the prediction, and nothing here may use it afterwards)
 }
 
 // An own order that no turn has carried for pending_timeout_ticks is lost (the server refused it, a host change dropped it): it must not stay in the picture
@@ -251,10 +265,12 @@ void Prediction::drop_lost_orders(uint64_t confirmed_tick_now) {
 bool Prediction::submit(const sim::Command& command, sim::CommandResult& result) {
     if (!running_ || suspended_ || command.issuer != cfg_.seat || !predicts(command.type)) return false;
     if (stale_) rebuild(std::max<uint64_t>(display_, confirmed_tick() + lead_), false);
+    if (!running_) return false;                                     // (the rebuild went over the budget once too often: the prediction is over)
     // The order is given to the state that the screen shows. That state is never behind a turn that is in hand (such a turn was sealed before this order existed), so the prediction first runs
     // up to the turns that it knows (it does so anyway when the buffer is deeper than the lead: the buffer is longer than the delay that was measured, a moment after a burst of turns)
     const uint64_t next_receive = runner_->next_turn_expected();
     if (display_ < next_receive) advance_to(next_receive);
+    if (!running_) return false;
     result = pred_.apply_command(command);
     assumed_.back().push_back(command);
     pending_.push_back(Pending{command, display_, confirmed_tick()});
@@ -304,7 +320,7 @@ void Prediction::on_turn(const TurnMsg& turn) {
 }
 
 void Prediction::on_tick() {
-    if (suspended_) return;
+    if (suspended_ || gave_up_) return;
     const uint64_t c = confirmed_tick();
     if (!running_) {
         begin(c);

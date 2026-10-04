@@ -818,6 +818,7 @@ int main(int argc, char** argv) {
         if (std::strcmp(argv[i], "--real-fill") == 0) return run_real_fill(argv[i + 1]);
         if (std::strcmp(argv[i], "--probe") == 0) return run_probe(argv[i + 1]);
     }
+    net::NetGame::default_prediction_budget_ns() = UINT64_MAX;      // (a busy machine stalls the test process now and then: that is not the prediction's cost, and no test is to lose its prediction to it)
     std::cout << "=== Start menu in the application ===\n";
 
     TEST_CASE("A1.1 Start: a native game with the menu starts at the menu (not at the setup screen), the game under it does not run, the loading screen's end leads to it, and a config without the menu starts as it always did") {

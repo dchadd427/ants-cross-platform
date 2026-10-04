@@ -1501,9 +1501,45 @@ void run_prediction_tests() {
             ASSERT_TRUE(&m->net.view_engine() == &m->sim);
         }
     } TEST_END();
+
+    TEST_CASE("N3.29 Prediction: A Machine Whose Prediction Costs More Than Its Budget Loses The Prediction And Nothing Else (It Switches Itself Off, The Confirmed Engine Is Shown, Orders Go As They Did Before, The Match Runs On And Ends Identical); The Other Machine Goes On Predicting") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        bob.net.set_prediction_budget(1, 3);                                                    // a budget that nothing meets: three strikes
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(11, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+        t.run(500);
+        ASSERT_TRUE(bob.net.prediction_gave_up());
+        ASSERT_FALSE(bob.net.predicting());
+        ASSERT_TRUE(&bob.net.view_engine() == &bob.sim);
+        ASSERT_FALSE(host.net.prediction_gave_up());
+        ASSERT_TRUE(host.net.predicting() && &host.net.view_engine() != &host.sim);
+        // an order of the machine that gave up goes the old way (the guess of predict_order_ack, the turn decides)
+        const uint32_t ant = first_ant(bob, 1);
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(open_goal_near_hill(bob.sim, 1, gx, gy));
+        const sim::CommandResult r = bob.net.submit(order(1, ant, gx, gy));
+        ASSERT_EQ(r.status, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(r.ack_ant, ant);
+        ASSERT_TRUE(bob.sim.get_unit(ant).orig_order != sim::AntUnit::kOrderMove);
+        ASSERT_TRUE(t.run_until([&]() { return bob.sim.get_unit(ant).orig_order == sim::AntUnit::kOrderMove; }, 3000));
+        t.run(2000);
+        ASSERT_FALSE(bob.net.predicting());                                                      // (it stays off: nothing brings it back)
+        ASSERT_EQ(bob.net.prediction()->stats().starts, 1u);
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+        ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
+    } TEST_END();
 }
 
 int main() {
+    NetGame::default_prediction_budget_ns() = UINT64_MAX;      // (a busy machine stalls the test process now and then: that is not the prediction's cost, and no test is to lose its prediction to it)
     std::cout << "\n=======================================================\n [SUITE] Network port: NetGame (room, start barrier, match) over real sockets\n"
                  "=======================================================\n";
     run_room_tests();

@@ -190,4 +190,62 @@ private:
     uint32_t last_applied_ms_{0};                         // when the last own command was applied
 };
 
+/// The delay that the player FEELS of an order while the prediction is on (net::Prediction): from the frame that took the order (the click) to the end of the first frame that shows what it did,
+/// the median of the last five. It is not the network's delay: with the prediction on, the network's delay (CommandDelayMeter: from the send to the tick that applies the order in the
+/// CONFIRMED engine) is the time that the confirmed engine waits, which the picture no longer does; this is the time that the picture waits: the order is in the predicted engine at once, and
+/// what it does shows when the predicted engine has run its next tick (the ants' first step) and a frame has been drawn after it. Like the other meters it reads no clock: the owner tells it
+/// the time. The clock is the frame's real one, so the number includes the frame that took the click and the frame that shows it, and not the display's own scan-out or the wait of the
+/// event before the frame polled it (nothing in the program can see that).
+class FeltDelayMeter {
+public:
+    static constexpr size_t kOrdersKept = 5;              // the number that is shown is the median of the last five orders
+    static constexpr size_t kMaxPending = 16;             // orders whose effect has not been drawn yet; the oldest is forgotten beyond this
+    static constexpr uint32_t kForgetAfterMs = 5000;      // an order whose effect is never drawn (the page was hidden, the prediction ended) is forgotten after this long
+    static constexpr uint32_t kStaleAfterMs = 10000;      // the corner says "delay -" when the last order was felt more than this long ago
+
+    /// An order of the player was taken by the predicted engine in the frame whose clock is `now_ms`
+    void on_order(uint32_t now_ms) {
+        if (pending_.size() >= kMaxPending) pending_.pop_front();
+        pending_.push_back(Pending{now_ms, false});
+    }
+    /// The predicted engine has run a tick: what the orders that are waiting did is in the picture from now on
+    void on_tick_shown() noexcept {
+        for (Pending& p : pending_) p.shown = true;
+    }
+    /// A frame has been drawn at `now_ms`: the orders whose effect is in the picture are felt now, the ones that have waited too long are forgotten
+    void on_frame_end(uint32_t now_ms) {
+        for (auto it = pending_.begin(); it != pending_.end();) {
+            if (it->shown) {
+                delays_.add(now_ms - it->order_ms);
+                last_felt_ms_ = now_ms;
+                it = pending_.erase(it);
+            } else if (now_ms - it->order_ms > kForgetAfterMs) {
+                it = pending_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    /// The orders that are waiting for their effect to be drawn (the prediction ended: they never will be)
+    void forget_pending() noexcept { pending_.clear(); }
+
+    bool measured() const noexcept { return !delays_.empty(); }
+    /// The median felt delay of the last kOrdersKept orders; 0 while not measured()
+    uint32_t felt_ms() const noexcept { return delays_.median(); }
+    uint32_t last_ms() const noexcept { return delays_.last(); }
+    size_t samples() const noexcept { return delays_.size(); }
+    size_t pending() const noexcept { return pending_.size(); }
+    /// True when the last order was felt more than `max_age_ms` before `now_ms`, or none was: what the number says is no longer about now
+    bool stale(uint32_t now_ms, uint32_t max_age_ms = kStaleAfterMs) const noexcept { return !measured() || now_ms - last_felt_ms_ > max_age_ms; }
+
+private:
+    struct Pending {
+        uint32_t order_ms{0};
+        bool shown{false};
+    };
+    std::deque<Pending> pending_;
+    MedianWindow<kOrdersKept> delays_;
+    uint32_t last_felt_ms_{0};
+};
+
 }  // namespace ants::net
