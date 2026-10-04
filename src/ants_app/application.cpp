@@ -390,12 +390,22 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--bot " + std::string(argv[i]) + ": " + why;
             }
+        } else if (std::strcmp(argv[i], "--teams") == 0) {                     // the teams of a game on this computer: ffa | A+B (docs/BOTS.md, "Alliances")
+            std::string why;
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--teams needs ffa or two seats like 0+1";
+            } else if (!parse_local_teams(argv[++i], cfg.teams, why) && cfg.startup_error.empty()) {
+                cfg.startup_error = "--teams " + std::string(argv[i]) + ": " + why;
+            }
         } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
             cfg.play_at_once = true;
             mode_given = true;
         }
     }
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
+    if (cfg.teams.set && cfg.net_role != ApplicationConfig::NetRole::None && cfg.startup_error.empty()) {
+        cfg.startup_error = "--teams is for a game on this computer: a room cannot choose its teams yet (its players team up in the match, with the team-up button).";
+    }
 #if !defined(__EMSCRIPTEN__)
     if (menu_forced) {
         // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
@@ -568,9 +578,11 @@ bool Application::init(const ApplicationConfig& config) {
         if (bots_) {                                                  // the same seats play again, with new bots
             stop_bots();
             sim_.init(current_level_, config_.random_seed + 1, local_roster_);
+            form_start_teams();                                       // (and the same teams)
             start_local_bots(config_.random_seed + 1);
         } else {
             sim_.init(current_level_, config_.random_seed + 1);
+            form_start_teams();
         }
         match_over_handled_ = false;
         hud_.reset();
@@ -740,6 +752,7 @@ bool Application::init(const ApplicationConfig& config) {
             scorecard_.show(mr, 0);
             scorecard_.update(0.25f);                                // the preview shows the rows, not the waiting label
         }
+        form_start_teams();                                          // --teams: the teams are made before the first tick
         if (local_bots) {                                            // --map with --bot: the game is running already, the bots join it
             hud_.set_roster_mask(local_roster_);                     // (the bots are named: every taken seat has its label and its row)
             scorecard_.set_shown_teams(local_roster_);
@@ -1042,6 +1055,7 @@ bool Application::start_game(const std::string& map_path) {
     if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled())) return false;
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
     enter_match();
+    form_start_teams();                                               // --teams: the teams are made before the first tick (the dialog of the start is up)
     if (!config_.bots.empty()) start_local_bots(config_.random_seed);
     return true;
 }
@@ -1206,6 +1220,30 @@ bool Application::start_local_bots(uint32_t match_seed) {
         }
     }
     return all;
+}
+
+// --teams: the pairs of the plan become teams with the original's own commands, as the players would make them (a bot never invites): the first seat of a pair invites and the second accepts,
+// applied straight to the simulation before its first tick. So the engine's own News Flash "... are a team now!" is in the chat log, no invitation dialog ever opens (nothing waits for an answer)
+// and the standard bot, which never breaks a team, keeps it for the match. What cannot be made is said, and the game starts without teams.
+void Application::form_start_teams() {
+    if (!config_.teams.set || network_active()) return;
+    const LocalTeamsPlan plan = plan_local_teams(config_.teams, sim_.roster_mask());
+    if (!plan.why.empty()) {
+        show_setup_notice("--teams " + local_teams_text(config_.teams) + ": " + plan.why + " The game starts without teams.");
+        return;
+    }
+    for (const std::array<uint8_t, 2>& pair : plan.pairs) {
+        sim::Command invite;
+        invite.type = sim::CommandType::AllianceInvite;
+        invite.issuer = pair[0];
+        invite.other_player = pair[1];
+        sim_.apply_command(invite);
+        sim::Command accept;
+        accept.type = sim::CommandType::AllianceAccept;
+        accept.issuer = pair[1];
+        accept.other_player = pair[0];
+        sim_.apply_command(accept);
+    }
 }
 
 // The host of a room runs the room's bots: their commands go into the host's sequencer. A guest (and a guest that took over as host) never does.

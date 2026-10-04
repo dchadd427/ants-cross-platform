@@ -662,6 +662,65 @@ void run_bot_tests() {
         ASSERT_TRUE(ApplicationConfig{}.bots.empty() && ApplicationConfig{}.startup_error.empty());
     } TEST_END();
 
+    TEST_CASE("AI6.13 Command Line: --teams ffa | A+B (Two Different Seats Of 0 To 3, ffa In Any Case Is The Default, The Last One Wins) Is For A Game On This Computer: Anything Else Is A Startup Error That Names The Option, A Room (--host, --join, --join-url) Refuses It With The Reason, ffa Is Fine Everywhere, And It Is No Mode (The Start Menu Still Shows)") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parsed = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            return Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        };
+        {   // valid
+            ApplicationConfig c = parsed({"ants", "--teams", "0+1", "--headless"});
+            ASSERT_TRUE(c.teams.set && c.teams.a == 0 && c.teams.b == 1 && c.startup_error.empty());
+            c = parsed({"ants", "--headless", "--teams", "3+2"});
+            ASSERT_TRUE(c.teams.set && c.teams.a == 3 && c.teams.b == 2 && c.startup_error.empty());        // (the order is kept: the first seat invites)
+            for (const char* ffa : {"ffa", "FFA", "Ffa"}) {
+                c = parsed({"ants", "--teams", ffa, "--headless"});
+                ASSERT_TRUE(!c.teams.set && c.startup_error.empty());
+            }
+            c = parsed({"ants", "--teams", "2+3", "--teams", "ffa", "--headless"});                           // the last one wins
+            ASSERT_TRUE(!c.teams.set && c.startup_error.empty());
+            c = parsed({"ants", "--teams", "ffa", "--teams", "1+0", "--headless"});
+            ASSERT_TRUE(c.teams.set && c.teams.a == 1 && c.teams.b == 0 && c.startup_error.empty());
+            c = parsed({"ants", "--headless"});                                                              // not asked for: free for all
+            ASSERT_TRUE(!c.teams.set && c.startup_error.empty());
+            c = parsed({"ants", "--bot", "1", "--bot", "2", "--bot", "3", "--teams", "0+1"});                 // with the bots: both are kept
+            ASSERT_TRUE(c.bots.size() == 3 && c.teams.set && c.teams.a == 0 && c.teams.b == 1 && c.startup_error.empty());
+        }
+        {   // anything else is a startup error that names the option (and the game does not start)
+            for (const char* bad : {"0+0", "1+1", "0+4", "4+0", "01", "0+", "+1", "0 + 1", "0+1+2", "fff", "none", "-1+0", ""}) {
+                ApplicationConfig c = parsed({"ants", "--headless", "--teams", bad});
+                ASSERT_TRUE(!c.teams.set);
+                ASSERT_TRUE(c.startup_error.find(std::string("--teams ") + bad + ":") == 0);
+                Application app;
+                ASSERT_FALSE(app.init(c));
+            }
+            ApplicationConfig same = parsed({"ants", "--headless", "--teams", "2+2"});
+            ASSERT_TRUE(same.startup_error.find("two different seats") != std::string::npos);
+            ApplicationConfig missing = parsed({"ants", "--headless", "--teams"});
+            ASSERT_TRUE(missing.startup_error.find("--teams needs ffa or two seats like 0+1") == 0);
+            ApplicationConfig first = parsed({"ants", "--headless", "--teams", "9", "--teams", "0+1"});        // the first problem is the one that is told
+            ASSERT_TRUE(first.startup_error.find("--teams 9:") == 0);
+        }
+        {   // a room cannot choose teams yet (whatever the order of the options); ffa is the default of a room too
+            for (const std::vector<std::string>& line : {std::vector<std::string>{"ants", "--teams", "0+1", "--host"}, std::vector<std::string>{"ants", "--host", "--teams", "0+1"},
+                                                          std::vector<std::string>{"ants", "--join", "127.0.0.1", "--teams", "0+1"}, std::vector<std::string>{"ants", "--teams", "0+1", "--join-url", "ws://example.test/ws"}}) {
+                ApplicationConfig c = parsed(line);
+                ASSERT_TRUE(c.startup_error.find("--teams is for a game on this computer") == 0);
+                Application app;
+                ASSERT_FALSE(app.init(c));
+            }
+            ApplicationConfig ok = parsed({"ants", "--teams", "ffa", "--host"});
+            ASSERT_TRUE(ok.startup_error.empty() && !ok.teams.set);
+        }
+        {   // it is no mode: a native game that is started with --teams alone still shows the start menu, which takes the choice as the panel's own
+            ApplicationConfig c = parsed({"ants", "--teams", "0+1"});
+            ASSERT_TRUE(c.start_menu && c.teams.set);
+            c = parsed({"ants", "--teams", "0+1", "--map", "Original-Ants/Maps/TINY.LVL"});
+            ASSERT_FALSE(c.start_menu);
+        }
+    } TEST_END();
+
     TEST_CASE("AI6.2 Refusals At Startup: A Seat Clash With The Local Player (Whatever The Order Of The Options), Two Bots On One Seat, --join With --bot, A Room's Host Seat") {
         const auto refused = [](const std::function<void(ApplicationConfig&)>& setup) {
             ApplicationConfig cfg = headless_config();

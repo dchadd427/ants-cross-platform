@@ -36,6 +36,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
+#include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/net_overlay.hpp"
@@ -154,6 +155,12 @@ struct ApplicationConfig {
     /// --bot SEAT[:SPEC] (repeatable): computer players at these seats (docs/BOTS.md). A local game then plays the seats that are taken (the local player and the bots); with
     /// --host the room shows the bots as players and the host's machine runs them. Empty by default: a game without --bot runs no bot code at all.
     std::vector<ai::BotSpec> bots;
+    /// --teams ffa | A+B (docs/BOTS.md, "Alliances"): the teams of a game on this computer. `ffa`, the default, is free for all; `A+B` (two different seats: 0 green, 1 red, 2 blue, 3 black) makes those
+    /// two seats a team, and the two other seats a team as well when both play. The teams are made when the match starts, with the original's own commands (an invitation and its acceptance, applied
+    /// straight to the simulation before its first tick), so the engine's News Flash "... are a team now!" is in the chat log and no invitation dialog opens; a bot never breaks a team. A pair with
+    /// a seat that does not play, or that would leave nobody to play against, makes no team: the game starts without teams and says why (stderr, the setup screen's status line). Not for a room:
+    /// --host and --join refuse it.
+    LocalTeams teams;
     /// For the tests: builds the bot of a spec instead of the registry (which has the idle bot and, since B3, the worker bot), so that the application's door for a
     /// bot's commands (the local sink, the room's sink) can be exercised with a bot of the test's own that acts in a way it wants to. Empty in a game that is played.
     std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> bot_factory;
@@ -604,6 +611,7 @@ private:
     bool start_local_bots(uint32_t match_seed);                        // after the simulation was initialised: the controller, one LocalBotSink per seat
     bool add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::string& why);   // seats one bot (the registry's, or the tests' factory's)
     void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
+    void form_start_teams();                                           // --teams: the pairs of the plan become teams with the original's commands, before the first tick of a local match
     void stop_bots();
     const ai::BotSpec* bot_spec_of(uint8_t seat) const;                // the spec that this machine knows for a seat (--bot, a fill of this machine's START), null for the others
     bool is_bot_seat(uint8_t seat) const;                              // a computer player holds the seat: a local game's specs, in a room the slots that the room calls bots
