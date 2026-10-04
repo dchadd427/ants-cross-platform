@@ -847,6 +847,7 @@ struct PWorld : LinkSource {
     RestartConfig restart;
     std::string maps;
     RestoreReport report;                                   // what the last start of the server brought back
+    std::function<bool()> restore_should_stop;              // the server's stop flag while it restores (empty: none)
     std::vector<std::string> notices;                       // every line that the server would have written to its log, in order
     size_t kept_at_stop{0};
     int starts{0};
@@ -865,7 +866,7 @@ struct PWorld : LinkSource {
         mgr = std::make_unique<RoomManager>(MapStore(maps), limits);
         std::string why;
         if (!mgr->enable_restart_records(restart, why)) throw std::runtime_error("enable_restart_records: " + why);
-        report = mgr->restore_rooms(server_now());
+        report = mgr->restore_rooms(server_now(), restore_should_stop);
         collect();
         ++starts;
     }
@@ -6988,6 +6989,7 @@ void run_persist_server_tests_6() {
 
     TEST_CASE("S3.102 A Restored Room Is A Match That Runs, As Far As /busy Counts (The Public Answer That A Deploy Waits On), For Five Minutes (M3 Of The Review): After A Restart Of The Server Two Rooms Whose Players Have Not Come Back Count Two Matches And Their People (The Seats Are Held, A Restart Now Would Interrupt Them Again; A Bot Is No Person) up to 299.999 s After The Restore And Nothing From 300 s On (A Room That Nobody Comes Back To Must Not Hold A Deploy For The Pause Cap); A Player Who Is Back Makes Its Room Count Again, As Itself (The Held Seats Of The Others Count Only Inside The Window); In A Live Room A Seat Whose Link Is Lost Is Held And Is No Person Who Is There; After A Restart That Cannot Bring Them Back (Another Network Protocol) They Count Nothing") {
         PWorld w("persist-102");
+        w.restart.clock_ms = []() { return 0u; };                                              // (a clock that stands still: the restore takes no time by it, so the rooms begin at the very moment of the restart and the window's edge is exact)
         w.start_server(500);
         const auto busy_after = [&w](uint32_t ms) { return w.mgr->busy(w.server_now() + ms); };
         const auto busy = [&]() { return busy_after(0); };
@@ -7111,6 +7113,30 @@ void rewrite_head(PWorld& w, const std::string& code, const std::function<void(R
     out.resize(at + (bytes.size() - frames[0].second));
     std::copy(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end(), out.begin() + static_cast<std::ptrdiff_t>(at));
     write_all_bytes(w.record_path(code), out);
+}
+
+// A clock that goes on by itself: every reading costs `step_ms`, so that a replay "takes" as long as the test says (a replay reads it twice every 20 turns); `real` switches it to the real one
+struct FakeClock {
+    uint32_t ms{0};
+    uint32_t step_ms{100};
+    bool real{false};
+    std::function<uint32_t()> as_function() {
+        return [this]() { return real ? restart_steady_ms() : (ms += step_ms); };
+    }
+};
+
+// A copy of the record of `from_code` under another code (its head is made over; the keys, the seats and the match are the original's), given a last write `age` ago
+void copy_record_as(PWorld& w, const std::string& from_code, const std::string& to_code, std::chrono::seconds age) {
+    const std::vector<uint8_t> bytes = read_all_bytes(w.record_path(from_code));
+    const auto frames = frames_of(bytes);
+    RestartLoaded rec = parse_restart_record(bytes.data(), bytes.size());
+    rec.head.code = to_code;
+    std::vector<uint8_t> out = with_magic(encode_restart_head(rec.head));
+    const size_t at = out.size();
+    out.resize(at + (bytes.size() - frames[0].second));
+    std::copy(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end(), out.begin() + static_cast<std::ptrdiff_t>(at));
+    write_all_bytes(w.record_path(to_code), out);
+    fs::last_write_time(w.record_path(to_code), fs::file_time_type::clock::now() - age);
 }
 
 }  // namespace
@@ -7802,6 +7828,274 @@ void run_persist_review_process_tests() {
             ASSERT_TRUE(d.wait_exit(10000, status) >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0);
         }
     } TEST_END();
+
+    TEST_CASE("S3.106 The Restore Is Bounded (M2 Of The Review): Seven Copies Of One Record (Rooms Of The Demo Kind) Are Restored Newest First Within A Budget Of A Few Seconds (Measured By A Clock That The Test Makes Go): The Ones That The Budget Reaches Are Back, Paused, Every Seat Held; The Rest Are Deferred (Their Records Stay On Disk Untouched, Their Codes Are Taken: create_room Says 409, They Are Not Counted By /busy) And A Hello With A Key For A Deferred Code Restores That Room (Not A New Demo Room) And Rejoins The Player; One Room's Replay May Not Pass Its Own Cap (Refused As Too Slow, A Failed Room); The Rooms Begin After The Replays With A Clock That Starts Then (The 90 s Wait For The Vote Is Not Eaten By The Replays Of The Others), A Room That Is Restored By A Hello Too; A Stop Flag (Before The First Room, In The Middle Of A Replay, Between Two Rooms, Between Two Rooms That Are Too Short To Be Asked In) Ends The Restore At Once And Leaves Every Record As It Was") {
+        {
+            const RestartConfig defaults;                                                                                   // the budgets: a minute of a deploy's time is a minute of nobody's game
+            ASSERT_TRUE(defaults.replay_budget_ms == 20000 && defaults.restore_budget_ms == 30000 && !defaults.clock_ms);
+        }
+        {   // seven copies, a budget for about two of them: the newest are restored, the rest wait for their first player
+            ServerLimits limits;
+            limits.demo_rooms = 16;
+            limits.demo_map = "TINY.LVL";
+            PWorld w("persist-106a", limits);
+            w.start_server(500);
+            const int rooms = 7;
+            const auto code_of = [](int i) { return "demo-tiny-2p-cp" + std::to_string(i); };
+            crash_with_record_of(w, code_of(0), 20000, 3);
+            const RestartLoaded original = w.read_record(code_of(0));
+            ASSERT_TRUE(original.ok() && original.turn_count > 300);
+            for (int i = 1; i < rooms; ++i) copy_record_as(w, code_of(0), code_of(i), std::chrono::seconds(0));
+            for (int i = 0; i < rooms; ++i) fs::last_write_time(w.record_path(code_of(i)), fs::file_time_type::clock::now() - std::chrono::seconds(10 * (rooms - i)));   // the last copy is the newest: not the order of the names
+            std::map<std::string, std::vector<uint8_t>> on_disk;
+            for (int i = 0; i < rooms; ++i) on_disk[code_of(i)] = read_all_bytes(w.record_path(code_of(i)));
+            FakeClock clock;                                                                                                // every reading is 100 ms: a replay reads it twice every 20 turns (4 s a room)
+            w.restart.clock_ms = clock.as_function();
+            w.restart.restore_budget_ms = 12000;
+            w.restart.replay_budget_ms = 20000;
+            const uint32_t before = clock.ms;
+            w.start_server(500);
+            w.now += clock.ms - before;                                                                                     // (the world's clock goes on by what the replays took, as a server's does)
+            clock.real = true;
+            const size_t restored = w.report.count(RestoreItem::Outcome::Restored);
+            const size_t deferred = w.report.count(RestoreItem::Outcome::Deferred);
+            ASSERT_TRUE(restored >= 2 && deferred >= 2 && restored + deferred == static_cast<size_t>(rooms) && w.report.count(RestoreItem::Outcome::Ended) == 0 && !w.report.stopped);
+            ASSERT_EQ(w.mgr->room_count(), restored);
+            ASSERT_EQ(w.mgr->deferred_count(), deferred);
+            for (int i = 0; i < rooms; ++i) {                                                                               // newest first: the restored are exactly the newest records
+                const std::string code = code_of(i);
+                RoomStatus s;
+                const bool alive = w.mgr->status(code, s, w.server_now());
+                ASSERT_MSG(alive == (static_cast<size_t>(rooms - 1 - i) < restored), code);
+                if (alive) ASSERT_MSG(s.state == RoomState::Running && s.restored && s.paused && s.absent.size() == 3 && s.record_kept, code);
+                ASSERT_MSG(fs::exists(w.record_path(code)), code);                                                          // every record is still on disk
+                if (!alive) ASSERT_MSG(read_all_bytes(w.record_path(code)) == on_disk[code], code);                         // and a deferred one is as it was, byte for byte
+            }
+            const std::string late = code_of(0);                                                                            // the oldest: deferred
+            const std::string next_late = code_of(rooms - 1 - static_cast<int>(restored));                                  // the newest of the deferred
+            ASSERT_EQ(w.mgr->create_room(held_spec(late, 2), w.server_now()).http_status, 409);                             // its code is taken
+            ASSERT_TRUE(w.mgr->busy(w.server_now()).matches == restored && w.mgr->busy(w.server_now()).players == 3 * restored);       // a deferred room is nothing that a restart would interrupt
+            bool noted = false;
+            for (const std::string& n : w.notices) noted = noted || (n.find(late) != std::string::npos && n.find("deferred") != std::string::npos);
+            ASSERT_TRUE(noted);
+            // a Hello with a key for a deferred code (a demo code: the room that it names exists, so no new demo room is made): that room is restored now, and the player is back in it
+            RClient& back = w.connect(original.head.start.names[0], late, 0, original.head.keys[0]);
+            ASSERT_TRUE(w.until([&]() { return w.status(late).rejoins == 1; }, 60000));
+            const RoomStatus s = w.status(late);
+            ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.restored_turns == original.turn_count && s.record_kept && !back.lost && back.session != nullptr);
+            ASSERT_EQ(w.mgr->deferred_count(), deferred - 1);
+            RoomStatus other;
+            ASSERT_FALSE(w.mgr->status(next_late, other, w.server_now()));                                                  // (the others still wait: nobody asked for them)
+            // the server stops and starts again with time enough: everything that was on disk is restored (the deferred records were never touched)
+            w.stop_server(true);
+            ASSERT_EQ(w.record_files().size(), static_cast<size_t>(rooms));
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == static_cast<size_t>(rooms) && w.report.count(RestoreItem::Outcome::Deferred) == 0 && w.mgr->deferred_count() == 0);
+        }
+        {   // the room's own cap: a replay that takes longer than its budget is refused as too slow (a failed room, its record deleted)
+            PWorld w("persist-106b");
+            w.start_server(500);
+            crash_with_record_of(w, "CAP-1", 20000, 2);
+            copy_record_as(w, "CAP-1", "CAP-2", std::chrono::seconds(10));
+            FakeClock clock;
+            w.restart.clock_ms = clock.as_function();
+            w.restart.restore_budget_ms = 600000;
+            w.restart.replay_budget_ms = 2000;                                                                              // 4 s a room by this clock
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Ended) == 2 && w.report.count(RestoreItem::Outcome::Restored) == 0 && w.report.count(RestoreItem::Outcome::Deferred) == 0);
+            for (const RestoreItem& i : w.report.items) ASSERT_TRUE(i.note.find("longer than the 2 s") != std::string::npos);
+            ASSERT_TRUE(w.status("CAP-1").state == RoomState::Failed && w.status("CAP-1").reason.find("longer than the 2 s") != std::string::npos && w.record_files().empty());
+        }
+        {   // the rooms begin together, after the replays, with a clock that starts then: the wait of 90 s for a vote counts from there
+            PWorld w("persist-106c");
+            w.start_server(500);
+            crash_with_record_of(w, "FC-1", 20000, 2);
+            copy_record_as(w, "FC-1", "FC-2", std::chrono::seconds(10));
+            FakeClock clock;
+            clock.step_ms = 1000;                                                                                           // a second a reading: a room takes more than half a minute by this clock
+            w.restart.clock_ms = clock.as_function();
+            w.restart.restore_budget_ms = 1000000;
+            w.restart.replay_budget_ms = 100000;
+            const uint32_t before = clock.ms;
+            w.start_server(500);
+            const uint32_t took = clock.ms - before;
+            ASSERT_TRUE(took > 40000 && w.report.count(RestoreItem::Outcome::Restored) == 2);
+            w.now += took;                                                                                                  // the world has gone on by what the replays took
+            const auto absent_for = [&](const std::string& code) {
+                const RoomStatus s = w.status(code);
+                uint32_t most = 0;
+                for (const RoomStatus::Absent& a : s.absent) most = std::max(most, a.away_s);
+                return most;
+            };
+            for (const char* code : {"FC-1", "FC-2"}) {
+                const RoomStatus s = w.status(code);
+                ASSERT_MSG(s.restored && s.paused && s.absent.size() == 2 && s.vote_seat == 255, code);
+                ASSERT_MSG(absent_for(code) <= 3, code);                                                                    // the pause began when the room began, not `took` ago
+            }
+            w.run(60000);
+            for (const char* code : {"FC-1", "FC-2"}) {
+                ASSERT_MSG(w.status(code).vote_seat == 255 && absent_for(code) >= 58 && absent_for(code) <= 63, code);       // 60 s on: no vote yet (it opens at 90 s)
+            }
+            w.run(32000);
+            for (const char* code : {"FC-1", "FC-2"}) ASSERT_MSG(w.status(code).vote_seat != 255, code);                     // 92 s on: the vote is open
+        }
+        {   // a room that a Hello restores begins when its replay is over, not when the Hello came: the wait for the vote counts from there too
+            PWorld w("persist-106e");
+            w.start_server(500);
+            crash_with_record_of(w, "LZ-1", 20000, 2);
+            copy_record_as(w, "LZ-1", "LZ-2", std::chrono::seconds(10));
+            FakeClock clock;                                                                                                // 4 s a room by this clock
+            w.restart.clock_ms = clock.as_function();
+            w.restart.restore_budget_ms = 6000;                                                                             // the first room is replayed (4 s), the second is put off at 6 s
+            w.restart.replay_budget_ms = 20000;
+            const uint32_t at_start = clock.ms;
+            w.start_server(500);
+            w.now += clock.ms - at_start;
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 1 && w.report.count(RestoreItem::Outcome::Deferred) == 1 && w.mgr->deferred_count() == 1);
+            const uint32_t before = clock.ms;
+            net::Connection* hello_link = w.open_link();                                                                    // a stranger asks for the deferred room: the room is restored, the stranger is told MatchRunning
+            net::HelloMsg h;
+            h.room = "LZ-2";
+            hello_link->send(net::encode(h));
+            w.run(100);
+            const uint32_t took = clock.ms - before;
+            ASSERT_TRUE(took >= 1500 && took <= 4000 && w.mgr->deferred_count() == 0);                                      // (about 2 s by that clock: the replay of the second room, read once every 20 turns)
+            ASSERT_TRUE(w.status("LZ-2").restored && w.status("LZ-2").paused);
+            ASSERT_EQ(reject_on(hello_link), static_cast<int>(net::RejectReason::MatchRunning));
+            w.now += took;                                                                                                  // the world has gone on by what that replay took
+            w.run(30000);
+            uint32_t most = 0;
+            for (const RoomStatus::Absent& a : w.status("LZ-2").absent) most = std::max(most, a.away_s);
+            ASSERT_TRUE(most >= 29 && most <= 31);                                                                          // about 30 s since the room began (the 2 s of the Hello's own replay are not part of it: a room that began at the Hello would be at 32)
+        }
+        {   // the server is told to stop: before the first room, in the middle of a replay, between two rooms; every record stays as it was and nothing is restored; then the restart restores all three
+            PWorld w("persist-106d");
+            w.start_server(500);
+            crash_with_record_of(w, "SP-0", 20000, 2);
+            const RestartLoaded original = w.read_record("SP-0");
+            for (int i = 1; i < 3; ++i) copy_record_as(w, "SP-0", "SP-" + std::to_string(i), std::chrono::seconds(10 * i));
+            fs::last_write_time(w.record_path("SP-0"), fs::file_time_type::clock::now() - std::chrono::seconds(1));
+            std::map<std::string, std::vector<uint8_t>> on_disk;
+            for (int i = 0; i < 3; ++i) on_disk["SP-" + std::to_string(i)] = read_all_bytes(w.record_path("SP-" + std::to_string(i)));
+            const size_t checks_in_a_room = original.turn_count / net::kHashEveryTurns;
+            ASSERT_TRUE(checks_in_a_room >= 5);
+            const auto untouched = [&]() {
+                for (const auto& kv : on_disk) {
+                    if (!fs::exists(w.record_path(kv.first)) || read_all_bytes(w.record_path(kv.first)) != kv.second) return false;
+                }
+                return w.record_files().size() == on_disk.size();
+            };
+            int polls = 0;
+            const auto stop_at = [&polls](int n) { return [&polls, n]() { return ++polls >= n; }; };
+            const struct { const char* what; int at; } cases[] = {
+                {"before the first room", 1},
+                {"in the middle of the first replay", 4},
+                {"between the first room and the second", static_cast<int>(1 + checks_in_a_room + 1)},
+            };
+            for (const auto& c : cases) {
+                polls = 0;
+                w.restore_should_stop = stop_at(c.at);
+                w.start_server(500);
+                ASSERT_MSG(w.report.stopped && w.report.left_on_disk == 3 && w.report.items.empty(), c.what);
+                ASSERT_MSG(w.mgr->room_count() == 0 && w.mgr->deferred_count() == 0, c.what);                               // nothing was restored, nothing is a failed room
+                ASSERT_MSG(untouched(), c.what);                                                                            // every record is as it was, byte for byte
+                ASSERT_MSG(polls == c.at, c.what);                                                                          // and the restore asked no more once it was told
+                bool noted = false;
+                for (const std::string& n : w.notices) noted = noted || n.find("restore was stopped") != std::string::npos;
+                ASSERT_MSG(noted, c.what);
+                ASSERT_MSG(w.mgr->shutdown(w.server_now()) == 0, c.what);
+                w.stop_server(false);
+            }
+            w.restore_should_stop = nullptr;
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 3 && !w.report.stopped);
+        }
+        {   // two records that are too short to be asked in the middle of their replays (fewer than 20 turns): only the question between the rooms can stop the restore
+            PWorld w("persist-106f");
+            w.start_server(500);
+            crash_with_record_of(w, "SH-0", 500, 2);
+            ASSERT_TRUE(w.read_record("SH-0").turn_count < net::kHashEveryTurns);
+            copy_record_as(w, "SH-0", "SH-1", std::chrono::seconds(10));
+            fs::last_write_time(w.record_path("SH-0"), fs::file_time_type::clock::now() - std::chrono::seconds(1));
+            int polls = 0;
+            w.restore_should_stop = [&polls]() { return ++polls >= 2; };                                                    // yes at the second question: the one before the second room
+            w.start_server(500);
+            ASSERT_TRUE(w.report.stopped && w.report.left_on_disk == 2 && w.mgr->room_count() == 0 && polls == 2 && w.record_files().size() == 2);
+        }
+        {   // the same two short records and the budget: the question between the rooms is the only one that they allow (no 20 turns to ask in), and it puts the second room off
+            PWorld w("persist-106g");
+            w.start_server(500);
+            crash_with_record_of(w, "SB-0", 500, 2);
+            copy_record_as(w, "SB-0", "SB-1", std::chrono::seconds(10));
+            fs::last_write_time(w.record_path("SB-0"), fs::file_time_type::clock::now() - std::chrono::seconds(1));
+            FakeClock clock;                                                                                                // 100 ms a reading
+            w.restart.clock_ms = clock.as_function();
+            w.restart.restore_budget_ms = 250;
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 1 && w.report.count(RestoreItem::Outcome::Deferred) == 1 && w.mgr->deferred_count() == 1 && !w.report.stopped);
+            ASSERT_TRUE(w.status("SB-0").restored && w.record_files().size() == 2);
+        }
+    } TEST_END();
+}
+
+void run_persist_review_process_tests_2() {
+    TEST_CASE("S3.107 The Real Program Told To Stop While It Restores (M2 Of The Review): Eight Records Of A Busy Match On TREASURE (Four Players, Three Minutes Of Play) Take Seconds To Replay; SIGTERM Comes While The First Are Being Replayed And The Program Leaves At Once (The Restore Looks At The Stop Flag Every 20 Turns: Not After The Replays Are Over), With Status 0, Every Record Untouched, Nothing Deleted, Nothing Restored") {
+        const fs::path root = temp_dir_for("persist-107");
+        const fs::path results = root / "results";
+        const fs::path restart_dir = results / "restart";
+        fs::create_directories(restart_dir);
+        const RestartStore names{[&]() {
+            RestartConfig c;
+            c.dir = restart_dir.string();
+            return c;
+        }()};
+        std::vector<std::string> paths;
+        std::vector<std::vector<uint8_t>> contents;
+        uint32_t turns = 0;
+        {   // a match of four machines on the busiest map, played for three minutes (they give orders: the replay does what the match did), and copies of its record under other codes
+            PWorld w("persist-107w");
+            w.start_server(500);
+            RoomSpec spec = held_spec("ST-1", 4, "TREASURE.LVL");
+            spec.run_ms = 24u * 3600u * 1000u;
+            std::vector<RClient*> m = play_room(w, spec, 180000);
+            for (RClient* p : m) p->reconnects = false;
+            w.stop_server(false);
+            const std::vector<uint8_t> bytes = read_all_bytes(w.record_path("ST-1"));
+            const RestartLoaded base = w.read_record("ST-1");
+            ASSERT_TRUE(base.ok() && !base.torn);
+            turns = base.turn_count;
+            const auto frames = frames_of(bytes);
+            for (int i = 1; i <= 8; ++i) {
+                RestartHead head = base.head;
+                head.code = "ST-" + std::to_string(i);
+                std::vector<uint8_t> copy = with_magic(encode_restart_head(head));
+                const size_t at = copy.size();
+                copy.resize(at + (bytes.size() - frames[0].second));
+                std::copy(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end(), copy.begin() + static_cast<std::ptrdiff_t>(at));
+                paths.push_back(names.path_for(head.code));
+                write_all_bytes(paths.back(), copy);
+                contents.push_back(copy);
+            }
+        }
+        const std::string secret = "test-secret-0123456789abcdef0123456789abcdef";
+        const std::vector<std::string> args = {"--maps", maps_dir(), "--port", std::to_string(free_tcp_port()), "--results-dir", results.string(), "--reconnect"};
+        const std::string log_a = (root / "a.log").string();
+        ServerProcess server;
+        ASSERT_TRUE(server.start(args, secret, log_a));
+        ASSERT_TRUE(log_has(log_a, "restart records in ", 15000));                                // (the restore starts right after this line: the replays take seconds)
+        const auto began_stop = std::chrono::steady_clock::now();
+        server.signal_it(SIGTERM);
+        int status = 0;
+        const int64_t took = server.wait_exit(60000, status);
+        const int64_t stop_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began_stop).count();
+        ASSERT_TRUE(took >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+        ASSERT_TRUE(stop_ms < 1500);                                                              // (not the seconds that the replays would still take)
+        for (size_t i = 0; i < paths.size(); ++i) ASSERT_TRUE(fs::exists(paths[i]) && read_all_bytes(paths[i]) == contents[i]);           // every record is as it was: nothing deleted, nothing written
+        const std::string log_text = text_of_file(log_a);
+        ASSERT_TRUE(log_text.find("the restore was stopped by the server's stop: 8 restart record(s) are left on disk as they were") != std::string::npos);
+        ASSERT_TRUE(log_text.find(" restored: ") == std::string::npos && log_text.find("was not restored") == std::string::npos);
+        std::cout << "\n      [stop in a restore] the program left " << stop_ms << " ms after SIGTERM, in the middle of the replays of eight matches of " << turns << " turns, with every record untouched" << std::flush;
+    } TEST_END();
 }
 #endif
 
@@ -7833,6 +8127,7 @@ int main() {
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();
     run_persist_review_process_tests();
+    run_persist_review_process_tests_2();
 #endif
     std::cout << "=======================================================\n";
     std::cout << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n";

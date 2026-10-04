@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -219,6 +220,11 @@ bool decode_restart_head(const uint8_t* payload, size_t size, RestartHead& out, 
     }
     out = std::move(h);
     return true;
+}
+
+uint32_t restart_steady_ms() noexcept {
+    static const auto start = std::chrono::steady_clock::now();
+    return static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -802,6 +808,18 @@ std::string RestartStore::path_for(const std::string& code) const {
     const uint32_t h = fnv1a32(code);
     const uint8_t digest[4] = {static_cast<uint8_t>(h >> 24), static_cast<uint8_t>(h >> 16), static_cast<uint8_t>(h >> 8), static_cast<uint8_t>(h)};
     return (fs::path(cfg_.dir) / (std::string(kRecordPrefix) + code + "-" + hex_digits(digest, 4) + kRestartExtension)).string();
+}
+
+bool RestartStore::code_of_path(const std::string& path, std::string& code) const {
+    const std::string name = fs::path(path).filename().string();
+    const size_t prefix = std::strlen(kRecordPrefix);
+    const std::string extension = kRestartExtension;
+    const size_t digest = 1 + 8;                                       // "-" and the 8 hex digits of the hash of the code
+    if (name.size() <= prefix + digest + extension.size() || name.compare(0, prefix, kRecordPrefix) != 0 || !has_suffix(name, extension)) return false;
+    const std::string candidate = name.substr(prefix, name.size() - prefix - digest - extension.size());
+    if (!net::valid_room_code(candidate) || fs::path(path_for(candidate)).filename().string() != name) return false;       // (a name that is not exactly what path_for makes of the code is nobody's record)
+    code = candidate;
+    return true;
 }
 
 bool RestartStore::prepare(std::string& why) {

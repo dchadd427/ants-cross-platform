@@ -14,8 +14,10 @@
 // for what the rooms hold (reconnect, the vote, the cap, the limit of the log) and the budget that all the logs share are ServerLimits.
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -86,7 +88,8 @@ struct RestoreItem {
     enum class Outcome : uint8_t {
         Restored,           // the room is back: running, paused until its players come back
         Ended,              // the record was read, but its match cannot go on: the room is there as a failed room with the reason (status, log, result file)
-        Unreadable          // the file is no record that can be read (corrupt, another format, too big, a code that is taken): nothing of it is left but a line in the log
+        Unreadable,         // the file is no record that can be read (corrupt, another format, too big, a code that is taken): nothing of it is left but a line in the log
+        Deferred            // the restore's time ran out before this record was done: it stays on disk untouched, its code is taken, and the room is restored when its first player comes (a Hello for the code)
     };
     std::string file;       // the record's file name (never a path)
     std::string code;       // the room's code ("" when the file could not be read)
@@ -97,6 +100,8 @@ struct RestoreItem {
 };
 struct RestoreReport {
     std::vector<RestoreItem> items;
+    bool stopped{false};    // the server was told to stop while it restored: the restore ended at once and nothing was restored; the records that it had not judged are left on disk as they were
+    size_t left_on_disk{0}; // ... how many records that was
     size_t count(RestoreItem::Outcome outcome) const noexcept {
         size_t n = 0;
         for (const RestoreItem& i : items) n += i.outcome == outcome ? 1u : 0u;
@@ -114,12 +119,18 @@ public:
     bool enable_restart_records(RestartConfig config, std::string& why);
     /// The server's restart records (null when it keeps none)
     const RestartStore* restart_store() const noexcept { return restart_.get(); }
-    /// Reads every record of the folder and brings its room back: the engine is made again from the match's start message and every sealed turn replayed (checked against the state hashes of the record),
-    /// the seats of the persons are held absent (the match is paused until the players come back with their keys: a Hello with a key finds the room by its code, as before the restart) and the bots start
-    /// again at the restored tick. A record that cannot be restored (another network protocol, a map that is gone or has changed, a replay that disagrees, too old, ...) becomes a FAILED room with
-    /// the reason, so that the control interface shows it and the log and the result file report it, and a record that cannot be read at all is only a line in the log; the file is deleted in both cases.
-    /// Call it once, after enable_restart_records() and before the first update(). Real time: the replay runs now (at most RestartConfig::replay_budget_ms for each room).
-    RestoreReport restore_rooms(uint32_t now_ms);
+    /// Reads the records of the folder, the newest first (by the time of their last write), and brings their rooms back: the engine is made again from the match's start message and every sealed turn replayed
+    /// (checked against the state hashes of the record), the seats of the persons are held absent (the match is paused until the players come back with their keys: a Hello with a key finds the room by its
+    /// code, as before the restart) and the bots start again at the restored tick. A record that cannot be restored (another network protocol, a map that is gone or has changed, a replay that disagrees,
+    /// too old, ...) becomes a FAILED room with the reason, so that the control interface shows it and the log and the result file report it; a record that cannot be read at all is only a line in the
+    /// log; the file is deleted in both cases. The restore is BOUNDED: one room's replay may take RestartConfig::replay_budget_ms (beyond it its record is refused as too slow) and the whole restore
+    /// RestartConfig::restore_budget_ms; a record that the budget does not reach is DEFERRED: it stays on disk untouched, its code is taken (create_room answers 409), and its room is restored by the first
+    /// Hello for its code (update(): the replay then runs inside that pass and every other room waits for it). All the rooms that were replayed begin together at the end, with a clock that starts then
+    /// (Room::begin_restored), so that the vote's wait and the pause cap are not eaten by the other rooms' replays. `should_stop` is asked between rooms and every 20 turns of a replay: when it says yes the
+    /// restore ends at once, nothing is restored and every record is left on disk as it was (RestoreReport::stopped). Call it once, after enable_restart_records() and before the first update().
+    RestoreReport restore_rooms(uint32_t now_ms, const std::function<bool()>& should_stop = nullptr);
+    /// Records that wait for their first player (see restore_rooms)
+    size_t deferred_count() const noexcept { return deferred_.size(); }
     /// The server is told to stop: every room that keeps a record makes it durable (fsync) and leaves it on disk, the other rooms are closed. Returns the number of records that were kept. Nothing is
     /// deleted: a record is deleted when its room is over, never because the server stops.
     size_t shutdown(uint32_t now_ms);
@@ -168,6 +179,21 @@ private:
         uint32_t since_ms{0};
     };
 
+    // Restart records: a record that was replayed and waits for its room to begin (restore_rooms begins them all together)
+    struct Replayed {
+        std::unique_ptr<Room> room;
+        RestartHead head;
+        RestoreItem item;
+        std::string path;
+    };
+    enum class Verdict : uint8_t { Replayed, Ended, Unreadable, Stopped, Deferred };
+    /// Reads, judges and replays one record. Replayed: `out` holds the room, not begun. Ended and Unreadable are done with (the record is deleted, a failed room made for the first); Stopped and Deferred
+    /// leave the record as it is. `waiting` are the codes of the rooms that were replayed and have not begun yet.
+    Verdict judge_and_replay(const std::string& path, uint32_t now_ms, const std::function<uint32_t()>& clock, const std::function<Room::ReplayCheck()>& check, const std::set<std::string>& waiting, RestoreItem& item,
+                             Replayed& out);
+    void begin_replayed(Replayed& replayed, uint32_t now_ms, RestoreReport& report);
+    /// The first Hello for the code of a deferred record: its room is restored now (the clock `now_ms` is moved on by what that took). True when the code has a room now (restored or failed).
+    bool restore_deferred(const std::string& code, uint32_t& now_ms);
     void reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms);
     std::string new_code();
     /// Makes the demo room that a Hello names, when demo rooms are on, the code has the prefix, and there is a free one; false otherwise
@@ -178,6 +204,7 @@ private:
     net::LogBudget log_budget_;                  // (declared before the rooms: they give their logs back when they are destroyed)
     std::unique_ptr<RestartStore> restart_;      // (also before the rooms: their records point at it)
     std::map<std::string, std::unique_ptr<Room>> rooms_;
+    std::map<std::string, std::string> deferred_;   // the code of a record that the restore did not reach, and its file
     std::vector<Pending> pending_;
     std::vector<Lingering> lingering_;
     std::vector<RoomStatus> unreported_;     // the ends of rooms that were forgotten in the pass in which they ended

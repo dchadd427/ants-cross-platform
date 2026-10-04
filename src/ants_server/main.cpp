@@ -438,7 +438,7 @@ int main(int argc, char** argv) {
     }
 
     if (rooms.restart_store() != nullptr) {                    // the matches that were running when the server stopped come back, paused until their players do (before the first connection is read)
-        rooms.restore_rooms(now_ms());
+        rooms.restore_rooms(now_ms(), []() { return g_stop.load(); });         // (a stop that comes meanwhile ends it at once and leaves every record on disk)
         for (const std::string& line : rooms.take_notices()) log(line);
     }
     while (!g_stop) {
