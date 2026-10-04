@@ -22,9 +22,7 @@ target_include_directories(test_ai PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_ai PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_ai PRIVATE ants_test_paths)
 
 add_test(NAME test_ai COMMAND test_ai)
 
@@ -54,8 +52,6 @@ target_include_directories(test_ai_worker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_ai_worker PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_ai_worker PRIVATE ants_test_paths)
 
 add_test(NAME test_ai_worker COMMAND test_ai_worker)

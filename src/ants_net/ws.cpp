@@ -162,6 +162,7 @@ const char* reason_phrase(int status) {
         case 408: return "Request Timeout";
         case 426: return "Upgrade Required";
         case 431: return "Request Header Fields Too Large";
+        case 500: return "Internal Server Error";
         default: return "Error";
     }
 }
@@ -244,6 +245,18 @@ WsHandshakeResult rejected(int status, size_t consumed) {
     r.status = WsHandshakeResult::Status::Rejected;
     r.http_status = status;
     r.response = http_error_response(status);
+    r.consumed = consumed;
+    return r;
+}
+
+// The status path's answer: 200 with the JSON text, which a proxy or a script may read and nobody may keep (no-store); too long a text is a 500, never a long answer
+WsHandshakeResult answered(const std::string& body, size_t consumed) {
+    if (body.size() > kWsMaxStatusBytes) return rejected(500, consumed);
+    WsHandshakeResult r;
+    r.status = WsHandshakeResult::Status::Answered;
+    r.http_status = 200;
+    r.response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nContent-Length: " + std::to_string(body.size()) +
+                 "\r\nConnection: close\r\n\r\n" + body;
     r.consumed = consumed;
     return r;
 }
@@ -667,6 +680,13 @@ WsHandshakeResult ws_parse_handshake(const std::string& request, const WsServerO
         headers.push_back({to_lower(line.substr(0, colon)), trim(line.substr(colon + 1))});
     }
 
+    // The status path: a plain GET of exactly that path (no query: /busy?x is no status request) and no Upgrade header is answered with the status text, whatever the other options say
+    if (!options.status_path.empty() && options.status_body && target == options.status_path && header_count(headers, "upgrade") == 0) {
+        if (header_count(headers, "host") != 1 || header_joined(headers, "host").empty()) return rejected(400, consumed);
+        if (header_count(headers, "transfer-encoding") > 0) return rejected(400, consumed);
+        if (header_count(headers, "content-length") > 0 && header_joined(headers, "content-length") != "0") return rejected(400, consumed);
+        return answered(options.status_body(), consumed);
+    }
     // The path (the query is not part of it)
     if (!options.path.empty()) {
         const size_t cut = target.find_first_of("?#");
@@ -960,7 +980,7 @@ bool WsListener::advance(Pending& p, uint64_t now) {
             ready_.push_back(std::move(c));
             return true;
         }
-        if (r.status == WsHandshakeResult::Status::Rejected) {
+        if (r.status == WsHandshakeResult::Status::Rejected || r.status == WsHandshakeResult::Status::Answered) {
             refuse(p, r.response, now);
             return true;
         }

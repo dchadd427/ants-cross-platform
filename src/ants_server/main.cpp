@@ -340,6 +340,12 @@ int main(int argc, char** argv) {
         log("demo rooms on: up to " + std::to_string(o.demo_rooms) + " at a time, 4 players unless the code says 2p or 3p (\"demo-[<map>-]<n>p-...\"), map " + o.demo_map + (chooseable.empty() ? std::string() : "; a code \"demo-<map>-...\" chooses one of " + chooseable));
     }
 
+    if (ws) {                                                    // GET /busy on the WebSocket port: how many matches run (a deploy waits for none), no name, no code, no secret
+        ws->set_status("/busy", [&rooms]() {
+            const ants::server::BusyCounts b = rooms.busy(now_ms());
+            return "{\"matches\":" + std::to_string(b.matches) + ",\"players\":" + std::to_string(b.players) + "}";
+        });
+    }
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 #ifdef SIGPIPE

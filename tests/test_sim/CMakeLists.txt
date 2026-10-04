@@ -11,9 +11,7 @@ target_include_directories(test_sim_rules PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_sim_rules PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_sim_rules PRIVATE ants_test_paths)
 
 add_test(NAME test_sim_rules COMMAND test_sim_rules)
 
@@ -76,9 +74,7 @@ target_include_directories(test_movement_golden PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_movement_golden PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_movement_golden PRIVATE ants_test_paths)
 
 add_test(NAME test_movement_golden COMMAND test_movement_golden)
 
@@ -100,9 +96,7 @@ target_include_directories(test_movement_differential PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
-target_compile_definitions(test_movement_differential PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_movement_differential PRIVATE ants_test_paths)
 
 add_test(NAME test_movement_differential COMMAND test_movement_differential)
 
@@ -164,9 +158,7 @@ target_include_directories(test_powerup_actions PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_powerup_actions PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_powerup_actions PRIVATE ants_test_paths)
 
 add_test(NAME test_powerup_actions COMMAND test_powerup_actions)
 
@@ -183,9 +175,7 @@ target_include_directories(test_food_actions PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_food_actions PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_food_actions PRIVATE ants_test_paths)
 
 add_test(NAME test_food_actions COMMAND test_food_actions)
 
@@ -204,9 +194,7 @@ target_include_directories(test_level_defaults PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_level_defaults PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_level_defaults PRIVATE ants_test_paths)
 
 add_test(NAME test_level_defaults COMMAND test_level_defaults)
 
@@ -223,8 +211,6 @@ target_include_directories(test_commands PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_commands PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_commands PRIVATE ants_test_paths)
 
 add_test(NAME test_commands COMMAND test_commands)

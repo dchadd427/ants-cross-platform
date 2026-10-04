@@ -31,13 +31,10 @@
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::app;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 namespace {
 

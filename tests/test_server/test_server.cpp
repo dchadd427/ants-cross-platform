@@ -53,6 +53,7 @@
 #include <unistd.h>
 #endif
 #include <cstring>
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::server;
@@ -61,10 +62,6 @@ namespace fs = std::filesystem;
 // The first turn of a match is sealed this long after the match began (protocol 12: the "Get ready to play!" dialog of every machine, in which no simulation runs): a test that wants play to
 // be under way waits this much longer than it did before
 constexpr uint32_t kPre = net::kMatchStartDelayMs;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 static int g_test_count = 0;
 static int g_test_failures = 0;
@@ -1413,6 +1410,55 @@ void run_match_tests() {
         ASSERT_TRUE(a.sim.is_match_over() && b.sim.is_match_over() && c.sim.is_match_over());
         w.run(11 * 60 * 1000);
         ASSERT_EQ(w.mgr.room_count(), size_t{0});
+    } TEST_END();
+
+    TEST_CASE("S3.81 The Busy Count (The Public /busy Answer): Rooms Whose Match Loads Or Runs, And The People In Rooms That Wait, Load Or Run; A Bot Is No Person; A Room That Is Closed Or Over Counts Nothing") {
+        World w;
+        const auto busy = [&w]() { return w.mgr.busy(w.now); };
+        ASSERT_TRUE(busy().matches == 0 && busy().players == 0);                          // a server that holds nothing
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BUSY-A", 2), w.now).ok);
+        ASSERT_TRUE(busy().matches == 0 && busy().players == 0);                          // a room that waits, nobody in it
+        w.connect("Ann", "BUSY-A");
+        w.run(300);
+        ASSERT_TRUE(w.status("BUSY-A").state == RoomState::Waiting);
+        ASSERT_TRUE(busy().matches == 0 && busy().players == 1);                          // a person who waits in a lobby: no match yet
+        w.connect("Bob", "BUSY-A");
+        bool saw_loading = false;
+        for (int guard = 0; guard < 400 && w.status("BUSY-A").state != RoomState::Running; ++guard) {
+            w.run(10);
+            if (w.status("BUSY-A").state == RoomState::Loading) {
+                saw_loading = true;
+                ASSERT_TRUE(busy().matches == 1 && busy().players == 2);                  // the match is loading: a restart now would cancel the start, it counts
+            }
+        }
+        ASSERT_TRUE(saw_loading);
+        ASSERT_TRUE(w.status("BUSY-A").state == RoomState::Running);
+        ASSERT_TRUE(busy().matches == 1 && busy().players == 2);                          // the match runs
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BUSY-B", 4), w.now).ok);
+        w.connect("Cy", "BUSY-B");
+        w.run(300);
+        ASSERT_TRUE(busy().matches == 1 && busy().players == 3);                          // a second room only waits
+        RoomSpec with_bot = spec_of("BUSY-C", 3);
+        with_bot.bots = {ai::BotSpec{2, "standard", ai::Level::Medium}};
+        ASSERT_TRUE(w.mgr.create_room(with_bot, w.now).ok);
+        w.connect("Di", "BUSY-C");
+        w.run(300);
+        ASSERT_TRUE(w.status("BUSY-C").joined == 2 && w.status("BUSY-C").bots.size() == 1);
+        ASSERT_TRUE(busy().matches == 1 && busy().players == 4);                          // the bot of room C is not counted: Ann, Bob, Cy and Di
+        ASSERT_TRUE(w.mgr.close_room("BUSY-A", w.now));                                   // the owner closes the running match
+        ASSERT_TRUE(w.status("BUSY-A").state == RoomState::Failed);
+        ASSERT_TRUE(busy().matches == 0 && busy().players == 2);                          // it counts nothing now: Cy and Di still wait
+        ASSERT_TRUE(w.mgr.close_room("BUSY-B", w.now) && w.mgr.close_room("BUSY-C", w.now));
+        ASSERT_TRUE(busy().matches == 0 && busy().players == 0);
+        // a match that ends by itself stops counting
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BUSY-D", 2), w.now).ok);
+        w.connect("Ed", "BUSY-D");
+        w.connect("Flo", "BUSY-D");
+        w.run(1500);
+        ASSERT_TRUE(w.status("BUSY-D").state == RoomState::Running && busy().matches == 1 && busy().players == 2);
+        for (int guard = 0; guard < 4000 && w.status("BUSY-D").state == RoomState::Running; ++guard) w.run(250);
+        ASSERT_TRUE(w.status("BUSY-D").state == RoomState::Finished);
+        ASSERT_TRUE(busy().matches == 0 && busy().players == 0);                          // over: nobody plays, a restart would cut nothing
     } TEST_END();
 
     TEST_CASE("S3.5 A Failed Start Is Cancelled And Tried Again: A Client That Cannot Load The Map Does Not Spoil The Room; Too Many Failed Starts End It") {

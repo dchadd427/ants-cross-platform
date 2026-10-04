@@ -76,9 +76,7 @@ target_include_directories(test_netgame PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-target_compile_definitions(test_netgame PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../Original-Ants"
-)
+target_link_libraries(test_netgame PRIVATE ants_test_paths)
 
 add_test(NAME test_netgame COMMAND test_netgame)
 

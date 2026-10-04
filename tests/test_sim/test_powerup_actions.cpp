@@ -14,6 +14,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include "ants_test_paths.hpp"
 
 using namespace ants::sim;
 

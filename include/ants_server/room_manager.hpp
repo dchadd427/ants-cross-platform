@@ -62,6 +62,13 @@ struct ServerLimits {
 /// The code prefix of the rooms that a Hello may make when demo rooms are on
 inline constexpr const char* kDemoRoomPrefix = "demo-";
 
+/// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running, and the people (bots are not people) in the rooms that wait, load or run. Plain
+/// counts: no name, no code.
+struct BusyCounts {
+    uint32_t matches{0};
+    uint32_t players{0};
+};
+
 struct CreateResult {
     bool ok{false};
     int http_status{201};                   // what the control interface answers: 201, 400, 404, 409, 503
@@ -95,6 +102,9 @@ public:
 
     /// The rooms that ended (finished or failed) since the last call, once each: what the server logs and writes to its result files
     std::vector<RoomStatus> take_ended(uint32_t now_ms);
+
+    /// How busy the server is (see BusyCounts); cheap: a pass over the rooms
+    BusyCounts busy(uint32_t now_ms) const;
 
     size_t room_count() const noexcept { return rooms_.size(); }
     size_t pending_count() const noexcept { return pending_.size(); }

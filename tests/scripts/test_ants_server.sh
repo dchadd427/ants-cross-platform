@@ -7,6 +7,28 @@
 # SIGTERM and writes the result file of a room that was closed. The last section is the server that HOLDS the seat of a player whose connection is lost (protocol 10, --reconnect):
 # a small TCP proxy (flaky_proxy.py) between a client and the server is cut, the room pauses and names the absent seat, nothing runs while it waits, and at the cap the seat is dropped
 # and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence and finds its link closed when it wakes up.
+# The sections below are PARTS: they run one after the other (the default), or alone with `--part NAME` (repeatable), each with its own server on its own ports and its own
+# scratch folder, so that ./run_tests.sh and the CI can run them at the same time. `--list-parts` prints the names.
+PART_NAMES="options rooms secret demo reconnect"
+PARTS=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --part)
+            shift
+            case " $PART_NAMES " in *" ${1:-?} "*) PARTS="$PARTS $1" ;; *) echo "usage: test_ants_server.sh [--part NAME ...] | --list-parts   (parts: $PART_NAMES)" >&2; exit 2 ;; esac
+            ;;
+        --list-parts) for part in $PART_NAMES; do echo "$part"; done; exit 0 ;;
+        *) echo "usage: test_ants_server.sh [--part NAME ...] | --list-parts   (parts: $PART_NAMES)" >&2; exit 2 ;;
+    esac
+    shift
+done
+part_enabled() {
+    if [ -z "$PARTS" ]; then return 0; fi
+    case " $PARTS " in *" $1 "*) return 0 ;; esac
+    return 1
+}
+PART_LABEL=""
+[ -n "$PARTS" ] && PART_LABEL=" [${PARTS# }]"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD="${BUILD_DIR:-build}"
 SERVER="$ROOT/$BUILD/src/ants_server/ants_server"
@@ -17,7 +39,7 @@ check() {      # check "what" exit-status
     CHECKS=$((CHECKS + 1))
     if [ "$2" -ne 0 ]; then
         FAILS=$((FAILS + 1))
-        echo "  FAIL: $1"
+        echo "  FAIL:${PART_LABEL} $1"            # (the parts run side by side in the CI: a failure names its part)
     fi
 }
 echo "[server e2e] ants_server and two headless clients: control secret, a room by code, an automatic start"
@@ -39,6 +61,9 @@ cleanup() {
 }
 trap cleanup EXIT
 free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'; }
+# (used by several parts)
+code_of() { curl -s -m 3 -o /dev/null -w '%{http_code}' "$@"; }
+stop_server() { kill -TERM "$SERVER_PID" 2> /dev/null; wait "$SERVER_PID" 2> /dev/null; SERVER_PID=""; }
 GAME_PORT="$(free_port)"
 CTL_PORT="$(free_port)"
 SECRET="e2e-$RANDOM-$RANDOM-secret"
@@ -59,6 +84,8 @@ wait_ticks() {
 }
 
 cd "$ROOT"
+# ---- part options: the pages' own texts and nginx.conf, and the command-line options of ants_server (a bad option is refused at once, a good one starts it) -------
+if part_enabled options; then
 # the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
 check "web/four.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/four.html")" -ge 3 ]; echo $?)"
 # bots fill the empty seats (protocol 11): the "New match" form offers the choice, remembers it, and every link of the room carries it as ?fill=easy|medium|hard, validated; the game page
@@ -153,8 +180,12 @@ cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
 env ANTS_SERVER_SECRET=x perl -e 'alarm 3; exec @ARGV' "$SERVER" --maps "$WORK/maps_odd" --port "$(free_port)" --demo-rooms 2 --demo-map TINY.LVL --demo-maps "TINY.LVL,A B.LVL" > "$WORK/odd.log" 2>&1
 ODD_STATUS=$?
 check "a listed map that no room code can name is a warning at startup, not an error" "$([ "$ODD_STATUS" = "142" ] && grep -q "'A B.LVL' can never be chosen" "$WORK/odd.log" && ! grep -q "'TINY.LVL' can never be chosen" "$WORK/odd.log"; echo $?)"
+fi
 
-ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ctl-port "$CTL_PORT" --results-dir "$WORK/results" > "$WORK/server.log" 2>&1 &
+# ---- part rooms: the control secret, a room by code, the leader, bots that fill the seats, chat, flood control, closing a room, SIGTERM ---------------------------
+if part_enabled rooms; then
+WS_PORT="$(free_port)"
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ws-port "$WS_PORT" --ctl-port "$CTL_PORT" --results-dir "$WORK/results" > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!
 UP=1
 for _ in $(seq 1 50); do
@@ -163,10 +194,20 @@ for _ in $(seq 1 50); do
     sleep 0.1
 done
 check "the server is up and answers /healthz without a secret" "$UP"
+# the busy answer (GET /busy on the WebSocket port; the site's nginx routes /busy to it): public, read-only, plain counts, GET only; the deploy job of CI waits for matches to be 0
+BUSY="http://127.0.0.1:$WS_PORT/busy"
+busy_json_ok() {      # busy_json_ok MATCHES PLAYERS: the answer is 200 JSON that nobody may cache, with exactly these two counts and nothing else (no name, no code, no secret)
+    local head body
+    head="$(curl -s -i -m 3 "$BUSY" | tr -d '\r')"
+    body="$(curl -s -m 3 "$BUSY")"
+    echo "$head" | head -1 | grep -q '^HTTP/1.1 200 OK$' && echo "$head" | grep -qi '^content-type: application/json$' && echo "$head" | grep -qi '^cache-control: no-store$' &&
+        echo "$body" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if sorted(d) == ["matches", "players"] and d["matches"] == int(sys.argv[1]) and d["players"] == int(sys.argv[2]) else 1)' "$1" "$2"
+}
+check "GET /busy on the WebSocket port needs no secret and says 200 JSON, no-store, {\"matches\":0,\"players\":0} while nothing runs" "$(busy_json_ok 0 0; echo $?)"
+check "the busy answer is GET only (a POST is 405) and takes no parameter (a query is no status request: 426), and no other path answers it" "$([ "$(code_of -X POST "$BUSY")" = "405" ] && [ "$(code_of "$BUSY?x=1")" = "426" ] && [ "$(code_of "http://127.0.0.1:$WS_PORT/busy/")" = "426" ] && [ "$(code_of "http://127.0.0.1:$WS_PORT/rooms")" = "426" ]; echo $?)"
 [ "$UP" -ne 0 ] && { cat "$WORK/server.log"; echo "server e2e: $CHECKS checks, $FAILS failures"; exit 1; }
 
 # the secret
-code_of() { curl -s -m 3 -o /dev/null -w '%{http_code}' "$@"; }
 check "no secret: 401" "$([ "$(code_of "$CTL/rooms")" = "401" ]; echo $?)"
 check "a wrong secret: 401" "$([ "$(code_of -H "Authorization: Bearer wrong-$SECRET" "$CTL/rooms")" = "401" ]; echo $?)"
 check "the secret with a character missing: 401" "$([ "$(code_of -H "Authorization: Bearer ${SECRET%?}" "$CTL/rooms")" = "401" ]; echo $?)"
@@ -193,6 +234,7 @@ done
 RUN_SEEN_AT="$(python3 -c 'import time; print(time.time())')"
 check "both clients joined and the match started by itself (state running)" "$RUNNING"
 check "both players are in the room list" "$(echo "$STATUS" | grep -q 'Player1' && echo "$STATUS" | grep -q 'Player2'; echo $?)"
+check "while their match runs /busy says one match and two people" "$(busy_json_ok 1 2; echo $?)"
 TICKS="$(wait_ticks "$CODE")"
 DIALOG_WAIT="$(python3 -c "import time; print(round(time.time() - $RUN_SEEN_AT, 1))")"
 check "the referee's clock runs (ticks after the dialog: $TICKS)" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
@@ -407,6 +449,7 @@ code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$VICTIM" > /dev
 
 # closing the room writes its result; SIGTERM stops the server
 check "the owner closes the room: 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE")" = "200" ]; echo $?)"
+check "with every room closed /busy says no match and nobody again" "$(busy_json_ok 0 0; echo $?)"
 sleep 0.5
 kill -TERM "$SERVER_PID" 2> /dev/null
 wait "$SERVER_PID" 2> /dev/null
@@ -415,7 +458,10 @@ SERVER_PID=""
 check "the server stops cleanly on SIGTERM" "$([ "$SERVER_EXIT" -eq 0 ]; echo $?)"
 check "the room's result file was written" "$([ -s "$WORK/results/$CODE.json" ]; echo $?)"
 check "the log never shows the secret" "$(grep -q "$SECRET" "$WORK/server.log"; [ $? -ne 0 ]; echo $?)"
+fi
 
+# ---- part secret: the control secret that the server makes, keeps, shows and reads from a file --------------------------------------------------------------------
+if part_enabled secret; then
 # no secret in the environment: the server makes one the first time (owner-only file, shown in the log once, the moment it is made) and uses the same one at every later start;
 # a secret in the environment wins; a file that is no secret stops the server and is left alone; nowhere to keep one is an error
 mode_of() { stat -c %a "$1" 2> /dev/null || stat -f %Lp "$1"; }
@@ -433,7 +479,6 @@ start_nosecret() {       # start_nosecret LOG CTL_PORT [more options]: the serve
     done
     return 1
 }
-stop_server() { kill -TERM "$SERVER_PID" 2> /dev/null; wait "$SERVER_PID" 2> /dev/null; SERVER_PID=""; }
 exit_nosecret() { env -u ANTS_SERVER_SECRET perl -e 'alarm 5; exec @ARGV' "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --ctl-port "$(free_port)" "$@" > "$WORK/exit.log" 2>&1; echo $?; }
 GEN_DIR="$WORK/gen"
 GEN_CTL1="$(free_port)"
@@ -491,7 +536,10 @@ check "no secret and nowhere to keep one: status 2 (as before)" "$([ "$(exit_nos
 check "--secret-file puts the generated secret where it is told" "$(start_nosecret "$WORK/gen4.log" "$(free_port)" --secret-file "$WORK/elsewhere/key"; r=$?; stop_server; [ "$r" = "0" ] && [ -s "$WORK/elsewhere/key" ]; echo $?)"
 # the Docker image always passes --results-dir: an explicit --secret-file must win over the default file in that folder (which then is not made)
 check "--secret-file together with --results-dir: the secret goes to the file that is named (owner-only), the default file in the results folder is not made" "$(start_nosecret "$WORK/gen5.log" "$(free_port)" --results-dir "$WORK/res5" --secret-file "$WORK/elsewhere5/key"; r=$?; stop_server; [ "$r" = "0" ] && [ -s "$WORK/elsewhere5/key" ] && [ "$(mode_of "$WORK/elsewhere5/key")" = "600" ] && [ ! -e "$WORK/res5/control-secret" ]; echo $?)"
+fi
 
+# ---- part demo: demo rooms that choose their map, and the stack's own defaults ------------------------------------------------------------------------------------
+if part_enabled demo; then
 # demo rooms that choose their map: "demo-<map>-..." makes the room on that map when it is in --demo-maps, any other code on --demo-map
 PICK_PORT="$(free_port)"
 PICK_CTL="$(free_port)"
@@ -544,8 +592,10 @@ check "the stack: demo-treasure-n3 is made on TREASURE.LVL" "$([ "$(stack_map_of
 check "the stack: demo-islands-2p-n4 is made on ISLANDS.LVL" "$([ "$(stack_map_of_room demo-islands-2p-n4)" = "ISLANDS.LVL" ]; echo $?)"
 for p in $STACK_PIDS; do kill "$p" 2> /dev/null; done
 stop_server
+fi
 
-# ---- the server that holds the seat of a player whose connection is lost (protocol 10, --reconnect) --------------------------------------------------------------
+# ---- part reconnect: the server that holds the seat of a player whose connection is lost (protocol 10, --reconnect) -----------------------------------------------
+if part_enabled reconnect; then
 # The game's own clients do not come back yet (that is release B: a native client whose link is cut is lost, the message below says so). What is tested here is the SERVER, with
 # real programs: a client behind a proxy that is cut, a client that is stopped. The room pauses for everybody and names the seat, nothing runs while it waits, the cap (60 s here)
 # drops the seat and the match goes on for the others.
@@ -703,5 +753,7 @@ check "the result file of the room that held a seat keeps the counters (drops_by
 check "the server's log names the rooms' ends with what the pause came to, and never the secret" "$(grep -q "room $RC_CODE" "$WORK/rc_server.log" && grep -q 'by the cap' "$WORK/rc_server.log" && ! grep -q "$SECRET" "$WORK/rc_server.log"; echo $?)"
 
 echo "  [reconnect e2e] the link cut: the room paused after $RC_PAUSED_AFTER s; the cap dropped the seat $RC_CAPPED_AFTER s after the cut (60 s of pause); a client stopped: the room paused $RC_STOP_PAUSED_AFTER s later"
-echo "server e2e: $CHECKS checks, $FAILS failures"
+fi
+
+echo "server e2e${PART_LABEL}: $CHECKS checks, $FAILS failures"
 [ "$FAILS" -eq 0 ]

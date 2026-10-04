@@ -1,18 +1,26 @@
-# Continuous integration: every push (all branches) and every pull request is built and tested on Windows (MSVC), macOS (Apple clang) and
-# Linux (GCC), and the web image (Emscripten, the beta site's Docker build) is built once. Nothing is published or deployed from here and the
-# workflow needs no secrets. What runs where is listed in README.md ("Continuous integration").
+# Continuous integration: every pull request, every push to main and to staging, and every manual run is built and tested on Windows (MSVC), macOS (Apple clang) and Linux (GCC),
+# and the web image (Emscripten, the beta site's Docker build) and the game server's image are built once. main is protected: it takes a change only through a pull request whose five
+# checks pass, and these five checks are the jobs "Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)" and "Web (Emscripten, Docker image)": rename or split
+# none of them without changing the branch protection in the same release (tests/scripts/test_ci_workflow.py keeps the names). What runs where is listed in README.md ("Continuous
+# integration"); the tiers of tests and the release procedure: docs/WORKFLOW.md.
 #
-# The suites are the ones run_tests.sh runs: ctest runs every test program that the CMake project registers (assets, simulation, network,
-# server, bots, application), then the self-tests of the two tools (map_sweep, bot_arena), the opaque-box E2E runner and, where bash and
-# python3 exist (macOS, Linux), the two script suites (start_game.sh --dry-run, ants_server with two headless clients) and the repository
-# checks (the version and changelog consistency check and the python tests of tests/scripts: the changelog pages, the version tools, the generated
-# version header, the tiers of run_tests.sh). The web job also builds the game server's image. The browser-based checks of the project are not run
-# here (they are opt-in, see tests/TEST_INFRA.md). The tiers of tests and the release procedure: docs/WORKFLOW.md.
+# The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
+# application), then the self-tests of the two tools (map_sweep, bot_arena), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
+# (start_game.sh --dry-run; ants_server with headless clients, its five parts side by side) and the repository checks (the version and changelog consistency check and the python
+# tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
+# --asan, locally) and the browser-based checks are opt-in (tests/TEST_INFRA.md).
+#
+# The last job, `deploy`, runs for a push to main (a merged pull request) or to staging, after every other job of the run passed, and only when the push changed what an image contains
+# or the stack file (tools/deploy_filter.py). A deploy restarts the game server and ends the matches that run, so the job first waits for an idle server (the site's public GET /busy,
+# tools/deploy_wait.py: at most DEPLOY_MAX_WAIT_MINUTES, 180 by default), then calls the Portainer webhook that the repository secret PORTAINER_WEBHOOK_URL (staging:
+# PORTAINER_STAGING_WEBHOOK_URL) holds (tools/deploy_webhook.sh). Without the secret it says so and does nothing, so nothing is deployed from here until the owner sets it
+# (docs/WORKFLOW.md: the steps).
 name: CI
 
 on:
-  push:
   pull_request:
+  push:
+    branches: [main, staging]
   workflow_dispatch:
 
 # One run per branch (or pull request): a newer push cancels the run of the older one.
@@ -93,14 +101,20 @@ jobs:
       - name: Script suites (start script, dedicated server with two headless clients)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
-          bash tests/scripts/test_start_game.sh
-          BUILD_DIR=build bash tests/scripts/test_ants_server.sh
+          status=0
+          bash tests/scripts/test_start_game.sh || status=1
+          # the server end-to-end script is five parts (its own --list-parts names them) that need no port or folder in common: they run side by side
+          export BUILD_DIR=build
+          bash tests/scripts/test_ants_server.sh --list-parts | xargs -P 5 -I{} bash tests/scripts/test_ants_server.sh --part {} || status=1
+          exit $status
 
       - name: Repository checks (version and changelog consistency, python tests of the tools and the tiers)
         if: ${{ !cancelled() }}
         run: |
-          python3 tools/check_version_consistency.py
-          python3 -m unittest discover -s tests/scripts -p 'test_*.py'
+          status=0
+          python3 tools/check_version_consistency.py || status=1
+          python3 tests/scripts/run_python_tests.py || status=1
+          exit $status
 
       - name: Keep the test logs of a failed run
         if: failure()
@@ -192,14 +206,20 @@ jobs:
       - name: Script suites (start script, dedicated server with two headless clients)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
-          bash tests/scripts/test_start_game.sh
-          BUILD_DIR=build bash tests/scripts/test_ants_server.sh
+          status=0
+          bash tests/scripts/test_start_game.sh || status=1
+          # the server end-to-end script is five parts (its own --list-parts names them) that need no port or folder in common: they run side by side
+          export BUILD_DIR=build
+          bash tests/scripts/test_ants_server.sh --list-parts | xargs -P 5 -I{} bash tests/scripts/test_ants_server.sh --part {} || status=1
+          exit $status
 
       - name: Repository checks (version and changelog consistency, python tests of the tools and the tiers)
         if: ${{ !cancelled() }}
         run: |
-          python3 tools/check_version_consistency.py
-          python3 -m unittest discover -s tests/scripts -p 'test_*.py'
+          status=0
+          python3 tools/check_version_consistency.py || status=1
+          python3 tests/scripts/run_python_tests.py || status=1
+          exit $status
 
       - name: Keep the test logs of a failed run
         if: failure()
@@ -216,51 +236,87 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Visual Studio 2022 (MSVC 19.4x) is what the owner builds with (windows-2022); windows-latest (and windows-2025) have Visual Studio 2026, the newest compiler.
-          - name: MSVC 2022
-            os: windows-2022
-          - name: MSVC 2026
-            os: windows-latest
+        # Visual Studio 2022 (MSVC 19.4x) is what the owner builds with (windows-2022); windows-latest (and windows-2025) have Visual Studio 2026, the newest compiler.
+        # MSVC 2026 runs for every pull request and push; MSVC 2022 for pull requests, pushes to main and manual runs (not for a push to staging), which is what the matrix
+        # below says: the list is chosen here, because a job's own `if` cannot see its matrix.
+        include: ${{ fromJSON(github.event_name == 'push' && github.ref != 'refs/heads/main' && '[{"name":"MSVC 2026","os":"windows-latest"}]' || '[{"name":"MSVC 2022","os":"windows-2022"},{"name":"MSVC 2026","os":"windows-latest"}]') }}
     env:
-      # compile the files of a project in parallel (cl's -MP; the dash form because Git Bash would turn /MP into a path)
-      CXXFLAGS: -MP
+      # The compiler cache: sccache (with the Ninja generator under the MSVC environment, as the Visual Studio generators cannot use a launcher), its folder cached like the
+      # ccache folder of the Linux job (keyed by the runner image and the commit, restored from the latest older one).
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 600M
     steps:
       - uses: actions/checkout@v7
 
+      - name: Restore the compiler cache
+        uses: actions/cache@v6
+        with:
+          path: .sccache
+          key: sccache-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: sccache-${{ matrix.os }}-
+
+      # sccache: a pinned release of Mozilla's compiler cache, its SHA-256 checked (the digest is the one that GitHub shows for the release asset).
+      - name: Install sccache 0.14.0
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $version = '0.14.0'
+          $sha256 = '74a3ffd4207e8e0e62af7747bd03b42deab0f6dabc7ef0a8cdd950f83f1037c8'
+          $zip = Join-Path $env:RUNNER_TEMP "sccache-v$version.zip"
+          Invoke-WebRequest -Uri "https://github.com/mozilla/sccache/releases/download/v$version/sccache-v$version-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          if ((Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLower() -ne $sha256) { throw 'sccache: the checksum of the download is not the pinned one' }
+          $folder = Join-Path $env:RUNNER_TEMP 'sccache'
+          Expand-Archive -Path $zip -DestinationPath $folder
+          $exe = Get-ChildItem -Path $folder -Recurse -Filter sccache.exe | Select-Object -First 1
+          Add-Content -Path $env:GITHUB_PATH -Value $exe.DirectoryName
+          & $exe.FullName --version
+
+      # The Visual C++ environment (cl, link, the include and library paths) for the steps below; the action is pinned to the commit of its tag v1.13.0.
+      - name: Set up the MSVC environment (x64)
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+
       # SDL2 and SDL2_ttf are not installed: CMakeLists.txt downloads the prebuilt Visual C++ packages itself (FetchContent), as it does on the owner's PC.
-      - name: Configure (Visual Studio generator, x64)
+      - name: Configure (Ninja, Release, warnings are errors, sccache)
         run: |
           cmake --version | head -1
-          cmake -S . -B build -A x64 -DANTS_WERROR=ON
+          cl 2>&1 | head -1 || true
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       - name: Build the game, the server and the test programs (Release)
         id: build
         run: |
-          cmake --build build --config Release --parallel
-          cmake --build build --config Release --parallel --target map_sweep bot_arena
+          cmake --build build
+          cmake --build build --target map_sweep bot_arena
 
       - name: Build the E2E runner (Release)
         id: build_e2e
         run: |
-          cmake -S tests/e2e -B build_e2e -A x64
-          cmake --build build_e2e --config Release --parallel
+          cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          cmake --build build_e2e
+
+      - name: Compiler cache statistics
+        if: ${{ !cancelled() }}
+        run: |
+          sccache --show-stats || true
+          sccache --stop-server || true
 
       - name: Test programs (ctest)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        run: ctest --test-dir build -C Release --output-on-failure --timeout 900 --parallel 4
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
       - name: Tool self-tests (map_sweep, bot_arena)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           status=0
-          build/Release/map_sweep.exe --selftest || status=1
-          build/Release/bot_arena.exe --selftest || status=1
+          build/map_sweep.exe --selftest || status=1
+          build/bot_arena.exe --selftest || status=1
           exit $status
 
       - name: Opaque-box E2E runner
         if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
-        run: build_e2e/Release/e2e_runner.exe --all
+        run: build_e2e/e2e_runner.exe --all
 
       - name: Keep the test logs of a failed run
         if: failure()
@@ -292,3 +348,105 @@ jobs:
         run: |
           docker build -f Dockerfile.server -t ants-server .
           docker run --rm --entrypoint /usr/local/bin/ants_server ants-server --version
+
+      # The two stacks (docker-compose.stack.yml and docker-compose.staging.yml) must render, and the build argument ANTS_SITE_LABEL of the staging stack must put "staging" in the
+      # title and the footer of both pages, while the production pages do not have the word. (The second image reuses the layers of the first: only its last layers are built.)
+      - name: Check the stack files and the staging label of the pages
+        run: |
+          docker compose -f docker-compose.stack.yml config --quiet
+          docker compose -f docker-compose.staging.yml config --quiet
+          docker build --build-arg ANTS_SITE_LABEL=staging -t ants-beta-staging .
+          docker run --rm ants-beta-staging sh -c 'cd /usr/share/nginx/html && for page in index.html four.html; do grep -q "(staging)</title>" $page && grep -q "id=\"site-label\">staging<" $page || exit 1; done'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ! grep -qi staging index.html four.html'
+
+  deploy:
+    name: Deploy (Portainer webhook)
+    needs: [linux, macos, windows, web]
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
+    runs-on: ubuntu-latest
+    # The job may wait for a quiet server for hours (tools/deploy_wait.py waits 300 minutes at the most, whatever DEPLOY_MAX_WAIT_MINUTES says): its limit is above that.
+    timeout-minutes: 330
+    # One deploy per branch, and a newer one replaces an older one that still waits (the group is not the workflow's, which would cancel the run this job is in).
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      actions: read
+    env:
+      # The webhook addresses are secrets: they are read from the environment by tools/deploy_webhook.sh and never printed, never put in an argument and never in a log line.
+      # Each variable holds its secret on its own branch only, so that a missing production secret can never be replaced by the staging one.
+      PRODUCTION_WEBHOOK: ${{ github.ref == 'refs/heads/main' && secrets.PORTAINER_WEBHOOK_URL || '' }}
+      STAGING_WEBHOOK: ${{ github.ref == 'refs/heads/staging' && secrets.PORTAINER_STAGING_WEBHOOK_URL || '' }}
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - name: Is the deploy secret set?
+        id: secret
+        run: |
+          if [ -z "${PRODUCTION_WEBHOOK}${STAGING_WEBHOOK}" ]; then
+            echo "deploy secret not set: skipped"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.secret.outputs.present == 'true'
+        with:
+          fetch-depth: 0
+
+      # What changed since the last run of this workflow that passed on this branch (so that a push whose run was cancelled by a newer push is not forgotten), else since the
+      # push's own "before". A push of documents, CI files and tests only is skipped: a deploy restarts the site and ends the matches that are running.
+      - name: Did the push change what the site serves or runs?
+        if: steps.secret.outputs.present == 'true'
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base=$(gh run list --workflow ci.yml --branch "$BRANCH" --event push --status success --limit 1 --json headSha --jq '.[0].headSha' 2> /dev/null || true)
+          [ -n "$base" ] || base="$BEFORE"
+          compose=docker-compose.stack.yml
+          [ "$BRANCH" = staging ] && compose=docker-compose.staging.yml
+          echo "comparing ${base:0:12} with ${GITHUB_SHA:0:12}"
+          python3 tools/deploy_filter.py --base "$base" --head "$GITHUB_SHA" --compose "$compose" --github-output "$GITHUB_OUTPUT"
+
+      # A deploy recreates the game server and ends every match that runs, so it waits for a quiet moment: the site's public GET /busy ({"matches": N, "players": M}) is polled every minute
+      # and the deploy goes on when no match runs, after DEPLOY_MAX_WAIT_MINUTES (a repository variable, 180 by default) whatever runs, or when the address has not answered for five
+      # minutes (the first deploy of a site that has no /busy yet). The addresses are the sites' own, public, so they are variables and not secrets: DEPLOY_BUSY_URL (the production
+      # site's address, the public beta site's by default) and STAGING_BUSY_URL (none by default: the staging site is deployed without a wait). A newer push cancels a job that waits.
+      - name: Wait for an idle game server
+        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'
+        env:
+          PRODUCTION_BUSY_URL: ${{ vars.DEPLOY_BUSY_URL || 'https://beta.playants.org/busy' }}
+          STAGING_BUSY_URL: ${{ vars.STAGING_BUSY_URL }}
+          MAX_WAIT_MINUTES: ${{ vars.DEPLOY_MAX_WAIT_MINUTES || '180' }}
+        run: |
+          site=production
+          url="$PRODUCTION_BUSY_URL"
+          if [ "$BRANCH" = staging ]; then
+            site=staging
+            url="$STAGING_BUSY_URL"
+          fi
+          python3 tools/deploy_wait.py --label "$site" --url "$url" --max-wait-minutes "$MAX_WAIT_MINUTES"
+
+      # The webhook makes Portainer pull the branch as it is now: a push that is not the tip any more (a newer one is on its way, its own run decides) is not deployed from here. This is
+      # checked after the wait, which may have taken hours.
+      - name: Is this push still the tip of the branch?
+        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'
+        id: tip
+        run: |
+          tip=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            echo "tip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "a newer push is on the branch: its run decides; nothing is called"
+            echo "tip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Call the deploy webhook
+        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true' && steps.tip.outputs.tip == 'true'
+        run: |
+          site=production
+          [ "$BRANCH" = staging ] && site=staging
+          WEBHOOK_URL="${PRODUCTION_WEBHOOK}${STAGING_WEBHOOK}" bash tools/deploy_webhook.sh "$site"

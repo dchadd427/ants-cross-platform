@@ -36,9 +36,7 @@ if(WIN32)
     endif()
 endif()
 
-target_compile_definitions(test_app_integration PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_app_integration PRIVATE ants_test_paths)
 
 add_test(NAME test_app_integration COMMAND test_app_integration)
 set_tests_properties(test_app_integration PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -72,9 +70,7 @@ if(WIN32)
     target_link_libraries(test_render_parity PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_render_parity PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_render_parity PRIVATE ants_test_paths)
 
 add_test(NAME test_render_parity COMMAND test_render_parity)
 set_tests_properties(test_render_parity PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -108,9 +104,7 @@ if(WIN32)
     target_link_libraries(test_hud_layout PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_hud_layout PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_hud_layout PRIVATE ants_test_paths)
 
 add_test(NAME test_hud_layout COMMAND test_hud_layout)
 set_tests_properties(test_hud_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -144,9 +138,7 @@ if(WIN32)
     target_link_libraries(test_status_messages PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_status_messages PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_status_messages PRIVATE ants_test_paths)
 
 add_test(NAME test_status_messages COMMAND test_status_messages)
 set_tests_properties(test_status_messages PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -180,9 +172,7 @@ if(WIN32)
     target_link_libraries(test_input_model PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_input_model PRIVATE
-    TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
-)
+target_link_libraries(test_input_model PRIVATE ants_test_paths)
 
 add_test(NAME test_input_model COMMAND test_input_model)
 set_tests_properties(test_input_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -266,9 +256,7 @@ target_link_libraries(test_network_app PRIVATE
     ants_server_core
 )
 
-target_compile_definitions(test_network_app PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_network_app PRIVATE ants_test_paths)
 
 if(APPLE)
     target_link_libraries(test_network_app PRIVATE
@@ -314,9 +302,7 @@ if(WIN32)
     target_link_libraries(test_view_fingerprint PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_view_fingerprint PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_view_fingerprint PRIVATE ants_test_paths)
 
 add_test(NAME test_view_fingerprint COMMAND test_view_fingerprint)
 set_tests_properties(test_view_fingerprint PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -337,9 +323,7 @@ target_link_libraries(test_start_menu_app PRIVATE
     ants_server_core
 )
 
-target_compile_definitions(test_start_menu_app PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_start_menu_app PRIVATE ants_test_paths)
 
 if(APPLE)
     target_link_libraries(test_start_menu_app PRIVATE
@@ -374,10 +358,7 @@ target_link_libraries(test_start_menu PRIVATE
     ants_assets
 )
 
-target_compile_definitions(test_start_menu PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-    ANTS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-)
+target_link_libraries(test_start_menu PRIVATE ants_test_paths)
 
 if(APPLE)
     target_link_libraries(test_start_menu PRIVATE
@@ -423,9 +404,7 @@ if(WIN32)
     target_link_libraries(test_screen_layout PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_screen_layout PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_screen_layout PRIVATE ants_test_paths)
 
 add_test(NAME test_screen_layout COMMAND test_screen_layout)
 set_tests_properties(test_screen_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -459,9 +438,7 @@ if(WIN32)
     target_link_libraries(test_canvas_layout PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_canvas_layout PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_canvas_layout PRIVATE ants_test_paths)
 
 add_test(NAME test_canvas_layout COMMAND test_canvas_layout)
 set_tests_properties(test_canvas_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -495,9 +472,7 @@ if(WIN32)
     target_link_libraries(test_wide_hud PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_wide_hud PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_wide_hud PRIVATE ants_test_paths)
 
 add_test(NAME test_wide_hud COMMAND test_wide_hud)
 set_tests_properties(test_wide_hud PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -532,9 +507,7 @@ if(WIN32)
     target_link_libraries(test_wide_setup PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_wide_setup PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_wide_setup PRIVATE ants_test_paths)
 
 add_test(NAME test_wide_setup COMMAND test_wide_setup)
 set_tests_properties(test_wide_setup PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -569,9 +542,7 @@ if(WIN32)
     target_link_libraries(test_wide_pages PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_wide_pages PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_wide_pages PRIVATE ants_test_paths)
 
 add_test(NAME test_wide_pages COMMAND test_wide_pages)
 set_tests_properties(test_wide_pages PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -606,9 +577,7 @@ if(WIN32)
     target_link_libraries(test_map_preview PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_map_preview PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_map_preview PRIVATE ants_test_paths)
 
 add_test(NAME test_map_preview COMMAND test_map_preview)
 set_tests_properties(test_map_preview PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -643,9 +612,7 @@ if(WIN32)
     target_link_libraries(test_zoom_model PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_zoom_model PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_zoom_model PRIVATE ants_test_paths)
 
 add_test(NAME test_zoom_model COMMAND test_zoom_model)
 set_tests_properties(test_zoom_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -680,9 +647,7 @@ if(WIN32)
     target_link_libraries(test_zoom_view PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_zoom_view PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_zoom_view PRIVATE ants_test_paths)
 
 add_test(NAME test_zoom_view COMMAND test_zoom_view)
 set_tests_properties(test_zoom_view PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -717,9 +682,7 @@ if(WIN32)
     target_link_libraries(test_zoom_fingerprint PRIVATE ws2_32 winmm)
 endif()
 
-target_compile_definitions(test_zoom_fingerprint PRIVATE
-    ORIGINAL_ASSETS_DIR="${CMAKE_SOURCE_DIR}/Original-Ants"
-)
+target_link_libraries(test_zoom_fingerprint PRIVATE ants_test_paths)
 
 add_test(NAME test_zoom_fingerprint COMMAND test_zoom_fingerprint)
 set_tests_properties(test_zoom_fingerprint PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

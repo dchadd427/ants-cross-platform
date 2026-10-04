@@ -30,14 +30,11 @@
 #include "ants_app/map_select.hpp"
 #include "ants_app/application.hpp"
 #include "ants_app/version.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants::app;
 using namespace ants::sim;
 using namespace ants::assets;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 // ============================================================================
 // Test Harness Assertions & Runner

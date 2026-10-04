@@ -49,13 +49,10 @@
 #include "ants_app/wide_page.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/match_stats.hpp"
+#include "ants_test_paths.hpp"
 
 using namespace ants;
 using namespace ants::app;
-
-#ifndef ORIGINAL_ASSETS_DIR
-#define ORIGINAL_ASSETS_DIR "Original-Ants"
-#endif
 
 namespace {
 
