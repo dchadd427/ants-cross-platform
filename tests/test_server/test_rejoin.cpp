@@ -1298,6 +1298,34 @@ void run_way_back_tests() {
         ASSERT_TRUE(all_equal({&a, &b}) && a.sim.state_hash().total == w.status("RJ-11").referee_hash);
     } TEST_END();
 
+    TEST_CASE("RJ1.12 A Page That The Browser Did Not Wake Hands Its Gap To The Session In Every Phase Of The Way Back (The Time Of The Way Back Is Real Time: The Attempts, And The Give-Up After The Cap And A Minute)") {
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-12"), w.server_now()).ok);
+        Machine& a = w.join("Ann", "RJ-12");
+        Machine& b = w.join("Bob", "RJ-12");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+        w.server.door = Server::Door::Refusing;                                           // Bob cannot reach the server
+        ASSERT_TRUE(w.server.cut_newest());
+        w.run(3000);
+        ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
+        const uint32_t tries = w.server.refused;
+        ASSERT_TRUE(tries >= 1);                                                         // it is trying
+        b.net.note_gap(10000);                                                           // ten seconds that its clock did not count: an attempt is due at once, nothing is given up
+        ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
+        w.run(100);
+        ASSERT_TRUE(w.server.refused > tries);
+        b.net.note_gap(32u * 60u * 1000u);                                               // half an hour that its clock did not count: the way back is over (the cap and a minute)
+        ASSERT_EQ(b.net.phase(), NetGame::Phase::Over);
+        w.run(10);                                                                       // (the next frame takes its events)
+        ASSERT_TRUE(b.saw(NetGame::Event::Type::HostLeft));
+        ASSERT_EQ(b.net.status_text(), std::string("The match could not wait any longer."));
+        ASSERT_TRUE(b.keys_forgotten.size() == 1);
+        const uint32_t seen = w.server.accepted;
+        w.run(5000);
+        ASSERT_EQ(w.server.accepted, seen);                                              // and nothing tries again
+    } TEST_END();
+
     TEST_CASE("RJ1.13 leave() Works In Every State Of The Way Back: While The Match Is Held For A Seat That Is Away (No Quit Command Would Be Sealed: The Leave Message Drops The Seat, The Others Are Told At The Same Tick), While The Machine Has No Link (It Ends The Attempts), And While It Catches Up (The Server Is Told And Drops The Seat); The Key Is Let Go Of Each Time") {
         {   // the match is held for Cat, and Bob quits
             World w;
@@ -1372,34 +1400,6 @@ void run_way_back_tests() {
             }
             ASSERT_TRUE(w.status("RJ-13C").absent.empty() && w.status("RJ-13C").rejoins == 0);
         }
-    } TEST_END();
-
-    TEST_CASE("RJ1.12 A Page That The Browser Did Not Wake Hands Its Gap To The Session In Every Phase Of The Way Back (The Time Of The Way Back Is Real Time: The Attempts, And The Give-Up After The Cap And A Minute)") {
-        World w;
-        ASSERT_TRUE(w.server.start(w.now));
-        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-12"), w.server_now()).ok);
-        Machine& a = w.join("Ann", "RJ-12");
-        Machine& b = w.join("Bob", "RJ-12");
-        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
-        w.server.door = Server::Door::Refusing;                                           // Bob cannot reach the server
-        ASSERT_TRUE(w.server.cut_newest());
-        w.run(3000);
-        ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
-        const uint32_t tries = w.server.refused;
-        ASSERT_TRUE(tries >= 1);                                                         // it is trying
-        b.net.note_gap(10000);                                                           // ten seconds that its clock did not count: an attempt is due at once, nothing is given up
-        ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
-        w.run(100);
-        ASSERT_TRUE(w.server.refused > tries);
-        b.net.note_gap(32u * 60u * 1000u);                                               // half an hour that its clock did not count: the way back is over (the cap and a minute)
-        ASSERT_EQ(b.net.phase(), NetGame::Phase::Over);
-        w.run(10);                                                                       // (the next frame takes its events)
-        ASSERT_TRUE(b.saw(NetGame::Event::Type::HostLeft));
-        ASSERT_EQ(b.net.status_text(), std::string("The match could not wait any longer."));
-        ASSERT_TRUE(b.keys_forgotten.size() == 1);
-        const uint32_t seen = w.server.accepted;
-        w.run(5000);
-        ASSERT_EQ(w.server.accepted, seen);                                              // and nothing tries again
     } TEST_END();
 }
 
