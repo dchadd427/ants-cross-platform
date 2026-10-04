@@ -1456,6 +1456,30 @@ void HarassTask::step(TaskContext& c) {
         }
     }
 
+    // 1b. how fast the carriers that were hit walk again (a blow clears the walk; the owner sends the carrier on, or does not): a team whose carriers are back on their way within harass_min_recovery
+    //     ticks loses next to nothing to a blow
+    if (plan.harass_min_recovery > 0) {
+        for (const AntView& e : v.others()) {
+            if (!e.holding) continue;
+            const bool hit_clip = e.state == sim::UnitState::Flinch || e.state == sim::UnitState::Knockback;
+            const auto f = flinched_.find(e.id);
+            if (hit_clip && f == flinched_.end()) {
+                flinched_[e.id] = now;
+            } else if (!hit_clip && f != flinched_.end() && (e.state == sim::UnitState::Walking || now >= f->second + 300u)) {
+                recover_sum_[e.team] += std::min<uint64_t>(300u, now - f->second);
+                ++recover_n_[e.team];
+                flinched_.erase(f);
+                if (recover_n_[e.team] >= 3 && recover_sum_[e.team] < static_cast<uint64_t>(plan.harass_min_recovery) * recover_n_[e.team] && pause_until_[e.team] <= now) {
+                    pause_until_[e.team] = now + plan.harass_pause_ticks;
+                    recover_n_[e.team] = 0;
+                    recover_sum_[e.team] = 0;
+                    ++pauses_;
+                }
+            }
+        }
+        for (auto it = flinched_.begin(); it != flinched_.end();) it = now >= it->second + 600u ? flinched_.erase(it) : std::next(it);          // (out of sight, dead, delivered)
+    }
+
     // 2. the targets: carriers of the other teams that an attack order can reach, with what makes one worth the trip
     int leader = -1;
     int32_t leader_score = -1;

@@ -117,6 +117,8 @@ struct LevelPlan {
     uint32_t harass_workers{0};          // workers that join the Combat Ants of the squad (an ant less at the piles while a target lasts)
     uint32_t harass_reserve{4};          // ants that never join (the economy: four carriers fill a gate)
     uint32_t harass_min_hp{5};           // a member with fewer hit points leaves the squad
+    uint32_t harass_min_recovery{0};     // a team whose hit carriers walk again within this many ticks (their owner re-sends them at once: an attentive player, a Hard bot with its gate task) is not worth the blows:
+                                         // the squad leaves it alone for harass_pause_ticks once it has seen three of them (0: off). A blow is worth the time that its victim loses.
     uint32_t harass_retreat_hp{0};       // ... and a member that falls below this (or dies) in a fight with ants of a team makes the squad leave that team alone for harass_pause_ticks (0: off)
     uint32_t harass_pause_ticks{3000};
     uint32_t harass_odds_percent{100};   // the squad's strength against the enemy's near a target (Combat Ant 8, any other ant 4; enemy: Combat 8, drawn attacking lately 4, other ants 1), in percent

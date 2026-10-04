@@ -463,7 +463,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid agg old allon steals harass harassw harassres harasshp harassodds harassretreat harasspause harasscrowd harassidlew harassnear hatchsq hatchextra harassleader harassfar harassidle harassstick harassdist harassstation harassrange harassrel), for the tournaments\n"
+        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid agg old allon steals harass harassw harassres harasshp harassodds harassrecover harassretreat harasspause harasscrowd harassidlew harassnear hatchsq hatchextra harassleader harassfar harassidle harassstick harassdist harassstation harassrange harassrel), for the tournaments\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -580,6 +580,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "harassres") { p.harass_reserve = static_cast<uint32_t>(v); return true; }
     if (key == "harasshp") { p.harass_min_hp = static_cast<uint32_t>(v); return true; }
     if (key == "harassodds") { p.harass_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "harassrecover") { p.harass_min_recovery = static_cast<uint32_t>(v); return true; }
     if (key == "harassretreat") { p.harass_retreat_hp = static_cast<uint32_t>(v); return true; }
     if (key == "harasspause") { p.harass_pause_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "harasscrowd") { p.harass_crowd_cost = static_cast<uint32_t>(v); return true; }
@@ -643,7 +644,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         if (p.takes_thief && p.max_thief < 2) p.max_thief = 2;
         return true;
     }
-    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid agg old allon steals harass harassw harassres harasshp harassodds harassretreat harasspause harasscrowd harassidlew harassnear hatchsq hatchextra harassleader harassfar harassidle harassstick harassdist harassstation harassrange harassrel)";
+    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid agg old allon steals harass harassw harassres harasshp harassodds harassrecover harassretreat harasspause harasscrowd harassidlew harassnear hatchsq hatchextra harassleader harassfar harassidle harassstick harassdist harassstation harassrange harassrel)";
     return false;
 }
 
