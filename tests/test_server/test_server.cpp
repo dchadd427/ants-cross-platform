@@ -5521,6 +5521,15 @@ void run_persist_tests() {
             ASSERT_TRUE(first != nullptr && first->append_turn(sample_turn(0)));
             RestartHead other = head;
             other.start.seed = 99;
+#ifdef _WIN32
+            // (Windows cannot replace a file that is open: while the first writer holds it the second head is refused and the first record stays whole; a room's
+            // writer is always closed before its code can be made again, and then the second head replaces the record as everywhere)
+            ASSERT_TRUE(store.create(other, why) == nullptr && !why.empty());
+            const RestartLoaded kept = read_restart_record(first->path(), cfg.max_record_bytes);
+            ASSERT_TRUE(kept.ok() && kept.turns.size() == 1 && kept.head.start.seed == head.start.seed);
+            ASSERT_EQ(entries_but_lock(cfg.dir), size_t{1});
+            first.reset();
+#endif
             auto second = store.create(other, why);
             ASSERT_TRUE(second != nullptr);
             const RestartLoaded r = read_restart_record(second->path(), cfg.max_record_bytes);
@@ -6021,6 +6030,9 @@ void run_persist_server_tests() {
             fs::create_directories(maps_copy);
             fs::copy_file(maps_dir() + "/TINY.LVL", fs::path(maps_copy) / "TINY.LVL", fs::copy_options::overwrite_existing);
             PWorld w("persist-79", ServerLimits(), maps_copy);
+            // (the restore's clock is this world's own, 1 ms a read: the real one stamped the failed room ahead of the world's time on a slow machine, and the keep
+            // time read that as long over; a replay still outlasts a budget of 0)
+            w.restart.clock_ms = [&w]() { w.now += 1; return w.server_now(); };
             w.start_server(500);
             crash_with_record(w, "R-1", 8000);
             ASSERT_MSG(w.record_files().size() == 1, c.what);
