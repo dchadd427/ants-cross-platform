@@ -66,7 +66,7 @@ class Game:
 
     def __init__(self, tab, web):
         self.tab = tab
-        self.web = web if web.endswith("/") else web + "/"
+        self.web = (web if web.endswith("/") else web + "/") + "play.html"            # the game page at its own path ("/" is the front page, the lobby)
         self.pointer = [0.0, 0.0]                                            # where the DevTools pointer is (CSS pixels): locked motion is the difference between two of its positions
 
     def probe(self, what):

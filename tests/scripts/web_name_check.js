@@ -1,21 +1,22 @@
 // Runs the pages' OWN code for the player's name (the owner: "the ability for somebody to type in their name ... so their name goes into the game instead of random", and "when joining a
 // link from somebody else, it should ask you first what you want your name to be"):
-//   - the rules of a name (the block NAME_BEGIN .. NAME_END, the same text in web/four.html and web/shell.html) on a table of names: the rules of the desktop start menu
+//   - the rules of a name (the block NAME_BEGIN .. NAME_END, the same text in web/lobby.html and web/shell.html) on a table of names: the rules of the desktop start menu
 //     (printable ASCII, trimmed, at most 32, nothing that starts with "Bot (" with blanks and case ignored; an empty name means "none chosen");
 //   - the name step (runNameStep): filled in from what the browser remembered, a bad name explained and not accepted, the button or Enter accepts once, the name is remembered;
 //   - web/shell.html: which addresses ask for a name (a shared link: ANTS_PAGE.asksForName), the address without its name (withoutName), and the gate that holds the game back until the name
 //     is chosen (makeNameGate): the game is not started, so it does not connect, before the button; the chosen name goes into the game's arguments as --name;
-//   - web/four.html as a whole, with a small fake of the browser's DOM: the field that Host and Join share is remembered and filled in, its name goes to the seat that this person plays
+//   - web/lobby.html (the front page) as a whole, with a small fake of the browser's DOM: a first visit (1 player, Treasure, Medium opponents), single player (Play takes this tab to the game page of this computer),
+//     the host's own seat in this tab, and the field that Host and Join share is remembered and filled in, its name goes to the seat that this person plays
 //     (the first seat of the page) and the other seats of the page keep random names, a link made for somebody else carries none, bad names start nothing, a name with < > & is only
 //     ever text (the page writes no markup at all), an empty field falls back to a random name (and to Player for a join), a shared link of the page asks first and starts nothing before.
-// tests/scripts/test_web_name.py runs this with node (the quick tier). usage: node web_name_check.js web/shell.html web/four.html     (exit 0: every check holds; every failure is printed)
+// tests/scripts/test_web_name.py runs this with node (the quick tier). usage: node web_name_check.js web/shell.html web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
 const nodeCrypto = require('crypto');
 
 const shellPath = process.argv[2];
-const fourPath = process.argv[3];
-if (!shellPath || !fourPath) { console.log('usage: web_name_check.js shell.html four.html'); process.exit(2); }
+const lobbyPath = process.argv[3];
+if (!shellPath || !lobbyPath) { console.log('usage: web_name_check.js shell.html lobby.html'); process.exit(2); }
 
 let checks = 0;
 let failures = 0;
@@ -39,15 +40,15 @@ function between(text, begin, end, path) {
     return text.slice(from, text.lastIndexOf('\n', stop - 1) + 1);
 }
 const shellText = fs.readFileSync(shellPath, 'utf8');
-const fourText = fs.readFileSync(fourPath, 'utf8');
+const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 1. The rules of a name: the same text in both pages, on a table
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const nameBlockShell = between(shellText, 'NAME_BEGIN', 'NAME_END', shellPath);
-const nameBlockFour = between(fourText, 'NAME_BEGIN', 'NAME_END', fourPath);
-check('the rules and the step of a name are the same text in both pages', nameBlockShell === nameBlockFour);
-const names = new Function(nameBlockFour + '\nreturn { nameCheck: nameCheck, runNameStep: runNameStep, KEY: NAME_KEY, MAX: NAME_MAX };')();
+const nameBlockLobby = between(lobbyText, 'NAME_BEGIN', 'NAME_END', lobbyPath);
+check('the rules and the step of a name are the same text in both pages', nameBlockShell === nameBlockLobby);
+const names = new Function(nameBlockLobby + '\nreturn { nameCheck: nameCheck, runNameStep: runNameStep, KEY: NAME_KEY, MAX: NAME_MAX };')();
 const nameCheck = names.nameCheck;
 check('the name is remembered under ants.name', names.KEY === 'ants.name');
 check('a name has at most 32 characters', names.MAX === 32);
@@ -247,9 +248,9 @@ check('a copy of the address of a game that was given a name is a shared link', 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 4. web/four.html as a whole, with a small fake of the browser
+// 4. web/lobby.html as a whole, with a small fake of the browser
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-const NAMES_OF_THE_PAGE = (function () { const m = /var NAMES = \[([^\]]*)\]/.exec(fourText); return m ? m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')) : []; })();
+const NAMES_OF_THE_PAGE = (function () { const m = /var NAMES = \[([^\]]*)\]/.exec(lobbyText); return m ? m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')) : []; })();
 check('the page has its list of random names', NAMES_OF_THE_PAGE.length >= 4);
 
 class El {
@@ -290,10 +291,10 @@ class El {
 }
 
 const THROWS = 'THROWS';
-function runFour(search, stored, options) {
+function runLobby(search, stored, options) {
     options = options || {};
     const env = { innerHTMLWrites: [], assigned: [], replaced: [], opened: [], copied: [], elements: {}, focused: null, confirms: [] };
-    const html = fourText;
+    const html = lobbyText;
     const body = html.slice(html.indexOf('<body>'));
     for (const m of body.matchAll(/<(\w+)([^>]*)>/g)) {
         const idm = /\bid="([^"]+)"/.exec(m[2]);
@@ -318,7 +319,7 @@ function runFour(search, stored, options) {
         setItem(k, v) { if (stored === THROWS) throw new Error('storage is blocked'); data[k] = String(v); },
     };
     const win = {
-        location: { search, href: 'https://play.test/four.html' + search, pathname: '/four.html', origin: 'https://play.test', protocol: 'https:', host: 'play.test', assign(u) { env.assigned.push(u); } },
+        location: { search, href: 'https://play.test/' + search, pathname: '/', origin: 'https://play.test', protocol: 'https:', host: 'play.test', assign(u) { env.assigned.push(u); } },
         localStorage: storage,
         crypto: nodeCrypto.webcrypto,
         listeners: {},
@@ -341,28 +342,30 @@ function runFour(search, stored, options) {
     env.frameOf = (seat) => { const cell = env.$('grid').children.find((c) => c.getAttribute('data-seat') === String(seat)); return cell ? cell.findAll((e) => e.tagName === 'iframe')[0] : null; };
     env.param = (url, key) => new URL(url).searchParams.get(key);
     env.roomStarted = () => !env.$('room-panel').hidden;
+    // The first visit has 1 player (single player is on the front page): the tests below that host a match choose 4 players first, as a person does; options.firstVisit keeps the page as it comes
+    if (!options.firstVisit) { env.$('players').value = '4'; env.$('players').fire('change', {}); }
     return env;
 }
 function randomName(n) { return NAMES_OF_THE_PAGE.indexOf(n) !== -1; }
 
 // ---- the plain page (nothing in the address)
 {
-    const env = runFour('', {});
+    const env = runLobby('', {});
     check('the page has ONE name field, near the top, in the same box for Host and Join', !!env.$('player-name') && !env.$('join-name') && env.$('who') && !env.$('who').hidden);
     check('nothing is asked first: the setup and the join form are there, the step\'s button is not', !env.$('setup').hidden && !env.$('join').hidden && env.$('who-go').hidden && env.$('who-title').hidden);
     check('nothing remembered: the field is empty and its placeholder is Player', env.$('player-name').value === '' && env.$('player-name').getAttribute('placeholder') === 'Player' && env.$('player-name').getAttribute('maxlength') === '32');
 }
 {
-    const env = runFour('', { 'ants.name': 'Maya' });
+    const env = runLobby('', { 'ants.name': 'Maya' });
     check('a remembered name is filled in the next time', env.$('player-name').value === 'Maya');
 }
 for (const bad of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
-    const env = runFour('', { 'ants.name': bad });
+    const env = runLobby('', { 'ants.name': bad });
     check('a remembered name that the rules refuse is not filled in (' + JSON.stringify(bad).slice(0, 14) + ')', env.$('player-name').value === '');
 }
 {
     let env = null;
-    try { env = runFour('', THROWS); } catch (e) { check('a browser that refuses its storage still runs the page', false, e.message); }
+    try { env = runLobby('', THROWS); } catch (e) { check('a browser that refuses its storage still runs the page', false, e.message); }
     if (env) {
         env.type('player-name', 'Alice');
         env.$('create').click();
@@ -372,7 +375,7 @@ for (const bad of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
 
 // ---- hosting: the typed name goes to the first seat of the page; the others keep random names
 {
-    const env = runFour('', { 'ants-four-map': 'small' });
+    const env = runLobby('', { 'ants-four-map': 'small' });
     env.type('player-name', '  Alice  ');
     env.$('create').click();
     check('Create with a good name makes the room', env.roomStarted() && env.$('player-name').value === '  Alice  ');
@@ -396,7 +399,7 @@ for (const bad of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
     check('"Play here" again (a reconnect) keeps the seat\'s name', env.param(env.frameOf(2).src, 'name') === 'Alice');
 }
 {   // the first seat that starts takes the name, whatever its number
-    const env = runFour('', {});
+    const env = runLobby('', {});
     env.type('player-name', 'Zed');
     env.$('create').click();
     env.rowButton(3, 'Open a window').click();
@@ -405,7 +408,7 @@ for (const bad of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
     check('... and then a frame is random', randomName(env.param(env.frameOf(0).src, 'name')));
 }
 {   // "All seats on this page": only the first seat takes the name
-    const env = runFour('', {});
+    const env = runLobby('', {});
     env.type('player-name', 'Alice');
     env.$('create').click();
     env.$('all-here').click();
@@ -413,7 +416,7 @@ for (const bad of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
     check('all seats on this page: seat 0 plays as Alice, the others have random names, all different', env.param(urls[0], 'name') === 'Alice' && urls.slice(1).every((u) => randomName(env.param(u, 'name'))) && new Set(urls.slice(1).map((u) => env.param(u, 'name'))).size === 3);
 }
 {   // the random fallback
-    const env = runFour('', {});
+    const env = runLobby('', {});
     env.$('create').click();
     env.$('all-here').click();
     const got = [0, 1, 2, 3].map((s) => env.param(env.frameOf(s).src, 'name'));
@@ -423,20 +426,20 @@ for (const bad of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
 
 // ---- bad names start nothing
 for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), 'a\u0001b']) {
-    const env = runFour('', {});
+    const env = runLobby('', {});
     env.type('player-name', bad);
     env.$('create').click();
     check('Create with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') makes no room and says why under the field', !env.roomStarted() && env.$('name-msg').textContent.length > 8 && env.replaced.length === 0 && env.$('player-name').getAttribute('aria-invalid') === 'true');
     env.type('player-name', 'Fine');
     check('... typing again clears the message', env.$('name-msg').textContent === '' && env.$('player-name').getAttribute('aria-invalid') === null);
-    const env2 = runFour('', {});
+    const env2 = runLobby('', {});
     env2.type('player-name', bad);
     env2.type('join-code', 'ABC-1');
     env2.$('join-go').click();
     check('Join with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') goes nowhere and says why', env2.assigned.length === 0 && env2.$('name-msg').textContent.length > 8);
 }
 {   // a bad name typed after the room is made starts no seat
-    const env = runFour('', {});
+    const env = runLobby('', {});
     env.$('create').click();
     env.type('player-name', 'Bot (x)');
     env.rowButton(1, 'Play here').click();
@@ -450,26 +453,26 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
 
 // ---- joining with a code
 {
-    const env = runFour('', {});
+    const env = runLobby('', {});
     env.type('player-name', 'Alice');
     env.type('join-code', 'demo-small-2p-x7k2');
     env.$('join-go').click();
     check('Join: the game page is opened with the room and the typed name', env.assigned.length === 1 && env.param(env.assigned[0], 'room') === 'demo-small-2p-x7k2' && env.param(env.assigned[0], 'name') === 'Alice' && env.param(env.assigned[0], 'join') === '/ws', env.assigned[0]);
     check('... the name is remembered', env.storage.data['ants.name'] === 'Alice');
-    const env2 = runFour('', { 'ants.name': 'Maya' });
+    const env2 = runLobby('', { 'ants.name': 'Maya' });
     env2.type('join-code', 'ABC');
     env2.$('join-code').key('Enter');
     check('Enter in the code field joins, with the remembered name that the field shows', env2.assigned.length === 1 && env2.param(env2.assigned[0], 'name') === 'Maya');
-    const env3 = runFour('', {});
+    const env3 = runLobby('', {});
     env3.type('join-code', 'ABC');
     env3.$('join-go').click();
     check('an empty name joins too, with the name\'s parameter empty (the game says Player; the game page does not ask again)', env3.assigned.length === 1 && env3.param(env3.assigned[0], 'name') === '' && /[?&]name=(&|$)/.test(env3.assigned[0]), env3.assigned[0]);
-    const env4 = runFour('', {});
+    const env4 = runLobby('', {});
     env4.type('player-name', 'Alice');
     env4.type('join-code', 'not a code!');
     env4.$('join-go').click();
     check('a bad room code joins nowhere (the form says why)', env4.assigned.length === 0 && /room code/.test(env4.$('join-hint').textContent));
-    const env5 = runFour('', {});
+    const env5 = runLobby('', {});
     env5.type('player-name', 'Ann & <b>Bob</b>');
     env5.type('join-code', 'ABC');
     env5.$('join-go').click();
@@ -479,7 +482,7 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
 // ---- a name with < > & is text, never markup
 {
     const evil = '<img src=x onerror=alert(1)>&amp;"\'';
-    const env = runFour('', {});
+    const env = runLobby('', {});
     env.type('player-name', evil.slice(0, 32));
     const typed = evil.slice(0, 32);
     env.$('create').click();
@@ -492,11 +495,11 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
     check('no element of the page was made from the name\'s characters (a < in a name makes no tag)', cell0.findAll((e) => e.tagName === 'img').length === 0 && env.rows()[0].findAll((e) => e.tagName === 'img').length === 0);
     check('the frame\'s address carries the name encoded: no raw < or > or quote in it', env.frameOf(0).src.indexOf('<') === -1 && env.frameOf(0).src.indexOf('>') === -1 && env.param(env.frameOf(0).src, 'name') === typed, env.frameOf(0).src);
 }
-check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(fourText) && !/document\.write/.test(fourText) && !/insertAdjacentHTML/.test(fourText));
+check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobbyText) && !/document\.write/.test(lobbyText) && !/insertAdjacentHTML/.test(lobbyText));
 
 // ---- a link of the page that asks for a match: the name is asked first, every time, and nothing starts before
 {
-    const env = runFour('?room=demo-small-2p-abc12', { 'ants.name': 'Maya' });
+    const env = runLobby('?room=demo-small-2p-abc12', { 'ants.name': 'Maya' });
     check('a shared room link: the step is up, with the remembered name in the field and a Join button', !env.$('who-go').hidden && env.$('who-go').textContent === 'Join' && !env.$('who-title').hidden && /demo-small-2p-abc12/.test(env.$('who-title').textContent) && env.$('player-name').value === 'Maya');
     check('... nothing starts before the button: no room panel, no frame, the address is not rewritten', !env.roomStarted() && env.frames().length === 0 && env.replaced.length === 0 && env.opened.length === 0 && env.$('setup').hidden && env.$('join').hidden);
     env.type('player-name', 'Bot (x)');
@@ -509,7 +512,7 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(four
     check('... and the seat that this person plays takes the name', env.param(env.frameOf(1).src, 'name') === 'Zed');
 }
 {
-    const env = runFour('?room=demo-small-2p-abc12', {});
+    const env = runLobby('?room=demo-small-2p-abc12', {});
     check('a shared room link with nothing remembered: an empty field, the placeholder', env.$('player-name').value === '' && !env.roomStarted());
     env.$('who-go').click();
     check('... an empty name is fine: the room opens, random names for the seats', env.roomStarted());
@@ -517,28 +520,137 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(four
     check('... (a random name for the seat)', randomName(env.param(env.frameOf(0).src, 'name')));
 }
 {
-    const env = runFour('?map=treasure&players=2', {});
+    const env = runLobby('?map=treasure&players=2', {});
     check('a link that hosts a match on a map asks for the name first too (button: Host)', !env.$('who-go').hidden && env.$('who-go').textContent === 'Host' && !env.roomStarted() && env.replaced.length === 0);
     env.type('player-name', 'Alice');
     env.$('who-go').click();
     check('... then the room is made on that map', env.roomStarted() && env.replaced.length === 1 && /room=demo-treasure-2p-/.test(String(env.replaced[0][2])));
 }
 {
-    const env = runFour('?room=demo-small-2p-abc12&play=here', { 'ants.name': 'Maya' });
+    const env = runLobby('?room=demo-small-2p-abc12&play=here', { 'ants.name': 'Maya' });
     check('the test mode ?play=here asks nobody: every seat starts at once', !env.$('who-go').hidden === false && env.roomStarted() && env.frames().length === 2);
     const names2 = [0, 1].map((s) => env.param(env.frameOf(s).src, 'name'));
     check('... the first seat takes the remembered name, the other seat is random', names2[0] === 'Maya' && randomName(names2[1]), names2.join(','));
-    const env2 = runFour('?map=small&play=here', {});
+    const env2 = runLobby('?map=small&play=here', {});
     check('?map= with ?play=here asks nobody either', env2.roomStarted() && env2.frames().length === 4 && env2.$('who-go').hidden);
 }
 {
-    const env = runFour('?room=a%20b', {});
+    const env = runLobby('?room=a%20b', {});
     check('an address that is no room code is the plain page (nothing is asked)', !env.$('setup').hidden && !env.$('join').hidden && env.$('who-go').hidden && !env.roomStarted());
 }
 {
-    const env = runFour('?aspect=4:3', {});
+    const env = runLobby('?aspect=4:3', {});
     check('an address with only a picture is the plain page', !env.$('setup').hidden && env.$('who-go').hidden);
 }
+
+// ---- the front page: a first visit, and single player (the owner: "you can play single on the play online tab by setting to 1 player")
+{
+    const env = runLobby('', {}, { firstVisit: true });
+    same('a first visit: 1 player, Treasure, Medium opponents, and the button reads Play', [env.$('players').value, env.$('map').value, env.$('opponents').value, env.$('create').textContent], ['1', 'treasure', 'medium', 'Play']);
+    same('... the row of the opponents is shown (not the empty seats\') and so is the single player\'s hint', [env.$('solo-line').hidden, env.$('fill-line').hidden, env.$('setup-hint-solo').hidden, env.$('setup-hint').hidden], [false, true, false, true]);
+    check('... the choice of the empty seats of a room is what it always was: leave empty', env.$('fill').value === '');
+    check('... the front page shows the setup, the join form and the one name field', !env.$('setup').hidden && !env.$('join').hidden && !!env.$('player-name') && env.$('who-go').hidden);
+    check('nothing was written by merely loading', Object.keys(env.storage.data).length === 0, JSON.stringify(env.storage.data));
+    env.$('create').click();
+    check('Play: this tab goes to the game page of this computer (one assignment, no window opened)', env.assigned.length === 1 && env.opened.length === 0, JSON.stringify(env.assigned));
+    const url = new URL(env.assigned[0] || 'https://x/');
+    check('... /play.html, the map, the Medium bots, the name Player and the 16:9 picture', url.pathname === '/play.html' && env.param(url.href, 'map') === 'treasure' && env.param(url.href, 'bots') === 'medium' && env.param(url.href, 'name') === 'Player' && env.param(url.href, 'aspect') === '16:9', url.href);
+    check('... no room, no server, no seat, no frame (nothing of a match on the game server)', ['join', 'room', 'seat', 'embed', 'fill'].every((k) => env.param(url.href, k) === null) && !env.roomStarted() && env.replaced.length === 0 && env.frames().length === 0);
+    same('... and the choices are remembered: the map, one player, the opponents (the multiplayer choice of bots is not touched)', [env.storage.data['ants-four-map'], env.storage.data['ants-four-players'], env.storage.data['ants-solo-bots'], 'ants-four-fill' in env.storage.data], ['treasure', '1', 'medium', false]);
+}
+{
+    const env = runLobby('', { 'ants-four-map': 'islands' }, { firstVisit: true });
+    env.type('player-name', '  Bob  ');
+    env.$('opponents').value = '';
+    env.$('opponents').fire('change', {});
+    env.$('create').click();
+    const u = env.assigned[0] || '';
+    check('Opponents: None, a typed name, another map: no bots parameter (alone, as in the original), the name, the map', env.param(u, 'bots') === null && env.param(u, 'name') === 'Bob' && env.param(u, 'map') === 'islands', u);
+    same('... "none" is what the browser remembers for it, and the name too', [env.storage.data['ants-solo-bots'], env.storage.data['ants.name']], ['none', 'Bob']);
+    const again = runLobby('', env.storage.data, { firstVisit: true });
+    same('the next visit comes back with those choices: None (not Medium), Islands, 1 player, the name', [again.$('opponents').value, again.$('map').value, again.$('players').value, again.$('player-name').value], ['', 'islands', '1', 'Bob']);
+}
+for (const level of ['easy', 'medium', 'hard']) {
+    const env = runLobby('', { 'ants-solo-bots': level }, { firstVisit: true });
+    check('the opponents that were remembered (' + level + ') are shown again and played', env.$('opponents').value === level && (env.$('create').click(), env.param(env.assigned[0], 'bots') === level));
+}
+for (const junk of ['extreme', 'MEDIUM2', '1', ' hard']) {
+    const env = runLobby('', { 'ants-solo-bots': junk }, { firstVisit: true });
+    check('a remembered value that is no level (' + JSON.stringify(junk) + ') is None, not a bot', env.$('opponents').value === '');
+}
+{
+    const env = runLobby('', { 'ants-four-players': '3', 'ants-four-fill': 'easy', 'ants-solo-bots': 'hard' }, { firstVisit: true });
+    same('a browser that chose 3 players, Easy empty seats and Hard solo opponents: the form is the room\'s (Create the match, the empty seats row), each choice in its own row', [env.$('players').value, env.$('create').textContent, env.$('fill').value, env.$('opponents').value, env.$('fill-line').hidden, env.$('solo-line').hidden], ['3', 'Create the match', 'easy', 'hard', false, true]);
+    env.$('players').value = '1';
+    env.$('players').fire('change', {});
+    same('... setting the players to 1 turns it into the single player\'s: Play, Opponents Hard (the empty seats\' choice stays Easy)', [env.$('create').textContent, env.$('opponents').value, env.$('fill').value, env.$('solo-line').hidden, env.$('fill-line').hidden], ['Play', 'hard', 'easy', false, true]);
+    env.$('players').value = '4';
+    env.$('players').fire('change', {});
+    same('... and back to 4 the room\'s again', [env.$('create').textContent, env.$('fill').value, env.$('setup-hint').hidden, env.$('setup-hint-solo').hidden], ['Create the match', 'easy', false, true]);
+    env.$('create').click();
+    check('... and Create the match makes the room (the empty seats\' bots Easy in the code\'s links), as ever', env.roomStarted() && env.assigned.length === 0 && /fill=easy/.test(env.$('any-link').value) && /room=demo-treasure-4p-/.test(env.$('any-link').value), env.$('any-link').value);
+    same('... and remembers the room\'s choices without touching the opponents\' (still the Hard that the browser had)', [env.storage.data['ants-four-players'], env.storage.data['ants-four-fill'], env.storage.data['ants-solo-bots']], ['4', 'easy', 'hard']);
+}
+for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
+    const env = runLobby('', {}, { firstVisit: true });
+    env.type('player-name', bad);
+    env.$('create').click();
+    check('Play with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') goes nowhere and says why under the field', env.assigned.length === 0 && env.$('name-msg').textContent.length > 8 && env.$('player-name').getAttribute('aria-invalid') === 'true');
+}
+{
+    const env = runLobby('', THROWS, { firstVisit: true });
+    env.$('create').click();
+    check('a browser that refuses its storage still plays (nothing is remembered, nothing breaks)', env.assigned.length === 1 && env.param(env.assigned[0], 'bots') === 'medium');
+}
+{
+    const env = runLobby('?aspect=4:3', {}, { firstVisit: true });
+    env.$('create').click();
+    check('the picture of the page goes with the game: ?aspect=4:3 gives aspect=4:3', env.param(env.assigned[0], 'aspect') === '4:3', env.assigned[0]);
+    const remembered = runLobby('', { 'ants.aspect.v2': '4:3' }, { firstVisit: true });
+    remembered.$('create').click();
+    check('... so does the choice that the selector remembered', remembered.param(remembered.assigned[0], 'aspect') === '4:3', remembered.assigned[0]);
+}
+// ... the addresses: ?map=...&players=1 plays on this computer after the name step; an address that names no players still hosts 4
+{
+    const env = runLobby('?map=small&players=1&fill=hard', { 'ants.name': 'Maya' }, { firstVisit: true });
+    check('?map=small&players=1&fill=hard asks for the name first (button Play), and nothing starts before', !env.$('who-go').hidden && env.$('who-go').textContent === 'Play' && /computer/.test(env.$('who-title').textContent) && env.assigned.length === 0);
+    env.$('who-go').click();
+    const u = env.assigned[0] || '';
+    check('... then the game of this computer on that map with the Hard bots and the name', env.assigned.length === 1 && env.param(u, 'map') === 'small' && env.param(u, 'bots') === 'hard' && env.param(u, 'name') === 'Maya', u);
+}
+{
+    const env = runLobby('?map=treasure&players=1&play=here', {}, { firstVisit: true });
+    check('the test mode ?play=here asks nobody: ?map=...&players=1 plays at once', env.assigned.length === 1 && env.$('who-go').hidden);
+    const room = runLobby('?map=small', {}, { firstVisit: true });
+    check('an address that names a map and no players hosts 4, as it always did (after the name step)', !room.$('who-go').hidden && room.$('who-go').textContent === 'Host');
+    room.$('who-go').click();
+    check('... the room of 4 on that map', room.roomStarted() && /demo-small-4p-/.test(room.$('room-code').textContent) && room.assigned.length === 0);
+}
+// ... the host's own seat in this tab: the address that Join makes, with the bots of the leader's START
+{
+    const env = runLobby('', {}, {});
+    env.$('players').value = '3';
+    env.$('players').fire('change', {});
+    env.$('fill').value = 'medium';
+    env.$('fill').fire('change', {});
+    env.type('player-name', 'Ann');
+    env.$('create').click();
+    check('Create the match with 3 players makes the room panel, and the play-here note of the frames is not shown yet', env.roomStarted() && env.$('frames-note').hidden === true);
+    env.$('play-tab').click();
+    const u = env.assigned[0] || '';
+    check('"Play in this tab": this tab goes to the game page with the room, the bots of the leader\'s START and the name (no seat, no embed, no new window)',
+          env.assigned.length === 1 && env.opened.length === 0 && env.param(u, 'join') === '/ws' && env.param(u, 'room') === env.$('room-code').textContent && env.param(u, 'fill') === 'medium' && env.param(u, 'name') === 'Ann' && env.param(u, 'seat') === null && env.param(u, 'embed') === null, u);
+    const bad = runLobby('', {}, {});
+    bad.$('create').click();
+    bad.type('player-name', 'Bot (x)');
+    bad.$('play-tab').click();
+    check('... a bad name starts nothing', bad.assigned.length === 0 && bad.$('name-msg').textContent.length > 8);
+    const shown = runLobby('', {}, {});
+    shown.$('create').click();
+    shown.rowButton(1, 'Play here').click();
+    check('a game that plays on the page shows the note about the frames', shown.$('frames-note').hidden === false);
+}
+check('the front page says no more that the page opens a window by default (its only window.open is the seat\'s explicit one)', (lobbyText.match(/window\.open\(/g) || []).length === 1);
 
 console.log('web name check: ' + checks + ' checks, ' + failures + ' failures');
 process.exit(failures === 0 ? 0 : 1);

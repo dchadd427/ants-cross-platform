@@ -11,7 +11,7 @@
 #   ANTS_STAGING_SERVER_PORT=4003            the public TCP game port of native clients
 #   ANTS_STAGING_SERVER_WS_PORT=4004         the WebSocket port (loopback)
 #   ANTS_STAGING_SERVER_CTL_PORT=4011        the control interface (loopback)
-#   ANTS_SERVER_SECRET, ANTS_MAPS_DIR, ANTS_BUILD_ID, ANTS_DEMO_ROOMS, ANTS_DEMO_MAP, ANTS_DEMO_MAPS    as in docker-compose.stack.yml (the demo rooms of web/four.html are on here too)
+#   ANTS_SERVER_SECRET, ANTS_MAPS_DIR, ANTS_BUILD_ID, ANTS_DEMO_ROOMS, ANTS_DEMO_MAP, ANTS_DEMO_MAPS    as in docker-compose.stack.yml (the demo rooms of web/lobby.html are on here too)
 services:
   ants-beta:
     build:
@@ -36,7 +36,7 @@ services:
         ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
     container_name: ants-server-staging
     restart: unless-stopped
-    # as in docker-compose.stack.yml: the demo rooms of web/four.html are on (ANTS_DEMO_ROOMS is 1 to 255, see that file's header)
+    # as in docker-compose.stack.yml: the demo rooms of web/lobby.html are on (ANTS_DEMO_ROOMS is 1 to 255, see that file's header)
     command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-12}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}

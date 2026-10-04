@@ -340,8 +340,17 @@ jobs:
       - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html index.js index.wasm index.data four.html changelog.html changelog_archive.html'
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && grep -Eo "id=.?game-version.?>[^<]*<" index.html && grep -Eo "id=.?game-build-id.?>[^<]*<" index.html && ! grep -q "@@" index.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html index.js index.wasm index.data changelog.html changelog_archive.html && cmp index.html play.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
+
+      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=, ?embed=1), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has
+      # the revalidation headers (tests/scripts/web_routes_check.py). The game server is not needed: nginx starts without it.
+      - name: Check the routes of the site (the front page, the game page's addresses, the redirect of the old Play online address)
+        run: |
+          docker run -d --name ants-routes -p 127.0.0.1:18080:80 ants-beta
+          for i in $(seq 1 50); do curl -fs -o /dev/null http://127.0.0.1:18080/lobby.html && break; sleep 0.2; done
+          python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || { docker logs ants-routes; docker rm -f ants-routes; exit 1; }
+          docker rm -f ants-routes
 
       # The game server's image (Dockerfile.server): built the same way as the stack's, and it must say which build it is.
       - name: Build the game server image and run its --version
@@ -350,14 +359,14 @@ jobs:
           docker run --rm --entrypoint /usr/local/bin/ants_server ants-server --version
 
       # The two stacks (docker-compose.stack.yml and docker-compose.staging.yml) must render, and the build argument ANTS_SITE_LABEL of the staging stack must put "staging" in the
-      # title and the footer of both pages, while the production pages do not have the word. (The second image reuses the layers of the first: only its last layers are built.)
+      # title and the footer of the pages, while the production pages do not have the word. (The second image reuses the layers of the first: only its last layers are built.)
       - name: Check the stack files and the staging label of the pages
         run: |
           docker compose -f docker-compose.stack.yml config --quiet
           docker compose -f docker-compose.staging.yml config --quiet
           docker build --build-arg ANTS_SITE_LABEL=staging -t ants-beta-staging .
-          docker run --rm ants-beta-staging sh -c 'cd /usr/share/nginx/html && for page in index.html four.html; do grep -q "(staging)</title>" $page && grep -q "id=\"site-label\">staging<" $page || exit 1; done'
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ! grep -qi staging index.html four.html'
+          docker run --rm ants-beta-staging sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html; do grep -q "(staging)</title>" $page && grep -q "id=\"site-label\">staging<" $page || exit 1; done'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ! grep -qi staging index.html play.html lobby.html'
 
   deploy:
     name: Deploy (Portainer webhook)

@@ -2,7 +2,7 @@
 # Checks start_game.sh without starting anything: its --dry-run prints the command line of every window.
 # The rig: window i is player i and colour i (0 green, 1 red, 2 blue, 3 black), window 0 hosts on this machine only, the others join and ask for their seat,
 # the windows lie in a 2 x 2 grid (2 x 1 for two), every name is different and random, nothing grabs the pointer, only the focused window has sound.
-# Where each window lies is the owner's layout (the same as the games on web/four.html, and the way the hills lie on the Small and Treasure maps):
+# Where each window lies is the owner's layout (the same as the games on web/lobby.html, and the way the hills lie on the Small and Treasure maps):
 # black top left, green top right, red bottom left, blue bottom right.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$ROOT/start_game.sh"
@@ -37,7 +37,7 @@ OUT="$("$SCRIPT" --dry-run)"
 check "four windows" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 4 ]; echo $?)"
 COLOURS=(Green Red Blue Black)
 # The owner's layout: green top right, red bottom left, blue bottom right, black top left, the way the four hills lie on the Small and Treasure maps (the games
-# on web/four.html lie the same way). --cell counts row by row (0 top left, 1 top right, 2 bottom left, 3 bottom right), so by seat (window n is seat n):
+# on web/lobby.html lie the same way). --cell counts row by row (0 top left, 1 top right, 2 bottom left, 3 bottom right), so by seat (window n is seat n):
 # green 1, red 2, blue 3, black 0. This check used to say that window n sits in cell n (green top left, red top right, blue bottom left, black bottom right),
 # the order of the seats; the owner's layout replaces it, so it is rewritten (each window's cell is still checked exactly, nothing is weakened).
 CELLS=(1 2 3 0)
@@ -91,7 +91,7 @@ check "without a seed the names change from run to run" "$([ "$R1" != "$R2" ] ||
 OUT="$("$SCRIPT" --dry-run --players 2)"
 check "two windows" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 2 ]; echo $?)"
 has "$OUT" "--grid 2x1"; check "two windows sit side by side" $?
-# fewer windows keep the order of the colours (black, green, red, blue) without holes, as the games on web/four.html do: nobody is black, so the top left cell
+# fewer windows keep the order of the colours (black, green, red, blue) without holes, as the games on web/lobby.html do: nobody is black, so the top left cell
 # goes to green; two windows are green left (cell 0), red right (cell 1)
 check "two windows: green left (cell 0), red right (cell 1)" "$([ "$(cells_of "$OUT")" = "0 1" ]; echo $?)"
 OUT="$("$SCRIPT" --players 3 --dry-run)"

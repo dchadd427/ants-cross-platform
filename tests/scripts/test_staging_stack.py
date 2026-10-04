@@ -156,21 +156,21 @@ class SiteLabelInThePages(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             os.makedirs(os.path.join(tmp, "src", "web"))
             os.makedirs(os.path.join(tmp, "src", "build_web", "src", "ants_app"))
-            shutil.copyfile(os.path.join(REPO, "web", "four.html"), os.path.join(tmp, "src", "web", "four.html"))
+            shutil.copyfile(os.path.join(REPO, "web", "lobby.html"), os.path.join(tmp, "src", "web", "lobby.html"))
             shutil.copyfile(os.path.join(REPO, "web", "shell.html"), os.path.join(tmp, "src", "build_web", "src", "ants_app", "index.html"))
             script = re.sub(r"(?<![A-Za-z0-9_./])/src/", lambda m: tmp + "/src/", self.script).replace("sed -i ", "sed -i.bak ")      # (GNU sed in the image; -i.bak is BSD sed's too)
             env = dict(os.environ, ANTS_SITE_LABEL=label)
             done = subprocess.run(["sh", "-c", script], capture_output=True, text=True, env=env)
             pages = {}
             if done.returncode == 0:
-                pages = {"index": read(os.path.join(tmp, "src", "build_web", "src", "ants_app", "index.html")), "four": read(os.path.join(tmp, "src", "four.html"))}
+                pages = {"index": read(os.path.join(tmp, "src", "build_web", "src", "ants_app", "index.html")), "lobby": read(os.path.join(tmp, "src", "lobby.html"))}
             return done, pages
 
     def test_a_label_goes_into_the_title_and_the_footer_of_both_pages(self):
         done, pages = self.run_step("staging")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("<title>Ants (1998) — beta.playants.org (staging)</title>", pages["index"])
-        self.assertIn("<title>Ants (1998) — play online (staging)</title>", pages["four"])
+        self.assertIn("<title>Ants (1998) (staging)</title>", pages["lobby"])
         for page in pages.values():
             self.assertIn('<footer>\n        <strong id="site-label">staging</strong>&#8197;&bull;&#8197;', page)
             self.assertNotIn("@@SITE_", page)
@@ -178,13 +178,13 @@ class SiteLabelInThePages(unittest.TestCase):
     def test_no_label_leaves_the_pages_as_they_are_in_the_repository(self):
         done, pages = self.run_step("")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(pages["four"], read(os.path.join(REPO, "web", "four.html")).replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", ""))
+        self.assertEqual(pages["lobby"], read(os.path.join(REPO, "web", "lobby.html")).replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", ""))
         self.assertEqual(pages["index"], read(os.path.join(REPO, "web", "shell.html")).replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", ""))
         self.assertNotIn("staging", pages["index"].lower())
-        self.assertNotIn("site-label", pages["four"])
+        self.assertNotIn("site-label", pages["lobby"])
 
     def test_the_placeholders_are_in_the_pages_of_the_repository_once_each(self):
-        for name in ("shell.html", "four.html"):
+        for name in ("shell.html", "lobby.html"):
             text = read(os.path.join(REPO, "web", name))
             self.assertEqual(text.count("@@SITE_TITLE@@"), 1, name)
             self.assertEqual(text.count("@@SITE_FOOTER@@"), 1, name)

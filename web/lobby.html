@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ants (1998) — play online@@SITE_TITLE@@</title>
+    <title>Ants (1998)@@SITE_TITLE@@</title>
     <link rel="icon" type="image/png" href="/favicon.png">
     <style>
         :root {
@@ -33,15 +33,19 @@
             max-width: 1320px;
             margin: 0 auto 10px;
         }
+        .title-group { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
         h1 {
-            font-size: 1.25rem;
+            font-size: 1.4rem;
             color: var(--accent-gold);
+            text-shadow: 0 0 10px rgba(230, 184, 48, 0.4);
             letter-spacing: 1px;
             text-transform: uppercase;
         }
-        .sub { color: var(--text-dim); font-size: 0.85rem; margin-top: 2px; }
+        .brand { color: var(--text-dim); font-size: 0.85rem; }
+        .sub { max-width: 1320px; margin: 0 auto 10px; color: var(--text-dim); font-size: 0.85rem; }
         .sub code { color: var(--text-main); }
         .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .actions .short { display: none; }
         .btn {
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
@@ -56,6 +60,8 @@
             align-items: center;
         }
         .btn:hover { border-color: var(--accent-green); color: #fff; }
+        .btn { gap: 6px; }
+        .actions .btn { min-height: 40px; }
         .aspect-pick { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 0.85rem; }
         #sync {
             position: sticky;
@@ -121,6 +127,22 @@
         .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--text-dim); }
         .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border: 1px solid #888; }
         footer { max-width: 1320px; margin: 12px auto 0; color: var(--text-dim); font-size: 0.8rem; line-height: 1.5; }
+        footer a { color: var(--accent-green); text-decoration: none; display: inline-block; padding: 2px 4px; }
+        footer a:hover { text-decoration: underline; }
+        footer p { margin-top: 8px; }
+        /* Phone width: the links are a grid of two columns, the picture's selector has the row below them */
+        @media (max-width: 640px) {
+            body { padding-left: 16px; padding-right: 16px; }
+            #create { flex: 1 1 100%; justify-content: center; }
+            #room-code { overflow-wrap: anywhere; }
+            header { flex-direction: column; align-items: stretch; }
+            .title-group { justify-content: space-between; width: 100%; }
+            .actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; }
+            .actions .btn { justify-content: center; padding: 6px 2px; font-size: 0.78rem; }
+            .actions .long { display: none; }
+            .actions .short { display: inline; }
+            .actions .aspect-pick { grid-column: 1 / -1; justify-content: flex-end; }
+        }
     
         #who, #setup, #join, #room-panel {
             max-width: 1320px;
@@ -131,6 +153,12 @@
             background: var(--panel-bg);
         }
         #who h2, #setup h2, #join h2, #room-panel h2 { font-size: 0.95rem; color: var(--accent-gold); margin-bottom: 8px; letter-spacing: 0.5px; }
+        /* New match and Join a match stand side by side where there is room (the panels of a room, and the name step, fill the width) */
+        .cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 10px; max-width: 1320px; margin: 0 auto 10px; align-items: start; }
+        .cols > section { margin: 0; max-width: none; }
+        @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+        .paneltop { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; margin-bottom: 8px; }
+        .paneltop h2 { margin-bottom: 0 !important; }
         .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
         .row label { color: var(--text-dim); font-size: 0.85rem; }
         .fillchoice { display: flex; flex-direction: column; gap: 3px; }
@@ -141,6 +169,8 @@
         }
         input[type=text] { min-width: 0; flex: 1 1 260px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; }
         .btn.primary { border-color: var(--accent-green); color: #fff; }
+        .btn.go { background: #2b7040; border-color: var(--accent-green); color: #fff; font-weight: 600; font-size: 0.95rem; min-height: 42px; padding: 8px 22px; }
+        .btn.go:hover { background: #348a4e; }
         .hint { color: var(--text-dim); font-size: 0.8rem; line-height: 1.45; }
         .seatrow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 4px 0; border-top: 1px solid var(--panel-border); }
         .seatrow .who { min-width: 150px; font-size: 0.9rem; }
@@ -153,21 +183,24 @@
 </head>
 <body>
     <header>
-        <div>
-            <h1>Play online</h1>
-            <div class="sub" id="subtitle">Host a match on the game server and share its code or links, or join a match with its code. You can also play every seat yourself, on this page or in windows of their own.</div>
+        <div class="title-group">
+            <h1>Ants (1998)</h1>
+            <span class="brand">beta.playants.org</span>
         </div>
         <div class="actions">
+            <a class="btn" href="/asset_catalog/" target="_blank" rel="noopener noreferrer" title="View 1998 Sprites, Animations &amp; Audio SFX">&#127912; <span class="long">Sprites and sounds</span><span class="short">Sprites</span></a>
+            <a class="btn" href="/changelog.html" target="_blank" rel="noopener noreferrer" title="What changed in each version">&#128203; <span class="long">Changelog</span><span class="short">Log</span></a>
+            <a class="btn" href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" title="View Source Code on GitHub"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg><span class="long">GitHub</span><span class="short">Code</span></a>
+            <a class="btn" href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" title="Give Feedback or Report Issues">&#128172; <span class="long">Feedback</span><span class="short">Issues</span></a>
             <label class="aspect-pick" for="aspect-select">Picture
                 <select id="aspect-select" aria-label="Shape of the picture">
                     <option value="16:9">16:9</option>
                     <option value="4:3">Classic 4:3</option>
                 </select>
             </label>
-            <button id="new-room" type="button" class="btn">New match</button>
-            <a class="btn" href="/">Single game</a>
         </div>
     </header>
+    <p class="sub" id="subtitle">Play on this computer, host a match on the game server and share its code or links, or join a match with its code.</p>
 
     <section id="who">
         <h2 id="who-title" hidden>Join the match</h2>
@@ -176,10 +209,11 @@
             <input type="text" id="player-name" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Your name" aria-describedby="who-hint name-msg" style="flex: 0 1 240px">
             <button id="who-go" type="button" class="btn primary" hidden>Join</button>
         </div>
-        <div class="hint" id="who-hint">The name your ants play under, for the seat you play: the one you play when you host a match, the one you get when you join one. Leave it empty for a random name when you host and Player when you join. This browser remembers it.</div>
+        <div class="hint" id="who-hint">The name your ants play under. Leave it empty for a random name when you host and Player otherwise. This browser remembers it.</div>
         <div class="msg" id="name-msg" role="alert"></div>
     </section>
 
+    <div class="cols">
     <section id="setup" hidden>
         <h2>New match</h2>
         <div class="row">
@@ -187,12 +221,22 @@
             <select id="map"></select>
             <label for="players">Players</label>
             <select id="players">
+                <option value="1">1</option>
                 <option value="2">2</option>
                 <option value="3">3</option>
                 <option value="4">4</option>
             </select>
             <div class="fillchoice">
-                <div class="fillline">
+                <div class="fillline" id="solo-line" hidden>
+                    <label for="opponents">Opponents</label>
+                    <select id="opponents">
+                        <option value="">None</option>
+                        <option value="easy">Easy bots</option>
+                        <option value="medium">Medium bots</option>
+                        <option value="hard">Hard bots</option>
+                    </select>
+                </div>
+                <div class="fillline" id="fill-line">
                     <label for="fill">Empty seats at START</label>
                     <select id="fill">
                         <option value="">Leave empty</option>
@@ -203,9 +247,10 @@
                 </div>
                 <div class="hint" id="fill-caption">Bots gather food; they do not fight yet.</div>
             </div>
-            <button id="create" type="button" class="btn primary">Create the match</button>
+            <button id="create" type="button" class="btn go">Create the match</button>
         </div>
-        <div class="hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken, and a running match takes nobody new. The first player in the room can start early with START (it is the room's leader): with at least 2 players in, and with <strong>Easy, Medium or Hard bots</strong> chosen above even alone, when every empty seat gets a bot of that level (bots do not play with Fog of War, and the leader's START is the only thing that seats them). Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
+        <div class="hint" id="setup-hint-solo" hidden>You play on this computer, in this tab: no game server, no room. <strong>Opponents</strong> are computer players in every other base of the map; with <strong>None</strong> you play alone, as in the original. The Menu button over the game brings you back here.</div>
+        <div class="hint" id="setup-hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken, and a running match takes nobody new. The first player in the room can start early with START (it is the room's leader): with at least 2 players in, and with <strong>Easy, Medium or Hard bots</strong> chosen above even alone, when every empty seat gets a bot of that level (bots do not play with Fog of War, and the leader's START is the only thing that seats them). Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
     </section>
 
     <section id="join" hidden>
@@ -217,9 +262,13 @@
         </div>
         <div class="hint" id="join-hint">The code of a match that somebody else made here (they see it above their seats). It takes you into the game in this window and gives you the first free seat; the match starts by itself when all its seats are filled, or earlier: the first player in the room can start it with START once at least 2 players are in.</div>
     </section>
+    </div>
 
     <section id="room-panel" hidden>
-        <h2>Room <code id="room-code">...</code> &middot; <span id="room-map"></span></h2>
+        <div class="paneltop">
+            <h2>Room <code id="room-code">...</code> &middot; <span id="room-map"></span></h2>
+            <button id="new-room" type="button" class="btn small">New match</button>
+        </div>
         <div class="row">
             <label for="any-link">Link for anybody (they get the first free seat)</label>
         </div>
@@ -228,9 +277,11 @@
             <button id="copy-any" type="button" class="btn small">Copy</button>
         </div>
         <div class="row">
-            <button id="all-here" type="button" class="btn primary">All seats on this page</button>
-            <button id="all-windows" type="button" class="btn primary">All seats in separate windows</button>
+            <button id="play-tab" type="button" class="btn go">Play in this tab</button>
+            <button id="all-here" type="button" class="btn">All seats on this page</button>
+            <button id="all-windows" type="button" class="btn">All seats in separate windows</button>
         </div>
+        <div class="hint">Play in this tab takes the first free seat for you, in this tab, as Join does (you are the first to connect, so you lead the room). The Back button of your browser brings this room back. The other two buttons play every seat yourself, in frames of this page or in windows of their own.</div>
         <div id="seat-rows"></div>
         <div class="hint" id="popup-hint" hidden>The browser blocked some of the windows: allow pop-ups for this site, or use the buttons of the seats.</div>
         <div class="hint">The first player to connect leads the room (not necessarily the green seat): its setup screen has the START button, and pressing it starts the match with the players who are in, once at least 2 are. Everybody else waits for the match to start.</div>
@@ -244,9 +295,10 @@
     <div id="grid"></div>
 
     <footer>
-        @@SITE_FOOTER@@Every window runs the whole simulation; the server only orders the commands and acts as the referee. Each game tells this page its tick and state hash every 100 ticks (5 seconds):
+        @@SITE_FOOTER@@<span id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span>&#8197;&bull;&#8197;</span>Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2 &bull;&#8197;<a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>&#8197;&bull;&#8197;<a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>&#8197;&bull;&#8197;<a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+        <p id="frames-note" hidden>Every window runs the whole simulation; the server only orders the commands and acts as the referee. Each game tells this page its tick and state hash every 100 ticks (5 seconds):
         when the seats that report agree, the machines are in step (a seat that plays on another computer cannot report to this page). Click a window of this page to play it (the others stop
-        their music and their sound: only the window you are in is heard). The match is the original's clock: when it ends each window shows its results screen.
+        their music and their sound: only the window you are in is heard). The match is the original's clock: when it ends each window shows its results screen.</p>
     </footer>
 
     <script>
@@ -294,7 +346,7 @@
         function remember(key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
         function recall(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
         // HELPERS_END
-        // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/four.html and web/shell.html carry the same text)
+        // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
         // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
         // 32 characters, and nothing that starts with "Bot (" (blanks and case ignored: a computer player is always shown as one, so a room would rename such a name; here it is refused, with the reason).
@@ -367,6 +419,24 @@
         // FILL_END
         var FILL_NAMES = { easy: 'Easy bots', medium: 'Medium bots', hard: 'Hard bots' };
 
+        // LOBBY_BEGIN (tests/scripts/web_lobby_check.js runs this block on a table)
+        // What the New match form means. Players 1 is a game on THIS computer: no game server and no room, the game page at its own path (LOCAL_PAGE) with its local parameters (web/shell.html:
+        // ANTS_PAGE.localArguments reads them through a whitelist). 2 to 4 is a match on the game server: a room that this page makes (demo-<map>-<n>p-<random>), as it always did.
+        var LOCAL_PAGE = 'play.html';
+        // 1 .. 4 from a text (the form's value, a remembered value, the address's &players=), else `fallback`
+        function playersChoice(text, fallback) { return text === '1' || text === '2' || text === '3' || text === '4' ? Number(text) : fallback; }
+        // The opponents of a game on this computer, from what the browser remembered (the key ants-solo-bots holds 'none' or a level): nothing remembered is Medium (a first visit); anything that is no
+        // level is none (the original's single player, alone).
+        function soloBots(stored) { return stored === null || stored === undefined ? 'medium' : validFill(stored); }
+        // The query of a game on this computer: ?map=<key>[&bots=<level>]&name=<name>&aspect=<shape>. A key that is no map's is Treasure (the default of everything), a level that is none of the three
+        // words is left out, an empty name is Player, the name goes in URL-encoded (a name is never put into an address any other way), the shape is 16:9 or 4:3.
+        function localGameQuery(mapKey, level, name, shape) {
+            var map = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
+            var bots = validFill(level);
+            return '?map=' + map.key + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9');
+        }
+        // LOBBY_END
+
         // The shape of the games' pictures: ?aspect=16:9 or ?aspect=4:3 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Each game passes it
         // on (?aspect= of its address) and the frames of the games have that shape. Links made for other people carry it only when this address names it.
         // The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the selectors write it. The key of the first versions of the pages was 'ants.aspect': it is NOT
@@ -413,6 +483,7 @@
             if (!(seat >= 0 && seat < SEATS.length) || typeof tick !== 'number' || !/^[0-9a-f]{16}$/.test(hash)) return;
             if (tick < state[seat].tick) resetMatch();                // a seat that reports an earlier tick than before: a new match began
             $('sync').hidden = false;                                  // (games of this room that were opened some other way report too)
+            $('frames-note').hidden = false;
             reported = true;
             state[seat] = { tick: tick, hash: hash, at: Date.now() };
             if (labels[seat]) labels[seat].textContent = 'tick ' + tick + ' \u00b7 ' + hash.slice(0, 8);
@@ -524,6 +595,7 @@
             iframe.addEventListener('load', function () { iframe.contentWindow.addEventListener('focus', function () { setFocus(seat); }); });
             setRowState(seat, 'on this page');
             $('sync').hidden = false;
+            $('frames-note').hidden = false;
             return true;
         }
         function openWindow(seat) {
@@ -538,6 +610,7 @@
             wins[seat] = w;
             setRowState(seat, 'in a window');
             $('sync').hidden = false;
+            $('frames-note').hidden = false;
             return true;
         }
         function copyText(text, done) {
@@ -634,7 +707,8 @@
 
         // ---- what the address says ----
         // ?room=<code>  a room that was made elsewhere (a shared code, the lobby, the control interface): its panel at once; a page-made code says its map and players
-        // ?map=<name>   host a match on that map at once (&players=2|3|4, default 4; &fill=easy|medium|hard seats bots in the empty seats at the leader's START; &play=here plays every seat on this page, as the page used to do)
+        // ?map=<name>   host a match on that map at once (&players=2|3|4, default 4; &fill=easy|medium|hard seats bots in the empty seats at the leader's START; &play=here plays every seat on this page, as the page used to do);
+        //               with &players=1 a game on this computer (&fill= is then the opponents' level)
         // ?fill=...     with ?room=: the same choice for a room that was made elsewhere (its links carry it)
         // nothing       the setup: choose the map and the players, or join with a code
         var params = new URLSearchParams(window.location.search);
@@ -647,18 +721,43 @@
         mapSelect.value = DEFAULT_MAP_KEY;
         var last = recall('ants-four-map');
         if (last && mapByKey(last)) mapSelect.value = last;
+        // The players: 1 plays on this computer, 2 to 4 is a match on the game server. A browser that never chose starts with 1 player (the owner: single player is on this page, by setting the players to 1).
+        // Each mode has its own choice of bots, remembered on its own: the OPPONENTS of a game on this computer (ants-solo-bots: none, easy, medium or hard; a first visit has Medium) and the bots that
+        // fill the EMPTY SEATS of a room at START (ants-four-fill, as ever: leave empty, easy, medium or hard).
         var playersSelect = $('players');
-        var lastPlayers = recall('ants-four-players');
-        playersSelect.value = lastPlayers === '2' || lastPlayers === '3' ? lastPlayers : '4';
+        playersSelect.value = String(playersChoice(recall('ants-four-players'), 1));
         var fillSelect = $('fill');
         fillSelect.value = validFill(recall('ants-four-fill'));
+        var opponentsSelect = $('opponents');
+        opponentsSelect.value = soloBots(recall('ants-solo-bots'));
+        function soloMode() { return Number(playersSelect.value) === 1; }
+        function showMode() {                       // what the form says for the players that it has: the button, the row of bots, the hint
+            var solo = soloMode();
+            $('solo-line').hidden = !solo;
+            $('fill-line').hidden = solo;
+            $('create').textContent = solo ? 'Play' : 'Create the match';
+            $('setup-hint-solo').hidden = !solo;
+            $('setup-hint').hidden = solo;
+        }
+        playersSelect.addEventListener('change', showMode);
+        showMode();
+        // A game on this computer: this tab goes to the game page (never a new tab) with the map, the opponents, the typed name and the picture's shape (the game page's own parameters)
+        function startLocal(mapKey, level) {
+            var checked = nameCheck(nameInput.value);
+            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, level, checked.ok ? checked.name : '', aspect), window.location.href).href);
+        }
         // The code carries the choice (the server reads it: demo-<map>-<n>p-<random>)
         function create(mapKey, play, n, fillLevel) {
             var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
-            var players = (n === 2 || n === 3 || n === 4) ? n : 4;
+            var players = playersChoice(String(n), 4);
             var level = validFill(fillLevel);
             remember('ants-four-map', m.key);
             remember('ants-four-players', String(players));
+            if (players === 1) {
+                remember('ants-solo-bots', level || 'none');
+                startLocal(m.key, level);
+                return;
+            }
             remember('ants-four-fill', level);
             startRoom('demo-' + m.key + '-' + players + 'p-' + randomCode(), m.name, play, players, level);
         }
@@ -674,7 +773,7 @@
         var wanted = params.get('room');
         var wantedMap = params.get('map');
         var wantedPlayersText = params.get('players');
-        var wantedPlayers = (wantedPlayersText === '2' || wantedPlayersText === '3' || wantedPlayersText === '4') ? Number(wantedPlayersText) : 4;
+        var wantedPlayers = playersChoice(wantedPlayersText, 4);          // (an address that names no players hosts 4, as it always did; &players=1 plays on this computer)
         var wantedFill = validFill(params.get('fill'));
         var asksRoom = !!(wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted));
         var asksMap = !asksRoom && !!(wantedMap && mapByKey(wantedMap.toLowerCase()));
@@ -693,14 +792,15 @@
         // from somebody else, it should ask you first what you want your name to be"), and nothing starts before. The test mode ?play=here starts every seat at once and asks nobody.
         if ((asksRoom || asksMap) && params.get('play') !== 'here') {
             var generalHint = $('who-hint').textContent;
-            $('who-title').textContent = asksRoom ? 'Join the match ' + wanted : 'Host a match';
-            $('who-go').textContent = asksRoom ? 'Join' : 'Host';
+            var asksSolo = asksMap && wantedPlayers === 1;
+            $('who-title').textContent = asksRoom ? 'Join the match ' + wanted : asksSolo ? 'Play a game on this computer' : 'Host a match';
+            $('who-go').textContent = asksRoom ? 'Join' : asksSolo ? 'Play' : 'Host';
             runNameStep({
                 input: nameInput, button: $('who-go'), message: nameMsg,
                 show: function () {
                     $('who-title').hidden = false;
                     $('who-go').hidden = false;
-                    $('who-hint').textContent = (asksRoom ? 'The name your ants play under in this match: the seat that you play from this page takes it.' : 'The name your ants play under in the match that you host from this page.') +
+                    $('who-hint').textContent = (asksRoom ? 'The name your ants play under in this match: the seat that you play from this page takes it.' : asksSolo ? 'The name your ants play under in the game on this computer.' : 'The name your ants play under in the match that you host from this page.') +
                         ' Leave it empty for a random name. This browser remembers it.';
                 },
                 hide: function () { $('who-title').hidden = true; $('who-go').hidden = true; $('who-hint').textContent = generalHint; }
@@ -710,7 +810,8 @@
         }
         $('create').addEventListener('click', function () {
             if (!readName().ok) return;               // a bad name starts nothing (the field says why)
-            create(mapSelect.value, '', Number(playersSelect.value), fillSelect.value);
+            var n = Number(playersSelect.value);
+            create(mapSelect.value, '', n, n === 1 ? opponentsSelect.value : fillSelect.value);
         });
 
         // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat, under the name of the field above (the game
@@ -725,9 +826,18 @@
             }
             var checked = readName();
             if (!checked.ok) return;                  // the field says why
-            var q = '?join=/ws&room=' + encodeURIComponent(code) + '&name=' + encodeURIComponent(checked.name) + (aspectFromAddress ? '&aspect=' + aspect : '');
-            window.location.assign(new URL('./' + q, window.location.href).href);
+            window.location.assign(joinUrl(code, checked.name, ''));
         }
+        // The game page of a seat that plays in THIS tab: the first free seat of the room, under the name of the field (the game page does not ask for it again), with the bots that the leader's START seats
+        function joinUrl(code, name, fillLevel) {
+            var q = '?join=/ws&room=' + encodeURIComponent(code) + (fillLevel ? '&fill=' + fillLevel : '') + '&name=' + encodeURIComponent(name) + (aspectFromAddress ? '&aspect=' + aspect : '');
+            return new URL('./' + q, window.location.href).href;
+        }
+        $('play-tab').addEventListener('click', function () {
+            var checked = readName();
+            if (!checked.ok || !room) return;         // a bad name starts nothing (the field says why)
+            window.location.assign(joinUrl(room, checked.name, fill));
+        });
         $('join-go').addEventListener('click', joinNow);
         $('join-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
 
@@ -750,6 +860,10 @@
             // the setup again (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
             window.location.assign(window.location.origin + window.location.pathname.replace(/^\/+/, '/'));
         });
+
+        // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
+        if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
+        else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
     })();
     </script>
 </body>

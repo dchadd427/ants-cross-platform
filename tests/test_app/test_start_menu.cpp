@@ -1091,10 +1091,10 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(why.find("blank") != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("M5.2 Room codes of a hosted match: demo-<map>-<n>p-<six characters> from the page's alphabet (read from web/four.html), at most 23 characters, a valid room code for every map and size, different every time") {
+    TEST_CASE("M5.2 Room codes of a hosted match: demo-<map>-<n>p-<six characters> from the page's alphabet (read from web/lobby.html), at most 23 characters, a valid room code for every map and size, different every time") {
         std::string page_alphabet;
         {
-            std::ifstream page(std::string(ANTS_SOURCE_DIR) + "/web/four.html");           // (by the source folder, not the working directory: it is read wherever the test is run from)
+            std::ifstream page(std::string(ANTS_SOURCE_DIR) + "/web/lobby.html");           // (by the source folder, not the working directory: it is read wherever the test is run from)
             ASSERT_TRUE(page.good());                                                      // a page that cannot be read, or in which the variable is renamed, FAILS the test (it used to skip it)
             std::stringstream text;
             text << page.rdbuf();
@@ -1104,7 +1104,7 @@ int main(int argc, char* argv[]) {
             page_alphabet = html.substr(at + 13, html.find('\'', at + 13) - (at + 13));
         }
         ASSERT_FALSE(page_alphabet.empty());
-        ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));                          // the same alphabet as web/four.html (the page is in the repository)
+        ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));                          // the same alphabet as web/lobby.html (the page is in the repository)
         ASSERT_EQ(std::string(kRoomCodeAlphabet).size(), static_cast<size_t>(31));
         ASSERT_EQ(kRoomCodeRandomChars, static_cast<size_t>(6));
         const char* keys[] = {"tiny", "small", "medium", "gauntlet", "treasure", "islands"};

@@ -13,11 +13,12 @@ COPY src/ ./src/
 COPY web/ ./web/
 COPY Original-Ants/ ./Original-Ants/
 
-# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text (the file VERSION) into shell.html
+# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text (the file VERSION) into shell.html (the game page) and lobby.html (the front page: its footer)
 RUN BUILD_TIME=$(date +%s) && \
     GAME_VERSION="v$(head -n 1 VERSION | tr -d '[:space:]')" && \
     case "${GAME_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION is not MAJOR.MINOR.PATCH: ${GAME_VERSION}" >&2; exit 1 ;; esac && \
-    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html
+    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html web/lobby.html && \
+    ! grep -q '@@GAME_VERSION@@' web/shell.html web/lobby.html
 
 # Configure and compile using default Makefiles
 RUN emcmake cmake -B build_web \
@@ -51,18 +52,19 @@ COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
     echo "${BUILD_ID}" > /src/build_id.txt && \
     PAGE=/src/build_web/src/ants_app/index.html && \
-    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g" "$PAGE" && \
-    ! grep -q '@@BUILD_ID@@' "$PAGE" && \
-    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" "$PAGE"
+    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g" "$PAGE" /src/web/lobby.html && \
+    ! grep -q '@@BUILD_ID@@' "$PAGE" /src/web/lobby.html && \
+    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" "$PAGE" && \
+    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/lobby.html
 
 # The site label (the build argument ANTS_SITE_LABEL, empty for the production site, "staging" for the staging stack: docker-compose.staging.yml): a non-empty label is put in the title
-# and in the footer of the game page and of the Play online page, so that nobody takes the staging site for the production one. Empty, the two placeholders become nothing and the
+# and in the footer of the game page and of the front page (the lobby), so that nobody takes the staging site for the production one. Empty, the two placeholders become nothing and the
 # pages are the same as ever (the same layer as the build id: the compile layers above do not depend on it). A label may hold letters, digits, dot, dash and underscore only.
 RUN SITE_LABEL="${ANTS_SITE_LABEL}" && \
     case "${SITE_LABEL}" in *[!A-Za-z0-9._-]*) echo "ANTS_SITE_LABEL may hold letters, digits, dot, dash and underscore only: ${SITE_LABEL}" >&2; exit 1 ;; esac && \
     if [ -n "${SITE_LABEL}" ]; then SITE_TITLE=" (${SITE_LABEL})"; SITE_FOOTER="<strong id=\"site-label\">${SITE_LABEL}</strong>\&#8197;\&bull;\&#8197;"; else SITE_TITLE=""; SITE_FOOTER=""; fi && \
-    cp /src/web/four.html /src/four.html && \
-    for PAGE in /src/build_web/src/ants_app/index.html /src/four.html; do \
+    cp /src/web/lobby.html /src/lobby.html && \
+    for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html; do \
         sed -i "s|@@SITE_TITLE@@|${SITE_TITLE}|g; s|@@SITE_FOOTER@@|${SITE_FOOTER}|g" "$PAGE" || exit 1; \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
@@ -89,11 +91,16 @@ RUN rm -rf /usr/share/nginx/html/*
 # Copy compiled WebAssembly artifacts atomically in a single layer
 COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
 
+# The game page also answers at a path of its own, play.html (the games on this computer: the front page's Play button opens it with ?map=...&bots=...): a copy of index.html. nginx serves "/" with
+# the lobby unless the address is a game's (?join=, ?embed=1: docker/nginx.conf), so index.html is still what every old game address opens.
+RUN cp /usr/share/nginx/html/index.html /usr/share/nginx/html/play.html
+
 # Copy favicon assets
 COPY web/favicon.* /usr/share/nginx/html/
 
-# The Play online page: host a match on the game server or join one by its code (four.html; it embeds the game page for the seats that play on it), with the site label put in
-COPY --from=builder /src/four.html /usr/share/nginx/html/four.html
+# The front page, the lobby (lobby.html): play on this computer alone or against bots, host a match on the game server or join one by its code (it embeds the game page for the seats that play on it),
+# with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
+COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 
 # The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other)
 COPY --from=builder /src/changelog/changelog.html /src/changelog/changelog_archive.html /usr/share/nginx/html/

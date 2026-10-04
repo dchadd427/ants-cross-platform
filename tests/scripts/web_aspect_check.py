@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The web page's picture in a REAL browser (widescreen milestone M5; opt-in; see tests/scripts/test_web_aspect.sh and docs/NETWORK_PORT.md).
 
-Needs a running web page (the web image of this tree: `docker build -t ants-beta .` and run it, or `docker-compose.stack.yml`), a Chromium-based browser and Python 3; nothing
+Needs a running web page (the web image of this tree: `docker build -t ants-beta .` and run it, or `docker-compose.stack.yml`; --web is the site's address: the game page is opened at its own
+path /play.html, "/" being the front page, and the Play online checks of --four use "/"), a Chromium-based browser and Python 3; nothing
 else (the DevTools protocol is spoken with the WebSocket client of web_hidden_check.py, standard library only). The check opens the page in a throwaway headless browser (its own
 profile, its own port; nothing of yours is touched) and looks at what only a browser can show:
 
@@ -15,7 +16,7 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
     makes has EXACTLY the shape of the picture (16:9, or 4:3 for the classic picture), fills the game's box, the box fits the window (no scrolling to see the whole picture and the bar
     under it) and is the largest that fits, the page has no sideways scroll;
   * the address and the selector: `?aspect=4:3`, `?aspect=16:9`, a bad value, the selector's click (remembered under `ants.aspect.v2`, reload with the parameter), a portrait phone gets the 16:9 picture like every other device (and a remembered 4:3 still wins there);
-    a Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is not read any more (every browser starts 16:9 once), on the game page and on web/four.html (the pages' own code
+    a Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is not read any more (every browser starts 16:9 once), on the game page and on web/lobby.html (the pages' own code
     runs on a table of such values without a browser in tests/scripts/web_aspect_key_check.js, which ./run_tests.sh --fast runs);
   * the picture follows the window when it is resized, and fullscreen (the browser's, and the page's own where there is no Fullscreen API: an iPhone) enters and leaves with the
     canvas the right shape;
@@ -32,7 +33,7 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
     download that fails for good shows the message with a Reload button; the loading of the game itself: index.js or index.wasm that fail, a game that never starts (the watchdog), a
     body that is a web page / too small / an error status / cut short / a byte short (each is a failed try, the game starts on the next good one), the package that is handed to the
     file packager once and only for index.data, a promise that fails after the game runs (no card over it), and index.js asked for once with one ?v= (`--load-only`);
-    and (`--downloads N`, needs the game server behind /ws) N cold-cache runs of web/four.html with 2 and with
+    and (`--downloads N`, needs the game server behind /ws) N cold-cache runs of web/lobby.html (the front page, at /) with 2 and with
     4 games on the page, every frame of which must start (the browser's cache refuses one of several equal downloads at the same moment: net::ERR_CACHE_WRITE_FAILURE).
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down during the check (a page that hangs, a browser that crashes, a script that raises:
@@ -558,17 +559,17 @@ def main():
     ap.add_argument("--shots", default="", help="a folder to save the screenshots in")
     ap.add_argument("--quick", action="store_true", help="fewer sizes (1280 x 720, a phone)")
     ap.add_argument("--logic-only", action="store_true", help="only the page's own logic (ANTS_PAGE): no game, no layout")
-    ap.add_argument("--runs-only", action="store_true", help="only the cold-cache runs of four.html (with --downloads N)")
+    ap.add_argument("--runs-only", action="store_true", help="only the cold-cache runs of the front page (with --downloads N)")
     ap.add_argument("--downloads-only", action="store_true", help="only the page's logic and the data download's faults (retry, failure for good)")
     ap.add_argument("--pointer", action="store_true", help="also the exactness of the game's pointer at six layouts (the full run does it too; --pointer-only does nothing else)")
     ap.add_argument("--pointer-only", action="store_true", help="only the exactness of the game's pointer (the game's START button's edges, found with the mouse, at six layouts)")
     ap.add_argument("--wheel", action="store_true", help="also the wheel and the pinch: cancelled over the canvas only, and the game zooms (the full run does it too; --wheel-only does nothing else)")
     ap.add_argument("--wheel-only", action="store_true", help="only the wheel and the pinch of the page (cancelled over the canvas only; the game zooms to 0.5, 1 and 2; the middle button)")
     ap.add_argument("--load-only", action="store_true", help="only the page's logic and the faults of the loading of the game (index.js, index.wasm, a game that never starts, a body that is not the data)")
-    ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of web/four.html with 2 and with 4 games on the page (needs the game server behind /ws)")
+    ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of web/lobby.html (the front page, at /) with 2 and with 4 games on the page (needs the game server behind /ws)")
     ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
     ap.add_argument("--exit-codes", action="store_true", help="only check this script's own exit statuses: a closed port is a skip (3), a page that hangs is a failure (1)")
-    ap.add_argument("--four", action="store_true", help="also check web/four.html (the page that plays seats in frames: the frames' shape, a bad ?aspect ignored, the remembered choice, frames of the picture's own size in a wide window); needs the game server behind /ws (the stack)")
+    ap.add_argument("--four", action="store_true", help="also check web/lobby.html (the front page, at /) (the page that plays seats in frames: the frames' shape, a bad ?aspect ignored, the remembered choice, frames of the picture's own size in a wide window); needs the game server behind /ws (the stack)")
     args = ap.parse_args()
     global READY_TIMEOUT
     READY_TIMEOUT = args.ready_timeout
@@ -588,7 +589,8 @@ def main():
     if not path:
         print("  SKIP: no Chromium-based browser found (give one with --browser or CHROME)")
         return 3
-    web = args.web if args.web.endswith("/") else args.web + "/"
+    site = args.web if args.web.endswith("/") else args.web + "/"
+    web = site + "play.html"                                                      # the game page, at its own path ("/" is the front page, the lobby, since the Play online page became it)
     browser = None
     try:
         browser = Browser(path)
@@ -598,14 +600,14 @@ def main():
         tab.emulate(1280, 720, 1)
         tab.open(web, settle=0.5)
         def cold_runs():
-            print("[web aspect] web/four.html with 2 and with 4 games on the page, cold cache, %d runs each: every frame must start" % args.downloads)
+            print("[web aspect] web/lobby.html (the front page, at /) with 2 and with 4 games on the page, cold cache, %d runs each: every frame must start" % args.downloads)
             for seats in (2, 4):
                 for run in range(args.downloads):
                     fresh = Browser(path)                                       # a browser of its own: nothing is cached
                     try:
                         t = Tab(fresh)
                         t.emulate(1500, 900, 1)
-                        t.call("Page.navigate", {"url": web + "four.html?map=tiny&players=%d&play=here" % seats})
+                        t.call("Page.navigate", {"url": site + "?map=tiny&players=%d&play=here" % seats})
                         deadline = time.time() + 120
                         states = []
                         while time.time() < deadline:
@@ -714,7 +716,7 @@ def main():
             def real_data():
                 if "bytes" not in real:
                     import urllib.request
-                    with urllib.request.urlopen(web + "index.data", timeout=120) as r:
+                    with urllib.request.urlopen(site + "index.data", timeout=120) as r:
                         real["bytes"] = r.read()
                 return real["bytes"]
 
@@ -1604,11 +1606,11 @@ def main():
             wheel_checks()
 
         if args.four:
-            print("[web aspect] web/four.html: the games' frames (the game server must be behind /ws)")
+            print("[web aspect] web/lobby.html (the front page, at /): the games' frames (the game server must be behind /ws)")
 
             def four_frames(query, w=1500, h=900, dpr=1, seconds=14):
                 tab.emulate(w, h, dpr)
-                tab.call("Page.navigate", {"url": web + "four.html" + query})
+                tab.call("Page.navigate", {"url": site + query})
                 time.sleep(seconds)
                 return json.loads(tab.ev(r"""JSON.stringify(Array.prototype.map.call(document.querySelectorAll('iframe'), function (f) {
                     var d = f.contentDocument, c = d && d.getElementById('canvas'), b = d && d.getElementById('game-container');

@@ -97,7 +97,7 @@ class CompileCommandsAreFolderIndependent(unittest.TestCase):
         root = REPO
         self.assertTrue(os.path.isfile(os.path.join(root, "Original-Ants", "ants.chd")))
         self.assertTrue(os.path.isdir(os.path.join(root, "tests", "data")))
-        self.assertTrue(os.path.isfile(os.path.join(root, "web", "four.html")))
+        self.assertTrue(os.path.isfile(os.path.join(root, "web", "lobby.html")))
 
 
 if __name__ == "__main__":
