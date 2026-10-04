@@ -816,7 +816,7 @@ void run_bot_tests() {
         ASSERT_TRUE(normal.bots() == nullptr);
     } TEST_END();
 
-    TEST_CASE("AI6.7 --play Does Nothing In A Room: A Host With The Flag And A Map Stays On The Room's Setup Screen (No Match Starts, No Bot Runs); The Flag Is For A Game Of One Machine") {
+    TEST_CASE("AI6.11 --play Does Nothing In A Room: A Host With The Flag And A Map Stays On The Room's Setup Screen (No Match Starts, No Bot Runs); The Flag Is For A Game Of One Machine") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;
         cfg.net_port = 0;
