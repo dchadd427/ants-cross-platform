@@ -1150,6 +1150,31 @@ void test_wheel() {
     check(w.feed(0.7, 4000000000u) == 0 && w.feed(0.7, 4000000100u) == 1, "the clock's large values are fine");
     w.reset();
     check(w.feed(5.0, 100) == 5 && w.feed(-3.0, 110) == -3 && w.feed(100.0, 120) == zoom::WheelAccumulator::kMaxSteps && w.feed(-100.0, 130) == -zoom::WheelAccumulator::kMaxSteps, "several notches in one event are that many steps, to a bound");
+    // a mouse notch worth more than a step (the browser's 120 at the page's 100 a step is 1.2): the nearest whole number of steps, at least one, and nothing left over. The 0.2 of every notch
+    // used to be kept, so that the fifth notch of a burst was two levels (1, 1, 1, 1, 2)
+    for (const double sign : {1.0, -1.0}) {
+        w.reset();
+        int ones = 0;
+        int total = 0;
+        for (uint32_t i = 0; i < 5; ++i) {
+            const int s = w.feed(sign * 1.2, 1000u + 80u * i);
+            ones += s == static_cast<int>(sign) ? 1 : 0;
+            total += s;
+        }
+        check(ones == 5 && total == 5 * static_cast<int>(sign) && w.pending() == 0.0, "five notches of 1.2 within 400 ms are five steps of one and nothing is left over (not 1, 1, 1, 1, 2)");
+        w.reset();
+        int run = 0;
+        for (uint32_t i = 0; i < 1000; ++i) run += w.feed(sign * 1.2, 5000u + 10u * i);
+        check(run == 1000 * static_cast<int>(sign), "a thousand notches of 1.2 are a thousand steps: no drift");
+    }
+    w.reset();
+    check(w.feed(1.6, 100) == 2 && w.feed(-1.6, 110) == -2 && w.feed(2.4, 120) == 2 && w.feed(-2.4, 130) == -2 && w.feed(1.49, 140) == 1 && w.feed(7.6, 150) == 8 && w.feed(1.0, 160) == 1 && w.pending() == 0.0,
+          "a notch worth a step or more is the nearest whole number of steps: 1.6 is 2, 2.4 is 2, 1.49 is 1, 1 is 1");
+    w.reset();
+    check(w.feed(0.4, 100) == 0 && std::fabs(w.pending() - 0.4) < 1e-12 && w.feed(1.2, 110) == 1 && w.pending() == 0.0 && w.feed(0.4, 120) == 0 && w.feed(0.4, 130) == 0 && std::fabs(w.pending() - 0.8) < 1e-12,
+          "a notch clears a pending fraction: 0.4, 1.2 is one step with nothing left, and 0.4 + 0.4 after it is not a step");
+    w.reset();
+    check(w.feed(0.4, 100) == 0 && w.feed(1.0, 110) == 1 && w.pending() == 0.0 && w.feed(0.4, 120) == 0 && w.feed(-1.2, 130) == -1 && w.pending() == 0.0, "a notch of exactly 1 clears it too, and so does a notch the other way: no fraction survives a whole notch");
     w.reset();
     check(w.feed(0.5, 100) == 0 && w.pending() == 0.5, "half a notch is pending");
     w.reset();

@@ -1904,6 +1904,18 @@ void test_app_wheel() {
         app.handle_mouse_wheel(wheel_event(0, 0.6f, false, 2000));
         check(app.zoom() == 1.0f, pic + "a pause of two seconds forgets half a notch: 0.6, a pause, 0.6 is no step");
 
+        // a mouse notch that the browser reports as 120, which the page counts at 100 a step: 1.2. One level a notch, however many come in a burst: the 0.2 is not kept (it made the fifth notch
+        // of a burst two levels)
+        for (int i = 0; i < 5; ++i) {
+            app.handle_mouse_wheel(wheel_event(-1, -1.2f, false, 80));
+            check(app.zoom() == levels[static_cast<size_t>(5 + i)], pic + "notch " + std::to_string(i + 1) + " of five of 120 within 400 ms is one level out: " + std::to_string(static_cast<double>(levels[static_cast<size_t>(5 + i)])));
+        }
+        for (int i = 0; i < 5; ++i) {
+            app.handle_mouse_wheel(wheel_event(1, 1.2f, false, 80));
+            check(app.zoom() == levels[static_cast<size_t>(8 - i)], pic + "notch " + std::to_string(i + 1) + " of five of 120 the other way is one level in: " + std::to_string(static_cast<double>(levels[static_cast<size_t>(8 - i)])));
+        }
+        check(app.zoom() == 1.0f, pic + "five of 120 out and five in are back at 1");
+
         // only over the map view
         const std::vector<std::pair<std::pair<int32_t, int32_t>, std::string>> outside = {
             {{mini.x + 10, mini.y + 10}, "the minimap"},

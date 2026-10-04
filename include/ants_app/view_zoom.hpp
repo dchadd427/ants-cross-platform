@@ -301,8 +301,9 @@ inline double wheel_amount(int32_t y, float precise_y, bool flipped) noexcept {
     return flipped ? -amount : amount;
 }
 
-/// The wheel's deltas added up to whole steps: one notch is one step, a trackpad's fractions add up (0.4 + 0.4 + 0.4 is one step with 0.2 left); a pause of more than kStaleMs
-/// forgets a left-over fraction and a change of direction starts again from nothing. A step is a change of one level.
+/// The wheel's deltas added up to whole steps. An event worth a step or more (a mouse notch: 1, or 1.2 when the browser's 120 is taken at the page's 100 a step) is the nearest whole number of
+/// steps, at least one, and leaves no fraction (a kept 0.2 made the fifth notch of a burst two steps); events worth less than a step (a trackpad's) add up (0.4 + 0.4 + 0.4 is one step with
+/// 0.2 left). A pause of more than kStaleMs forgets a left-over fraction and a change of direction starts again from nothing. A step is a change of one level.
 class WheelAccumulator {
 public:
     static constexpr uint32_t kStaleMs = 500;
@@ -315,6 +316,10 @@ public:
         if (have_ && static_cast<int64_t>(time_ms) - static_cast<int64_t>(last_ms_) > static_cast<int64_t>(kStaleMs)) acc_ = 0.0;
         have_ = true;
         last_ms_ = time_ms;
+        if (std::fabs(amount) >= 1.0) {
+            acc_ = 0.0;
+            return static_cast<int>(std::lround(amount));                    // (at least one: 1.2 is 1, 1.6 is 2)
+        }
         if (amount * acc_ < 0.0) acc_ = 0.0;
         acc_ += amount;
         const double whole = std::trunc(acc_);
