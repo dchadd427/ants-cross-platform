@@ -31,6 +31,8 @@
 //   AI7.26  a raid that never got going blacklists the hill
 //   AI7.27  a refused click (Fate::Filtered) blacklists the pile for 900 ticks; the economy's rescue and the aid of a hit carrier do not repeat a refused click onto the entrance; a pile under a power-up is never proposed
 //   AI7.28  a refused raid click blacklists the raided team for 900 ticks
+//   AI7.29  the stall detector's rules: the same order sent repeat_limit times within repeat_window without a point banked (attacks, other ants, a longer span do not count), no point for stall_ticks
+//           while food that the hill reaches lies on the map, the doubling of the fallback (at most 9,600 ticks), what the fallback changes
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -2007,6 +2009,215 @@ void run_b41_tests() {
             }
             ASSERT_FALSE(stranger);
             ASSERT_TRUE(alive(sim, thief));
+        }
+    } TEST_END();
+
+    TEST_CASE("AI7.29 The Stall Detector: The Same Order Sent 12 Times Within 1200 Ticks With Nothing Banked In Between (Not 11, Not Spread Over A Longer Time, Not Attacks, Not Different Ants, Not With A Point Banked Between) Or No Point For stall_ticks While Food That The Hill Reaches Lies On The Map (Not Without Food, Not When The Food Cannot Be Reached) Sends The Bot To The Plain Economy For fallback_ticks, Doubled At Every Stall And At Most 9600; The Plain Economy Is The Worker's Harvest, The Thief Goes Back To It")
+    {
+        struct Stalled {
+            sim::SimulationEngine sim;
+            std::unique_ptr<MapInfo> map;
+            std::unique_ptr<StandardBot> bot;
+            Profile profile{profile_for(Level::Hard)};
+            uint32_t ants[3]{};
+            uint32_t thief{0};
+            Stalled(const LevelPlan& plan, int food, bool thief_and_loot = false, uint32_t ticks = 14400) {     // food: 0 none, 1 a pile that the hill reaches, 2 a pile that a ring of rocks shuts off
+                empty_field(sim, 5, ticks);
+                for (int i = 0; i < 3; ++i) ants[i] = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 10});
+                if (food == 1) add_pile(sim, 14, 12, 40, 25);
+                if (food == 2) {
+                    add_pile(sim, 30, 30, 40, 25);
+                    for (int d = -3; d <= 3; ++d) {
+                        for (const TileCoord& r : {TileCoord{30 + d, 27}, TileCoord{30 + d, 33}, TileCoord{27, 30 + d}, TileCoord{33, 30 + d}}) sim.set_terrain(r.x, r.y, sim::TERRAIN_OBSTACLE);
+                    }
+                }
+                if (thief_and_loot) {
+                    thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 10});
+                    sim.set_player_score(1, 200);
+                }
+                map = std::make_unique<MapInfo>(sim);
+                bot = std::make_unique<StandardBot>(plan);
+                bot->start(BotContext{0, profile, 1, map.get()});
+            }
+            uint64_t look(uint64_t advance) {                                                    // advances the world and looks once; the orders go nowhere (the bot is stalled by construction)
+                tick_all(sim, advance);
+                const BotView view = BotView::build(sim, 0, map.get());
+                Orders orders;
+                bot->think(view, orders);
+                return view.tick();
+            }
+            void send(CommandType type, uint32_t ant, uint64_t tick) { bot->on_command(command_of(type, 0, {ant}, 20, 20), Bot::Fate::Sent, tick); }
+        };
+        LevelPlan base = plan_for(Level::Hard);
+        base.gate = false;
+        base.raids = false;
+        {   // the repeat rule, alone (the other rule is off): the same order 12 times within 1200 ticks, in a window in which nothing was banked (the clock of the first look has run 1200 ticks)
+            LevelPlan plan = base;
+            plan.stall_ticks = 0;
+            plan.repeat_limit = 12;
+            plan.repeat_window = 1200;
+            // `sends` orders `gap` ticks apart from tick 1300 (the sim is run to each tick; the bot looks at the tick of the last one); `same`: one ant and tile, else another of both every time
+            const auto stalled_after = [&](CommandType type, bool same, uint64_t gap, bool bank_between, size_t sends) {
+                Stalled w(plan, 1);
+                w.look(1);
+                for (size_t k = 0; k < sends; ++k) {
+                    const uint64_t at = 1300 + gap * k;
+                    tick_all(w.sim, at - w.sim.current_tick());
+                    const uint32_t ant = same ? w.ants[0] : w.ants[k % 3];
+                    const int x = same ? 20 : 20 + static_cast<int>(k);
+                    w.bot->on_command(command_of(type, 0, {ant}, x, 20), Bot::Fate::Sent, at);
+                    if (bank_between && k == 7) {
+                        w.sim.set_player_score(0, 25);
+                        w.look(1);                                                                // the look that sees the point: nothing was banked for 1200 ticks before it, and the clock starts again
+                    }
+                }
+                w.look(0);
+                return w.bot->in_fallback();
+            };
+            ASSERT_TRUE(stalled_after(CommandType::GroupMove, true, 50, false, 12));              // 12 in 550 ticks
+            ASSERT_FALSE(stalled_after(CommandType::GroupMove, true, 50, false, 11));             // 11
+            ASSERT_TRUE(stalled_after(CommandType::GroupMove, true, 109, false, 12));             // 12 in 1199 ticks
+            ASSERT_FALSE(stalled_after(CommandType::GroupMove, true, 110, false, 12));            // 12 in 1210 ticks: the first has left the window
+            ASSERT_FALSE(stalled_after(CommandType::GroupAttack, true, 50, false, 30));           // attacks are one blow each: a fight repeats them
+            ASSERT_FALSE(stalled_after(CommandType::GroupMove, false, 50, false, 30));            // other ants and tiles are other orders
+            ASSERT_FALSE(stalled_after(CommandType::GroupMove, true, 50, true, 16));              // a point was banked after the 8th: sixteen sends, but nothing was hammered for a whole window without one
+            ASSERT_TRUE(stalled_after(CommandType::Stop, true, 50, false, 12));                   // (a Stop is repeated like any other order)
+            const auto stalled_at = [&](uint64_t twelfth) {                  // eleven sends 100 ticks apart from tick 1300, the twelfth at the given tick, the look at its tick
+                Stalled w(plan, 1);
+                w.look(1);
+                for (uint64_t k = 0; k < 11; ++k) {
+                    tick_all(w.sim, 1300 + 100 * k - w.sim.current_tick());
+                    w.send(CommandType::GroupMove, w.ants[0], 1300 + 100 * k);
+                }
+                tick_all(w.sim, twelfth - w.sim.current_tick());
+                w.send(CommandType::GroupMove, w.ants[0], twelfth);
+                w.look(0);
+                return w.bot->in_fallback();
+            };
+            ASSERT_TRUE(stalled_at(2500));                                                    // exactly 1200 ticks after the first: the first is still in the window
+            ASSERT_FALSE(stalled_at(2501));                                                   // 1201: it is not
+            {   // a loop that stopped before the window was over is no stall: twelve sends, then 1300 quiet ticks (nothing banked all that time)
+                Stalled w(plan, 1);
+                w.look(1);
+                for (uint64_t k = 0; k < 12; ++k) {
+                    tick_all(w.sim, 100 + 50 * k - w.sim.current_tick());
+                    w.send(CommandType::GroupMove, w.ants[0], 100 + 50 * k);
+                }
+                w.look(0);
+                ASSERT_FALSE(w.bot->in_fallback());                                              // (a window has not passed since the last point: the first look)
+                w.look(1400);
+                ASSERT_FALSE(w.bot->in_fallback());                                              // the loop is over: nothing was sent in the last window
+            }
+        }
+        {   // the rule of the clock, alone
+            LevelPlan plan = base;
+            plan.repeat_limit = 0;
+            plan.stall_ticks = 400;
+            plan.fallback_ticks = 1000;
+            {
+                Stalled w(plan, 1);
+                const uint64_t first = w.look(1);
+                uint64_t at = 0;
+                for (int k = 0; k < 40 && at == 0; ++k) {
+                    ASSERT_FALSE(w.bot->in_fallback());
+                    const uint64_t now = w.look(20);
+                    if (w.bot->in_fallback()) at = now;
+                }
+                ASSERT_EQ(at, first + 400);                                                      // the first look at which stall_ticks have passed since the first look
+                ASSERT_EQ(w.bot->stalls(), 1u);
+                ASSERT_EQ(w.bot->fallback_until(), first + 400 + 1000);
+            }
+            {   // ... to the tick: not one tick before
+                Stalled w(plan, 1);
+                w.look(1);
+                w.look(399);
+                ASSERT_FALSE(w.bot->in_fallback());                                              // 399 ticks after the first look
+                w.look(1);
+                ASSERT_TRUE(w.bot->in_fallback());                                               // 400
+            }
+            {   // a point banked at tick ~300 starts the clock again
+                Stalled w(plan, 1);
+                const uint64_t first = w.look(1);
+                w.look(299);
+                w.sim.set_player_score(0, 25);
+                const uint64_t seen = w.look(1);
+                uint64_t at = 0;
+                for (uint64_t t = seen; t < seen + 800 && at == 0; t += 20) {
+                    const uint64_t now = w.look(20);
+                    if (w.bot->in_fallback()) at = now;
+                }
+                ASSERT_TRUE(first < seen);
+                ASSERT_TRUE(at >= seen + 400 && at <= seen + 420);
+            }
+            {   // the clock starts again when the fallback begins: the next stall is 1500 ticks after the last, not one at the end of the fallback
+                LevelPlan slow = plan;
+                slow.stall_ticks = 1500;
+                slow.fallback_ticks = 500;
+                Stalled w(slow, 1, false, 20000);
+                const uint64_t first = w.look(1);
+                uint64_t second_at = 0;
+                for (int k = 0; k < 500 && second_at == 0; ++k) {
+                    const uint64_t now = w.look(20);
+                    if (w.bot->stalls() == 2) second_at = now;
+                }
+                ASSERT_EQ(w.bot->stalls(), 2u);
+                ASSERT_EQ(second_at, first + 3000);                                              // the first stall at 1500, a fallback of 500, and the next stall 1500 ticks after the FIRST (the clock restarts at the stall), not at the end of the fallback
+            }
+            for (const int food : {0, 2}) {                                                       // no food at all, or food that the hill cannot reach: nothing to bank, nothing to stall at
+                Stalled w(plan, food);
+                w.look(1);
+                for (int k = 0; k < 120; ++k) w.look(20);                                         // 2400 ticks
+                ASSERT_EQ(w.bot->stalls(), 0u);
+            }
+        }
+        {   // the doubling and the cap
+            LevelPlan plan = base;
+            plan.repeat_limit = 0;
+            plan.stall_ticks = 50;
+            plan.fallback_ticks = 1500;
+            Stalled w(plan, 1, false, 40000);                                                    // (a match long enough for 1500 + 3000 + 6000 + 9600 ticks)
+            w.look(1);
+            std::vector<uint64_t> spans;
+            for (int k = 0; k < 2000 && spans.size() < 5; ++k) {
+                const uint64_t now = w.look(20);
+                if (w.bot->stalls() > spans.size()) spans.push_back(w.bot->fallback_until() - now);
+            }
+            ASSERT_EQ(spans.size(), 5u);
+            ASSERT_TRUE(spans[0] == 1500 && spans[1] == 3000 && spans[2] == 6000 && spans[3] == StandardBot::kMaxFallbackTicks && spans[4] == StandardBot::kMaxFallbackTicks);
+            ASSERT_EQ(StandardBot::kMaxFallbackTicks, 9600u);
+        }
+        {   // what the fallback changes: the harvest of the worker (no contested piles, no typed ants, the rescue on) and no raids; the Thief is the economy's again; afterwards everything is back
+            LevelPlan plan = base;
+            plan.raids = true;
+            plan.stall_ticks = 0;
+            plan.repeat_limit = 12;
+            plan.fallback_ticks = 600;
+            Stalled w(plan, 1, true);
+            w.look(1);
+            for (int k = 0; k < 10 && w.bot->ledger().owner(w.thief) != StandardBot::kRaids; ++k) w.look(4);
+            const HarvestTask::Params normal = w.bot->harvest().params();
+            ASSERT_TRUE(normal.contest_opening_ants != 0 && normal.extra_types != 0);        // the Hard bot's own economy: ants to the contested centre in the opening, typed ants that harvest
+            ASSERT_EQ(w.bot->ledger().owner(w.thief), StandardBot::kRaids);                  // the thief is kept for a raid
+            const uint32_t raids_before = w.bot->raids().raids_ordered();
+            ASSERT_TRUE(raids_before >= 1);
+            tick_all(w.sim, 1300 - w.sim.current_tick());                                    // (a whole window without a point)
+            for (int k = 0; k < 12; ++k) {
+                tick_all(w.sim, 10);
+                w.send(CommandType::GroupMove, w.ants[0], w.sim.current_tick());
+            }
+            const uint64_t now = w.look(0);
+            ASSERT_TRUE(w.bot->in_fallback());
+            ASSERT_EQ(w.bot->fallback_until(), now + 600);
+            const HarvestTask::Params plain = w.bot->harvest().params();
+            ASSERT_TRUE(plain.contest_opening_ants == 0 && !plain.contest_aware && plain.extra_types == 0 && plain.rescue && !plain.fire_aware);
+            ASSERT_EQ(w.bot->ledger().owner(w.thief), kNoTask);                              // released, and no raid takes it again while the fallback lasts
+            for (int k = 0; k < 20; ++k) w.look(20);
+            ASSERT_EQ(w.bot->ledger().owner(w.thief), kNoTask);
+            ASSERT_EQ(w.bot->raids().raids_ordered(), raids_before);                         // no raid in the plain economy
+            for (int k = 0; k < 40; ++k) w.look(20);                                          // the fallback is over (600 ticks)
+            ASSERT_FALSE(w.bot->in_fallback());
+            const HarvestTask::Params back = w.bot->harvest().params();
+            ASSERT_TRUE(back.contest_opening_ants == normal.contest_opening_ants && back.extra_types == normal.extra_types && back.fire_aware == normal.fire_aware);
         }
     } TEST_END();
 }

@@ -99,6 +99,7 @@ struct ArenaSeatResult {
     uint32_t raided{0};
     uint32_t kills{0};
     uint32_t losses{0};
+    uint32_t stalls{0};                        // times a standard bot's stall detector sent it to the plain economy (StandardBot::stalls); 0 for the other kinds
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {

@@ -1901,6 +1901,7 @@ void GateTask::step(TaskContext& c) {
             user_ = 0;
         } else if (ua->tile == g.entrance || ua->state == sim::UnitState::EnteringBase) {
             user_active = true;
+            user_streak_ = 0;                                                       // the click delivered
         } else {
             user_active = true;
             if (user_release_ != 0) {
@@ -1915,6 +1916,14 @@ void GateTask::step(TaskContext& c) {
                     cmd_.erase(user_);
                     user_ = 0;
                     user_active = false;
+                    ++user_streak_;
+                    if (params_.user_fail_limit != 0 && user_streak_ >= params_.user_fail_limit) {            // the clicks deliver nothing: stop for a while (the carriers are boxed in)
+                        blocked_[static_cast<int64_t>(g.entrance.y) * 4096 + g.entrance.x] = now + params_.blocked_ticks;
+                        user_streak_ = 0;
+                        ++pauses_;
+                        usable_ = false;
+                        return;
+                    }
                 }
             }
         }

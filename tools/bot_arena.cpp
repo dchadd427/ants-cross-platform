@@ -621,6 +621,11 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "gatepred") return flag(p.gate_predictive);
     if (key == "gatelat") { p.gate_latency = static_cast<uint32_t>(v); return true; }
     if (key == "gatestaged") { p.gate_max_staged = static_cast<uint32_t>(v); return true; }
+    if (key == "gatefails") { p.gate_user_fails = static_cast<uint32_t>(v); return true; }
+    if (key == "stall") { p.stall_ticks = static_cast<uint32_t>(v); return true; }                 // the stall detector (0: off): ticks without a point banked
+    if (key == "repeat") { p.repeat_limit = static_cast<uint32_t>(v); return true; }               // ... the same order sent this many times ...
+    if (key == "repwindow") { p.repeat_window = static_cast<uint32_t>(v); return true; }           // ... within this many ticks with nothing banked
+    if (key == "fallback") { p.fallback_ticks = static_cast<uint32_t>(v); return true; }           // ... and the plain economy this long
     if (key == "gategap") { p.gate_gap_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "idle") { p.bench_idle_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "avoid") return flag(p.avoids_guarded_hills);
@@ -965,7 +970,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
         if (x.spec.seat != y.spec.seat || x.runs != y.runs || x.score != y.score || x.shown_score != y.shown_score || x.ants != y.ants || x.eggs != y.eggs || x.hatched != y.hatched ||
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
-            x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected) {
+            x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls) {
             return false;
         }
     }
@@ -1205,6 +1210,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("raided", uint64_t{s.raided});
             j.field("kills", uint64_t{s.kills});
             j.field("losses", uint64_t{s.losses});
+            j.field("stalls", uint64_t{s.stalls});
             j.field("decisions", uint64_t{s.stats.decisions});
             j.field("intents", uint64_t{s.stats.intents});
             j.field("released", uint64_t{s.stats.released});
@@ -1614,6 +1620,7 @@ void selftest_wiring(SelfTest& t, const LoadedMap& tiny) {
             {"released", [](ai::ArenaResult& r) { ++r.seats[0].stats.released; }},
             {"decisions", [](ai::ArenaResult& r) { ++r.seats[0].stats.decisions; }},
             {"rejected", [](ai::ArenaResult& r) { ++r.seats[1].stats.rejected; }},
+            {"stalls", [](ai::ArenaResult& r) { ++r.seats[0].stalls; }},
             {"audio events", [](ai::ArenaResult& r) { ++r.audio_events; }},
             {"units left on reachable piles", [](ai::ArenaResult& r) { ++r.reachable_units_left; }},
             {"seat count", [](ai::ArenaResult& r) { r.seats.pop_back(); }},
@@ -1813,7 +1820,7 @@ void selftest_tool(SelfTest& t) {
             const ai::ArenaSeatResult& r = played.seats[i];
             const auto num = [&s](const char* key) { return s.get(key) != nullptr ? s.get(key)->i64() : int64_t{-12345}; };
             fields_ok = num("seat") == r.spec.seat && num("score") == r.score && num("shown_score") == r.shown_score && num("ants") == r.ants && num("eggs") == r.eggs && num("hatched") == r.hatched &&
-                        num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("decisions") == r.stats.decisions &&
+                        num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("stalls") == r.stalls && num("decisions") == r.stats.decisions &&
                         num("released") == r.stats.released && num("intents") == r.stats.intents && num("expired") == r.stats.expired && num("rejected") == r.stats.rejected &&
                         s.get("bot") != nullptr && s.get("bot")->text == spec_text(r.spec) && s.get("runs") != nullptr && s.get("runs")->text == r.runs;
         }
@@ -1944,6 +1951,12 @@ int selftest() {
         Options out_given;
         t.check(parse_args({"--out", "report.json"}, out_given, err) && out_given.out == "report.json" && !parse_args({"--out", ""}, bad, err) && !parse_args({"--out"}, bad, err),
                 "--out takes a file name; an empty one (an unset shell variable) is refused, not taken for 'no report'");
+        ai::LevelPlan probe = ai::plan_for(ai::Level::Hard);
+        std::string tune_err;
+        t.check(apply_tune(probe, "stall", 500, tune_err) && probe.stall_ticks == 500 && apply_tune(probe, "repeat", 5, tune_err) && probe.repeat_limit == 5 && apply_tune(probe, "repwindow", 600, tune_err) &&
+                    probe.repeat_window == 600 && apply_tune(probe, "fallback", 700, tune_err) && probe.fallback_ticks == 700 && apply_tune(probe, "gatefails", 4, tune_err) && probe.gate_user_fails == 4 &&
+                    !apply_tune(probe, "stal", 1, tune_err),
+                "the tuning keys of the stall detector and of the gate's pause (stall, repeat, repwindow, fallback, gatefails) set the plan; a misspelt key is refused");
     }
 
     t.section("the table of baselines (tests/test_ai/baselines.inc)");

@@ -7,8 +7,13 @@
 //   AI10.3  the surroundings: a rock on the queue row or on the buffer tile is never ordered onto, and the gate still works
 //   AI10.4  a hill that the gate cannot guide (in the top rows: no buffer tile) keeps the economy's rescue; both are off only while the gate guides
 //   AI10.5  a click that the controller refused (Fate::Filtered) blocks its tile for 900 ticks: a queue-row slot, the buffer tile, the entrance (no gate until it is over)
+//   AI10.6  a gate whose clicks onto the entrance deliver nothing (gate_user_fails in a row: the carriers are boxed in) stops for 900 ticks, the economy's rescue is on meanwhile
+//   AI10.7  a seat whose gate is answered by a world that cancels the walk of an ant and then fails (the loop of M2) banks next to nothing and burns its budget without the stall detector,
+//           and banks like the worker with it (the repeat rule, the rule of the clock, both with the gate's own stop)
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
+
+#include "ants_ai/worker_bot.hpp"
 
 using namespace ai_test;
 using namespace ants;
@@ -98,6 +103,98 @@ uint64_t median(std::vector<uint64_t> v) {
     if (v.empty()) return 0;
     std::sort(v.begin(), v.end());
     return v[v.size() / 2];
+}
+
+// A standard bot in a world that answers the gate's orders (the Urgent moves: the takeovers of the carriers and the clicks onto the entrance) by cancelling the walk of the ant and then failing,
+// which is what a jammed causeway does ("Can't go there."): each of them leaves as a Stop of the same ants, and the bot is told that its order was sent. The loop of M2: the carriers stand where
+// they stand and the gate orders them again and again.
+class FutileGate final : public Bot {
+public:
+    explicit FutileGate(std::unique_ptr<StandardBot> inner) : inner_(std::move(inner)) {}
+    const char* kind() const noexcept override { return inner_->kind(); }
+    void start(const BotContext& c) override { inner_->start(c); }
+    void think(const BotView& v, Orders& o) override {
+        Orders mine;
+        inner_->think(v, mine);
+        for (const Intent& in : mine.intents()) {
+            if (in.priority == Priority::Urgent && in.command.type == CommandType::GroupMove) {
+                Command stop = in.command;
+                stop.type = CommandType::Stop;
+                stop.tile_x = 0;
+                stop.tile_y = 0;
+                replaced_.push_back(in.command);
+                o.push_unchecked(stop, Priority::Urgent);
+            } else {
+                o.push_unchecked(in.command, in.priority, in.pickup);
+            }
+        }
+    }
+    void on_command(const Command& c, Fate fate, uint64_t tick) override {
+        if (c.type == CommandType::Stop) {
+            for (auto it = replaced_.begin(); it != replaced_.end(); ++it) {
+                if (it->ants == c.ants) {
+                    const Command original = *it;
+                    replaced_.erase(it);
+                    inner_->on_command(original, fate, tick);                       // the bot hears about its own order
+                    return;
+                }
+            }
+        }
+        inner_->on_command(c, fate, tick);
+    }
+    const StandardBot& inner() const { return *inner_; }
+
+private:
+    std::unique_ptr<StandardBot> inner_;
+    std::vector<Command> replaced_;
+};
+
+struct SeatRun {
+    int32_t score{0};
+    uint32_t released{0};
+    uint32_t stalls{0};
+    uint32_t pauses{0};
+};
+
+// Six workers on a pile 13 rows north of the hill, six minutes (7,200 ticks): `kind` 0 the worker, 1 the standard bot as it is, 2 the standard bot in the futile world; the plan is the Hard
+// plan with the gate and the given switches of the detector (0 for the numbers of a rule that is off) and of the gate's own stop
+SeatRun play_seat(int kind, uint32_t stall_ticks, uint32_t repeat_limit, uint32_t gate_fails, uint32_t fallback_ticks = 2400, uint32_t repeat_window = 1200, uint64_t ticks = 7200) {
+    GateScene scene;
+    scene.build(6);                                                                                 // (fewer than 8: the economy's rescue does nothing while 8 or more carriers stand idle at once)
+    RecordingSink sink(scene.sim, true);
+    BotController ctl(scene.sim, 3);
+    BotSpec spec;
+    spec.seat = 0;
+    spec.level = Level::Hard;
+    spec.kind = kind == 0 ? "worker" : "standard";
+    std::string why;
+    const StandardBot* standard = nullptr;
+    if (kind == 0) {
+        if (!ctl.add(spec, sink, why)) std::cout << "    add failed: " << why << "\n";
+    } else {
+        LevelPlan plan = gate_plan(true);
+        plan.stall_ticks = stall_ticks;
+        plan.repeat_limit = repeat_limit;
+        plan.gate_user_fails = gate_fails;
+        plan.fallback_ticks = fallback_ticks;
+        plan.repeat_window = repeat_window;
+        auto inner = std::make_unique<StandardBot>(plan);
+        standard = inner.get();
+        std::unique_ptr<Bot> bot = kind == 2 ? std::unique_ptr<Bot>(new FutileGate(std::move(inner))) : std::unique_ptr<Bot>(std::move(inner));
+        if (!ctl.add(spec, std::move(bot), sink, why)) std::cout << "    add failed: " << why << "\n";
+    }
+    for (uint64_t t = 0; t < ticks; ++t) {
+        scene.sim.tick();
+        scene.sim.clear_news_events();
+        scene.sim.clear_audio_events();
+        ctl.on_tick(scene.sim);
+    }
+    SeatRun r;
+    r.score = scene.sim.get_player_score(0);
+    r.released = ctl.stats(0).released;
+    r.stalls = standard != nullptr ? standard->stalls() : 0u;
+    r.pauses = standard != nullptr ? standard->gate().pauses() : 0u;
+    return r;
 }
 
 }  // namespace
@@ -258,7 +355,9 @@ void run_b41_gate_tests() {
                 if (which == 1) return c.tile_x == hill.x + 1 && c.tile_y == hill.y - 4;
                 return c.tile_x == hill.x + 1 && c.tile_y == hill.y + 1;
             };
-            GateTask gate(1);
+            GateTask::Params gate_params;
+            gate_params.user_fail_limit = 0;                                                                // (the gate's own stop after failed clicks is AI10.6: the clicks of this scene all fail)
+            GateTask gate(1, gate_params);
             AntLedger ledger;
             TileCoord refused{-1, -1};
             uint32_t refused_ant = 0;
@@ -321,5 +420,113 @@ void run_b41_gate_tests() {
                 for (const uint64_t m : moves) ASSERT_TRUE(m >= t0 + 900);                                  // and no order of the gate at all meanwhile
             }
         }
+    } TEST_END();
+
+    TEST_CASE("AI10.6 A Gate Whose Clicks Deliver Nothing Stops: After gate_user_fails Clicks Onto The Entrance In A Row That Delivered Nothing (The Engine Ignores The Order: Nothing Is Applied Here) The Gate Guides No More For 900 Ticks, Its Orders Stop, The Economy's Rescue Is On Meanwhile, And It Tries Again When The Time Is Up; With No Limit It Clicks At Every Look For The Rest Of The Match")
+    {
+        for (const int variant : {0, 1, 2}) {                                                               // 0: limit 3, nothing is applied; 1: no limit; 2: limit 3, but every third click is applied (it delivers)
+            const uint32_t limit = variant == 1 ? 0u : 3u;
+            GateScene scene;
+            scene.build(0);
+            for (int i = 0; i < 3; ++i) {                                                                   // three carriers outside the doorstep; nothing the bot orders is applied
+                const uint32_t id = scene.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{23 + i, 16});
+                scene.sim.get_unit(id).pick_up_food(1, 25);
+            }
+            LevelPlan plan = gate_plan(true);
+            plan.gate_user_fails = limit;
+            plan.stall_ticks = 0;                                                                           // (the detector is another test: this is the gate's own stop)
+            plan.repeat_limit = 0;
+            const MapInfo map(scene.sim);
+            const Profile profile = profile_for(Level::Hard);
+            StandardBot bot(plan);
+            bot.start(BotContext{0, profile, 1, &map});
+            const TileCoord entrance = map.hill(0).entrance;
+            size_t click_no = 0;
+            std::vector<uint64_t> clicks;                                                                   // the looks at which the GATE clicked (the economy's rescue clicks onto the entrance too)
+            uint64_t paused_at = 0;
+            uint32_t seen_clicks = 0;
+            uint32_t rescues_before_pause = 0;
+            bool rescue_on_when_paused = true;
+            bool guided_rescue_off = true;
+            for (uint64_t t = 1; t <= 1400; ++t) {
+                tick_all(scene.sim, 1);
+                if (t % 4 != 1) continue;                                                                   // a look every 4 ticks, like Hard
+                const BotView view = BotView::build(scene.sim, 0, &map);
+                Orders orders;
+                bot.think(view, orders);
+                for (const Intent& in : orders.intents()) {
+                    bot.on_command(in.command, Bot::Fate::Sent, view.tick());
+                    const bool click = in.command.type == CommandType::GroupMove && in.command.tile_x == entrance.x && in.command.tile_y == entrance.y;
+                    if (variant == 2 && click && ++click_no % 3 == 0) {                                     // a click that reaches the engine: the carrier walks to the entrance and delivers
+                        Command applied = in.command;
+                        applied.issuer = 0;
+                        scene.sim.apply_command(applied);
+                    }
+                }
+                if (bot.gate().entrance_clicks() != seen_clicks) {
+                    for (uint32_t k = seen_clicks; k < bot.gate().entrance_clicks(); ++k) clicks.push_back(view.tick());
+                    seen_clicks = bot.gate().entrance_clicks();
+                }
+                if (paused_at == 0) rescues_before_pause = bot.harvest().rescues();
+                if (bot.gate().pauses() >= 1 && paused_at == 0) paused_at = view.tick();
+                if (paused_at != 0 && view.tick() < paused_at + 900) rescue_on_when_paused = rescue_on_when_paused && !bot.gate().usable() && bot.harvest().params().rescue;
+                if (paused_at == 0 && bot.gate().usable()) guided_rescue_off = guided_rescue_off && !bot.harvest().params().rescue;
+            }
+            if (variant == 2) {
+                ASSERT_EQ(bot.gate().pauses(), 0u);                                                         // two failed clicks and a delivery again and again: never three in a row
+                ASSERT_TRUE(bot.gate().entrance_clicks() >= 6);
+                ASSERT_TRUE(scene.sim.get_player_score(0) > 0);                                             // (the clicks that were applied banked)
+            } else if (variant == 0) {
+                ASSERT_TRUE(paused_at != 0 && paused_at < 150);                                             // three clicks that deliver nothing take a few dozen ticks
+                size_t before = 0;
+                size_t during = 0;
+                size_t after = 0;
+                for (const uint64_t c : clicks) {
+                    if (c < paused_at) ++before;
+                    else if (c < paused_at + 900) ++during;
+                    else ++after;
+                }
+                ASSERT_EQ(before, 3u);
+                ASSERT_EQ(during, 0u);                                                                      // not one click, and no order of the gate at all, while it stops
+                ASSERT_TRUE(after >= 1);                                                                    // it tries again when the 900 ticks are over
+                ASSERT_TRUE(clicks[3] >= paused_at + 900 && clicks[3] <= paused_at + 900 + 8);              // at the first look after them
+                ASSERT_TRUE(rescue_on_when_paused);                                                         // the gate does not guide, so the economy's rescue and the aid are on
+                ASSERT_TRUE(guided_rescue_off);                                                             // (and while it guides the rescue is off, as before)
+                ASSERT_EQ(rescues_before_pause, 0u);
+                ASSERT_TRUE(bot.harvest().rescues() >= 1);                                                  // the rescue sent the carriers home while the gate stopped
+                ASSERT_TRUE(bot.gate().pauses() >= 1);
+            } else {
+                ASSERT_EQ(bot.gate().pauses(), 0u);
+                ASSERT_TRUE(clicks.size() >= 60);                                                           // a click every 16 ticks or so, for the rest of the match
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI10.7 The Loop Of M2 And The Stall Detector: Six Workers On A Pile, Six Minutes; The World Answers Every Order Of The Gate (A Takeover, A Click Onto The Entrance) By Stopping The Ant And Failing; The Worker Banks What It Banks; The Standard Bot Without Any Safety Net Banks Under A Quarter Of That And Burns Its Budget (More Than 900 Commands), With The Repeat Rule Alone, The Rule Of The Clock Alone Or Both With The Gate's Own Stop (Shortened Numbers: A Window Of 300 Ticks) It Goes To The Plain Economy And Banks Like The Worker (At Least Half, At Least Three Quarters With Both), And With The Numbers That Ship At Least Half; In A World That Obeys, The Standard Bot Is Not Worse Than The Worker")
+    {
+        const SeatRun worker = play_seat(0, 0, 0, 0);
+        ASSERT_TRUE(worker.score >= 1000);
+        const SeatRun healthy = play_seat(1, 3600, 12, 16);                                                 // the defaults, in a world that obeys: the gate works and the detector keeps quiet
+        ASSERT_TRUE(healthy.score >= worker.score);
+        ASSERT_EQ(healthy.stalls, 0u);
+        ASSERT_EQ(healthy.pauses, 0u);                                                                      // (the failed clicks of a healthy gate are far apart: a success starts the count again)
+        const SeatRun loop = play_seat(2, 0, 0, 0);                                                         // no detector, no stop of the gate: the loop
+        ASSERT_TRUE(loop.score * 4 <= worker.score);
+        ASSERT_TRUE(loop.released > 900);                                                                   // the budget of Hard is 3 commands a second: 1,080 in six minutes
+        ASSERT_EQ(loop.stalls, 0u);
+        const SeatRun repeats = play_seat(2, 0, 12, 0, 2400, 300);                                          // the repeat rule alone, with the window shortened to 300 ticks
+        ASSERT_TRUE(repeats.stalls >= 1);
+        ASSERT_TRUE(repeats.score * 2 >= worker.score);
+        const SeatRun clock = play_seat(2, 600, 0, 0, 1200);                                                // the rule of the clock alone (30 seconds without a point, a fallback of one minute)
+        ASSERT_TRUE(clock.stalls >= 1);
+        ASSERT_TRUE(clock.score * 2 >= worker.score);
+        const SeatRun both = play_seat(2, 3600, 12, 16, 1200, 300);                                         // both rules (a short window and fallback) and the gate's own stop
+        ASSERT_TRUE(both.stalls >= 1);
+        ASSERT_TRUE(both.score * 4 >= worker.score * 3);
+        ASSERT_TRUE(both.released < loop.released / 2);                                                     // and it does not burn the budget
+        const SeatRun shipped = play_seat(2, 3600, 12, 16);                                                 // the numbers that ship (a window of 1200 ticks, a fallback of 2400): slower, but out of the loop
+        ASSERT_TRUE(shipped.stalls >= 1);
+        ASSERT_TRUE(shipped.score * 2 >= worker.score);
+        ASSERT_TRUE(shipped.released < loop.released / 2);
     } TEST_END();
 }

@@ -20,12 +20,21 @@
 // thieves, hatching, the strict contest order, the strike and the wipe-out focus (the strike is part of the Hard Aggressive style), the ambush at a thief hole, the sabotage with a
 // single Fire Ant, the harassment squad (but in the Aggressive style) (docs/BOTS.md, "Aggression").
 //
+// THE STALL DETECTOR (every level, the safety net of a seat that burns its command budget and banks nothing: a jammed causeway, a hill that the carriers cannot reach, an order that the world
+// never carries out): the only progress is the score rising. A seat whose score has not risen for plan.stall_ticks while it has ants and food lies on the map, or that sent the same order (type,
+// tile, first ant; attacks are one blow each and are not counted) plan.repeat_limit times within plan.repeat_window ticks while nothing was banked for that whole time, plays the PLAIN ECONOMY for
+// plan.fallback_ticks: the worker's harvest with its default parameters (no contested piles, the rescue on), no gate, no raids. Defence and fights go on. Every later stall doubles the time
+// (at most kMaxFallbackTicks). No clock and no randomness: ticks of the view and the release ticks of the controller.
+//
 // It is a virtual client like every bot (project rule 8): it reads the world through the BotView, sends commands that a person could click, and has no knowledge that a person of its
 // seat could not have. It answers an invitation to team up by the accept rule (accepts_invitation), never invites and never breaks an alliance. The worker bot stays what it was: the
 // frozen yardstick that this bot is measured against.
 
 #include <cstdint>
+#include <deque>
 #include <functional>
+#include <map>
+#include <tuple>
 
 #include "ants_ai/bot.hpp"
 #include "ants_ai/standard_tasks.hpp"
@@ -87,6 +96,12 @@ public:
     /// The style that the bot plays (known once start() has run; Random for a bot with a plan of its own)
     Style style() const noexcept { return style_; }
     const AntLedger& ledger() const noexcept { return ledger_; }
+    /// Times the stall detector sent the bot to the plain economy, and whether it is there at `tick`
+    uint32_t stalls() const noexcept { return stalls_; }
+    bool in_fallback() const noexcept { return fallback_until_ != 0; }
+    uint64_t fallback_until() const noexcept { return fallback_until_; }
+    /// The longest a fallback lasts (ticks): 8 minutes
+    static constexpr uint64_t kMaxFallbackTicks = 9600;
     uint32_t denials() const noexcept { return denials_; }
     uint32_t accepts() const noexcept { return accepts_; }
     /// The accept rule: an invitation to team up is accepted unless it would unite all live teams (the match would end at once: the alliance of the last two live teams wins), or the bot
@@ -121,6 +136,7 @@ private:
         p.latency_ticks = plan.gate_latency;
         p.max_staged = plan.gate_max_staged;
         p.predictive = plan.gate_predictive;
+        p.user_fail_limit = plan.gate_user_fails;
         return p;
     }
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
@@ -168,9 +184,24 @@ private:
     GateTask gate_;
     HarassTask harass_;
     SabotageTask sabotage_;
+    void note_repeat(const sim::Command& command, uint64_t tick);
+    void update_progress(const BotView& view);
+    bool detect_stall(const BotView& view);
+    bool hammered(uint64_t now);
+    void begin_fallback(uint64_t now);
+    void end_fallback();
+
     uint32_t denials_{0};
     uint32_t accepts_{0};
     uint64_t deny_after_{0};
+    // the stall detector
+    uint64_t fallback_until_{0};                     // the plain economy runs until this tick (0: normal play)
+    uint32_t stalls_{0};
+    uint64_t progress_tick_{0};                      // the look at which the score last rose (the first look to begin with)
+    int32_t last_score_{0};
+    bool progress_known_{false};
+    uint64_t next_prune_{0};
+    std::map<std::tuple<uint8_t, int16_t, int16_t, uint32_t>, std::deque<uint64_t>> repeats_;    // (type, tile, first ant) -> the ticks it was sent at within the window
 };
 
 }  // namespace ants::ai

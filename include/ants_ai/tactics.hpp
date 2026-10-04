@@ -145,6 +145,14 @@ struct LevelPlan {
     uint32_t ambush_thieves{1};          // ... at most this many thieves wait at a time (the others harvest between raids)
     uint32_t raid_min_loot{30};          // a hill whose score box shows less is not raided (RaidTask)
     uint32_t raid_black_ticks{600};      // a hill that could not be reached is left alone this long
+    // the stall detector (StandardBot, every level; 0 switches a trigger off): a seat whose banked score has not risen for stall_ticks (while it has ants and food lies on the map), or that sent the same
+    // order (type, tile, first ant) repeat_limit times within repeat_window ticks while nothing was banked for that whole time, plays the plain economy for fallback_ticks (no gate, no raids, no contested piles;
+    // doubled at every stall, at most 9,600)
+    uint32_t stall_ticks{3600};
+    uint32_t repeat_limit{12};
+    uint32_t repeat_window{1200};
+    uint32_t fallback_ticks{2400};
+    uint32_t gate_user_fails{16};        // the gate stops guiding for 900 ticks after this many clicks onto the entrance in a row that delivered nothing (0: it never stops)
     /// The order of the opening's power-up trips (PowerUpTask): the values of the owner's playbook, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};

@@ -488,6 +488,8 @@ private:
 ///   exit       the tile that the empty ants leave the hill by is seen from the looks (the queue-row tile an ant steps on right after the mound): it and the lane behind it stay free
 ///   fails      a clicked ant that is neither on the mound nor nearer after 30 ticks, or that takes longer than its walk and 40 ticks, was refused: it is taken over again
 /// A click that the controller refused (Fate::Filtered: a power-up on the tile) blocks that tile for Params::blocked_ticks; with the entrance blocked the gate does not guide (the engine's flow stays).
+/// So does a run of Params::user_fail_limit clicks onto the entrance that delivered nothing (the carriers are boxed in: a causeway jammed head on): the gate stops for blocked_ticks, which turns the
+/// economy's rescue and the aid of a hit carrier on, instead of ordering the same ants every 24 ticks for the rest of the match.
 /// Without an entry in the plan (Easy and Medium, and every level until the tournaments say so) the engine's flow stays. It claims no ant in the ledger (carriers are nobody's task); the
 /// economy's own rescue of idle carriers and the carrier aid are off while it runs.
 class GateTask final : public Task {
@@ -502,6 +504,7 @@ public:
         uint32_t latency_ticks{9};           // an order decided now is applied this many ticks later (the profile's delay less its jitter, and the sink)
         uint32_t bite_wait_max{25};          // the entrance click waits at most this many looks for a bite that runs (a fresh carrier's own order claims the entrance until the takeover lands)
         uint32_t blocked_ticks{900};         // a tile that the controller refused a click onto (a power-up on it) is not chosen again this long
+        uint32_t user_fail_limit{16};        // this many clicks onto the entrance in a row that delivered nothing (a healthy gate fails up to 10 in a row: measured on the shipped maps): it stops guiding for blocked_ticks (0: never)
         bool predictive{true};
         int32_t doorstep_dx0{-4};
         int32_t doorstep_dx1{6};
@@ -519,6 +522,8 @@ public:
     uint32_t takeovers() const noexcept { return takeovers_; }
     uint32_t parks() const noexcept { return parks_; }
     uint32_t user_failures() const noexcept { return user_failures_; }
+    /// Times the gate stopped guiding because its clicks delivered nothing (Params::user_fail_limit)
+    uint32_t pauses() const noexcept { return pauses_; }
     uint32_t user() const noexcept { return user_; }
     /// (review experiment) the gate could guide at the last look: the hill has room at its doorstep
     bool usable() const noexcept { return usable_; }
@@ -573,6 +578,8 @@ private:
     uint32_t takeovers_{0};
     uint32_t parks_{0};
     uint32_t user_failures_{0};
+    uint32_t user_streak_{0};                     // clicks onto the entrance in a row that delivered nothing
+    uint32_t pauses_{0};
     bool usable_{false};
 };
 
