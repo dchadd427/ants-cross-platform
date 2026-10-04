@@ -617,7 +617,7 @@ uint64_t preview_digest(const MapPreview& p) {
 
 /// The digest (region_digest's, RGB) of a picture centred in the black box of inner x inner pixels (the box is filled with the black of the original's frames, (7, 11, 15))
 uint64_t boxed_digest(const MapPreview& p, int32_t inner) {
-    constexpr uint8_t kBoxBlack[3] = {7, 11, 15};
+    constexpr uint8_t kBoxRgb[3] = {7, 11, 15};
     Fnv f;
     const int32_t ox = (inner - p.width) / 2;
     const int32_t oy = (inner - p.height) / 2;
@@ -627,7 +627,7 @@ uint64_t boxed_digest(const MapPreview& p, int32_t inner) {
             const int32_t py = y - oy;
             const bool in = px >= 0 && py >= 0 && px < p.width && py < p.height;
             const size_t i = in ? (static_cast<size_t>(py) * static_cast<size_t>(p.width) + static_cast<size_t>(px)) * 4u : 0;
-            for (size_t k = 0; k < 3; ++k) f.byte(in ? p.rgba[i + k] : kBoxBlack[k]);
+            for (size_t k = 0; k < 3; ++k) f.byte(in ? p.rgba[i + k] : kBoxRgb[k]);
         }
     }
     return f.value();

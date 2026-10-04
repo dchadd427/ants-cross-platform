@@ -868,7 +868,7 @@ void test_pointer_over_bars() {
         // 1440 x 810, bars of 45 rows) and 1512 x 982 (a MacBook's, bars of 66 rows at a scale of 1.575): the pointer anywhere over a bar is on the picture's nearest edge pixel and is NOT gone, the
         // map scrolls up or down, a corner of the bars scrolls diagonally, and the picture's own first row and the bar's last row are the same pointer. A fullscreen window is such a window (the clamp does not
         // look at fullscreen): tests/test_app/test_app_integration.cpp 7.8f makes one. The windowed case is unchanged: a pointer that really left (SDL's LEAVE) is gone and scrolls nothing.
-        for (const std::pair<int, int> size : {std::pair<int, int>{1440, 900}, std::pair<int, int>{1512, 982}}) {
+        for (const std::pair<int, int>& size : {std::pair<int, int>{1440, 900}, std::pair<int, int>{1512, 982}}) {
             AppFixture f("", config_of(Aspect::Wide16x9, true, size.first, size.second));
             check(f.ok && f.window != nullptr, "the 16:9 application runs a match in a " + std::to_string(size.first) + " x " + std::to_string(size.second) + " window");
             if (!f.ok || f.window == nullptr) return;

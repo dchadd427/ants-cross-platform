@@ -4473,10 +4473,10 @@ void run_room_chat_ui_tests() {
         MS::RoomView v;                                                                                   // the classic page (the web page's "Classic 4:3"): 293 px, two lines of 14 px
         v.networked = true;
         v.status = web;
-        const std::vector<std::string> lines = MS::status_lines(r, v);
-        ASSERT_TRUE(!lines.empty() && lines.size() <= MS::STATUS_LINES);
+        const std::vector<std::string> refusal_lines = MS::status_lines(r, v);
+        ASSERT_TRUE(!refusal_lines.empty() && refusal_lines.size() <= MS::STATUS_LINES);
         std::string joined;
-        for (const std::string& l : lines) {
+        for (const std::string& l : refusal_lines) {
             ASSERT_TRUE(r.get_text_width(l, FontSize::Px14) <= MS::STATUS_W);
             joined += (joined.empty() ? "" : " ") + l;
         }
