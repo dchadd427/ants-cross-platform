@@ -56,7 +56,7 @@ JsonValue status_to_json(const RoomStatus& s) {
         row.set("bot", JsonValue::make_string(b.kind == "standard" ? b.level + pinned : b.kind + ":" + b.level));
         row.set("kind", JsonValue::make_string(b.kind));
         row.set("level", JsonValue::make_string(b.level));
-        row.set("style", JsonValue::make_string(b.style.empty() ? "random" : b.style));
+        if (!b.style.empty()) row.set("style", JsonValue::make_string(b.style));                // (the worker and the idle bot have no style: the key is absent, not "random")
         row.set("name", JsonValue::make_string(b.name));
         row.set("fill", JsonValue::make_bool(b.fill));
         bots.push_back(std::move(row));

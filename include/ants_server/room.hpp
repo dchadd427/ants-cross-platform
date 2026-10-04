@@ -121,7 +121,7 @@ struct RoomStatus {
         uint8_t seat{255};
         std::string kind;                   // "standard" (the bot of the three levels), "worker", "idle"
         std::string level;                  // "easy", "medium", "hard"
-        std::string style;                  // the style that the specification pins ("aggressive", "economic", "raider", "defensive"), "random" for a bot that draws its own at the start of the match
+        std::string style;                  // the style that the specification pins ("aggressive", "economic", "raider", "defensive"), "random" for a bot that draws its own at the start of the match; "" for a kind without styles
         std::string name;                   // "Bot (Medium)"
         bool fill{false};                   // seated by the leader's START (false: by the room's specification)
     };

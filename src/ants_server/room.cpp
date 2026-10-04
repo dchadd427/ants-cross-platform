@@ -392,7 +392,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         row.seat = b.seat;
         row.kind = b.kind;
         row.level = ai::level_name(b.level);
-        row.style = ai::style_name(b.style);
+        row.style = b.kind == "standard" ? ai::style_name(b.style) : std::string();                // (only the standard bot has a style)
         row.name = ai::bot_display_name(b);
         row.fill = b.seat < sim::MAX_PLAYERS && (fill_seats_ & (1u << b.seat)) != 0;
         s.bots.push_back(std::move(row));
