@@ -5252,8 +5252,10 @@ std::vector<uint8_t> test_frame(uint8_t type, const std::vector<uint8_t>& payloa
 }
 
 std::vector<uint8_t> with_magic(const std::vector<uint8_t>& frames) {
-    std::vector<uint8_t> out(kRestartMagic, kRestartMagic + sizeof(kRestartMagic));
-    out.insert(out.end(), frames.begin(), frames.end());
+    // (a vector::insert of the 8 bytes of the magic into an empty vector is a false -Warray-bounds / -Wstringop-overflow of GCC 12: the vector is made at its size and filled instead)
+    std::vector<uint8_t> out(sizeof(kRestartMagic) + frames.size());
+    for (size_t i = 0; i < sizeof(kRestartMagic); ++i) out[i] = static_cast<uint8_t>(kRestartMagic[i]);
+    std::copy(frames.begin(), frames.end(), out.begin() + static_cast<std::ptrdiff_t>(sizeof(kRestartMagic)));
     return out;
 }
 
@@ -6907,7 +6909,7 @@ void run_persist_server_tests_6() {
             std::vector<Run> runs = {{"TINY.LVL", 3, 3}};
             if (std::getenv("ANTS_PERSIST_MEASURE_LONG") != nullptr) {
                 runs.push_back(Run{"TINY.LVL", 3, 5});                                         // (a minute short of its 6 minutes)
-                runs.push_back(Run{"TREASURE.LVL", 4, 11});
+                runs.push_back(Run{"TREASURE.LVL", 4, 12});                                    // (its whole match is 12 minutes: 14,400 ticks; this is 20 s short of the end)
             }
             for (const Run& r : runs) {
                 PWorld w("persist-94c");
@@ -7221,6 +7223,98 @@ void real_process_scenario(const char* tag, int stop_signal, bool control_room) 
               << "): the server " << (stop_signal == SIGTERM ? "exited " + std::to_string(stop_ms) + " ms after the signal" : std::string("was gone")) << ", started again, both machines found the room by themselves, the match ended in one state" << std::flush;
 }
 
+
+// The output (stdout and stderr) of a shell command and its exit status
+std::string shell_output(const std::string& command, int& exit_status) {
+    std::string out;
+    FILE* pipe = ::popen((command + " 2>&1").c_str(), "r");
+    if (pipe == nullptr) {
+        exit_status = -1;
+        return out;
+    }
+    char buf[512];
+    size_t n = 0;
+    while ((n = std::fread(buf, 1, sizeof(buf), pipe)) > 0) out.append(buf, n);
+    const int st = ::pclose(pipe);
+    exit_status = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+    return out;
+}
+
+// The scenario of S3.95: a server that runs in a docker container that the operator made (a volume at /results, the game and control ports published on this machine, --reconnect), stopped with
+// `docker stop` and started again. The test never makes or removes a container: it only starts, stops and asks the one whose name it is given.
+void container_scenario(const std::string& name, uint16_t game_port, uint16_t ctl_port, const std::string& secret) {
+    int rc = 0;
+    const auto docker = [&rc](const std::string& args) { return shell_output("docker " + args, rc); };
+    ASSERT_TRUE(port_accepts(game_port, 20000));
+    ASSERT_TRUE(port_accepts(ctl_port, 5000));
+    int http = 0;
+    const ctl::JsonValue made = ctl_call(ctl_port, "POST", "/rooms", secret, "{\"map\": \"TINY.LVL\", \"players\": 2, \"code\": \"CT-1\", \"reconnect\": true, \"resume_countdown_seconds\": 0, \"max_pause_seconds\": 300}", &http);
+    ASSERT_TRUE(http == 201 && made.get("state").str() == "waiting");
+    RealWorld w;
+    w.port = game_port;
+    w.maps = maps_dir();
+    RClient& a = w.connect("Ann", "CT-1");
+    RClient& b = w.connect("Bob", "CT-1");
+    ASSERT_TRUE(w.until([&]() { return a.session != nullptr && b.session != nullptr && a.session->runner().next_turn_expected() >= 130 && b.session->runner().next_turn_expected() >= 130; }, 60000));
+    // the record is on the volume, for its owner only (the folder 700, the file 600), and the control interface says so
+    const std::string modes = docker("exec " + name + " sh -c 'stat -c %a /results/restart /results/restart/*.restart'");
+    ASSERT_TRUE(rc == 0 && modes == "700\n600\n");
+    ctl::JsonValue j = ctl_call(ctl_port, "GET", "/rooms/CT-1", secret);
+    ASSERT_TRUE(j.get("state").str() == "running" && j.get("record").get("kept").as_bool_or(false) && j.get("restored").is_null());
+    const net::SeatKey key_a = a.lobby->key();
+    const net::SeatKey key_b = b.lobby->key();
+    // ---- docker stop: SIGTERM, then SIGKILL after the grace period that the stack gives (15 s) -------------------------------------------------------------------------------------------
+    w.run_for(1234);
+    const uint32_t seen = std::max(a.session->runner().next_turn_expected(), b.session->runner().next_turn_expected());
+    const auto began_stop = std::chrono::steady_clock::now();
+    docker("stop -t 15 " + name);
+    const int64_t stop_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began_stop).count();
+    ASSERT_EQ(rc, 0);
+    const std::string exit_code = docker("inspect -f '{{.State.ExitCode}}' " + name);
+    ASSERT_TRUE(rc == 0 && exit_code == "0\n");                                         // it stopped by itself (137 would be docker's SIGKILL)
+    ASSERT_TRUE(stop_ms < 6000);
+    w.run_for(2500);
+    ASSERT_TRUE(a.session->reconnecting() && b.session->reconnecting() && !a.lost && !b.lost);
+    docker("start " + name);
+    ASSERT_EQ(rc, 0);
+    ASSERT_TRUE(port_accepts(game_port, 30000));
+    // the machines find the room by its code and their keys, and the match goes on
+    ASSERT_TRUE(w.until([&]() { return a.session->mode() == net::ClientSession::Mode::Normal && b.session->mode() == net::ClientSession::Mode::Normal && !a.session->paused(); }, 60000));
+    ASSERT_FALSE(a.lost || b.lost || a.was_rejected || b.was_rejected);
+    j = ctl_call(ctl_port, "GET", "/rooms/CT-1", secret);
+    ASSERT_TRUE(j.get("state").str() == "running" && j.get("restored").is_object() && j.get("restored").get("turns").as_int_or(0) >= static_cast<int64_t>(seen));
+    ASSERT_TRUE(j.get("rejoins").as_int_or(0) == 2 && !j.get("paused").as_bool_or(true));
+    const int64_t restored_turns = j.get("restored").get("turns").as_int_or(0);
+    w.run_for(4000);
+    j = ctl_call(ctl_port, "GET", "/rooms/CT-1", secret);
+    ASSERT_TRUE(j.get("turns").as_int_or(0) > restored_turns + 60);
+    // ---- Bob quits: the match ends in one state on the machines and on the referee ----------------------------------------------------------------------------------------------------
+    sim::Command quit;
+    quit.type = sim::CommandType::Quit;
+    quit.issuer = b.lobby->my_seat();
+    ASSERT_TRUE(b.session->submit(quit));
+    bool finished = false;
+    for (int i = 0; i < 100 && !finished; ++i) {
+        w.run_for(200);
+        j = ctl_call(ctl_port, "GET", "/rooms/CT-1", secret);
+        finished = j.get("state").str() == "finished";
+    }
+    ASSERT_TRUE(finished);
+    w.run_for(1500);
+    ASSERT_TRUE(a.sim.is_match_over() && b.sim.is_match_over() && a.sim.state_hash() == b.sim.state_hash());
+    ASSERT_EQ(j.get("state_hash").str(), hex_u64(a.sim.state_hash().total));
+    ASSERT_FALSE(a.session->desynced() || b.session->desynced());
+    const std::string left = docker("exec " + name + " sh -c 'ls /results/restart'");    // the match is over: its record is gone
+    ASSERT_TRUE(rc == 0 && left.empty());
+    // the container's log: what happened, and no key anywhere in it
+    const std::string log_text = docker("logs " + name);
+    ASSERT_TRUE(log_text.find("stopped: 1 restart record(s) made durable and kept") != std::string::npos);
+    ASSERT_TRUE(log_text.find("room CT-1 restored: ") != std::string::npos);
+    ASSERT_TRUE(log_text.find(hex_of(key_a)) == std::string::npos && log_text.find(hex_of(key_b)) == std::string::npos);
+    std::cout << "\n      [container] docker stop took " << stop_ms << " ms (exit code 0), the room came back with " << restored_turns << " turns (the machines had been sent " << seen
+              << "), both machines found it by themselves, the match ended in one state" << std::flush;
+}
+
 }  // namespace
 
 void run_persist_process_tests() {
@@ -7230,6 +7324,21 @@ void run_persist_process_tests() {
 
     TEST_CASE("S3.90 The Real Program, Killed (SIGKILL: A Crash, The Container's Death) In The Middle Of A Match Of A Room That The Control Interface Made: The Record Holds Every Turn That A Machine Has Been Sent (A Turn Is Written Before It Is Sent: No Turn Is Lost That A Player Has Seen), The Program Started Again Restores The Room, Both Machines Find It By Themselves And Are Not Told That They Are Ahead, The Match Goes On And Ends In One State On The Machines And On The Referee")  {
         real_process_scenario("persist-90", SIGKILL, true);
+    } TEST_END();
+
+    TEST_CASE("S3.95 The Real Container (Opt-In: ANTS_PERSIST_CONTAINER Names A Container That The Operator Made From The Server's Image With A Volume At /results, --reconnect And The Ports ANTS_PERSIST_GAME_PORT / ANTS_PERSIST_CTL_PORT / ANTS_PERSIST_SECRET): A Match Of Two Machines, docker stop (SIGTERM, Exit Code 0 Within The Grace), docker start, The Record On The Volume Is For Its Owner Only, The Machines Find The Room By Themselves, The Match Ends In One State On The Machines And The Referee, The Record Is Gone, No Key Is In The Container's Log") {
+        const char* name = std::getenv("ANTS_PERSIST_CONTAINER");
+        const char* game = std::getenv("ANTS_PERSIST_GAME_PORT");
+        const char* ctl_port = std::getenv("ANTS_PERSIST_CTL_PORT");
+        const char* secret = std::getenv("ANTS_PERSIST_SECRET");
+        if (name == nullptr || game == nullptr || ctl_port == nullptr || secret == nullptr) {
+            std::cout << "\n      [container] skipped: ANTS_PERSIST_CONTAINER, _GAME_PORT, _CTL_PORT and _SECRET are not all set (the opt-in check of a real container: tests/test_server)" << std::flush;
+        } else {
+            const std::string container = name;
+            ASSERT_FALSE(container.empty());
+            for (const char c : container) ASSERT_TRUE(std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' || c == '.' || c == '-');      // (it goes into a shell command)
+            container_scenario(container, static_cast<uint16_t>(std::atoi(game)), static_cast<uint16_t>(std::atoi(ctl_port)), secret);
+        }
     } TEST_END();
 }
 #endif
