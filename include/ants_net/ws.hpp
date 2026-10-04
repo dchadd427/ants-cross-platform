@@ -61,6 +61,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ants_net/protocol.hpp"
@@ -163,15 +164,22 @@ struct WsServerOptions {
     // connection closes. A reverse proxy routes the path like /ws. Empty path or no function: none.
     std::string status_path;
     std::function<std::string()> status_body;
+    // More paths that are answered like status_path (the game server's /stats): {path, text}
+    std::vector<std::pair<std::string, std::function<std::string()>>> more_status;
+    // One POST that takes nothing (the game server's /stats/local): a POST of exactly `post_path` (no query, no Upgrade header, no body: Content-Length absent or 0) is answered 204 and the
+    // listener runs `post_action` once for it, never ws_parse_handshake (it only says `posted`). Any other POST is 405, a malformed one 400, a GET of the path 405 (Allow: POST).
+    std::string post_path;
+    std::function<void()> post_action;
 };
 
 struct WsHandshakeResult {
     enum class Status : uint8_t { NeedMore, Accepted, Rejected, Answered };
     Status status{Status::NeedMore};
     int http_status{0};                 // 101 or the error's status (400, 403, 404, 405, 426, 431)
-    std::string response;               // Accepted: the 101 answer; Rejected: the whole HTTP error response; Answered: the whole 200 answer of the status path (both close the connection)
+    std::string response;               // Accepted: the 101 answer; Rejected: the whole HTTP error response; Answered: the whole 200 answer of a status path or the 204 of the post path (both close the connection)
     size_t consumed{0};                 // the request's length through the blank line; what follows belongs to the WebSocket frames
     bool subprotocol{false};            // "ants" was offered and echoed
+    bool posted{false};                 // Answered: it was the post path's POST (the listener runs WsServerOptions::post_action)
 };
 
 /// Judges the bytes received so far of a handshake request. Pure: the same bytes give the same answer. Stricter than HTTP needs to be (CRLF line ends
@@ -243,6 +251,13 @@ public:
     void set_status(std::string path, std::function<std::string()> body) {
         options_.status_path = std::move(path);
         options_.status_body = std::move(body);
+    }
+    /// Another status path (WsServerOptions::more_status)
+    void add_status(std::string path, std::function<std::string()> body) { options_.more_status.emplace_back(std::move(path), std::move(body)); }
+    /// The POST path and what it does (WsServerOptions::post_path and post_action)
+    void set_post(std::string path, std::function<void()> action) {
+        options_.post_path = std::move(path);
+        options_.post_action = std::move(action);
     }
     /// Sockets whose handshake has not finished (diagnostics)
     size_t pending() const noexcept { return pending_.size(); }

@@ -53,6 +53,46 @@ std::vector<fs::path> stats_files_in(const fs::path& dir, const std::string& pre
     return out;
 }
 
+#ifndef _WIN32
+// One request to a listener on this machine: sent whole, the answer read until the server closes (or 3 s), while the listener is polled (the server and this client share a thread)
+std::string http_exchange(net::WsListener& listener, const std::string& request) {
+    const int s = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (s < 0) return "";
+    sockaddr_in a;
+    std::memset(&a, 0, sizeof(a));
+    a.sin_family = AF_INET;
+    a.sin_port = htons(listener.port());
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) {
+        ::close(s);
+        return "";
+    }
+    int flags = 0;
+#ifdef MSG_NOSIGNAL
+    flags = MSG_NOSIGNAL;
+#endif
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));                         // (macOS: no SIGPIPE on a dead peer)
+#endif
+    ::send(s, request.data(), request.size(), flags);
+    std::string answer;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    bool closed = false;
+    while (!closed && std::chrono::steady_clock::now() < deadline) {
+        while (listener.accept() != nullptr) {
+        }
+        char buf[2048];
+        const ssize_t n = ::recv(s, buf, sizeof(buf), MSG_DONTWAIT);
+        if (n > 0) answer.append(buf, static_cast<size_t>(n));
+        else if (n == 0) closed = true;
+        else std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ::close(s);
+    return answer;
+}
+#endif
+
 }  // namespace
 
 void run_site_stats_tests() {
@@ -565,4 +605,136 @@ void run_site_stats_tests() {
             ASSERT_TRUE(fs::exists(dir / "no-such-folder" / SiteStats::kFileName));
         }
     } TEST_END();
+
+    TEST_CASE("S3.148 A real room manager: a demo room that ran and ended counts once (also when its code is asked for again before anybody looked), a room closed during the dialog or while it waited counts nothing, a match that ran and was closed by the owner counts, and nothing counts twice") {
+        ServerLimits limits;
+        limits.demo_rooms = 4;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_players = 2;
+        limits.demo_wait_ms = 3000;                                                              // a demo room that nobody completes fails after 3 s
+        World w(limits);
+        StatsClock clock;
+        SiteStats stats(clock.fn());
+        std::string seen;                                                                        // the codes that were told ended, for the message of a failure
+        const auto look = [&]() {
+            size_t ended = 0;
+            for (const RoomStatus& s : w.mgr.take_ended(w.now)) {
+                stats.count_ended(s);
+                seen += s.code + "(" + std::to_string(s.ticks) + ") ";
+                ++ended;
+            }
+            return ended;
+        };
+        const auto ticking = [&](const std::string& code) { return w.status(code).state == RoomState::Running && w.status(code).ticks > 20; };
+        const auto play_until = [&](const std::function<bool()>& done, uint32_t max_ms) {
+            for (uint32_t t = 0; t < max_ms && !done(); t += 250) w.run(250);
+            return done();
+        };
+        // a demo room that never fills: it fails, with no tick
+        w.connect("Lone", "demo-lone");
+        w.run(4500);
+        ASSERT_TRUE(w.status("demo-lone").state == RoomState::Failed && w.status("demo-lone").ticks == 0);
+        ASSERT_EQ(look(), size_t{1});
+        ASSERT_TRUE(stats.online().total == 0);
+        // two players: the match runs; one quits and the match ends; counted when the end is looked at, once
+        Client& ann = w.connect("Ann", "demo-ran");
+        w.connect("Bob", "demo-ran");
+        ASSERT_TRUE(play_until([&]() { return ticking("demo-ran"); }, 30000));
+        ASSERT_EQ(look(), size_t{0});                                                            // (it runs: it has not ended)
+        ASSERT_TRUE(stats.online().total == 0);
+        sim::Command quit;
+        quit.type = sim::CommandType::Quit;
+        quit.issuer = ann.lobby->my_seat();
+        ASSERT_TRUE(ann.session->submit(quit));
+        ASSERT_TRUE(play_until([&]() { return w.status("demo-ran").state == RoomState::Finished; }, 20000));
+        ASSERT_TRUE(w.status("demo-ran").ticks > 20);
+        ASSERT_EQ(look(), size_t{1});
+        ASSERT_TRUE(stats.online().total == 1 && stats.online().day == 1);
+        ASSERT_EQ(look(), size_t{0});                                                            // (told once: nothing more to count)
+        w.run(40000);                                                                            // forgotten after its keep time: still one
+        ASSERT_EQ(look(), size_t{0});
+        ASSERT_EQ(stats.online().total, uint64_t{1});
+        // a match that ended and whose code is asked for before anybody looked: the manager forgets the room at once and still tells its end, once
+        w.connect("Cat", "demo-twice");
+        Client& dan = w.connect("Dan", "demo-twice");
+        ASSERT_TRUE(play_until([&]() { return ticking("demo-twice"); }, 30000));
+        quit.issuer = dan.lobby->my_seat();
+        ASSERT_TRUE(dan.session->submit(quit));
+        ASSERT_TRUE(play_until([&]() { return w.status("demo-twice").state == RoomState::Finished; }, 20000));
+        w.connect("Eve", "demo-twice");                                                          // a late friend with the same link: a new room for the code
+        w.run(500);
+        ASSERT_TRUE(w.status("demo-twice").state == RoomState::Waiting);
+        ASSERT_EQ(look(), size_t{1});                                                            // the end of the old one (and only that)
+        ASSERT_TRUE(stats.online().total == 2);
+        ASSERT_EQ(look(), size_t{0});
+        // a room that the control interface made, closed while it waits: nothing. Closed during the dialog before the first tick: nothing. Closed in the match: counted.
+        ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-wait", 2), w.now).ok);
+        ASSERT_TRUE(w.mgr.close_room("CTL-wait", w.now));
+        ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-dialog", 2), w.now).ok);
+        w.connect("Fay", "CTL-dialog");
+        w.connect("Gus", "CTL-dialog");
+        ASSERT_TRUE(play_until([&]() { return w.status("CTL-dialog").state == RoomState::Running; }, 20000));
+        ASSERT_EQ(w.status("CTL-dialog").ticks, 0u);                                             // the match began, the 5 s of the dialog are not over: no tick yet
+        ASSERT_TRUE(w.mgr.close_room("CTL-dialog", w.now));
+        ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-play", 2), w.now).ok);
+        w.connect("Hal", "CTL-play");
+        w.connect("Ida", "CTL-play");
+        ASSERT_TRUE(play_until([&]() { return ticking("CTL-play"); }, 30000));
+        ASSERT_TRUE(w.mgr.close_room("CTL-play", w.now));
+        ASSERT_TRUE(w.status("CTL-play").state == RoomState::Failed && w.status("CTL-play").ticks > 20);
+        ASSERT_MSG(look() == 4, seen);                                                           // four rooms ended (the new demo-twice, which nobody joined, failed meanwhile); only the one that played is a game
+        ASSERT_TRUE(stats.online().total == 3 && stats.online().day == 3);
+        ASSERT_EQ(look(), size_t{0});
+        ASSERT_TRUE(stats.local().total == 0);
+    } TEST_END();
+
+#ifndef _WIN32
+    TEST_CASE("S3.149 The statistics through a real listener (the wiring of the server's main): GET /stats answers the numbers and the busy counts, POST /stats/local is counted and answered 204, the 121st report of a minute gets the same 204 as the first (the cap cannot be seen), a body or a query is refused and counted for nothing, and nothing reaches the game") {
+        StatsClock clock;
+        SiteStats stats(clock.fn());
+        BusyCounts busy;
+        busy.matches = 1;
+        busy.players = 3;
+        auto listener = net::WsListener::listen(0, true);
+        ASSERT_TRUE(listener != nullptr);
+        listener->set_status("/busy", [&busy]() { return "{\"matches\":" + std::to_string(busy.matches) + ",\"players\":" + std::to_string(busy.players) + "}"; });
+        listener->add_status("/stats", [&]() { return stats.json(busy); });
+        listener->set_post("/stats/local", [&]() { stats.count_local(); });
+        const std::string get = "GET /stats HTTP/1.1\r\nHost: play.example.org\r\n\r\n";
+        const std::string post = "POST /stats/local HTTP/1.1\r\nHost: play.example.org\r\nContent-Length: 0\r\n\r\n";
+        const auto body_of = [](const std::string& answer) {
+            const size_t split = answer.find("\r\n\r\n");
+            return split == std::string::npos ? std::string() : answer.substr(split + 4);
+        };
+        std::string answer = http_exchange(*listener, get);
+        ASSERT_TRUE(answer.find("HTTP/1.1 200 OK\r\n") == 0 && answer.find("Cache-Control: no-store\r\n") != std::string::npos && answer.find("Content-Type: application/json\r\n") != std::string::npos);
+        ASSERT_EQ(body_of(answer), std::string("{\"now\":{\"matches\":1,\"players\":3},\"online\":{\"day\":0,\"total\":0},\"local\":{\"day\":0,\"total\":0},\"since\":\"2026-10-04\"}"));
+        stats.count_online();
+        answer = http_exchange(*listener, post);                                                 // the first report: counted
+        const std::string counted_answer = answer;
+        ASSERT_TRUE(answer.find("HTTP/1.1 204 No Content\r\n") == 0 && body_of(answer).empty() && answer.find("Content-Length") == std::string::npos);
+        ASSERT_TRUE(stats.local().total == 1);
+        ASSERT_EQ(body_of(http_exchange(*listener, get)), std::string("{\"now\":{\"matches\":1,\"players\":3},\"online\":{\"day\":1,\"total\":1},\"local\":{\"day\":1,\"total\":1},\"since\":\"2026-10-04\"}"));
+        for (int i = 1; i < 120; ++i) ASSERT_EQ(http_exchange(*listener, post), counted_answer);
+        ASSERT_EQ(stats.local().total, uint64_t{120});
+        const std::string capped_answer = http_exchange(*listener, post);                         // the 121st of the minute: the same answer, not counted
+        ASSERT_EQ(capped_answer, counted_answer);
+        ASSERT_EQ(http_exchange(*listener, post), counted_answer);
+        ASSERT_EQ(stats.local().total, uint64_t{120});
+        ASSERT_TRUE(body_of(http_exchange(*listener, get)).find("\"local\":{\"day\":120,\"total\":120}") != std::string::npos);
+        clock.now += 60;                                                                         // a minute later the next one counts
+        ASSERT_EQ(http_exchange(*listener, post), counted_answer);
+        ASSERT_EQ(stats.local().total, uint64_t{121});
+        // what is refused counts for nothing
+        ASSERT_TRUE(http_exchange(*listener, "POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\n\r\nabcd").find("HTTP/1.1 400 ") == 0);
+        ASSERT_TRUE(http_exchange(*listener, "POST /stats/local?a=1 HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n").find("HTTP/1.1 405 ") == 0);
+        ASSERT_TRUE(http_exchange(*listener, "POST /stats HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n").find("HTTP/1.1 405 ") == 0);
+        ASSERT_TRUE(http_exchange(*listener, "GET /stats/local HTTP/1.1\r\nHost: x\r\n\r\n").find("HTTP/1.1 405 ") == 0);
+        ASSERT_TRUE(http_exchange(*listener, "GET /stats?x=1 HTTP/1.1\r\nHost: x\r\n\r\n").find("HTTP/1.1 426 ") == 0);
+        ASSERT_EQ(stats.local().total, uint64_t{121});
+        ASSERT_TRUE(http_exchange(*listener, "GET /busy HTTP/1.1\r\nHost: x\r\n\r\n").find("{\"matches\":1,\"players\":3}") != std::string::npos);      // (the busy answer is as it was)
+        ASSERT_TRUE(listener->accept() == nullptr);                                              // nothing reached the game
+        ASSERT_EQ(listener->pending(), size_t{0});
+    } TEST_END();
+#endif
 }
