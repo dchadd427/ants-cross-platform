@@ -894,6 +894,9 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
         if (row.score < static_cast<int32_t>(plan.raid_min_loot) || black(t, now)) continue;
         teams.push_back(t);
     }
+    // the cheap checks first: a hill that is not there, or whose hole is shut, is no target, and a thief that looks at the world every few ticks must not search the map for nothing (a full
+    // search per look and thief was the most expensive thing that the bot did)
+    teams.erase(std::remove_if(teams.begin(), teams.end(), [&](uint8_t t) { return !c.map.hill(t).present || east_state(grid, c.map.hill(t)).shut(); }), teams.end());
     if (teams.empty()) return false;
     std::stable_sort(teams.begin(), teams.end(), [&](uint8_t x, uint8_t y) { return v.rows()[x].score > v.rows()[y].score; });
     const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
@@ -901,7 +904,6 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     if (field.empty()) return false;
     for (const uint8_t t : teams) {
         const HillInfo& hill = c.map.hill(t);
-        if (!hill.present || east_state(grid, hill).shut()) continue;                  // walls or bombs in front of the hole: the order would end in "Can't go there."
         int32_t best = -1;
         for (const sim::TileCoord& e : east_tiles(hill)) {
             if (!grid.in_bounds(e) || e.x < 0) continue;
@@ -1442,7 +1444,7 @@ void HarassTask::step(TaskContext& c) {
                 }
             }
             if (team >= 0 && pause_until_[static_cast<size_t>(team)] <= now) {
-                pause_until_[static_cast<size_t>(team)] = now + plan.harass_pause_ticks;
+                pause_until_[static_cast<size_t>(team)] = now + (static_cast<uint64_t>(plan.harass_pause_ticks) << std::min<uint32_t>(pause_count_[static_cast<size_t>(team)]++, 4u));
                 ++pauses_;
             }
         }
@@ -1456,28 +1458,23 @@ void HarassTask::step(TaskContext& c) {
         }
     }
 
-    // 1b. how fast the carriers that were hit walk again (a blow clears the walk; the owner sends the carrier on, or does not): a team whose carriers are back on their way within harass_min_recovery
-    //     ticks loses next to nothing to a blow
-    if (plan.harass_min_recovery > 0) {
-        for (const AntView& e : v.others()) {
-            if (!e.holding) continue;
-            const bool hit_clip = e.state == sim::UnitState::Flinch || e.state == sim::UnitState::Knockback;
-            const auto f = flinched_.find(e.id);
-            if (hit_clip && f == flinched_.end()) {
-                flinched_[e.id] = now;
-            } else if (!hit_clip && f != flinched_.end() && (e.state == sim::UnitState::Walking || now >= f->second + 300u)) {
-                recover_sum_[e.team] += std::min<uint64_t>(300u, now - f->second);
-                ++recover_n_[e.team];
-                flinched_.erase(f);
-                if (recover_n_[e.team] >= 3 && recover_sum_[e.team] < static_cast<uint64_t>(plan.harass_min_recovery) * recover_n_[e.team] && pause_until_[e.team] <= now) {
-                    pause_until_[e.team] = now + plan.harass_pause_ticks;
-                    recover_n_[e.team] = 0;
-                    recover_sum_[e.team] = 0;
-                    ++pauses_;
-                }
+    // 1b. a team that answers the squad with several ants at once is left alone: the ants of a team that were drawn in their attack clip lately within eight tiles of a member
+    if (plan.harass_strong_defence > 0) {
+        std::array<std::set<uint32_t>, sim::MAX_PLAYERS> answering;
+        for (const auto& m : squad_) {
+            const AntView* a = find_ant(v.mine(), m.first);
+            if (a == nullptr) continue;
+            for (const AntView& e : v.others()) {
+                if (e.type == sim::AntType::Thief || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) || e.tile.chebyshev_dist(a->tile) > 8) continue;
+                if (tactics_.memory.fought_lately(e.id, 150) || e.state == sim::UnitState::Attacking) answering[e.team].insert(e.id);
             }
         }
-        for (auto it = flinched_.begin(); it != flinched_.end();) it = now >= it->second + 600u ? flinched_.erase(it) : std::next(it);          // (out of sight, dead, delivered)
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            if (answering[t].size() >= plan.harass_strong_defence && pause_until_[t] <= now) {
+                pause_until_[t] = now + (static_cast<uint64_t>(plan.harass_pause_ticks) << std::min<uint32_t>(pause_count_[t]++, 4u));
+                ++pauses_;
+            }
+        }
     }
 
     // 2. the targets: carriers of the other teams that an attack order can reach, with what makes one worth the trip
@@ -1512,7 +1509,6 @@ void HarassTask::step(TaskContext& c) {
         const HillInfo& hill = c.map.hill(e.team);
         if (hill.present) value += static_cast<int32_t>(plan.harass_far_bonus) * std::min<int32_t>(25, e.tile.chebyshev_dist(hill.queue));
         if (e.state == sim::UnitState::Idle || e.state == sim::UnitState::GuardIdle) value += static_cast<int32_t>(plan.harass_idle_bonus);
-        value -= static_cast<int32_t>(plan.harass_crowd_cost * t.enemy);
         t.value = value;
         targets.push_back(t);
     }

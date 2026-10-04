@@ -417,8 +417,7 @@ public:
     uint32_t shunned() const noexcept { return shunned_count_; }
     uint32_t recruited() const noexcept { return recruited_; }
     uint32_t pauses() const noexcept { return pauses_; }
-    /// The mean number of ticks that a hit carrier of `team` took to walk again, as the squad saw it (0 before the first one)
-    uint32_t mean_recovery(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS && recover_n_[team] != 0 ? static_cast<uint32_t>(recover_sum_[team] / recover_n_[team]) : 0u; }
+
 
 private:
     static constexpr uint64_t kPending = ~uint64_t{0};
@@ -437,9 +436,8 @@ private:
     std::map<uint32_t, Member> squad_;
     std::map<uint32_t, uint64_t> shunned_;
     std::array<uint64_t, sim::MAX_PLAYERS> pause_until_{};     // a team whose ants hurt the squad (or that shrugs the blows off): left alone until then
-    std::map<uint32_t, uint64_t> flinched_;                    // an enemy carrier that was seen in its hit clip -> the tick it was first seen so
-    std::array<uint32_t, sim::MAX_PLAYERS> recover_n_{};       // per team: the hit carriers that were seen to walk again (or to stay), and the sum of the ticks that took
-    std::array<uint64_t, sim::MAX_PLAYERS> recover_sum_{};
+
+    std::array<uint32_t, sim::MAX_PLAYERS> pause_count_{};     // how often a team has been put on hold: every time it lasts twice as long as the one before (a team that hurt the squad twice is no prey)
     uint32_t pauses_{0};
     bool hunting_{false};
     uint64_t last_target_{0};

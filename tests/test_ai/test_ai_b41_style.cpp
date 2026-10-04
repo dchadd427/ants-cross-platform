@@ -8,7 +8,7 @@
 //   AI11.5  the level's limits do not move with the style: the profile of the controller, and what the level unlocks (the gate, the theft, the second Thief, the raids, the Combat Ants)
 //   AI11.7  the Raider's signature: Fire and Thief first in the opening and no Bomber, raids for small loot
 //   AI11.8  the Economic style's signature: nobody to the centre, raids only for large loot, walls up before a thief shows (it defends like the others: the Combat Ant is taken in the opening)
-//   AI11.9  the Aggressive style's signature: more ants to the centre, one more defender, a squad that goes for carriers within reach (Medium 8 tiles, Hard 14), at Hard a stolen Fire Ant
+//   AI11.9  the Aggressive style's signature: more ants to the centre, one more defender, a squad that goes for carriers within 8 tiles (with careful odds at Medium), at Hard a stolen Fire Ant
 //   AI11.10 the Defensive style's signature: walls up before a thief shows (no interception: measured as a loss), one more defender, nobody to the centre
 //   AI11.11 what counts as an attack on the bot (Memory::last_attacked: a blow on an ant that is no Thief with an enemy that is no Thief next to it) and the adaptive Combat policy: the second
 //           Combat Ant (Hard) is wanted once the bot is attacked, and not before
@@ -441,7 +441,7 @@ void run_b41_style_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI11.9 The Aggressive Style: Medium Sends Two Ants To The Contested Centre And Hard Three (One More Than The Neutral Plans), One Defender More Answers A Blow, The Squad Goes For A Carrier Within Reach (8 Tiles At Medium, 14 At Hard) And Not For One Beyond It, And At Hard The Bot Steals A Second Fire Ant For The Sabotage Of The Best Opponent's Gate")
+    TEST_CASE("AI11.9 The Aggressive Style: Medium Sends Two Ants To The Contested Centre And Hard Three (One More Than The Neutral Plans), One Defender More Answers A Blow, The Squad Goes For A Carrier Within 8 Tiles And Not For One Beyond It (Medium Only When It Is Clearly Stronger Than What Stands Near The Carrier, Hard When It Is As Strong), And At Hard The Bot Steals A Second Fire Ant For The Sabotage Of The Best Opponent's Gate")
     {
         {   // the centre
             sim::SimulationEngine probe;
@@ -499,8 +499,54 @@ void run_b41_style_tests() {
                 Rig rig(sim, 0, level, Pinned::bot(level, Style::Aggressive), 4, 4);
                 rig.run(30);
                 const bool goes = rig.proposed_count(CommandType::GroupAttack) >= 1;
-                ASSERT_EQ(goes, level == Level::Hard || x == 38);                                                  // Medium: 8 tiles but not 13; Hard: both
+                ASSERT_EQ(goes, x == 38);                                                                         // 8 tiles but not 13, at both levels
             }
+        }
+        {   // the odds: one Combat Ant (8) against six idle workers near the carrier (6): Hard (100 percent) goes, Medium (150 percent: 8 against 9) does not
+            for (const Level level : {Level::Medium, Level::Hard}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 61);
+                sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30, 30});
+                const uint32_t carrier = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{36, 30});
+                sim.get_unit(carrier).pick_up_food(1, 25);
+                for (int i = 0; i < 6; ++i) sim.spawn_unit(1, sim::AntType::Worker, TileCoord{37 + i % 3, 32 + i / 3});
+                Rig rig(sim, 0, level, Pinned::bot(level, Style::Aggressive), 4, 4);
+                rig.run(30);
+                ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack) >= 1, level == Level::Hard);
+            }
+        }
+        {   // the squad learns: a member that is hurt (below 7 hit points) leaves, and the team of the ant next to it is left alone (3,000 ticks, twice as long the next time), another team's carrier is not
+            sim::SimulationEngine sim;
+            empty_field(sim, 61);
+            const uint32_t fighter = sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30, 30});
+            const uint32_t c1 = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{36, 30});
+            sim.get_unit(c1).pick_up_food(1, 25);
+            const uint32_t c2 = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{30, 36});
+            sim.get_unit(c2).pick_up_food(2, 25);
+            Rig rig(sim, 0, Level::Hard, Pinned::bot(Level::Hard, Style::Aggressive), 4, 4);
+            rig.run(60);
+            const StandardBot& bot = rig.as<StandardBot>();
+            ASSERT_EQ(bot.harass().pauses(), 0u);
+            ASSERT_TRUE(bot.harass().attacks_ordered() >= 1);
+            sim.get_unit(fighter).hp = 6;                                                                   // it was hurt, with an enemy of team 1 next to it
+            sim.get_unit(fighter).pos.x = sim.get_unit(c1).pos.x - 1;
+            sim.get_unit(fighter).pos.y = sim.get_unit(c1).pos.y;
+            rig.run(8);
+            ASSERT_EQ(bot.harass().pauses(), 1u);
+            ASSERT_EQ(bot.harass().squad(), 0u);                                                            // it left
+            sim.get_unit(fighter).hp = 10;
+            const size_t before = rig.proposed.size();
+            rig.run(120);
+            bool on_team1 = false;
+            bool on_team2 = false;
+            for (size_t i = before; i < rig.proposed.size(); ++i) {
+                const Command& c = rig.proposed[i].second;
+                if (c.type != CommandType::GroupAttack) continue;
+                on_team1 = on_team1 || (std::abs(c.tile_x - 36) <= 2 && std::abs(c.tile_y - 30) <= 2);                // (a blow throws the victim a tile or two: the tiles where the carriers stood)
+                on_team2 = on_team2 || (std::abs(c.tile_x - 30) <= 2 && std::abs(c.tile_y - 36) <= 2);
+            }
+            ASSERT_FALSE(on_team1);                                                                         // the team that hurt it is no prey now (carrier c1 stays idle in range)
+            ASSERT_TRUE(on_team2);
         }
         {   // a second Fire Ant by theft (the neighbours' ants are away from home: their Fire power-ups are unguarded), the Raider and the neutral plan keep the one of their side
             for (const Style style : {Style::Aggressive, Style::Raider}) {

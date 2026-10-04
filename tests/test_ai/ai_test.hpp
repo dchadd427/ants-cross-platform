@@ -216,3 +216,4 @@ void run_b41_fight_tests();
 void run_b41_gate_tests();
 void run_b41_style_tests();
 void run_b41_offence_tests();
+void run_b41_cost_tests();

@@ -112,15 +112,17 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 p.defenders += 1;
                 p.harass = true;                                                             // the visible part: Combat Ants go for the carriers of the best opponent that are near them (a militia: it harvests when nothing is near)
                 p.harass_idle_release = 20;
+                p.harass_range = 8;                                                          // (14 tiles lost 35 points of the group wins in the cross table against the raider, 8 tiles and the learning below 12: docs/BOTS.md "Styles")
+                p.harass_retreat_hp = 7;                                                     // a member that is hurt leaves, and its team is left alone for a while (twice as long every time)
+                p.harass_pause_ticks = 3000;
+                p.harass_strong_defence = 3;                                                 // so is a team that answers with three ants at once (a Hard bot's defenders)
                 if (hard) {
                     p.max_combat = 2;                                                        // (the second Combat Ant is a theft: Hard's)
                     p.combat_extra = 0;
-                    p.harass_range = 14;
                     p.sabotage = true;                                                       // "they could fire your whole basin and then you cannot eat": a stolen Fire Ant walls in the gate of the best opponent
                     p.fire_extra = 1;
                     p.strikes = true;                                                        // behind the leader, a force goes for its carriers
-                } else {                                                                     // Medium: a milder one, a short reach and careful odds
-                    p.harass_range = 8;
+                } else {                                                                     // Medium: a milder one, careful odds
                     p.harass_odds_percent = 150;
                 }
                 break;
