@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks start_game.sh without starting anything: its --dry-run prints the command line of every window.
-# The rig: window i is player i and colour i (0 green, 1 red, 2 blue, 3 black), window 0 hosts on this machine only, the others join and ask for their seat,
+# A bare start is one plain game (the start menu). The rig (--players N): window i is player i and colour i (0 green, 1 red, 2 blue, 3 black), window 0 hosts on this machine only, the others join and ask for their seat,
 # the windows lie in a 2 x 2 grid (2 x 1 for two), every name is different and random, nothing grabs the pointer, only the focused window has sound.
 # Where each window lies is the owner's layout (the same as the games on web/lobby.html, and the way the hills lie on the Small and Treasure maps):
 # black top left, green top right, red bottom left, blue bottom right.
@@ -33,8 +33,14 @@ cells_of() {   # the --cell of every window of a dry run, in window order: "1 2 
 
 echo "[start script] dry runs: seats, colours, cells, names, grid, host and guests, the options that keep the pointer free"
 
+# a bare start is one plain game: the bare program, no mode flag, so the desktop start menu appears (Single player, Join, Host, Quit)
 OUT="$("$SCRIPT" --dry-run)"
-check "four windows" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 4 ]; echo $?)"
+check "a bare start is one window, the bare program: the start menu appears" "$([ "$OUT" = "./build/src/ants_app/ants" ]; echo $?)"
+OUT="$("$SCRIPT" --dry-run --name Bob)"
+check "a bare start passes the arguments to the one game" "$([ "$OUT" = "./build/src/ants_app/ants --name Bob" ]; echo $?)"
+
+OUT="$("$SCRIPT" --dry-run --players 4)"
+check "--players 4: four windows" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 4 ]; echo $?)"
 COLOURS=(Green Red Blue Black)
 # The owner's layout: green top right, red bottom left, blue bottom right, black top left, the way the four hills lie on the Small and Treasure maps (the games
 # on web/lobby.html lie the same way). --cell counts row by row (0 top left, 1 top right, 2 bottom left, 3 bottom right), so by seat (window n is seat n):
@@ -75,16 +81,16 @@ SORTED="$(cells_of "$OUT" | tr ' ' '\n' | sort | tr '\n' ' ')"
 check "the four windows fill the four cells of the grid, each once (none lies on another)" "$([ "$SORTED" = "0 1 2 3 " ]; echo $?)"
 
 # the names are random, and repeatable on request
-A="$(ANTS_NAMES_SEED=11 "$SCRIPT" --dry-run)"
-B="$(ANTS_NAMES_SEED=11 "$SCRIPT" --dry-run)"
+A="$(ANTS_NAMES_SEED=11 "$SCRIPT" --dry-run --players 4)"
+B="$(ANTS_NAMES_SEED=11 "$SCRIPT" --dry-run --players 4)"
 check "the same seed gives the same names" "$([ "$A" = "$B" ]; echo $?)"
 DIFFERENT=1
 for seed in 1 2 3 4 5 6 7 8; do
-    C="$(ANTS_NAMES_SEED=$seed "$SCRIPT" --dry-run)"
+    C="$(ANTS_NAMES_SEED=$seed "$SCRIPT" --dry-run --players 4)"
     if [ "$C" != "$A" ]; then DIFFERENT=0; fi
 done
 check "other seeds give other names" "$DIFFERENT"
-R1="$("$SCRIPT" --dry-run)"; R2="$("$SCRIPT" --dry-run)"; R3="$("$SCRIPT" --dry-run)"
+R1="$("$SCRIPT" --dry-run --players 4)"; R2="$("$SCRIPT" --dry-run --players 4)"; R3="$("$SCRIPT" --dry-run --players 4)"
 check "without a seed the names change from run to run" "$([ "$R1" != "$R2" ] || [ "$R2" != "$R3" ]; echo $?)"
 
 # fewer windows, another port, extra arguments
@@ -100,7 +106,7 @@ has "$OUT" "--seat 2"; check "the third window asks for seat 2 (blue)" $?
 has "$OUT" "--seat 3"; [ $? -ne 0 ]; check "there is no fourth window" $?
 has "$OUT" "--grid 2x2"; check "three windows lie in the 2 x 2 grid" $?
 check "three windows: green, red, blue in the cells 0, 1, 2 (black is missing, the colours keep their order without a hole)" "$([ "$(cells_of "$OUT")" = "0 1 2" ]; echo $?)"
-OUT="$(ANTS_PORT=5123 "$SCRIPT" --dry-run --fog-test)"
+OUT="$(ANTS_PORT=5123 "$SCRIPT" --dry-run --players 4 --fog-test)"
 has "$OUT" "--host 5123 --loopback"; check "ANTS_PORT moves the room" $?
 has "$OUT" "--join 127.0.0.1:5123"; check "... and the guests follow" $?
 check "an extra argument reaches every window" "$([ "$(echo "$OUT" | grep -c -- '--fog-test')" -eq 4 ]; echo $?)"
@@ -204,7 +210,7 @@ check "a failed build stops the script with a failure status" "$([ "$STATUS" -eq
 check "... without starting the game that an older build left in ./build" "$([ "$(OLD_GAME_RAN)" = "$before" ]; echo $?)"
 has "$OUTPUT" "build failed"; check "... and says that the build failed (and that nothing was started)" $?
 has "$OUTPUT" "Nothing was started"; check "... in words that say that nothing was started" $?
-FAKE_BUILD_FAILS=1 run_copy
+FAKE_BUILD_FAILS=1 run_copy --players 4
 check "the four-window rig stops too, with no window started" "$([ "$STATUS" -eq 1 ] && [ "$(OLD_GAME_RAN)" = "$before" ]; echo $?)"
 # a failed configure stops the launch before the build
 rm -f "$WORK/build/CMakeCache.txt"
