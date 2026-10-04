@@ -5,7 +5,8 @@
 //     one screen pixel); at 0.5 it is the 2 x 2 average of the direct picture of a view twice as large (0.25: the 4 x 4 average). Group "levels": EVERY level of a map (the series 2^(k/4)
 //     from 2 to the map's limit) against the picture that the design specifies, built from the zoom 1 picture of the whole map: the exact levels pixel for pixel, the others as the smooth
 //     picture (the software renderer is a pixel off at most), never a gap in the view, a scroll that only moves the picture, frames of the levels in any order. Group "place": where the
-//     software renderer puts the picture of a level (the smallest whole-pixel rectangle that holds the exact one), and that the pass paints the margins around a small map itself. Ants of
+//     software renderer puts the picture of a level (the smallest whole-pixel rectangle that holds the exact one), and that the pass paints the margins around a small map itself. Group "fog":
+//     with Fog of War on every level draws what the zoom 1 draws (the fog over every unexplored tile, nothing that it hides), at every level of GAUNTLET and TINY. Ants of
 //     every type, effects, score bubbles, selection markers, the click marker, the fog of war, the hill's brackets, and the small maps (centred, black around them) all pass through it. The
 //     hit point digits are one size at every zoom; nothing is drawn outside the view.
 //   * HUD: the cursor, the clicks and orders (also at the first and the last pixel of the view), the rubber band, the minimap and the edge scroll follow the zoom, each against an
@@ -601,6 +602,431 @@ void test_lattice_placement(const assets::AssetArchive& arc) {
         check(differ(over_red, pic, view) == 0, at + "the margins around the small map are black whatever the view held before: " + std::to_string(differ(over_red, pic, view)) + " pixels differ");
     }
     check(fractional >= 4, "the levels checked include ones with a fraction in the place or the size of the picture: " + std::to_string(fractional));
+}
+
+
+// =====================================================================================================================================================
+// Renderer: the fog of war at every level
+// =====================================================================================================================================================
+
+// With Fog of War on, every level has to draw what the zoom 1 draws: the fog over every unexplored tile and nothing that the fog hides (every level goes through the one world pass; a level that
+// skipped the fog or a gate would show what the zoom 1 cannot). For every level of GAUNTLET and TINY, both pictures, four cameras: a scene that is unexplored except a window at the view's top left,
+// with every class of thing on unexplored tiles and two that are always drawn. R1 = everything, R2 = without the hidden things, R3 = nothing but the fog, R4 = nothing and no fog, R5 = all and no fog:
+// R1 = R2 (pixel for pixel), the two always drawn are in R2 and not in R3, the hidden things are in R5 (the first check is not empty), and R3 against R4 is the fog itself, block by block.
+
+/// An ant standing at (px, py), drawn from its idle clip (populate() puts them at random places; this one where it is told to)
+sim::AntSnapshot fog_ant(const assets::AssetArchive& arc, uint32_t id, uint8_t player, int type, int32_t px, int32_t py) {
+    static const int kDirs[5] = {3, 7, 2, 8, 9};
+    const int dir = kDirs[id % 5];
+    sim::AntSnapshot a;
+    a.id = id;
+    a.player_id = player;
+    a.type = static_cast<sim::AntType>(type % 6);
+    a.px = px;
+    a.py = py;
+    a.tile_x = px / 32;
+    a.tile_y = py / 32;
+    a.hp = static_cast<uint16_t>(2 + id % 8);
+    a.max_hp = 10;
+    a.state = sim::UnitState::Idle;
+    const int32_t clip = idle_clip(arc, type % 6, dir);
+    a.loco_clip = clip < 0 ? uint16_t{0x7FFE} : static_cast<uint16_t>(clip);
+    a.loco_frame = 0;
+    a.loco_mirrored = (dir == 2 || dir == 8 || dir == 9) && id % 3 == 0;
+    a.loco_left_ms = 100;
+    return a;
+}
+
+/// One scene of the group: the explored window, the things in it and outside it, and what is needed to take them in and out of the engine's map
+struct FogScene {
+    enum Kind { kBomb = 0, kPowerup = 1, kLunchbox = 2, kFire = 3, kAnt = 4, kEffect = 5, kDropper = 6, kPile = 7, kKinds = 8 };
+    struct Item {                                  // a thing that lives in a cell of the map
+        int32_t tx{0};
+        int32_t ty{0};
+        int kind{kBomb};
+        sim::TileCell saved;                       // the cell as it was
+    };
+    struct Pile {                                  // a pile of food that the map has: the cells that it covers (their anchor is its anchor) as they were
+        bool hidden{false};                        // the anchor is on an unexplored tile and no cell of it is explored: the fog hides it (a cell that is explored draws it, as in the original)
+        std::vector<std::pair<int32_t, int32_t>> cells;
+        std::vector<sim::TileCell> saved;
+    };
+    int32_t tx0{0}, ty0{0}, tx1{0}, ty1{0};       // the explored window: the tiles [tx0, tx1) x [ty0, ty1)
+    std::vector<sim::AntSnapshot> hidden_ants;     // enemy ants on unexplored tiles
+    std::vector<sim::AntSnapshot> shown_ants;      // an enemy ant on an explored tile and an own ant on an unexplored one
+    std::vector<sim::VisualEffect> effects;        // on unexplored tiles
+    std::vector<sim::FlowerDropperSnapshot> droppers;
+    std::vector<Item> items;
+    std::vector<Pile> piles;
+    int placed[kKinds] = {0, 0, 0, 0, 0, 0, 0, 0};
+    int piles_in_view{0};                          // hidden piles whose anchor is in the world that the camera shows (the art of a pile reaches 64 pixels past its anchor)
+};
+
+/// A thing of the map on or off: on puts it into its cell, off puts the cell back as it was
+void fog_put(sim::Grid& grid, const FogScene::Item& it, bool on) {
+    const uint32_t x = static_cast<uint32_t>(it.tx);
+    const uint32_t y = static_cast<uint32_t>(it.ty);
+    if (!on) {
+        grid.get_cell_mut(x, y) = it.saved;
+        return;
+    }
+    switch (it.kind) {
+        case FogScene::kBomb: grid.place_bomb(x, y, static_cast<uint8_t>(1 + (x + y) % 3)); break;
+        case FogScene::kPowerup: grid.place_powerup(it.tx, it.ty, static_cast<uint8_t>(1 + (x + y) % 5)); break;
+        case FogScene::kLunchbox: grid.set_layer2(x, y, sim::TILE_LUNCHBOX, 255); break;
+        default: grid.set_fire_at(sim::TileCoord{it.tx, it.ty}, 3600); break;
+    }
+}
+
+bool fog_placed(const sim::Grid& grid, const FogScene::Item& it) {
+    const sim::TileCell& c = grid.get_cell(static_cast<uint32_t>(it.tx), static_cast<uint32_t>(it.ty));
+    switch (it.kind) {
+        case FogScene::kBomb: return c.has_bomb();
+        case FogScene::kPowerup: return c.has_powerup();
+        case FogScene::kLunchbox: return c.has_lunchbox();
+        default: return c.has_fire();
+    }
+}
+
+/// The scene for the camera (cx, cy) at the zoom z: the fog is set in the rig's world, the things are chosen (not yet put anywhere)
+FogScene fog_scene(PixelRig& rig, const assets::AssetArchive& arc, double cx, double cy, float z, const LayoutRect& view) {
+    FogScene sc;
+    sim::WorldState& world = rig.world;
+    sim::Grid& grid = rig.engine.grid_mut();
+    const int32_t tiles_w = static_cast<int32_t>(rig.tiles_w);
+    const int32_t tiles_h = static_cast<int32_t>(rig.tiles_h);
+    const double vis_w = zoom::visible_exact(view.w, z);
+    const double vis_h = zoom::visible_exact(view.h, z);
+    // the explored window: the tiles over the top left part of the world that is seen (about 30 % of it on each axis, at least 2 tiles), so that most of the view is deep in the fog
+    const auto span = [](double origin, double vis, int32_t tiles, int32_t& t0, int32_t& t1) {
+        t0 = static_cast<int32_t>(std::floor((origin + vis * 0.12) / 32.0));
+        t1 = static_cast<int32_t>(std::ceil((origin + vis * 0.42) / 32.0));
+        t1 = std::min(std::max(t1, t0 + 2), tiles);
+        t0 = std::max(0, std::min(t0, t1 - 2));
+    };
+    span(cx, vis_w, tiles_w, sc.tx0, sc.tx1);
+    span(cy, vis_h, tiles_h, sc.ty0, sc.ty1);
+    world.fog_of_war_enabled = true;
+    world.fog_revealed.assign(static_cast<size_t>(tiles_w) * static_cast<size_t>(tiles_h), 0);
+    for (int32_t ty = sc.ty0; ty < sc.ty1; ++ty) {
+        for (int32_t tx = sc.tx0; tx < sc.tx1; ++tx) world.fog_revealed[static_cast<size_t>(ty) * static_cast<size_t>(tiles_w) + static_cast<size_t>(tx)] = 1;
+    }
+    const auto explored = [&](int32_t tx, int32_t ty) { return tx >= sc.tx0 && tx < sc.tx1 && ty >= sc.ty0 && ty < sc.ty1; };
+    const auto in_map = [&](int32_t tx, int32_t ty) { return tx >= 0 && ty >= 0 && tx < tiles_w && ty < tiles_h; };
+
+    // the food that the map has: hidden when its anchor and every cell of it are unexplored
+    for (const sim::FoodObject& food : grid.food_objects()) {
+        const int32_t col = static_cast<int32_t>(food.col);
+        const int32_t row = static_cast<int32_t>(food.row);
+        FogScene::Pile pile;
+        bool any_explored = explored(col, row);
+        for (int32_t dy = -4; dy <= 4; ++dy) {
+            for (int32_t dx = -4; dx <= 4; ++dx) {
+                if (!in_map(col + dx, row + dy)) continue;
+                const sim::TileCell& c = grid.get_cell(static_cast<uint32_t>(col + dx), static_cast<uint32_t>(row + dy));
+                if (c.anchor_x != col || c.anchor_y != row || !c.is_food) continue;
+                pile.cells.emplace_back(col + dx, row + dy);
+                pile.saved.push_back(c);
+                any_explored = any_explored || explored(col + dx, row + dy);
+            }
+        }
+        if (pile.cells.empty()) continue;
+        pile.hidden = !any_explored;
+        sc.placed[FogScene::kPile] += pile.hidden ? 1 : 0;
+        if (pile.hidden && col * 32 > cx - 64.0 && col * 32 < cx + vis_w + 64.0 && row * 32 > cy - 64.0 && row * 32 < cy + vis_h + 64.0) ++sc.piles_in_view;
+        sc.piles.push_back(std::move(pile));
+    }
+
+    // the enemy ant that is drawn: on the middle tile of the explored window
+    uint32_t id = 7000;
+    sc.shown_ants.push_back(fog_ant(arc, id, 1, static_cast<int>(id), ((sc.tx0 + sc.tx1 - 1) / 2) * 32 + 16, ((sc.ty0 + sc.ty1 - 1) / 2) * 32 + 16));
+    ++id;
+    // a 5 x 5 lattice over the world that is seen: the last point holds the own ant, the others the hidden things, class after class (every thing on the nearest unexplored tile that is free)
+    std::vector<std::pair<int32_t, int32_t>> taken;
+    const FogScene::Kind order[8] = {FogScene::kAnt, FogScene::kAnt, FogScene::kBomb, FogScene::kPowerup, FogScene::kEffect, FogScene::kLunchbox, FogScene::kFire, FogScene::kDropper};
+    int next = 0;
+    for (int j = 0; j < 5; ++j) {
+        for (int i = 0; i < 5; ++i) {
+            const int32_t wx = std::clamp(static_cast<int32_t>(cx + (0.1 + 0.2 * i) * vis_w), 16, tiles_w * 32 - 16);
+            const int32_t wy = std::clamp(static_cast<int32_t>(cy + (0.1 + 0.2 * j) * vis_h), 16, tiles_h * 32 - 16);
+            const bool own = i == 4 && j == 4;
+            const FogScene::Kind kind = own ? FogScene::kAnt : order[next % 8];
+            if (!own) ++next;
+            const int32_t home_x = wx / 32;
+            const int32_t home_y = wy / 32;
+            bool done = false;
+            for (int ring = 0; ring <= 8 && !done; ++ring) {
+                for (int32_t dy = -ring; dy <= ring && !done; ++dy) {
+                    for (int32_t dx = -ring; dx <= ring && !done; ++dx) {
+                        if (std::max(std::abs(dx), std::abs(dy)) != ring) continue;
+                        const int32_t tx = home_x + dx;
+                        const int32_t ty = home_y + dy;
+                        if (!in_map(tx, ty) || explored(tx, ty)) continue;
+                        if (std::find(taken.begin(), taken.end(), std::make_pair(tx, ty)) != taken.end()) continue;
+                        if (kind == FogScene::kAnt) {
+                            sim::AntSnapshot ant = fog_ant(arc, id, own ? uint8_t{0} : static_cast<uint8_t>(1 + id % 3), static_cast<int>(id), tx * 32 + 16, ty * 32 + 16);
+                            if (!own && sc.hidden_ants.size() % 3 == 2) {                  // (every third hidden ant is a dud bomb's, burning: the overlay of its flame is what the fog has to hide)
+                                ant.burn_elapsed_ms = 150;
+                                ant.frozen = true;
+                                ant.state = sim::UnitState::Burn;
+                            }
+                            (own ? sc.shown_ants : sc.hidden_ants).push_back(ant);
+                            ++id;
+                        } else if (kind == FogScene::kEffect) {
+                            sim::VisualEffect e;
+                            e.anim_name = next % 2 == 0 ? "bombex" : "sputter";
+                            e.duration_ms = next % 2 == 0 ? 680u : 830u;
+                            e.px = tx * 32;
+                            e.py = ty * 32;
+                            e.y_key = ty * 32;
+                            e.elapsed_ms = 150;
+                            e.frame = 3;
+                            e.total_frames = static_cast<uint16_t>(e.duration_ms / 50u);
+                            e.fog_gated = true;
+                            sc.effects.push_back(e);
+                        } else if (kind == FogScene::kDropper) {
+                            sim::FlowerDropperSnapshot fd;
+                            fd.x = tx * 32 - 64;
+                            fd.y = ty * 32 - 64;
+                            fd.drop_x = tx;
+                            fd.drop_y = ty;
+                            fd.is_dropping = true;
+                            fd.drop_elapsed_ms = 150;
+                            fd.powerup_type = static_cast<uint8_t>(next % 5);
+                            sc.droppers.push_back(fd);
+                        } else {                                                       // a thing of the map: only on a cell that holds nothing else (a bomb is refused next to a hill)
+                            const sim::TileCell& cell = grid.get_cell(static_cast<uint32_t>(tx), static_cast<uint32_t>(ty));
+                            if (!cell.is_empty_overlay() || cell.is_food || cell.is_powerup || cell.is_obstacle() || cell.terrain_type != sim::TERRAIN_WALKABLE || cell.anchor_x >= 0) continue;
+                            FogScene::Item item;
+                            item.tx = tx;
+                            item.ty = ty;
+                            item.kind = kind;
+                            item.saved = cell;
+                            fog_put(grid, item, true);
+                            const bool ok = fog_placed(grid, item);
+                            fog_put(grid, item, false);
+                            if (!ok) continue;
+                            sc.items.push_back(item);
+                        }
+                        taken.emplace_back(tx, ty);
+                        ++sc.placed[kind];
+                        done = true;
+                    }
+                }
+            }
+        }
+    }
+    return sc;
+}
+
+/// The scene put into the rig: the hidden things, the things that are always drawn, the fog
+void fog_set(PixelRig& rig, const FogScene& sc, bool hidden, bool shown, bool fog) {
+    sim::Grid& grid = rig.engine.grid_mut();
+    for (const FogScene::Item& it : sc.items) fog_put(grid, it, hidden);
+    for (const FogScene::Pile& p : sc.piles) {
+        const bool on = p.hidden ? hidden : shown;
+        for (size_t k = 0; k < p.cells.size(); ++k) {
+            sim::TileCell& c = grid.get_cell_mut(static_cast<uint32_t>(p.cells[k].first), static_cast<uint32_t>(p.cells[k].second));
+            if (on) {
+                c = p.saved[k];
+            } else {                                                                    // (the pile is gone: its cells are empty)
+                c.interactive_id = sim::TILE_EMPTY;
+                c.is_food = false;
+            }
+        }
+    }
+    rig.world.ants.clear();
+    if (hidden) rig.world.ants.insert(rig.world.ants.end(), sc.hidden_ants.begin(), sc.hidden_ants.end());
+    if (shown) rig.world.ants.insert(rig.world.ants.end(), sc.shown_ants.begin(), sc.shown_ants.end());
+    rig.world.effects = hidden ? sc.effects : std::vector<sim::VisualEffect>();
+    rig.world.flower_droppers = hidden ? sc.droppers : std::vector<sim::FlowerDropperSnapshot>();
+    rig.world.fog_of_war_enabled = fog;
+}
+
+/// The map of the rig as it was before the scene (every cell that the scene changed put back), and a world without the scene's ants, effects and droppers
+void fog_reset(PixelRig& rig, const FogScene& sc) {
+    sim::Grid& grid = rig.engine.grid_mut();
+    for (const FogScene::Item& it : sc.items) fog_put(grid, it, false);
+    for (const FogScene::Pile& p : sc.piles) {
+        for (size_t k = 0; k < p.cells.size(); ++k) grid.get_cell_mut(static_cast<uint32_t>(p.cells[k].first), static_cast<uint32_t>(p.cells[k].second)) = p.saved[k];
+    }
+    rig.world.ants.clear();
+    rig.world.effects.clear();
+    rig.world.flower_droppers.clear();
+}
+
+/// The pixels of `area` where two pictures differ (any channel), and the box that holds them
+struct DiffBox {
+    int count{0};
+    int32_t x0{1 << 30}, y0{1 << 30}, x1{-1}, y1{-1};
+};
+DiffBox diff_box(const Picture& a, const Picture& b, const LayoutRect& area) {
+    DiffBox d;
+    for (int32_t y = std::max(0, area.y); y < std::min(area.bottom(), a.h); ++y) {
+        for (int32_t x = std::max(0, area.x); x < std::min(area.right(), a.w); ++x) {
+            if (std::memcmp(a.at(x, y), b.at(x, y), 3) == 0) continue;
+            ++d.count;
+            d.x0 = std::min(d.x0, x);
+            d.y0 = std::min(d.y0, y);
+            d.x1 = std::max(d.x1, x);
+            d.y1 = std::max(d.y1, y);
+        }
+    }
+    return d;
+}
+
+/// The fog against the same world without it, block by block: a block over explored ground (with the margin that the level's filters look at) is the same in both (16 x 16 screen pixels); one
+/// deep in the fog (its tiles and their neighbours unexplored: the dither covers every other pixel) keeps about half of what it showed (a tile of the world, at least 16 screen pixels).
+struct FogBlocks {
+    int deep_fog{0};
+    int deep_clear{0};
+    int bad_fog{0};
+    int bad_clear{0};
+    double lowest{9.0};
+    double highest{0.0};
+};
+FogBlocks fog_blocks(const Picture& fogged, const Picture& clear, const LayoutRect& view, double cx, double cy, float z, const sim::WorldState& world) {
+    FogBlocks r;
+    const int32_t tw = static_cast<int32_t>(world.width);
+    const int32_t th = static_cast<int32_t>(world.height);
+    const auto explored = [&](int32_t tx, int32_t ty) { return tx >= 0 && ty >= 0 && tx < tw && ty < th && world.fog_revealed[static_cast<size_t>(ty) * world.width + static_cast<size_t>(tx)] != 0; };
+    const auto deep = [&](int32_t tx, int32_t ty) { return !explored(tx, ty) && !explored(tx + 1, ty) && !explored(tx - 1, ty) && !explored(tx, ty + 1) && !explored(tx, ty - 1); };
+    const double zz = static_cast<double>(z);
+    const double support = z >= 1.0f ? 3.0 : 12.0;                     // world pixels around a block that its pixels depend on: a halving block (4 texels at most), the filter, the lattice
+    for (const bool clear_blocks : {true, false}) {
+        const int32_t block = clear_blocks ? 16 : std::max<int32_t>(16, static_cast<int32_t>(std::lround(32.0 * zz)));
+        for (int32_t j0 = 0; j0 + block <= view.h; j0 += block) {
+            for (int32_t i0 = 0; i0 + block <= view.w; i0 += block) {
+                const double x_lo = cx + static_cast<double>(i0) / zz - support;
+                const double x_hi = cx + static_cast<double>(i0 + block) / zz + support;
+                const double y_lo = cy + static_cast<double>(j0) / zz - support;
+                const double y_hi = cy + static_cast<double>(j0 + block) / zz + support;
+                if (x_lo < 0.0 || y_lo < 0.0 || x_hi > static_cast<double>(tw) * 32.0 || y_hi > static_cast<double>(th) * 32.0) continue;
+                bool all_clear = true;
+                bool all_deep = true;
+                for (int32_t ty = static_cast<int32_t>(std::floor(y_lo / 32.0)); ty <= static_cast<int32_t>(std::floor((y_hi - 1e-6) / 32.0)); ++ty) {
+                    for (int32_t tx = static_cast<int32_t>(std::floor(x_lo / 32.0)); tx <= static_cast<int32_t>(std::floor((x_hi - 1e-6) / 32.0)); ++tx) {
+                        all_clear = all_clear && explored(tx, ty);
+                        all_deep = all_deep && deep(tx, ty);
+                    }
+                }
+                if (clear_blocks ? !all_clear : !all_deep) continue;
+                long sum_fog = 0;
+                long sum_clear = 0;
+                bool same = true;
+                for (int32_t j = 0; j < block; ++j) {
+                    for (int32_t i = 0; i < block; ++i) {
+                        const uint8_t* p = fogged.at(view.x + i0 + i, view.y + j0 + j);
+                        const uint8_t* q = clear.at(view.x + i0 + i, view.y + j0 + j);
+                        sum_fog += p[0] + p[1] + p[2];
+                        sum_clear += q[0] + q[1] + q[2];
+                        if (std::memcmp(p, q, 3) != 0) same = false;
+                    }
+                }
+                if (clear_blocks) {
+                    ++r.deep_clear;
+                    if (!same) ++r.bad_clear;
+                } else if (sum_clear >= static_cast<long>(block) * block * 3 * 20) {      // (a block of black terrain says nothing about a fog over it)
+                    const double ratio = static_cast<double>(sum_fog) / static_cast<double>(sum_clear);
+                    ++r.deep_fog;
+                    r.lowest = std::min(r.lowest, ratio);
+                    r.highest = std::max(r.highest, ratio);
+                    if (ratio < 0.3 || ratio > 0.7) ++r.bad_fog;
+                }
+            }
+        }
+    }
+    return r;
+}
+
+void test_fog_levels(const assets::AssetArchive& arc) {
+    group("fog", "with Fog of War on, every level draws what the zoom 1 draws: nothing that the fog hides, and the fog over every unexplored tile of the view");
+    int scenes = 0;
+    int hidden_piles = 0;                                              // piles of food that the map has, hidden and in view, over the scenes
+    for (const Shape& s : kShapes) {
+        const LayoutRect view = ScreenLayout::with_size(s.cw, s.ch).view();
+        for (const char* map : {"GAUNTLET", "TINY"}) {
+            PixelRig rig(arc, map, s.cw, s.ch);
+            check(rig.ok, std::string("the rig for ") + map + " in the " + s.name + " picture is up");
+            if (!rig.ok) continue;
+            const int32_t map_w = static_cast<int32_t>(rig.tiles_w) * 32;
+            const int32_t map_h = static_cast<int32_t>(rig.tiles_h) * 32;
+            zoom::Fit fit;
+            fit.view_w = view.w;
+            fit.view_h = view.h;
+            fit.map_w = map_w;
+            fit.map_h = map_h;
+            const std::vector<float> levels = zoom::levels(fit, zoom::Limits::any());
+            check(levels.size() >= 7 && levels.front() == 2.0f, std::string(map) + " in the " + s.name + " picture offers its levels: " + std::to_string(levels.size()));
+            const LayoutRect canvas{0, 0, s.cw, s.ch};
+            double food_x = map_w / 2.0;                              // the pile of food that is nearest to the middle of the map (a camera that is held at the map's edge would put it in the explored window)
+            double food_y = map_h / 2.0;
+            double nearest = 1.0e18;
+            for (const sim::FoodObject& food : rig.engine.grid().food_objects()) {
+                const double dx = static_cast<double>(food.col) * 32.0 + 16.0 - map_w / 2.0;
+                const double dy = static_cast<double>(food.row) * 32.0 + 16.0 - map_h / 2.0;
+                if (dx * dx + dy * dy < nearest) {
+                    nearest = dx * dx + dy * dy;
+                    food_x = static_cast<double>(food.col) * 32.0 + 16.0;
+                    food_y = static_cast<double>(food.row) * 32.0 + 16.0;
+                }
+            }
+            const struct { const char* name; double x; double y; } cameras[4] = {{"top left", 0.0, 0.0}, {"middle", map_w / 2.0 - 300.0, map_h / 2.0 - 200.0}, {"bottom right", 1.0e9, 1.0e9}, {"on the food", 0.0, 0.0}};
+            for (const float z : levels) {
+                for (const auto& cam : cameras) {
+                    const std::string at = std::string(map) + " " + s.name + " at " + zoom::level_name(z) + ", " + cam.name + ": ";
+                    if (std::strcmp(cam.name, "on the food") == 0) rig.look(food_x - 0.75 * zoom::visible_exact(view.w, z), food_y - 0.75 * zoom::visible_exact(view.h, z), z);       // (the pile three quarters across and down the view)
+                    else rig.look(cam.x, cam.y, z);
+                    const double cx = static_cast<double>(rig.cam().x);
+                    const double cy = static_cast<double>(rig.cam().y);
+                    const FogScene sc = fog_scene(rig, arc, cx, cy, z, view);
+                    ++scenes;
+                    hidden_piles += sc.piles_in_view;
+                    if (std::strcmp(cam.name, "on the food") == 0) check(sc.piles_in_view >= 1, at + "a hidden pile of food is in view: " + std::to_string(sc.piles_in_view));
+                    bool all_classes = sc.shown_ants.size() == 2;                // (the enemy ant on the explored window and the own ant outside it)
+                    for (int k = 0; k < FogScene::kKinds; ++k) all_classes = all_classes && (sc.placed[k] > 0 || k == FogScene::kPile);       // (a view may have no hidden food of the map's)
+                    check(all_classes, at + "the scene has a thing of every class (an ant, a bomb, a power-up, an effect, a lunchbox, a fire wall, a falling power-up) and the two that are always drawn");
+
+                    fog_set(rig, sc, true, true, true);
+                    const Picture r1 = rig.shoot(-1, {}, -1, true);
+                    fog_set(rig, sc, false, true, true);
+                    const Picture r2 = rig.shoot(-1, {}, -1, true);
+                    fog_set(rig, sc, false, false, true);
+                    const Picture r3 = rig.shoot(-1, {}, -1, true);
+                    fog_set(rig, sc, false, false, false);
+                    const Picture r4 = rig.shoot(-1, {}, -1, true);
+                    fog_set(rig, sc, true, true, false);
+                    const Picture r5 = rig.shoot(-1, {}, -1, true);
+                    fog_reset(rig, sc);                                      // (the cells of the map as they were: the next scene starts from them)
+
+                    // 1. what the fog hides is not drawn: the picture with the hidden things is the picture without them
+                    const DiffBox hidden = diff_box(r1, r2, canvas);
+                    check(hidden.count == 0, at + "the hidden things are not drawn: " + std::to_string(hidden.count) + " pixels differ, in the box (" + std::to_string(hidden.x0) + ", " + std::to_string(hidden.y0) + ") - (" + std::to_string(hidden.x1) + ", " +
+                                                 std::to_string(hidden.y1) + ")");
+                    // 2. what is always drawn is: the enemy ant on an explored tile and the own ant on an unexplored one make a difference to R2 where they stand
+                    for (const sim::AntSnapshot& a : sc.shown_ants) {
+                        const double zz = static_cast<double>(z);
+                        const double sx = view.x + (static_cast<double>(a.px) - cx) * zz;
+                        const double sy = view.y + (static_cast<double>(a.py) - cy) * zz;
+                        const LayoutRect box{static_cast<int32_t>(std::floor(sx - 24.0 * zz)) - 2, static_cast<int32_t>(std::floor(sy - 36.0 * zz)) - 2, static_cast<int32_t>(std::ceil(48.0 * zz)) + 5, static_cast<int32_t>(std::ceil(60.0 * zz)) + 5};
+                        const DiffBox shown = diff_box(r2, r3, box);
+                        check(shown.count >= 3, at + std::string(a.player_id == 0 ? "the own ant on an unexplored tile" : "the enemy ant on an explored tile") + " is drawn: " + std::to_string(shown.count) + " pixels of its box differ from the picture without it");
+                    }
+                    // 3. the hidden things are there to be hidden: with the fog off they are drawn
+                    const DiffBox there = diff_box(r5, r4, view);
+                    check(there.count >= 50, at + "without the fog the hidden things are drawn (so the first check is not an empty one): " + std::to_string(there.count) + " pixels");
+                    // 4. the fog is the fog: the same over explored ground, half of it deep in the fog, in every block of the view
+                    const FogBlocks blocks = fog_blocks(r3, r4, view, cx, cy, z, rig.world);
+                    check(blocks.bad_fog == 0, at + "deep in the fog about half of what is there is left: " + std::to_string(blocks.bad_fog) + " of " + std::to_string(blocks.deep_fog) + " blocks keep a share outside [0.3, 0.7], from " + num(blocks.lowest) + " to " + num(blocks.highest));
+                    check(blocks.bad_clear == 0, at + "over explored ground the fog changes nothing: " + std::to_string(blocks.bad_clear) + " of " + std::to_string(blocks.deep_clear) + " blocks differ");
+                    check(blocks.deep_fog >= 4 && blocks.deep_clear >= 3, at + "there is fog and there is explored ground to compare: " + std::to_string(blocks.deep_fog) + " blocks deep in the fog (4), " + std::to_string(blocks.deep_clear) + " over explored ground (3)");
+                    check(outside_not_black(r1, view) == 0, at + "nothing is drawn outside the view");
+                }
+            }
+        }
+    }
+    check(scenes >= 160, "the scenes: " + std::to_string(scenes));
+    check(hidden_piles >= 60, "food that the map has was hidden in the views of the scenes: " + std::to_string(hidden_piles) + " piles");
 }
 
 
@@ -2568,7 +2994,7 @@ void test_network_match() {
 
 int main(int argc, char* argv[]) {
     // (SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one)
-    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, levels, place, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net, guard, garbage)
+    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, levels, place, fog, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net, guard, garbage)
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
             only = argv[++i];
@@ -2590,6 +3016,7 @@ int main(int argc, char* argv[]) {
     if (run("out")) test_zoom_out_pass(arc);
     if (run("levels")) test_level_pictures(arc);
     if (run("place")) test_lattice_placement(arc);
+    if (run("fog")) test_fog_levels(arc);
     if (run("state")) test_pass_state(arc);
     if (run("cursor")) test_hud_cursor(arc);
     if (run("orders")) test_hud_orders(arc);
