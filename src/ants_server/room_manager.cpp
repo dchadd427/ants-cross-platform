@@ -378,7 +378,7 @@ RoomManager::Verdict RoomManager::judge_and_replay(const std::string& path, uint
     if (rooms_.find(head.code) != rooms_.end() || waiting.count(head.code) != 0 || deferred_.count(head.code) != 0) {   // (two records for one code cannot be: the name holds a hash of the code; a room made before the restore can)
         item.outcome = RestoreItem::Outcome::Unreadable;
         item.note = "a room with the code " + head.code + " exists already";
-        restart_->remove_file(path);
+        restart_->refuse_file(path);
         restart_->note("restart record " + item.file + " was not restored: " + item.note);
         return Verdict::Unreadable;
     }
@@ -434,10 +434,10 @@ RoomManager::Verdict RoomManager::judge_and_replay(const std::string& path, uint
         if (result == Room::ReplayResult::Deferred) return Verdict::Deferred;
         refusal = "ended by a restart of the server: " + why;
     }
-    // not restored: the room is there as a failed room with the reason, and the record goes
+    // not restored: the room is there as a failed room with the reason, and the record is put by for a day (it was read: the owner may want it back)
     item.outcome = RestoreItem::Outcome::Ended;
     item.note = refusal;
-    restart_->remove_file(path);
+    restart_->refuse_file(path);
     if (rooms_.size() + waiting.size() + deferred_.size() < limits_.max_rooms) rooms_.emplace(head.code, Room::refused(head, refusal, item.turns, now_ms + (clock() - entered)));       // (the rooms that were replayed have their places)
     restart_->note("room " + head.code + " was not restored: " + refusal);
     return Verdict::Ended;
@@ -454,7 +454,7 @@ void RoomManager::begin_replayed(Replayed& replayed, uint32_t now_ms, RestoreRep
         replayed.room.reset();
         item.outcome = RestoreItem::Outcome::Ended;
         item.note = refusal;
-        restart_->remove_file(replayed.path);
+        restart_->refuse_file(replayed.path);
         if (rooms_.size() < limits_.max_rooms) rooms_.emplace(head.code, Room::refused(head, refusal, item.turns, now_ms));
         restart_->note("room " + head.code + " was not restored: " + refusal);
         report.items.push_back(item);

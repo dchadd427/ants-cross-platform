@@ -33,7 +33,8 @@
 // checkpoints (a CHECK must name a turn that the file holds, in increasing order), every field of the head (the strict decoders of the protocol read the start message, the commands, the names). A
 // restore reads a record as Streaming: the turns are checked and counted, not kept, and the replay decodes them again one at a time (a hostile file of empty turns costs its own size and no more). A frame that is cut at the END of the file (a write that the death of the machine interrupted: a frame that
 // reaches the end of the file and does not fit it, one whose CRC is wrong and that is the last, or nothing but zero bytes) is a torn tail: it is dropped, and the record is the frames before it. Any
-// other fault, a bad CRC or length or order in the MIDDLE of the file, is corruption: the record is refused (the room is lost, as it was before records existed). A refused record is deleted.
+// other fault, a bad CRC or length or order in the MIDDLE of the file, is corruption: the record is refused (the room is lost, as it was before records existed) and deleted at once. A record that was
+// read and judged to be of a match that cannot go on (another protocol, a changed map, too old, ...) is moved to the folder `refused` and kept for a day (RestartStore::refuse_file), not deleted.
 //
 // WHAT IS NOT RESTORED. A record of another network protocol is not (a rules change would play the match out differently: the room is closed with that reason, in the log and in the status JSON);
 // nor is one whose map file is gone or has changed, whose last write is older than RestartConfig::max_age_ms (its players are gone), or whose replay does not agree with the stored state hashes (the rules
@@ -170,6 +171,7 @@ struct RestartConfig {
     uint32_t restore_budget_ms{30u * 1000u};                // the restore at the start of the server may take this long in all, in real time: a room that it does not reach (or does not finish) is deferred, its
                                                             // record stays on disk and the room is restored when its first player comes (RoomManager::restore_rooms)
     std::function<uint32_t()> clock_ms;                     // the clock that these budgets are measured with, in real milliseconds (empty: restart_steady_ms): the tests give one of their own
+    uint32_t refused_keep_ms{24u * 60u * 60u * 1000u};      // a record that was read and refused is kept this long in the folder `refused` (the owner may want it back); the folder is held under budget_bytes
     uint32_t sync_every_ms{1000};                           // a room's record is made durable this often while it is written
 };
 
@@ -253,6 +255,12 @@ public:
     bool remove_file(const std::string& path);
     /// Tries again to delete the files that could not be deleted; how many are still there. A line for the log says which were deleted at last.
     size_t retry_stale();
+    /// A record that was READ and refused (its room is a failed room: another protocol, a map that changed, too old, a replay that disagrees, ...): moved to the folder `refused` of the records' folder
+    /// and kept for RestartConfig::refused_keep_ms, not deleted: an owner whose map was missing for a moment, or whose server was a version behind, can move it back. The folder is held under
+    /// budget_bytes (the oldest files go first) and a record that alone passes it is deleted. False when the record was deleted instead (a line says why). A record that cannot be READ is deleted at once.
+    bool refuse_file(const std::string& path);
+    /// Deletes what is older than refused_keep_ms in the folder `refused` (prepare() does it when the server starts); how many files
+    size_t purge_refused();
     bool is_stale(const std::string& path) const;
     size_t stale_count() const noexcept { return stale_.size(); }
 

@@ -660,6 +660,7 @@ uint32_t fnv1a32(const std::string& s) {
 constexpr const char* kRecordPrefix = "room-";
 constexpr const char* kTempSuffix = ".tmp";
 constexpr const char* kLockName = ".lock";
+constexpr const char* kRefusedName = "refused";
 
 bool has_suffix(const std::string& s, const std::string& suffix) { return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0; }
 
@@ -858,6 +859,74 @@ bool RestartStore::prepare(std::string& why) {
         const std::string name = it->path().filename().string();
         if (name.compare(0, std::strlen(kRecordPrefix), kRecordPrefix) == 0 && has_suffix(name, kTempSuffix)) native_remove(it->path().string());
     }
+    purge_refused();                                                // (what was refused a day ago is not wanted any more)
+    return true;
+}
+
+size_t RestartStore::purge_refused() {
+    const fs::path dir = fs::path(cfg_.dir) / kRefusedName;
+    std::error_code ec;
+    if (!enabled() || !fs::is_directory(dir, ec)) return 0;
+    const auto now = fs::file_time_type::clock::now();
+    std::vector<fs::path> old;
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code entry_ec;
+        if (!it->is_regular_file(entry_ec) || entry_ec) continue;
+        const fs::file_time_type written = it->last_write_time(entry_ec);
+        if (entry_ec) continue;
+        const auto age = now - written;
+        const uint64_t age_ms = age.count() < 0 ? 0u : static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(age).count());
+        if (age_ms > cfg_.refused_keep_ms) old.push_back(it->path());
+    }
+    size_t purged = 0;
+    for (const fs::path& p : old) purged += native_remove(p.string()) ? 1u : 0u;
+    return purged;
+}
+
+bool RestartStore::refuse_file(const std::string& path) {
+    const std::string name = fs::path(path).filename().string();
+    const auto drop = [&](const std::string& why) {
+        remove_file(path);
+        note("restart record " + name + " was refused and could not be kept (" + why + "): it was deleted");
+        return false;
+    };
+    std::error_code ec;
+    const uint64_t size = static_cast<uint64_t>(fs::file_size(path, ec));
+    if (ec) return drop("it cannot be looked at: " + ec.message());
+    if (size > cfg_.budget_bytes) return drop("it is bigger than the folder of refused records may be, " + std::to_string(cfg_.budget_bytes) + " bytes");
+    const fs::path dir = fs::path(cfg_.dir) / kRefusedName;
+    fs::create_directories(dir, ec);
+    if (ec) return drop("the folder '" + std::string(kRefusedName) + "' cannot be made: " + ec.message());
+#ifndef _WIN32
+    ::chmod(dir.c_str(), 0700);                                     // (the records hold the keys of the seats: this folder is the server's own as well)
+#endif
+    purge_refused();
+    // the folder is held under the budget: the oldest files go until this record fits
+    struct Kept {
+        fs::file_time_type at;
+        uint64_t size;
+        fs::path path;
+    };
+    const fs::path to = dir / name;
+    std::vector<Kept> kept;
+    uint64_t total = 0;
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code entry_ec;
+        if (!it->is_regular_file(entry_ec) || entry_ec || it->path() == to) continue;               // (a file of this name is replaced below)
+        Kept k{it->last_write_time(entry_ec), static_cast<uint64_t>(it->file_size(entry_ec)), it->path()};
+        if (entry_ec) continue;
+        total += k.size;
+        kept.push_back(std::move(k));
+    }
+    std::sort(kept.begin(), kept.end(), [](const Kept& a, const Kept& b) { return a.at < b.at; });
+    for (const Kept& k : kept) {
+        if (total + size <= cfg_.budget_bytes) break;
+        if (native_remove(k.path.string())) total -= k.size;
+    }
+    std::string why;
+    native_remove(to.string());                                     // (what was there under this name goes: a rename that replaces is not the same everywhere)
+    if (!native_rename_replace(path, to.string(), why)) return drop(why);
+    note("restart record " + name + " was refused and is kept in the folder '" + kRefusedName + "' for " + std::to_string(cfg_.refused_keep_ms / 3600000u) + " hours: the owner may move it back to the restart folder");
     return true;
 }
 

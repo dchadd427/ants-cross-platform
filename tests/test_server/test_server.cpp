@@ -8205,6 +8205,97 @@ void run_persist_review_process_tests_2() {
         ASSERT_EQ(w.mgr->restart_store()->stale_count(), size_t{0});
 #endif
     } TEST_END();
+
+    TEST_CASE("S3.110 A Record That Was Read And Refused Is Kept For A Day (L2 Of The Review): The Record Of A Match That Another Network Protocol Ended Goes To restart/refused/ Whole (Mode 600 In A Folder Of 700), The Log Says So, And The Owner Who Moves It Back When The Cause Is Gone Has The Match Restored; A Record That Is Corrupt Is Deleted At Once; At Start The Folder Is Purged Of What Is Older Than 24 Hours (Not Of Younger Files); The Folder Is Held Under The Budget (The Oldest Go First) And A Record That Alone Passes It Is Deleted") {
+        const auto refused_dir = [](PWorld& w) { return fs::path(w.restart.dir) / "refused"; };
+        const auto name_of = [](PWorld& w, const std::string& code) { return fs::path(w.record_path(code)).filename(); };
+        {   // refused: kept, whole, private; moved back by the owner it is restored
+            PWorld w("persist-110a");
+            w.start_server(500);
+            crash_with_record_of(w, "RF-1", 6000);
+            const std::vector<uint8_t> bytes = read_all_bytes(w.record_path("RF-1"));
+            w.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1);
+            w.start_server(500);
+            ASSERT_TRUE(w.report.items.size() == 1 && w.report.items[0].outcome == RestoreItem::Outcome::Ended && w.status("RF-1").state == RoomState::Failed);
+            ASSERT_TRUE(w.record_files().empty());                                               // (not in the folder that a start reads any more)
+            const fs::path kept = refused_dir(w) / name_of(w, "RF-1");
+            ASSERT_TRUE(fs::exists(kept) && read_all_bytes(kept) == bytes);
+#ifndef _WIN32
+            struct stat st;
+            ASSERT_EQ(::stat(kept.c_str(), &st), 0);
+            ASSERT_EQ(static_cast<int>(st.st_mode & 0777), 0600);
+            ASSERT_EQ(::stat(refused_dir(w).c_str(), &st), 0);
+            ASSERT_EQ(static_cast<int>(st.st_mode & 0777), 0700);
+#endif
+            bool noted = false;
+            for (const std::string& n : w.notices) noted = noted || (n.find("RF-1") != std::string::npos && n.find("refused") != std::string::npos && n.find("24 hours") != std::string::npos);
+            ASSERT_TRUE(noted);
+            w.stop_server(false);
+            w.restart.identity.protocol = net::kProtocolVersion;                                 // the cause is gone (the server is what it was) and the owner moves the file back
+            fs::rename(kept, w.record_path("RF-1"));
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 1 && w.status("RF-1").restored && w.status("RF-1").state == RoomState::Running);
+        }
+        {   // corrupt: deleted at once, nothing kept (a bit flipped in the middle, and a file that is no record at all)
+            PWorld w("persist-110b");
+            w.start_server(500);
+            crash_with_record_of(w, "RF-2", 6000);
+            std::vector<uint8_t> bytes = read_all_bytes(w.record_path("RF-2"));
+            bytes[bytes.size() / 2] ^= 0x10;
+            write_all_bytes(w.record_path("RF-2"), bytes);
+            write_all_bytes(fs::path(w.restart.dir) / "room-JUNK-00000001.restart", {'j', 'u', 'n', 'k'});
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Unreadable) == 2 && w.record_files().empty());
+            ASSERT_TRUE(!fs::exists(refused_dir(w)) || fs::is_empty(refused_dir(w)));
+        }
+        {   // the purge at start: what is older than 24 hours goes, what is younger stays
+            PWorld w("persist-110c");
+            w.start_server(500);
+            w.stop_server(false);
+            fs::create_directories(refused_dir(w));
+            const auto plant = [&](const char* name, std::chrono::hours age) {
+                write_all_bytes(refused_dir(w) / name, {1, 2, 3});
+                fs::last_write_time(refused_dir(w) / name, fs::file_time_type::clock::now() - age);
+            };
+            plant("old-1.restart", std::chrono::hours(25));
+            plant("old-2.restart", std::chrono::hours(72));
+            plant("young-1.restart", std::chrono::hours(23));
+            plant("young-2.restart", std::chrono::hours(1));
+            w.start_server(500);
+            ASSERT_TRUE(!fs::exists(refused_dir(w) / "old-1.restart") && !fs::exists(refused_dir(w) / "old-2.restart"));
+            ASSERT_TRUE(fs::exists(refused_dir(w) / "young-1.restart") && fs::exists(refused_dir(w) / "young-2.restart"));
+        }
+        {   // the folder is held under the budget: the oldest go first; a record that alone passes the budget is deleted
+            PWorld w("persist-110d");
+            w.start_server(500);
+            crash_with_record_of(w, "RF-3", 6000);
+            const uint64_t size = fs::file_size(w.record_path("RF-3"));
+            fs::create_directories(refused_dir(w));
+            const auto plant = [&](const char* name, std::chrono::hours age) {
+                write_all_bytes(refused_dir(w) / name, std::vector<uint8_t>(static_cast<size_t>(size), 7));
+                fs::last_write_time(refused_dir(w) / name, fs::file_time_type::clock::now() - age);
+            };
+            plant("a.restart", std::chrono::hours(5));                                           // the oldest
+            plant("b.restart", std::chrono::hours(4));
+            plant("c.restart", std::chrono::hours(3));
+            w.restart.budget_bytes = 3 * size + 10;                                              // room for three records of this size, not four
+            w.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1);
+            w.start_server(500);
+            ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Ended) == 1);
+            ASSERT_TRUE(!fs::exists(refused_dir(w) / "a.restart") && fs::exists(refused_dir(w) / "b.restart") && fs::exists(refused_dir(w) / "c.restart") && fs::exists(refused_dir(w) / name_of(w, "RF-3")));
+            // a record that alone is more than the budget is deleted, not kept
+            w.stop_server(false);
+            PWorld small("persist-110e");
+            small.start_server(500);
+            crash_with_record_of(small, "RF-4", 6000);
+            const uint64_t big = fs::file_size(small.record_path("RF-4"));
+            small.restart.budget_bytes = big - 1;
+            small.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1);
+            small.start_server(500);
+            ASSERT_TRUE(small.report.count(RestoreItem::Outcome::Ended) == 1 && small.record_files().empty());
+            ASSERT_TRUE(!fs::exists(refused_dir(small) / name_of(small, "RF-4")));
+        }
+    } TEST_END();
 }
 #endif
 
