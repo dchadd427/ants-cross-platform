@@ -105,6 +105,32 @@ std::string NetGame::reject_text(RejectReason r, bool in_browser) {
     }
 }
 
+namespace {
+
+constexpr const char* kTextGaveUp = "The match could not wait any longer.";                       // the time of the way back ran out (the cap that the room named and a minute, or half an hour from the loss)
+constexpr const char* kTextNewRoom = "Your match has ended. This is a new room.";                // the key fits nothing in the room that took the code: this machine is a new player of its waiting room
+
+// The refusals after which the key is of no use: the seat was dropped (or removed), the match is over, the server does not hold the seat. Superseded (the other window has it), RejoinFailed (the server would
+// not take the machine back now: it may use Rejoin later) and the rest leave the key where it is.
+bool way_back_forgets(RejectReason reason) {
+    return reason == RejectReason::Dropped || reason == RejectReason::Kicked || reason == RejectReason::NoSuchRoom || reason == RejectReason::MatchRunning;
+}
+
+}  // namespace
+
+// The words of the way back (docs/NETWORK_PORT.md "Reconnect"): what a player is told when the server refuses a machine that comes back with its key. The reasons that mean something else for a machine
+// that holds a seat than for a new player have words of their own (the first-join texts, reject_text, are what they were); Superseded says the same in both.
+std::string NetGame::way_back_text(RejectReason reason) {
+    switch (reason) {
+        case RejectReason::Dropped:
+        case RejectReason::Kicked: return "You were dropped from the match.";
+        case RejectReason::NoSuchRoom: return "The match is over.";
+        case RejectReason::MatchRunning: return "The server does not hold your seat.";
+        case RejectReason::RejoinFailed: return "The server would not take you back now. Try Rejoin in a minute.";
+        default: return reject_text(reason, kInBrowser);
+    }
+}
+
 NetGame::NetGame(sim::SimulationEngine& sim) : sim_(sim) {}
 
 NetGame::~NetGame() { shutdown_transport(); }
@@ -227,6 +253,15 @@ void NetGame::begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_por
     peer_port_ = peer_port;
     client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), lobby_config(key, target_.want_seat));
     reload_used_ = false;
+    join_key_ = key;
+    welcomed_ = false;
+    have_key_ = false;
+    rejoin_key_ = RejoinKey{};
+    last_mode_ = ClientSession::Mode::Normal;
+    if (!key_is_zero(key)) {                                    // (the place that keeps it gave it to this machine: it has to be told when the key is of no use)
+        rejoin_key_ = RejoinKey{target_.room, target_.want_seat, key, server_text()};
+        have_key_ = true;
+    }
     role_ = Role::Client;
     phase_ = Phase::Connecting;
     phase_since_ms_ = now_;
@@ -239,6 +274,7 @@ void NetGame::leave() {
         if (client_session_) client_session_->leave();
         else if (client_lobby_) client_lobby_->leave();
     }
+    forget_key();                                               // the player left: the seat is gone, and the key with it
     shutdown_transport();
     role_ = Role::None;
     phase_ = Phase::Off;
@@ -248,6 +284,9 @@ void NetGame::leave() {
     target_ = JoinTarget{};
     way_back_ = false;
     reload_used_ = false;
+    join_key_ = SeatKey{};
+    welcomed_ = false;
+    last_mode_ = ClientSession::Mode::Normal;
 }
 
 std::vector<NetGame::Event> NetGame::take_events() {
@@ -487,6 +526,7 @@ void NetGame::update_host_session() {
 void NetGame::update_client() {
     if ((phase_ == Phase::Connecting || phase_ == Phase::Room || phase_ == Phase::Loading) && client_lobby_) {
         client_lobby_->update(now_);
+        note_lobby_welcome();
         collect_room_chat();
         for (const ClientLobby::Event& ev : client_lobby_->take_events()) {
             switch (ev.type) {
@@ -530,7 +570,12 @@ void NetGame::update_client() {
                     phase_ = Phase::Failed;
                     fail_reason_ = FailReason::Rejected;
                     reject_reason_ = client_lobby_->reject_reason();
-                    status_ = reject_text(client_lobby_->reject_reason(), kInBrowser);
+                    if (!key_is_zero(join_key_)) {                  // a machine that came with the key of its seat: the words of the way back, and the key goes when the reason says that it is of no use
+                        status_ = way_back_text(reject_reason_);
+                        if (way_back_forgets(reject_reason_)) forget_key();
+                    } else {
+                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser);
+                    }
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
                 case ClientLobby::Event::Type::Disconnected:
@@ -550,6 +595,7 @@ void NetGame::update_client() {
     if (phase_ == Phase::Playing && client_session_) {
         client_session_->update(now_);
         if (client_session_->wants_connection(now_)) attach_new_link();       // the way back: the session lost its link and asks for a new one (a failed attempt is told to it too)
+        note_session_mode();
         if (!desync_reported_ && client_session_->desynced()) {
             desync_reported_ = true;
             status_ = "The game is out of sync.";
@@ -657,6 +703,114 @@ void NetGame::attach_new_link() {
     client_session_->attach(raw, now_);                                   // null: no link could be made, the next attempt is due in two seconds
 }
 
+// ---- the key, the way back's state for the screens -------------------------------------------------------------------------------------------------
+
+std::string NetGame::server_text() const {
+    if (!target_.url.empty()) return target_.url;
+    return (target_.address.find(':') != std::string::npos ? "[" + target_.address + "]" : target_.address) + ":" + std::to_string(target_.port);
+}
+
+void NetGame::announce_key(const SeatKey& key, uint8_t seat) {
+    if (key_is_zero(key)) return;
+    rejoin_key_ = RejoinKey{target_.room, seat, key, server_text()};
+    have_key_ = true;
+    if (!on_key_) return;
+    const std::function<void(const RejoinKey&)> fn = on_key_;           // (the owner's function may end the session, and with it the callbacks of this object: it runs from copies)
+    const RejoinKey given = rejoin_key_;
+    fn(given);
+}
+
+void NetGame::forget_key() {
+    if (!have_key_) return;
+    have_key_ = false;
+    if (!on_forget_key_) return;
+    const std::function<void(const RejoinKey&)> fn = on_forget_key_;
+    const RejoinKey gone = rejoin_key_;
+    fn(gone);
+}
+
+// The lobby's Welcome is the moment that a room hands out a key (none from a game on the local network or a room that holds no seats). A Hello that showed a key and was answered as a new player's (the
+// Welcome has no rejoin flag and another key: the match is gone and a room with the same code, a demo room that the Hello made again, is waiting for its players) found nothing to take the seat of: the
+// old key is of no use, and the machine is a player of the waiting room like any other. The same key without the flag is the seat taken back in a waiting room.
+void NetGame::note_lobby_welcome() {
+    if (welcomed_ || !client_lobby_ || client_lobby_->my_seat() >= sim::MAX_PLAYERS) return;
+    welcomed_ = true;
+    const SeatKey& key = client_lobby_->key();
+    if (!key_is_zero(join_key_) && !client_lobby_->rejoined() && !key_matches(key, join_key_)) {
+        forget_key();
+        set_notice(kTextNewRoom);
+    }
+    announce_key(key, client_lobby_->my_seat());
+}
+
+// The session's mode changed (it was looked at after every update). A rejoin's Welcome (Rejoining to CatchingUp, or straight to Normal) says the key again; the end of the way back, in whichever way
+// it was taken, is one event for the screen.
+void NetGame::note_session_mode() {
+    const ClientSession::Mode mode = client_session_->mode();
+    if (mode == last_mode_) return;
+    using Mode = ClientSession::Mode;
+    const bool was_linking = last_mode_ == Mode::Reconnecting || last_mode_ == Mode::Rejoining;
+    const bool was_back = was_linking || last_mode_ == Mode::CatchingUp;
+    if (was_linking && (mode == Mode::CatchingUp || mode == Mode::Normal)) announce_key(client_session_->key(), seat_);
+    if (was_back && mode == Mode::Normal) events_.push_back(Event{Event::Type::Rejoined, 255});
+    last_mode_ = mode;
+}
+
+bool NetGame::paused() const {
+    if (phase_ != Phase::Playing || !client_session_) return false;
+    return client_session_->reconnecting() || client_session_->paused();
+}
+
+PauseInfo NetGame::pause_info() const {
+    PauseInfo info;
+    if (phase_ != Phase::Playing || !client_session_) return info;
+    const ClientSession& s = *client_session_;
+    const ClientSession::Mode mode = s.mode();
+    info.reconnecting = mode == ClientSession::Mode::Reconnecting || mode == ClientSession::Mode::Rejoining;
+    info.catching_up = mode == ClientSession::Mode::CatchingUp;
+    if (info.reconnecting || info.catching_up) {                // this machine's own way back: what the server last said about the match is old
+        const uint32_t away = now_ - s.lost_since_ms();
+        info.away_s = away / 1000u;
+        info.attempts = s.reconnect_attempts();
+        if (info.reconnecting) {
+            const uint32_t limit = s.give_up_ms();
+            info.give_up_s = away < limit ? (limit - away + 999u) / 1000u : 0u;
+        } else {
+            info.catch_up_percent = s.catch_up_percent();
+        }
+        return info;
+    }
+    if (mode != ClientSession::Mode::Normal) return info;
+    const auto name_of = [this](uint8_t seat) { return seat < sim::MAX_PLAYERS ? start_.names[seat] : std::string(); };
+    const PresenceMsg& p = s.presence();
+    for (const PresenceMsg::Entry& e : p.missing) {
+        PauseInfo::Seat seat;
+        seat.seat = e.seat;
+        seat.name = name_of(e.seat);
+        seat.away_s = e.waited_s;
+        seat.catching_up = e.state == PresenceMsg::State::CatchingUp;
+        seat.progress = e.progress;
+        info.missing.push_back(std::move(seat));
+    }
+    if (p.vote_seat < sim::MAX_PLAYERS) {
+        info.vote_open = true;
+        info.vote_seat = p.vote_seat;
+        info.vote_name = name_of(p.vote_seat);
+        info.votes_continue = p.votes_continue;
+        info.voters = p.voters;
+        info.my_vote = p.your_vote == 1 ? PauseInfo::Choice::KeepWaiting : (p.your_vote == 2 ? PauseInfo::Choice::Continue : PauseInfo::Choice::None);
+    }
+    info.resume_seconds_left = s.resume_seconds_left();
+    return info;
+}
+
+bool NetGame::vote(bool keep_waiting) {
+    if (phase_ != Phase::Playing || !client_session_) return false;
+    const uint8_t seat = client_session_->presence().vote_seat;
+    if (seat >= sim::MAX_PLAYERS) return false;                 // no vote is open
+    return client_session_->vote(seat, !keep_waiting);          // (the session sends it only while it follows the live match)
+}
+
 // A server that restored the match from a record that lost its last second (the death of its machine: docs/NETWORK_PORT.md "Writing") answers the Hello of a machine that is AHEAD of it, one that
 // says it has more turns than were ever sealed, with BadRequest. That machine's key is good: it starts from nothing, the way a page that was reloaded does (a new lobby, a Hello with the key and no
 // turns, Start, the stream), once per match: a server that keeps answering BadRequest ends the match for this machine as any refusal does.
@@ -690,14 +844,25 @@ void NetGame::begin_reload() {
         return;
     }
     client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), lobby_config(key, seat_));
+    join_key_ = key;
+    welcomed_ = false;
     phase_ = Phase::Connecting;
     refresh_status();
 }
 
 // The session cannot go on: the host is gone and no other machine could take over, or this machine was cut off for good
 void NetGame::end_lost_match() {
+    const ClientSession& s = *client_session_;
     phase_ = Phase::Over;
-    status_ = match_lost_text(client_session_->lost_reason());
+    if (way_back_ && s.rejected()) {                            // the server's word on the way back
+        status_ = way_back_text(s.reject_reason());
+        if (way_back_forgets(s.reject_reason())) forget_key();
+    } else if (way_back_ && !s.desynced()) {                    // nobody refused: the time of the way back ran out
+        status_ = kTextGaveUp;
+        forget_key();
+    } else {
+        status_ = match_lost_text(s.lost_reason());
+    }
     events_.push_back(Event{Event::Type::HostLeft, 255});
 }
 
@@ -835,6 +1000,7 @@ void NetGame::begin_match() {
         }
         known_host_ = cc.host;
         client_session_ = std::make_unique<ClientSession>(sim_, cc);
+        last_mode_ = client_session_->mode();                   // (CatchingUp for a machine that is given its match, else Normal)
         client_session_->set_connection(transport_->uplink.get());
         install_hooks();
         client_session_->start(now_);
@@ -1083,6 +1249,7 @@ bool NetGame::chat(const std::string& text, bool team) {
 void NetGame::freeze() {
     if (host_session_) host_session_->freeze();
     if (client_session_) client_session_->finish();              // the match is over: a host that leaves now is no loss
+    forget_key();                                                // ... and the room will finish: no key opens it any more
 }
 
 bool NetGame::stalled() const {
