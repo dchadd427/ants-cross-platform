@@ -66,6 +66,7 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     } while (0)
 
 #define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
+#define ASSERT_NE(a, b) ASSERT_TRUE((a) != (b))
 
 template <typename T>
 long long printable(const T& v) {
@@ -674,6 +675,165 @@ static void run_suite_5_terrain() {
     } TEST_END();
 }
 
+// ============================================================================
+// Suite 6: The snapshot before the first tick (the picture behind the "Get ready" dialog)
+// ============================================================================
+// The first movement tick starts the idle clip of every ant (loco_sync); until then no ant has a clip and the renderer, which draws an ant from its clip, drew none: the picture behind the
+// start dialog (which the simulation waits behind since v0.2.0) showed the ants' hit point numbers and no ants. get_world_state shows, before the first tick, the clip that tick starts (the
+// original starts it when it creates the ant: CreateAnt 0x100ef18 -> SetAction idle at 0x100efef), its first frame, held (the clock is stopped). Nothing of the state is touched.
+static bool is_idle_label_state(UnitState s) { return s == UnitState::Idle || s == UnitState::GuardIdle || s == UnitState::Swimming; }
+
+static std::vector<AntSnapshot> snapshot_of_ants(const SimulationEngine& sim) { return sim.get_world_state().ants; }
+
+static const AntSnapshot* find_ant(const std::vector<AntSnapshot>& ants, uint32_t id) {
+    for (const AntSnapshot& a : ants) {
+        if (a.id == id) return &a;
+    }
+    return nullptr;
+}
+
+static void run_suite_6_before_the_first_tick() {
+    TEST_SUITE("Suite 6: The Snapshot Before the First Tick");
+
+    TEST_CASE("6.1 Shipped maps: before the first tick every ant shows the idle clip of its facing, its first frame, held; the first tick starts exactly that clip") {
+        const std::string dir = locate_maps_dir();
+        if (dir.empty()) {
+            std::cout << "(maps not found, skipped) ";
+            return;
+        }
+        for (const char* name : {"GAUNTLET.LVL", "ISLANDS.LVL", "MEDIUM.LVL", "SMALL.LVL", "TINY.LVL", "TREASURE.LVL"}) {
+            ants::assets::LevelData lvl;
+            ASSERT_TRUE(lvl.load_from_file(dir + "/" + name));
+            for (const uint32_t seed : {1u, 7u, 1337u}) {
+                SimulationEngine sim;
+                sim.init(lvl, seed);
+                ASSERT_EQ(static_cast<unsigned long long>(sim.current_tick()), 0ull);
+                const std::vector<AntSnapshot> before = snapshot_of_ants(sim);
+                ASSERT_TRUE(before.size() >= 8);                                          // (every shipped map starts with ants for at least two teams)
+                for (const AntSnapshot& a : before) {
+                    ASSERT_TRUE(is_idle_label_state(a.state));                            // the premise: a level starts its ants idle
+                    const bool water = sim.grid().terrain_class_at(TileCoord{a.tile_x, a.tile_y}) == mv::kTerrainWater;
+                    const mv::MotionClip want = water ? mv::idle_water_clip() : mv::idle_clip(static_cast<uint8_t>(a.type), a.facing, a.is_holding);
+                    ASSERT_TRUE(want.valid());
+                    ASSERT_EQ(static_cast<unsigned>(a.loco_clip), static_cast<unsigned>(want.chd_index));
+                    ASSERT_EQ(a.loco_mirrored, want.mirrored);
+                    ASSERT_EQ(static_cast<unsigned>(a.loco_frame), 0u);                                          // the first frame ...
+                    ASSERT_EQ(static_cast<unsigned>(a.loco_left_ms), 0xFFFFu);                                   // ... held: the renderer's prediction of the next frames never reaches it
+                }
+                sim.tick();
+                const std::vector<AntSnapshot> after = snapshot_of_ants(sim);
+                for (const AntSnapshot& b : before) {
+                    const AntSnapshot* a = find_ant(after, b.id);
+                    ASSERT_TRUE(a != nullptr);
+                    ASSERT_EQ(static_cast<unsigned>(a->loco_clip), static_cast<unsigned>(b.loco_clip));                                 // the clip that the first tick starts is the one that was shown
+                    ASSERT_EQ(a->loco_mirrored, b.loco_mirrored);
+                    ASSERT_EQ(a->px, b.px);                                               // and nothing moved
+                    ASSERT_EQ(a->py, b.py);
+                    ASSERT_EQ(a->facing, b.facing);
+                    ASSERT_NE(static_cast<unsigned>(a->loco_left_ms), 0xFFFFu);                                  // (the clip is the engine's own now: its frame ends in time)
+                }
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("6.2 Asking for the snapshot changes nothing: the state hash of every tick is the same with and without it") {
+        const std::string dir = locate_maps_dir();
+        if (dir.empty()) {
+            std::cout << "(maps not found, skipped) ";
+            return;
+        }
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(lvl.load_from_file(dir + "/TINY.LVL"));
+        SimulationEngine asked;
+        SimulationEngine silent;
+        asked.init(lvl, 11);
+        silent.init(lvl, 11);
+        ASSERT_EQ(asked.state_hash().total, silent.state_hash().total);
+        (void)asked.get_world_state();                                                    // the snapshot before the first tick, and before every tick after it
+        ASSERT_EQ(asked.state_hash().total, silent.state_hash().total);
+        const uint32_t first_ant = asked.get_world_state().ants.front().id;
+        for (int t = 0; t < 120; ++t) {
+            if (t == 5) {
+                asked.issue_move_order(first_ant, TileCoord{10, 10});
+                silent.issue_move_order(first_ant, TileCoord{10, 10});
+            }
+            (void)asked.get_world_state();
+            asked.tick();
+            silent.tick();
+            ASSERT_EQ(asked.state_hash().total, silent.state_hash().total);
+        }
+    } TEST_END();
+
+    TEST_CASE("6.3 A swimmer on water shows the water idle clip, an ant that carries food its carrying clip, as the first tick starts them") {
+        SimulationEngine sim;
+        sim.init_test_world(20, 20, 7, 600000);
+        sim.grid_mut().set_terrain(10, 10, TERRAIN_WATER);
+        const uint32_t swimmer = sim.spawn_unit(0, AntType::Swimmer, TileCoord{10, 10});
+        const uint32_t worker = sim.spawn_unit(1, AntType::Worker, TileCoord{5, 5});
+        sim.get_unit(worker).pick_up_food(1, 25);
+        const uint32_t fighter = sim.spawn_unit(2, AntType::Combat, TileCoord{8, 3});
+        const std::vector<AntSnapshot> before = snapshot_of_ants(sim);
+        const AntSnapshot* s = find_ant(before, swimmer);
+        const AntSnapshot* w = find_ant(before, worker);
+        const AntSnapshot* c = find_ant(before, fighter);
+        ASSERT_TRUE(s != nullptr && w != nullptr && c != nullptr);
+        ASSERT_EQ(static_cast<unsigned>(s->loco_clip), static_cast<unsigned>(mv::idle_water_clip().chd_index));
+        ASSERT_EQ(static_cast<unsigned>(w->loco_clip), static_cast<unsigned>(mv::idle_clip(static_cast<uint8_t>(AntType::Worker), w->facing, true).chd_index));
+        ASSERT_NE(static_cast<unsigned>(w->loco_clip), static_cast<unsigned>(mv::idle_clip(static_cast<uint8_t>(AntType::Worker), w->facing, false).chd_index));
+        ASSERT_EQ(static_cast<unsigned>(c->loco_clip), static_cast<unsigned>(mv::idle_clip(static_cast<uint8_t>(AntType::Combat), c->facing, false).chd_index));
+        sim.tick();
+        const std::vector<AntSnapshot> after = snapshot_of_ants(sim);
+        for (const AntSnapshot& b : before) {
+            const AntSnapshot* a = find_ant(after, b.id);
+            ASSERT_TRUE(a != nullptr);
+            ASSERT_EQ(static_cast<unsigned>(a->loco_clip), static_cast<unsigned>(b.loco_clip));
+            ASSERT_EQ(a->loco_mirrored, b.loco_mirrored);
+        }
+    } TEST_END();
+
+    TEST_CASE("6.3b A level whose default ant type is Combat: the shown clip is the combat ant's, as the first tick starts it (the getter's type, not the ant's own field)") {
+        SimulationEngine sim;
+        sim.init_test_world(20, 20, 7, 600000);
+        sim.grid_mut().set_default_ant_tile(62);                                          // block 3 names the combat power-up: every ant of own type 0 IS a combat ant
+        const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
+        const std::vector<AntSnapshot> before = snapshot_of_ants(sim);
+        const AntSnapshot* a = find_ant(before, id);
+        ASSERT_TRUE(a != nullptr);
+        ASSERT_TRUE(a->type == AntType::Combat && a->raw_type == AntType::Worker);
+        ASSERT_EQ(static_cast<unsigned>(a->loco_clip), static_cast<unsigned>(mv::idle_clip(static_cast<uint8_t>(AntType::Combat), a->facing, false).chd_index));
+        ASSERT_NE(static_cast<unsigned>(a->loco_clip), static_cast<unsigned>(mv::idle_clip(static_cast<uint8_t>(AntType::Worker), a->facing, false).chd_index));
+        sim.tick();
+        ASSERT_EQ(static_cast<unsigned>(find_ant(snapshot_of_ants(sim), id)->loco_clip), static_cast<unsigned>(a->loco_clip));
+    } TEST_END();
+
+    TEST_CASE("6.3c An ant that another system owns (not an idle label) shows no clip before the first tick, as the first tick starts none") {
+        SimulationEngine sim;
+        sim.init_test_world(20, 20, 7, 600000);
+        const uint32_t idle = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
+        const uint32_t other = sim.spawn_unit(1, AntType::Worker, TileCoord{9, 5});
+        sim.get_unit(other).state = UnitState::Stunned;                                   // (a state of the action system: loco_sync leaves the ant alone)
+        ASSERT_NE(static_cast<unsigned>(find_ant(snapshot_of_ants(sim), idle)->loco_clip), 0x7FFEu);
+        ASSERT_EQ(static_cast<unsigned>(find_ant(snapshot_of_ants(sim), other)->loco_clip), 0x7FFEu);
+        sim.tick();
+        ASSERT_NE(static_cast<unsigned>(find_ant(snapshot_of_ants(sim), idle)->loco_clip), 0x7FFEu);
+        ASSERT_EQ(static_cast<unsigned>(find_ant(snapshot_of_ants(sim), other)->loco_clip), 0x7FFEu);
+    } TEST_END();
+
+    TEST_CASE("6.4 The held pose is the picture of a stopped clock only: after the first tick the snapshot is what the locomotion holds (an ant made later has no clip until its tick)") {
+        SimulationEngine sim;
+        sim.init_test_world(20, 20, 7, 600000);
+        const uint32_t early = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 5});
+        ASSERT_NE(static_cast<unsigned>(find_ant(snapshot_of_ants(sim), early)->loco_clip), 0x7FFEu);            // before the first tick: shown
+        sim.tick();
+        const uint32_t late = sim.spawn_unit(0, AntType::Worker, TileCoord{7, 5});
+        const std::vector<AntSnapshot> now = snapshot_of_ants(sim);
+        ASSERT_EQ(static_cast<unsigned>(find_ant(now, late)->loco_clip), 0x7FFEu);                               // after it: not (nothing changes once the game runs)
+        ASSERT_EQ(static_cast<unsigned>(find_ant(now, late)->loco_left_ms), 0u);
+        sim.tick();
+        ASSERT_NE(static_cast<unsigned>(find_ant(snapshot_of_ants(sim), late)->loco_clip), 0x7FFEu);             // its own tick starts its clip
+    } TEST_END();
+}
+
 int main() {
     std::cout << "=======================================================\n"
               << " ANTS - ORIGINAL MOVEMENT GOLDEN TEST SUITE\n"
@@ -684,6 +844,7 @@ int main() {
     run_suite_3_blocking();
     run_suite_4_cant_go();
     run_suite_5_terrain();
+    run_suite_6_before_the_first_tick();
 
     std::cout << "\n=======================================================\n"
               << " MOVEMENT GOLDEN TEST SUMMARY\n"

@@ -790,6 +790,15 @@ const WorldState& SimulationEngine::get_world_state() const {
                 s.loco_mirrored = a->loco.clip.mirrored;
                 s.loco_left_ms = (a->loco.next_ms > impl_->anim_clock_ms_)
                     ? static_cast<uint16_t>(std::min<uint32_t>(a->loco.next_ms - impl_->anim_clock_ms_, 0xFFFFu)) : uint16_t{0};
+            } else if (impl_->current_tick_ == 0) {
+                // Before the first tick: the clip that tick starts (the original starts it when it creates the ant, 0x100ef18), its first frame, held, so that the picture behind the
+                // "Get ready" dialog has its ants. Nothing of the state is touched.
+                const movement::MotionClip first = impl_->pending_idle_clip(*a);
+                if (first.valid()) {
+                    s.loco_clip = first.chd_index;
+                    s.loco_mirrored = first.mirrored;
+                    s.loco_left_ms = 0xFFFFu;
+                }
             }
             impl_->world_state_cache_.ants.push_back(s);
         }

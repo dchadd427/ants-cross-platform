@@ -4,8 +4,8 @@
 //   * "zoom.world.*": the pixels of the real software renderer's world pass (Renderer::render_world) on GAUNTLET and TINY at the corners and the middle of the map, from a half-pixel origin
 //     (the zoom 2), with ants of every type and colour, effects, score bubbles, selection markers, the click marker, hit point digits and the fog of war;
 //   * "zoom.app.*": whole frames of a headless Application (the HUD, the minimap with its frame of the seen world, the world) on both maps, the text boxes masked as in the zoom 1 program,
-//     taken at once after the start: before the first simulation tick an ant has no clip, so its hit point digits are drawn and its sprite is not;
-//   * "zoom.app.ants.*": the same frames of a match that has TICKED (the ants have their clips and are drawn), at 0.5, 1 and 2: before the first tick only the ants' hit point digits show;
+//     taken at once after the start, behind the start dialog: the ants stand in the first frame of the clip that the first tick will start (the snapshot of an engine that has not ticked);
+//   * "zoom.app.ants.*": the same frames of a match that has TICKED (the ants play the clips that the simulation started), at 0.5, 1 and 2;
 //   * "zoom.radar.*": the rectangle that the minimap's frame is, for nine cameras;
 //   * "zoom.ptr.edge.*" and "zoom.ptr.cursor.*": for EVERY pixel of the picture, the step of the edge scroll in screen pixels (nine cameras) and the cursor that HUD::evaluate_cursor chooses
 //     (two selections); "zoom.ptr.click.*": what a click orders (the tile, the marker's world pixel) on a grid of pixels; "zoom.camera.*": the camera's conversions and clamps.
@@ -293,9 +293,9 @@ void app_scenarios() {
     }
 }
 
-/// The same frames of a match that has TICKED (the start modal dismissed, six simulation ticks of 50 ms), at the zoom 0.5, 1 and 2: the ants are in the picture. BEFORE the first tick an
-/// ant has no clip and no sprite, only its hit point digits are drawn, which is what the frames of "zoom.app.*" above (taken at once after the start, like the "px.app.match.*" of
-/// suite 3.10) show. These pin the sprites of the ants through the whole path of the application: the simulation's clips, the camera, the offscreen pass at a zoom and the copy.
+/// The same frames of a match that has TICKED (the start modal dismissed, six simulation ticks of 50 ms), at the zoom 0.5, 1 and 2: the ants are in the picture, in the poses that the
+/// simulation's clips have reached (the frames of "zoom.app.*" above, taken at once after the start like the "px.app.match.*" of suite 3.10, show them standing in the first frame).
+/// These pin the sprites of the ants through the whole path of the application: the simulation's clips, the camera, the offscreen pass at a zoom and the copy.
 void app_ants_scenarios() {
     for (const Shape& s : kShapes) {
         const bool wide = s.cw == kWideW;
@@ -319,14 +319,16 @@ void app_ants_scenarios() {
                 check(app.zoom() == z, name + ": the match is at the zoom that was asked for");
                 const LayoutRect view = app.layout().view();
                 app.render_frame();
-                const Picture before = read_canvas(app, s.cw, s.ch);                       // (at tick 0: no sprites, only digits)
+                (void)read_canvas(app, s.cw, s.ch);                                         // (a frame behind the dialog, as before: what the application renders first)
                 for (int tick = 0; tick < 6; ++tick) app.update_simulation(0.05f);
                 check(app.sim().current_tick() >= 3, name + ": the simulation has ticked");
                 app.render_frame();
                 Picture p = read_canvas(app, s.cw, s.ch);
-                // the ants are in the picture: after the ticks the view differs from the view before them by the sprites (the digits and the terrain are the same in both)
-                const int sprites = differ(before, p, view);
-                check(sprites > 300, name + ": the ants are drawn after the first ticks: " + std::to_string(sprites) + " pixels of the view are not what the frame before the first tick shows");
+                // the ants are in the picture: the world pass of the same world draws sprites that the same world without its ants does not have (both without the digits)
+                const Picture with_ants = world_with_ants(app, s.cw, s.ch);
+                const Picture without_ants = world_without_ants(app, s.cw, s.ch);
+                const int sprites = differ(with_ants, without_ants, view);
+                check(sprites > 300, name + ": the ants are drawn after the first ticks: " + std::to_string(sprites) + " pixels of the view are not what the same world without its ants shows");
                 std::vector<MaskRect> mask = wide ? kWMaskMatch : kMaskMatch;
                 mask.push_back(wide ? kWMaskPlate : kMaskPlate);
                 record_picture(name, p, mask);
@@ -613,14 +615,14 @@ const Golden kGoldens[] = {
     {"zoom.app.ants.wide.TINY.z0.5", 0x6b02b92ef6ff8bc4, 518400},
     {"zoom.app.ants.wide.TINY.z1", 0x85a3d695f1432492, 518400},
     {"zoom.app.ants.wide.TINY.z2", 0x32217ff583631ba9, 518400},
-    {"zoom.app.classic.GAUNTLET.z0.5", 0x52ecda6eb4ca0562, 307200},
-    {"zoom.app.classic.GAUNTLET.z2", 0x0752deb3e7e2313c, 307200},
-    {"zoom.app.classic.TINY.z0.5", 0x51ad00b81a4182c3, 307200},
-    {"zoom.app.classic.TINY.z2", 0x1f97ee96bf5bb05d, 307200},
-    {"zoom.app.wide.GAUNTLET.z0.5", 0x755aaffcd02bd6df, 518400},
-    {"zoom.app.wide.GAUNTLET.z2", 0xc7817479071f3f8f, 518400},
-    {"zoom.app.wide.TINY.z0.5", 0xb98b45312ada3849, 518400},
-    {"zoom.app.wide.TINY.z2", 0x66678974b731f9f0, 518400},
+    {"zoom.app.classic.GAUNTLET.z0.5", 0xfddd91bb8441a40f, 307200},
+    {"zoom.app.classic.GAUNTLET.z2", 0x1b8b400156cdbc14, 307200},
+    {"zoom.app.classic.TINY.z0.5", 0x8d8546e45efb6210, 307200},
+    {"zoom.app.classic.TINY.z2", 0x87a3ee948b0fc0f5, 307200},
+    {"zoom.app.wide.GAUNTLET.z0.5", 0x68abadbf0c489c48, 518400},
+    {"zoom.app.wide.GAUNTLET.z2", 0x76c6a986c4a3548b, 518400},
+    {"zoom.app.wide.TINY.z0.5", 0x39f848fb1cd975c6, 518400},
+    {"zoom.app.wide.TINY.z2", 0x3cbc4ec63a606f98, 518400},
     {"zoom.camera.classic.z0.5", 0x3a4dad0e646af9cc, 45},
     {"zoom.camera.classic.z2", 0x898a58705f5b9fc1, 45},
     {"zoom.camera.wide.z0.5", 0x4625c85a49d212b7, 45},
