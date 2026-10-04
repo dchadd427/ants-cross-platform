@@ -1027,7 +1027,7 @@ void run_cue_tests() {
         Rig rig(sc);
         CueRouter router;
         const std::set<uint32_t> own_ids(rig.ids.ants[0].begin(), rig.ids.ants[0].end());
-        const CueRouter::OwnsAnt owns = [&](uint32_t id) { return own_ids.count(id) != 0; };
+        const CueRouter::OwnsAnt owns_ant = [&](uint32_t id) { return own_ids.count(id) != 0; };
         struct Heard {
             uint32_t step;
             sim::AudioEvent event;
@@ -1036,13 +1036,13 @@ void run_cue_tests() {
         std::vector<Heard> heard;                                            // what the loudspeaker would play, in order
         std::vector<std::pair<uint32_t, sim::AudioEvent>> made;              // every cue of the class that the confirmed engine made, and the step at which it did
         rig.set_on_tick_extra([&]() {                                        // (the application's post_tick: the predicted engine's cues first, then the confirmed engine's)
-            for (sim::AudioEvent& e : router.from_predicted(rig.prediction()->take_audio(), owns)) heard.push_back(Heard{rig.step_no(), std::move(e), true});
+            for (sim::AudioEvent& e : router.from_predicted(rig.prediction()->take_audio(), owns_ant)) heard.push_back(Heard{rig.step_no(), std::move(e), true});
             const uint64_t tick = rig.confirmed().current_tick() - 1;
             std::vector<sim::AudioEvent> events = rig.confirmed().poll_audio_events();
             for (const sim::AudioEvent& e : events) {
-                if (CueRouter::in_class(e, owns)) made.emplace_back(rig.step_no(), e);
+                if (CueRouter::in_class(e, owns_ant)) made.emplace_back(rig.step_no(), e);
             }
-            for (sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns)) heard.push_back(Heard{rig.step_no(), std::move(e), false});
+            for (sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns_ant)) heard.push_back(Heard{rig.step_no(), std::move(e), false});
             rig.prediction()->take_news();
         });
         rig.run(12);
@@ -1091,15 +1091,15 @@ void run_cue_tests() {
             Rig rig(sc);
             CueRouter router;
             const std::set<uint32_t> own_ids(rig.ids.ants[0].begin(), rig.ids.ants[0].end());
-            const CueRouter::OwnsAnt owns = [&](uint32_t id) { return own_ids.count(id) != 0; };
+            const CueRouter::OwnsAnt owns_ant = [&](uint32_t id) { return own_ids.count(id) != 0; };
             uint64_t made = 0;
             uint64_t played_from_confirmed_class = 0;
             rig.set_on_tick_extra([&]() {
-                router.from_predicted(rig.prediction()->take_audio(), owns);
+                router.from_predicted(rig.prediction()->take_audio(), owns_ant);
                 const uint64_t tick = rig.confirmed().current_tick() - 1;
                 std::vector<sim::AudioEvent> events = rig.confirmed().poll_audio_events();
-                for (const sim::AudioEvent& e : events) made += CueRouter::in_class(e, owns) ? 1u : 0u;
-                for (const sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns)) played_from_confirmed_class += CueRouter::in_class(e, owns) ? 1u : 0u;
+                for (const sim::AudioEvent& e : events) made += CueRouter::in_class(e, owns_ant) ? 1u : 0u;
+                for (const sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns_ant)) played_from_confirmed_class += CueRouter::in_class(e, owns_ant) ? 1u : 0u;
                 rig.prediction()->take_news();
             });
             rig.run(sc.buffer_turns + sc.down_delay + 6);
@@ -1145,17 +1145,17 @@ void run_cue_tests() {
             Rig rig(sc);
             CueRouter router;
             const std::set<uint32_t> own_ids(rig.ids.ants[0].begin(), rig.ids.ants[0].end());
-            const CueRouter::OwnsAnt owns = [&](uint32_t id) { return own_ids.count(id) != 0; };
+            const CueRouter::OwnsAnt owns_ant = [&](uint32_t id) { return own_ids.count(id) != 0; };
             std::vector<std::pair<uint32_t, sim::AudioEvent>> heard;
             std::vector<std::pair<uint32_t, sim::AudioEvent>> made;
             rig.set_on_tick_extra([&]() {
-                for (sim::AudioEvent& e : router.from_predicted(rig.prediction()->take_audio(), owns)) heard.emplace_back(rig.step_no(), std::move(e));
+                for (sim::AudioEvent& e : router.from_predicted(rig.prediction()->take_audio(), owns_ant)) heard.emplace_back(rig.step_no(), std::move(e));
                 const uint64_t tick = rig.confirmed().current_tick() - 1;
                 std::vector<sim::AudioEvent> events = rig.confirmed().poll_audio_events();
                 for (const sim::AudioEvent& e : events) {
-                    if (CueRouter::in_class(e, owns)) made.emplace_back(rig.step_no(), e);
+                    if (CueRouter::in_class(e, owns_ant)) made.emplace_back(rig.step_no(), e);
                 }
-                for (sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns)) heard.emplace_back(rig.step_no(), std::move(e));
+                for (sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns_ant)) heard.emplace_back(rig.step_no(), std::move(e));
                 rig.prediction()->take_news();
             });
             rig.run(14);
