@@ -56,6 +56,13 @@ EM_JS(void, ants_post_sync_to_parent, (int seat, int tick, int hash_high, int ha
 });
 }
 
+// Tells the page that a game on this computer began (web/shell.html antsReportLocalGame: the page asks the server to count it, and ignores every failure); nothing here can throw
+extern "C" {
+EM_JS(void, ants_report_local_game, (), {
+    try { if (typeof antsReportLocalGame === "function") antsReportLocalGame(); } catch (e) {}
+});
+}
+
 // The one application of the page (main() keeps it alive for as long as the page lives): the entry for ants_background_pump below
 namespace {
 ants::app::Application* g_web_app = nullptr;
@@ -785,6 +792,7 @@ bool Application::init(const ApplicationConfig& config) {
     g_web_app = this;
     emscripten_set_visibilitychange_callback(this, EM_FALSE, on_visibility_change);
     refresh_page_visibility();
+    set_on_local_match_started([]() { ants_report_local_game(); });       // the page counts the games on this computer for the front page (a native game has no such hook)
 #endif
     return true;
 }
@@ -1124,6 +1132,7 @@ void Application::enter_match() {
     start_dialog_clock_ms_ = 0.0;
     scorecard_.hide();
     match_over_handled_ = false;
+    local_match_reported_ = false;                                          // (the first tick of this match tells the page: once)
     state_ = AppState::Playing;
     update_picture();                                                       // (the match screen replaces whatever page was up)
 
@@ -2181,6 +2190,10 @@ void Application::update_simulation(float dt) {
                 // behind the dialog: a deliberate deviation, sim_engine.hpp)
                 hud_.update(sim_.get_world_state(), 1);
             } else if (!sim_.is_match_over()) {
+                if (!local_match_reported_ && !network_active()) {              // the first tick of a game on this computer: told once (the web page has the server count it)
+                    local_match_reported_ = true;
+                    if (on_local_match_started_) on_local_match_started_();
+                }
                 sim_.tick();
                 post_tick();
             }

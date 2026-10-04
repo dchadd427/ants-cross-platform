@@ -7,14 +7,14 @@
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
-//   --ws-port N        the WebSocket port of browsers and Electron behind a reverse proxy that ends TLS (0: none; default 0); this machine only
+//   --ws-port N        the WebSocket port of browsers and Electron behind a reverse proxy that ends TLS (0: none; default 0); this machine only. It also answers the public GET /busy, GET /stats and POST /stats/local
 //   --ctl-port N       the control interface: HTTP + JSON on this machine only, with a bearer secret (0: none; default 0; needs the secret)
 //   --public           the TCP game port accepts connections from other machines
 //   --ws-any-interface, --ctl-any-interface
 //                      the WebSocket / control port listens on every interface instead of the loopback address. For a container only: a port that is published
 //                      from a container does not reach a program that listens on the container's loopback address. The host decides who can connect
 //                      (docker run -p 127.0.0.1:4010:4010 ...); never use these on a machine without that protection, the control interface speaks plain HTTP.
-//   --results-dir DIR  every ended room writes <code>.json there
+//   --results-dir DIR  every ended room writes <code>.json there, and the site statistics (the counters of GET /stats) are kept in site-stats.json (without it they live in memory)
 //   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
 //   --max-rooms N      the most rooms at a time (default 256)
 //   --demo-rooms N     for a public test page: a Hello for a not yet existing room "demo-..." makes it (4 players, the --demo-map, unless its code chooses: see --demo-maps), at most N at a time. N is 1 to
@@ -82,6 +82,7 @@
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
+#include "ants_server/site_stats.hpp"
 
 namespace {
 
@@ -384,6 +385,13 @@ int main(int argc, char** argv) {
             return "{\"matches\":" + std::to_string(b.matches) + ",\"players\":" + std::to_string(b.players) + "}";
         });
     }
+    // The numbers of the front page (site_stats.hpp): the games that ended on this server and the single-player games that browsers report, kept in the results folder when there is one
+    ants::server::SiteStats stats;
+    if (!o.results_dir.empty()) stats.open((std::filesystem::path(o.results_dir) / ants::server::SiteStats::kFileName).string());
+    if (ws) {                                                    // GET /stats (numbers only) and POST /stats/local (a browser tells that a single-player game began: counted, answered 204)
+        ws->add_status("/stats", [&rooms, &stats]() { return stats.json(rooms.busy(now_ms())); });
+        ws->set_post("/stats/local", [&stats]() { stats.count_local(); });
+    }
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 #ifdef SIGPIPE
@@ -462,6 +470,7 @@ int main(int argc, char** argv) {
         rooms.update(now);
         if (http) http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_control(rooms, request, now); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
+            stats.count_ended(s);                                  // (a match that ran counts, demo rooms too; a room that never began counts nothing)
             const bool demo = s.code.compare(0, std::strlen(ants::server::kDemoRoomPrefix), ants::server::kDemoRoomPrefix) == 0;
             if (demo && s.ticks == 0) continue;                    // a demo room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
             std::string held;                                      // a room that held seats says what came of it (never a key)
@@ -476,6 +485,8 @@ int main(int argc, char** argv) {
             }
         }
         for (const std::string& line : rooms.take_notices()) log(line);          // (a record that the disk refused, ...)
+        stats.save_if_due();
+        for (const std::string& line : stats.take_notices()) log(line);
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     log("stopping");
@@ -483,6 +494,8 @@ int main(int argc, char** argv) {
     const auto stopping = std::chrono::steady_clock::now();
     const size_t kept = rooms.shutdown(now_ms());
     for (const std::string& line : rooms.take_notices()) log(line);
+    stats.save();                                                // (the counters reach the file whatever the last ten seconds did)
+    for (const std::string& line : stats.take_notices()) log(line);
     if (rooms.restart_store() != nullptr) {
         const auto took = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - stopping).count();
         log("stopped: " + std::to_string(kept) + " restart record(s) made durable and kept (" + std::to_string(took) + " ms)");

@@ -385,6 +385,9 @@ public:
     /// The clock that frames and wake-ups are timed with is SDL's performance counter; a test gives the application a virtual one (in the counter's units:
     /// SDL_GetPerformanceFrequency per second) so that every rule of the time is checked exactly and without waiting. Nothing: the real clock.
     void set_clock(std::function<uint64_t()> counter) { clock_ = std::move(counter); }
+    /// Called once for each game on this computer, when its first tick runs (never for a match of the network, whichever machine it is): the web build tells its page, which has the server count
+    /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/NETWORK_PORT.md "Site statistics"). A native game sets nothing and so reports nothing.
+    void set_on_local_match_started(std::function<void()> hook) { on_local_match_started_ = std::move(hook); }
     /// The network's clock in ms: what the frames and the wake-ups have given the session so far
     double net_clock_ms() const noexcept { return net_time_ms_; }
     /// How many wake-ups made a step since the application started
@@ -524,6 +527,8 @@ private:
     enum class PendingMusic : uint8_t { None, InGame, Intro, Closed };
     PendingMusic pending_music_{PendingMusic::None};       // what a background step wanted of the music, done by the next frame or when the page is shown (the last wish counts)
     std::function<uint64_t()> clock_;                      // set_clock: a virtual clock for the tests (empty: SDL's performance counter)
+    std::function<void()> on_local_match_started_;         // set_on_local_match_started: told at the first tick of a game on this computer
+    bool local_match_reported_{false};                     // ... and it was told for this match (enter_match starts the next match with it false)
     uint64_t last_frame_run_{0};                           // when a frame last ran (performance counter; 0: none since the page was hidden): the wake-ups stand down while frames come
     uint64_t hidden_since_{0};                             // this hidden period: when it began (performance counter), the wake-ups that stepped in it and the ticks that ran in it
     uint32_t hidden_wakes_{0};
