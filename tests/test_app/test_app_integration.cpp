@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <cstdlib>
 #include <cassert>
 #include <cmath>
 #include <algorithm>
@@ -1718,6 +1719,36 @@ void run_suite_7_input_controls() {
             ASSERT_TRUE(run_until(app, [&] { return app.sim().get_world_state().player_alliances[0] == 1; }, 400));
             for (int t = 0; t < 20; ++t) app.update_simulation(0.05f);
             ASSERT_EQ(notes_in(transcript(app)), 0u);
+            ASSERT_EQ(count_of(transcript(app), "are a team now!"), 1u);
+            app.shutdown();
+        }
+        {   // the same where the system's user and machine make a long default name (a macOS runner's machine name is about 50 characters): the name is cut as a typed one (32 printable
+            // characters), so the original's "... are a team now!" stays whole in its chat entry (100 characters)
+            struct LongUser {
+                std::string saved;
+                bool had{false};
+                static void put(const char* value) {
+#if defined(_WIN32)
+                    _putenv_s("USER", value);                                         // ("" removes it)
+#else
+                    if (*value != '\0') ::setenv("USER", value, 1);
+                    else ::unsetenv("USER");
+#endif
+                }
+                LongUser() {
+                    const char* old = std::getenv("USER");
+                    had = old != nullptr;
+                    if (had) saved = old;
+                    put(std::string(60, 'u').c_str());
+                }
+                ~LongUser() { put(had ? saved.c_str() : ""); }
+            } long_user;
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}));
+            ASSERT_EQ(app.sim().get_player_name(0), std::string(32, 'u'));
+            app.hud().request_team_up(app.sim(), 1);
+            ASSERT_TRUE(run_until(app, [&] { return app.sim().get_world_state().player_alliances[0] == 1; }, 400));
+            for (int t = 0; t < 20; ++t) app.update_simulation(0.05f);
             ASSERT_EQ(count_of(transcript(app), "are a team now!"), 1u);
             app.shutdown();
         }

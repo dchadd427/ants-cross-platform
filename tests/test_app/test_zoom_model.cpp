@@ -162,6 +162,8 @@ void test_levels() {
         if (k % 4 == 0) check(static_cast<double>(got) == want, "a power of two is exact in a float: series(" + std::to_string(k) + ")");
         if (k < 8) check(std::fabs(static_cast<double>(zoom::series(k + 1)) / static_cast<double>(got) - std::pow(2.0, 0.25)) < 1e-6, "one step up is the fourth root of 2 times as much at k = " + std::to_string(k));
     }
+    // the same in a loop over negative k alone, as levels() has it (MSVC 2022 and 2026 miscompiled the signed floor division in such a loop: series(-4) gave 0.25)
+    for (int k = -1; k >= -48; --k) check(zoom::series(k) == ref_series(k), "in a loop over negative k alone, series(" + std::to_string(k) + ") is 2^(k/4): " + num(static_cast<double>(zoom::series(k))));
     check(zoom::series(4) == 2.0f && zoom::series(0) == 1.0f && zoom::series(-4) == 0.5f && zoom::series(-8) == 0.25f && zoom::series(-12) == 0.125f, "2, 1, 0.5, 0.25 and 0.125 are the exact levels");
     {
         const double named[13] = {2.0, 1.68, 1.41, 1.19, 1.0, 0.84, 0.71, 0.59, 0.5, 0.42, 0.35, 0.30, 0.25};         // (as the owner's list names them)

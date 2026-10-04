@@ -46,13 +46,12 @@ inline constexpr bool kSmoothUpscale = true;
 /// The k-th level of the series 2^(k/4): k = 4 is 2, 0 is 1, -4 is 0.5. Every power of two is exact in a float and a double (a power of two times a root is one rounding).
 inline float series(int k) noexcept {
     static constexpr double kRoot[kStepsPerDoubling] = {1.0, 1.189207115002721, 1.414213562373095, 1.681792830507429};
-    int q = k / kStepsPerDoubling;
-    int r = k % kStepsPerDoubling;
-    if (r < 0) {
-        r += kStepsPerDoubling;
-        --q;
-    }
-    return static_cast<float>(std::ldexp(kRoot[r], q));
+    // The floor division of k by 4, done unsigned on k + 4096 (the levels use k from 4 down to -48). MSVC 2022 and 2026 miscompiled the signed form (k / 4, k % 4, then + 4 for a
+    // negative remainder) inside levels()' loop over negative k: series(-4) came out 0.25 there, while a direct call gave 0.5.
+    constexpr int kBiasDoublings = 1024;
+    const unsigned biased = static_cast<unsigned>(k + kStepsPerDoubling * kBiasDoublings);
+    const unsigned steps = static_cast<unsigned>(kStepsPerDoubling);
+    return static_cast<float>(std::ldexp(kRoot[biased % steps], static_cast<int>(biased / steps) - kBiasDoublings));
 }
 
 /// The world pixels that `screen_len` screen pixels show at the zoom `z` (rounded up: a world pixel that is shown in part is a shown one): 2 x at 0.5, 1 x at 1, half at 2
