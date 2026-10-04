@@ -92,6 +92,8 @@ public:
         };
         Type type{Type::RoomChanged};
         uint8_t seat{255};
+        bool rejoin{false};   // StartRequested and Begun: this machine starts from nothing and is given a match that runs (it joined with its key, or took the way back again after a server that had lost
+                              // the last turns answered it BadRequest): the screen skips the start dialog and the start sound, the catch-up is its loading
     };
 
     explicit NetGame(sim::SimulationEngine& sim);
@@ -105,10 +107,15 @@ public:
     bool host(uint16_t port, const std::string& name, bool loopback_only = false);
     /// Starts joining the room at address:port. False when the address cannot be used or there is no transport; the outcome arrives as events.
     /// `want_seat` (0 .. 3) asks the host for that seat (the colour: 0 green, 1 red, 2 blue, 3 black); a seat that is taken gives the first free one; 255 = any.
-    bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string());
+    /// `key` (all zero: a new player, as it always was) is the key of a seat of a dedicated server's room that this machine had (a game that was started again, a page that was reloaded: the place
+    /// that keeps it gave it back): the Hello shows it, and a room whose match runs gives the machine its seat and the match from the server's log (the event StartRequested, then Begun, both with
+    /// `rejoin`). A room that is over, that does not hold the seat or that has dropped it refuses, with the reasons of the way back (status_text()).
+    bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
+              const SeatKey& key = SeatKey{});
     /// The same through a WebSocket (ws:// or wss:// URL, the game server's door behind its proxy): the browser build's only way to join. False when the URL cannot
     /// be used or there is no WebSocket (every native build: it joins with TCP). A server's room has no host migration and no links between guests.
-    bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string());
+    bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
+                  const SeatKey& key = SeatKey{});
     /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone.
     void leave();
 
@@ -319,7 +326,9 @@ private:
     void pump_peers();
     void begin_peer_links();
     /// The part of joining that every transport shares: the uplink is ready, the lobby asks for its room and seat
-    void begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_port, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token);
+    void begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_port, const SeatKey& key);
+    /// The lobby's Hello for the join target: `key` (all zero for a new player) and the seat that it asks for
+    ClientLobby::Config lobby_config(const SeatKey& key, uint8_t want_seat) const;
     void close_peer_links();
     void refresh_status();
     void set_notice(std::string text);
@@ -336,14 +345,20 @@ private:
     /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
     void collect_room_chat();
     // The way back (see the head of this file)
-    /// A new link to the server, made the way the first one was (TCP natively, a WebSocket in the browser); null when none can be made (the session tries again in two seconds)
-    std::unique_ptr<Connection> make_link();
+    /// A new link to the server, made the way the first one was (TCP natively, a WebSocket in the browser); null when none can be made (the session tries again in two seconds). `for_lobby`: the link
+    /// is the lobby's, not the session's (a machine that starts the match from nothing): the browser's socket then says the lobby's Hello when it opens
+    std::unique_ptr<Connection> make_link(bool for_lobby = false);
     /// The session wants a new link: makes one and hands it over (attach), a failed attempt too (null)
     void attach_new_link();
     /// The browser's connections tell the application that they have news (set_on_wake); the same function for the first link and every new one
     std::function<void()> wake_function();
     /// What a new link says as its Hello (the session adds the version, the key and the number of turns): the name, the room, the token and this machine's seat
     HelloMsg way_back_hello() const;
+    /// The session is lost: a server that restored the match from a record that lost its last turns (docs/NETWORK_PORT.md, "start from nothing") answered BadRequest to a Hello that carried more
+    /// turns than it holds; the machine starts the match from nothing with the same key (begin_reload), once per match. True when it did; false: the session ended some other way (end_lost_match)
+    bool reload_after_bad_request();
+    void begin_reload();
+    void end_lost_match();
 
     sim::SimulationEngine& sim_;
     Role role_{Role::None};
@@ -372,6 +387,7 @@ private:
     FillLevel fill_{FillLevel::None};       // the bots that this machine's START asks for (protocol 11)
     JoinTarget target_;                     // client: how the first link was made (join, join_url)
     bool way_back_{false};                  // client: the session was built to come back by itself (a dedicated server's room that gave this machine a key)
+    bool reload_used_{false};               // client: the BadRequest fallback (reload_after_bad_request) was taken in this match
     std::vector<ChatLine> pending_chat_;    // the waiting room's lines that take_pregame_chat() has not handed out
     bool chat_status_mirror_{true};         // the lines of the room are shown on the status line too (set_chat_status_mirror)
 

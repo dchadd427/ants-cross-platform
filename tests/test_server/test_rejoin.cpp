@@ -18,9 +18,11 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <random>
@@ -257,6 +259,43 @@ public:
         RoomStatus s;
         if (mgr != nullptr) mgr->status(code, s, now(world_now));
         return s;
+    }
+    // The record of a room (the keys of its seats are in its head: the place that keeps a machine's key gets the same bytes from the NetGame's callback)
+    std::string record_path(const std::string& code) const { return RestartStore(restart_).path_for(code); }
+    RestartLoaded read_record(const std::string& code) const { return read_restart_record(record_path(code), 1ull << 30); }
+    // The record of a room cut after its first `turns` turns, at the end of a frame: what a server finds when the death of its machine took the last second of a file that was not synced (the frames that
+    // remain are whole). A server that was stopped (the file is closed) is started again on it, and the machines that ran more turns than it holds are AHEAD of it.
+    bool shorten_record(const std::string& code, uint32_t turns) const {
+        const std::string path = record_path(code);
+        std::vector<uint8_t> bytes;
+        {
+            std::ifstream in(path, std::ios::binary);
+            if (!in) return false;
+            bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        const auto u32 = [&bytes](size_t at) {
+            return static_cast<uint32_t>(bytes[at]) | (static_cast<uint32_t>(bytes[at + 1]) << 8) | (static_cast<uint32_t>(bytes[at + 2]) << 16) | (static_cast<uint32_t>(bytes[at + 3]) << 24);
+        };
+        size_t pos = sizeof(kRestartMagic);
+        size_t cut = bytes.size();
+        while (pos + kRestartFrameOverhead <= bytes.size()) {
+            const uint32_t length = u32(pos + 1);
+            const size_t end = pos + 1 + 4 + size_t{length} + 4;
+            if (end > bytes.size()) break;
+            if (bytes[pos] == static_cast<uint8_t>(RestartFrame::Turns) && length >= 6) {
+                const uint32_t first = u32(pos + 5);
+                const uint32_t count = static_cast<uint32_t>(bytes[pos + 9]) | (static_cast<uint32_t>(bytes[pos + 10]) << 8);
+                if (first + count > turns) {
+                    cut = pos;
+                    break;
+                }
+            }
+            pos = end;
+        }
+        if (cut == bytes.size()) return false;                      // (nothing to cut: the record holds no more turns than that)
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(cut));
+        return static_cast<bool>(out);
     }
 
     std::unique_ptr<RoomManager> mgr;
@@ -570,6 +609,162 @@ void run_way_back_tests() {
         ASSERT_TRUE(all_equal({&a, &b}) && a.sim.state_hash().total == end.referee_hash);        // the machines that lived through the restart and the restored referee: one state at the end
         ASSERT_TRUE(a.hash_at.count(end.ticks) == 1 && a.hash_at[end.ticks] == end.referee_hash && b.hash_at.count(end.ticks) == 1 && b.hash_at[end.ticks] == end.referee_hash);
         ASSERT_FALSE(a.net.desynced() || b.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("RJ1.3 A Machine That Starts From Nothing (A Reloaded Page, A Game Started Again) Joins With Its Key: The Room Gives It Its Seat And The Match From The Server's Log (Start, The Stream, CaughtUp), It Is Back In The Match With The Events Marked `rejoin`, A Key That Fits No Seat Is Refused, And Both Machines End In The Same State As The Referee") {
+        World w("rejoin-reload");
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-3"), w.server_now()).ok);
+        Machine& a = w.join("Ann", "RJ-3");
+        Machine& b = w.join("Bob", "RJ-3");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+        w.run(25000);                                                                    // some 500 turns
+        const uint8_t seat = b.net.my_seat();
+        const net::SeatKey key = w.server.read_record("RJ-3").head.keys[seat];            // the key of Bob's seat, as the record has it
+        ASSERT_FALSE(net::key_is_zero(key));
+        ASSERT_FALSE(a.events.empty());
+        for (const NetGame::Event& e : a.events) ASSERT_FALSE(e.rejoin);                  // (the first start of a match is no rejoin)
+        w.machines.erase(w.machines.begin() + 1);                                        // the page of Bob is gone: its game, its engine and its links with it (no goodbye)
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-3").paused; }, 3000));
+        ASSERT_TRUE(w.status("RJ-3").absent.size() == 1 && w.status("RJ-3").absent[0].seat == seat);
+        const uint32_t sealed = w.status("RJ-3").turns;                                  // the match so far: all of it is to be given to the new machine
+        ASSERT_TRUE(sealed > 300);
+        Machine& wrong = w.add_machine("Mallory");                                       // a key that fits no seat reveals nothing: the room answers as it answers any Hello for a running match
+        net::SeatKey made_up = key;
+        made_up[0] = static_cast<uint8_t>(made_up[0] ^ 0xFFu);
+        ASSERT_TRUE(wrong.net.join("127.0.0.1", w.server.port(), "Mallory", seat, "RJ-3", "", made_up));
+        ASSERT_TRUE(w.run_until([&]() { return wrong.net.phase() == NetGame::Phase::Failed; }, 5000));
+        ASSERT_TRUE(wrong.net.fail_reason() == NetGame::FailReason::Rejected && wrong.net.reject_reason() == net::RejectReason::MatchRunning);
+        ASSERT_TRUE(w.status("RJ-3").paused && w.status("RJ-3").rejoins == 0);
+        Machine& b2 = w.add_machine("Bob");                                              // a new machine with nothing but the key
+        ASSERT_TRUE(b2.net.join("127.0.0.1", w.server.port(), "Bob", seat, "RJ-3", "", key));
+        ASSERT_EQ(b2.net.phase(), NetGame::Phase::Connecting);
+        ASSERT_TRUE(w.run_until([&]() { return b2.net.phase() == NetGame::Phase::Playing && !w.status("RJ-3").paused; }, 30000));
+        ASSERT_EQ(b2.net.my_seat(), seat);
+        ASSERT_EQ(b2.loads, 1u);                                                         // it loaded the map, as for any start
+        bool start_flag = false;
+        bool begun_flag = false;
+        for (const NetGame::Event& e : b2.events) {
+            start_flag = start_flag || (e.type == NetGame::Event::Type::StartRequested && e.rejoin);
+            begun_flag = begun_flag || (e.type == NetGame::Event::Type::Begun && e.rejoin);
+        }
+        ASSERT_TRUE(start_flag && begun_flag);                                           // the screen skips the start dialog and the start sound
+        ASSERT_EQ(b2.count(NetGame::Event::Type::StartRequested), size_t{1});
+        ASSERT_EQ(b2.count(NetGame::Event::Type::Begun), size_t{1});
+        RoomStatus s = w.status("RJ-3");
+        ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 1 && s.absent.empty() && s.names[seat] == "Bob");
+        ASSERT_TRUE(b2.net.turns_executed() >= sealed);                                  // the whole match was given to it
+        w.run(5000);
+        ASSERT_TRUE(b2.net.turns_executed() > sealed + 60);                              // and the match goes on
+        a.quit();
+        ASSERT_TRUE(w.run_until([&]() { return w.finished("RJ-3") && a.sim.is_match_over() && b2.sim.is_match_over(); }, 20000));
+        w.run(2000);
+        const RoomStatus end = w.status("RJ-3");
+        ASSERT_TRUE(end.state == RoomState::Finished && end.rejoins == 1 && end.referee_hash != 0);
+        ASSERT_TRUE(all_equal({&a, &b2}) && a.sim.state_hash().total == end.referee_hash);
+        ASSERT_TRUE(b2.hash_at.count(end.ticks) == 1 && b2.hash_at[end.ticks] == end.referee_hash);
+        ASSERT_FALSE(a.net.desynced() || b2.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("RJ1.4 A Server That Lost The Last Second Of Its Record Answers The Hello Of A Machine That Is Ahead Of It With BadRequest: The NetGame Starts The Match From Nothing With Its Key (A New Lobby, Start, The Stream), Once; A Second BadRequest Ends It As Any Refusal Does And Nothing Tries Again") {
+        {   // the real thing: a server restarted on a record that lacks the last 40 turns, two machines that ran them
+            World w("rejoin-ahead");
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-4"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-4");
+            Machine& b = w.join("Bob", "RJ-4");
+            int a_dropped = 0;                                                           // the prediction of one's own orders is on: the machine's engine is made again, so the prediction that stood
+            int b_dropped = 0;                                                           // on the old session's runner is destroyed (and whoever points at its engine is told)
+            a.net.set_prediction_enabled(true);
+            b.net.set_prediction_enabled(true);
+            a.net.set_on_prediction_dropped([&a_dropped]() { ++a_dropped; });
+            b.net.set_on_prediction_dropped([&b_dropped]() { ++b_dropped; });
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}) && a.net.predicting() && b.net.predicting(); }, 12000 + kPre));
+            w.run(20000);
+            const uint32_t sealed = w.status("RJ-4").turns;
+            ASSERT_TRUE(sealed > 300);
+            const uint16_t port = w.server.port();
+            w.server.stop(w.now, true);
+            ASSERT_TRUE(w.server.shorten_record("RJ-4", sealed - 40));                   // two seconds of play never reached the disk
+            ASSERT_TRUE(a.net.turns_executed() + 4 >= sealed && b.net.turns_executed() + 4 >= sealed);        // (the machines saw them)
+            w.run(3000);
+            ASSERT_TRUE(w.server.start(w.now, 500, port));
+            ASSERT_TRUE(w.server.report.items.size() == 1 && w.server.report.items[0].outcome == RestoreItem::Outcome::Restored && w.server.report.items[0].turns == sealed - 40);
+            ASSERT_TRUE(w.run_until([&]() { return a.count(NetGame::Event::Type::StartRequested) == 2 && b.count(NetGame::Event::Type::StartRequested) == 2; }, 60000));      // each starts again from nothing
+            ASSERT_TRUE(w.run_until([&]() { return a.count(NetGame::Event::Type::Begun) == 2 && b.count(NetGame::Event::Type::Begun) == 2 && !w.status("RJ-4").paused; }, 60000));
+            for (Machine* m : {&a, &b}) {
+                ASSERT_EQ(m->net.phase(), NetGame::Phase::Playing);
+                ASSERT_EQ(m->loads, 2u);
+                size_t flagged = 0;
+                for (const NetGame::Event& e : m->events) flagged += (e.rejoin ? 1u : 0u);
+                ASSERT_EQ(flagged, size_t{2});                                           // the second start and the second begin only
+                ASSERT_FALSE(m->saw(NetGame::Event::Type::HostLeft) || m->saw(NetGame::Event::Type::Failed));
+            }
+            RoomStatus s = w.status("RJ-4");
+            ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.rejoins == 2 && s.absent.empty() && s.turns >= sealed - 40);
+            ASSERT_TRUE(a_dropped == 1 && b_dropped == 1);                               // told once, when the old session went
+            ASSERT_TRUE(w.run_until([&]() { return a.net.predicting() && b.net.predicting(); }, 5000));
+            ASSERT_TRUE(a.net.prediction()->stats().starts == 1 && b.net.prediction()->stats().starts == 1);      // a new prediction on the new session, not the old one resumed
+            w.run(4000);
+            ASSERT_TRUE(w.status("RJ-4").turns > sealed - 40 + 60);
+            a.quit();
+            ASSERT_TRUE(w.run_until([&]() { return w.finished("RJ-4") && a.sim.is_match_over() && b.sim.is_match_over(); }, 20000));
+            w.run(2000);
+            const RoomStatus end = w.status("RJ-4");
+            ASSERT_TRUE(end.state == RoomState::Finished && end.referee_hash != 0);
+            ASSERT_TRUE(all_equal({&a, &b}) && a.sim.state_hash().total == end.referee_hash);
+            ASSERT_TRUE(a.hash_at.count(end.ticks) == 1 && a.hash_at[end.ticks] == end.referee_hash && b.hash_at.count(end.ticks) == 1 && b.hash_at[end.ticks] == end.referee_hash);
+            ASSERT_FALSE(a.net.desynced() || b.net.desynced());
+        }
+        {   // the fallback is taken once: scripted refusals (the door answers the Hello with BadRequest and the manager never sees it)
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-4B"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-4B");
+            Machine& b = w.join("Bob", "RJ-4B");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+            w.run(2000);
+            w.server.script_reason = net::RejectReason::BadRequest;
+            w.server.door = Server::Door::Scripted;
+            ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 5000));
+            w.server.door = Server::Door::Open;                                          // the machine's next link goes to the real server
+            ASSERT_EQ(w.server.scripted_hellos.size(), size_t{1});
+            ASSERT_TRUE(!net::key_is_zero(w.server.scripted_hellos[0].key) && w.server.scripted_hellos[0].have_turns > 0);        // the Hello that was refused carried turns
+            ASSERT_TRUE(w.run_until([&]() { return b.count(NetGame::Event::Type::Begun) == 2 && !w.status("RJ-4B").paused; }, 60000));
+            ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
+            ASSERT_TRUE(w.status("RJ-4B").rejoins == 1 && b.loads == 2 && b.count(NetGame::Event::Type::StartRequested) == 2);
+            ASSERT_FALSE(b.saw(NetGame::Event::Type::HostLeft));
+            w.run(3000);
+            w.server.door = Server::Door::Scripted;                                      // the second time
+            ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 2; }, 5000));
+            ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Over; }, 3000));          // it ends as a refusal does, it does not start again from nothing a second time
+            w.run(10);
+            ASSERT_TRUE(b.saw(NetGame::Event::Type::HostLeft));
+            ASSERT_EQ(b.count(NetGame::Event::Type::StartRequested), size_t{2});
+            w.server.door = Server::Door::Open;
+            const uint32_t seen = w.server.accepted;
+            w.run(10000);
+            ASSERT_EQ(w.server.accepted, seen);                                          // nothing tries again
+            ASSERT_EQ(b.net.phase(), NetGame::Phase::Over);
+        }
+        {   // a machine that has run no turn (its link is cut in the seconds of the start dialog) says Hello with no turns: BadRequest to that is not "ahead of the record", it is a refusal
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-4C"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-4C");
+            Machine& b = w.join("Bob", "RJ-4C");
+            ASSERT_TRUE(w.run_until([&]() { return a.net.phase() == NetGame::Phase::Playing && b.net.phase() == NetGame::Phase::Playing; }, 12000));
+            ASSERT_EQ(b.ticks, uint64_t{0});
+            w.server.script_reason = net::RejectReason::BadRequest;
+            w.server.door = Server::Door::Scripted;
+            ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 5000));
+            ASSERT_TRUE(w.server.scripted_hellos.size() == 1 && !net::key_is_zero(w.server.scripted_hellos[0].key) && w.server.scripted_hellos[0].have_turns == 0);
+            ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Over; }, 3000));
+            ASSERT_EQ(b.count(NetGame::Event::Type::StartRequested), size_t{1});         // (no new match was asked for)
+        }
     } TEST_END();
 
     TEST_CASE("RJ1.9 The Prediction Of One's Own Orders Is Not Run While The Way Back Runs (Reconnecting, The Hello, The Catch-Up) Or While The Match Is Held (A Seat Missing, The Countdown After A Pause), And Comes Back After It: Both Machines Predict Again From The Confirmed Engine And End In The Same State") {

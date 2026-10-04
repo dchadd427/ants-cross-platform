@@ -163,7 +163,7 @@ bool NetGame::host(uint16_t port, const std::string& name, bool loopback_only) {
 #endif
 }
 
-bool NetGame::join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token) {
+bool NetGame::join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token, const SeatKey& key) {
 #ifdef __EMSCRIPTEN__
     (void)address;
     (void)port;
@@ -171,6 +171,7 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     (void)want_seat;
     (void)room;
     (void)token;
+    (void)key;
     return false;
 #else
     if (role_ != Role::None) return false;
@@ -178,21 +179,21 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     if (!conn) return false;
     auto peer_listener = TcpListener::listen(0, false);                 // where the other guests reach us during the match (host migration)
     const uint16_t peer_port = peer_listener ? peer_listener->port() : uint16_t{0};
-    begin_client(std::move(conn), peer_port, name, want_seat, room, token);
-    transport_->peer_listener = std::move(peer_listener);
     target_ = JoinTarget{address, port, std::string(), name, want_seat, room, token};        // (the way back of a server's room makes its links from this)
+    begin_client(std::move(conn), peer_port, key);
+    transport_->peer_listener = std::move(peer_listener);
     return true;
 #endif
 }
 
-bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token) {
+bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token, const SeatKey& key) {
 #ifdef __EMSCRIPTEN__
     if (role_ != Role::None) return false;
     auto conn = WasmWsConnection::connect(url);
     if (!conn) return false;
     WasmWsConnection* raw = conn.get();
-    begin_client(std::move(conn), 0, name, want_seat, room, token);       // no port for the other guests: a server's room has no links between guests
     target_ = JoinTarget{std::string(), 0, url, name, want_seat, room, token};
+    begin_client(std::move(conn), 0, key);                                // no port for the other guests: a server's room has no links between guests
     raw->set_on_open([this]() {                                           // the Hello goes out when the socket opens, not at the next frame: a page that is not drawn
         if (client_lobby_) client_lobby_->send_hello();                   // runs no frames, and the server closes a connection that says nothing for 10 s
     });
@@ -204,21 +205,28 @@ bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t 
     (void)want_seat;
     (void)room;
     (void)token;
+    (void)key;
     return false;                                                         // (a native client joins with TCP)
 #endif
 }
 
-void NetGame::begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_port, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token) {
+ClientLobby::Config NetGame::lobby_config(const SeatKey& key, uint8_t want_seat) const {
+    ClientLobby::Config cfg;
+    cfg.name = target_.name;
+    cfg.listen_port = peer_port_;
+    cfg.want_seat = want_seat;
+    cfg.room = target_.room;
+    cfg.token = target_.token;
+    cfg.key = key;                                            // (all zero: a new player; else the Hello shows the key of the seat that this machine had)
+    return cfg;
+}
+
+void NetGame::begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_port, const SeatKey& key) {
     transport_ = std::make_unique<Transport>();
     transport_->uplink = std::move(uplink);
     peer_port_ = peer_port;
-    ClientLobby::Config cfg;
-    cfg.name = name;
-    cfg.listen_port = peer_port_;
-    cfg.want_seat = want_seat;
-    cfg.room = room;
-    cfg.token = token;
-    client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), cfg);
+    client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), lobby_config(key, target_.want_seat));
+    reload_used_ = false;
     role_ = Role::Client;
     phase_ = Phase::Connecting;
     phase_since_ms_ = now_;
@@ -239,6 +247,7 @@ void NetGame::leave() {
     fail_reason_ = FailReason::None;
     target_ = JoinTarget{};
     way_back_ = false;
+    reload_used_ = false;
 }
 
 std::vector<NetGame::Event> NetGame::take_events() {
@@ -494,9 +503,10 @@ void NetGame::update_client() {
                     phase_ = Phase::Loading;
                     phase_since_ms_ = now_;
                     loaded_reported_ = false;
+                    seat_ = client_lobby_->my_seat();            // (a machine that is given its match back has no Room message: its seat is the Welcome's)
                     start_ = client_lobby_->start_info();
                     begin_peer_links();                          // the links between guests are made while the map loads
-                    events_.push_back(Event{Event::Type::StartRequested, 255});
+                    events_.push_back(Event{Event::Type::StartRequested, 255, client_lobby_->rejoined()});
                     break;
                 case ClientLobby::Event::Type::Begun:
                     begin_match();
@@ -548,9 +558,7 @@ void NetGame::update_client() {
         if (client_session_->promoted()) {
             promote();                                            // the host is gone and this machine is the lowest seat left
         } else if (client_session_->lost()) {
-            phase_ = Phase::Over;
-            status_ = match_lost_text(client_session_->lost_reason());
-            events_.push_back(Event{Event::Type::HostLeft, 255});
+            if (!reload_after_bad_request()) end_lost_match();
         } else if (client_session_->host_seat() != known_host_) {   // another guest took over and this one follows it
             known_host_ = client_session_->host_seat();
             const std::string& who = start_.names[known_host_];
@@ -621,14 +629,21 @@ HelloMsg NetGame::way_back_hello() const {
     return h;
 }
 
-std::unique_ptr<Connection> NetGame::make_link() {
+std::unique_ptr<Connection> NetGame::make_link(bool for_lobby) {
     if (link_maker_) return link_maker_();
 #ifdef __EMSCRIPTEN__
     if (target_.url.empty()) return nullptr;
     auto conn = WasmWsConnection::connect(target_.url);
-    if (conn) conn->set_on_wake(wake_function());                         // as for the first link: news from the server reaches a page that is not drawn (the session says Hello when the link opens)
+    if (!conn) return nullptr;
+    conn->set_on_wake(wake_function());                                   // as for the first link: news from the server reaches a page that is not drawn
+    if (for_lobby) {
+        conn->set_on_open([this]() {                                      // the lobby's Hello goes out when the socket opens (a session's own Hello is sent by the session, when its link is open)
+            if (client_lobby_) client_lobby_->send_hello();
+        });
+    }
     return conn;
 #else
+    (void)for_lobby;
     if (target_.address.empty()) return nullptr;
     return TcpConnection::connect(target_.address, target_.port);
 #endif
@@ -640,6 +655,50 @@ void NetGame::attach_new_link() {
     Connection* raw = link.get();
     transport_->relink = std::move(link);                                 // (the session holds no pointer to the link before this one: it was let go when the attempt failed)
     client_session_->attach(raw, now_);                                   // null: no link could be made, the next attempt is due in two seconds
+}
+
+// A server that restored the match from a record that lost its last second (the death of its machine: docs/NETWORK_PORT.md "Writing") answers the Hello of a machine that is AHEAD of it, one that
+// says it has more turns than were ever sealed, with BadRequest. That machine's key is good: it starts from nothing, the way a page that was reloaded does (a new lobby, a Hello with the key and no
+// turns, Start, the stream), once per match: a server that keeps answering BadRequest ends the match for this machine as any refusal does.
+bool NetGame::reload_after_bad_request() {
+    ClientSession& s = *client_session_;
+    if (!way_back_ || reload_used_ || !s.rejected() || s.reject_reason() != RejectReason::BadRequest || s.runner().next_turn_expected() == 0) return false;
+    begin_reload();
+    return true;
+}
+
+void NetGame::begin_reload() {
+    reload_used_ = true;
+    const SeatKey key = client_session_->key();
+    drop_prediction();                                          // (it holds the runner of the session: it goes first)
+    client_session_.reset();
+    client_lobby_.reset();
+    if (transport_) {
+        transport_->relink.reset();
+        if (transport_->uplink) transport_->uplink->close();
+        transport_->uplink = make_link(true);
+    }
+    way_back_ = false;                                          // (begin_match says again, for the session of the new match)
+    loaded_reported_ = false;
+    desync_reported_ = false;
+    phase_since_ms_ = now_;
+    if (!transport_ || !transport_->uplink) {                   // no link can be made: the machine is where a join that cannot connect is
+        phase_ = Phase::Failed;
+        fail_reason_ = FailReason::Unreachable;
+        status_ = str::text(str::kUnableToConnect);
+        events_.push_back(Event{Event::Type::Failed, 255});
+        return;
+    }
+    client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), lobby_config(key, seat_));
+    phase_ = Phase::Connecting;
+    refresh_status();
+}
+
+// The session cannot go on: the host is gone and no other machine could take over, or this machine was cut off for good
+void NetGame::end_lost_match() {
+    phase_ = Phase::Over;
+    status_ = match_lost_text(client_session_->lost_reason());
+    events_.push_back(Event{Event::Type::HostLeft, 255});
 }
 
 // ---- the links between guests --------------------------------------------------------------------------------------------------------------------
@@ -738,6 +797,7 @@ void NetGame::pump_peers() {
 }
 
 void NetGame::begin_match() {
+    bool rejoin = false;                                        // this machine was given a match that runs (see Event::rejoin)
 #ifndef __EMSCRIPTEN__
     if (role_ == Role::Host) {
         HostSession::Config hc;
@@ -770,6 +830,7 @@ void NetGame::begin_match() {
             cc.key = key;
             cc.hello = way_back_hello();
             cc.rejoin = client_lobby_->rejoined();               // (a machine that starts from nothing is given the match: its lobby did the Hello, Welcome, Start, Loaded, Begin)
+            rejoin = cc.rejoin;
             way_back_ = true;
         }
         known_host_ = cc.host;
@@ -782,7 +843,7 @@ void NetGame::begin_match() {
     phase_ = Phase::Playing;
     loaded_reported_ = false;
     status_.clear();
-    events_.push_back(Event{Event::Type::Begun, 255});
+    events_.push_back(Event{Event::Type::Begun, 255, rejoin});
 }
 
 LockstepRunner* NetGame::runner() const {
