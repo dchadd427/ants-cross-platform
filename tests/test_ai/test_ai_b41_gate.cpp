@@ -5,6 +5,7 @@
 //           at saturation, and the far waiting tile stays empty
 //   AI10.2  the task's rules: the plans (Hard only), the economy's own rescue is off, the refused click is recovered from, more carriers than the doorstep holds are parked and released
 //   AI10.3  the surroundings: a rock on the queue row or on the buffer tile is never ordered onto, and the gate still works
+//   AI10.4  a hill that the gate cannot guide (in the top rows: no buffer tile) keeps the economy's rescue; both are off only while the gate guides
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -26,6 +27,19 @@ struct GateScene {
         sim.grid_mut().set_anthill(3, TileCoord{54, 54});
         place_pile(sim, hill.x + 1, hill.y - pile_rows, 900, 25, {{900, 369}, {675, 370}, {450, 371}, {225, 372}, {0, kPileGone}});
         for (size_t i = 0; i < workers; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{hill.x - 3 + static_cast<int32_t>(i % 6), hill.y - 6 - static_cast<int32_t>(i / 6)});
+    }
+};
+
+// The hill in the top rows of the map: the gate's buffer tile is searched 2 to 5 rows north of the hill and there is no such row; the pile is south of it
+struct TopScene : GateScene {
+    void build_top() {
+        hill = TileCoord{26, 1};
+        sim.init_test_world(60, 60, 5, 14400u * sim::TICK_MS);
+        sim.grid_mut().set_anthill(0, hill);
+        sim.grid_mut().set_anthill(1, TileCoord{4, 54});
+        sim.grid_mut().set_anthill(2, TileCoord{54, 54});
+        sim.grid_mut().set_anthill(3, TileCoord{54, 30});
+        place_pile(sim, hill.x + 1, hill.y + 20, 900, 25, {{900, 369}, {675, 370}, {450, 371}, {225, 372}, {0, kPileGone}});
     }
 };
 
@@ -191,6 +205,37 @@ void run_b41_gate_tests() {
                 ASSERT_EQ(rig.as<StandardBot>().gate().entrance_clicks(), 0u);
                 ASSERT_TRUE(score * 100 >= plain.score * 95);
             }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI10.4 A Hill That The Gate Cannot Guide Keeps The Economy's Rescue: In The Top Rows Of The Map There Is No Buffer Tile North Of The Hill, So The Gate Task Does Nothing And A Carrier That Stands Far Away With Its Food Must Still Be Sent Home; The Rescue Is Off Only While The Gate Really Guides")
+    {
+        {   // a hill in the middle rows with a pile north of it: the gate guides, the economy's rescue is off (AI10.2)
+            GateScene scene;
+            scene.build(8);
+            Rig rig(scene.sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            rig.run(1200);
+            ASSERT_TRUE(rig.as<StandardBot>().gate().usable());
+            ASSERT_FALSE(rig.as<StandardBot>().harvest().params().rescue);
+        }
+        {   // the hill in the top rows: the gate cannot guide, the rescue is on, and the carrier that stands idle far from the hill is sent home and banks its food
+            TopScene scene;
+            scene.build_top();
+            const uint32_t carrier = scene.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 18});
+            scene.sim.get_unit(carrier).pick_up_food(1, 25);
+            const Run r = play(scene, gate_plan(true), 1200, 0);
+            ASSERT_EQ(r.clicks, 0u);                                                                          // the gate never guided
+            ASSERT_TRUE(r.rescues >= 1);                                                                      // the economy's rescue did
+            ASSERT_TRUE(r.score >= 25);                                                                       // and the food is banked
+        }
+        {   // the same hill with the plan of the engine's flow (no gate): the same result, so the plan with the gate loses nothing there
+            TopScene scene;
+            scene.build_top();
+            const uint32_t carrier = scene.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 18});
+            scene.sim.get_unit(carrier).pick_up_food(1, 25);
+            const Run r = play(scene, gate_plan(false), 1200, 0);
+            ASSERT_TRUE(r.rescues >= 1);
+            ASSERT_TRUE(r.score >= 25);
         }
     } TEST_END();
 }
