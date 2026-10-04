@@ -1829,6 +1829,31 @@ void run_way_back_tests() {
         ASSERT_TRUE(all_equal({&a, &again}) && a.sim.state_hash().total == w.status("RJ-17").referee_hash);
         ASSERT_TRUE(again.keys_forgotten.size() == 1);
     } TEST_END();
+
+    TEST_CASE("RJ1.18 A Link Cut In The Seconds Of The Start Dialog (No Turn Was Sealed Yet, The Machine Has Run None): The Machine Comes Back In Memory With No Turns, The Room Gives It The Match From The Start, The Seconds Of The Dialog Slide, And Both Machines And The Referee End In The Same State") {
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-18"), w.server_now()).ok);
+        Machine& a = w.join("Ann", "RJ-18");
+        Machine& b = w.join("Bob", "RJ-18");
+        ASSERT_TRUE(w.run_until([&]() { return a.net.phase() == NetGame::Phase::Playing && b.net.phase() == NetGame::Phase::Playing; }, 12000));
+        ASSERT_TRUE(a.ticks == 0 && b.ticks == 0 && b.net.turns_executed() == 0);        // the dialog of the start: no turn was sealed
+        ASSERT_TRUE(w.server.cut_newest());
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-18").rejoins == 1 && !w.status("RJ-18").paused; }, 30000));
+        ASSERT_TRUE(b.net.phase() == NetGame::Phase::Playing && b.count(NetGame::Event::Type::Rejoined) == 1);
+        ASSERT_TRUE(b.count(NetGame::Event::Type::StartRequested) == 1 && !b.saw(NetGame::Event::Type::HostLeft) && !b.saw(NetGame::Event::Type::Failed));      // (it did not start from nothing: its engine was loaded)
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 20000 + kPre));
+        w.run(3000);
+        ASSERT_TRUE(b.net.turns_executed() > 40 && a.net.turns_executed() > 40);
+        a.quit();
+        ASSERT_TRUE(w.run_until([&]() { return w.finished("RJ-18") && a.sim.is_match_over() && b.sim.is_match_over(); }, 20000));
+        w.run(2000);
+        const RoomStatus end = w.status("RJ-18");
+        ASSERT_TRUE(end.state == RoomState::Finished && end.rejoins == 1 && end.referee_hash != 0);
+        ASSERT_TRUE(all_equal({&a, &b}) && a.sim.state_hash().total == end.referee_hash);
+        ASSERT_TRUE(a.hash_at.count(end.ticks) == 1 && a.hash_at[end.ticks] == end.referee_hash && b.hash_at.count(end.ticks) == 1 && b.hash_at[end.ticks] == end.referee_hash);
+        ASSERT_FALSE(a.net.desynced() || b.net.desynced());
+    } TEST_END();
 }
 
 int main() {
