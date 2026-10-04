@@ -248,8 +248,13 @@ public:
     /// Opens the record of a room that was restored, to go on writing it: the file is cut to `good_bytes` (a torn tail goes) and holds `turns` turns. Null, with the reason, when the budget refuses or the
     /// disk does.
     std::unique_ptr<RestartWriter> reopen(const std::string& path, uint64_t good_bytes, uint32_t turns, std::string& why);
-    /// Deletes a file of the folder (a record that was refused, or one that has been restored into a room that is over); true when it is gone
+    /// Deletes a file of the folder (a record whose room is over, one that cannot be read, ...); true when it is gone. A file that cannot be deleted is remembered as STALE, because a restart would bring
+    /// its room back from it (a match that had ended, or one that is not at its tick): the log gets a line, and retry_stale() tries again (the room manager does, every 10 s and when the server stops).
     bool remove_file(const std::string& path);
+    /// Tries again to delete the files that could not be deleted; how many are still there. A line for the log says which were deleted at last.
+    size_t retry_stale();
+    bool is_stale(const std::string& path) const;
+    size_t stale_count() const noexcept { return stale_.size(); }
 
     /// A line for the server's log (a record that could not be written, a room that was restored); never a key. take_notes() hands them over once.
     void note(std::string line) { notes_.push_back(std::move(line)); }
@@ -268,6 +273,7 @@ private:
     net::LogBudget budget_;
     RestartConfig cfg_;
     std::vector<std::string> notes_;
+    std::vector<std::string> stale_;                        // the files that could not be deleted (see remove_file)
     size_t open_{0};
     uint32_t failed_{0};
     int lock_fd_{-1};                                       // the folder's lock (a Windows HANDLE is kept in lock_handle_)

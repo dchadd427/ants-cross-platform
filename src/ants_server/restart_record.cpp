@@ -590,9 +590,20 @@ void native_sync_dir(const std::string& dir) {
 #endif
 }
 
-void native_remove(const std::string& path) {
+// Deletes a file; false, with the reason, when the delete failed (a file that is not there is deleted already)
+bool native_remove(const std::string& path, std::string* why = nullptr) {
     std::error_code ec;
     fs::remove(path, ec);
+    if (ec && why != nullptr) *why = ec.message();
+    return !ec;
+}
+
+// The path still names something (a path that cannot be looked at is taken to be there: a delete that failed leaves it so)
+bool still_there(const std::string& path) {
+    std::error_code ec;
+    const fs::file_status st = fs::symlink_status(path, ec);
+    if (st.type() == fs::file_type::not_found) return false;
+    return ec ? true : fs::exists(st);
 }
 
 // The folder's lock: the file is made if it is not there and kept locked until the descriptor (the handle) is closed, which the end of the process does too. `busy` says that another holder has it (an error
@@ -692,7 +703,8 @@ bool RestartWriter::fail(const std::string& why) {
 
 void RestartWriter::discard() {
     close_file();
-    native_remove(path_);
+    if (store_ != nullptr) store_->remove_file(path_);       // (a delete that fails is not forgotten: the store keeps the file as stale and tries again)
+    else native_remove(path_);
     if (!failed_) {                                          // (what the writer does not do any more is not an error: it was told to stop)
         failed_ = true;
         error_ = "the record was deleted";
@@ -865,9 +877,32 @@ std::vector<std::string> RestartStore::records() const {
 }
 
 bool RestartStore::remove_file(const std::string& path) {
-    native_remove(path);
-    std::error_code ec;
-    return !fs::exists(fs::symlink_status(path, ec));
+    std::string why;
+    native_remove(path, &why);
+    if (!still_there(path)) {
+        stale_.erase(std::remove(stale_.begin(), stale_.end(), path), stale_.end());
+        return true;
+    }
+    if (!is_stale(path)) {
+        stale_.push_back(path);
+        note("restart record " + fs::path(path).filename().string() + " could not be deleted (" + (why.empty() ? std::string("it is still there") : why) + "): a restart would bring its room back from it; the server tries again every 10 s");
+    }
+    return false;
+}
+
+bool RestartStore::is_stale(const std::string& path) const {
+    return std::find(stale_.begin(), stale_.end(), path) != stale_.end();
+}
+
+size_t RestartStore::retry_stale() {
+    std::vector<std::string> still;
+    for (const std::string& path : stale_) {
+        native_remove(path);
+        if (still_there(path)) still.push_back(path);
+        else note("restart record " + fs::path(path).filename().string() + " was deleted at last");
+    }
+    stale_.swap(still);
+    return stale_.size();
 }
 
 std::unique_ptr<RestartWriter> RestartStore::create(const RestartHead& head, std::string& why) {

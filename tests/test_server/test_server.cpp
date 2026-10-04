@@ -8147,6 +8147,64 @@ void run_persist_review_process_tests_2() {
         ASSERT_TRUE(starts_sent >= 4 && with_record == starts_sent && whole_and_the_same == starts_sent);       // every Start of every attempt was sent with its record on disk
         ASSERT_TRUE(w.status("L3-1").record_kept && w.record_files().size() == 1);
     } TEST_END();
+
+    TEST_CASE("S3.109 A Record That Cannot Be Deleted Is Not Forgotten (L1 Of The Review): The Delete That Fails (Here: A Folder With Something In It Takes The File's Name) Leaves The File Of A Room That Is Over; The Room's Status Says So (record.stale, A Note) And Says Kept While The File Is There (Never Kept: False), The Log Gets A Line; The Server Tries Again Every 10 s (Not Sooner) And When It Can The Status Is That Of A Room That Is Over And The Log Says So; The Server's Stop Tries Once More") {
+#ifndef _WIN32
+        const auto make_undeletable = [](PWorld& w, const std::string& code) {                  // the room's descriptor goes on writing the file that was moved aside; the name is now a folder that is not empty
+            const std::string path = w.record_path(code);
+            fs::rename(path, path + ".aside");
+            fs::create_directory(path);
+            write_all_bytes(fs::path(path) / "x", {1});
+        };
+        PWorld w("persist-109");
+        w.start_server(500);
+        std::vector<RClient*> m = play_room(w, held_spec("DL-1", 2), 6000);
+        make_undeletable(w, "DL-1");
+        RoomStatus s = w.status("DL-1");
+        ASSERT_TRUE(s.record_kept && !s.record_stale);
+        ctl::HttpRequest rq;
+        rq.method = "DELETE";
+        rq.path = "/rooms/DL-1";
+        ASSERT_EQ(handle_control(*w.mgr, rq, w.server_now()).status, 200);                      // the owner closes the room: its record is to go
+        const std::string path = w.record_path("DL-1");
+        ASSERT_TRUE(fs::exists(path));                                                           // ... and cannot
+        s = w.status("DL-1");
+        ASSERT_TRUE(s.state == RoomState::Failed && s.record_kept && s.record_stale && s.record_note.find("could not be deleted") != std::string::npos);      // kept: true while the file is there
+        {
+            const ctl::JsonValue j = status_json(w, "DL-1");
+            ASSERT_TRUE(j.get("record").get("kept").as_bool_or(false) && j.get("record").get("stale").as_bool_or(false) && j.get("record").get("note").str() == s.record_note);
+        }
+        w.collect();                                                                             // (the lines that the server would have logged)
+        bool noted = false;
+        for (const std::string& n : w.notices) noted = noted || (n.find("could not be deleted") != std::string::npos && n.find("DL-1") != std::string::npos);
+        ASSERT_TRUE(noted);
+        for (const std::string& n : w.notices) ASSERT_TRUE(n.find(w.restart.dir) == std::string::npos);        // (a line names the file, not the folder of the server)
+        ASSERT_EQ(w.mgr->restart_store()->stale_count(), size_t{1});
+        // the obstacle goes at once; the server tries again every 10 s: not before 5 s, and by 11 s the file is gone
+        fs::remove(fs::path(path) / "x");
+        w.run(5000);
+        ASSERT_TRUE(fs::exists(path) && w.status("DL-1").record_stale);
+        w.run(6000);
+        ASSERT_FALSE(fs::exists(path));
+        s = w.status("DL-1");
+        ASSERT_TRUE(!s.record_kept && !s.record_stale && s.record_note == "the room is over");
+        ASSERT_EQ(w.mgr->restart_store()->stale_count(), size_t{0});
+        noted = false;
+        for (const std::string& n : w.notices) noted = noted || (n.find("was deleted") != std::string::npos && n.find("DL-1") != std::string::npos);
+        ASSERT_TRUE(noted);
+        // the retries go on while the obstacle stays: a second room, 25 s of tries, the file is still there and still stale
+        std::vector<RClient*> m2 = play_room(w, held_spec("DL-2", 2), 6000);
+        make_undeletable(w, "DL-2");
+        ASSERT_TRUE(w.mgr->close_room("DL-2", w.server_now()));
+        w.run(25000);
+        ASSERT_TRUE(fs::exists(w.record_path("DL-2")) && w.status("DL-2").record_stale && w.mgr->restart_store()->stale_count() == 1);
+        // the stop tries once more, at once: the obstacle goes just before it
+        fs::remove(fs::path(w.record_path("DL-2")) / "x");
+        w.mgr->shutdown(w.server_now());
+        ASSERT_FALSE(fs::exists(w.record_path("DL-2")));
+        ASSERT_EQ(w.mgr->restart_store()->stale_count(), size_t{0});
+#endif
+    } TEST_END();
 }
 #endif
 

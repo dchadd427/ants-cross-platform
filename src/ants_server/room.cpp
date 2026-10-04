@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <limits>
 
@@ -474,19 +475,24 @@ void Room::record_hook_up() {
 // The record cannot be kept any more: it is deleted (a record that stops in the middle of a match would bring the match back at the wrong tick), the room plays on, and says why
 void Room::record_stop(const std::string& note) {
     if (record_ == nullptr) return;
-    record_->discard();
-    record_.reset();
+    drop_record();
     record_note_ = note;
     if (restart_store_ != nullptr) restart_store_->note("room " + spec_.code + ": the restart record is gone, a restart would end this match: " + note);
 }
 
 // The room is over, or its start was cancelled: there is no match to bring back
 void Room::record_discard() {
-    if (record_ != nullptr) {
-        record_->discard();
-        record_.reset();
-    }
+    drop_record();
     record_note_.clear();
+}
+
+// The record is deleted and its writer goes. A delete that fails leaves the file on disk (a restart would bring this room back from it): the store remembers it and the status says so
+void Room::drop_record() {
+    if (record_ == nullptr) return;
+    const std::string path = record_->path();
+    record_->discard();
+    record_.reset();
+    stale_path_ = restart_store_ != nullptr && restart_store_->is_stale(path) ? path : std::string();
 }
 
 void Room::flush_record() {
@@ -749,10 +755,19 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.max_catch_up_ms = spec_.max_catch_up_ms;
     s.resume_countdown_ms = spec_.resume_countdown_ms;
     s.connections = static_cast<uint32_t>(connections_.size());
-    s.record_kept = record_ != nullptr;
+    const bool stale = !stale_path_.empty() && restart_store_ != nullptr && restart_store_->is_stale(stale_path_);
+    s.record_kept = record_ != nullptr || stale;                // (a file that is still there is a record that a restart would use: never "not kept" while it is)
+    s.record_stale = stale;
     s.record_bytes = record_ != nullptr ? record_->bytes() : 0u;
+    if (stale) {
+        std::error_code size_ec;
+        s.record_bytes = static_cast<uint64_t>(std::filesystem::file_size(stale_path_, size_ec));
+        if (size_ec) s.record_bytes = 0;
+    }
     s.record_note = record_note_;
-    if (record_ == nullptr && record_note_.empty()) {
+    if (stale) {
+        s.record_note = "the file of this room's record could not be deleted yet: a restart now would bring the room back from it; the server tries again every 10 s";
+    } else if (record_ == nullptr && record_note_.empty()) {
         s.record_note = state_ == RoomState::Waiting ? "the room has not started: a room is kept from the start of its match on" : "the room is over";
         if (state_ == RoomState::Waiting && restart_store_ == nullptr) s.record_note = "this server keeps no restart records";
     }

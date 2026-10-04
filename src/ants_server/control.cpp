@@ -113,6 +113,7 @@ JsonValue status_to_json(const RoomStatus& s) {
     // Restart records (restart_record.hpp): whether a restart of the server would bring this match back, and, for a room that came back from a record, what was replayed. Never a key.
     JsonValue record = JsonValue::make_object();
     record.set("kept", JsonValue::make_bool(s.record_kept));
+    record.set("stale", JsonValue::make_bool(s.record_stale));
     record.set("bytes", JsonValue::make_int(static_cast<int64_t>(s.record_bytes)));
     record.set("note", JsonValue::make_string(s.record_note));
     o.set("record", std::move(record));

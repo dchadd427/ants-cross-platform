@@ -193,7 +193,8 @@ struct RoomStatus {
     bool log_usable{true};
     uint32_t connections{0};                // the connections that the room keeps (diagnostics: at most kMaxConnections of the lobby's, and those that came back)
     // Restart records (restart_record.hpp). Never a key.
-    bool record_kept{false};                // a restart record of this room is on disk: a restart of the server would bring the match back
+    bool record_kept{false};                // a restart record of this room is on disk: a restart of the server would bring the match back (also a file that could not be deleted: record_stale)
+    bool record_stale{false};               // the room is over (or its record ended) and the file of the record could not be deleted yet: the server tries again every 10 s, and a restart before that would bring the room back
     std::string record_note;                // when it is not: why (the server keeps none, the room holds no seats, the turn log passed its limit, the disk refused ...); "" while it is kept
     uint64_t record_bytes{0};               // the size of the record
     bool restored{false};                   // the room came back from a record after a restart of the server
@@ -286,6 +287,7 @@ private:
     void record_hook_up();                                   // the session writes every sealed turn and the referee's hashes to the record
     void record_stop(const std::string& note);               // the record can no longer be kept: delete it, say why, go on
     void record_discard();                                   // the room is over (or the start was cancelled): delete the record
+    void drop_record();                                      // delete the record and let the writer go; a delete that fails is remembered (stale_path_)
     void build_session(uint32_t restart_vote_after_ms);      // the session of the match, as begin_match and restore both make it (the engine is made already)
     // Bots (docs/BOTS.md B6): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
     class BotSink;
@@ -330,6 +332,7 @@ private:
     RestartStore* restart_store_{nullptr};
     std::unique_ptr<RestartWriter> record_;
     std::string record_note_;                // why there is no record (the status says it)
+    std::string stale_path_;                 // the file of a record that could not be deleted: the status says kept and stale until the store has deleted it
     uint32_t next_sync_ms_{0};
     uint8_t roster_{0};                      // the seats of the match (a restored room has no lobby that knows them)
     bool from_record_{false};                // the room has no lobby that knows its players: it was made from a restart record (restored, or refused)

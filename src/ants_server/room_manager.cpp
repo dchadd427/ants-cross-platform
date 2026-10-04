@@ -7,6 +7,7 @@
 #include <random>
 #include <set>
 
+#include "ants_net/clock.hpp"
 #include "ants_net/protocol.hpp"
 
 namespace fs = std::filesystem;
@@ -207,6 +208,19 @@ void RoomManager::add_connection(std::unique_ptr<net::Connection> connection, co
 }
 
 void RoomManager::update(uint32_t now_ms) {
+    // 0. a record whose delete failed is tried again every 10 s (its room is over: a restart before it is deleted would bring the room back)
+    if (restart_ != nullptr) {
+        constexpr uint32_t kStaleRetryMs = 10000;
+        if (restart_->stale_count() == 0) {
+            stale_armed_ = false;
+        } else if (!stale_armed_) {
+            stale_armed_ = true;
+            next_stale_retry_ms_ = now_ms + kStaleRetryMs;
+        } else if (net::time_reached(now_ms, next_stale_retry_ms_)) {
+            next_stale_retry_ms_ = now_ms + kStaleRetryMs;
+            restart_->retry_stale();
+        }
+    }
     // 1. connections that have not said Hello yet
     for (size_t i = 0; i < pending_.size();) {
         Pending& p = pending_[i];
@@ -558,6 +572,7 @@ size_t RoomManager::shutdown(uint32_t now_ms) {
         }
         room.close("closed by the owner", now_ms);                // (a room without a record ends with the server, as it always did)
     }
+    if (restart_ != nullptr) restart_->retry_stale();             // (a record whose delete failed: one more try before the server goes)
     return kept;
 }
 

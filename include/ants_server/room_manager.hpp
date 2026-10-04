@@ -205,6 +205,8 @@ private:
     std::unique_ptr<RestartStore> restart_;      // (also before the rooms: their records point at it)
     std::map<std::string, std::unique_ptr<Room>> rooms_;
     std::map<std::string, std::string> deferred_;   // the code of a record that the restore did not reach, and its file
+    bool stale_armed_{false};                    // files that could not be deleted wait for a retry (RestartStore::retry_stale): when the next one is due
+    uint32_t next_stale_retry_ms_{0};
     std::vector<Pending> pending_;
     std::vector<Lingering> lingering_;
     std::vector<RoomStatus> unreported_;     // the ends of rooms that were forgotten in the pass in which they ended
