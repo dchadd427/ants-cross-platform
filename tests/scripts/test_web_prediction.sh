@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # OPT-IN, not part of ./run_tests.sh: the prediction of one's own orders in a REAL browser, against a stack that is already running (docs/NETWORK_PORT.md, "Prediction of one's own orders").
-# No automated test reaches the web build's side of it (the page's ?prediction=off, the game's frame function in wasm, the corner's delay in a browser's frames, a window that predicts
-# against one that does not): a native test plays the application (suite 3.21), this plays a real browser. It starts a throwaway headless browser, plays two matches of a demo room for two
-# players in two windows (the first window's player gives its orders with the mouse), one with the game's defaults and one with ?prediction=off, and checks through the game's own
-# `ants_probe` that the prediction is on and predicts, then off and predicts nothing, that the click is felt sooner than the confirmed engine applies it, that the game's frame function
-# stays cheap, and, through the control interface and the games' own hash reports, that the room runs with both players and that the state hashes of the two windows are equal.
+# No automated test reaches the web build's side of it (the page's ?prediction=on and ?prediction=off, the game's frame function in wasm, the corner's delay in a browser's frames, a window
+# that predicts against one that does not): a native test plays the application (suite 3.21), this plays a real browser. It starts a throwaway headless browser, plays three matches of a demo
+# room for two players in two windows (the first window's player gives its orders with the mouse), with ?prediction=on, with nothing said (the default is off) and with ?prediction=off, and
+# checks through the game's own `ants_probe` that the prediction is on and predicts, then off and predicts nothing, that the click is felt sooner than the confirmed engine applies it, that the
+# game's frame function stays cheap, and, through the control interface and the games' own hash reports, that the room runs with both players and that the state hashes of the two windows are equal.
 #
 #   ANTS_WEB_URL=http://127.0.0.1:19980/ ANTS_CTL_URL=http://127.0.0.1:4010 ANTS_CTL_SECRET=$(docker exec ants-server cat /results/control-secret) \
 #       tests/scripts/test_web_prediction.sh [--orders N]
