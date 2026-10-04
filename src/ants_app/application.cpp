@@ -37,7 +37,7 @@
 #endif
 
 #if defined(__EMSCRIPTEN__)
-// Tells the page that embeds this game (web/four.html) the tick and the state hash (high word first, 16 hex digits). A game in a frame posts to its parent; a game in
+// Tells the page that embeds this game (web/lobby.html) the tick and the state hash (high word first, 16 hex digits). A game in a frame posts to its parent; a game in
 // a window of its own posts on the broadcast channel "ants-sync" of its origin, with its room code, for the page that opened it or any page of the site that listens.
 // EM_JS and not EM_ASM: the `$0` of EM_ASM is a warning under -Wpedantic.
 extern "C" {
@@ -2036,7 +2036,7 @@ void Application::post_tick() {
     if (!background_stepping_) audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);   // a background step makes no sound: its events are dropped, not saved up
 
 #if defined(__EMSCRIPTEN__)
-    // A page that embeds several games (web/four.html) shows that the machines stay in step: every 100 ticks the game tells its parent page the tick and the
+    // A page that embeds several games (web/lobby.html) shows that the machines stay in step: every 100 ticks the game tells its parent page the tick and the
     // state hash (the page compares the hashes of the same tick)
     if (network_active() && sim_.current_tick() % 100 == 0) {
         const sim::StateHash h = sim_.state_hash();

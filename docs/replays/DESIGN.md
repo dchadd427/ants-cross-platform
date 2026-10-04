@@ -111,7 +111,7 @@ A local match whose seats are all bots, played by the unchanged `BotController` 
 1. **Approve or mark up `mockups/overview.png`** (the rule: nothing visible is built before).
 2. **"Style"**: read as the bot's kind (Standard, Worker; later kinds appear by themselves). If you meant playing styles (rusher, economy, double-thief ...) they are new bots in B4; the panel needs no change.
 3. **Server recording by default** (30 days, names only, demo rooms off, the lobby decides per room): confirm the defaults.
-4. **The web bar** under the picture, or should watching live on `four.html`?
+4. **The web bar** under the picture, or should watching live on the front page (`lobby.html`)?
 5. **Live spectating of a server room** (with a delay): not designed here; say if it is the next step after replays.
 6. **Old replays are refused after a rules change** (the message names the game that made them): fine, or keep old builds online?
 7. **Compact command coding** (2 - 3 times smaller than the protocol's bytes, about 150 lines) or the protocol's bytes with gaps: recommended compact.

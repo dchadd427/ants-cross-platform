@@ -32,7 +32,7 @@ Update for the next section of `implementation_plan.md` (that file is not part o
 | Styles: `Style`, `BotSpec::style`, the `--bot` forms `LEVEL:STYLE` and `KIND:LEVEL:STYLE`, the setup check, `make_bot`, the draw from the seat's own generator; the server's room specification (`"bot": "hard:raider"`) and the status rows (`style`) | `bot.hpp` / `.cpp`, `include/ants_server/room.hpp`, `src/ants_server/room.cpp`, `control.cpp` |
 | The arena: `ArenaSeatResult::style`, `ArenaSpec::extra_kinds`; `bot_arena` kinds and options (`--tune`, `--ally-standard`, `--ally-pairs`, `standard+K=V`, `BOT_DIAG`); the bench bots that are never in the registry (`aggressor`, `aggressor2`, `rusher`, `saboteur`, `aggr1` .. `aggr9`, the diagnostics wrapper) | `arena.hpp` / `.cpp`, `tools/bot_arena.cpp`, `tools/bench_aggressor.hpp` |
 | Tests: the cases AI7.1 - AI13.4 in seven files (`test_ai_b41.cpp`, `_team`, `_fight`, `_gate`, `_style`, `_offence`, `_cost`) and `b41_helpers.hpp`; S3.65 (the server's status rows); the render test of enemy bombs | `tests/test_ai/`, `tests/test_server/test_server.cpp`, `tests/test_app/test_render_parity.cpp` |
-| The text under the bots' choice ("Bots gather food, raid and fight back.") | `src/ants_app/start_menu.cpp`, `web/four.html`, `README.md`, the two tests that pin it, four fingerprints |
+| The text under the bots' choice ("Bots gather food, raid and fight back.") | `src/ants_app/start_menu.cpp`, `web/lobby.html`, `README.md`, the two tests that pin it, four fingerprints |
 | Documents | `docs/BOTS.md` ("The standard bot", "Measurements", the levels, interfaces, running bots, limits), `README.md`, `docs/NETWORK_PORT.md`, `docs/GAME_REVERSE_ENGINEERING.md` (three corrections), this file |
 
 ## The metric and the opponents
