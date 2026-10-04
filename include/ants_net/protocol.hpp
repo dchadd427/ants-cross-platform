@@ -31,6 +31,12 @@
 // sequencer has no turn that a seat could be behind. The number is a constant of the protocol, not a field of a message: no machine needs it (a client closes its dialog on an event, not at a
 // time), and a message would be one more thing for a decoder to refuse.
 
+// A level for each seat of the fill, and teams chosen before the start (protocol 13, docs/NETWORK_PORT.md "Protocol 13"). The StartRequest of a server's room leader carries a fill level FOR EACH SEAT (seats 0 - 3:
+// none / easy / medium / hard; protocol 11 had one level for all of them) and the TEAMS that the leader chose: a pair of different seats, or 255 255 for free for all. The room seats the bots of the
+// levels in the empty seats (the seat of a person who took it meanwhile is skipped), checks the teams against the seats that play, and puts them into the Start message, which every engine of the match
+// starts from (the machines, the referee, a machine that comes back from nothing, a restored room): each calls sim::apply_start_teams right after init() and before its first tick, so the alliances are
+// the original's own commands applied the same way everywhere. A match without teams is byte for byte what it was.
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -40,6 +46,7 @@
 
 #include "ants_sim/command.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_sim/start_teams.hpp"
 
 namespace ants::net {
 
@@ -48,7 +55,7 @@ namespace ants::net {
 // or in some rare sequence of orders, because peers that run different rules desynchronise in the first play where they differ, and the door checks nothing else: a Hello of another
 // number is refused ("version mismatch") by a LAN host and by a server's room, and a LAN announcement of another number is listed as another version. A release that cannot say "no
 // state hash of any play changed" raises it, and the history below says why (nothing in the wire changed in 9: the rules of the engine did; nothing in 12: when the match starts did).
-inline constexpr uint16_t kProtocolVersion = 12;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30; Presence ends with the seconds left of the resume countdown that follows a pause); 11: bots fill empty seats at the leader's START, chat in the waiting room (StartRequest carries a fill level: two bytes now; the room's own notices travel as Chat with sender 255); 12: the match clock waits for the "Get ready to play!" dialog (the host seals the first turn kMatchStartDelayMs after the match begins, a client's dialog ends when its first turn executes: no message changed, but a client of 11 would count its dialog in simulation ticks and be blocked for 100 ticks of the running match after the late first turn)
+inline constexpr uint16_t kProtocolVersion = 13;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30; Presence ends with the seconds left of the resume countdown that follows a pause); 11: bots fill empty seats at the leader's START, chat in the waiting room (StartRequest carries a fill level: two bytes now; the room's own notices travel as Chat with sender 255); 12: the match clock waits for the "Get ready to play!" dialog (the host seals the first turn kMatchStartDelayMs after the match begins, a client's dialog ends when its first turn executes: no message changed, but a client of 11 would count its dialog in simulation ticks and be blocked for 100 ticks of the running match after the late first turn); 13: a level for each seat of the leader's fill and teams in the start data (StartRequest is [24][fill0 .. fill3][team_a][team_b], seven bytes; Start ends with team_a and team_b; every engine makes the teams before its first tick)
 /// Protocol 12: the host seals the first turn of a match this long after the match begins (Begin sent, the sessions started): the length of the "Get ready to play!" dialog, sim::kMatchStartDialogMs.
 /// A host with a seat (a game on the local network) and a dedicated server's room both do it; the simulation does not run on any machine before that first turn.
 inline constexpr uint32_t kMatchStartDelayMs = sim::kMatchStartDialogMs;
@@ -89,7 +96,7 @@ enum class MsgType : uint8_t {
     Resume = 21,    // new host -> peers: I am the host from this turn on
     Request = 22,   // peer -> peer: send me the turns from this one on
     PeerHello = 23, // guest -> guest on a new link between guests: who I am
-    StartRequest = 24,   // leader -> server (protocol 7): start the match now with the players who are here; no payload, only the leader of a server's room is heard
+    StartRequest = 24,   // leader -> server (protocol 7): start the match now with the players who are here, with the bots of the fill (11, a level for each seat since 13) and the teams (13); only the leader of a server's room is heard
     Lag = 25,       // dedicated server -> the other players (protocol 8): a player is more than 3 s behind the match (or is not any more)
     Presence = 26,  // dedicated server -> the players (protocol 10): who is missing from the match and for how long, the vote about the seat that has been away longest (or flaps), the cap on the pauses, the resume countdown
     Vote = 27,      // player -> dedicated server (protocol 10): keep waiting for the seat that is missing / continue without it
@@ -209,6 +216,9 @@ inline constexpr uint8_t kRoomSender = 255;
 /// The notices that a server's room sends to its leader when it cannot do what the START asked (a Chat message from kRoomSender; each is at most kMaxChatChars)
 inline constexpr const char* kNoticeFillFog = "Bots cannot play with Fog of War.";
 inline constexpr const char* kNoticeFillMap = "This map cannot be played by every seat: no bots in the empty seats.";
+/// The room's notice when the teams that the leader chose cannot be made for the seats that play (protocol 13): "No teams: " and the reason (sim::StartTeamsPlan::short_why), sent to every person in the room
+/// as the match starts without teams; at most kMaxChatChars (the reasons are written to fit).
+inline constexpr const char* kNoticeNoTeams = "No teams: ";
 
 struct RoomMsg {
     struct Slot {
@@ -237,10 +247,27 @@ std::string fill_level_title(FillLevel level);
 /// What the room calls the bot that a fill seats: "Bot (Easy)", "Bot (Medium)", "Bot (Hard)" (the name of the standard bot of that level: ants_ai's bot_display_name says the same; a
 /// person can never take a name that starts with "Bot (": the lobby renames it). Empty for None.
 std::string fill_bot_name(FillLevel level);
-/// The leader's request to start the match now with the players who are in the room (protocol 7, client -> server), and, since protocol 11, to seat bots of `fill` in the seats that are
-/// still empty (up to the room's player count). Two bytes on the wire: the type and the fill level (0 .. 3); nothing else is a StartRequest.
+/// "No team" in the team bytes of StartRequest and Start (protocol 13): both bytes are kNoTeam for free for all, else they are two different seats, 0 - 3
+inline constexpr uint8_t kNoTeam = 255;
+/// The leader's request to start the match now with the players who are in the room (protocol 7, client -> server), to seat bots in the seats that are still empty (up to the room's player count)
+/// since protocol 11, with a level for each seat since protocol 13 (`fill[s]`: the bot of seat s, None: leave it empty), and to start with the teams `team_a` + `team_b` (kNoTeam both: free for all).
+/// Seven bytes on the wire: the type, the four levels (0 .. 3), the two team bytes; nothing else is a StartRequest. The decoder refuses a level above 3, a team byte that is not kNoTeam for both or
+/// two different seats 0 - 3, a missing or an extra byte.
 struct StartRequestMsg {
-    FillLevel fill{FillLevel::None};
+    std::array<FillLevel, sim::MAX_PLAYERS> fill{};
+    uint8_t team_a{kNoTeam};
+    uint8_t team_b{kNoTeam};
+    /// Every seat gets `level` (the single choice of protocol 11)
+    static StartRequestMsg all(FillLevel level) {
+        StartRequestMsg m;
+        m.fill.fill(level);
+        return m;
+    }
+    sim::StartTeams teams() const noexcept { return team_a == kNoTeam && team_b == kNoTeam ? sim::StartTeams{} : sim::StartTeams{true, team_a, team_b}; }
+    void set_teams(const sim::StartTeams& t) noexcept {
+        team_a = t.set ? t.a : kNoTeam;
+        team_b = t.set ? t.b : kNoTeam;
+    }
 };
 /// Where a guest accepts connections from the other guests (the host fills it from the address it saw and the port the guest announced)
 struct Endpoint {
@@ -256,6 +283,13 @@ struct StartMsg {
     uint8_t roster{0};            // bit p: seat p takes part
     std::array<std::string, sim::MAX_PLAYERS> names;
     std::array<Endpoint, sim::MAX_PLAYERS> endpoints;   // guests: how the other guests reach this seat (host migration); the host's seat is empty
+    uint8_t team_a{kNoTeam};      // protocol 13: the teams the match starts with: both kNoTeam (free for all) or the pair that sim::plan_start_teams accepts for `roster` (the decoder refuses anything else);
+    uint8_t team_b{kNoTeam};      // every engine calls sim::apply_start_teams(teams()) right after init() and before its first tick
+    sim::StartTeams teams() const noexcept { return team_a == kNoTeam && team_b == kNoTeam ? sim::StartTeams{} : sim::StartTeams{true, team_a, team_b}; }
+    void set_teams(const sim::StartTeams& t) noexcept {
+        team_a = t.set ? t.a : kNoTeam;
+        team_b = t.set ? t.b : kNoTeam;
+    }
 };
 struct LoadedMsg {
     bool ok{true};
@@ -425,7 +459,7 @@ bool decode(const uint8_t* data, size_t size, RefuseMsg& out);
 bool decode(const uint8_t* data, size_t size, ResumeMsg& out);
 bool decode(const uint8_t* data, size_t size, RequestMsg& out);
 bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out);
-/// Exactly the type byte: a StartRequest with a payload is no StartRequest
+/// Exactly the type byte, four levels (0 .. 3) and two team bytes (kNoTeam both, or two different seats 0 - 3): anything else is no StartRequest
 bool decode(const uint8_t* data, size_t size, StartRequestMsg& out);
 bool decode(const uint8_t* data, size_t size, LagMsg& out);
 bool decode(const uint8_t* data, size_t size, PresenceMsg& out);

@@ -4323,7 +4323,7 @@ void run_bot_tests() {
             Client& ann = w.connect("Ann", "FR-1");
             Client& bob = w.connect("Bob", "FR-1");
             w.run(500);
-            bob.end->send(net::encode(net::StartRequestMsg{net::FillLevel::Hard}));
+            bob.end->send(net::encode(net::StartRequestMsg::all(net::FillLevel::Hard)));
             w.run(1500);
             RoomStatus s = w.status("FR-1");
             ASSERT_TRUE(s.state == RoomState::Waiting && s.bots.empty() && s.joined == 2 && s.ignored_start_requests == 1);
@@ -4360,7 +4360,7 @@ void run_bot_tests() {
             Client& ann = w.connect("Ann", "FR-4");
             w.connect("Bob", "FR-4");
             w.run(500);
-            ann.end->send(net::encode(net::StartRequestMsg{net::FillLevel::Medium}));
+            ann.end->send(net::encode(net::StartRequestMsg::all(net::FillLevel::Medium)));
             w.run(2500);
             RoomStatus s = w.status("FR-4");
             ASSERT_TRUE(s.state == RoomState::Running && s.bots.empty() && s.joined == 2);
@@ -4394,7 +4394,7 @@ void run_bot_tests() {
             ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
             Client& ann = w.connect("Ann", "FR-7");
             w.run(500);
-            ann.end->send(net::encode(net::StartRequestMsg{net::FillLevel::Medium}));
+            ann.end->send(net::encode(net::StartRequestMsg::all(net::FillLevel::Medium)));
             w.run(1500);
             RoomStatus s = w.status("FR-7");
             ASSERT_TRUE(s.state == RoomState::Waiting && s.bots.empty() && s.joined == 1 && s.ignored_start_requests == 1);
@@ -5045,11 +5045,11 @@ void run_bot_tests() {
         ASSERT_EQ(raw.size(), size_t{1});                                                    // and the raw client still only the line for all
     } TEST_END();
 
-    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog) Or 13 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
+    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog), 12 (The Release Before The Teams) Or 14 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
         {   // the door's own check of the protocol, for a code that no room has
             World w;
-            ASSERT_EQ(net::kProtocolVersion, uint16_t{12});                  // (11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match)
-            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{13}, uint16_t{1}, uint16_t{0}}) {
+            ASSERT_EQ(net::kProtocolVersion, uint16_t{13});                  // (11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
+            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{14}, uint16_t{1}, uint16_t{0}}) {
                 auto ends = w.net.connect({20, 10});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
                 net::HelloMsg hello;
@@ -6813,7 +6813,7 @@ void run_persist_server_tests_4() {
             ASSERT_TRUE(w.mgr->create_room(held_spec("B-2", 3), w.server_now()).ok);
             RClient& leader = w.connect("Lea", "B-2");
             w.run(1500);
-            ASSERT_TRUE(leader.end->send(net::encode(net::StartRequestMsg{net::FillLevel::Medium})));
+            ASSERT_TRUE(leader.end->send(net::encode(net::StartRequestMsg::all(net::FillLevel::Medium))));
             ASSERT_TRUE(w.until([&]() { return w.status("B-2").state == RoomState::Running; }, 20000));
             w.run(12000 + kPre);
             RoomStatus s = w.status("B-2");

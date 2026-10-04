@@ -392,6 +392,8 @@ std::vector<uint8_t> encode(const StartMsg& m) {
         w.str8(e.address.size() > 64 ? std::string() : e.address);
         w.u16(e.port);
     }
+    w.u8(m.team_a);
+    w.u8(m.team_b);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, StartMsg& out) {
@@ -413,9 +415,13 @@ bool decode(const uint8_t* data, size_t size, StartMsg& out) {
         e.port = r->u16();
         if (!valid_address(e.address)) return false;
     }
+    m.team_a = r->u8();
+    m.team_b = r->u8();
     int players = 0;
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) players += (m.roster >> p) & 1;
     if (!r->done() || fog > 1 || !valid_map_name(m.map_name) || (m.roster & 0xF0) != 0 || players < 2) return false;
+    // the teams (protocol 13): none, or a pair that this roster can make (the room checked it before it sent the Start: a machine that is told otherwise would start another match than the others)
+    if ((m.team_a != kNoTeam || m.team_b != kNoTeam) && !sim::plan_start_teams(sim::StartTeams{true, m.team_a, m.team_b}, m.roster).why.empty()) return false;
     m.fog = fog == 1;
     out = std::move(m);
     return true;
@@ -553,16 +559,31 @@ std::vector<uint8_t> encode(const StartRequestMsg& m) {
     std::vector<uint8_t> out;
     ByteWriter w(out);
     w.u8(static_cast<uint8_t>(MsgType::StartRequest));
-    w.u8(static_cast<uint8_t>(m.fill));
+    for (const FillLevel level : m.fill) w.u8(static_cast<uint8_t>(level));
+    w.u8(m.team_a);
+    w.u8(m.team_b);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, StartRequestMsg& out) {
     ByteReader storage(nullptr, 0);
     ByteReader* r = nullptr;
     if (!open(data, size, MsgType::StartRequest, r, storage)) return false;
-    const uint8_t fill = r->u8();
-    if (!r->done() || fill > kFillLevelLast) return false;               // exactly the type and one fill level: protocol 7's single byte is no StartRequest any more
-    out.fill = static_cast<FillLevel>(fill);
+    std::array<uint8_t, sim::MAX_PLAYERS> fill{};
+    for (uint8_t& level : fill) level = r->u8();
+    const uint8_t team_a = r->u8();
+    const uint8_t team_b = r->u8();
+    if (!r->done()) return false;                                        // exactly the type, four levels and two team bytes: the single level of protocol 11 is no StartRequest any more
+    for (const uint8_t level : fill) {
+        if (level > kFillLevelLast) return false;
+    }
+    if (team_a == kNoTeam || team_b == kNoTeam) {
+        if (team_a != team_b) return false;                              // free for all is both bytes 255, never one
+    } else if (team_a >= sim::MAX_PLAYERS || team_b >= sim::MAX_PLAYERS || team_a == team_b) {
+        return false;                                                    // a pair is two different seats of the match
+    }
+    for (size_t i = 0; i < fill.size(); ++i) out.fill[i] = static_cast<FillLevel>(fill[i]);
+    out.team_a = team_a;
+    out.team_b = team_b;
     return true;
 }
 

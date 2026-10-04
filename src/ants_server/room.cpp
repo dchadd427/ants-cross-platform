@@ -314,7 +314,8 @@ void Room::update(uint32_t now_ms) {
             begin_match(now_ms);
         } else if (ev.type == net::HostLobby::Event::Type::LeaderStart) {
             asked_by = ev.seat;
-            asked_fill = ev.fill;
+            asked_fill = net::FillLevel::None;
+            for (const net::FillLevel level : ev.fill) asked_fill = asked_fill == net::FillLevel::None ? level : asked_fill;      // (one level for every seat until the per-seat fill: the next step)
         }
     }
 
