@@ -76,13 +76,16 @@ struct ArenaSpec {
     /// A bot that is not in the registry (tests, later the tournaments): called instead of make_bot when set; a null result refuses the match. The `kind` of the BotSpec must
     /// still be a name that make_bot knows (check_setup), and the Profile comes from the spec's level.
     std::function<std::unique_ptr<Bot>(const BotSpec&)> factory;
+    /// Kinds besides the registry's that `factory` supplies (the bench bots of tools/bot_arena.cpp, never a bot of the game): the setup check accepts them
+    std::vector<std::string> extra_kinds;
     /// Called once with the engine as the match ended (a test hook: the tests compare the result with the engine's own getters). Read-only; the engine is gone after play_match.
     std::function<void(const sim::SimulationEngine&)> inspect;
 };
 
 struct ArenaSeatResult {
     BotSpec spec;                              // what was asked for
-    std::string runs;                          // the kind of bot that actually played ("worker" for "worker" and for "standard", which is an alias of it until B4)
+    std::string style;                         // the style that the standard bot played (the pinned one or the one it drew: "aggressive", ...); "" for the other kinds
+    std::string runs;                          // the kind of bot that actually played: the bot's own kind() ("standard", "worker", "idle", or a bench bot of the tournaments)
     int32_t score{0};                          // the individual score at the end (what the results screen ranks by, before ties)
     int32_t shown_score{0};                    // the number of the score box (own plus ally's)
     uint32_t ants{0};                          // living ants at the end
@@ -96,6 +99,7 @@ struct ArenaSeatResult {
     uint32_t raided{0};
     uint32_t kills{0};
     uint32_t losses{0};
+    uint32_t stalls{0};                        // times a standard bot's stall detector sent it to the plain economy (StandardBot::stalls); 0 for the other kinds
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {

@@ -2,16 +2,20 @@
 // with: the same arguments always give the same matches, bit for bit, on any machine, whatever the number of threads.
 //
 // Usage:
-//   bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N] [--replay-check]
-//             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR]
+//   bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N] [--replay-check]
+//             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-standard | --ally-pairs]
 //   bot_arena --selftest
 //   bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc
 //
 //   --map NAMES       a comma list of shipped maps by name (TINY, SMALL, MEDIUM, GAUNTLET, TREASURE, ISLANDS, or "shipped" for all six) or paths of .LVL files (default TINY)
 //   --seeds A..B      the engine and controller seeds: "3", "1..8", "1,4,9..12" (default 1)
-//   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL or LEVEL: KIND idle, worker, standard; LEVEL easy, medium, hard.
+//   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE: KIND idle, worker, standard (or one of the
+//                     bench bots of tools/bench_aggressor.hpp, which are not bots of the game: aggressor, aggressor2 (a double-thief opening), rusher (the contested middle first),
+//                     saboteur, aggr1 .. aggr9 (an aggressor with that many attackers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
+//                     bot's style: Hard plays aggressive or raider only; none: it draws its own per match). KIND may be `standard+K=V,K=V`, a standard bot with its own tuning of
+//                     the keys of apply_tune (the tournaments' ablations; listed in docs/audit/B4_1_notes.md).
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants.
-//                     idle stands still; worker harvests (B3); standard is an ALIAS of worker until the standard bot with its tactics arrives with B4 (every report says so).
+//                     idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
 //   --ticks full|N    play until the match is over (the map's own length, default) or at most N ticks (50 ms each)
 //   --latency-ticks N the sink latency: 0 applies a command the moment a bot releases it; N > 0 plays like a lock-step room (applied at the first 100 ms turn
 //                     boundary at least N ticks later, in canonical order); default 3
@@ -19,6 +23,10 @@
 //                     so a comparison of bots must rotate them
 //   --repeat N        play every match N times and require identical results (finds any nondeterminism)
 //   --replay-check    re-feed the commands that were applied into a FRESH engine with no bot at all and require the same state hash at every 20th tick and at the end
+//   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did
+//                     (counts of attack orders, raids, walls, ...) to stderr when a match is over (tools/exp.py reads it).
+//   --ally-standard   the first two standard bots of a match team up (the lower seat invites at its first look, the other accepts by its accept rule); --ally-pairs: every two seats
+//                     with the same standard spec team up (2 + 2 for [A, A, B, B]). Test-only: no bot of the game invites.
 //   --threads N       matches played at the same time (default 1; every match is independent, the report is sorted by map, seed and arrangement)
 //   --out FILE        write the JSON report (fixed key order; the maps' NAMES only, no paths). The file is opened BEFORE the first match (an unwritable path costs nothing) and
 //                     checked after the last: a report that could not be written completely is exit code 2, never a silent success
@@ -62,7 +70,9 @@
 #include "ants_ai/bot.hpp"
 #include "ants_ai/bot_view.hpp"
 #include "ants_ai/rng.hpp"
+#include "ants_ai/standard_bot.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "bench_aggressor.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
 
@@ -89,7 +99,7 @@ constexpr const char* kShippedMaps[] = {"TINY", "SMALL", "MEDIUM", "GAUNTLET", "
 constexpr size_t kMaxMatches = 200000;
 
 const char* const kKindsNote =
-    "idle stands still; worker harvests (B3); standard is an alias of worker until the standard bot with its tactics arrives with B4";
+    "idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the economy of the worker plus the tactics of its level)";
 
 ARENA_PRINTF(1, 2) std::string fmt(const char* format, ...) {
     va_list args;
@@ -433,29 +443,35 @@ struct Options {
     bool wall_time{true};
     bool selftest{false};
     bool write_baselines{false};
+    bool ally_standard{false};                     // the first two standard bots of a match team up (the lower seat invites)
+    bool ally_pairs{false};                        // every two seats with the same standard spec team up (2 + 2 with [A, A, B, B]; the lower seat of a pair invites)
     bool help{false};
 };
 
 void print_usage(std::FILE* to) {
     std::fprintf(to,
-        "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
-        "                 [--replay-check] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR]\n"
+        "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
+        "                 [--replay-check] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs]\n"
         "       bot_arena --selftest\n"
         "       bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc\n"
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
         "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
-        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL or LEVEL (kinds idle worker standard; levels easy medium hard).\n"
-        "                     Default: four standard bots at medium level. %s.\n"
+        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE (kinds idle worker standard and the bench bots aggressor aggressor2\n"
+        "                     saboteur rusher aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
+        "                     KIND may be standard+K=V,K=V: a standard bot with its own tuning (see --tune). Default: four standard bots at medium level. %s.\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
         "  --rotate           every distinct arrangement of the bots over the seats\n"
+        "  --ally-standard    the first two standard bots of a match team up: the lower seat invites at its first look, the other accepts by its accept rule (test-only: no bot of the game invites)\n"
+        "  --ally-pairs       every two seats that have the same standard spec team up (2 + 2 for [A, A, B, B]; the lower seat of a pair invites; test-only)\n"
         "  --repeat N         play every match N times and require identical results\n"
         "  --replay-check     replay the applied commands into a fresh engine without any bot: same hash at every 20th tick and at the end\n"
         "  --threads N        matches at the same time (default 1)\n"
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
+        "  --tune K=V,...     ablations of the standard bot's plan, for the tournaments (the keys are those of apply_tune in this file, listed in docs/audit/B4_1_notes.md)\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -485,12 +501,240 @@ bool parse_seeds(const std::string& text, std::vector<uint32_t>& out, std::strin
     return true;
 }
 
-// "N=KIND:LEVEL" (also "N:KIND:LEVEL"): the spec of ants::ai::parse_bot_spec with the seat in front
+// "N=KIND:LEVEL" (also "N:KIND:LEVEL"): the spec of ants::ai::parse_bot_spec with the seat in front. The kind "aggressor" (any case) is the arena's own bench bot
+// (tools/bench_aggressor.hpp: it raids and harasses, it is not in the registry): the registry parses it as a worker and the kind is put back afterwards
 bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     std::string spec = text;
     const size_t eq = spec.find('=');
     if (eq != std::string::npos) spec[eq] = ':';
-    return ai::parse_bot_spec(spec, out, err);
+    bool aggressor = false;
+    std::string bench_kind = "aggressor";
+    std::vector<std::string> parts = split(spec, ':');
+    for (size_t i = 1; i < parts.size(); ++i) {
+        if (upper(parts[i]) == "AGGRESSOR" || upper(parts[i]) == "AGGRESSOR2" || upper(parts[i]) == "SABOTEUR" || upper(parts[i]) == "RUSHER" ||
+            (upper(parts[i]).rfind("AGGR", 0) == 0 && upper(parts[i]).size() == 5 && upper(parts[i])[4] >= '1' && upper(parts[i])[4] <= '9')) {
+            aggressor = true;
+            bench_kind = upper(parts[i]) == "SABOTEUR" ? "saboteur" : upper(parts[i]) == "AGGRESSOR2" ? "aggressor2" : upper(parts[i]) == "RUSHER" ? "rusher" : upper(parts[i]) == "AGGRESSOR" ? "aggressor" : "aggr" + parts[i].substr(4);
+            parts[i] = "worker";
+        } else if (upper(parts[i]).rfind("STANDARD+", 0) == 0) {                      // "standard+K=V,K=V": a standard bot with its own tuning, for the duels of two plans in one match
+            aggressor = true;
+            bench_kind = "standard" + parts[i].substr(8);
+            parts[i] = "worker";
+        }
+    }
+    ai::Style pinned = ai::Style::Random;
+    if (aggressor && parts.size() == 4) {                                              // "KIND:LEVEL:STYLE" of a tuned standard bot: the registry's parser would refuse a style for 'worker'
+        if (!ai::parse_style(parts[3], pinned)) { err = "unknown bot style '" + parts[3] + "'"; return false; }
+        parts.pop_back();
+    }
+    if (aggressor) {
+        spec.clear();
+        for (size_t i = 0; i < parts.size(); ++i) spec += (i == 0 ? "" : ":") + parts[i];
+    }
+    if (!ai::parse_bot_spec(spec, out, err)) return false;
+    if (aggressor) out.kind = bench_kind;
+    if (pinned != ai::Style::Random) {
+        if (!ai::style_allowed(out.level, pinned)) { err = std::string("a ") + ai::level_name(out.level) + " bot cannot play the " + ai::style_name(pinned) + " style"; return false; }
+        out.style = pinned;
+    }
+    return true;
+}
+
+// --tune KEY=VALUE,...: the ablations of the standard bot's plan (docs/audit/B4_1_notes.md): every standard bot of the run gets the plan of its level with these values put over it.
+// Set while the options are parsed, before any match (and thread) starts, and only read afterwards.
+std::vector<std::pair<std::string, int64_t>> g_tune;
+
+bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string& err) {
+    const auto flag = [&](bool& f) { f = v != 0; return true; };
+    if (key == "defenders") { p.defenders = static_cast<uint32_t>(v); return true; }
+    if (key == "leash") { p.leash_tiles = static_cast<int32_t>(v); return true; }
+    if (key == "linger") { p.fight_linger_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "aid") return flag(p.carrier_aid);
+    if (key == "contest") return flag(p.contest_aware);
+    if (key == "clow") { p.contest_low = static_cast<uint32_t>(v); return true; }
+    if (key == "chigh") { p.contest_high = static_cast<uint32_t>(v); return true; }
+    if (key == "rankrem") return flag(p.rank_by_remaining);
+    if (key == "cone") return flag(p.contest_one_first);
+    if (key == "creact") return flag(p.contest_reactive);
+    if (key == "copen") { p.contest_opening_ants = static_cast<uint32_t>(v); return true; }
+    if (key == "copenmin") { p.contest_opening_min_ants = static_cast<uint32_t>(v); return true; }
+    if (key == "typedh") return flag(p.typed_harvest);
+    if (key == "firew") return flag(p.fire_aware);
+    if (key == "secure") return flag(p.secure_side);
+    if (key == "securek") { p.secure_kinds = static_cast<uint8_t>(v); return true; }
+    if (key == "counters") return flag(p.counters);
+    if (key == "bhit") return flag(p.bomb_hit);
+    if (key == "chv") return flag(p.combat_harvests);
+    if (key == "walls") { p.wall_trigger = v == 0 ? ai::WallTrigger::Never : v == 1 ? ai::WallTrigger::ThiefSeen : v == 2 ? ai::WallTrigger::ThiefPossible : ai::WallTrigger::Early; return true; }
+    if (key == "renew") { p.renew_lead_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "combat") { p.takes_combat = v > 0; p.max_combat = static_cast<uint32_t>(v); return true; }
+    if (key == "steals") return flag(p.steals);
+    if (key == "fiststrict") return flag(p.fists_strict);
+    if (key == "ambush") return flag(p.ambush);
+    if (key == "ambushticks") { p.ambush_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "ambushpause") { p.ambush_pause = static_cast<uint32_t>(v); return true; }
+    if (key == "ambushdist") { p.ambush_distance = static_cast<int32_t>(v); return true; }
+    if (key == "ambushn") { p.ambush_thieves = static_cast<uint32_t>(v); return true; }
+    if (key == "raidmin") { p.raid_min_loot = static_cast<uint32_t>(v); return true; }
+    if (key == "raidblack") { p.raid_black_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "sabotage") return flag(p.sabotage);
+    if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "sabkeeper") return flag(p.sabotage_spare_keeper);
+    if (key == "sabscore") { p.sabotage_min_score = static_cast<uint32_t>(v); return true; }
+    if (key == "sabafter") { p.sabotage_after = static_cast<uint32_t>(v); return true; }
+    if (key == "harass") return flag(p.harass);
+    if (key == "hatchsq") return flag(p.hatch_for_squad);
+    if (key == "hatchextra") { p.hatch_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "harassw") { p.harass_workers = static_cast<uint32_t>(v); return true; }
+    if (key == "harassres") { p.harass_reserve = static_cast<uint32_t>(v); return true; }
+    if (key == "harasshp") { p.harass_min_hp = static_cast<uint32_t>(v); return true; }
+    if (key == "harassodds") { p.harass_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "harassstrong") { p.harass_strong_defence = static_cast<uint32_t>(v); return true; }
+    if (key == "harassretreat") { p.harass_retreat_hp = static_cast<uint32_t>(v); return true; }
+    if (key == "harasspause") { p.harass_pause_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "harassidlew") { p.harass_idle_weight = static_cast<uint32_t>(v); return true; }
+    if (key == "harassnear") { p.harass_near = static_cast<int32_t>(v); return true; }
+    if (key == "harassleader") { p.harass_leader_bonus = static_cast<uint32_t>(v); return true; }
+    if (key == "harassidle") { p.harass_idle_bonus = static_cast<uint32_t>(v); return true; }
+    if (key == "harassstick") { p.harass_stick = static_cast<uint32_t>(v); return true; }
+    if (key == "harassdist") { p.harass_dist_cost = static_cast<uint32_t>(v); return true; }
+    if (key == "harassfar") { p.harass_far_bonus = static_cast<uint32_t>(v); return true; }
+    if (key == "harassstation") return flag(p.harass_station);
+    if (key == "harassrange") { p.harass_range = static_cast<int32_t>(v); return true; }
+    if (key == "harassrel") { p.harass_idle_release = static_cast<uint32_t>(v); return true; }
+    if (key == "combatx") { p.combat_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "thief") { p.takes_thief = v > 0; p.max_thief = static_cast<uint32_t>(v); return true; }
+    if (key == "intercept") return flag(p.intercepts);
+    if (key == "combat_early") { p.combat_when_attacked = v == 0; return true; }
+    if (key == "combat_idle") return flag(p.combat_when_idle);
+    if (key == "guard") return flag(p.guards);
+    if (key == "raid") return flag(p.raids);
+    if (key == "strike") return flag(p.strikes);
+    if (key == "strikew") return flag(p.strike_workers);
+    if (key == "strikef") { p.strike_force = static_cast<uint32_t>(v); return true; }
+    if (key == "strikeres") { p.strike_reserve = static_cast<uint32_t>(v); return true; }
+    if (key == "strikeodds") { p.strike_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "wipe") return flag(p.wipe_focus);
+    if (key == "hatch") return flag(p.hatches);
+    if (key == "allyhelp") return flag(p.ally_help);
+    if (key == "gate") return flag(p.gate);
+    if (key == "gatepred") return flag(p.gate_predictive);
+    if (key == "gatelat") { p.gate_latency = static_cast<uint32_t>(v); return true; }
+    if (key == "gatestaged") { p.gate_max_staged = static_cast<uint32_t>(v); return true; }
+    if (key == "gatefails") { p.gate_user_fails = static_cast<uint32_t>(v); return true; }
+    if (key == "stall") { p.stall_ticks = static_cast<uint32_t>(v); return true; }                 // the stall detector (0: off): ticks without a point banked
+    if (key == "repeat") { p.repeat_limit = static_cast<uint32_t>(v); return true; }               // ... the same order sent this many times ...
+    if (key == "repwindow") { p.repeat_window = static_cast<uint32_t>(v); return true; }           // ... within this many ticks with nothing banked
+    if (key == "fallback") { p.fallback_ticks = static_cast<uint32_t>(v); return true; }           // ... and the plain economy this long
+    if (key == "gategap") { p.gate_gap_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "idle") { p.bench_idle_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "avoid") return flag(p.avoids_guarded_hills);
+    if (key == "agg") {                                                               // the aggressive plan (Hard's from the start): the squad, Combat Ants in the opening, no guard post at home
+        if (v == 0) return true;
+        p.harass = true;
+        p.combat_when_attacked = false;
+        p.guards = false;
+        return true;
+    }
+    if (key == "old") {                                                               // the conflict tactics as they were shipped before the win-rate measurements: all off, one Thief
+        if (v == 0) return true;
+        p.contest_aware = false;
+        p.contest_reactive = false;
+        p.strikes = false;
+        p.hatches = false;
+        p.wipe_focus = false;
+        p.ally_help = false;
+        if (p.max_thief > 1) p.max_thief = 1;
+        return true;
+    }
+    if (key == "allon") {                                                             // ALL the conflict tactics on (the mirror of the conflict-rich tournaments): the strict contest order, strikes, hatching for fights, wipe-out focus, the help of the ally, two Thieves
+        if (v == 0) return true;
+        p.contest_aware = true;
+        p.strikes = true;
+        p.hatches = true;
+        p.wipe_focus = true;
+        p.ally_help = true;
+        if (p.takes_thief && p.max_thief < 2) p.max_thief = 2;
+        return true;
+    }
+    err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena.cpp, listed in docs/audit/B4_1_notes.md)";
+    return false;
+}
+
+// BOT_DIAG=1: the standard bots print what their tasks did when the match is over (experiments only)
+std::unique_ptr<ai::Bot> diag_wrap(std::unique_ptr<ai::StandardBot> bot, const ai::BotSpec& spec) {
+    if (std::getenv("BOT_DIAG") == nullptr) return bot;
+    return std::make_unique<ai::bench::DiagBot>(std::move(bot), spec.kind + ":" + ai::level_name(spec.level) + (spec.style != ai::Style::Random ? std::string(":") + ai::style_name(spec.style) : std::string()));
+}
+
+std::unique_ptr<ai::Bot> count_wrap(std::unique_ptr<ai::Bot> bot, const ai::BotSpec& spec) {
+    if (std::getenv("BOT_DIAG") == nullptr) return bot;
+    return std::make_unique<ai::bench::CountBot>(std::move(bot), spec.kind + ":" + ai::level_name(spec.level));
+}
+
+// The bots of the registry, and the arena's bench bots
+// The tuning keys of a seat: the global --tune first, then the seat's own `standard+K=V,K=V`; false for a key or a value that does not parse
+bool tuning_of(const ai::BotSpec& spec, std::vector<std::pair<std::string, int64_t>>& out) {
+    out = g_tune;
+    if (spec.kind.rfind("standard+", 0) != 0) return true;
+    for (const std::string& kv : split(spec.kind.substr(9), ',')) {
+        const size_t eq = kv.find('=');
+        uint64_t num = 0;
+        if (eq == std::string::npos || !parse_uint(kv.substr(eq + 1), num)) return false;
+        out.emplace_back(kv.substr(0, eq), static_cast<int64_t>(num));
+    }
+    return true;
+}
+
+void apply_tuning(ai::LevelPlan& plan, const std::vector<std::pair<std::string, int64_t>>& keys) {
+    for (const auto& t : keys) {
+        std::string err;
+        apply_tune(plan, t.first, t.second, err);
+    }
+}
+
+std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
+    if (spec.kind.rfind("standard+", 0) == 0) {                                      // a tuned standard bot: the tuning of this seat over the global one
+        std::vector<std::pair<std::string, int64_t>> keys;
+        if (!tuning_of(spec, keys)) return nullptr;
+        for (const auto& t : keys) {                                                 // (a key that does not exist refuses the match)
+            ai::LevelPlan probe;
+            std::string err;
+            if (!apply_tune(probe, t.first, t.second, err)) return nullptr;
+        }
+        if (spec.style == ai::Style::Random) {                                       // no style named: the level's neutral plan, no variations (the ablations of the tournaments)
+            ai::LevelPlan plan = ai::plan_for(spec.level);
+            apply_tuning(plan, keys);
+            return diag_wrap(std::make_unique<ai::StandardBot>(plan), spec);
+        }
+        return diag_wrap(std::make_unique<ai::StandardBot>(spec.level, spec.style, [keys](ai::LevelPlan& p) { apply_tuning(p, keys); }), spec);
+    }
+    if (spec.kind == "aggressor") return count_wrap(std::make_unique<ai::bench::AggressorBot>(), spec);
+    if (spec.kind.size() == 5 && spec.kind.rfind("aggr", 0) == 0 && spec.kind[4] >= '1' && spec.kind[4] <= '9') return count_wrap(std::make_unique<ai::bench::AggressorBot>(1, static_cast<size_t>(spec.kind[4] - '0')), spec);
+    if (spec.kind == "aggressor2") return std::make_unique<ai::bench::AggressorBot>(2);
+    if (spec.kind == "rusher") {                                                      // the centre-rusher of the bench: the economy of the standard bot with the contest order and no tactics
+        ai::LevelPlan plan = ai::plan_for(spec.level);
+        plan.contest_aware = true;
+        plan.secure_side = false;
+        plan.secure_kinds = 0;
+        plan.wall_trigger = ai::WallTrigger::Never;
+        plan.takes_combat = false;
+        plan.takes_thief = false;
+        plan.guards = false;
+        plan.raids = false;
+        plan.counters = false;
+        return std::make_unique<ai::StandardBot>(plan);
+    }
+    if (spec.kind == "saboteur") return std::make_unique<ai::bench::SaboteurBot>();
+    if (spec.kind == "standard" && !g_tune.empty()) {
+        std::vector<std::pair<std::string, int64_t>> keys = g_tune;
+        return diag_wrap(std::make_unique<ai::StandardBot>(spec.level, spec.style, [keys](ai::LevelPlan& p) { apply_tuning(p, keys); }), spec);
+    }
+    std::unique_ptr<ai::Bot> made = ai::make_bot(spec);
+    if (made != nullptr && spec.kind == "standard" && std::getenv("BOT_DIAG") != nullptr) {                  // (the experiments count what a registry bot does too)
+        return diag_wrap(std::unique_ptr<ai::StandardBot>(static_cast<ai::StandardBot*>(made.release())), spec);
+    }
+    return made;
 }
 
 bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err) {
@@ -508,6 +752,8 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--selftest") o.selftest = true;
         else if (s == "--write-baselines") o.write_baselines = true;
         else if (s == "--rotate") o.rotate = true;
+        else if (s == "--ally-standard") o.ally_standard = true;
+        else if (s == "--ally-pairs") o.ally_pairs = true;
         else if (s == "--replay-check") o.replay_check = true;
         else if (s == "--quiet") o.quiet = true;
         else if (s == "--no-wall-time") o.wall_time = false;
@@ -552,6 +798,17 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         } else if (s == "--out") {
             if (!value("--out", o.out)) return false;
             if (o.out.empty()) { err = "--out needs a file name (an empty one, from an unset shell variable perhaps, is not 'no report': leave --out out for that)"; return false; }
+        } else if (s == "--tune") {
+            if (!value("--tune", v)) return false;
+            g_tune.clear();
+            for (const std::string& kv : split(v, ',')) {
+                const size_t eq = kv.find('=');
+                uint64_t num = 0;
+                if (eq == std::string::npos || !parse_uint(kv.substr(eq + 1), num)) { err = "--tune needs KEY=NUMBER,..., not '" + kv + "'"; return false; }
+                ai::LevelPlan probe;
+                if (!apply_tune(probe, kv.substr(0, eq), static_cast<int64_t>(num), err)) return false;
+                g_tune.emplace_back(kv.substr(0, eq), static_cast<int64_t>(num));
+            }
         } else if (s == "--maps-dir") {
             if (!value("--maps-dir", o.maps_dir)) return false;
         } else {
@@ -643,7 +900,7 @@ std::vector<LoadedMap> load_maps(const Options& o) {
 // Arrangements: every distinct way to put the given bots on the given seats
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-std::string spec_text(const ai::BotSpec& s) { return s.kind + ":" + ai::level_name(s.level); }
+std::string spec_text(const ai::BotSpec& s) { return s.kind + ":" + ai::level_name(s.level) + (s.style != ai::Style::Random ? std::string(":") + ai::style_name(s.style) : std::string()); }
 
 // The arrangements in a fixed order: the given one first, then the others in lexicographic order of their texts. Equal bots (same kind and level) are not told apart, so four equal
 // bots have one arrangement.
@@ -713,7 +970,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
         if (x.spec.seat != y.spec.seat || x.runs != y.runs || x.score != y.score || x.shown_score != y.shown_score || x.ants != y.ants || x.eggs != y.eggs || x.hatched != y.hatched ||
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
-            x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected) {
+            x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls) {
             return false;
         }
     }
@@ -725,6 +982,48 @@ void release_memory(std::vector<T>& v) {
     std::vector<T>().swap(v);
 }
 
+// The factory of a match with --ally-standard: the standard bot of the lower seat of the first two is wrapped in an inviter for the other
+std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> ally_factory(const Job& j) {
+    int first = -1;
+    int second = -1;
+    for (const ai::BotSpec& b : j.bots) {
+        if (b.kind != "standard") continue;
+        if (first < 0 || b.seat < first) {
+            second = first;
+            first = b.seat;
+        } else if (second < 0 || b.seat < second) {
+            second = b.seat;
+        }
+    }
+    if (first < 0 || second < 0) return arena_factory;
+    if (first > second) std::swap(first, second);
+    return [first, second](const ai::BotSpec& spec) -> std::unique_ptr<ai::Bot> {
+        std::unique_ptr<ai::Bot> bot = arena_factory(spec);
+        if (bot != nullptr && spec.seat == first) return std::make_unique<ai::bench::InviterBot>(std::move(bot), static_cast<uint8_t>(second));
+        return bot;
+    };
+}
+
+// The factory of a match with --ally-pairs: of every two seats with the same standard spec (kind and level) the lower one invites the other
+std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> ally_pairs_factory(const Job& j) {
+    std::map<std::string, std::vector<uint8_t>> by_spec;
+    for (const ai::BotSpec& b : j.bots) {
+        if (b.kind.rfind("standard", 0) == 0) by_spec[spec_text(b)].push_back(b.seat);
+    }
+    std::map<uint8_t, uint8_t> inviter_of;                     // inviting seat -> invited seat
+    for (auto& entry : by_spec) {
+        if (entry.second.size() != 2) continue;
+        std::sort(entry.second.begin(), entry.second.end());
+        inviter_of[entry.second[0]] = entry.second[1];
+    }
+    return [inviter_of](const ai::BotSpec& spec) -> std::unique_ptr<ai::Bot> {
+        std::unique_ptr<ai::Bot> bot = arena_factory(spec);
+        const auto it = inviter_of.find(spec.seat);
+        if (bot != nullptr && it != inviter_of.end()) return std::make_unique<ai::bench::InviterBot>(std::move(bot), it->second);
+        return bot;
+    };
+}
+
 ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool record) {
     ai::ArenaSpec s;
     s.level = &m.level;
@@ -733,6 +1032,10 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.max_ticks = o.ticks;
     s.latency_ticks = o.latency;
     s.record = record;
+    s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher", "aggr1", "aggr2", "aggr3", "aggr4", "aggr5", "aggr6", "aggr7", "aggr8", "aggr9"};
+    for (const ai::BotSpec& b : j.bots) {
+        if (b.kind.rfind("standard+", 0) == 0) s.extra_kinds.push_back(b.kind);
+    }
     return s;
 }
 
@@ -746,7 +1049,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     }
     const Clock::time_point started = Clock::now();
     ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check);
-    spec.factory = factory;
+    spec.factory = factory ? factory : o.ally_pairs ? ally_pairs_factory(job) : o.ally_standard ? ally_factory(job) : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
     r.result = ai::play_match(spec);
     r.plays = 1;
     if (r.result.error.empty() && o.replay_check) {
@@ -755,7 +1058,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     }
     for (uint32_t again = 1; again < o.repeat && r.result.error.empty(); ++again) {
         ai::ArenaSpec s2 = spec_of(o, m, job, false);
-        s2.factory = factory;
+        s2.factory = spec.factory;
         const ai::ArenaResult second = ai::play_match(s2);
         ++r.plays;
         if (!same_match(r.result, second)) {
@@ -897,6 +1200,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("seat", uint64_t{s.spec.seat});
             j.field("bot", spec_text(s.spec));
             j.field("runs", s.runs);
+            j.field("style", s.style);
             j.field_signed("score", s.score);
             j.field_signed("shown_score", s.shown_score);
             j.field("ants", uint64_t{s.ants});
@@ -906,6 +1210,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("raided", uint64_t{s.raided});
             j.field("kills", uint64_t{s.kills});
             j.field("losses", uint64_t{s.losses});
+            j.field("stalls", uint64_t{s.stalls});
             j.field("decisions", uint64_t{s.stats.decisions});
             j.field("intents", uint64_t{s.stats.intents});
             j.field("released", uint64_t{s.stats.released});
@@ -1004,15 +1309,10 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         return 2;
     }
     std::string kinds;
-    bool placeholder = false;
-    for (const ai::BotSpec& s : o.seats) {
-        kinds += (kinds.empty() ? "" : ", ") + std::to_string(static_cast<unsigned>(s.seat)) + "=" + spec_text(s);
-        placeholder = placeholder || s.kind == "standard";
-    }
+    for (const ai::BotSpec& s : o.seats) kinds += (kinds.empty() ? "" : ", ") + std::to_string(static_cast<unsigned>(s.seat)) + "=" + spec_text(s);
     std::fprintf(g_out, "bot_arena: %zu match(es): maps %zu, seeds %s, %zu arrangement(s) of [%s], ticks %s, latency %u%s%s\n", jobs.size(), maps.size(), seeds_text(o.seeds).c_str(),
                  arrangements(o.seats, o.rotate).size(), kinds.c_str(), o.ticks == 0 ? "full" : std::to_string(o.ticks).c_str(), o.latency, o.replay_check ? ", replay check" : "",
                  o.repeat > 1 ? fmt(", every match %u times", o.repeat).c_str() : "");
-    if (placeholder) std::fprintf(g_out, "NOTE: %s\n", kKindsNote);
     const Clock::time_point started = Clock::now();
     const std::vector<MatchReport> reports = run_jobs(o, maps, jobs, factory, jobs.size() > 100);
     if (!o.quiet) {
@@ -1320,6 +1620,7 @@ void selftest_wiring(SelfTest& t, const LoadedMap& tiny) {
             {"released", [](ai::ArenaResult& r) { ++r.seats[0].stats.released; }},
             {"decisions", [](ai::ArenaResult& r) { ++r.seats[0].stats.decisions; }},
             {"rejected", [](ai::ArenaResult& r) { ++r.seats[1].stats.rejected; }},
+            {"stalls", [](ai::ArenaResult& r) { ++r.seats[0].stalls; }},
             {"audio events", [](ai::ArenaResult& r) { ++r.audio_events; }},
             {"units left on reachable piles", [](ai::ArenaResult& r) { ++r.reachable_units_left; }},
             {"seat count", [](ai::ArenaResult& r) { r.seats.pop_back(); }},
@@ -1519,7 +1820,7 @@ void selftest_tool(SelfTest& t) {
             const ai::ArenaSeatResult& r = played.seats[i];
             const auto num = [&s](const char* key) { return s.get(key) != nullptr ? s.get(key)->i64() : int64_t{-12345}; };
             fields_ok = num("seat") == r.spec.seat && num("score") == r.score && num("shown_score") == r.shown_score && num("ants") == r.ants && num("eggs") == r.eggs && num("hatched") == r.hatched &&
-                        num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("decisions") == r.stats.decisions &&
+                        num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("stalls") == r.stalls && num("decisions") == r.stats.decisions &&
                         num("released") == r.stats.released && num("intents") == r.stats.intents && num("expired") == r.stats.expired && num("rejected") == r.stats.rejected &&
                         s.get("bot") != nullptr && s.get("bot")->text == spec_text(r.spec) && s.get("runs") != nullptr && s.get("runs")->text == r.runs;
         }
@@ -1650,6 +1951,12 @@ int selftest() {
         Options out_given;
         t.check(parse_args({"--out", "report.json"}, out_given, err) && out_given.out == "report.json" && !parse_args({"--out", ""}, bad, err) && !parse_args({"--out"}, bad, err),
                 "--out takes a file name; an empty one (an unset shell variable) is refused, not taken for 'no report'");
+        ai::LevelPlan probe = ai::plan_for(ai::Level::Hard);
+        std::string tune_err;
+        t.check(apply_tune(probe, "stall", 500, tune_err) && probe.stall_ticks == 500 && apply_tune(probe, "repeat", 5, tune_err) && probe.repeat_limit == 5 && apply_tune(probe, "repwindow", 600, tune_err) &&
+                    probe.repeat_window == 600 && apply_tune(probe, "fallback", 700, tune_err) && probe.fallback_ticks == 700 && apply_tune(probe, "gatefails", 4, tune_err) && probe.gate_user_fails == 4 &&
+                    !apply_tune(probe, "stal", 1, tune_err),
+                "the tuning keys of the stall detector and of the gate's pause (stall, repeat, repwindow, fallback, gatefails) set the plan; a misspelt key is refused");
     }
 
     t.section("the table of baselines (tests/test_ai/baselines.inc)");
@@ -1866,7 +2173,7 @@ int selftest() {
         t.check(JsonChecker(json1).valid(), "the JSON report is valid JSON");
         t.check(json1.find("/Users/") == std::string::npos && json1.find(ORIGINAL_ASSETS_DIR) == std::string::npos && json1.find('\\') == std::string::npos && json1.find(".LVL") == std::string::npos,
                 "the JSON report holds no path");
-        t.check(json1.find(kKindsNote) != std::string::npos, "the report says what the kinds are (standard is an alias of worker until B4)");
+        t.check(json1.find(kKindsNote) != std::string::npos, "the report says what the kinds are (worker is the yardstick, standard the standard bot)");
         t.check(json1.find("\"wall_ms\"") == std::string::npos, "no wall time with --no-wall-time");
         o.wall_time = true;
         t.check(report_json(o, maps, one).find("\"wall_ms\"") != std::string::npos, "wall times with the default");

@@ -86,14 +86,14 @@ void run_setup_tests() {
         ASSERT_EQ(h.rate_milli_cps, 3000u);
         ASSERT_EQ(m.rate_milli_cps, 1500u);
         ASSERT_EQ(e.rate_milli_cps, 400u);
-        // the registry: idle, worker and standard exist ("standard" is an alias of the worker bot of B3 until the standard bot of B4 exists), anything else does not
+        // the registry: idle, worker and standard exist, each is the bot of its own name (since B4-1 "standard" is the standard bot, no longer an alias of the worker), anything else does not
         for (const char* kind : {"idle", "worker", "standard"}) {
             BotSpec k;
             k.kind = kind;
             ASSERT_TRUE(known_bot_kind(kind));
             std::unique_ptr<Bot> bot = make_bot(k);
             ASSERT_TRUE(bot != nullptr);
-            ASSERT_EQ(std::string(bot->kind()), std::string(kind) == "idle" ? "idle" : "worker");
+            ASSERT_EQ(std::string(bot->kind()), std::string(kind));
         }
         BotSpec unknown;
         unknown.kind = "genius";

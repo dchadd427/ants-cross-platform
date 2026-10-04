@@ -1,4 +1,5 @@
 #include "ants_ai/arena.hpp"
+#include "ants_ai/standard_bot.hpp"
 
 #include <algorithm>
 #include <array>
@@ -98,6 +99,7 @@ std::string refusal(const ArenaSpec& spec) {
     info.bots = spec.bots;
     info.fog = false;
     info.allow_all_bots = true;                          // the arena is the one place where nobody is a person
+    info.extra_kinds = spec.extra_kinds;
     const std::string why = check_setup(info);
     if (!why.empty()) return why;
     // Is the map playable by the teams that sit? (a start marker of a team that plays must lie inside the grid: the engine places no ant for one outside and the team would start
@@ -219,6 +221,10 @@ ArenaResult play_match(const ArenaSpec& spec) {
         r.spec = b;
         const Bot* bot = controller.bot(b.seat);
         r.runs = bot != nullptr ? bot->kind() : "";
+        if (const StandardBot* sb = dynamic_cast<const StandardBot*>(bot)) {
+            r.style = style_name(sb->style());
+            r.stalls = sb->stalls();
+        }
         read_seat_result(sim, b.seat, r);
         r.banked = ledger.banked(b.seat);
         r.raided = ledger.raided(b.seat);

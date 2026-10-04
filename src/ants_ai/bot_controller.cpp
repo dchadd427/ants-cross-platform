@@ -129,8 +129,9 @@ void BotController::on_tick(const sim::SimulationEngine& sim) {
 }
 
 // Whether a command may be proposed at all: what a person could click
-bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, const sim::Command& c) const {
+bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, const Intent& in) const {
     using sim::CommandType;
+    const sim::Command& c = in.command;
     if (!sim::is_client_command(c.type) || c.type == CommandType::Quit) return false;       // None, Drop (the sequencer's own) and Quit are never a bot's
     if (sim::has_ant_list(c.type)) {
         if (c.ants.empty() || c.ants.size() > sim::kMaxCommandAnts) return false;
@@ -138,16 +139,30 @@ bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, con
         return false;
     }
     if (c.type == CommandType::GroupSpecial && c.ants.size() != 1) return false;           // the HUD sends a special order for one selected ant only
+    if (in.pickup && (c.type != CommandType::GroupMove || c.ants.size() != 1)) return false;   // a planned pick-up is ONE ant's plain click (never a group, never an attack or a special order)
     if (sim::is_group_order(c.type)) {
         if (!sim.grid().in_bounds(c.tile_x, c.tile_y)) return false;
-        if (c.type == CommandType::GroupAttack) {                                           // an attack on an ally needs the break of the alliance first
+        const sim::TileCoord tile{c.tile_x, c.tile_y};
+        const bool powerup = sim.grid().has_powerup_at(tile);
+        if (in.pickup && !powerup) return false;                                            // there is nothing to take on that tile (any more)
+        if (powerup && !in.pickup) return false;                                            // a click on a power-up takes it: only a planned pick-up may name one (and no special order, no attack)
+        if (c.type == CommandType::GroupAttack) {
+            // who stands on the tile: an ant of another team that is still an ant on the screen (an ally's: the attack needs the break of the alliance first)
             const uint8_t ally = sim.get_ally_id(s.seat);
-            if (ally < sim::MAX_PLAYERS) {
-                for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
-                    if (a.player_id == ally && a.tile_x == c.tile_x && a.tile_y == c.tile_y) return false;
-                }
+            bool foreign = false;
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                if (a.tile_x != c.tile_x || a.tile_y != c.tile_y || a.player_id == s.seat) continue;
+                if (a.hp == 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning) continue;
+                if (a.player_id == ally && ally < sim::MAX_PLAYERS) return false;
+                foreign = true;
+            }
+            if (!foreign) return false;                                                     // an attack click is made on an enemy ant: with nobody there a person's click is a move
+            for (const assets::AnthillSpawn& hill : sim.grid().anthills()) {                 // an ant of another colour on a hill tile gets the plain move cursor
+                if (tile.x >= static_cast<int32_t>(hill.x) && tile.x <= static_cast<int32_t>(hill.x) + 3 && tile.y >= static_cast<int32_t>(hill.y) && tile.y <= static_cast<int32_t>(hill.y) + 3) return false;
             }
         }
+        // (A plain move onto the tile of an enemy ant is an attack in the engine, and a person can click it: on a food cell the pointer's cursor is the food cursor, which comes
+        // before the attack cursor. The worker's harvest clicks do that to an enemy harvester that stands on the pile's click tile, so this is NOT refused: the economy stays what it was.)
     }
     switch (c.type) {
         case CommandType::AllianceInvite:
@@ -178,8 +193,9 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
     bool release_drawn = false;
     uint64_t release = 0;
     for (const Intent& in : orders.intents()) {
-        if (!allowed(sim, s, in.command)) {
+        if (!allowed(sim, s, in)) {
             ++s.stats.filtered;
+            s.bot->on_command(in.command, Bot::Fate::Filtered, tick);                       // the bot is told, or a task would propose the same refused click at every look
             continue;
         }
         if (!release_drawn) {

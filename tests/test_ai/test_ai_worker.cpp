@@ -14,7 +14,7 @@
 //   AI3.11  four workers share the whole pot, and do nothing that a person could not do
 //   AI3.12  the pinned numbers (baselines.inc), within +-8 percent
 //   AI3.13  the task model: the ledger, tasks that hold ants, orders that never left, stranded ants
-//   AI3.14  determinism and replay: a worker match is bit-reproducible and nothing but its commands; standard is the worker until B4
+//   AI3.14  determinism and replay: a worker match, and a match of standard bots, is bit-reproducible and nothing but its commands
 //   AI3.15  what the level changes in the economy: Easy sends the nearest pile first and at most 4 ants to a pile, Medium and Hard rank by points per trip; the per-pile cap
 //   AI3.16  whose fault a failed order is: an ant that is shut in is kept away from the pile, not the pile from everybody; a lone ant (nobody works anywhere) blames the pile; a
 //           "can't go" mid-route and an ant that moved are no failure of the pile
@@ -1452,7 +1452,7 @@ void run_worker_tests() {
         }
     } TEST_END();
 
-    WORKER_TEST("AI3.14 Determinism And Replay: A Match Of Workers Is Bit-Reproducible And Nothing But Its Commands (They Replay Into A Fresh Engine Without Any Bot); Another Seed Is Another Match; standard Is An Alias Of The Worker Until B4; The Registry") {
+    WORKER_TEST("AI3.14 Determinism And Replay: A Match Of Workers Is Bit-Reproducible And Nothing But Its Commands (They Replay Into A Fresh Engine Without Any Bot); Another Seed Is Another Match; The Standard Bot Is Its Own Kind (B4-1), As Reproducible And As Replayable; The Registry") {
         for (const char* map : {"TINY", "TREASURE"}) {
             const ArenaSpec spec = match_of(map, 7, 0x0F, Level::Medium, 0, 3, true);
             const ArenaResult a = play_match(spec);
@@ -1462,9 +1462,15 @@ void run_worker_tests() {
             for (size_t i = 0; i < a.seats.size(); ++i) ASSERT_TRUE(a.seats[i].score == b.seats[i].score && a.seats[i].stats.released == b.seats[i].stats.released);
             const ReplayResult replay = replay_commands(spec, a);
             ASSERT_TRUE(replay.ok && replay.hash == a.hash);                                          // the commands alone give the same match
-            const ArenaResult alias = play_match(match_of(map, 7, 0x0F, Level::Medium, 0, 3, true, "standard"));
-            ASSERT_TRUE(alias.error.empty() && alias.hash == a.hash && alias.log.size() == a.log.size());   // standard IS the worker (the same seat seed: the kind that plays is "worker")
-            for (const ArenaSeatResult& s : alias.seats) ASSERT_TRUE(s.runs == "worker" && s.spec.kind == "standard");
+            // since B4-1 "standard" is the standard bot, no longer an alias of the worker: the kind is part of the seat's seed, so it is another match, as reproducible and as replayable
+            const ArenaSpec std_spec = match_of(map, 7, 0x0F, Level::Medium, 0, 3, true, "standard");
+            const ArenaResult s1 = play_match(std_spec);
+            const ArenaResult s2 = play_match(std_spec);
+            ASSERT_TRUE(s1.error.empty() && s1.match_over && s1.log.size() > 20);
+            ASSERT_TRUE(s1.hash == s2.hash && s1.checkpoints == s2.checkpoints && s1.log.size() == s2.log.size() && s1.hash != a.hash);
+            const ReplayResult std_replay = replay_commands(std_spec, s1);
+            ASSERT_TRUE(std_replay.ok && std_replay.hash == s1.hash);
+            for (const ArenaSeatResult& s : s1.seats) ASSERT_TRUE(s.runs == "standard" && s.spec.kind == "standard");
             const ArenaResult other = play_match(match_of(map, 8, 0x0F, Level::Medium, 0, 3, true));
             ASSERT_TRUE(other.hash != a.hash);
         }
@@ -1474,7 +1480,7 @@ void run_worker_tests() {
         spec.kind = "worker";
         ASSERT_EQ(std::string(make_bot(spec)->kind()), "worker");
         spec.kind = "standard";
-        ASSERT_EQ(std::string(make_bot(spec)->kind()), "worker");                                     // until the standard bot of B4
+        ASSERT_EQ(std::string(make_bot(spec)->kind()), "standard");
         spec.kind = "genius";
         ASSERT_TRUE(make_bot(spec) == nullptr);
     } TEST_END();

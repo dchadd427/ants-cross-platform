@@ -40,6 +40,13 @@
 #include <vector>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #include <process.h>
 #endif
 #ifndef _WIN32
@@ -50,6 +57,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #endif
 #include <cstring>
@@ -399,6 +407,21 @@ double peak_memory_mb() {
 #endif
 }
 #endif
+
+// The CPU time (user and system, milliseconds) that the calling thread has used so far; -1 when the system cannot say. It does not run while the thread waits for the machine or sleeps, so the
+// difference of two readings is the thread's own work, however busy the machine of the test is (a wall clock around a call counts the time that other programs took, too).
+double thread_cpu_ms() {
+#ifdef _WIN32
+    FILETIME created, exited, kernel, user;
+    if (!GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user)) return -1.0;
+    const auto hundred_ns = [](const FILETIME& t) { return static_cast<double>((static_cast<uint64_t>(t.dwHighDateTime) << 32) | t.dwLowDateTime); };
+    return (hundred_ns(kernel) + hundred_ns(user)) / 10000.0;
+#else
+    timespec ts;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0) return -1.0;
+    return static_cast<double>(ts.tv_sec) * 1000.0 + static_cast<double>(ts.tv_nsec) / 1.0e6;
+#endif
+}
 
 // A folder of this process alone, `ants_server_test_<pid>_<random hex>`, made new (create_directory says no when the name exists, and another is drawn) and removed with everything in it when
 // the object goes. The folders of the suite used to be `ants_server_test_<tag>` and `ants_secret_test_<tag>` under the temp folder, the same for every run on the machine: two runs at the
@@ -4251,6 +4274,20 @@ void run_bot_tests() {
         v = json_of(r);
         ASSERT_TRUE(v.get("bots").size() == 3 && v.get("bots").at(0).get("seat").as_int_or(9) == 1 && v.get("bots").at(0).get("bot").str() == "worker:easy" &&
                     v.get("bots").at(1).get("bot").str() == "idle:medium" && v.get("bots").at(2).get("bot").str() == "hard");     // (listed by seat)
+        ASSERT_TRUE(v.get("bots").at(2).get("style").str() == "random");                   // (a standard bot without a pinned style draws its own at the start of the match)
+        ASSERT_TRUE(!v.get("bots").at(0).has("style") && !v.get("bots").at(1).has("style"));       // (the worker and the idle bot have no style: the key is absent, it does not say "random")
+        // a pinned style (docs/BOTS.md, "Styles"): the text is what --bot takes, the style is listed, the name of the seat is still "Bot (Level)"; a style that the level may not play is refused
+        r = call("POST", "/rooms", R"({"map":"TINY.LVL","players":4,"code":"CB-3S","bots":[{"seat":3,"bot":"hard:raider"},{"seat":1,"bot":"standard:medium:defensive"}]})");
+        ASSERT_EQ(r.status, 201);
+        v = json_of(r);
+        ASSERT_TRUE(v.get("bots").size() == 2 && v.get("bots").at(0).get("seat").as_int_or(9) == 1 && v.get("bots").at(0).get("bot").str() == "medium:defensive" && v.get("bots").at(0).get("style").str() == "defensive" &&
+                    v.get("bots").at(0).get("level").str() == "medium" && v.get("bots").at(0).get("name").str() == "Bot (Medium)" && v.get("bots").at(1).get("bot").str() == "hard:raider" &&
+                    v.get("bots").at(1).get("style").str() == "raider" && v.get("bots").at(1).get("name").str() == "Bot (Hard)");
+        for (const char* body : {R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"hard:economic"}]})", R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"worker:easy:raider"}]})", R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"medium:wild"}]})"}) {
+            r = call("POST", "/rooms", body);
+            ASSERT_EQ(r.status, 400);
+            ASSERT_TRUE(json_of(r).get("error").str().find("style") != std::string::npos);
+        }
         // a person joins CB-1 (a room for two with a bot at seat 0): it gets seat 1, and the room is full: it starts by itself
         Client& ann = w.connect("Ann", "CB-1", 0);                                         // (it asks for seat 0, which the bot has: the first free seat)
         ann.record_hashes = true;
@@ -4275,7 +4312,7 @@ void run_bot_tests() {
         ASSERT_TRUE(row_of(s, 0) != nullptr && row_of(s, 0)->score > 300);
         // the list shows bots too
         r = call("GET", "/rooms");
-        ASSERT_TRUE(r.status == 200 && json_of(r).get("rooms").size() == 3);
+        ASSERT_TRUE(r.status == 200 && json_of(r).get("rooms").size() == 4);               // (CB-1, CB-2, CB-3 and the room with the pinned styles)
     } TEST_END();
 
     TEST_CASE("S3.66 A Room's Own Bots: The Early Start With Them (One Person And The Bot Of A Room For Three Start At The Leader's Request, No Fill Needed), And A Fill On Top Of Them Seats Only The Seats That Are Still Empty") {
@@ -4533,7 +4570,17 @@ void run_bot_tests() {
         ASSERT_TRUE(clients[0]->lobby->chat_log().size() == 2);                              // the waiting room's lines are still there
     } TEST_END();
 
-    TEST_CASE("S3.71 Server CPU With Bots (Measured): Twelve Rooms Of One Person And Three Bots Each Cost The Server's Thread A Few Milliseconds A Second (Only mgr.update Is Timed: The Clients' Work Is Not The Server's), On TINY And On TREASURE, With Idle, Medium And Hard Bots; The Start Of Twelve Rooms Is Not A Stall (Each Room Analyses Its Map Once)") {
+    TEST_CASE("S3.71 Server CPU With Bots (Measured): Twelve Rooms Of One Person And Three Bots Each Cost The Server's Thread A Few Milliseconds A Second (Only mgr.update Is Timed, As The Thread's CPU Time: The Clients' Work Is Not The Server's, A Busy Machine Is Not Either), On TINY And On TREASURE, With Idle, Medium And Hard Bots; The Start Of Twelve Rooms Is Not A Stall (Each Room Analyses Its Map Once)") {
+        // the clock of the measurement: it works, it does not run while the thread sleeps (a wall clock would read the whole 60 ms) and it runs while the thread works
+        const double cpu_start = thread_cpu_ms();
+        ASSERT_TRUE(cpu_start >= 0.0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        ASSERT_TRUE(thread_cpu_ms() - cpu_start < 30.0);
+        volatile uint64_t spin = 0;
+        const auto give_up = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (thread_cpu_ms() - cpu_start < 30.0 && std::chrono::steady_clock::now() < give_up) spin = spin + 1;
+        static_cast<void>(spin);
+        ASSERT_TRUE(thread_cpu_ms() - cpu_start >= 30.0);
         struct Result {
             double ms_per_second{0};
             double worst_pass_ms{0};
@@ -4556,9 +4603,9 @@ void run_bot_tests() {
             const auto pass = [&](double& timed_ms) {
                 w.now += 10;
                 w.net.set_time(w.now);
-                const auto t0 = std::chrono::steady_clock::now();
+                const double cpu0 = thread_cpu_ms();                                          // the thread's CPU time, not the wall clock: a loaded machine delays the thread, it does not make the pass cost more
                 w.mgr.update(w.now);
-                timed_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+                timed_ms = thread_cpu_ms() - cpu0;
                 for (auto& c : w.clients) c->update(w.now, maps_dir());
             };
             double ms = 0;

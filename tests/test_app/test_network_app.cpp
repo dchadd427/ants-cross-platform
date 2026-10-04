@@ -725,7 +725,7 @@ void run_bot_tests() {
         ASSERT_TRUE(app.bots()->stats(1).decisions == 0 && app.bots()->stats(3).decisions == 0);
         ASSERT_TRUE(ants_of(app.sim(), 2).empty() && !ants_of(app.sim(), 1).empty());
         const uint64_t hash0 = app.sim().state_hash().total;
-        // the ticks of the local loop reach the controller: the bots look at the world (the idle one never acts; the standard one is the worker bot of B3 until B4 and sends its ants to the food).
+        // the ticks of the local loop reach the controller: the bots look at the world (the idle one never acts; the standard one sends its ants to the food).
         // The first kDialogSteps steps are the "Get ready" dialog, in which the simulation waits, so 400 ticks take kDialogSteps + 400 steps
         for (int i = 0; i < kDialogSteps + 400; ++i) app.update_simulation(0.05f);
         ASSERT_EQ(app.sim().current_tick(), 400u);

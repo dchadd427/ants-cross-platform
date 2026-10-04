@@ -75,6 +75,26 @@ bool AntLedger::claim(uint32_t ant, TaskId task) {
     return true;
 }
 
+void AntLedger::set_rank(TaskId task, uint8_t rank) { rank_[task] = rank; }
+
+uint8_t AntLedger::rank(TaskId task) const noexcept {
+    const auto it = rank_.find(task);
+    return it != rank_.end() ? it->second : uint8_t{0};
+}
+
+bool AntLedger::take(uint32_t ant, TaskId task) {
+    if (task == kNoTask) return false;
+    const auto it = owner_.find(ant);
+    if (it == owner_.end()) {
+        owner_.emplace(ant, task);
+        return true;
+    }
+    if (it->second == task) return true;
+    if (rank(it->second) >= rank(task)) return false;                // only a task of a higher rank takes an ant from another
+    it->second = task;
+    return true;
+}
+
 bool AntLedger::release(uint32_t ant, TaskId task) {
     const auto it = owner_.find(ant);
     if (it == owner_.end() || it->second != task) return false;
@@ -141,11 +161,16 @@ void HarvestTask::sync_ledger(AntLedger& ledger) const {
 
 void HarvestTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
     if (command.type != sim::CommandType::GroupMove) return;
+    if (fate == Bot::Fate::Filtered && rescue_tile_.x >= 0 && command.tile_x == rescue_tile_.x && command.tile_y == rescue_tile_.y) rescue_blocked_until_ = tick + params_.blacklist_ticks;     // the entrance cannot be clicked
     for (const uint32_t ant : command.ants) {
         const auto it = recs_.find(ant);
         if (it == recs_.end() || it->second.sent != kPending) continue;
-        if (fate == Bot::Fate::Sent) it->second.sent = tick;          // the clock of this order starts when it LEFT, not when it was decided
-        else recs_.erase(it);                                         // it never left (expired, its ant died, a newer order took the ant): the ant is idle and empty, so it is in the pool again
+        if (fate == Bot::Fate::Sent) {
+            it->second.sent = tick;                                   // the clock of this order starts when it LEFT, not when it was decided
+        } else {
+            if (fate == Bot::Fate::Filtered) black_[it->second.pile] = tick + params_.blacklist_ticks;   // the click itself is refused: the pile is left alone for a while, or it is proposed again at every look
+            recs_.erase(it);                                          // it never left (expired, its ant died, a newer order took the ant, refused): the ant is idle and empty, so it is in the pool again
+        }
     }
 }
 
@@ -162,6 +187,34 @@ bool HarvestTask::connected_now(const MapInfo& map, sim::TileCoord tile) const n
         }
     }
     return false;
+}
+
+uint8_t HarvestTask::tier_for(const TaskContext& c, const PileInfo& pile, int32_t own_cost) const {
+    const BotView& v = c.view;
+    const uint8_t ally = v.ally();
+    size_t competitors = 0;                                                          // live enemy teams that reach the pile at a comparable cost
+    bool first = false;                                                              // an enemy that is far nearer than the seat
+    bool ally_near = false;
+    const uint64_t mine = static_cast<uint64_t>(std::max<int32_t>(own_cost, 1));
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        const TeamRow& row = v.rows()[t];
+        if (t == c.seat || !row.present || row.dropped) continue;                  // a team that dropped out competes for nothing
+        const int32_t cost = pile.approach[t].cost;
+        if (cost < 0) continue;                                                   // its hill cannot walk there
+        const uint64_t theirs = static_cast<uint64_t>(cost) * 100u;
+        if (ally < sim::MAX_PLAYERS && t == ally) {
+            if (theirs <= mine * params_.contest_high) ally_near = true;          // the ally is as near as the seat, or nearer
+            continue;
+        }
+        if (theirs < mine * params_.contest_low) first = true;
+        else if (theirs <= mine * params_.contest_high) ++competitors;
+    }
+    if (competitors >= 2) return static_cast<uint8_t>(PileClass::Multi);
+    if (competitors == 1 && params_.contest_one_first) return static_cast<uint8_t>(PileClass::One);
+    if (competitors == 1) return static_cast<uint8_t>(PileClass::Safe);
+    if (first) return static_cast<uint8_t>(PileClass::Hopeless);
+    if (ally_near) return static_cast<uint8_t>(PileClass::Shared);
+    return static_cast<uint8_t>(PileClass::Safe);
 }
 
 void HarvestTask::reask(const TaskContext& c) {
@@ -186,12 +239,27 @@ void HarvestTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const Profile& profile = c.profile;
+    if (!start_ants_known_ && !v.mine().empty()) {                                          // the opening's contest needs a team that can spare an ant (Params::contest_opening_min_ants)
+        start_ants_ = v.mine().size();
+        start_ants_known_ = true;
+    }
+    const uint32_t opening_ants = start_ants_ >= params_.contest_opening_min_ants ? params_.contest_opening_ants : 0u;
+    const auto in_pool_type = [&](sim::AntType type, sim::AntType def) { return type == def || ((params_.extra_types >> static_cast<unsigned>(type)) & 1u) != 0; };
     // The longest an order of ours can take to leave: the reaction delay plus its jitter, then the time to live in the controller's queue. A record that was never answered
     // by a fate (it cannot happen unless a bot is driven without the controller) is dropped after that, so that no ant stays out of the pool for ever.
     const uint64_t max_delay = profile.reaction_delay + profile.reaction_delay * profile.jitter_percent / 100u;
     const uint64_t stale_after = max_delay + profile.intent_ttl + profile.decision_interval + 8u;
 
     sync_ledger(c.ledger);
+    // an ant that a task of a higher rank took from us (AntLedger::take) is not ours any more: its order of ours is forgotten (nothing else ever takes an ant of the worker bot)
+    for (auto it = recs_.begin(); it != recs_.end();) {
+        if (c.ledger.owner(it->first) != id()) {
+            watch_.erase(it->first);
+            it = recs_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
     // 1. what became of the ants that were ordered
     //    first the evidence: a pile that another ant of the task walks to, bites at or carries from is not a pile that cannot be reached
@@ -303,7 +371,7 @@ void HarvestTask::step(TaskContext& c) {
     }
 
     // 1b. a carrier that stands idle with its food for longer than a legitimate wait for the gate: its walk home failed. A person would click it onto the hill.
-    {
+    if (params_.rescue) {
         std::map<uint32_t, uint64_t> stuck_now;
         std::vector<uint32_t> home;
         const HillInfo& hill = c.map.hill(c.seat);
@@ -311,7 +379,7 @@ void HarvestTask::step(TaskContext& c) {
         size_t queued = 0;                                                                  // idle carriers within the ring of the gate
         if (hill.present) {
             for (const AntView& a : v.mine()) {
-                if (a.type != v.default_ant_type() || !a.idle() || !(a.holding || a.carried_points > 0)) continue;
+                if (!in_pool_type(a.type, v.default_ant_type()) || !a.idle() || !(a.holding || a.carried_points > 0)) continue;
                 idle_carriers.push_back(&a);
                 queued += far_from_hill(hill, a.tile, params_.ring_tiles) ? 0u : 1u;
             }
@@ -323,8 +391,9 @@ void HarvestTask::step(TaskContext& c) {
         // With many carriers idle at once the gate is the bottleneck: one idle carrier more or less costs nothing, and a rescue sends an ant through the crowd of the queue (it
         // stirs it: 12 to 24 workers on one hill scored up to 10 percent less with rescues than without)
         const bool saturated = idle_carriers.size() >= params_.rescue_max_carriers;
+        const bool refused = now < rescue_blocked_until_;                                   // the controller refused a click onto the entrance lately: it is not tried again before the time is up
         for (const AntView* a : idle_carriers) {
-            if (saturated) break;
+            if (saturated || refused) break;
             const uint64_t since = stuck_now[a->id];
             // far from the hill, with nobody queueing at the gate, an idle carrier cannot be waiting for its turn
             const bool far_alone = far_from_hill(hill, a->tile, params_.ring_tiles) && queued == 0;
@@ -343,6 +412,7 @@ void HarvestTask::step(TaskContext& c) {
         }
         if (!home.empty()) {
             c.orders.move(home, hill.entrance, Priority::Normal);
+            rescue_tile_ = hill.entrance;
             rescues_ += static_cast<uint32_t>(home.size());
         }
     }
@@ -350,7 +420,7 @@ void HarvestTask::step(TaskContext& c) {
     // 2. the pool: idle workers with empty hands that nobody holds and that are not waiting for an order of ours
     std::vector<const AntView*> pool;
     for (const AntView& a : v.mine()) {
-        if (a.type != v.default_ant_type() || !a.idle() || a.holding || a.carried_points > 0) continue;   // a carrier walks home by itself: never order it (F12b)
+        if (!in_pool_type(a.type, v.default_ant_type()) || !a.idle() || a.holding || a.carried_points > 0) continue;   // a carrier walks home by itself: never order it (F12b)
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id()) continue;
         if (recs_.count(a.id) != 0) continue;
@@ -386,6 +456,13 @@ void HarvestTask::step(TaskContext& c) {
         }
         return c.map.approach_now(v.grid(), pile, now_field);
     };
+    const bool watch_fire = params_.fire_aware && v.has_grid() && !v.fire_walls().empty();
+    const auto fire_near = [&](sim::TileCoord anchor) {
+        for (const FireWallView& w : v.fire_walls()) {
+            if (w.tile.chebyshev_dist(anchor) <= params_.fire_radius) return true;
+        }
+        return false;
+    };
     std::vector<Candidate> cands;
     for (const PileView& p : v.piles()) {
         if (blacklisted(p.index, now)) continue;
@@ -400,10 +477,11 @@ void HarvestTask::step(TaskContext& c) {
             shut = true;
             ap = ask_now(p.index);                                                          // a pile of that kind has been worked on, or has not: ask for its click tile as it is now
             if (!ap.reachable()) continue;
-        } else if (v.has_grid() && p.remaining < info->units) {
-            ap = ask_now(p.index);                                                          // a pile that has been eaten into has another footprint: its click tile of the start may no longer be food
+        } else if (v.has_grid() && (p.remaining < info->units || (watch_fire && fire_near(info->anchor)))) {
+            ap = ask_now(p.index);                                                          // a pile that has been eaten into has another footprint: its click tile of the start may no longer be food; one with a fire wall near it may be cut off
             if (!ap.reachable()) continue;
         }
+        if (v.has_grid() && v.grid().has_powerup_at(ap.click)) continue;                  // (review experiment) the controller refuses a plain click onto a power-up tile: such a pile cannot be worked
         const int32_t trip = MapInfo::trip_ticks_for_cost(ap.cost);
         if (trip < 0) continue;
         // The endgame veto: points that an ant carries when the clock runs out are lost, and the order leaves up to max_delay ticks from now
@@ -414,18 +492,43 @@ void HarvestTask::step(TaskContext& c) {
         k.cost = ap.cost;
         k.trip = trip;
         k.rank = profile.value_aware_piles ? static_cast<int64_t>(p.value) * 100000 / trip : -static_cast<int64_t>(ap.cost);
+        if (params_.rank_by_remaining && profile.value_aware_piles) k.rank = static_cast<int64_t>(p.value) * static_cast<int64_t>(bite->remaining) * 100000 / trip;
         k.cap = std::max<uint32_t>(1u, std::min<uint32_t>(profile.max_ants_per_pile, static_cast<uint32_t>(trip) / std::max<uint32_t>(1u, params_.gate_gap_ticks) + 2u));
         for (const auto& e : recs_) k.load += e.second.pile == p.index ? 1u : 0u;
         k.bite = info->bite_index;
         k.units = bite->remaining;
         k.shut_at_start = shut;
+        if (params_.contest_aware || params_.contest_reactive || opening_ants > 0) {
+            const uint8_t cls = tier_for(c, *info, ap.cost);
+            const uint8_t safe = static_cast<uint8_t>(PileClass::Safe);
+            const uint8_t multi = static_cast<uint8_t>(PileClass::Multi);
+            if (params_.contest_aware) {
+                k.tier = cls;
+            } else if (params_.contest_reactive) {
+                bool enemy_there = false;
+                for (const AntView& e : v.others()) {
+                    if (e.team == c.seat || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
+                    if (e.tile.chebyshev_dist(info->anchor) <= 3) enemy_there = true;
+                }
+                k.tier = enemy_there && (cls == multi || cls == static_cast<uint8_t>(PileClass::One)) ? multi : safe;
+            } else if (now < params_.contest_opening_ticks && cls == multi) {
+                k.tier = multi;
+                k.cap = std::min<uint32_t>(k.cap, opening_ants);
+            } else {
+                k.tier = safe;
+            }
+        }
         cands.push_back(k);
     }
     if (cands.empty()) {
         unplaced_ = pool.size();
         return;
     }
-    std::stable_sort(cands.begin(), cands.end(), [](const Candidate& x, const Candidate& y) { return x.rank > y.rank; });     // ties: the lower pile index (the view's order)
+    if (params_.contest_aware || params_.contest_reactive || opening_ants > 0) {
+        tiers_.clear();
+        for (const Candidate& k : cands) tiers_[k.pile] = k.tier;
+    }
+    std::stable_sort(cands.begin(), cands.end(), [](const Candidate& x, const Candidate& y) { return x.tier != y.tier ? x.tier < y.tier : x.rank > y.rank; });     // ties: the lower pile index (the view's order)
 
     // 4. every ant of the pool to the first pile with room that it can walk to, else to the best one; the groups are cut at max_group_ants
     const int32_t hill_component = c.map.hill_component(c.seat);

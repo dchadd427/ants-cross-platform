@@ -52,9 +52,11 @@ JsonValue status_to_json(const RoomStatus& s) {
     for (const RoomStatus::Bot& b : s.bots) {
         JsonValue row = JsonValue::make_object();
         row.set("seat", JsonValue::make_int(b.seat));
-        row.set("bot", JsonValue::make_string(b.kind == "standard" ? b.level : b.kind + ":" + b.level));
+        const std::string pinned = b.style == "random" || b.style.empty() ? std::string() : ":" + b.style;       // (a pinned style is part of the text that --bot takes; a bot that draws its own is not named)
+        row.set("bot", JsonValue::make_string(b.kind == "standard" ? b.level + pinned : b.kind + ":" + b.level));
         row.set("kind", JsonValue::make_string(b.kind));
         row.set("level", JsonValue::make_string(b.level));
+        if (!b.style.empty()) row.set("style", JsonValue::make_string(b.style));                // (the worker and the idle bot have no style: the key is absent, not "random")
         row.set("name", JsonValue::make_string(b.name));
         row.set("fill", JsonValue::make_bool(b.fill));
         bots.push_back(std::move(row));
@@ -211,7 +213,7 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
     spec.max_catch_up_ms = static_cast<uint32_t>(catch_s * 1000);
     spec.resume_countdown_ms = static_cast<uint32_t>(resume_s * 1000);
     // The computer players that sit in the room from the start (docs/BOTS.md B6): [{"seat": 2, "bot": "medium"}]; "bot" is what --bot takes after the seat ("easy", "medium", "hard",
-    // "idle", "worker", "worker:easy", ...; "standard" is the default kind)
+    // "idle", "worker", "worker:easy", "hard:raider" (a pinned style), ...; "standard" is the default kind)
     if (const JsonValue* v = body.find("bots")) {
         if (!v->is_array()) {
             error = "\"bots\" must be an array of {\"seat\": 0 to 3, \"bot\": \"easy\" | \"medium\" | \"hard\" | ...}";

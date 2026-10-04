@@ -957,8 +957,8 @@ int main(int argc, char* argv[]) {
         bool whole = false;
         for (const Recorder::Text& t : rec.texts) whole = whole || t.text == "Empty seats at START";
         ASSERT_TRUE(whole);
-        // the caption under the choice (the bots only harvest until B4b: the panel must not promise a fight): exact words, dim, between the choice and the name, drawn whole and 14 px
-        ASSERT_EQ(std::string(fill_choice_caption()), std::string("Bots gather food; they do not fight yet."));
+        // the caption under the choice (the panel says what the standard bot does, it gathers food, raids and fights back, and must not promise more): exact words, dim, between the choice and the name, drawn whole and 14 px
+        ASSERT_EQ(std::string(fill_choice_caption()), std::string("Bots gather food, raid and fight back."));
         MenuElement caption;
         MenuElement name_label;
         for (const MenuElement& e : g.menu.elements()) {

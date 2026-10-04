@@ -1,5 +1,6 @@
 // Tests of the controller that stands between a bot and the door of a person: schedule, reaction delay, budget, time to live, priorities, ants that died,
-// splitting, the rules of the HUD, the issuer, the anti-thrash cool-down, and above all that a controller whose bots only read changes nothing (AI2.3 .. AI2.16).
+// splitting, the rules of the HUD, the issuer, the anti-thrash cool-down, and above all that a controller whose bots only read changes nothing (AI2.3 .. AI2.16); AI2.21: a refused
+// click has a fate (Bot::Fate::Filtered).
 #include "ai_test.hpp"
 
 #include <algorithm>
@@ -1182,5 +1183,45 @@ void run_controller_tests() {
                 }
             }
         }
+    } TEST_END();
+
+    TEST_CASE("AI2.21 A Refused Click Has A Fate: The Bot Is Told (Fate::Filtered, At The Tick Of The Look, The Command As It Proposed It) Once For Every Intent The Filter Refuses, Before Anything Else Of That Look; The Count Of `filtered` Agrees; What Passes Is Sent And Never Filtered") {
+        sim::SimulationEngine sim;
+        build_world(sim, 7);
+        sim.grid_mut().place_powerup(20, 20, 3);
+        RecordingSink sink(sim);
+        BotController c(sim, 3);
+        c.set_start_hold(0);                                                              // the filter, from tick 1 (the start hold: AI2.17 - AI2.20)
+        const std::vector<uint32_t> mine = ants_of(sim, 0);
+        size_t looks = 0;
+        ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Medium), sink, [&](const BotView&, Orders& o) {
+            if (++looks > 5) return;
+            o.move({mine[0]}, tc(20, 20));                                                // refused: a plain click onto a power-up (only a planned pick-up may name one)
+            if (looks == 2) o.special(mine[1], tc(20, 20));                               // refused: a special order onto a power-up tile
+            if (looks == 3) o.move({mine[2]}, tc(22, 20));                                // passes: next to the power-up
+            if (looks == 4) o.attack({mine[3]}, tc(25, 25));                              // refused: no enemy ant stands there
+        });
+        ASSERT_TRUE(bot != nullptr);
+        run_ticks(sim, c, 300);
+        ASSERT_TRUE(looks > 5);                                                              // (five looks proposed, the rest were silent)
+        const BotController::SeatStats& st = c.stats(0);
+        ASSERT_EQ(st.filtered, 7u);                                                       // five plain clicks, one special order, one attack
+        ASSERT_EQ(st.released, 1u);
+        ASSERT_EQ(bot->count(Bot::Fate::Filtered), static_cast<size_t>(st.filtered));     // once per refused intent
+        ASSERT_EQ(bot->count(Bot::Fate::Sent), 1u);
+        size_t at = 0;
+        for (const ScriptBot::Seen& seen : bot->fates) {
+            if (seen.fate != Bot::Fate::Filtered) continue;
+            ASSERT_TRUE(seen.command.type == CommandType::GroupMove || seen.command.type == CommandType::GroupSpecial || seen.command.type == CommandType::GroupAttack);
+            ASSERT_TRUE(seen.command.ants.size() == 1);                                   // the command as proposed
+            ASSERT_TRUE(seen.tick >= 1 && std::count(bot->thought.begin(), bot->thought.end(), seen.tick) == 1);       // the tick of a look (told at once, not when the release would have been due)
+            ++at;
+        }
+        ASSERT_EQ(at, 7u);
+        const ScriptBot::Seen& first = bot->fates.front();                                // the first thing the bot hears is the refusal of its first click, in the look that proposed it
+        ASSERT_TRUE(first.fate == Bot::Fate::Filtered && first.command.type == CommandType::GroupMove && first.command.tile_x == 20 && first.command.tile_y == 20 && first.command.ants[0] == mine[0]);
+        ASSERT_EQ(first.tick, bot->thought.front());
+        ASSERT_EQ(sink.log.size(), 1u);                                                   // nothing refused left
+        ASSERT_TRUE(sink.log[0].second.tile_x == 22 && sink.log[0].second.ants.size() == 1 && sink.log[0].second.ants[0] == mine[2]);
     } TEST_END();
 }
