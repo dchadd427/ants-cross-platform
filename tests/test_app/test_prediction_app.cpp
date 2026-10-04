@@ -765,10 +765,6 @@ int main(int argc, char* argv[]) {
         app.render_frame();
         const sim::SimulationEngine* predicted = &app.view_sim();
         ASSERT_TRUE(predicted != &app.sim() && app.hud().sim_query() == predicted);       // (the frame asks the engine that it shows)
-        app.net()->set_prediction_enabled(false);
-        app.pump_network(0.0f);
-        ASSERT_TRUE(app.net()->prediction() == nullptr);                                   // destroyed, not suspended
-        ASSERT_TRUE(app.hud().sim_query() == &app.sim());                                  // at once: no frame has been drawn since
         int16_t gx = 0, gy = 0;
         ASSERT_TRUE(far_goal(app.sim(), 0, gx, gy));
         const int32_t goal_wx = gx * 32 + 16;
@@ -776,8 +772,14 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(place_camera(app, goal_wx, goal_wy, 0, 0));
         int32_t gsx = 0, gsy = 0;
         ASSERT_TRUE(app.renderer().camera().world_to_screen(goal_wx, goal_wy, gsx, gsy));
-        const CursorType cursor = app.hud().evaluate_cursor(gsx, gsy, app.sim().get_world_state(), app.sim().grid(), app.renderer().camera());     // (reads the query: a sanitizer sees a pointer that dangles)
+        app.net()->set_prediction_enabled(false);
+        app.pump_network(0.0f);
+        ASSERT_TRUE(app.net()->prediction() == nullptr);                                   // destroyed, not suspended
+        // the cursor over open ground with the ant selected asks the query about a special target, with no frame drawn since (the first thing is the read: under a sanitizer a query that still
+        // pointed at the destroyed engine is a heap-use-after-free right here)
+        const CursorType cursor = app.hud().evaluate_cursor(gsx, gsy, app.sim().get_world_state(), app.sim().grid(), app.renderer().camera());
         ASSERT_TRUE(cursor == CursorType::Move || cursor == CursorType::Target);           // open ground, an own ant selected
+        ASSERT_TRUE(app.hud().sim_query() == &app.sim());                                  // at once: no frame has been drawn since
         app.render_frame();
         ASSERT_TRUE(app.hud().sim_query() == &app.sim());
         app.net()->freeze();
