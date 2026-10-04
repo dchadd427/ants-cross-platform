@@ -167,6 +167,21 @@ The machine was shared with other work (its load average was about 40 on 10 core
 
 ## Gates
 
+**With the fixes of the review** (the rows of the table "State at handoff"):
+
+| Gate | Result |
+|---|---|
+| Release build with `-DANTS_WERROR=ON` | 0 warnings |
+| `./run_tests.sh --fast` | every suite passes except two python tests that check that the children of a killed test are collected at once (they fail in the sandbox where this was done, which collects a killed child late; CI runs them) |
+| `test_server` | 110 tests, 60,477 assertions, 0 failed |
+| `test_lockstep` | 117 tests, 3,163,737 assertions, 0 failed |
+| The server end-to-end script, parts `options` and `reconnect` | 113 checks, 0 failures |
+| **AddressSanitizer + UBSan** (Debug, `-DENABLE_ASAN=ON`, built without `-Werror`: see below) | `test_server`: 110 tests, 60,455 assertions (its real-process tests run the sanitized server); `test_lobby`: 25 tests, 64,818 assertions; `test_lockstep`: N2.40 - N2.50 and N2.96 - N2.99; all pass, no finding. The rest of the lock-step suite was not run under the sanitizers (the machine was loaded, and the code of that suite is as it was: the one change in `ants_net` is the lobby's hook, which `test_lobby` covers) |
+| Mutants (`tools/mutate.py`) | 96 faults put in the code of the fixes: 95 caught by a test of the fix, 1 equivalent (M2: whether the lazy restore comes before the demo room cannot be seen) |
+| Leak scan of the diff and of the commit messages | no path, host, token or key |
+
+The Debug build with `-Werror` stops at `-Wsign-conversion` for `(mask >> n) & 1u` (GCC 12 without optimisation) in `match_stats.hpp`, `bot_controller.cpp`, `session.cpp`, `room.cpp` and `restart_record.cpp`: code from before the fixes, and the Release build that CI and `run_tests.sh` use has none.
+
 The work was done on the v0.2.0 candidate, then rebased onto the merge of v0.2.0 (the clock behind the start dialog, F1: a room discards a command sent before its first turn, the `/busy` count, the parallel runner, the split server script, the ants_test_paths scheme). What ran on which tree:
 
 **On the final tree (after the rebase):**
