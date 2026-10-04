@@ -143,7 +143,8 @@ enum class MenuId : uint8_t {
     Cancel,                                             // connecting
     Copy, EnterRoom,                                    // the room's code
     Back,                                               // every panel but the first (on the room's panel: leave the room)
-    Teams                                               // single player, only while two or more seats have a bot (last: the numbers above are in the golden fingerprints of the wide pages)
+    Teams,                                              // single player, only while two or more seats have a bot (last: the numbers above are in the golden fingerprints of the wide pages)
+    SingleName                                          // single player: the player's name (the same text as Name and HostName: one remembered name)
 };
 
 enum class MenuKind : uint8_t {
@@ -185,7 +186,7 @@ struct MenuElement {
 struct MenuRequest {
     enum class Type : uint8_t { None, Quit, Single, Join, Host, Cancel, EnterRoom, LeaveRoom };
     Type type{Type::None};
-    std::string name;                         // Join, Host: the player's name (cleaned)
+    std::string name;                         // Join, Host, Single: the player's name (cleaned: the same rule for all three)
     std::string room;                         // Join: the room code (cleaned)
     int map{0};                               // Host: the index of the map
     int players{4};                           // Host: 2 - 4
@@ -332,11 +333,12 @@ private:
     void back();
     void try_join();
     void try_host();
+    void try_single();
     void request(MenuRequest::Type type);
     void set_selected(MenuId id);
     void notify(MenuSetting setting);
     void play(uint32_t sound_id);
-    bool is_field(MenuId id) const noexcept { return id == MenuId::Name || id == MenuId::Code || id == MenuId::HostName; }
+    bool is_field(MenuId id) const noexcept { return id == MenuId::Name || id == MenuId::Code || id == MenuId::HostName || id == MenuId::SingleName; }
     std::string* field_text(MenuId id) noexcept;
     void edit(MenuId id, const std::string& typed);
     void name_changed();                                    // the name field changed: written later (flush)

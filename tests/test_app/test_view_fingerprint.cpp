@@ -3963,9 +3963,9 @@ const Golden kGoldens[] = {
     {"screen.menu.main.second_selected", 0x7ec2b1c259beacce, 146},
     {"screen.menu.main.quit_selected", 0x647ac943406089ce, 146},
     {"screen.menu.main.notice", 0xe9d5e1ba26ad5f25, 156},
-    {"screen.menu.single.empty", 0x985b15c8c2fc8ab2, 207},
-    {"screen.menu.single.two_bots", 0x721e1443bedde420, 231},          // regenerated for the Teams row that two bots bring (the panel with fewer bots, "empty" and "own_seat_2", did not move)
-    {"screen.menu.single.own_seat_2", 0xb470829b76dc0289, 207},
+    {"screen.menu.single.empty", 0x227af479f1885934, 218},                // the three Single panel goldens: regenerated for the name field (+ the Teams row of two_bots)
+    {"screen.menu.single.two_bots", 0xc7548f9283cdd916, 242},
+    {"screen.menu.single.own_seat_2", 0xb2edf0250758b271, 218},
     {"screen.menu.join.empty", 0xa3719b0cf65673ec, 148},
     {"screen.menu.join.typed", 0x97292172383f912c, 149},
     {"screen.menu.join.caret_off", 0xffc1932a3464e20d, 148},

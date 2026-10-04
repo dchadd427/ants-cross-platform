@@ -251,6 +251,21 @@ std::vector<Variant> all_variants() {
             r.click(id);
         }
     }});
+    v.push_back({"single player, the longest name and a refusal", [](Rig& r) {
+        r.to_panel(MenuId::Single);
+        r.key(SDLK_UP);
+        r.type("Bot (" + std::string(40, 'W'));                                    // 32 characters, and a name that is for computer players: refused with the long line
+        r.key(SDLK_RETURN);
+    }});
+    v.push_back({"single player, three bots, the Teams row and a refusal", [](Rig& r) {
+        r.to_panel(MenuId::Single);
+        for (MenuId id : {MenuId::Seat1, MenuId::Seat2, MenuId::Seat3}) r.click(id);
+        r.click(MenuId::Teams);
+        for (int up = 0; up < 4; ++up) r.key(SDLK_UP);                             // Teams, Black, Blue, Red, the name
+        ASSERT_TRUE(r.menu.selected() == MenuId::SingleName);
+        r.type("Bot (" + std::string(40, 'W'));
+        r.key(SDLK_RETURN);
+    }});
     v.push_back({"single player, own seat 3", [](Rig& r) {
         r.menu.set_own_seat(3);
         r.to_panel(MenuId::Single);
@@ -538,9 +553,9 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(r.element(MenuId::Teams).value, std::string("Free for all"));
         ASSERT_TRUE(r.element(MenuId::Teams).kind == MenuKind::Cycler);
         ASSERT_TRUE(has_text(r.menu.elements(), "Teams") && has_text(r.menu.elements(), StartMenu::kBotsLine));
-        // the Tab order: the rows, Teams, Continue, Back
+        // the Tab order: the name, the rows, Teams, Continue, Back
         const std::vector<MenuId> ids = control_ids(r.menu);
-        ASSERT_TRUE((ids == std::vector<MenuId>{MenuId::Seat1, MenuId::Seat2, MenuId::Seat3, MenuId::Teams, MenuId::Continue, MenuId::Back}));
+        ASSERT_TRUE((ids == std::vector<MenuId>{MenuId::SingleName, MenuId::Seat1, MenuId::Seat2, MenuId::Seat3, MenuId::Teams, MenuId::Continue, MenuId::Back}));
         // the controls lie inside the panel, clear of each other, and under the seats
         {
             const std::vector<MenuElement> all = r.menu.elements();
@@ -696,6 +711,130 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(store.get_string("teams", "?", 99), std::string("ffa"));
             ASSERT_EQ(store.get_string("bots", "?", 99), std::string("off,off,easy,off"));   // (the seats by colour: green is the player's, red is empty again, blue is Easy)
         }
+    } TEST_END();
+
+    TEST_CASE("M2.6 Single player: the player's name is a field of the panel, the same text as Join's and Host's (one remembered name), proposed as the settings have it, focused by the keyboard (Up from the first row: its text is selected, so typing replaces it) or by a click (nothing selected), edited like the others (printable ASCII, 32 at most), Enter in it and Continue ask for the game with the cleaned name, a name that Join would refuse is refused on the field with the same words (shown in the rule's place until the next key, with the can't-go cue, asking for nothing), and the name is written when the game is asked for") {
+        TempDir temp;
+        ConfigStore store;
+        store.set_location(temp.file("settings.ini"));
+        Rig r(0, "Maya");
+        r.menu.set_on_change([&](MenuSetting which) {
+            r.changes.push_back(which);
+            r.menu.settings().write(store, which);
+        });
+        r.to_panel(MenuId::Single);
+        ASSERT_TRUE(r.exists(MenuId::SingleName));
+        ASSERT_TRUE(r.element(MenuId::SingleName).kind == MenuKind::Field);
+        ASSERT_EQ(r.element(MenuId::SingleName).text, std::string("Maya"));                // the name that the settings have (the owner puts --name there too)
+        ASSERT_TRUE(has_text(r.menu.elements(), "Your name"));
+        ASSERT_EQ(r.menu.selected(), MenuId::Seat1);                                       // arriving: the first row, as it was (never a field that takes typing, never a button that acts)
+        // by the keyboard: Up from the first row selects the field and its text
+        r.key(SDLK_UP);
+        ASSERT_EQ(r.menu.selected(), MenuId::SingleName);
+        ASSERT_TRUE(r.element(MenuId::SingleName).all_selected);
+        r.type("Zed");
+        ASSERT_EQ(r.menu.name(), std::string("Zed"));                                      // typing replaced "Maya"
+        ASSERT_FALSE(r.element(MenuId::SingleName).all_selected);
+        ASSERT_EQ(r.element(MenuId::SingleName).text, std::string("Zed"));
+        r.type(std::string(60, 'x'));
+        ASSERT_EQ(r.menu.name().size(), StartMenu::kNameMax);                              // the limit of the room's protocol, as on the other panels
+        r.key(SDLK_BACKSPACE);
+        ASSERT_EQ(r.menu.name().size(), StartMenu::kNameMax - 1);
+        r.type("\x01\xc3\xa9");                                                            // a control character and an accent are not typed ...
+        ASSERT_EQ(r.menu.name().size(), StartMenu::kNameMax - 1);
+        ASSERT_TRUE(has_text(r.menu.elements(), StartMenu::kRefusedCharsText));            // ... and the panel says why (in the rule's place)
+        r.type("y");                                                                       // the next key clears the line
+        ASSERT_FALSE(has_text(r.menu.elements(), StartMenu::kRefusedCharsText));
+        ASSERT_TRUE(has_text(r.menu.elements(), StartMenu::kNoBotsLine));
+        ASSERT_FALSE(store.has("name"));                                                   // (nothing is written at every key)
+        r.key(SDLK_DOWN);                                                                  // the field is left: now it is
+        ASSERT_EQ(r.menu.selected(), MenuId::Seat1);
+        ASSERT_EQ(store.get_string("name", "", 99), "Zed" + std::string(28, 'x') + "y");
+        ASSERT_TRUE(r.changes.back() == MenuSetting::Name);
+        // one name for the three panels
+        r.key(SDLK_ESCAPE);
+        r.to_panel(MenuId::JoinWithCode);
+        ASSERT_EQ(r.menu.name(), "Zed" + std::string(28, 'x') + "y");
+        ASSERT_EQ(r.element(MenuId::Name).text, r.menu.name());
+        r.key(SDLK_UP);
+        r.type("Ruth");
+        r.key(SDLK_ESCAPE);
+        r.click(MenuId::Single);
+        ASSERT_EQ(r.element(MenuId::SingleName).text, std::string("Ruth"));                // what was typed on Join is the single player's name
+        r.to_panel(MenuId::HostOnline);
+        ASSERT_EQ(r.element(MenuId::HostName).text, std::string("Ruth"));
+        // by the mouse: a click gives the field the focus and selects nothing (typing goes on at the end); the pointer over it selects nothing
+        r.to_panel(MenuId::Single);
+        r.mouse_move(MenuId::SingleName);
+        ASSERT_EQ(r.menu.selected(), MenuId::Seat1);
+        r.click(MenuId::SingleName);
+        ASSERT_EQ(r.menu.selected(), MenuId::SingleName);
+        ASSERT_FALSE(r.element(MenuId::SingleName).all_selected);
+        r.type("!");
+        ASSERT_EQ(r.menu.name(), std::string("Ruth!"));
+        // Tab order: the name, then the rows, Continue, Back (and round)
+        r.key(SDLK_TAB);
+        ASSERT_EQ(r.menu.selected(), MenuId::Seat1);
+        r.key(SDLK_TAB, KMOD_SHIFT);
+        ASSERT_EQ(r.menu.selected(), MenuId::SingleName);
+        // Enter in the field asks for the game: with the cleaned name (the blanks at both ends go), the bots and the teams of the panel; and it is written
+        r.key(SDLK_a, KMOD_CTRL);                                                          // (select the text: the next typing replaces it)
+        r.type("  Dave  ");
+        r.key(SDLK_RETURN);
+        MenuRequest request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Single && request.bots.empty() && request.teams == LocalTeams{});
+        ASSERT_EQ(request.name, std::string("Dave"));
+        ASSERT_EQ(store.get_string("name", "", 99), std::string("  Dave  "));              // (the field's text, as the other panels write it; the settings clean it when they are read)
+        // Continue asks as well, with the same name; a second ask with nothing new writes nothing new
+        const size_t writes = r.changes.size();
+        r.click(MenuId::Seat1);
+        r.click(MenuId::Seat3);
+        r.changes.clear();
+        r.click(MenuId::Continue);
+        request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Single && request.bots.size() == 2 && request.name == "Dave");
+        ASSERT_TRUE(std::find(r.changes.begin(), r.changes.end(), MenuSetting::Name) == r.changes.end());
+        (void)writes;
+        // a name that Join would refuse is refused here with the same words, on the field, with the cue, and nothing is asked
+        for (const auto& refused : std::vector<std::pair<std::string, std::string>>{{"", "Type your name first."},
+                                                                                  {"   ", "Type your name first."},
+                                                                                  {"Bot (Hard)", "A name that starts with \"Bot (\" is for computer players. Please choose another name."},
+                                                                                  {" bot(x", "A name that starts with \"Bot (\" is for computer players. Please choose another name."}}) {
+            Rig b(0, "Player");
+            b.to_panel(MenuId::Single);
+            b.key(SDLK_UP);
+            b.key(SDLK_BACKSPACE);                                                         // (the selected text goes)
+            b.type(refused.first);
+            const int cues = b.sounds.count(sim::SoundID::CantGo);
+            b.click(MenuId::Continue);
+            ASSERT_FALSE(b.menu.has_request());
+            ASSERT_EQ(b.menu.panel(), MenuPanel::Single);
+            ASSERT_EQ(b.menu.message(), refused.second);
+            ASSERT_TRUE(has_text(b.menu.elements(), refused.second));
+            ASSERT_EQ(b.menu.selected(), MenuId::SingleName);
+            ASSERT_EQ(b.sounds.count(sim::SoundID::CantGo), cues + 1);
+            std::string clean;
+            std::string why;
+            ASSERT_FALSE(check_player_name(refused.first, clean, why));                    // the Join panel's rule says the same
+            ASSERT_EQ(why, refused.second);
+            b.key(SDLK_RETURN);                                                            // Enter in the field is the same ask, refused the same
+            ASSERT_FALSE(b.menu.has_request());
+            ASSERT_EQ(b.sounds.count(sim::SoundID::CantGo), cues + 2);
+            b.type("Bob");                                                                 // the next key takes the line away, and a good name goes through
+            ASSERT_TRUE(b.menu.message().empty());
+            b.click(MenuId::Continue);
+            const MenuRequest ok = b.take();
+            ASSERT_TRUE(ok.type == MenuRequest::Type::Single && ok.name == "Bob");
+        }
+        // Esc leaves the panel and writes what was typed (a name that is not asked for yet is still kept)
+        Rig e(0, "Player");
+        e.menu.set_on_change([&](MenuSetting which) { e.menu.settings().write(store, which); });
+        e.to_panel(MenuId::Single);
+        e.key(SDLK_UP);
+        e.type("Esme");
+        e.key(SDLK_ESCAPE);
+        ASSERT_EQ(e.menu.panel(), MenuPanel::Main);
+        ASSERT_EQ(store.get_string("name", "", 99), std::string("Esme"));
     } TEST_END();
 
     TEST_CASE("M3.1 Join: the name and the code fields take printable characters up to 32 and Backspace; Up, Down and Tab move between the fields and the buttons; the keyboard selects the text of a field (the next typing replaces it), a click does not") {

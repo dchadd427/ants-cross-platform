@@ -343,7 +343,8 @@ std::string Application::menu_failure_text() const {
 // ---- the way into the original's screens and the way back ----------------------------------------------------------------------------------
 
 // Continue on the single-player panel: the match will have exactly the bots that `--bot SEAT:LEVEL` gives (same path: config_.bots, checked again at START with the fog option
-// that the setup screen has then) and the teams that `--teams` gives (config_.teams); an empty list is the original's single-player game, unchanged
+// that the setup screen has then) and the teams that `--teams` gives (config_.teams); an empty list is the original's single-player game, unchanged. The name is the one of the panel's field
+// (--name pre-fills it): the score box, the results, the chat and the setup screen show it, as for the name that a Join or a Host asks for.
 void Application::menu_start_single(const MenuRequest& request) {
     config_.bots = request.bots;
     config_.teams = request.teams;
@@ -354,6 +355,7 @@ void Application::menu_start_single(const MenuRequest& request) {
         start_menu_.show_main(why);
         return;
     }
+    if (!request.name.empty()) local_player_name_ = request.name;           // the name in the panel's field is the player's in this game (the menu checked it as it checks Join's and Host's)
     apply_player_name(local_player_name_);
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), uint8_t{0x0F});
     show_opening_screens();
