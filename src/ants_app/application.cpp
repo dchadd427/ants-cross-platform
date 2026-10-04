@@ -1231,18 +1231,7 @@ void Application::form_start_teams() {
         show_setup_notice("--teams " + local_teams_text(config_.teams) + ": " + plan.why + " The game starts without teams.");
         return;
     }
-    for (const std::array<uint8_t, 2>& pair : plan.pairs) {
-        sim::Command invite;
-        invite.type = sim::CommandType::AllianceInvite;
-        invite.issuer = pair[0];
-        invite.other_player = pair[1];
-        sim_.apply_command(invite);
-        sim::Command accept;
-        accept.type = sim::CommandType::AllianceAccept;
-        accept.issuer = pair[1];
-        accept.other_player = pair[0];
-        sim_.apply_command(accept);
-    }
+    sim::apply_start_teams(sim_, config_.teams);
 }
 
 // The host of a room runs the room's bots: their commands go into the host's sequencer. A guest (and a guest that took over as host) never does.
