@@ -132,8 +132,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 p.raid_min_loot = p.raid_min_loot * 3;                                       // (it defends like the others: the Combat Ant that harvests costs nothing and is its defence)
                 break;
             case Style::Raider:
-                p.opening_order = {sim::AntType::Fire, sim::AntType::Thief, sim::AntType::Bomber, sim::AntType::Combat, sim::AntType::Swimmer};
-                p.secure_kinds = static_cast<uint8_t>((1u << static_cast<unsigned>(sim::AntType::Fire)) | (1u << static_cast<unsigned>(sim::AntType::Thief)));
+                p.secure_kinds = static_cast<uint8_t>((1u << static_cast<unsigned>(sim::AntType::Fire)) | (1u << static_cast<unsigned>(sim::AntType::Thief)));    // (Fire and Thief first of the opening's trips: the Bomber is not secured, so its place in the order does not matter)
                 p.raid_min_loot = p.raid_min_loot / 2;
                 p.raid_black_ticks = 300;
                 p.avoids_guarded_hills = false;

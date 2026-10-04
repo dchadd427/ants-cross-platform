@@ -2,15 +2,18 @@
 // with: the same arguments always give the same matches, bit for bit, on any machine, whatever the number of threads.
 //
 // Usage:
-//   bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N] [--replay-check]
-//             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR]
+//   bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N] [--replay-check]
+//             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-standard | --ally-pairs]
 //   bot_arena --selftest
 //   bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc
 //
 //   --map NAMES       a comma list of shipped maps by name (TINY, SMALL, MEDIUM, GAUNTLET, TREASURE, ISLANDS, or "shipped" for all six) or paths of .LVL files (default TINY)
 //   --seeds A..B      the engine and controller seeds: "3", "1..8", "1,4,9..12" (default 1)
-//   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL or LEVEL: KIND idle, worker, standard (or aggressor, the bench bot of
-//                     tools/bench_aggressor.hpp: raids and harasses, never harvests, not a bot of the game); LEVEL easy, medium, hard.
+//   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE: KIND idle, worker, standard (or one of the
+//                     bench bots of tools/bench_aggressor.hpp, which are not bots of the game: aggressor, aggressor2 (a double-thief opening), rusher (the contested middle first),
+//                     saboteur, aggr1 .. aggr9 (an aggressor with that many attackers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
+//                     bot's style: Hard plays aggressive or raider only; none: it draws its own per match). KIND may be `standard+K=V,K=V`, a standard bot with its own tuning of
+//                     the keys of apply_tune (the tournaments' ablations; listed in docs/audit/B4_1_notes.md).
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants.
 //                     idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
 //   --ticks full|N    play until the match is over (the map's own length, default) or at most N ticks (50 ms each)
@@ -20,6 +23,10 @@
 //                     so a comparison of bots must rotate them
 //   --repeat N        play every match N times and require identical results (finds any nondeterminism)
 //   --replay-check    re-feed the commands that were applied into a FRESH engine with no bot at all and require the same state hash at every 20th tick and at the end
+//   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did
+//                     (counts of attack orders, raids, walls, ...) to stderr when a match is over (tools/exp.py reads it).
+//   --ally-standard   the first two standard bots of a match team up (the lower seat invites at its first look, the other accepts by its accept rule); --ally-pairs: every two seats
+//                     with the same standard spec team up (2 + 2 for [A, A, B, B]). Test-only: no bot of the game invites.
 //   --threads N       matches played at the same time (default 1; every match is independent, the report is sorted by map, seed and arrangement)
 //   --out FILE        write the JSON report (fixed key order; the maps' NAMES only, no paths). The file is opened BEFORE the first match (an unwritable path costs nothing) and
 //                     checked after the last: a report that could not be written completely is exit code 2, never a silent success
@@ -443,15 +450,16 @@ struct Options {
 
 void print_usage(std::FILE* to) {
     std::fprintf(to,
-        "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
-        "                 [--replay-check] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR]\n"
+        "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
+        "                 [--replay-check] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs]\n"
         "       bot_arena --selftest\n"
         "       bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc\n"
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
         "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
-        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL or LEVEL (kinds idle worker standard aggressor aggressor2 saboteur rusher; levels easy medium hard).\n"
-        "                     Default: four standard bots at medium level. %s.\n"
+        "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE (kinds idle worker standard and the bench bots aggressor aggressor2\n"
+        "                     saboteur rusher aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
+        "                     KIND may be standard+K=V,K=V: a standard bot with its own tuning (see --tune). Default: four standard bots at medium level. %s.\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
         "  --rotate           every distinct arrangement of the bots over the seats\n"

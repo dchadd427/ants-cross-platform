@@ -2,6 +2,7 @@
 // four bots, next to the worker's. A measurement with a loose bound (the machine of a test run is shared and busy); the numbers are printed and are the ones of docs/BOTS.md ("Cost").
 //
 //   AI13.1  the cost of a look: the worker's and the standard bot's, at every level, on every shipped map after 3,000 ticks of a match
+//   AI13.2  whole matches of four standard bots (A5): the budget in every window of releases, nothing filtered or rejected, bit-reproducible, replayed without any bot
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -48,6 +49,18 @@ LookCost cost_of(const sim::SimulationEngine& sim, uint8_t seat, Bot& bot, const
     out.build_us = build / looks;
     out.think_us = think / looks;
     return out;
+}
+
+// Whether a seat's releases (their ticks, sorted) keep to the budget of the level in every window: no window holds more commands than the bucket and the rate allow (the bound of AI2.3)
+bool within_budget(const std::vector<uint64_t>& ticks, const Profile& p) {
+    for (size_t i = 0; i < ticks.size(); ++i) {
+        for (size_t j = i; j < ticks.size(); ++j) {
+            const uint64_t len = ticks[j] - ticks[i] + 1;
+            const uint64_t n = j - i + 1;
+            if (n * 1000u > static_cast<uint64_t>(p.burst) * 1000u + (len * p.rate_milli_cps + 19u) / 20u) return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace
@@ -121,5 +134,50 @@ void run_b41_cost_tests() {
             ASSERT_TRUE(standard < 60000.0);                                                              // a whole match of four bots in under a minute, even on a loaded machine
         }
         std::cout << "\n    ";
+    } TEST_END();
+
+    TEST_CASE("AI13.2 Whole Matches Of Four Standard Bots (Acceptance A5): At Every Level On TREASURE, And On TINY With Several Seeds (Every Style Is Drawn), No Window Of Releases Holds More Commands Than The Bucket And The Rate Allow, Nothing Is Filtered Or Rejected, The Match Is Bit-Reproducible And Its Commands Alone Replay To The Same Hashes Without Any Bot")
+    {
+        struct Case {
+            const char* map;
+            Level level;
+            uint32_t seed;
+        };
+        const Case cases[] = {{"TREASURE", Level::Easy, 1}, {"TREASURE", Level::Medium, 1}, {"TREASURE", Level::Hard, 1}, {"TINY", Level::Hard, 1}, {"TINY", Level::Hard, 2},
+                              {"TINY", Level::Hard, 3}, {"TINY", Level::Hard, 4}, {"TINY", Level::Medium, 1}, {"TINY", Level::Medium, 2}, {"TINY", Level::Medium, 3}, {"TINY", Level::Medium, 4}};
+        for (const Case& c : cases) {
+            assets::LevelData level_data;
+            ASSERT_TRUE(level_data.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + c.map + ".LVL"));
+            ArenaSpec spec;
+            spec.level = &level_data;
+            spec.seed = c.seed;
+            spec.latency_ticks = 0;                                                                        // the tick of a record is then the tick of the release
+            spec.record = true;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.kind = "standard";
+                b.level = c.level;
+                spec.bots.push_back(b);
+            }
+            const ArenaResult r = play_match(spec);
+            ASSERT_TRUE(r.error.empty() && r.match_over);
+            const Profile p = profile_for(c.level);
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                std::vector<uint64_t> ticks;
+                for (const RecordedCommand& rc : r.log) {
+                    if (rc.command.issuer == seat) ticks.push_back(rc.tick);
+                }
+                ASSERT_TRUE(std::is_sorted(ticks.begin(), ticks.end()));
+                ASSERT_TRUE(within_budget(ticks, p));
+                ASSERT_EQ(ticks.size(), static_cast<size_t>(r.seats[seat].stats.released));
+                ASSERT_TRUE(r.seats[seat].stats.rejected == 0 && r.seats[seat].stats.filtered == 0);                  // nothing that a person could not click, nothing refused by the engine
+                ASSERT_TRUE(r.seats[seat].spec.kind == "standard" && r.seats[seat].runs == "standard" && !r.seats[seat].style.empty());
+            }
+            const ArenaResult again = play_match(spec);
+            ASSERT_TRUE(again.hash == r.hash && again.checkpoints == r.checkpoints && again.log.size() == r.log.size());          // bit-reproducible, styles and all
+            const ReplayResult replay = replay_commands(spec, r);
+            ASSERT_TRUE(replay.ok && replay.hash == r.hash);                                               // the commands alone: no bot is needed to replay the match
+        }
     } TEST_END();
 }

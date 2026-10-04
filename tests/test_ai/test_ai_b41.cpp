@@ -1721,6 +1721,23 @@ void run_b41_tests() {
             ASSERT_FALSE(sim.grid().has_powerup_at(tc(14, 12)));                                           // the own side's, though it is the farther
             ASSERT_TRUE(sim.grid().has_powerup_at(tc(33, 10)));
         }
+        {   // the Thief power-up that lies on the ally's side is never stolen (an enemy's is): Hard wants two Thieves, the own side's is taken in both worlds
+            for (const bool allied : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 83);
+                sim.grid_mut().place_powerup(33, 10, 3);                                                   // on the side of team 1, away from its ants
+                sim.grid_mut().place_powerup(14, 12, 3);                                                   // on the own side
+                if (allied) sim.form_alliance(0, 1);
+                for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{28 + i % 2, 8 + i / 2});
+                const uint32_t walker = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{4, 58});         // an enemy (not the ally) plays, far from every power-up
+                sim.apply_command(command_of(CommandType::GroupMove, 2, {walker}, 10, 58));
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+                rig.run(800);
+                ASSERT_FALSE(sim.grid().has_powerup_at(tc(14, 12)));
+                ASSERT_EQ(sim.grid().has_powerup_at(tc(33, 10)), allied);                                  // the ally's stays, the enemy's goes
+                ASSERT_EQ(count_type(sim, 0, sim::AntType::Thief), allied ? 1u : 2u);
+            }
+        }
         // two Medium neighbours: each takes its own side's Thief power-up at the start, so there is nothing left to steal (the Hard bot keeps its one)
         {
             ArenaSpec spec;

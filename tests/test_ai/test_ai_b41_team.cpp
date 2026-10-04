@@ -331,7 +331,7 @@ void run_b41_team_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI8.5 The Opening's Contest Needs Six Ants (TINY Starts With 3, SMALL With 4): A Team That Cannot Spare An Ant Harvests First, At Every Level And Seat (The First Orders Are Those Of A Bot Without The Contest), While The Same Plan Without The Minimum Sends Ants Across TINY; TREASURE (8 Ants) Keeps The Contest; In A Hand-Made World Five Ants Spare None And Six Spare The Level's Number") {
+    TEST_CASE("AI8.5 The Opening's Contest Needs Six Ants (TINY Starts With 3, SMALL With 4): A Team That Cannot Spare An Ant Harvests First, At Every Level And Seat (The First Orders Are Those Of A Bot Without The Contest), While The Same Plan Without The Minimum Sends Ants Across TINY; TREASURE (6 Ants) Keeps The Contest; In A Hand-Made World Five Ants Spare None And Six Spare The Level's Number") {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) ASSERT_EQ(plan_for(level).contest_opening_min_ants, 6u);
         const auto first_orders = [&](const char* map, uint8_t seat, Level level, uint32_t k, uint32_t min_ants) {
             sim::SimulationEngine sim;
@@ -363,7 +363,7 @@ void run_b41_team_tests() {
                 if (std::string(map) == "TINY") ASSERT_TRUE(crossing);                                                   // (on TINY the contested pile is far: the unrestricted contest sends ants there)
             }
         }
-        {   // TREASURE: eight ants, the contest stays (AI8.4 pins who goes where)
+        {   // TREASURE: six ants, the contest stays (AI8.4 pins who goes where)
             const auto shipped = first_orders("TREASURE", 0, Level::Hard, 2, 6);
             const auto without = first_orders("TREASURE", 0, Level::Hard, 0, 6);
             ASSERT_TRUE(shipped != without);
@@ -388,6 +388,84 @@ void run_b41_team_tests() {
             }
             if (n == 5) ASSERT_EQ(in_middle[0], in_middle[1]);                                                   // too few ants: the contest is off
             else ASSERT_TRUE(in_middle[0] == 2u && in_middle[1] > 2u);                                           // six ants: two go first, the value order would send more
+        }
+    } TEST_END();
+
+    TEST_CASE("AI8.6 Help For The Ally (The Defensive Style's Flag): A Blow On An Ant Of The Ally Is Answered By The Own Ants Within 10 Tiles Of It And By No Ant Further Away, Nothing Moves With The Flag Off, And The Ally's Ants Are Never The Target; An Enemy Bomb Near The Ally's Hill Is Defused By An Own Bomber With The Flag On And Left Alone With It Off")
+    {
+        const auto attack_ants = [](const Rig& rig) {
+            std::set<uint32_t> out;
+            for (const auto& e : rig.sent) {
+                if (e.second.type == CommandType::GroupAttack) out.insert(e.second.ants.begin(), e.second.ants.end());
+            }
+            return out;
+        };
+        for (const Level level : {Level::Medium, Level::Hard}) {
+            for (const bool help : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 93);
+                sim.form_alliance(0, 1);
+                const uint32_t victim = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 28});                 // an ant of the ally ...
+                const uint32_t attacker = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{30, 29});               // ... that an enemy keeps hitting
+                const std::vector<uint32_t> near = {sim.spawn_unit(0, sim::AntType::Worker, TileCoord{24, 28}), sim.spawn_unit(0, sim::AntType::Worker, TileCoord{25, 32})};
+                const std::vector<uint32_t> far = {sim.spawn_unit(0, sim::AntType::Worker, TileCoord{6, 8}), sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 8})};
+                LevelPlan plan = plan_for(level);
+                plan.ally_help = help;
+                plan.gate = false;
+                Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
+                for (int t = 0; t < 200; ++t) {
+                    keep_attacking(sim, 2, attacker, victim);
+                    rig.tick();
+                }
+                const std::set<uint32_t> went = attack_ants(rig);
+                if (!help) {
+                    ASSERT_TRUE(went.empty());                                                                    // a blow on the ally is nothing to this plan
+                } else {
+                    ASSERT_FALSE(went.empty());
+                    for (const uint32_t a : went) ASSERT_TRUE(a == near[0] || a == near[1]);                      // the ants within ten tiles, not the ones at the hill
+                    for (const uint32_t a : far) ASSERT_TRUE(went.count(a) == 0);
+                    ASSERT_TRUE(went.count(victim) == 0);
+                    ASSERT_TRUE(rig.as<StandardBot>().fight().fights_started() >= 1u);
+                }
+            }
+        }
+        {   // nobody near the blow (every own ant is more than ten tiles from it): no fight is started at all
+            sim::SimulationEngine sim;
+            empty_field(sim, 93);
+            sim.form_alliance(0, 1);
+            const uint32_t victim = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 28});
+            const uint32_t attacker = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{30, 29});
+            for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{6 + i, 8});
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.ally_help = true;
+            plan.gate = false;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            for (int t = 0; t < 200; ++t) {
+                keep_attacking(sim, 2, attacker, victim);
+                rig.tick();
+            }
+            ASSERT_EQ(rig.as<StandardBot>().fight().fights_started(), 0u);
+            ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
+        }
+        {   // the counters reach the ally's hill: an enemy bomb 4 tiles from it is defused by an own Bomber (nothing is hurt), but only with the flag
+            for (const bool help : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 94);
+                sim.form_alliance(0, 1);
+                sim.grid_mut().place_bomb(53, 8, 2);                                                               // hill 1 is at (50, 4)
+                const uint32_t bomber = sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{44, 10});
+                for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
+                LevelPlan plan = plan_for(Level::Hard);
+                plan.ally_help = help;
+                plan.gate = false;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(60);
+                bool ordered = false;
+                for (const auto& e : rig.proposed) {
+                    ordered = ordered || (e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == bomber && e.second.tile_x == 53 && e.second.tile_y == 8);
+                }
+                ASSERT_EQ(ordered, help);
+            }
         }
     } TEST_END();
 }

@@ -79,6 +79,39 @@ void run_b41_offence_tests() {
                 ASSERT_EQ(sim.get_unit(carrier).hp, 10);
             }
         }
+        {   // (e) two carriers, the one of the poorer team two tiles nearer: the squad goes for the carrier of the BEST opponent (by the score boxes; the bonus outweighs two tiles)
+            sim::SimulationEngine sim;
+            empty_field(sim, 61);
+            sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30, 30});
+            const uint32_t poor = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{35, 30});
+            const uint32_t rich = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{30, 37});
+            sim.get_unit(poor).pick_up_food(1, 25);
+            sim.get_unit(rich).pick_up_food(2, 25);
+            sim.set_player_score(1, 20);
+            sim.set_player_score(2, 120);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(20);
+            const Command* first = nullptr;
+            for (const auto& e : rig.proposed) {
+                if (e.second.type == CommandType::GroupAttack && first == nullptr) first = &e.second;
+            }
+            ASSERT_TRUE(first != nullptr);
+            ASSERT_TRUE(first->tile_x == 30 && first->tile_y == 37);                                      // the richer team's carrier, 7 tiles away, not the poorer team's, 5 tiles away
+        }
+        {   // (f) ants of the ALLY next to the target are no enemy: nine idle workers of the ally (9 against the squad's 8) keep the squad away only when they are not the ally's
+            for (const bool allied : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 61);
+                if (allied) sim.form_alliance(0, 3);
+                sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30, 30});
+                const uint32_t carrier = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{36, 30});
+                sim.get_unit(carrier).pick_up_food(1, 25);
+                for (int i = 0; i < 9; ++i) sim.spawn_unit(3, sim::AntType::Worker, TileCoord{38 + i % 3, 32 + i / 3});
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(30);
+                ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack) >= 1, allied);                          // an ally's ants are no strength against us; an enemy's nine are
+            }
+        }
     } TEST_END();
 
     TEST_CASE("AI12.2 The Sabotage (Flag): The Fire Ant Lights Walls On The Ring Round The Gate Of The Best Opponent (Eight Tiles, The Queue Row Sealed); It Is Taken Back At Once For The Walls Of The Own Thief Hole; No Team With Points Or No Fire Ant, No Walls; The Shipped Plans Light None")

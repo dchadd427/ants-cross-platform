@@ -384,6 +384,16 @@ void run_b41_style_tests() {
         Rig neutral(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
         neutral.run(40);
         ASSERT_EQ(neutral.as<StandardBot>().raids().raids_ordered(), 0u);                                         // 25 is below the neutral plan's 30
+        // Hard's neutral plan raids a hill that shows 20 points (a raid is a swing of 30 and a trip of a few hundred ticks: it pays), Medium's (30) does not
+        for (const Level level : {Level::Medium, Level::Hard}) {
+            sim::SimulationEngine sim20;
+            empty_field(sim20, 31);
+            sim20.set_player_score(1, 20);
+            sim20.spawn_unit(0, sim::AntType::Thief, TileCoord{20, 20});
+            Rig rig20(sim20, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+            rig20.run(40);
+            ASSERT_EQ(rig20.as<StandardBot>().raids().raids_ordered() >= 1, level == Level::Hard);
+        }
     } TEST_END();
 
     TEST_CASE("AI11.8 The Economic Style: Nobody Is Sent To The Contested Centre (The Neutral Medium Sends One Ant), A Hill That Shows 60 Points Is Not Raided (150 Is), The Combat Ant Is Taken In The Opening Like Everywhere, And The Fire Walls Of The Thief Hole Stand Before A Thief Shows (An Enemy Does Not Even Have To Play)")
@@ -632,6 +642,11 @@ void run_b41_style_tests() {
                 if (pile_of_tile(rig.map(), piles, tc(e.second.tile_x, e.second.tile_y)) == static_cast<int>(centre)) at_centre += e.second.ants.size();
             }
             ASSERT_EQ(at_centre, 0u);
+        }
+        {   // the help for the ally (AI8.6 plays it) is the Defensive style's alone: no other style and no neutral plan answers a blow on an ally's ant
+            ASSERT_TRUE(Pinned::plan(Level::Medium, Style::Defensive).ally_help);
+            for (const Style style : {Style::Aggressive, Style::Economic, Style::Raider}) ASSERT_FALSE(Pinned::plan(Level::Medium, style).ally_help);
+            for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) ASSERT_FALSE(plan_for(level).ally_help);
         }
     } TEST_END();
 
