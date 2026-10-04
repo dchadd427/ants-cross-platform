@@ -695,8 +695,10 @@ void run_way_back_tests() {
         ASSERT_FALSE(a.saw(NetGame::Event::Type::HostLeft) || b.saw(NetGame::Event::Type::HostLeft));
         ASSERT_TRUE(w.server.start(w.now, 500, port));                                   // a new uptime, the same port: the machines have no other address
         ASSERT_EQ(w.server.port(), port);
-        ASSERT_EQ(w.server.report.items.size(), size_t{1});
-        ASSERT_TRUE(w.server.report.items[0].outcome == RestoreItem::Outcome::Restored && w.server.report.items[0].code == "RJ-2" && w.server.report.items[0].turns == sealed);
+        ASSERT_TRUE(w.server.report.items.empty() && w.server.report.queued == 1);      // the record was judged good: its replay runs in the server's passes, in slices
+        ASSERT_TRUE(w.run_until([&]() { return w.server.mgr->restore_report().items.size() == 1; }, 2000));
+        const RestoreItem& restored = w.server.mgr->restore_report().items[0];
+        ASSERT_TRUE(restored.outcome == RestoreItem::Outcome::Restored && restored.code == "RJ-2" && restored.turns == sealed);
         s = w.status("RJ-2");
         ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.paused && s.absent.size() == 2 && s.turns == sealed);       // the room is back, every seat held
         ASSERT_TRUE(w.run_until([&]() { return !w.status("RJ-2").paused; }, 60000));
@@ -804,7 +806,9 @@ void run_way_back_tests() {
             ASSERT_TRUE(a.net.turns_executed() + 4 >= sealed && b.net.turns_executed() + 4 >= sealed);        // (the machines saw them)
             w.run(3000);
             ASSERT_TRUE(w.server.start(w.now, 500, port));
-            ASSERT_TRUE(w.server.report.items.size() == 1 && w.server.report.items[0].outcome == RestoreItem::Outcome::Restored && w.server.report.items[0].turns == sealed - 40);
+            ASSERT_TRUE(w.server.report.items.empty() && w.server.report.queued == 1);  // (replayed in the server's passes, in slices)
+            ASSERT_TRUE(w.run_until([&]() { return w.server.mgr->restore_report().items.size() == 1; }, 2000));
+            ASSERT_TRUE(w.server.mgr->restore_report().items[0].outcome == RestoreItem::Outcome::Restored && w.server.mgr->restore_report().items[0].turns == sealed - 40);
             ASSERT_TRUE(w.run_until([&]() { return a.count(NetGame::Event::Type::StartRequested) == 2 && b.count(NetGame::Event::Type::StartRequested) == 2; }, 60000));      // each starts again from nothing
             ASSERT_TRUE(w.run_until([&]() { return a.count(NetGame::Event::Type::Begun) == 2 && b.count(NetGame::Event::Type::Begun) == 2 && !w.status("RJ-4").paused; }, 60000));
             for (Machine* m : {&a, &b}) {
@@ -1053,7 +1057,7 @@ void run_way_back_tests() {
         w.machines.clear();                                                              // the players' games are gone
         w.server.stop(w.now, false);                                                     // the server too, with no record of the match
         ASSERT_TRUE(w.server.start(w.now, 500, port));
-        ASSERT_EQ(w.server.report.items.size(), size_t{0});
+        ASSERT_TRUE(w.server.report.items.empty() && w.server.report.queued == 0);
         ASSERT_EQ(w.server.mgr->room_count(), size_t{0});
         Machine& b2 = w.add_machine("Bob");
         ASSERT_TRUE(b2.net.join("127.0.0.1", port, "Bob", 1, code, "", old_key));          // the Hello that shows the key of a seat of a match that is gone
