@@ -38,7 +38,7 @@ Work that is not released yet is written in the same template under a heading th
 - A command that reaches the host before the first turn is sealed is discarded: a modified client could script an opening of up to 64 orders per seat that ran at the first tick, ahead of every person. Honest clients are not affected.
 - The loading screen drew the frame's pieces in the wrong order (145 pixels), and the results' numbers ran together ("20", "4", "10" as "204 10").
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b8d2603...b73338f), [network notes](docs/NETWORK_PORT.md), [notes](docs/audit/B3_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ddf134f...f29c2f9), [network notes](docs/NETWORK_PORT.md), [notes](docs/audit/B3_notes.md)
 
 ## v0.1.3 - 2026-10-03 - Deploys wait for an idle server; faster checks
 
