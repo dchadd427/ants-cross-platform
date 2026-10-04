@@ -448,7 +448,7 @@ public:
     Client() = default;
     Client(const Client&) = delete;
     Client& operator=(const Client&) = delete;
-    Client(Client&& o) noexcept : fd_(o.fd_) { o.fd_ = kBadSock; }
+    Client(Client&& o) noexcept : fd_(o.fd_), receive_buffer_(o.receive_buffer_) { o.fd_ = kBadSock; }
     ~Client() { close(); }
 
     // Connects to 127.0.0.1:port (the connect itself is blocking: on the loopback interface it completes in the kernel at once)
@@ -456,6 +456,9 @@ public:
         close();
         fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
         if (fd_ == kBadSock) return false;
+        if (receive_buffer_ > 0) {                                                       // before the connect: the window is agreed in the handshake
+            setsockopt(fd_, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&receive_buffer_), sizeof(receive_buffer_));
+        }
         sockaddr_in a;
         std::memset(&a, 0, sizeof(a));
         a.sin_family = AF_INET;
@@ -530,9 +533,12 @@ public:
         }
     }
     bool valid() const { return fd_ != kBadSock; }
+    // A kernel receive buffer of `bytes` from the next connect_to on (a client that never reads then fills it at once; 0 keeps the system's)
+    void set_receive_buffer(int bytes) { receive_buffer_ = bytes; }
 
 private:
     sock_t fd_{kBadSock};
+    int receive_buffer_{0};
 };
 
 struct Reply {
@@ -2409,15 +2415,24 @@ int main() {
             ASSERT_EQ(r.body.size(), big.size());
             ASSERT_TRUE(r.body == big);
         }
-        {
+        {   // small buffers on both sides keep the answer stuck in the server's write: the system's own can take all of it (Linux's take 4 MB at once),
+            // or more of it later (macOS grows them), and a write that finished was dropped kLingerMs after it, or never once the clock stood still
+            rig.server->set_send_buffer_bytes(16 * 1024);
             Client c;
+            c.set_receive_buffer(16 * 1024);
             rig.now = 100000;
             ASSERT_TRUE(rig.connect(c));
             const int before = rig.calls;
             c.send_all(make_request("GET", "/big"));
             ASSERT_TRUE(rig.wait_calls(before + 1));                                     // answered (and stuck in the write) at 100000
             ASSERT_EQ(rig.server->connection_count(), 1u);
-            rig.now += HttpServer::kWriteTimeoutMs;                                      // (a stuck write is dropped after kWriteTimeoutMs, a finished one after kLingerMs)
+            rig.now += HttpServer::kLingerMs;                                            // a finished answer would be dropped now, a stuck one is not
+            rig.pump_n(5);
+            ASSERT_EQ(rig.server->connection_count(), 1u);
+            rig.now = 100000 + HttpServer::kWriteTimeoutMs - 1;
+            rig.pump_n(5);
+            ASSERT_EQ(rig.server->connection_count(), 1u);
+            rig.now += 1;                                                                // dropped kWriteTimeoutMs after the answer
             ASSERT_TRUE(rig.wait_count(0));
         }
     } TEST_END();

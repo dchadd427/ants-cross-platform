@@ -442,6 +442,7 @@ struct HttpServer::Impl {
     uint16_t port{0};
     std::string secret;
     uint32_t request_timeout_ms{HttpServer::kRequestTimeoutMs};
+    int send_buffer_bytes{0};
     std::vector<std::unique_ptr<Conn>> conns;
 };
 
@@ -489,6 +490,9 @@ void HttpServer::Impl::accept_new(uint32_t now) {
         }
         set_no_inherit(s);
         tune(s);
+        if (send_buffer_bytes > 0) {
+            setsockopt(s, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&send_buffer_bytes), sizeof(send_buffer_bytes));
+        }
         conns.push_back(std::make_unique<Conn>(s, now));
     }
 }
@@ -633,6 +637,8 @@ uint16_t HttpServer::port() const { return impl_->port; }
 size_t HttpServer::connection_count() const { return impl_->conns.size(); }
 
 void HttpServer::set_request_timeout_ms(uint32_t ms) { impl_->request_timeout_ms = ms; }
+
+void HttpServer::set_send_buffer_bytes(int bytes) { impl_->send_buffer_bytes = bytes; }
 
 void HttpServer::update(uint32_t now_ms, const std::function<HttpResponse(const HttpRequest&)>& handler) {
     impl_->accept_new(now_ms);
