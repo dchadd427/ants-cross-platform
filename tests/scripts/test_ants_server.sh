@@ -337,9 +337,15 @@ code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CHAT" > /dev/n
 PROTOCOL="$("$SERVER" --version 2> /dev/null | sed -n 's/.*(network protocol \([0-9][0-9]*\)).*/\1/p')"      # the raw client below says Hello with the protocol of this very server (it said a literal 7 until protocol 8)
 check "the server says which network protocol it speaks (--version: $PROTOCOL)" "$([ -n "$PROTOCOL" ]; echo $?)"
 rss_kb() { ps -o rss= -p "$SERVER_PID" 2> /dev/null | tr -d ' '; }
-cpu_secs() { ps -o time= -p "$SERVER_PID" 2> /dev/null | python3 -c 'import sys; t = sys.stdin.read().strip().replace("-", ":"); s = 0.0
+cpu_secs() {      # the server's CPU time to the hundredth: Linux's `ps -o time=` has whole seconds only (a 3 s window read 0 or 1, and 1 failed), so /proc there; ps elsewhere (macOS shows hundredths)
+    if [ -r "/proc/$SERVER_PID/stat" ]; then
+        python3 -c 'import os, sys; f = open(sys.argv[1]).read().rsplit(")", 1)[1].split(); print((int(f[11]) + int(f[12])) / os.sysconf("SC_CLK_TCK"))' "/proc/$SERVER_PID/stat"
+        return
+    fi
+    ps -o time= -p "$SERVER_PID" 2> /dev/null | python3 -c 'import sys; t = sys.stdin.read().strip().replace("-", ":"); s = 0.0
 for part in t.split(":"): s = s * 60 + float(part)
-print(s)'; }
+print(s)'
+}
 field_of() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get(sys.argv[1], ""))' "$2" 2> /dev/null; }
 VICTIM="E2E-VICTIM-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$VICTIM\",\"seed\":11}" "$CTL/rooms"
