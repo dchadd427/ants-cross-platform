@@ -12,6 +12,7 @@
 //   - the property that makes it safe: the predicted engine that was advanced tick by tick equals the engine that a rebuild would make now (derived_hash), at every frame, under random
 //     jitter, stalls, bursts, commands of every kind and a lead that changes;
 //   - the prediction never touches the confirmed engine, the turns or the hashes.
+#include "ants_net/cue_router.hpp"
 #include "ants_net/lockstep.hpp"
 #include "ants_net/prediction.hpp"
 #include "ants_net/protocol.hpp"
@@ -197,7 +198,10 @@ public:
             pc.seat = 0;
             pred_ = std::make_unique<Prediction>(confirmed_, runner_, pc);
             pred_->set_expected_delay_ms(sc.lead_ms != 0 ? sc.lead_ms : (sc.buffer_turns + sc.down_delay + sc.uplink) * sim::TICK_MS);
-            runner_.set_on_tick([this]() { pred_->on_tick(); });
+            runner_.set_on_tick([this]() {
+                pred_->on_tick();
+                if (on_tick_extra_) on_tick_extra_();
+            });
             runner_.set_on_turn([this](const TurnMsg& t) { pred_->on_turn(t); });
         }
         rng_ = Lcg(sc.seed * 977u + 5u);
@@ -276,6 +280,8 @@ public:
 
     // Compare the predicted engine with the derived one at every `every`-th frame (0: never)
     void check_derived(uint32_t every) { derived_every_ = every; }
+    // Something to do after the prediction's tick, in the tick hook (the application's post_tick: it reads what the engines made)
+    void set_on_tick_extra(std::function<void()> fn) { on_tick_extra_ = std::move(fn); }
 
     uint32_t step_no() const { return step_; }
     sim::SimulationEngine& confirmed() { return confirmed_; }
@@ -329,6 +335,7 @@ private:
     uint32_t hold_until_{0};
     Lcg rng_{1};
     uint32_t derived_every_{0};
+    std::function<void()> on_tick_extra_;
 };
 
 // verify_views, and at least `min_views` of them must have been checkable (a test that checks nothing proves nothing)
@@ -883,6 +890,281 @@ void run_state_tests() {
     } TEST_END();
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The cues: who plays what, once (cue_router.hpp)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+sim::AudioEvent cue(uint32_t sound, uint32_t owner, bool stop = false) {
+    sim::AudioEvent e;
+    e.sound_id = sound;
+    e.owner = owner;
+    e.stop = stop;
+    e.world_x = 100;
+    e.world_y = 100;
+    return e;
+}
+
+Prediction::PredictedAudio predicted_cue(sim::AudioEvent e, uint64_t tick, uint32_t generation = 1) {
+    Prediction::PredictedAudio p;
+    p.event = std::move(e);
+    p.tick = tick;
+    p.generation = generation;
+    return p;
+}
+
+// "sound/owner" for a cue, "stop/owner" for a stop, in order
+std::string describe(const std::vector<sim::AudioEvent>& v) {
+    std::string out;
+    for (const auto& e : v) out += (e.stop ? std::string("stop") : std::to_string(e.sound_id)) + "/" + std::to_string(e.owner) + " ";
+    return out;
+}
+
+void run_cue_tests() {
+    const CueRouter::OwnsAnt owns = [](uint32_t id) { return id >= 1 && id <= 6; };             // the player's ants are 1 .. 6, another player's 11 ..
+
+    TEST_CASE("RP6.1 Which Cues Are Played From The Predicted Engine: An Own Ant's Own Actions And Its Stops (can't go, harvest, the chimes, fire, bomb, bridge and raid cues, the bump), Never A Blow, A Hit, An Explosion, A Score, An Alliance Cue Or Anything Of Another Player's Ants") {
+        namespace S = sim::SoundID;
+        for (uint32_t sound : {S::PowerUpHeal, S::PowerUpChime, S::Bump, S::CantGo, S::FoodHarvest, S::FoodGrab, S::FireBeam, S::FireErupt, S::FireExtinguish, S::BombDefuseGrab, S::BombBodySquash, S::BombPick,
+                               S::ShovelGravel, S::ShovelWater, S::ThiefDive, S::ThiefRummage, S::ThiefEmerge}) {
+            ASSERT_TRUE(CueRouter::is_own_action_sound(sound));
+        }
+        for (uint32_t sound : {S::ButtonClick, S::CombatNetFairy, S::BombDetonate, S::FireBurnout, S::PlayerDropOut, S::ExitHill, S::Countdown, S::Anthill, S::AllianceBreak, S::AllianceYes, S::ThirtySeconds,
+                               S::OneMinute, S::MeleeAttack, S::BaseAlarmSiren, S::CombatAttack1, S::AntStop, S::PowerUpDrop, S::FlingThumpA, S::FlingThumpB, S::Stun, S::WaterSplash, S::AntDrown,
+                               S::AttackAlt, S::HeavyPunch, S::WaterAttack, S::ThiefWhip, S::BaseScoreUp, S::BaseScoreDn}) {
+            ASSERT_FALSE(CueRouter::is_own_action_sound(sound));
+        }
+        ASSERT_TRUE(CueRouter::in_class(cue(S::CantGo, 3), owns));                          // an own ant's own action ...
+        ASSERT_FALSE(CueRouter::in_class(cue(S::CantGo, 13), owns));                        // ... another player's ant's is not ours to play
+        ASSERT_FALSE(CueRouter::in_class(cue(S::CantGo, 0), owns));                         // ... a cue that nobody owns is not an ant's
+        ASSERT_FALSE(CueRouter::in_class(cue(S::CantGo, 0x40000005u), owns));               // ... an effect sprite's owner is no ant
+        ASSERT_FALSE(CueRouter::in_class(cue(S::FlingThumpA, 3), owns));                    // a blow on an own ant is another player's doing
+        ASSERT_FALSE(CueRouter::in_class(cue(S::MeleeAttack, 3), owns));
+        ASSERT_TRUE(CueRouter::in_class(cue(S::Bump, 0), owns));                            // the bump has no owner: the engine makes it for the viewer's own ants alone
+        ASSERT_TRUE(CueRouter::in_class(cue(0, 3, true), owns));                            // the stop of an own ant (whatever it cuts) ...
+        ASSERT_FALSE(CueRouter::in_class(cue(0, 13, true), owns));                          // ... not another's
+        ASSERT_FALSE(CueRouter::in_class(cue(0, 0x40000005u, true), owns));                 // ... nor an effect sprite's
+        ASSERT_FALSE(CueRouter::in_class(cue(0, 0, true), owns));
+    } TEST_END();
+
+    TEST_CASE("RP6.2 Each Occurrence Is Played Once: From The Predicted Engine When It Runs On, Never From A Replay Of A Rebuild, The Confirmed Engine's Copy Dropped Once For Each (The Same Tick Or A Few Ticks Off); What Nobody Played Is Played, What Is Not Of The Class Is The Confirmed Engine's") {
+        namespace S = sim::SoundID;
+        CueRouter r;
+        // tick 10: the predicted engine's own ant 3 is refused (stop, then the cue), an enemy's ant 13 is hit (not ours to play) and the own ant 4 harvests twice
+        std::vector<Prediction::PredictedAudio> batch = {predicted_cue(cue(0, 3, true), 10), predicted_cue(cue(S::CantGo, 3), 10), predicted_cue(cue(S::FlingThumpA, 13), 10),
+                                                         predicted_cue(cue(S::FoodHarvest, 4), 10), predicted_cue(cue(S::FoodHarvest, 4), 10)};
+        ASSERT_EQ(describe(r.from_predicted(batch, owns)), std::string("stop/3 63/3 66/4 66/4 "));                      // in order, and only the class
+        ASSERT_EQ(r.stats().played_predicted, 4u);
+        ASSERT_EQ(r.outstanding(), size_t{4});
+        // a rebuild replays ticks 10 and 11 (a later generation, flagged): the same four, a third harvest that the corrected timeline makes, and a cue of the next tick: nothing is played from a replay
+        std::vector<Prediction::PredictedAudio> replay = {predicted_cue(cue(0, 3, true), 10, 2), predicted_cue(cue(S::CantGo, 3), 10, 2), predicted_cue(cue(S::FoodHarvest, 4), 10, 2),
+                                                          predicted_cue(cue(S::FoodHarvest, 4), 10, 2), predicted_cue(cue(S::FoodHarvest, 4), 10, 2), predicted_cue(cue(S::CantGo, 5), 11, 2)};
+        for (auto& e : replay) e.replay = true;
+        ASSERT_EQ(describe(r.from_predicted(replay, owns)), std::string());
+        ASSERT_EQ(r.stats().replays_dropped, 6u);
+        // the prediction is suspended and begins again within its lead: the straight run makes tick 10 again, and what was played at that very tick is not played again
+        ASSERT_EQ(describe(r.from_predicted({predicted_cue(cue(0, 3, true), 10, 3), predicted_cue(cue(S::CantGo, 3), 10, 3)}, owns)), std::string());
+        ASSERT_EQ(r.stats().replays_dropped, 6u);
+        ASSERT_EQ(r.stats().repeats_dropped, 2u);
+        ASSERT_EQ(r.stats().played_predicted, 4u);
+        // the confirmed engine reaches tick 10: it makes the same things, the enemy's hit and a cue of the clock. It plays the hit and the clock, drops the four that were heard, and plays the
+        // third harvest, which only the replay made (nobody heard it)
+        std::vector<sim::AudioEvent> c10 = {cue(0, 3, true), cue(S::CantGo, 3), cue(S::FlingThumpA, 13), cue(S::FoodHarvest, 4), cue(S::FoodHarvest, 4), cue(S::FoodHarvest, 4), cue(S::OneMinute, 0)};
+        ASSERT_EQ(describe(r.from_confirmed(c10, 10, owns)), std::string("64/13 66/4 55/0 "));
+        ASSERT_EQ(r.stats().duplicates_dropped, 4u);
+        ASSERT_EQ(r.stats().played_confirmed_own, 1u);
+        ASSERT_EQ(r.outstanding(), size_t{0});
+        // a copy a few ticks off (an order that the server sealed 3 ticks later than the prediction assumed): the same cue, dropped; one later than the window is another cue, played
+        ASSERT_EQ(describe(r.from_predicted({predicted_cue(cue(S::CantGo, 2), 20)}, owns)), std::string("63/2 "));
+        ASSERT_EQ(describe(r.from_confirmed({cue(S::CantGo, 2)}, 23, owns)), std::string());                           // (20 played, 23 made: 3 ticks off)
+        ASSERT_EQ(r.outstanding(), size_t{0});
+        ASSERT_EQ(describe(r.from_predicted({predicted_cue(cue(S::CantGo, 2), 30)}, owns)), std::string("63/2 "));
+        ASSERT_EQ(describe(r.from_confirmed({cue(S::CantGo, 2)}, 30 + CueRouter::kMatchWindowTicks + 1, owns)), std::string("63/2 "));      // (beyond the window: another occurrence)
+        ASSERT_EQ(r.stats().phantoms, 1u);                                                                             // ... and the one that was played for tick 30 was never met
+        ASSERT_EQ(r.outstanding(), size_t{0});
+        // the nearest is the one that is met: two occurrences waited for, the confirmed engine's cue at 41 meets the one at 40, not the one at 35
+        ASSERT_EQ(describe(r.from_predicted({predicted_cue(cue(S::FoodHarvest, 5), 35), predicted_cue(cue(S::FoodHarvest, 5), 40)}, owns)), std::string("66/5 66/5 "));
+        ASSERT_EQ(describe(r.from_confirmed({cue(S::FoodHarvest, 5)}, 41, owns)), std::string());
+        ASSERT_EQ(r.outstanding(), size_t{1});
+        ASSERT_EQ(describe(r.from_confirmed({cue(S::FoodHarvest, 5)}, 36, owns)), std::string());                      // (the one at 35 is met by a cue at 36)
+        ASSERT_EQ(r.outstanding(), size_t{0});
+        // a cue that was played for something that did not happen: the confirmed engine passes the window without making it
+        ASSERT_EQ(describe(r.from_predicted({predicted_cue(cue(S::FoodHarvest, 6), 50)}, owns)), std::string("66/6 "));
+        const uint64_t phantoms = r.stats().phantoms;
+        ASSERT_EQ(describe(r.from_confirmed({}, 50 + CueRouter::kMatchWindowTicks - 1, owns)), std::string());
+        ASSERT_EQ(r.stats().phantoms, phantoms);                                                                       // (still within the window: it may yet be met)
+        ASSERT_EQ(describe(r.from_confirmed({}, 50 + CueRouter::kMatchWindowTicks, owns)), std::string());
+        ASSERT_EQ(r.stats().phantoms, phantoms + 1);
+        ASSERT_EQ(r.outstanding(), size_t{0});
+        // the kinds are kept apart: an owner's stop is not met by another owner's stop, a cue by another sound's cue
+        r.from_predicted({predicted_cue(cue(0, 3, true), 60), predicted_cue(cue(S::CantGo, 3), 60)}, owns);
+        ASSERT_EQ(describe(r.from_confirmed({cue(0, 4, true), cue(S::FoodHarvest, 3)}, 60, owns)), std::string("stop/4 66/3 "));
+        ASSERT_EQ(r.outstanding(), size_t{2});
+        // reset forgets the book and the counts
+        r.reset();
+        ASSERT_EQ(r.outstanding(), size_t{0});
+        ASSERT_EQ(r.stats().played_predicted, 0u);
+    } TEST_END();
+
+    TEST_CASE("RP6.3 In A Match: The Cues Of An Own Worker That Walks To The Lunch Box And Harvests Are Heard Once Each, From The Predicted Engine, Before The Confirmed Engine Makes Them; None Is Lost, None Is Doubled, None Is A Phantom") {
+        Scenario sc;
+        sc.seed = 91;
+        sc.lead_ms = 150;                                                    // the exact lead of the scenario (buffer 1, lag 1, uplink 1): no order is ever re-timed
+        sc.oracle_hashes = false;
+        Rig rig(sc);
+        CueRouter router;
+        const std::set<uint32_t> own_ids(rig.ids.ants[0].begin(), rig.ids.ants[0].end());
+        const CueRouter::OwnsAnt owns = [&](uint32_t id) { return own_ids.count(id) != 0; };
+        struct Heard {
+            uint32_t step;
+            sim::AudioEvent event;
+            bool from_predicted;
+        };
+        std::vector<Heard> heard;                                            // what the loudspeaker would play, in order
+        std::vector<std::pair<uint32_t, sim::AudioEvent>> made;              // every cue of the class that the confirmed engine made, and the step at which it did
+        rig.set_on_tick_extra([&]() {                                        // (the application's post_tick: the predicted engine's cues first, then the confirmed engine's)
+            for (sim::AudioEvent& e : router.from_predicted(rig.prediction()->take_audio(), owns)) heard.push_back(Heard{rig.step_no(), std::move(e), true});
+            const uint64_t tick = rig.confirmed().current_tick() - 1;
+            std::vector<sim::AudioEvent> events = rig.confirmed().poll_audio_events();
+            for (const sim::AudioEvent& e : events) {
+                if (CueRouter::in_class(e, owns)) made.emplace_back(rig.step_no(), e);
+            }
+            for (sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns)) heard.push_back(Heard{rig.step_no(), std::move(e), false});
+            rig.prediction()->take_news();
+        });
+        rig.run(12);
+        rig.issue(make_command(CommandType::GroupMove, 0, 255, 20, 20, {rig.ids.ants[0][0]}));          // the worker to the lunch box
+        rig.issue(make_command(CommandType::GroupSpecial, 0, 255, 25, 25, {rig.ids.ants[0][1]}));        // the bomber to the bomb of the other team
+        rig.issue(make_command(CommandType::GroupMove, 0, 255, 30, 30, {rig.ids.ants[0][2]}));           // the fire ant onto the bridge
+        rig.issue(make_command(CommandType::GroupMove, 0, 255, 29, 30, {rig.ids.ants[0][5]}));           // the swimmer next to it, in the river
+        rig.run(260);
+        rig.run_quiet(40);
+        ASSERT_TRUE(made.size() >= 5);                                       // (the worker harvests, the bomber defuses, the fire ant bumps: the scenario makes cues of the class)
+        std::vector<sim::AudioEvent> made_events;
+        for (const auto& m : made) made_events.push_back(m.second);
+        std::vector<sim::AudioEvent> heard_events;
+        for (const Heard& h : heard) heard_events.push_back(h.event);
+        ASSERT_EQ(describe(heard_events), describe(made_events));            // every cue that the confirmed engine made was heard exactly once, in its order
+        ASSERT_EQ(heard.size(), made.size());
+        for (size_t i = 0; i < heard.size(); ++i) {
+            ASSERT_TRUE(heard[i].from_predicted);                            // ... from the predicted engine ...
+            ASSERT_TRUE(heard[i].step + 3 <= made[i].first);                 // ... three ticks before the confirmed engine made it (the lead)
+        }
+        const CueRouter::Stats& st = router.stats();
+        ASSERT_EQ(st.played_predicted, made.size());
+        ASSERT_EQ(st.duplicates_dropped, made.size());                       // ... and its copies were dropped, one for each
+        ASSERT_EQ(st.played_confirmed_own, 0u);
+        ASSERT_EQ(st.phantoms, 0u);
+        ASSERT_EQ(st.replays_dropped, 0u);                                   // (no rebuild: nothing was replayed)
+        ASSERT_EQ(rig.prediction()->stats().rebuilds, 0u);
+        ASSERT_EQ(router.outstanding(), size_t{0});
+    } TEST_END();
+
+    TEST_CASE("RP6.4 Under Random Jitter, Bursts, Orders Of Every Kind From Every Seat And Rebuilds, The Books Balance: Every Cue Of The Class That The Confirmed Engine Makes Is Dropped (it was heard from the predicted engine) Or Played (nobody had), Every Cue That Was Played From The Predicted Engine Was Met Or Is A Phantom, And Nothing Is Played Twice By A Replay") {
+        uint64_t total_made = 0;
+        uint64_t total_replays = 0;
+        uint64_t total_phantoms = 0;
+        uint64_t total_dup = 0;
+        for (uint32_t seed = 200; seed < 212; ++seed) {
+            Lcg rng(seed * 104729u);
+            Scenario sc;
+            sc.oracle_hashes = false;
+            sc.seed = seed;
+            sc.buffer_turns = 1 + rng.below(3);
+            sc.down_delay = rng.below(3);
+            sc.down_jitter = rng.below(3);
+            sc.uplink = rng.below(3);
+            sc.lead_ms = 50 * (2 + rng.below(4));
+            Rig rig(sc);
+            CueRouter router;
+            const std::set<uint32_t> own_ids(rig.ids.ants[0].begin(), rig.ids.ants[0].end());
+            const CueRouter::OwnsAnt owns = [&](uint32_t id) { return own_ids.count(id) != 0; };
+            uint64_t made = 0;
+            uint64_t played_from_confirmed_class = 0;
+            rig.set_on_tick_extra([&]() {
+                router.from_predicted(rig.prediction()->take_audio(), owns);
+                const uint64_t tick = rig.confirmed().current_tick() - 1;
+                std::vector<sim::AudioEvent> events = rig.confirmed().poll_audio_events();
+                for (const sim::AudioEvent& e : events) made += CueRouter::in_class(e, owns) ? 1u : 0u;
+                for (const sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns)) played_from_confirmed_class += CueRouter::in_class(e, owns) ? 1u : 0u;
+                rig.prediction()->take_news();
+            });
+            rig.run(sc.buffer_turns + sc.down_delay + 6);
+            for (uint32_t s = 0; s < 220; ++s) {
+                const uint32_t roll = rng.below(100);
+                if (roll < 12) rig.issue(random_order(rng, rig.ids, 0));
+                else if (roll < 24) rig.schedule(rig.step_no() + rng.below(4), random_order(rng, rig.ids, static_cast<uint8_t>(1 + rng.below(3))));
+                if (s % 40 == 25) rig.hold_link_until(rig.step_no() + 1 + rng.below(6));
+                rig.step();
+            }
+            rig.run_quiet(60);
+            const CueRouter::Stats& st = router.stats();
+            ASSERT_EQ(made, st.duplicates_dropped + st.played_confirmed_own);                // every cue the confirmed engine made: heard before, or heard now
+            ASSERT_EQ(played_from_confirmed_class, st.played_confirmed_own);
+            ASSERT_EQ(router.outstanding(), size_t{0});
+            ASSERT_EQ(st.played_predicted, st.duplicates_dropped + st.phantoms);            // every cue played from the predicted engine was met by the confirmed engine's copy, or is a phantom
+            total_made += made;
+            total_replays += st.replays_dropped;
+            total_phantoms += st.phantoms;
+            total_dup += st.duplicates_dropped;
+        }
+        ASSERT_TRUE(total_made >= 20);                                                       // (the matches make cues of the class)
+        ASSERT_TRUE(total_dup >= 10);                                                        // ... most of them are heard before the confirmed engine makes them
+        ASSERT_TRUE(total_replays >= 1);                                                     // ... rebuilds replayed ticks that had been heard (flagged by the prediction as replays), and they were not heard again
+        if (std::getenv("RP_DEBUG")) std::cout << "\n  made " << total_made << " dup " << total_dup << " replays " << total_replays << " phantoms " << total_phantoms << "\n";
+    } TEST_END();
+
+    TEST_CASE("RP6.5 The Refusal Of An Order Is Heard Once: Right After The Click When The Lead Is Right, And Still Once When The Lead Is Too Low And Chases The Order Through Three Rebuilds (Not Once For Every Place It Was Put At), The Confirmed Engine's Copy Is The One That Is Dropped") {
+        struct Case {
+            const char* name;
+            uint32_t lead_ms;                // 0: the exact lead of the scenario
+            uint64_t rebuilds;
+            uint32_t earliest_ticks;         // the cue is heard at least this many ticks before the confirmed engine makes it
+        };
+        for (const Case c : {Case{"exact", 0, 0, 3}, Case{"too low", 50, 3, 1}, Case{"too high", 600, 1, 5}}) {
+            Scenario sc;
+            sc.seed = 95;
+            sc.buffer_turns = 3;
+            sc.down_delay = 1;
+            sc.uplink = 2;
+            sc.lead_ms = c.lead_ms;                                           // (exact: 3 + 1 + 2 = 6 ticks; too low: one tick, the chase of RP2.4)
+            sc.oracle_hashes = false;
+            Rig rig(sc);
+            CueRouter router;
+            const std::set<uint32_t> own_ids(rig.ids.ants[0].begin(), rig.ids.ants[0].end());
+            const CueRouter::OwnsAnt owns = [&](uint32_t id) { return own_ids.count(id) != 0; };
+            std::vector<std::pair<uint32_t, sim::AudioEvent>> heard;
+            std::vector<std::pair<uint32_t, sim::AudioEvent>> made;
+            rig.set_on_tick_extra([&]() {
+                for (sim::AudioEvent& e : router.from_predicted(rig.prediction()->take_audio(), owns)) heard.emplace_back(rig.step_no(), std::move(e));
+                const uint64_t tick = rig.confirmed().current_tick() - 1;
+                std::vector<sim::AudioEvent> events = rig.confirmed().poll_audio_events();
+                for (const sim::AudioEvent& e : events) {
+                    if (CueRouter::in_class(e, owns)) made.emplace_back(rig.step_no(), e);
+                }
+                for (sim::AudioEvent& e : router.from_confirmed(std::move(events), tick, owns)) heard.emplace_back(rig.step_no(), std::move(e));
+                rig.prediction()->take_news();
+            });
+            rig.run(14);
+            rig.issue(make_command(CommandType::GroupSpecial, 0, 255, 30, 10, {rig.ids.ants[0][1]}));       // the bomber is told to plant a bomb in the river: refused
+            rig.run(40);
+            rig.run_quiet(40);
+            ASSERT_EQ(rig.prediction()->stats().rebuilds, c.rebuilds);
+            ASSERT_EQ(made.size(), size_t{2});                                                              // the refusal and the stop that cuts it when the clip ends
+            ASSERT_EQ(heard.size(), made.size());                                                           // each heard once
+            for (size_t i = 0; i < heard.size(); ++i) {
+                ASSERT_EQ(heard[i].second.stop, made[i].second.stop);
+                ASSERT_EQ(heard[i].second.sound_id, made[i].second.sound_id);
+                ASSERT_TRUE(heard[i].first + c.earliest_ticks <= made[i].first);
+            }
+            ASSERT_EQ(router.stats().played_confirmed_own, 0u);                                             // (the predicted engine played both: the confirmed engine's copies were dropped)
+            ASSERT_EQ(router.stats().duplicates_dropped, 2u);
+            ASSERT_EQ(router.stats().phantoms, 0u);
+            ASSERT_EQ(router.outstanding(), size_t{0});
+        }
+    } TEST_END();
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -894,6 +1176,7 @@ int main(int argc, char* argv[]) {
     run_correction_tests();
     run_property_tests();
     run_state_tests();
+    run_cue_tests();
     std::cout << "\n=======================================================\n"
               << " PREDICTION TEST SUMMARY\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Passed:           " << (g_test_count - g_test_failures) << "\n Failed:           "

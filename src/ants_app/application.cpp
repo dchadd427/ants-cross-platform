@@ -1049,6 +1049,7 @@ void Application::enter_match() {
     hud_.init(local_player_id_);
     hud_.reset();
     hud_.start_match_modal(network_active());                               // (the simulation waits for it: update_simulation, post_tick)
+    cue_router_.reset();                                                    // (no cue of an earlier match is waited for)
     tick_accumulator_ = 0.0f;                                               // the dialog and the match are counted from now
     start_dialog_clock_ms_ = 0.0;
     scorecard_.hide();
@@ -2022,13 +2023,34 @@ void Application::post_tick() {
     // The first turn of a match of the network has executed: the ants can move now, and the "Get ready" dialog (which every machine opened when the match began, while the host waited for it)
     // is gone. (A local game's dialog ends before its first tick, in update_simulation.)
     if (hud_.is_match_start_modal_active()) hud_.dismiss_match_start_modal();
-    const auto& world = view_sim().get_world_state();        // (what the screen shows: with the prediction on, the predicted engine's, a tick further for every tick)
+    const sim::SimulationEngine& shown = view_sim();        // (what the screen shows: with the prediction on, the predicted engine, a tick further for every tick)
+    const auto& world = shown.get_world_state();
     hud_.update(world, 1);
     hud_.poll_sim_events(sim_);                              // (the news are the confirmed engine's: they are told once, whatever was shown before)
 
     if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
-    if (!background_stepping_) audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);   // a background step makes no sound: its events are dropped, not saved up
+    std::vector<sim::AudioEvent> predicted_cues;
+    if (net_ != nullptr && net_->prediction() != nullptr) {
+        // The cues of the own ants' own actions come from the predicted engine, when it runs the tick that makes them (in step with the picture), and the confirmed engine's copies of them
+        // are dropped when they come; every other cue is the confirmed engine's (net::CueRouter). The predicted engine's news are never told: the confirmed engine's are.
+        const auto owns_in = [this](const sim::SimulationEngine& engine) {
+            return [&engine, me = local_player_id_](uint32_t ant_id) {
+                for (const auto& a : engine.get_world_state().ants) {
+                    if (a.id == ant_id) return a.player_id == me;
+                }
+                return false;
+            };
+        };
+        net::Prediction& prediction = *net_->prediction();
+        predicted_cues = cue_router_.from_predicted(prediction.take_audio(), owns_in(shown));
+        prediction.take_news();
+        audio_events = cue_router_.from_confirmed(std::move(audio_events), sim_.current_tick() - 1, owns_in(sim_));
+    }
+    if (!background_stepping_) {                             // a background step makes no sound: its events are dropped, not saved up
+        audio_mixer_.ingest_simulation_events(predicted_cues, local_player_id_);
+        audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);
+    }
 
 #if defined(__EMSCRIPTEN__)
     // A page that embeds several games (web/four.html) shows that the machines stay in step: every 100 ticks the game tells its parent page the tick and the

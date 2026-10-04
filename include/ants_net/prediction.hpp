@@ -77,17 +77,20 @@ public:
         uint32_t max_move_px{0};                  // the largest distance that an ant was moved, in pixels (the larger of the two axes)
     };
 
-    /// A cue or a line of news that the predicted engine made at `tick` (the tick that produced it); `generation` counts the rebuilds (an event of a replay belongs to a later generation than
-    /// the first time the same tick was run). The application decides what is shown (the cues of the orders and the ants' movement) and plays each once.
+    /// A cue or a line of news that the predicted engine made at `tick` (the tick that produced it); `generation` counts the rebuilds. `replay` is true for what a rebuild's REPLAY made: a tick
+    /// that the predicted engine had run before (or the ticks that a rebuild catches up in one go), as against the tick that it runs on from its display tick, which no run has made before.
+    /// The application decides what is heard (CueRouter) and plays each occurrence once.
     struct PredictedAudio {
         sim::AudioEvent event;
         uint64_t tick{0};
         uint32_t generation{0};
+        bool replay{false};
     };
     struct PredictedNews {
         sim::NewsEvent event;
         uint64_t tick{0};
         uint32_t generation{0};
+        bool replay{false};
     };
 
     /// `confirmed` and `runner` must outlive the prediction (a runner that moves to another session as the host changes stays where it is: it is a heap object). Nothing is predicted until
@@ -163,7 +166,7 @@ private:
     void advance_one();
     /// Applies the commands of the state that stands at `tick` (before its tick runs) and records them: the turn when it is in hand (certain), else the own orders waiting for this tick
     void apply_commands_for(uint64_t tick);
-    void capture_events(uint64_t tick);
+    void capture_events(uint64_t tick, bool replay);
     void update_lead();
     void drop_lost_orders(uint64_t confirmed_tick);
     uint64_t confirmed_tick() const noexcept { return confirmed_->current_tick(); }

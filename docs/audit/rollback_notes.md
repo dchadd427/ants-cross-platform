@@ -1,6 +1,6 @@
 # Rollback for one's own orders: what was built, measured, and where it differs from the design
 
-Update for section 74 of `implementation_plan.md` (that file is not part of the repository; the owner copies this text into it). Client-side prediction with rollback of one's own commands in network matches: the confirmed lock-step simulation, the server's sealing and referee, the network protocol and the rules stay as they are. The steps land one after the other; this file grows with them (R1 the engine copy, R2 the prediction core, R3 the screen, then the cues, the switches and the measurements).
+Update for section 74 of `implementation_plan.md` (that file is not part of the repository; the owner copies this text into it). Client-side prediction with rollback of one's own commands in network matches: the confirmed lock-step simulation, the server's sealing and referee, the network protocol and the rules stay as they are. The steps land one after the other; this file grows with them (R1 the engine copy, R2 the prediction core, R3 the screen, R4 the cues, then the switches and the measurements).
 
 ## R1: the engine copy (value semantics of `SimulationEngine`)
 
@@ -208,3 +208,60 @@ The first run of the harness had A1 and A5 survive. A1 (the frame drawn from the
 ### What this does not do (R4 and R5 follow)
 
 The cues are still the confirmed engine's: a sound is heard when the confirmed engine makes it, `lead` ticks after the picture shows it. The picture of other players' things (a fight, an explosion) is the prediction's, a few ticks ahead, and its sound arrives with the confirmed tick. R4 decides which cues can come from the predicted engine.
+
+## R4: who plays which cue, once (`net::CueRouter`)
+
+### What the engine's sounds are (a finding that shaped this step)
+
+The design spoke of "movement sounds" and "order acknowledgements" from the prediction. **Walking has no sound in this game.** The walk and idle clips of every ant type, on every terrain, loaded or carrying, carry no frame sounds (a probe over `walk_clip`, `idle_clip`, `action_clip`, `swim_clip`, `dive_clip`, `climb_clip`, `cant_go_clip` and `bump_clip` finds sounds only on the action clips: harvest, attack, hit, blown, burn, stun, drown, ignite, extinguish, the bridges, plant, defuse, infiltrate, the power-up pick-up, the dive, the can't-go clip and the bump). The voices of an order ("On my way!", the pedestal's click) are **not the engine's**: the HUD plays them at the click, from the verdict that the predicted engine gives (R3: its `ack_ant` and `needing_order` are the engine's own), so they were instant before this step too. What the engine makes of an own order are the cues of the ant's own ACTION: refused (the can't-go cue), harvests, picks up a power-up, lights or puts out a fire, defuses, shovels a bridge, raids, bumps.
+
+### Built
+
+| Item | Where |
+|---|---|
+| **`CueRouter`** (no SDL, no clock): two inputs, the cues of the predicted engine (`Prediction::take_audio`) and the cues of the confirmed engine's tick, and what to play out. **The own ants' own actions and their stops** (the list in `is_own_action_sound`: can't go, harvest and grab, the two power-up chimes, fire, bomb, bridge and raid cues, the bump, and the stop of any own ant, whatever it cuts) are played from the predicted engine, when it first runs the tick that makes them, in step with the picture; **everything else is the confirmed engine's, as it was**: combat, hits, blows, stuns, drownings, explosions, scores, the alliance cues, the clock's warnings, the can't-hatch cue, the hatching, every cue of another player's ants. Nothing in the second list is ever a guess: a cue that was played for something that then did not happen can only be one of the first | `include/ants_net/cue_router.hpp`, `src/ants_net/cue_router.cpp` |
+| **What a rebuild replays is never played from the predicted engine.** `Prediction::PredictedAudio::replay` (new) is true for the cues that a rebuild's replay made: the ticks that the predicted engine had run before, so a correction cannot make a cue heard twice. Only what the engine makes by running on from its display tick is played, and no earlier run has made a tick beyond it. What the corrected timeline makes later is made again by the confirmed engine and played then, late but never wrong. A tick that is run again by a straight run (the prediction was suspended and began again within its lead) is caught by an exact guard (`repeats_dropped`) | `prediction.hpp`, `prediction.cpp` (`capture_events`), `cue_router.cpp` |
+| **The confirmed engine's copy of what was played is dropped, one for each**: the nearest occurrence of the same kind (the same sound, or a stop, of the same ant) within `kMatchWindowTicks` = 12 (the longest lead) of the tick, the same tick when the prediction was right, a few off when an order was sealed later or earlier than assumed. An occurrence that nobody played is played (an own cue is never lost), and one that was played and not met by the time its window has passed is counted a phantom (`Stats`) | `cue_router.cpp` |
+| **In the application** (`Application::post_tick`): the predicted engine's cues first, then the confirmed engine's, through the same mixer call that took the confirmed ones; the predicted engine's news are never told (the confirmed engine's are, once); a background step makes no sound from either stream; the router is reset with every match. `Application::cue_router()` is public for the tests | `application.cpp`, `application.hpp` |
+| Tests: RP6.1 - RP6.5 in suite 2.27 (`test_prediction`) and PA3 in suite 3.21 (`test_prediction_app`) | `tests/test_net/test_prediction.cpp`, `tests/test_app/test_prediction_app.cpp` |
+
+### What the tests hold the router to
+
+- **RP6.1** the list: every sound of the own-action list, no other (28 sounds that are not: blows, hits, stuns, explosions, scores, alliance, clock, siren, hatching), another player's ants' cues, a cue without an owner and an effect sprite's owner are not the class, the bump (no owner) is, the stops of own ants are.
+- **RP6.2** every rule on explicit events: the first appearance plays in order, a rebuild's replay plays nothing (flagged, 6 events), the same tick run again by a straight run plays nothing, the confirmed engine's copies are dropped one for each, an occurrence that nobody played is played (the third harvest that only the replay made), a copy 3 ticks off is met and one beyond the window is another cue, the nearest is the one that is met, a cue that was never met is a phantom exactly when its window has passed, the kinds are kept apart, `reset`.
+- **RP6.3** a real match in the rig: an own worker walks to the lunch box and harvests, the bomber defuses, the fire ant bumps: **every cue that the confirmed engine made was heard exactly once, in its order, from the predicted engine, three ticks before the confirmed engine made it** (the lead), none lost, none doubled, no phantom, no replay, no rebuild.
+- **RP6.4** twelve random matches (jitter, bursts, orders of every kind from every seat, a lead that is not the delay's, rebuilds): the books balance (every cue of the class that the confirmed engine made was dropped as heard or played now; every cue played from the predicted engine was met or is a phantom; the router's count of the confirmed engine's cues is the test's own count) and rebuilds did replay ticks that had been heard, flagged, and were not heard again.
+- **RP6.5** the refusal of an order (the bomber is told to plant a bomb in the river): heard once with the right lead (right after the click: three ticks before the confirmed engine), still once when the lead is too low and the order is chased through three rebuilds (not once for every place it was put at), and once when the lead is too high and the order is sealed before the tick the prediction put it at (the confirmed copy comes five ticks off and is met).
+- **PA3** the application: an own worker is sent to food and harvests; the cue is played from the predicted engine (one more sound is playing, the confirmed engine has made nothing yet), and a second later, when the confirmed engine has made the same cues, no second sound is ever playing, the copies were dropped (`duplicates_dropped == played_predicted`), the confirmed engine played no cue of the ant's action itself, and the stop that cuts the sound, from the predicted engine too, was met.
+
+### Mutants (K1 - K13 edit the router and `prediction.cpp`, run against `test_prediction`; B1 - B4 edit `application.cpp`, run against `test_prediction_app`)
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `K1_every_sound_is_class` | every sound is routed from the predicted engine (combat, hits, explosions too) | KILLED by RP6.1 |
+| `K2_foreign_ants_in_class` | the ant's owner is not asked: another player's ants' cues are routed too | KILLED by RP6.1 |
+| `K3_replays_played` | what a rebuild's replay makes is played from the predicted engine | KILLED by RP6.2, RP6.4, RP6.5 |
+| `K4_no_exact_tick_guard` | a tick that was played before and is run again (a restart within the lead) is played again | KILLED by RP6.2 |
+| `K5_window_zero` | a copy that comes a few ticks off is not the same cue | KILLED by RP6.2, RP6.5 |
+| `K6_copy_not_consumed` | a played occurrence meets any number of copies | KILLED by RP6.2, RP6.3, RP6.4, RP6.5 |
+| `K7_stops_not_in_class` | the stops of own ants are the confirmed engine's | KILLED by RP6.1, RP6.2, RP6.3, RP6.5 |
+| `K8_bump_needs_an_owner` | the bump (no owner) is not an own cue | KILLED by RP6.1, RP6.3 |
+| `K9_kind_ignores_owner` | an occurrence is met by the same sound of any ant | KILLED by RP6.2 |
+| `K10_no_phantom_expiry` | an occurrence that was never met stays in the book for ever | KILLED by RP6.2 |
+| `K11_only_later_copies_meet` | a cue that was played AFTER the confirmed engine's tick is met, one played before it is not | KILLED by RP6.2 |
+| `K12_unmet_own_cues_dropped` | an own cue that nobody played is dropped (lost) | KILLED by RP6.2, RP6.4 |
+| `K13_replay_flag_never_set` | a rebuild's replay is not flagged as one | KILLED by RP6.4, RP6.5 |
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `B1_no_predicted_cues` | the predicted engine's cues are not played | KILLED by PA3 |
+| `B2_confirmed_not_filtered` | the confirmed engine's cues are played as they come (the copies of what was heard are heard again) | KILLED by PA3 |
+| `B3_wrong_tick_of_the_confirmed_cues` | the confirmed engine's tick is told wrong (far from the predicted one) | KILLED by PA3 |
+| `B4_ownership_never` | no ant is the player's | KILLED by PA3 |
+
+All killed. Three of the first run's verdicts changed when the tests did: K3 (replays are played) was caught only by RP6.2 because the exact-tick guard repeated the replay flag in the rig's matches (the guard now counts apart, `repeats_dropped`, so RP6.4 sees the flag), K5 (a window of zero) was caught only by RP6.2 because no rig case had a cue that the two engines made at different ticks (RP6.5's lead that is too high), and K13 (the replay flag never set) survived for the same reason as K3.
+
+### What the cues do NOT do, and what they cost
+
+- **The picture of other players' things is ahead of their sound.** A fight, an explosion, a hit is shown by the predicted engine `lead` ticks ahead of the confirmed one and heard when the confirmed engine makes it: at a round trip of 60 ms the lead is 3 - 4 ticks, so the sound of a blow comes 150 - 200 ms after its picture (before the prediction both were late together). Playing the cues that the predicted engine makes from turns that are already in hand (certain: the jitter buffer's turns, no guess) would shorten that by the buffer's one or two ticks, and is not built: it is a second class of cues with the same bookkeeping, for a gain of 50 - 100 ms of a skew that the owner can judge first.
+- A phantom (a cue of an own ant's action that the confirmed engine never made) is possible only after a correction, is counted, and costs one short sound: a harvest heard for food that another player's ant took first.

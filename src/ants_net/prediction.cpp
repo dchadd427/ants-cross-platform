@@ -140,16 +140,16 @@ void Prediction::apply_commands_for(uint64_t tick) {
     assumed_.push_back(std::move(applied));
 }
 
-void Prediction::capture_events(uint64_t tick) {
-    for (sim::AudioEvent& e : pred_.poll_audio_events()) audio_.push_back(PredictedAudio{std::move(e), tick, generation_});
-    for (sim::NewsEvent& e : pred_.poll_news_events()) news_.push_back(PredictedNews{std::move(e), tick, generation_});
+void Prediction::capture_events(uint64_t tick, bool replay) {
+    for (sim::AudioEvent& e : pred_.poll_audio_events()) audio_.push_back(PredictedAudio{std::move(e), tick, generation_, replay});
+    for (sim::NewsEvent& e : pred_.poll_news_events()) news_.push_back(PredictedNews{std::move(e), tick, generation_, replay});
     if (audio_.size() > cfg_.max_events) audio_.erase(audio_.begin(), audio_.begin() + static_cast<std::ptrdiff_t>(audio_.size() - cfg_.max_events));
     if (news_.size() > cfg_.max_events) news_.erase(news_.begin(), news_.begin() + static_cast<std::ptrdiff_t>(news_.size() - cfg_.max_events));
 }
 
 void Prediction::advance_one() {
     pred_.tick();
-    capture_events(display_);
+    capture_events(display_, false);
     ++display_;
     apply_commands_for(display_);
     ++stats_.ticks_advanced;
@@ -196,7 +196,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
             have_after = true;
         }
         pred_.tick();
-        capture_events(t);
+        capture_events(t, true);
     }
     apply_commands_for(target);
     if (measure && !have_after && target == shown_before) {

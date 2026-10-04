@@ -422,6 +422,67 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
     } TEST_END();
 
+
+    TEST_CASE("PA3 The Cues Of An Own Ant's Own Action Are Heard Once, From The Predicted Engine, In Step With The Picture: An Own Worker Sent To Food Harvests It, The Cues Are Played From The Predicted Engine A Few Ticks Before The Confirmed Engine Makes Them, And The Confirmed Engine's Copies Are Dropped (No Second Sound)") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        // the food nearest to the player's hill, and an own worker
+        const sim::Grid& grid = app.sim().grid();
+        const auto* hill = grid.find_anthill(0);
+        ASSERT_TRUE(hill != nullptr);
+        sim::TileCoord food{-1, -1};
+        int32_t best = 1 << 30;
+        for (int32_t y = 0; y < static_cast<int32_t>(grid.height()); ++y) {
+            for (int32_t x = 0; x < static_cast<int32_t>(grid.width()); ++x) {
+                if (grid.food_object_at_cell(sim::TileCoord{x, y}) < 0) continue;
+                const int32_t d = std::max(std::abs(x - static_cast<int32_t>(hill->x)), std::abs(y - static_cast<int32_t>(hill->y)));
+                if (d < best) {
+                    best = d;
+                    food = sim::TileCoord{x, y};
+                }
+            }
+        }
+        ASSERT_TRUE(food.x >= 0);
+        const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
+        ASSERT_TRUE(!mine.empty());
+        sim::Command go;
+        go.type = sim::CommandType::GroupMove;
+        go.issuer = 0;
+        go.tile_x = static_cast<int16_t>(food.x);
+        go.tile_y = static_cast<int16_t>(food.y);
+        go.ants = {mine[0]};
+        const size_t channels_before = app.audio_mixer().active_channel_count();
+        ASSERT_EQ(app.net()->submit(go).status, sim::CommandResult::Status::Applied);
+        const net::CueRouter::Stats before = app.cue_router().stats();
+        for (int i = 0; i < 3000 && app.cue_router().stats().played_predicted == before.played_predicted; ++i) duo.step(10);       // (the ant walks to the food and harvests it)
+        ASSERT_TRUE(app.cue_router().stats().played_predicted > before.played_predicted);
+        // heard now, from the predicted engine: one more sound is playing, and the confirmed engine has not made the cue yet (nothing has been met)
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), channels_before + 1);
+        ASSERT_EQ(app.cue_router().stats().duplicates_dropped, before.duplicates_dropped);
+        ASSERT_EQ(app.cue_router().stats().played_confirmed_own, before.played_confirmed_own);
+        const uint64_t heard_at = app.sim().current_tick();
+        // a second later the confirmed engine has made the same cues; they are dropped, and never a second sound is playing
+        bool met = false;
+        for (int i = 0; i < 100; ++i) {
+            duo.step(10);
+            ASSERT_TRUE(app.audio_mixer().active_channel_count() <= channels_before + 1);
+            met = met || app.cue_router().stats().duplicates_dropped > before.duplicates_dropped;
+        }
+        ASSERT_TRUE(met);
+        const net::CueRouter::Stats& st = app.cue_router().stats();
+        ASSERT_TRUE(app.sim().current_tick() > heard_at + app.net()->prediction()->lead_ticks());
+        ASSERT_EQ(st.duplicates_dropped, st.played_predicted);                              // every cue that was played from the predicted engine was met by the confirmed engine's copy
+        ASSERT_EQ(st.played_confirmed_own, 0u);                                             // ... and the confirmed engine played no cue of the ant's own action itself
+        ASSERT_EQ(st.phantoms, 0u);
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), channels_before);               // (the stop that cuts the sound came from the predicted engine too, and was met)
+        app.net()->freeze();
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " PREDICTION APPLICATION TEST SUMMARY\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Passed:           " << (g_test_count - g_test_failures) << "\n Failed:           "

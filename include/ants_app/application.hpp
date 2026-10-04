@@ -23,6 +23,7 @@
 #include "ants_ai/bot_controller.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_net/cue_router.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
@@ -307,6 +308,9 @@ public:
     net::NetGame* net() noexcept { return net_.get(); }
     /// True while a room or a network match exists
     bool network_active() const noexcept { return net_ && net_->active(); }
+    /// Who plays which cue of a network match that predicts (net::CueRouter): the own ants' own actions from the predicted engine, in step with the picture, everything else from the confirmed
+    /// engine. Public for the tests (what was played from where, what was dropped)
+    const net::CueRouter& cue_router() const noexcept { return cue_router_; }
     /// Advances the network by `dt` seconds of game time and handles what it reports (run once per frame; the tests call it directly). `gap_seconds` is real time that
     /// `dt` did not count (a hidden page that was not woken for a while, see background_run): once the connection has been read, a host that said nothing has been silent
     /// for that time as well (NetGame::note_gap).
@@ -470,6 +474,7 @@ private:
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<net::NetGame> net_;
+    net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     double net_time_ms_{0.0};
     double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START
     bool page_hidden_{false};                              // the browser's page is hidden (set_page_hidden): a network match belongs to the wake-ups, see background_pump
