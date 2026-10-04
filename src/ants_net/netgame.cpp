@@ -758,6 +758,8 @@ void NetGame::make_prediction() {
     pc.seat = seat_;
     pc.budget_ns = prediction_budget_ns_;
     pc.budget_strikes = prediction_budget_strikes_;
+    pc.cooldown_ticks = prediction_cooldown_ticks_;
+    pc.work_hook = prediction_work_hook_;
     prediction_ = std::make_unique<Prediction>(sim_, *r, pc);
 }
 

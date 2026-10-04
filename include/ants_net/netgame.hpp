@@ -225,16 +225,19 @@ public:
     bool prediction_enabled() const noexcept { return prediction_enabled_; }
     /// The application suspends the prediction where only it knows that the match is not simply following the live stream (a hidden page's background steps, a screen over the match)
     void set_prediction_suspended(bool suspended) noexcept { app_suspends_prediction_ = suspended; }
-    /// True when the prediction switched itself off for this match because its work took longer than its budget too often (Prediction::Config::budget_ns): the confirmed engine is shown
-    /// from then on, as without the prediction, and nothing else changes
-    bool prediction_gave_up() const noexcept { return prediction_ != nullptr && prediction_->gave_up(); }
-    /// The budget of the prediction's work for the NEXT match (the tests and the diagnostics): a rebuild or a run of predicted ticks that takes longer than `ns` is a strike, `strikes` of them
-    /// within 10 s end the prediction for the match. The default is Prediction::Config's; default_prediction_budget_ns() is what a NetGame starts with (a test program that runs on a busy
-    /// machine raises it: a stall of the test process is not the prediction's cost)
-    void set_prediction_budget(uint64_t ns, uint32_t strikes) noexcept {
+    /// True during a cool-down of the prediction (Prediction::Config::budget_ns): its work cost more than the budget too often, so it is off for a while: the confirmed engine is shown and
+    /// orders go as they did before the prediction. It begins again by itself.
+    bool prediction_cooling_down() const noexcept { return prediction_ != nullptr && prediction_->cooling_down(); }
+    /// The budget of the prediction's work for the NEXT prediction (the tests and the diagnostics): a rebuild or a run of predicted ticks that costs more than `ns` is a strike, `strikes` of
+    /// them within 10 s start a cool-down of `cooldown_ticks`. The defaults are Prediction::Config's; default_prediction_budget_ns() is what a NetGame starts with (a test program that
+    /// runs under a sanitizer raises it)
+    void set_prediction_budget(uint64_t ns, uint32_t strikes, uint32_t cooldown_ticks = Prediction::Config{}.cooldown_ticks) noexcept {
         prediction_budget_ns_ = ns;
         prediction_budget_strikes_ = strikes;
+        prediction_cooldown_ticks_ = cooldown_ticks;
     }
+    /// The tests: something that runs inside every timed block of the prediction (Prediction::Config::work_hook)
+    void set_prediction_work_hook(std::function<void()> hook) { prediction_work_hook_ = std::move(hook); }
     static uint64_t& default_prediction_budget_ns() noexcept;
     /// True while the predicted engine is the one that the screen shows: a match is running, the prediction is on and not suspended, and at least one tick has run
     bool predicting() const noexcept { return prediction_ != nullptr && prediction_->active(); }
@@ -353,6 +356,8 @@ private:
     bool app_suspends_prediction_{false};
     uint64_t prediction_budget_ns_{default_prediction_budget_ns()};
     uint32_t prediction_budget_strikes_{Prediction::Config{}.budget_strikes};
+    uint32_t prediction_cooldown_ticks_{Prediction::Config{}.cooldown_ticks};
+    std::function<void()> prediction_work_hook_;
 };
 
 }  // namespace ants::net

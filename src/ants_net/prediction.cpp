@@ -4,21 +4,64 @@
 #include <cstdlib>
 #include <utility>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif !defined(__EMSCRIPTEN__)
+#include <time.h>
+#endif
+
 namespace ants::net {
 
 namespace {
 
-uint64_t ns_since(std::chrono::steady_clock::time_point t0) {
-    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+uint64_t wall_now_ns() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
 }
 
+// One timed block of work: stop() gives its wall time (the statistics) and what the budget counts (work_cost_ns). The CPU reading is taken inside the wall one, so it is never the larger.
+class Timer {
+public:
+    Timer() : wall_(wall_now_ns()), cpu_(thread_cpu_ns()) {}
+    uint64_t stop(uint64_t& charged_ns) const {
+        const uint64_t cpu = thread_cpu_ns() - cpu_;
+        const uint64_t wall = wall_now_ns() - wall_;
+        charged_ns = work_cost_ns(wall, cpu);
+        return wall;
+    }
+
+private:
+    uint64_t wall_;
+    uint64_t cpu_;
+};
+
 }  // namespace
+
+uint64_t thread_cpu_ns() {
+#if defined(_WIN32)
+    FILETIME created, exited, kernel, user;
+    if (GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user) != 0) {
+        const auto ticks = [](const FILETIME& t) { return (static_cast<uint64_t>(t.dwHighDateTime) << 32) | static_cast<uint64_t>(t.dwLowDateTime); };
+        return (ticks(kernel) + ticks(user)) * 100u;                       // (100 ns units)
+    }
+#elif !defined(__EMSCRIPTEN__)
+    timespec ts;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0) return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
+#endif
+    return wall_now_ns();                                                  // (no thread clock: the web build, or a call that failed)
+}
 
 Prediction::Prediction(const sim::SimulationEngine& confirmed, const LockstepRunner& runner, Config config)
     : confirmed_(&confirmed), runner_(&runner), cfg_(config) {
     cfg_.max_lead_ticks = std::max<uint32_t>(cfg_.max_lead_ticks, 1u);
     cfg_.min_lead_ticks = std::min(cfg_.min_lead_ticks, cfg_.max_lead_ticks);
     lead_ = target_lead_ = std::clamp<uint32_t>(estimate_lag_ + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
+    cooldown_next_ = std::min(cfg_.cooldown_ticks, cfg_.cooldown_max_ticks);
 }
 
 const std::vector<sim::Command>& Prediction::applied_at_display() const noexcept {
@@ -179,29 +222,44 @@ void Prediction::advance_to(uint64_t target) {
         rebuild(target, false);
         return;
     }
-    const auto t0 = Clock::now();
+    const Timer timer;
+    if (cfg_.work_hook) cfg_.work_hook();
     while (display_ < target) advance_one();
-    const uint64_t ns = ns_since(t0);
+    uint64_t charged = 0;
+    const uint64_t ns = timer.stop(charged);
     stats_.advance_ns_total += ns;
     stats_.advance_ns_max = std::max(stats_.advance_ns_max, ns);
-    note_cost(ns);
+    note_cost(charged);
 }
 
 void Prediction::note_cost(uint64_t ns) {
-    if (ns <= cfg_.budget_ns || gave_up_) return;
+    if (ns <= cfg_.budget_ns) return;
     ++stats_.over_budget;
     const uint64_t c = confirmed_tick();
     strikes_.push_back(c);
     while (!strikes_.empty() && strikes_.front() + cfg_.budget_window_ticks < c) strikes_.pop_front();
-    if (strikes_.size() >= cfg_.budget_strikes) {
-        gave_up_ = true;
-        stop();
-    }
+    if (strikes_.size() >= cfg_.budget_strikes) start_cooldown(c);
+}
+
+// The prediction is off for the next `cooldown_next_` confirmed ticks, counting from the tick `c`; the strikes start from nothing after it, and the next cool-down is twice as long (up to the cap)
+void Prediction::start_cooldown(uint64_t c) {
+    ++stats_.cooldowns;
+    cooling_down_ = true;
+    cooldown_until_ = c + cooldown_next_;
+    cooldown_next_ = std::min<uint64_t>(cooldown_next_ * 2u, cfg_.cooldown_max_ticks);
+    strikes_.clear();
+    stop();
+}
+
+uint64_t Prediction::cooldown_ticks_left() const noexcept {
+    const uint64_t c = confirmed_tick();
+    return cooling_down_ && cooldown_until_ > c ? cooldown_until_ - c : 0u;
 }
 
 // A copy of the confirmed engine, run to the display tick with the turns in hand and the waiting orders: the prediction as it should be now.
 void Prediction::rebuild(uint64_t target, bool is_start) {
-    const auto t0 = Clock::now();
+    const Timer timer;
+    if (cfg_.work_hook) cfg_.work_hook();
     std::vector<sim::AntSnapshot> before;
     const bool measure = measure_corrections_ && !is_start && running_;
     if (measure) before = pred_.get_world_state().ants;              // the picture that was on screen
@@ -237,7 +295,8 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
     display_ = target;
     stale_ = false;
 
-    const uint64_t ns = ns_since(t0);
+    uint64_t charged = 0;
+    const uint64_t ns = timer.stop(charged);
     if (!is_start) {
         ++stats_.rebuilds;
         stats_.replay_ticks += target - c;
@@ -269,7 +328,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
         if (moved > 0) ++stats_.corrections_visible;
         stats_.ants_moved += moved;
     }
-    note_cost(ns);                                                   // (last: over the budget often enough, it ends the prediction, and nothing here may use it afterwards)
+    note_cost(charged);                                              // (last: over the budget often enough, it starts a cool-down, and nothing here may use the prediction afterwards)
 }
 
 // An own order that no turn has carried for pending_timeout_ticks is lost (the server refused it, a host change dropped it): it must not stay in the picture
@@ -343,8 +402,12 @@ void Prediction::on_turn(const TurnMsg& turn) {
 }
 
 void Prediction::on_tick() {
-    if (suspended_ || gave_up_) return;
+    if (suspended_) return;
     const uint64_t c = confirmed_tick();
+    if (cooling_down_) {
+        if (c < cooldown_until_) return;
+        cooling_down_ = false;                                       // (over: it begins again below, from the confirmed engine, as after any suspension)
+    }
     if (!running_) {
         begin(c);
         return;

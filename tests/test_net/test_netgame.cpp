@@ -1279,6 +1279,18 @@ void run_start_delay_tests() {
 // The prediction of one's own orders (prediction.hpp), in a match of real NetGames
 // ---------------------------------------------------------------------------------------------------------------------------------
 
+// Work that costs `ns` of the thread's CPU time (a spin on the clock that the prediction's budget reads: it is what it says on every platform). A clock that stands still fails the test
+// instead of hanging it: the spin gives up when the clock has not moved in 100 ms of the time that goes by.
+void burn_cpu(uint64_t ns) {
+    const uint64_t t0 = thread_cpu_ns();
+    const auto wall0 = std::chrono::steady_clock::now();
+    for (;;) {
+        const uint64_t spent = thread_cpu_ns() - t0;
+        if (spent >= ns) return;
+        if (spent == 0 && std::chrono::steady_clock::now() - wall0 > std::chrono::milliseconds(100)) return;
+    }
+}
+
 // The prediction is OFF by default (opt-in): the tests of it ask for it, as the application does when it is told `--prediction on`
 void enable_prediction(Table& t) {
     for (auto& m : t.machines) m->net.set_prediction_enabled(true);
@@ -1512,25 +1524,33 @@ void run_prediction_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N3.30 Prediction: A Machine Whose Prediction Costs More Than Its Budget Loses The Prediction And Nothing Else (It Switches Itself Off, The Confirmed Engine Is Shown, Orders Go As They Did Before, The Match Runs On And Ends Identical); The Other Machine Goes On Predicting") {
+    TEST_CASE("N3.30 Prediction: A Machine Whose Prediction Costs More Than Its Budget Loses The Prediction For A While And Nothing Else (A Cool-Down: The Confirmed Engine Is Shown, Orders Go As They Did Before, The Match Runs On And Ends Identical); The Other Machine Goes On Predicting, And When The Cool-Down Is Over It Begins Again") {
+        constexpr uint64_t kMs = 1000ull * 1000ull;
+        uint64_t burn = 30 * kMs;                                                                // (declared before the table: the machine's hook holds it) what every timed block costs
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         enable_prediction(t);
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
-        bob.net.set_prediction_budget(1, 3);                                                    // a budget that nothing meets: three strikes
+        bob.net.set_prediction_budget(50 * kMs, 3, 40);                                          // three strikes of more than 50 ms of CPU, a cool-down of 40 ticks (2 s)
+        bob.net.set_prediction_work_hook([&burn]() { burn_cpu(burn); });
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(11, hash));
-        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting(); }, kUntilRunning));
         t.run(500);
-        ASSERT_TRUE(bob.net.prediction_gave_up());
+        ASSERT_TRUE(bob.net.predicting());                                                       // 30 ms a block is under the budget of 50: no strike (the default budget, 12 ms, would have had four)
+        ASSERT_EQ(bob.net.prediction()->stats().over_budget, 0u);
+        burn = 60 * kMs;                                                                         // (a machine that is too slow for it)
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.prediction_cooling_down(); }, 2000));
+        burn = 0;                                                                                // (the load is gone: from here on its blocks cost what they cost)
+        ASSERT_EQ(bob.net.prediction()->stats().over_budget, 3u);                                // three strikes, as many as the machine was given
         ASSERT_FALSE(bob.net.predicting());
         ASSERT_TRUE(&bob.net.view_engine() == &bob.sim);
-        ASSERT_FALSE(host.net.prediction_gave_up());
+        ASSERT_FALSE(host.net.prediction_cooling_down());
         ASSERT_TRUE(host.net.predicting() && &host.net.view_engine() != &host.sim);
-        // an order of the machine that gave up goes the old way (the guess of predict_order_ack, the turn decides)
+        // an order of the machine that is cooling down goes the old way (the guess of predict_order_ack, the turn decides)
         const uint32_t ant = first_ant(bob, 1);
         int16_t gx = 0, gy = 0;
         ASSERT_TRUE(open_goal_near_hill(bob.sim, 1, gx, gy));
@@ -1539,9 +1559,28 @@ void run_prediction_tests() {
         ASSERT_EQ(r.ack_ant, ant);
         ASSERT_TRUE(bob.sim.get_unit(ant).orig_order != sim::AntUnit::kOrderMove);
         ASSERT_TRUE(t.run_until([&]() { return bob.sim.get_unit(ant).orig_order == sim::AntUnit::kOrderMove; }, 3000));
-        t.run(2000);
-        ASSERT_FALSE(bob.net.predicting());                                                      // (it stays off: nothing brings it back)
-        ASSERT_EQ(bob.net.prediction()->stats().starts, 1u);
+        ASSERT_TRUE(bob.net.prediction_cooling_down() || bob.net.predicting());                  // (a second of the two has gone by)
+        ASSERT_EQ(bob.net.prediction()->stats().cooldowns, 1u);
+        // the cool-down is over after its ticks: it begins again, from the confirmed engine, and orders are predicted again
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.predicting(); }, 6000));
+        ASSERT_FALSE(bob.net.prediction_cooling_down());
+        ASSERT_EQ(bob.net.prediction()->stats().starts, 2u);
+        ASSERT_EQ(bob.net.prediction()->stats().cooldowns, 1u);
+        ASSERT_TRUE(bob.net.view_engine().current_tick() > bob.sim.current_tick());
+        t.run(500);
+        ASSERT_TRUE(bob.net.predicting());                                                       // (and it stays)
+        const std::vector<uint32_t> bobs = [&]() {
+            std::vector<uint32_t> ids;
+            for (const auto& a : bob.sim.get_world_state().ants) {
+                if (a.player_id == 1 && a.id != ant) ids.push_back(a.id);
+            }
+            return ids;
+        }();
+        ASSERT_TRUE(!bobs.empty());
+        const sim::CommandResult again = bob.net.submit(order(1, bobs[0], gx, gy));
+        ASSERT_EQ(again.status, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(bob.net.view_engine().get_unit(bobs[0]).orig_order, sim::AntUnit::kOrderMove);   // (in the shown engine in the same call: it predicts)
+        ASSERT_TRUE(bob.sim.get_unit(bobs[0]).orig_order != sim::AntUnit::kOrderMove);
         host.net.freeze();
         t.run(3000);
         ASSERT_TRUE(all_equal(t));

@@ -1092,7 +1092,7 @@ void Application::enter_match() {
     cue_router_.reset();                                                    // (no cue of an earlier match is waited for)
     felt_delay_ = net::FeltDelayMeter();
     orders_seen_ = 0;                                                       // (the match's own prediction counts its orders from none)
-    prediction_gave_up_reported_ = false;
+    prediction_cooldowns_reported_ = 0;
     tick_accumulator_ = 0.0f;                                               // the dialog and the match are counted from now
     start_dialog_clock_ms_ = 0.0;
     scorecard_.hide();
@@ -1509,7 +1509,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // game draws its cursor at and scrolls from); 2: 1 while the game takes the pointer as gone from its window (no cursor, no scrolling); 3 and 4: the map view's origin in world pixels
 // (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
 // The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the corner's "delay" in ms as the player reads it (the felt delay while the prediction is on, the
-// network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 ended by its budget; 10: the
+// network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 cooling down after its budget; 10: the
 // orders that it has predicted; 11: the rebuilds that it has made; 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
 // 15: reads 0 and starts again).
 // Anything else, or no game: -1.
@@ -1535,7 +1535,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 9: {
             const net::NetGame* game = g_web_app->net();
             if (game == nullptr) return 0;
-            return game->prediction_gave_up() ? 2 : (game->predicting() ? 1 : 0);
+            return game->prediction_cooling_down() ? 2 : (game->predicting() ? 1 : 0);
         }
         case 10: {
             const net::NetGame* game = g_web_app->net();
@@ -2130,13 +2130,15 @@ void Application::post_tick() {
 
     if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
     if (net_ != nullptr && net_->predicting()) felt_delay_.on_tick_shown();      // (what an order of this frame did is in the picture now: the next frame that is drawn shows it)
-    if (net_ != nullptr && net_->prediction_gave_up() && !prediction_gave_up_reported_) {
-        prediction_gave_up_reported_ = true;
-        std::cerr << "[Application] The prediction of your orders switched itself off for this match: its work took longer than its budget too often. The match goes on as it did without it." << std::endl;
+    net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;
+    if (prediction != nullptr && prediction->stats().cooldowns != prediction_cooldowns_reported_) {
+        prediction_cooldowns_reported_ = prediction->stats().cooldowns;
+        std::cerr << "[Application] The prediction of your orders switched itself off for " << (prediction->cooldown_ticks_left() * sim::TICK_MS + 999u) / 1000u
+                  << " s: its work took longer than its budget too often. The match goes on as it did without it, and the prediction tries again afterwards." << std::endl;
     }
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
     std::vector<sim::AudioEvent> predicted_cues;
-    if (net_ != nullptr && net_->prediction() != nullptr) {
+    if (prediction != nullptr) {
         // The cues of the own ants' own actions come from the predicted engine, when it runs the tick that makes them (in step with the picture), and the confirmed engine's copies of them
         // are dropped when they come; every other cue is the confirmed engine's (net::CueRouter). The predicted engine's news are never told: the confirmed engine's are.
         const auto owns_in = [this](const sim::SimulationEngine& engine) {
@@ -2147,9 +2149,8 @@ void Application::post_tick() {
                 return false;
             };
         };
-        net::Prediction& prediction = *net_->prediction();
-        predicted_cues = cue_router_.from_predicted(prediction.take_audio(), owns_in(shown));
-        prediction.take_news();
+        predicted_cues = cue_router_.from_predicted(prediction->take_audio(), owns_in(shown));
+        prediction->take_news();
         audio_events = cue_router_.from_confirmed(std::move(audio_events), sim_.current_tick() - 1, owns_in(sim_));
     }
     if (!background_stepping_) {                             // a background step makes no sound: its events are dropped, not saved up

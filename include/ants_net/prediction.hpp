@@ -34,6 +34,7 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <utility>
 #include <vector>
 
@@ -44,6 +45,13 @@
 
 namespace ants::net {
 
+/// The CPU time that the calling thread has used, in ns: what the budget counts (a sleep, a preempted thread or a stalled process is not the prediction's cost). POSIX clock_gettime(
+/// CLOCK_THREAD_CPUTIME_ID); Windows GetThreadTimes (kernel + user: a counter of clock ticks); the web build has one thread and gives the wall clock. Never goes back within a thread.
+uint64_t thread_cpu_ns();
+
+/// What a block of work costs against the budget: the thread's CPU time, never more than the wall time (a clock that counts in ticks may charge a short block a whole tick)
+inline uint64_t work_cost_ns(uint64_t wall_ns, uint64_t cpu_ns) noexcept { return cpu_ns < wall_ns ? cpu_ns : wall_ns; }
+
 class Prediction {
 public:
     struct Config {
@@ -53,12 +61,17 @@ public:
         uint32_t lead_fall_after_ticks{40};       // the lead falls by one tick when the delay has asked for less for this long (2 s): it rises at once
         uint32_t pending_timeout_ticks{100};      // an own order that no turn has carried after this many ticks (5 s) is lost
         size_t max_events{4096};                  // the cues and news of the predicted ticks that are kept for the application
-        // The budget. The prediction is work that a frame pays for: a rebuild (a copy and a replay of `lead` ticks), or the ticks that it runs for one confirmed tick, that takes longer than
-        // `budget_ns` is a STRIKE, and `budget_strikes` of them within `budget_window_ticks` confirmed ticks switch it off for the rest of the match (gave_up(): the confirmed engine is shown
-        // from then on, as without the prediction). A machine that cannot afford it (a slow browser, a very large map) loses the prediction, never the frame rate.
+        // The budget. The prediction is work that a frame pays for: a rebuild (a copy and a replay of `lead` ticks), or the ticks that it runs for one confirmed tick, that takes more than
+        // `budget_ns` of the thread's CPU time is a STRIKE, and `budget_strikes` of them within `budget_window_ticks` confirmed ticks start a COOL-DOWN of `cooldown_ticks` confirmed ticks:
+        // the prediction is off (cooling_down(): the confirmed engine is shown from then on, as without the prediction), and after it begins again from the confirmed engine like after any
+        // suspension. Each further cool-down of the match is twice as long, up to `cooldown_max_ticks`. A machine that cannot afford it (a slow browser, a very large map) loses it for a
+        // while, never the frame rate.
         uint64_t budget_ns{12ull * 1000ull * 1000ull};     // 12 ms: three quarters of a frame at 60 Hz (a rebuild is a few hundred microseconds on the shipped maps, R1)
         uint32_t budget_strikes{4};                        // (not one: a machine that is busy with something else stalls a frame now and then, and that is not the prediction's cost)
         uint32_t budget_window_ticks{200};                 // 10 s
+        uint32_t cooldown_ticks{200};                      // 10 s
+        uint32_t cooldown_max_ticks{3200};                 // 160 s
+        std::function<void()> work_hook;                   // the tests: called inside every timed block (a sleep there is not a cost, a spin is)
         // The lead is the median lag (the upper one of an even number) of the last `lag_samples` own orders, none older than `lag_fresh_ticks`, plus `lead_bias_ticks`: one stalled order
         // does not move it. Off: the owner's estimate alone (the tests that hold a wrong lead to account).
         bool learn_lead{true};
@@ -85,7 +98,8 @@ public:
         uint64_t rebuild_ns_max{0};
         uint64_t advance_ns_total{0};             // time of the predicted ticks run one by one, and the longest
         uint64_t advance_ns_max{0};
-        uint64_t over_budget{0};                  // strikes: rebuilds or runs of predicted ticks that took longer than Config::budget_ns
+        uint64_t over_budget{0};                  // strikes: rebuilds or runs of predicted ticks that cost more than Config::budget_ns
+        uint64_t cooldowns{0};                    // cool-downs started (the strikes reached Config::budget_strikes)
         // Corrections (measure_corrections only): what a rebuild changed in the picture, compared at the display tick before and after
         uint64_t corrections{0};                  // rebuilds that were measured
         uint64_t corrections_visible{0};          // ... in which at least one ant stood elsewhere afterwards
@@ -147,8 +161,11 @@ public:
     // ---- the output ---------------------------------------------------------------------------------------------------------------------------------
     /// True while the predicted engine is the one that the screen shows (it exists, is not suspended and has not given up). When it is false the confirmed engine is shown.
     bool active() const noexcept { return running_; }
-    /// True when the prediction switched itself off for the rest of the match because its work took longer than the budget (Config::budget_ns) too often: it never begins again
-    bool gave_up() const noexcept { return gave_up_; }
+    /// True during a cool-down: the prediction switched itself off because its work cost more than the budget (Config::budget_ns) too often. The confirmed engine is shown, orders go as they did
+    /// before the prediction, and it begins again by itself when the cool-down is over
+    bool cooling_down() const noexcept { return cooling_down_; }
+    /// The confirmed ticks that the cool-down still lasts (0 when there is none)
+    uint64_t cooldown_ticks_left() const noexcept;
     /// The predicted engine, up to date (a stale one is rebuilt first); only while active(). The player's orders go through submit(), never to this engine directly.
     sim::SimulationEngine& engine();
     /// The tick that the predicted engine stands at, and how far it is ahead of the confirmed engine (0 when not active)
@@ -179,7 +196,6 @@ private:
         uint64_t tick{0};                         // the tick at which the prediction applied it (or will apply it, after a correction)
         uint64_t born{0};                         // the confirmed tick when the player gave it: a lost order is told by the time that has passed since THEN (a correction moves `tick`)
     };
-    using Clock = std::chrono::steady_clock;
 
     void begin(uint64_t confirmed_tick);
     void stop();
@@ -192,8 +208,9 @@ private:
     void capture_events(uint64_t tick, bool replay);
     void update_lead();
     uint32_t wanted_lead() const noexcept;
-    /// A rebuild or a run of predicted ticks took `ns`: over the budget it is a strike, and enough of them within the window end the prediction for this match
+    /// A rebuild or a run of predicted ticks cost `ns` (work_cost_ns): over the budget it is a strike, and enough of them within the window start a cool-down
     void note_cost(uint64_t ns);
+    void start_cooldown(uint64_t tick);
     void drop_lost_orders(uint64_t confirmed_tick);
     uint64_t confirmed_tick() const noexcept { return confirmed_->current_tick(); }
 
@@ -203,7 +220,9 @@ private:
     sim::SimulationEngine pred_;
     bool running_{false};
     bool suspended_{false};
-    bool gave_up_{false};
+    bool cooling_down_{false};
+    uint64_t cooldown_until_{0};                  // the confirmed tick at which the cool-down is over
+    uint64_t cooldown_next_{0};                   // the length of the next cool-down, in ticks
     std::deque<uint64_t> strikes_;                // the confirmed ticks at which the budget was exceeded, within the window
     bool stale_{false};
     bool stale_foreign_{false};                   // why it went stale (the statistics)

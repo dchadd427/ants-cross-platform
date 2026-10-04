@@ -497,7 +497,7 @@ private:
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
     bool prediction_wanted_{false};                       // --prediction, else the settings' key `prediction`, else off: given to every NetGame that this application makes
-    bool prediction_gave_up_reported_{false};             // the console has said that this match's prediction switched itself off
+    uint64_t prediction_cooldowns_reported_{0};           // the cool-downs of this match's prediction that the console has said so of
     uint64_t orders_seen_{0};                             // the orders that the prediction has taken and the felt delay has been told of
     double net_time_ms_{0.0};
     double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START

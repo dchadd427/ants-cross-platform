@@ -21,6 +21,7 @@
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
@@ -31,6 +32,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -162,6 +164,20 @@ Command random_unpredicted(Lcg& rng, uint8_t seat) {
     if (kind == 2) return make_command(CommandType::AllianceWithdraw, seat, other);
     return make_command(CommandType::AllianceBreak, seat);
 }
+
+// Work that costs `ns` of the thread's CPU time: a spin on the very clock that the budget reads, so that it is what it says on every platform (Windows' counts in ticks). A clock that
+// stands still fails the tests instead of hanging them: the spin gives up when the clock has not moved in 100 ms of the time that goes by.
+void burn_cpu(uint64_t ns) {
+    const uint64_t t0 = thread_cpu_ns();
+    const auto wall0 = std::chrono::steady_clock::now();
+    for (;;) {
+        const uint64_t spent = thread_cpu_ns() - t0;
+        if (spent >= ns) return;
+        if (spent == 0 && std::chrono::steady_clock::now() - wall0 > std::chrono::milliseconds(100)) return;
+    }
+}
+
+constexpr uint64_t kMs = 1000ull * 1000ull;
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The rig
@@ -1177,25 +1193,46 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP7.1 The Budget: A Prediction Whose Work Takes Longer Than Its Budget Four Times (here: a budget of one nanosecond) Switches Itself Off For The Rest Of The Match, At Once And For Good: The Confirmed Engine Is Shown, Orders Are Left To The Caller, A Suspension Does Not Bring It Back, And The Match Is Not Touched") {
+    TEST_CASE("RP7.1 The Budget: A Prediction Whose Work Costs More Than Its Budget Four Times Within The Window Switches Itself Off For A Cool-Down, At Once: The Confirmed Engine Is Shown, Orders Are Left To The Caller, A Suspension Does Not End It, The Match Is Not Touched; Exactly cooldown_ticks Confirmed Ticks Later It Begins Again From The Confirmed Engine, And Is Derived State Again") {
         const Prediction::Config defaults;
         ASSERT_TRUE(defaults.budget_ns == 12ull * 1000ull * 1000ull && defaults.budget_strikes == 4 && defaults.budget_window_ticks == 200);
+        ASSERT_TRUE(defaults.cooldown_ticks == 200 && defaults.cooldown_max_ticks == 3200);
+        bool slow = true;                                                                     // the machine is busy: every timed block costs 25 ms of CPU against a budget of 20 ms
         Scenario with;
         with.seed = 97;
         with.down_jitter = 1;
-        with.prediction.budget_ns = 1;                                                        // every rebuild and every run of ticks is over it
+        with.prediction.budget_ns = 20 * kMs;
         with.prediction.budget_strikes = 4;
+        with.prediction.cooldown_ticks = 30;
+        with.prediction.work_hook = [&slow]() {
+            if (slow) burn_cpu(25 * kMs);
+        };
         Scenario without = with;
         without.predict = false;
         Rig a(with);
         Rig b(without);
         Lcg ra(97);
         Lcg rb(97);
-        a.run(8);
-        b.run(8);
         Prediction& p = *a.prediction();
-        ASSERT_TRUE(p.gave_up() || p.active());
-        for (uint32_t s = 0; s < 120; ++s) {
+        a.check_derived(1);
+        Prediction::Stats at_start;
+        uint64_t began = 0;
+        uint64_t ended = 0;
+        bool was_cooling = false;
+        a.set_on_tick_extra([&]() {                                                           // (after the prediction's own tick: what it did at this tick)
+            if (p.cooling_down() == was_cooling) return;
+            if (!was_cooling) {
+                began = a.confirmed().current_tick();
+                at_start = p.stats();
+                slow = false;                                                                 // (the load is gone: the next blocks cost what they cost)
+            } else {
+                ended = a.confirmed().current_tick();
+            }
+            was_cooling = p.cooling_down();
+        });
+        bool refused = false;
+        bool suspended_meanwhile = false;
+        for (uint32_t s = 0; s < 160 && ended == 0; ++s) {
             if (s % 9 == 0) {
                 a.issue(random_order(ra, a.ids, 0));
                 b.issue(random_order(rb, b.ids, 0));
@@ -1208,61 +1245,173 @@ void run_cue_tests() {
             }
             a.step();
             b.step();
-            ASSERT_TRUE(a.confirmed().state_hash() == b.confirmed().state_hash());            // (it never touches the confirmed engine: before, while it gave up, and after)
+            ASSERT_TRUE(a.confirmed().state_hash() == b.confirmed().state_hash());            // (it never touches the confirmed engine: before, during and after the cool-down)
+            if (began != 0 && ended == 0) {
+                ASSERT_TRUE(p.cooling_down() && !p.active());                                  // the confirmed engine is shown for as long as it lasts
+                if (!refused) {
+                    refused = true;
+                    sim::CommandResult r;
+                    ASSERT_FALSE(p.submit(make_command(CommandType::GroupMove, 0, 255, 10, 10, {a.ids.ants[0][0]}), r));      // an order is left to the caller
+                    ASSERT_EQ(p.pending_orders(), 0u);
+                }
+                ASSERT_EQ(p.cooldown_ticks_left(), began + 30 - a.confirmed().current_tick());
+                if (!suspended_meanwhile && a.confirmed().current_tick() >= began + 5) {
+                    suspended_meanwhile = true;
+                    p.set_suspended(true);                                                     // a suspension and a resume do not end the cool-down early
+                    p.set_suspended(false);
+                }
+            }
         }
-        ASSERT_TRUE(p.gave_up());                                                              // four strikes, a tick each, and it was over
-        ASSERT_FALSE(p.active());
-        ASSERT_EQ(p.stats().over_budget, 4u);
-        ASSERT_EQ(p.stats().ticks_advanced, 3u);                                               // (the first tick's copy and replay, and the three ticks that followed it: one strike each)
-        ASSERT_EQ(p.stats().starts, 1u);
+        ASSERT_TRUE(began != 0 && ended != 0 && refused && suspended_meanwhile);
+        ASSERT_EQ(at_start.over_budget, 4u);                                                   // four strikes: the copy that began it and the three ticks that followed it
+        ASSERT_EQ(at_start.ticks_advanced, 3u);
+        ASSERT_EQ(at_start.starts, 1u);
+        ASSERT_EQ(at_start.cooldowns, 1u);
+        ASSERT_EQ(ended - began, 30u);                                                         // cooldown_ticks confirmed ticks
+        ASSERT_TRUE(p.active() && !p.cooling_down());                                          // it begins again, at the tick that ends the cool-down ...
+        ASSERT_EQ(p.cooldown_ticks_left(), 0u);
+        ASSERT_EQ(p.stats().starts, 2u);
+        ASSERT_EQ(p.stats().cooldowns, 1u);
+        ASSERT_EQ(p.stats().over_budget, 4u);                                                  // ... and the machine is not slow any more
+        a.run(60);
+        ASSERT_TRUE(p.active());
         sim::CommandResult r;
-        ASSERT_FALSE(p.submit(make_command(CommandType::GroupMove, 0, 255, 10, 10, {a.ids.ants[0][0]}), r));      // an order is left to the caller
-        p.set_suspended(true);
-        p.set_suspended(false);
-        a.run(10);
-        ASSERT_FALSE(p.active());                                                              // (resumed, it does not begin again)
-        ASSERT_EQ(p.stats().starts, 1u);
-        ASSERT_EQ(p.pending_orders(), 0u);
+        ASSERT_TRUE(p.submit(make_command(CommandType::GroupMove, 0, 255, 12, 14, {a.ids.ants[0][1]}), r));        // orders are predicted again
+        ASSERT_EQ(a.derived_mismatches, 0u);                                                   // (the engine that begins again is the derivation, at every frame)
+        ASSERT_TRUE(a.derived_checks > 40);
     } TEST_END();
 
-    TEST_CASE("RP7.2 The Budget Runs Out In The Middle Of An Order (The Rebuild That The Order Asks For Is The Strike That Ends The Prediction): The Order Is Left To The Caller, Nothing Is Touched That The Prediction Has Dropped, The Match Goes On") {
+    TEST_CASE("RP7.2 The Budget Runs Out In The Middle Of An Order (The Rebuild That The Order Asks For Is The Strike That Starts The Cool-Down): The Order Is Left To The Caller, Nothing Is Touched That The Prediction Has Dropped, The Match Goes On") {
         Scenario sc;
         sc.seed = 98;
         sc.down_delay = 0;                                                                     // (a turn arrives in the step that seals it: the step of the test says when)
         sc.prediction.budget_ns = 1;
         sc.prediction.budget_strikes = 2;                                                      // the first tick's copy and replay is one strike; the rebuild that the order asks for is the second
+        sc.prediction.work_hook = []() { burn_cpu(kMs); };                                     // (every timed block costs more than a nanosecond: on any platform's clock)
         sc.oracle_hashes = false;
         Rig rig(sc);
         Prediction& p = *rig.prediction();
         for (uint32_t i = 0; i < 30 && !p.active(); ++i) rig.step();                           // (the first tick: the prediction begins, one strike)
-        ASSERT_TRUE(p.active() && !p.gave_up() && p.stats().over_budget == 1);
+        ASSERT_TRUE(p.active() && !p.cooling_down() && p.stats().over_budget == 1);
         rig.schedule(rig.step_no(), make_command(CommandType::GroupMove, 1, 255, 20, 40, rig.ids.ants[1]));
         rig.step(false);                                                                       // (no frame: nobody asks for the engine; the turn of another player has marked it stale)
         ASSERT_TRUE(p.stale() && p.active() && p.stats().over_budget == 1);
         const sim::CommandResult r = rig.issue(make_command(CommandType::GroupMove, 0, 255, 12, 44, {rig.ids.ants[0][0]}));
-        ASSERT_TRUE(p.gave_up());                                                              // the rebuild that the order asked for was the second strike, and it ended the prediction
+        ASSERT_TRUE(p.cooling_down());                                                         // the rebuild that the order asked for was the second strike, and it started the cool-down
         ASSERT_FALSE(p.active());
         ASSERT_TRUE(r.status != sim::CommandResult::Status::Applied);                          // (the order is the caller's: the answer is the default one, nothing was predicted)
         ASSERT_EQ(p.stats().commands_predicted, 0u);
         ASSERT_EQ(p.pending_orders(), 0u);
         rig.run(40);
-        ASSERT_FALSE(p.active());
+        ASSERT_FALSE(p.active());                                                              // (the cool-down is 200 ticks)
+        ASSERT_TRUE(p.cooling_down());
         ASSERT_TRUE(rig.confirmed().current_tick() > 30);                                      // (the match went on)
     } TEST_END();
 
-    TEST_CASE("RP7.3 Strikes That Are Spread Out Do Not Add Up: With A Window Of Nothing Each Strike Is Forgotten At The Next Tick, So That A Prediction Whose Every Tick Is Over The Budget But Whose Ticks Come Alone Never Gives Up (The Window Counts)") {
+    TEST_CASE("RP7.3 Strikes That Are Spread Out Do Not Add Up: With A Window Of Nothing Each Strike Is Forgotten At The Next Tick, So That A Prediction Whose Every Tick Is Over The Budget But Whose Ticks Come Alone Never Cools Down (The Window Counts)") {
         Scenario sc;
         sc.seed = 99;
         sc.prediction.budget_ns = 1;
         sc.prediction.budget_strikes = 2;
         sc.prediction.budget_window_ticks = 0;
+        sc.prediction.work_hook = []() { burn_cpu(kMs); };
         sc.oracle_hashes = false;
         Rig rig(sc);
         rig.run(60);                                                                           // (no foreign command, no order: nothing is rebuilt, one run of ticks for every tick)
         Prediction& p = *rig.prediction();
-        ASSERT_TRUE(p.active() && !p.gave_up());
+        ASSERT_TRUE(p.active() && !p.cooling_down());
         ASSERT_TRUE(p.stats().over_budget >= 50);                                              // every tick was a strike ...
         ASSERT_EQ(p.stats().rebuilds, 0u);
+        ASSERT_EQ(p.stats().cooldowns, 0u);
+    } TEST_END();
+
+    TEST_CASE("RP7.4 Every Further Cool-Down Of The Match Is Twice As Long As The One Before (cooldown_ticks, twice, four times ...) Up To cooldown_max_ticks, And The Strikes Of One Do Not Count In The Next (Between Two It Is On For The One Tick That It Takes To Collect The Strikes Again)") {
+        Scenario sc;
+        sc.seed = 100;
+        sc.oracle_hashes = false;
+        sc.prediction.budget_ns = 1;
+        sc.prediction.budget_strikes = 2;                                                      // the copy that begins it, then the first tick: a cool-down every other tick of life
+        sc.prediction.cooldown_ticks = 10;
+        sc.prediction.cooldown_max_ticks = 40;
+        sc.prediction.work_hook = []() { burn_cpu(kMs); };
+        Rig rig(sc);
+        Prediction& p = *rig.prediction();
+        std::vector<uint64_t> began;                                                           // the confirmed tick at which each cool-down began and ended
+        std::vector<uint64_t> ended;
+        bool was_cooling = false;
+        rig.set_on_tick_extra([&]() {
+            if (p.cooling_down() == was_cooling) return;
+            (was_cooling ? ended : began).push_back(rig.confirmed().current_tick());
+            was_cooling = p.cooling_down();
+        });
+        rig.run(260);
+        ASSERT_TRUE(began.size() >= 6 && ended.size() >= 5);
+        const uint64_t lengths[5] = {10, 20, 40, 40, 40};                                      // doubled, doubled, the cap, the cap ...
+        for (size_t i = 0; i < 5; ++i) {
+            ASSERT_EQ(ended[i] - began[i], lengths[i]);
+            ASSERT_EQ(began[i + 1] - ended[i], 1u);
+        }
+        ASSERT_EQ(p.stats().cooldowns, began.size());
+        ASSERT_EQ(p.stats().starts, ended.size() + 1);                                         // (it began again after every cool-down that is over)
+        // the cap rules the first cool-down too: a cool-down that is asked to be longer than the longest is the longest
+        Scenario capped = sc;
+        capped.prediction.cooldown_ticks = 50;
+        capped.prediction.cooldown_max_ticks = 20;
+        Rig second(capped);
+        Prediction& q = *second.prediction();
+        uint64_t first_began = 0;
+        uint64_t first_ended = 0;
+        bool cooling = false;
+        second.set_on_tick_extra([&]() {
+            if (q.cooling_down() == cooling) return;
+            if (!cooling && first_began == 0) first_began = second.confirmed().current_tick();
+            if (cooling && first_ended == 0) first_ended = second.confirmed().current_tick();
+            cooling = q.cooling_down();
+        });
+        second.run(60);
+        ASSERT_TRUE(first_began != 0 && first_ended != 0);
+        ASSERT_EQ(first_ended - first_began, 20u);
+    } TEST_END();
+
+    TEST_CASE("RP7.5 The Budget Counts The CPU Time Of The Thread, Not The Time That Went By: A Timed Block In Which The Thread Sleeps 30 ms (A Preempted Or Stalled Process Looks The Same) Is No Strike Against A Budget Of 12 ms, One In Which It Computes For 15 ms Is; The Statistics Keep The Wall Time; A Block Is Never Charged More Than Its Wall Time") {
+        ASSERT_EQ(work_cost_ns(100, 15625000), 100u);                                          // a clock that counts in ticks may charge a short block a whole tick: the wall time is the bound
+        ASSERT_EQ(work_cost_ns(30 * kMs, 0), 0u);
+        ASSERT_EQ(work_cost_ns(7, 7), 7u);
+        const uint64_t t0 = thread_cpu_ns();
+        burn_cpu(3 * kMs);
+        const uint64_t t1 = thread_cpu_ns();
+        ASSERT_TRUE(t1 >= t0 + 3 * kMs);                                                       // the clock counts computing ...
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        const uint64_t t2 = thread_cpu_ns();
+        ASSERT_TRUE(t2 >= t1 && t2 - t1 < 10 * kMs);                                           // ... and not sleeping
+        {
+            Scenario sc;
+            sc.seed = 101;
+            sc.oracle_hashes = false;
+            sc.prediction.budget_ns = 12 * kMs;
+            sc.prediction.work_hook = []() { std::this_thread::sleep_for(std::chrono::milliseconds(30)); };
+            Rig rig(sc);
+            Prediction& p = *rig.prediction();
+            rig.run(14);
+            ASSERT_TRUE(p.active() && !p.cooling_down());
+            ASSERT_TRUE(p.stats().ticks_advanced >= 8);
+            ASSERT_EQ(p.stats().over_budget, 0u);                                              // every block took 30 ms and cost nothing
+            ASSERT_TRUE(p.stats().advance_ns_max >= 30 * kMs);                                 // (the statistics are about the time that went by)
+        }
+#endif
+        {
+            Scenario sc;
+            sc.seed = 102;
+            sc.oracle_hashes = false;
+            sc.prediction.budget_ns = 12 * kMs;
+            sc.prediction.work_hook = []() { burn_cpu(15 * kMs); };
+            Rig rig(sc);
+            Prediction& p = *rig.prediction();
+            rig.run(8);
+            ASSERT_TRUE(p.stats().over_budget >= 4);                                           // every block cost 15 ms
+            ASSERT_TRUE(p.stats().cooldowns >= 1 && !p.active());
+        }
     } TEST_END();
 
     TEST_CASE("RP8.1 The Lead Learns The Lag Of The Player's Own Orders: A Lead That Starts Too Low (One Tick Where The Orders Need Six) Costs The First Order A Chase And Then Is The Lag, With No Rebuild For The Orders That Follow; With A Bias Of One Every Order Costs One Rebuild That Moves The Ordered Ants On By A Tick, And Never Chases") {
@@ -1448,7 +1597,7 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Median Of The Last Five Orders No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Runs It), Between 1 And 12 Ticks, Falls After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks") {
+    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Median Of The Last Five Orders No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Runs It), Between 1 And 12 Ticks, Falls After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
         const Prediction::Config c;
         ASSERT_TRUE(c.learn_lead);
         ASSERT_EQ(c.lag_samples, 5u);
@@ -1461,6 +1610,9 @@ void run_cue_tests() {
         ASSERT_EQ(c.budget_ns, 12ull * 1000ull * 1000ull);
         ASSERT_EQ(c.budget_strikes, 4u);
         ASSERT_EQ(c.budget_window_ticks, 200u);
+        ASSERT_EQ(c.cooldown_ticks, 200u);
+        ASSERT_EQ(c.cooldown_max_ticks, 3200u);
+        ASSERT_TRUE(!c.work_hook);
     } TEST_END();
 
     TEST_CASE("RP8.4 The Lead That Learns And Is Biased Keeps The Prediction Derived State: 16 Random Matches (a lag that changes, bursts, orders of every kind from every seat), The Predicted Engine Equals The One A Rebuild Would Make At Every Third Frame, And It Converges") {
