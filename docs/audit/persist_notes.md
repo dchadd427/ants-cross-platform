@@ -141,20 +141,30 @@ The machine was shared with other work (its load average was about 40 on 10 core
 
 ## Gates
 
-Once, on the final tree (the commits of this branch):
+The work was done on the v0.2.0 candidate, then rebased onto the merge of v0.2.0 (the clock behind the start dialog, F1: a room discards a command sent before its first turn, the `/busy` count, the parallel runner, the split server script, the ants_test_paths scheme). What ran on which tree:
+
+**On the final tree (after the rebase):**
 
 | Gate | Result |
 |---|---|
 | Build with `-DANTS_WERROR=ON` (`-Wall -Wextra -Werror -Wsign-conversion`), Release | the whole tree builds with 0 warnings |
-| The same, Debug with AddressSanitizer and UBSan (`-DENABLE_ASAN=ON`) | 0 warnings |
-| **Linux**: Debian 12, GCC 12.2, `-Werror` (a docker build of the worktree: `ants_server`, `test_lockstep`, `test_server`) | 0 warnings once a GCC 12 false positive (`-Warray-bounds` / `-Wstringop-overflow` for a `vector::insert` of 8 bytes into an empty vector) in one test helper was worked around. Both suites pass there: `test_lockstep` 115 tests, 3,153,356 assertions; `test_server` 97 tests, 60,024 assertions, with the real-process SIGTERM and SIGKILL tests and the disk-limit test with a real `EFBIG` |
-| Quick tier, `./run_tests.sh --fast`, before every commit | passed (47 suites, 100 - 140 s) |
-| **Full `./run_tests.sh`** on the final code (detached into a log) | **57 suites, 0 failed, 682 s** (the slowest: 3.9 the server end-to-end script 199 s, 2.19 `test_server` 119 s, 2.11 `test_lockstep` 104 s) |
-| Server end-to-end script `tests/scripts/test_ants_server.sh` (also in the full run) | 197 checks, 0 failures: the restart options and their edges, the record's mode (600 in a folder of 700), SIGTERM within 0.03 s with the record kept, the room restored with its two seats, a second restore after SIGKILL, `DELETE` removes the record, no key in the log |
-| **AddressSanitizer + UBSan** (`halt_on_error`; the logs are searched for `runtime error` as well) | `test_server` (97 tests, 60,007 assertions; its real-process tests run the ASan-built server), `test_lobby`, `test_tcp`, `test_ws`, `test_netgame`, `test_latency`, `test_jitter`, `test_ctl`, `test_network_app`, `test_start_menu_app`: all pass, no finding. `test_lockstep`: the 48 tests that touch the attendance, the hold of seats and the restart (N2.40 - N2.99, one process each, the four new ones among them) pass with no finding; the whole suite was started as well and had passed 68 of its 115 tests, with no finding, when it was stopped after an hour (the sanitized lock-step suite is about fifty times slower than the release one; the full run without sanitizers passes all 115). The build is Debug, `-DENABLE_ASAN=ON -DANTS_WERROR=ON`, 0 warnings |
-| `docker build -f Dockerfile.server -t ants-server:ps .` and **a real container** | the image builds (GCC 12, 0 warnings). S3.101 against a container with a named volume: `docker stop` 180 ms, exit code 0, the room back with 157 turns (the machines had been sent 156), both machines found it by themselves, the match ended in one state, the record on the volume was mode 600 in a folder of 700 and was gone at the end, no key in `docker logs`. The same with the stack's `read_only`, `cap_drop: ALL`, `no-new-privileges` and `pids_limit`: 225 ms, 158 / 157 turns. The stack's own command (no `--reconnect`): the log says that no record is kept, `docker stop` 0.19 s, exit code 0. The tag, the containers and the volumes were removed |
-| Leak scan of the diff, the new notes and the commit messages | no path, address (but 127.0.0.1), name, host, key or secret; the author lines are the repository's own |
+| **Full `./run_tests.sh`** (the parallel runner, detached into a log) | **62 suites, 0 failed, 180 s** (917 s of suite time added up) |
+| `./run_tests.sh --fast`, before every commit | passed (48 suites, 50 s) |
+| `test_server` | 100 tests, 60,086 assertions, 0 failed (the real-process SIGTERM and SIGKILL tests included) |
+| `test_lockstep` | 117 tests, 3,153,417 assertions, 0 failed |
+| The server end-to-end script, every part (`--list-parts`, side by side as the CI runs them) | 201 checks, 0 failures: options 56, rooms 53, secret 22, demo 13, reconnect 57 (the restart section is in the reconnect part: the record's mode, SIGTERM within 0.02 s with the record kept, the room restored with its two seats, a second restore after SIGKILL, `DELETE` removes the record, no key in the log) |
+| The python tests of `tests/scripts` (the CI guards: the paths scheme `test_cmake_paths.py`, the runner and the parts `test_run_tests.py`, the CI against the runner `test_ci_workflow.py`, the configure with the Xcode generator `test_cmake_version.py`) | 302 tests pass |
+| Leak scan of `git diff origin/main` and of the commit messages | no path, address (but 127.0.0.1), name, host, key or secret; the author lines are the repository's own; every commit ends with one trailer |
 
+**On the tree before the rebase** (the code of the restart records is the same; the rebase changed the tests' ids, the way the process tests find the server, one test's tamper and added `S3.102`):
+
+| Gate | Result |
+|---|---|
+| Debug build with AddressSanitizer and UBSan (`-DENABLE_ASAN=ON -DANTS_WERROR=ON`) | 0 warnings |
+| **AddressSanitizer + UBSan** (`halt_on_error`; the logs are searched for `runtime error` as well) | `test_server` (97 tests, 60,007 assertions; its real-process tests run the ASan-built server), `test_lobby`, `test_tcp`, `test_ws`, `test_netgame`, `test_latency`, `test_jitter`, `test_ctl`, `test_network_app`, `test_start_menu_app`: all pass, no finding. `test_lockstep`: the 48 tests that touch the attendance, the hold of seats and the restart (N2.40 - N2.99, one process each, the four new ones among them) pass with no finding; the whole suite was started as well and had passed 68 of its 115 tests, with no finding, when it was stopped after an hour (the sanitized lock-step suite is about fifty times slower than the release one; the full run without sanitizers passes all 115). The build is Debug, `-DENABLE_ASAN=ON -DANTS_WERROR=ON`, 0 warnings |
+| **Linux**: Debian 12, GCC 12.2, `-Werror` (a docker build of the worktree: `ants_server`, `test_lockstep`, `test_server`) | 0 warnings once a GCC 12 false positive (`-Warray-bounds` / `-Wstringop-overflow` for a `vector::insert` of 8 bytes into an empty vector) in one test helper was worked around. Both suites pass there: `test_lockstep` 115 tests, 3,153,356 assertions; `test_server` 97 tests, 60,024 assertions, with the real-process SIGTERM and SIGKILL tests and the disk-limit test with a real `EFBIG`. (The base image of that check was gone from the machine by the time of the rebase: the Linux build of the rebased tree is left to the CI.) |
+| `docker build -f Dockerfile.server -t ants-server:ps .` and **a real container** | the image builds (GCC 12, 0 warnings). S3.101 (then S3.95) against a container with a named volume: `docker stop` 180 ms, exit code 0, the room back with 157 turns (the machines had been sent 156), both machines found it by themselves, the match ended in one state, the record on the volume was mode 600 in a folder of 700 and was gone at the end, no key in `docker logs`. The same with the stack's `read_only`, `cap_drop: ALL`, `no-new-privileges` and `pids_limit`: 225 ms, 158 / 157 turns. The stack's own command (no `--reconnect`): the log says that no record is kept, `docker stop` 0.19 s, exit code 0. The tag, the containers and the volumes were removed |
+| The whole tree, full run | 57 suites, 0 failed, 682 s (the serial runner of then) |
 
 ## Open
 
