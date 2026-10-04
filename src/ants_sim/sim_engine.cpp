@@ -692,7 +692,7 @@ void SimulationEngine::withdraw_alliance_offer(uint8_t from_player, uint8_t to_p
     if (!invite.active || invite.from_player != from_player) return;
     impl_->stats_.clear_pending_invite(to_player);
     impl_->world_state_dirty_ = true;
-    impl_->post_news(to_player, strings::kTeamWithdrawn, impl_->player_display_name(from_player));       // FUN_0100c5fa, 0x100c73a
+    impl_->post_news(to_player, strings::kTeamWithdrawn, impl_->player_display_name(from_player), {}, {}, {}, from_player);       // FUN_0100c5fa, 0x100c73a
 }
 
 // FUN_0100c36b (the proposer hears the answer: 81 "%s accepted teaming up") and the team message 0x1d kind 1 (FUN_01023c87, every
@@ -705,7 +705,7 @@ void SimulationEngine::accept_alliance(uint8_t responding_player, uint8_t propos
     impl_->world_state_dirty_ = true;
 
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceYes, 0, 0, 1, responding_player});
-    impl_->post_news(proposing_player, strings::kTeamAccepted, impl_->player_display_name(responding_player));
+    impl_->post_news(proposing_player, strings::kTeamAccepted, impl_->player_display_name(responding_player), {}, {}, {}, responding_player);
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceOn, 0, 0, 1, 255});
     impl_->post_news_flash(strings::kTeamNow, impl_->player_display_name(proposing_player), impl_->player_colour_name(proposing_player),
                            impl_->player_display_name(responding_player), impl_->player_colour_name(responding_player));
@@ -720,7 +720,7 @@ void SimulationEngine::deny_alliance(uint8_t responding_player, uint8_t proposin
     impl_->world_state_dirty_ = true;
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceNot, 0, 0, 1, proposing_player});
     impl_->audio_queue_.push_back(AudioEvent{SoundID::AllianceNot, 0, 0, 1, responding_player});           // 0x1023c53: the decliner's own machine plays the same cue
-    impl_->post_news(proposing_player, strings::kTeamRejected, impl_->player_display_name(responding_player));
+    impl_->post_news(proposing_player, strings::kTeamRejected, impl_->player_display_name(responding_player), {}, {}, {}, responding_player);
 }
 
 // Team message 0x1d kind 2 (FUN_01023c87, every client): the allyoff cue always plays, the News Flash of string 40 (the breaker and

@@ -251,6 +251,21 @@ std::vector<Variant> all_variants() {
             r.click(id);
         }
     }});
+    v.push_back({"single player, the longest name and a refusal", [](Rig& r) {
+        r.to_panel(MenuId::Single);
+        r.key(SDLK_UP);
+        r.type("Bot (" + std::string(40, 'W'));                                    // 32 characters, and a name that is for computer players: refused with the long line
+        r.key(SDLK_RETURN);
+    }});
+    v.push_back({"single player, three bots, the Teams row and a refusal", [](Rig& r) {
+        r.to_panel(MenuId::Single);
+        for (MenuId id : {MenuId::Seat1, MenuId::Seat2, MenuId::Seat3}) r.click(id);
+        r.click(MenuId::Teams);
+        for (int up = 0; up < 4; ++up) r.key(SDLK_UP);                             // Teams, Black, Blue, Red, the name
+        ASSERT_TRUE(r.menu.selected() == MenuId::SingleName);
+        r.type("Bot (" + std::string(40, 'W'));
+        r.key(SDLK_RETURN);
+    }});
     v.push_back({"single player, own seat 3", [](Rig& r) {
         r.menu.set_own_seat(3);
         r.to_panel(MenuId::Single);
@@ -521,6 +536,305 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(bots.size(), static_cast<size_t>(3));
             for (const ai::BotSpec& b : bots) ASSERT_TRUE(b.seat != own && b.seat < 4 && b.level == ai::Level::Hard);
         }
+    } TEST_END();
+
+    TEST_CASE("M2.4 Single player: a Teams choice appears under the seats once two or more of them have a bot (with fewer there is nothing to choose: the panel is the one that it always was), cycles Free for all, You + each bot and round by click, Enter and Left / Right, stands between the seats and Continue in the Tab order, and Continue asks for the teams as --teams would give them") {
+        Rig r;
+        r.to_panel(MenuId::Single);
+        ASSERT_FALSE(r.exists(MenuId::Teams));                                             // nobody seated
+        const ButtonRect continue_none = r.element(MenuId::Continue).rect;
+        r.click(MenuId::Seat1);                                                            // Red: Easy
+        ASSERT_FALSE(r.exists(MenuId::Teams));                                             // one bot: a team would be the whole match (it would end at the first point), nothing to choose
+        ASSERT_TRUE(r.element(MenuId::Continue).rect.y == continue_none.y && r.element(MenuId::Continue).rect.h == continue_none.h);
+        ASSERT_TRUE(r.menu.teams() == LocalTeams{});
+        ASSERT_TRUE(r.menu.team_choices().size() == 1);
+        r.click(MenuId::Seat3);                                                            // Black: Easy: two bots
+        ASSERT_TRUE(r.exists(MenuId::Teams));
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("Free for all"));
+        ASSERT_TRUE(r.element(MenuId::Teams).kind == MenuKind::Cycler);
+        ASSERT_TRUE(has_text(r.menu.elements(), "Teams") && has_text(r.menu.elements(), StartMenu::kBotsLine));
+        // the Tab order: the name, the rows, Teams, Continue, Back
+        const std::vector<MenuId> ids = control_ids(r.menu);
+        ASSERT_TRUE((ids == std::vector<MenuId>{MenuId::SingleName, MenuId::Seat1, MenuId::Seat2, MenuId::Seat3, MenuId::Teams, MenuId::Continue, MenuId::Back}));
+        // the controls lie inside the panel, clear of each other, and under the seats
+        {
+            const std::vector<MenuElement> all = r.menu.elements();
+            for (size_t i = 0; i < all.size(); ++i) {
+                ASSERT_TRUE(all[i].rect.x >= 16 && all[i].rect.y >= 16 && all[i].rect.x + all[i].rect.w <= StartMenu::kWidth - 16 && all[i].rect.y + all[i].rect.h <= StartMenu::kHeight - 16);
+                for (size_t j = i + 1; j < all.size(); ++j) ASSERT_FALSE(intersects(all[i].rect, all[j].rect));
+            }
+            ASSERT_TRUE(r.element(MenuId::Teams).rect.y >= r.element(MenuId::Seat3).rect.y + r.element(MenuId::Seat3).rect.h);
+            ASSERT_TRUE(r.element(MenuId::Continue).rect.y >= r.element(MenuId::Teams).rect.y + r.element(MenuId::Teams).rect.h);
+        }
+        // the cycle: by click, Enter, Right, Left
+        const size_t before = r.changes.size();
+        r.click(MenuId::Teams);
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Red"));
+        ASSERT_TRUE(r.changes.size() == before + 1 && r.changes.back() == MenuSetting::Teams);
+        ASSERT_TRUE(r.menu.teams() == LocalTeams({true, 0, 1}));
+        ASSERT_EQ(r.menu.selected(), MenuId::Teams);
+        r.key(SDLK_RETURN);
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Black"));
+        ASSERT_TRUE(r.menu.teams() == LocalTeams({true, 0, 3}));
+        r.key(SDLK_RIGHT);
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("Free for all"));            // round
+        ASSERT_TRUE(r.menu.teams() == LocalTeams{});
+        r.key(SDLK_LEFT);
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Black"));             // and back round
+        r.key(SDLK_LEFT);
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Red"));
+        r.key(SDLK_UP);                                                                    // a move of the selection is no change
+        const size_t after = r.changes.size();
+        r.key(SDLK_DOWN);
+        ASSERT_EQ(r.changes.size(), after);
+        // Continue asks for the bots and the teams
+        r.click(MenuId::Continue);
+        MenuRequest request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Single && request.bots.size() == 2 && request.bots[0].seat == 1 && request.bots[1].seat == 3);
+        ASSERT_TRUE(request.teams == LocalTeams({true, 0, 1}));
+        // the choice survives a change of the other seats that keeps its bot, and Back and the way in again
+        r.click(MenuId::Seat3);                                                            // Black: Medium
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Red"));
+        r.key(SDLK_ESCAPE);
+        r.click(MenuId::Single);
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Red"));
+        // a third bot: one more choice
+        r.click(MenuId::Seat2);
+        ASSERT_TRUE(r.menu.team_choices().size() == 4);
+        r.click(MenuId::Teams);
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Blue"));
+        r.click(MenuId::Teams);
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Black"));
+        // the team's bot leaves (its row goes round to Empty): free for all again, written (the file never says a team with a seat that has no bot), and with one bot left the row is gone
+        r.click(MenuId::Seat3);                                                            // Black: Hard (still a bot: the choice stays)
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Black"));
+        r.click(MenuId::Seat3);                                                            // Black: Empty
+        ASSERT_TRUE(r.menu.settings().teams == LocalTeams{});
+        ASSERT_TRUE(r.changes.size() >= 2 && r.changes.back() == MenuSetting::Teams && r.changes[r.changes.size() - 2] == MenuSetting::Bots);       // (the seat, then the team that went with it)
+        ASSERT_EQ(r.element(MenuId::Teams).value, std::string("Free for all"));            // (Red and Blue are bots: still a choice)
+        r.click(MenuId::Seat2);
+        r.click(MenuId::Seat2);
+        r.click(MenuId::Seat2);                                                            // Blue: Empty: one bot left
+        ASSERT_FALSE(r.exists(MenuId::Teams));
+        r.click(MenuId::Continue);
+        request = r.take();
+        ASSERT_TRUE(request.bots.size() == 1 && request.teams == LocalTeams{});
+    } TEST_END();
+
+    TEST_CASE("M2.5 Single player: the Teams choice is the player's seat with a bot, whatever the seat is (own seat blue: You + Green, You + Red), a team that is stored for seats that have no bots is no choice (free for all, and the cycler goes on from there), the words of the cycler, and the store keeps the choice under `teams`") {
+        {
+            Rig r(2);
+            r.to_panel(MenuId::Single);
+            r.click(MenuId::Seat0);                                                        // Green
+            r.click(MenuId::Seat3);                                                        // Black
+            ASSERT_TRUE(r.exists(MenuId::Teams));
+            r.click(MenuId::Teams);
+            ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Green"));
+            ASSERT_TRUE(r.menu.teams() == LocalTeams({true, 2, 0}));
+            r.click(MenuId::Teams);
+            ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Black"));
+            ASSERT_TRUE(r.menu.teams() == LocalTeams({true, 2, 3}));
+            r.click(MenuId::Continue);
+            const MenuRequest request = r.take();
+            ASSERT_TRUE(request.teams == LocalTeams({true, 2, 3}) && request.bots.size() == 2 && request.bots[0].seat == 0 && request.bots[1].seat == 3);
+        }
+        ASSERT_EQ(StartMenu::teams_text(LocalTeams{}, 0), std::string("Free for all"));
+        ASSERT_EQ(StartMenu::teams_text(LocalTeams({true, 0, 1}), 0), std::string("You + Red"));
+        ASSERT_EQ(StartMenu::teams_text(LocalTeams({true, 0, 2}), 0), std::string("You + Blue"));
+        ASSERT_EQ(StartMenu::teams_text(LocalTeams({true, 0, 3}), 0), std::string("You + Black"));
+        ASSERT_EQ(StartMenu::teams_text(LocalTeams({true, 2, 0}), 2), std::string("You + Green"));
+        {   // a stored team whose seat has no bot is no choice: the panel says free for all and the first click goes to the first choice (not to the one after the stored one)
+            Rig r;
+            MenuSettings s;
+            s.name = "Player";
+            s.seats = {SeatChoice::Empty, SeatChoice::Empty, SeatChoice::Hard, SeatChoice::Hard};
+            s.teams = LocalTeams({true, 0, 1});
+            r.menu.set_settings(s);
+            ASSERT_TRUE(r.menu.teams() == LocalTeams{});
+            r.to_panel(MenuId::Single);
+            ASSERT_EQ(r.element(MenuId::Teams).value, std::string("Free for all"));
+            r.click(MenuId::Teams);
+            ASSERT_EQ(r.element(MenuId::Teams).value, std::string("You + Blue"));
+            // and the same for a team of a seat that is not the player's partner at all (not 0 + N for the player at seat 0)
+            s.teams = LocalTeams({true, 2, 3});
+            r.menu.set_settings(s);
+            ASSERT_TRUE(r.menu.teams() == LocalTeams{});
+        }
+        {   // the store: written under `teams` as ffa or A+B, read back; anything else is free for all
+            TempDir temp;
+            {
+                ConfigStore store;
+                store.set_location(temp.file("settings.ini"));
+                MenuSettings s;
+                s.write(store, MenuSetting::Teams);
+                ASSERT_EQ(store.get_string("teams", "?", 99), std::string("ffa"));
+                s.teams = LocalTeams({true, 0, 3});
+                s.write(store, MenuSetting::Teams);
+                ASSERT_EQ(store.get_string("teams", "?", 99), std::string("0+3"));
+                ASSERT_FALSE(store.has("bots") || store.has("name"));                      // only that one
+            }
+            ConfigStore later;
+            later.set_location(temp.file("settings.ini"));
+            ASSERT_TRUE(later.load());
+            MenuSettings back;
+            back.load(later);
+            ASSERT_TRUE(back.teams == LocalTeams({true, 0, 3}));
+            for (const char* junk : {"teams=\n", "teams=0+0\n", "teams=0+9\n", "teams=red\n", "teams=0+1+2\n", "teams=ffa\n", ""}) {
+                ConfigStore bad;
+                bad.parse(junk);
+                MenuSettings d;
+                d.teams = LocalTeams({true, 1, 2});                                         // (what load() does not read it must not keep)
+                d.load(bad);
+                ASSERT_TRUE(d.teams == LocalTeams{});
+            }
+            ConfigStore padded;
+            padded.parse("teams= 0+2 \n");
+            MenuSettings p;
+            p.load(padded);
+            ASSERT_TRUE(p.teams == LocalTeams({true, 0, 2}));
+        }
+        {   // the menu writes a change of the Teams choice at once and only that one
+            TempDir temp;
+            ConfigStore store;
+            store.set_location(temp.file("settings.ini"));
+            Rig r;
+            r.menu.set_on_change([&](MenuSetting which) { r.menu.settings().write(store, which); });
+            r.to_panel(MenuId::Single);
+            r.click(MenuId::Seat1);
+            r.click(MenuId::Seat2);
+            ASSERT_FALSE(store.has("teams"));                                              // (a seat is `bots`)
+            r.click(MenuId::Teams);
+            ASSERT_EQ(store.get_string("teams", "?", 99), std::string("0+1"));
+            r.click(MenuId::Seat1);
+            r.click(MenuId::Seat1);
+            r.click(MenuId::Seat1);                                                        // Red: Empty: the team is gone, and so is the stored word
+            ASSERT_EQ(store.get_string("teams", "?", 99), std::string("ffa"));
+            ASSERT_EQ(store.get_string("bots", "?", 99), std::string("off,off,easy,off"));   // (the seats by colour: green is the player's, red is empty again, blue is Easy)
+        }
+    } TEST_END();
+
+    TEST_CASE("M2.6 Single player: the player's name is a field of the panel, the same text as Join's and Host's (one remembered name), proposed as the settings have it, focused by the keyboard (Up from the first row: its text is selected, so typing replaces it) or by a click (nothing selected), edited like the others (printable ASCII, 32 at most), Enter in it and Continue ask for the game with the cleaned name, a name that Join would refuse is refused on the field with the same words (shown in the rule's place until the next key, with the can't-go cue, asking for nothing), and the name is written when the game is asked for") {
+        TempDir temp;
+        ConfigStore store;
+        store.set_location(temp.file("settings.ini"));
+        Rig r(0, "Maya");
+        r.menu.set_on_change([&](MenuSetting which) {
+            r.changes.push_back(which);
+            r.menu.settings().write(store, which);
+        });
+        r.to_panel(MenuId::Single);
+        ASSERT_TRUE(r.exists(MenuId::SingleName));
+        ASSERT_TRUE(r.element(MenuId::SingleName).kind == MenuKind::Field);
+        ASSERT_EQ(r.element(MenuId::SingleName).text, std::string("Maya"));                // the name that the settings have (the owner puts --name there too)
+        ASSERT_TRUE(has_text(r.menu.elements(), "Your name"));
+        ASSERT_EQ(r.menu.selected(), MenuId::Seat1);                                       // arriving: the first row, as it was (never a field that takes typing, never a button that acts)
+        // by the keyboard: Up from the first row selects the field and its text
+        r.key(SDLK_UP);
+        ASSERT_EQ(r.menu.selected(), MenuId::SingleName);
+        ASSERT_TRUE(r.element(MenuId::SingleName).all_selected);
+        r.type("Zed");
+        ASSERT_EQ(r.menu.name(), std::string("Zed"));                                      // typing replaced "Maya"
+        ASSERT_FALSE(r.element(MenuId::SingleName).all_selected);
+        ASSERT_EQ(r.element(MenuId::SingleName).text, std::string("Zed"));
+        r.type(std::string(60, 'x'));
+        ASSERT_EQ(r.menu.name().size(), StartMenu::kNameMax);                              // the limit of the room's protocol, as on the other panels
+        r.key(SDLK_BACKSPACE);
+        ASSERT_EQ(r.menu.name().size(), StartMenu::kNameMax - 1);
+        r.type("\x01\xc3\xa9");                                                            // a control character and an accent are not typed ...
+        ASSERT_EQ(r.menu.name().size(), StartMenu::kNameMax - 1);
+        ASSERT_TRUE(has_text(r.menu.elements(), StartMenu::kRefusedCharsText));            // ... and the panel says why (in the rule's place)
+        r.type("y");                                                                       // the next key clears the line
+        ASSERT_FALSE(has_text(r.menu.elements(), StartMenu::kRefusedCharsText));
+        ASSERT_TRUE(has_text(r.menu.elements(), StartMenu::kNoBotsLine));
+        ASSERT_FALSE(store.has("name"));                                                   // (nothing is written at every key)
+        r.key(SDLK_DOWN);                                                                  // the field is left: now it is
+        ASSERT_EQ(r.menu.selected(), MenuId::Seat1);
+        ASSERT_EQ(store.get_string("name", "", 99), "Zed" + std::string(28, 'x') + "y");
+        ASSERT_TRUE(r.changes.back() == MenuSetting::Name);
+        // one name for the three panels
+        r.key(SDLK_ESCAPE);
+        r.to_panel(MenuId::JoinWithCode);
+        ASSERT_EQ(r.menu.name(), "Zed" + std::string(28, 'x') + "y");
+        ASSERT_EQ(r.element(MenuId::Name).text, r.menu.name());
+        r.key(SDLK_UP);
+        r.type("Ruth");
+        r.key(SDLK_ESCAPE);
+        r.click(MenuId::Single);
+        ASSERT_EQ(r.element(MenuId::SingleName).text, std::string("Ruth"));                // what was typed on Join is the single player's name
+        r.to_panel(MenuId::HostOnline);
+        ASSERT_EQ(r.element(MenuId::HostName).text, std::string("Ruth"));
+        // by the mouse: a click gives the field the focus and selects nothing (typing goes on at the end); the pointer over it selects nothing
+        r.to_panel(MenuId::Single);
+        r.mouse_move(MenuId::SingleName);
+        ASSERT_EQ(r.menu.selected(), MenuId::Seat1);
+        r.click(MenuId::SingleName);
+        ASSERT_EQ(r.menu.selected(), MenuId::SingleName);
+        ASSERT_FALSE(r.element(MenuId::SingleName).all_selected);
+        r.type("!");
+        ASSERT_EQ(r.menu.name(), std::string("Ruth!"));
+        // Tab order: the name, then the rows, Continue, Back (and round)
+        r.key(SDLK_TAB);
+        ASSERT_EQ(r.menu.selected(), MenuId::Seat1);
+        r.key(SDLK_TAB, KMOD_SHIFT);
+        ASSERT_EQ(r.menu.selected(), MenuId::SingleName);
+        // Enter in the field asks for the game: with the cleaned name (the blanks at both ends go), the bots and the teams of the panel; and it is written
+        r.key(SDLK_a, KMOD_CTRL);                                                          // (select the text: the next typing replaces it)
+        r.type("  Dave  ");
+        r.key(SDLK_RETURN);
+        MenuRequest request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Single && request.bots.empty() && request.teams == LocalTeams{});
+        ASSERT_EQ(request.name, std::string("Dave"));
+        ASSERT_EQ(store.get_string("name", "", 99), std::string("  Dave  "));              // (the field's text, as the other panels write it; the settings clean it when they are read)
+        // Continue asks as well, with the same name; a second ask with nothing new writes nothing new
+        const size_t writes = r.changes.size();
+        r.click(MenuId::Seat1);
+        r.click(MenuId::Seat3);
+        r.changes.clear();
+        r.click(MenuId::Continue);
+        request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Single && request.bots.size() == 2 && request.name == "Dave");
+        ASSERT_TRUE(std::find(r.changes.begin(), r.changes.end(), MenuSetting::Name) == r.changes.end());
+        (void)writes;
+        // a name that Join would refuse is refused here with the same words, on the field, with the cue, and nothing is asked
+        for (const auto& refused : std::vector<std::pair<std::string, std::string>>{{"", "Type your name first."},
+                                                                                  {"   ", "Type your name first."},
+                                                                                  {"Bot (Hard)", "A name that starts with \"Bot (\" is for computer players. Please choose another name."},
+                                                                                  {" bot(x", "A name that starts with \"Bot (\" is for computer players. Please choose another name."}}) {
+            Rig b(0, "Player");
+            b.to_panel(MenuId::Single);
+            b.key(SDLK_UP);
+            b.key(SDLK_BACKSPACE);                                                         // (the selected text goes)
+            b.type(refused.first);
+            const int cues = b.sounds.count(sim::SoundID::CantGo);
+            b.click(MenuId::Continue);
+            ASSERT_FALSE(b.menu.has_request());
+            ASSERT_EQ(b.menu.panel(), MenuPanel::Single);
+            ASSERT_EQ(b.menu.message(), refused.second);
+            ASSERT_TRUE(has_text(b.menu.elements(), refused.second));
+            ASSERT_EQ(b.menu.selected(), MenuId::SingleName);
+            ASSERT_EQ(b.sounds.count(sim::SoundID::CantGo), cues + 1);
+            std::string clean;
+            std::string why;
+            ASSERT_FALSE(check_player_name(refused.first, clean, why));                    // the Join panel's rule says the same
+            ASSERT_EQ(why, refused.second);
+            b.key(SDLK_RETURN);                                                            // Enter in the field is the same ask, refused the same
+            ASSERT_FALSE(b.menu.has_request());
+            ASSERT_EQ(b.sounds.count(sim::SoundID::CantGo), cues + 2);
+            b.type("Bob");                                                                 // the next key takes the line away, and a good name goes through
+            ASSERT_TRUE(b.menu.message().empty());
+            b.click(MenuId::Continue);
+            const MenuRequest ok = b.take();
+            ASSERT_TRUE(ok.type == MenuRequest::Type::Single && ok.name == "Bob");
+        }
+        // Esc leaves the panel and writes what was typed (a name that is not asked for yet is still kept)
+        Rig e(0, "Player");
+        e.menu.set_on_change([&](MenuSetting which) { e.menu.settings().write(store, which); });
+        e.to_panel(MenuId::Single);
+        e.key(SDLK_UP);
+        e.type("Esme");
+        e.key(SDLK_ESCAPE);
+        ASSERT_EQ(e.menu.panel(), MenuPanel::Main);
+        ASSERT_EQ(store.get_string("name", "", 99), std::string("Esme"));
     } TEST_END();
 
     TEST_CASE("M3.1 Join: the name and the code fields take printable characters up to 32 and Backspace; Up, Down and Tab move between the fields and the buttons; the keyboard selects the text of a field (the next typing replaces it), a click does not") {

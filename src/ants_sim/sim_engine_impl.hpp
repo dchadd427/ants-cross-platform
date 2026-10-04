@@ -458,9 +458,9 @@ public:
     void add_score(uint8_t player, int32_t amount);    // FUN_01010cc9
     SimulationEngine::HatchResult hatch_request(uint8_t player, AntType type, bool force);   // FUN_01010aca
     /// PostStatus of the original for one player (255 = everybody): the text of `string_id` with `%s` filled by a..d, the flash flag
-    /// of that id. The remake posts to the player that the original's "local player" test would pass.
+    /// of that id. The remake posts to the player that the original's "local player" test would pass. `subject`: NewsEvent::subject.
     void post_news(uint8_t player, uint16_t string_id, const std::string& a = {}, const std::string& b = {},
-                   const std::string& c = {}, const std::string& d = {});
+                   const std::string& c = {}, const std::string& d = {}, uint8_t subject = 255);
     /// A "News Flash" line of the chat log (AddNewsFlash 0x100e9bb).
     void post_news_flash(uint16_t string_id, const std::string& a = {}, const std::string& b = {},
                          const std::string& c = {}, const std::string& d = {});

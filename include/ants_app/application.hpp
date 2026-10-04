@@ -36,6 +36,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
+#include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/net_overlay.hpp"
@@ -154,6 +155,9 @@ struct ApplicationConfig {
     /// --bot SEAT[:SPEC] (repeatable): computer players at these seats (docs/BOTS.md). A local game then plays the seats that are taken (the local player and the bots); with
     /// --host the room shows the bots as players and the host's machine runs them. Empty by default: a game without --bot runs no bot code at all.
     std::vector<ai::BotSpec> bots;
+    /// --teams ffa | A+B (docs/BOTS.md, "Alliances"), for a game on this computer: ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the
+    /// match start with the original's commands (Application::form_start_teams); a pair that cannot be made starts the game without teams and says why. A room refuses it.
+    LocalTeams teams;
     /// For the tests: builds the bot of a spec instead of the registry (which has the idle bot and, since B3, the worker bot), so that the application's door for a
     /// bot's commands (the local sink, the room's sink) can be exercised with a bot of the test's own that acts in a way it wants to. Empty in a game that is played.
     std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> bot_factory;
@@ -573,7 +577,7 @@ private:
     void menu_connection_failed(const std::string& message);
     void abort_menu_connection();                         // Cancel, Back from the room, a failure: nothing of the connection stays
     void menu_connected();                                // the player is in the server's room
-    void menu_start_single(const std::vector<ai::BotSpec>& bots);
+    void menu_start_single(const MenuRequest& request);
     std::string menu_failure_text() const;                // what a failed join says, in the menu's words
     bool room_has_chosen_map() const;                     // hosting: the room that the server made is on the map that the player chose
     void show_opening_screens();                          // after the menu (or the loading screen of a game without one): the quick help when the option asks for it, else the setup screen
@@ -604,7 +608,11 @@ private:
     bool start_local_bots(uint32_t match_seed);                        // after the simulation was initialised: the controller, one LocalBotSink per seat
     bool add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::string& why);   // seats one bot (the registry's, or the tests' factory's)
     void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
+    void form_start_teams();                                           // --teams: the pairs of the plan become teams with the original's commands, before the first tick of a local match
     void stop_bots();
+    const ai::BotSpec* bot_spec_of(uint8_t seat) const;                // the --bot spec of a seat, null for the others
+    bool is_bot_seat(uint8_t seat) const;                              // a computer player holds the seat: a local game's specs, in a room the slots that the room calls bots
+    std::string declined_team_up_note(const sim::NewsEvent& event) const;   // the line that says why a bot declined the local player's invitation (the HUD's news note); "" for any other event
 
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
     bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same canvas: wide_page.hpp)

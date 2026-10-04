@@ -102,9 +102,8 @@ public:
     uint32_t denials() const noexcept { return denials_; }
     uint32_t accepts() const noexcept { return accepts_; }
     /// The accept rule: an invitation to team up is accepted unless it would unite all live teams (the match would end at once: the alliance of the last two live teams wins), or the bot
-    /// already has an ally, or the inviter has one (accepting would break an alliance). A team counts as live when it plays, has not dropped out and has an ant in sight (the bot's own
-    /// ants count for itself); the eggs of a team that has no ant cannot be seen: such a team counts as gone, which only makes the bot more careful. The bot never invites, never withdraws
-    /// and never breaks an alliance.
+    /// already has an ally, or the inviter has one (accepting would break an alliance). The rule and its reasons are team_up_answer (team_up.hpp), which the application also asks to tell
+    /// the player why an invitation was declined. The bot never invites, never withdraws and never breaks an alliance.
     static bool accepts_invitation(const BotView& view, uint8_t from);
 
     /// The ids of the tasks (their rank is the order they take ants in: a higher rank takes from a lower one)

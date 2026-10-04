@@ -393,11 +393,14 @@ constexpr MockRect kMockMenuMain[] = {
     {"title plate", 280, 28, 400, 44},        {"button \"Single player\"", 320, 148, 320, 50}, {"button \"Join with a code\"", 320, 214, 320, 50},
     {"button \"Host an online match\"", 320, 280, 320, 50}, {"button \"Quit\"", 320, 346, 320, 50}, {"hint line", 200, 506, 560, 14},
 };
+// Single player has the player's name since the owner asked for it (with the choice of the teams): the mock-up's panel had no name field (the mock-up's digest was 0x7f200eb25b5cfc11), so this
+// table and the panel's digest are the panel as it is now: the model's numbers (StartMenu::elements) with the 16:9 shift, the art of the other panels.
 constexpr MockRect kMockMenuSingle[] = {
-    {"title plate", 280, 28, 400, 44},        {"intro line", 220, 120, 520, 22},        {"portrait of the Red seat", 244, 154, 40, 46},  {"Red seat name", 296, 165, 130, 24},
-    {"Red seat chooser", 440, 154, 280, 46},  {"portrait of the Blue seat", 244, 210, 40, 46}, {"Blue seat name", 296, 221, 130, 24},   {"Blue seat chooser", 440, 210, 280, 46},
-    {"portrait of the Black seat", 244, 266, 40, 46}, {"Black seat name", 296, 277, 130, 24}, {"Black seat chooser", 440, 266, 280, 46}, {"rule text", 220, 320, 520, 42},
-    {"button \"Continue\"", 320, 364, 320, 46}, {"button \"Back\"", 320, 418, 320, 40},   {"hint line", 200, 506, 560, 14},
+    {"title plate", 280, 28, 400, 44},        {"intro line", 220, 110, 520, 22},        {"label \"Your name\"", 296, 141, 130, 24},      {"name field", 440, 136, 280, 34},
+    {"portrait of the Red seat", 244, 176, 40, 44}, {"Red seat name", 296, 186, 130, 24},  {"Red seat chooser", 440, 176, 280, 44},     {"portrait of the Blue seat", 244, 224, 40, 44},
+    {"Blue seat name", 296, 234, 130, 24},    {"Blue seat chooser", 440, 224, 280, 44}, {"portrait of the Black seat", 244, 272, 40, 44}, {"Black seat name", 296, 282, 130, 24},
+    {"Black seat chooser", 440, 272, 280, 44}, {"rule text", 220, 320, 520, 42},        {"button \"Continue\"", 320, 392, 320, 40},       {"button \"Back\"", 320, 436, 320, 34},
+    {"hint line", 200, 506, 560, 14},
 };
 constexpr MockRect kMockMenuJoin[] = {
     {"title plate", 280, 28, 400, 44},        {"label \"Your name\"", 270, 120, 420, 22}, {"name field", 270, 144, 420, 34},   {"label \"Room code\"", 270, 190, 420, 22},
@@ -1016,7 +1019,7 @@ void draw_menu_picture(RendererRig& rig, const assets::AssetArchive& arc, const 
 constexpr uint64_t kMockLoadingDigest = 0x94eabba28aea947eull;
 constexpr uint64_t kMockQuickHelpDigest = 0x94b71b16f7a70dcdull;
 constexpr uint64_t kMockResultsDigest = 0xbb947f9aa3aa2a78ull;
-constexpr uint64_t kMockMenuDigest[6] = {0x7ba0d0a4ec7fb2ddull, 0x7f200eb25b5cfc11ull, 0x519d85125827ebc9ull, 0x906f3b97b3a5995dull, 0x8980eaac55423631ull, 0x722ef4cf407305e9ull};
+constexpr uint64_t kMockMenuDigest[6] = {0x7ba0d0a4ec7fb2ddull, 0x1702617f6d84b631ull, 0x519d85125827ebc9ull, 0x906f3b97b3a5995dull, 0x8980eaac55423631ull, 0x722ef4cf407305e9ull};
 
 /// --save: the picture as a bitmap (RGBA bytes of a canvas)
 void save_picture(const std::string& name, const std::vector<uint8_t>& px, int32_t w, int32_t h) {
@@ -1625,7 +1628,7 @@ constexpr Golden kGolden[] = {
     {"ptr.wide.pages.quickhelp", 0x106da6e002748a25, 518400ull},
     {"ptr.wide.pages.results", 0x30781008ed866525, 518400ull},
     {"ptr.wide.pages.menu_main", 0x1087e844bb59f825, 518400ull},
-    {"ptr.wide.pages.menu_single", 0x54df772fbca48b75, 518400ull},
+    {"ptr.wide.pages.menu_single", 0xd35f033870708055, 518400ull},
     {"ptr.wide.pages.menu_join", 0x34549dbe8ad8413d, 518400ull},
     {"ptr.wide.pages.menu_host", 0xdb1d7f3d435d96f5, 518400ull},
     {"ptr.wide.pages.menu_connecting", 0x3f6f7ab6ef755ea5, 518400ull},
@@ -1644,7 +1647,7 @@ constexpr Golden kGolden[] = {
     {"screen.wide.pages.results.big_numbers", 0x5eb6de5aa4403d36, 200ull},
     {"screen.wide.pages.results.classic_rows", 0x9e0737830f145ffa, 201ull},
     {"screen.wide.pages.menu_main", 0x0af18420436d3565, 160ull},
-    {"screen.wide.pages.menu_single", 0x035577b7d780f805, 221ull},
+    {"screen.wide.pages.menu_single", 0x29fe2740618363c0, 232ull},
     {"screen.wide.pages.menu_join", 0xc2108141358be108, 162ull},
     // menu_host moved deliberately in B4-1 (v0.3.0): the caption under the choice of the bots changed (see test_view_fingerprint.cpp, screen.menu.host.*); the draw-call count is the same.
     {"screen.wide.pages.menu_host", 0x50bca38b5ce97ecb, 224ull},
@@ -1663,7 +1666,7 @@ constexpr Golden kGolden[] = {
     {"px.wide.pages.results.big_numbers", 0xe44e9c4950a7f6e4, 518400ull},
     {"px.wide.pages.results.four_rows", 0x3968ebeaa37249bc, 518400ull},
     {"px.wide.pages.menu_main", 0x7ba0d0a4ec7fb2dd, 518400ull},
-    {"px.wide.pages.menu_single", 0x7f200eb25b5cfc11, 518400ull},
+    {"px.wide.pages.menu_single", 0x1702617f6d84b631, 518400ull},
     {"px.wide.pages.menu_join", 0x519d85125827ebc9, 518400ull},
     {"px.wide.pages.menu_host", 0x906f3b97b3a5995d, 518400ull},
     {"px.wide.pages.menu_connecting", 0x8980eaac55423631, 518400ull},

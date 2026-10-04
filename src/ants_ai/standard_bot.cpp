@@ -1,5 +1,7 @@
 #include "ants_ai/standard_bot.hpp"
 
+#include "ants_ai/team_up.hpp"
+
 namespace ants::ai {
 
 namespace {
@@ -123,19 +125,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
 }
 
 bool StandardBot::accepts_invitation(const BotView& view, uint8_t from) {
-    if (from >= sim::MAX_PLAYERS || from == view.seat()) return false;
-    if (view.ally() < sim::MAX_PLAYERS) return false;                                // never break an alliance
-    const TeamRow& inviter = view.rows()[from];
-    if (!inviter.present || inviter.dropped || inviter.ally < sim::MAX_PLAYERS) return false;
-    std::array<bool, sim::MAX_PLAYERS> has_ant{};
-    has_ant[view.seat()] = !view.mine().empty();
-    for (const AntView& a : view.others()) has_ant[a.team] = true;
-    size_t live = 0;
-    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
-        const TeamRow& row = view.rows()[t];
-        if (row.present && !row.dropped && has_ant[t]) ++live;
-    }
-    return live >= 3;                                                                // with only two live teams the alliance would unite all of them: the match would end at once
+    return team_up_answer(view, from) == TeamUpAnswer::Accept;                       // the one rule (team_up.hpp): the application tells the player the reason of a refusal from the same function
 }
 
 // ---- the stall detector ------------------------------------------------------------------------------------------------------------------------------

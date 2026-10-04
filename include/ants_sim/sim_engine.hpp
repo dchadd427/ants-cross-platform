@@ -227,6 +227,9 @@ struct NewsEvent {
     uint16_t    string_id{0};         // id in the original's string table (game_strings.hpp)
     bool        blink{false};         // status posted with the flash flag: a 500 ms flicker before the steady text
     NewsChannel channel{NewsChannel::Status};
+    /// The seat that the text is about when it names one as the answer to an invitation to team up does (80 "... rejected teaming up", 81 "... accepted ...": the team that answered; 82 "...
+    /// withdrew offer ...": the team that withdrew); 255 otherwise. Presentation only: no rule and no state hash reads it (the application says why a bot declined).
+    uint8_t     subject{255};
 };
 
 struct AntSnapshot {

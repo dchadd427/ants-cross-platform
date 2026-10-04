@@ -104,6 +104,9 @@ public:
     // Per-tick / per-frame update
     void update(const sim::WorldState& world, uint32_t delta_ticks);
     void poll_sim_events(sim::SimulationEngine& sim);
+    /// A note after the text of a news event: called for every event that this player sees (the engine's own texts are never changed); a text that comes back is added to the chat log as one more
+    /// News Flash, with the time of the event, right after the event's own text. The application uses it to say why a bot declined an invitation to team up.
+    void set_news_note(std::function<std::string(const sim::NewsEvent&)> note) { news_note_ = std::move(note); }
 
     // Rendering pipeline
     void render(IRenderer& renderer, const assets::AssetArchive& assets,
@@ -418,6 +421,7 @@ private:
     bool is_multi_select_mode_{false};
     int32_t selected_base_team_id_{-1};
     std::function<void(const std::string&, bool)> on_chat_send_;
+    std::function<std::string(const sim::NewsEvent&)> news_note_;
     // The chat log (docs 5.56): the entries with their layout, the display lines that derive from them, and the state of the window
     struct ChatEntry {
         std::string header;                    // "Name:" ...

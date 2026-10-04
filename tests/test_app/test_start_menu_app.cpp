@@ -988,6 +988,7 @@ int main(int argc, char** argv) {
             Application app;
             ApplicationConfig cfg = menu_config(server.address(), temp.file("b.ini"));
             cfg.start_menu = false;
+            cfg.player_name = "Player";                                                      // (the panel proposes this name and names the game by its field: the game that never saw the menu gets the same)
             ASSERT_TRUE(app.init(cfg));
             ASSERT_EQ(app.state(), AppState::MapSelect);
             app.map_select().handle_key_down(SDLK_RETURN);
@@ -1050,7 +1051,7 @@ int main(int argc, char** argv) {
         }
         Played by_flags;
         {
-            std::vector<std::string> args = {"ants", "--headless", "--bot", "1:medium", "--bot", "3:hard", "--settings", temp.file("b.ini")};
+            std::vector<std::string> args = {"ants", "--headless", "--bot", "1:medium", "--bot", "3:hard", "--name", "Player", "--settings", temp.file("b.ini")};      // (--name Player: the panel's proposal)
             std::vector<char*> storage;
             const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
             ASSERT_FALSE(cfg.start_menu);
@@ -1085,6 +1086,193 @@ int main(int argc, char** argv) {
             click(app, MenuId::Seat0);
             ASSERT_EQ(app.start_menu().bots().size(), static_cast<size_t>(1));
             ASSERT_EQ(app.start_menu().bots()[0].seat, 0);
+        }
+    } TEST_END();
+
+    TEST_CASE("A2.3 Single player with teams: the Teams choice reaches the game as --teams does (three bots and You + Red: the same teams, roster, names and state after the dialog and 100 ticks as --bot 1:medium --bot 2:medium --bot 3:medium --teams 0+1), the engine's News Flash lines are in the chat log and no invitation dialog opened, the choice is written to the settings file and is in the panel of the next run, and two bots with no team chosen are free for all") {
+        TempDir temp;
+        Server server;
+        write_no_quick_help(temp.file("a.ini"));
+        write_no_quick_help(temp.file("b.ini"));
+        const auto allies = [](Application& app) {
+            std::string out;
+            for (uint8_t a : app.sim().get_world_state().player_alliances) out += std::to_string(a);
+            return out;
+        };
+        Played via_menu;
+        {
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("a.ini"))));
+            click(app, MenuId::Single);
+            for (const MenuId seat : {MenuId::Seat1, MenuId::Seat2, MenuId::Seat3}) {
+                click(app, seat);
+                click(app, seat);                                                            // medium
+            }
+            ASSERT_TRUE(app.start_menu().bots().size() == 3);
+            MenuElement row;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "Free for all");
+            click(app, MenuId::Teams);
+            ASSERT_EQ(app.start_menu().teams().a, 0);
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "You + Red");
+            ASSERT_HAS(read_file(temp.file("a.ini")), "teams=0+1");                          // written at once
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(allies(app), std::string("1032"));                                     // the player and Red, Blue and Black: before the first tick
+            ASSERT_TRUE(app.hud().alliance_dialog() == HUD::AllianceDialog::None);
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            via_menu = snapshot(app);
+            ASSERT_EQ(allies(app), std::string("1032"));                                     // 100 ticks on: the same
+            ASSERT_TRUE(app.hud().alliance_dialog() == HUD::AllianceDialog::None);
+            const std::string log = app.hud().chat_transcript(std::string());
+            size_t flashes = 0;
+            for (size_t at = log.find("are a team now!"); at != std::string::npos; at = log.find("are a team now!", at + 1)) ++flashes;
+            ASSERT_EQ(flashes, 2u);
+        }
+        Played by_flags;
+        {
+            std::vector<std::string> args = {"ants", "--headless", "--bot", "1:medium", "--bot", "2:medium", "--bot", "3:medium", "--teams", "0+1", "--name", "Player", "--settings", temp.file("b.ini")};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            ASSERT_FALSE(cfg.start_menu);
+            ASSERT_TRUE(cfg.teams.set && cfg.teams.a == 0 && cfg.teams.b == 1);
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(allies(app), std::string("1032"));
+            by_flags = snapshot(app);
+        }
+        ASSERT_TRUE(via_menu.bots && via_menu.bot_seats == 0x0E);
+        ASSERT_TRUE(same(via_menu, by_flags));                                               // the same game, hash and all
+        // the next run of the program finds the choice in its panel (the seats and the team come from the file)
+        {
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("a.ini"))));
+            ASSERT_TRUE(app.start_menu().teams() == LocalTeams({true, 0, 1}));
+            click(app, MenuId::Single);
+            MenuElement row;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "You + Red");
+            // two bots: the choice is for a seat that has none now, so it is no choice: free for all, and the game that follows has no team
+            click(app, MenuId::Seat1);
+            click(app, MenuId::Seat1);                                                       // Red: Medium, Hard, Empty
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "Free for all");
+            ASSERT_HAS(read_file(temp.file("a.ini")), "teams=ffa");
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().roster_mask(), 0x0D);                                        // the player, Blue and Black
+            ASSERT_EQ(allies(app), std::string("4444"));
+        }
+    } TEST_END();
+
+    TEST_CASE("A2.4 Single player with a name: the panel's field holds the name that the settings have (--name proposes it, else Player), whatever it holds when Continue is pressed is the player's name in that game (the own team's name in the simulation, the score box, the HUD, the results' local row), it is written to the settings file and is in the field of the next run, a name that Join would refuse is refused on the panel (no game, the field has the focus and the line says why), and a game that never saw the menu keeps today's rule") {
+        TempDir temp;
+        Server server;
+        write_no_quick_help(temp.file("a.ini"));
+        {   // --name proposes the name, the player types another: that one is the game's, down to the results
+            Application app;
+            ApplicationConfig cfg = menu_config(server.address(), temp.file("a.ini"));
+            cfg.player_name = "Alice";                                                       // (--name)
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.start_menu().name(), std::string("Alice"));
+            click(app, MenuId::Single);
+            MenuElement field;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::SingleName, field) && field.text == "Alice");
+            fill(app, MenuId::SingleName, "Zed");
+            ASSERT_EQ(app.start_menu().name(), std::string("Zed"));
+            click(app, MenuId::Seat1);                                                       // Red: an Easy bot, so that there is somebody in the results too
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            ASSERT_EQ(app.state(), AppState::MapSelect);                                     // (the quick help is off in this file)
+            ASSERT_HAS(read_file(temp.file("a.ini")), "name=Zed");                           // written when the game was asked for
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().get_player_name(0), std::string("Zed"));                     // the own team's name in the engine's texts
+            ASSERT_EQ(app.hud().team_names()[0], std::string("Zed"));                        // the score box's label
+            ASSERT_EQ(app.hud().get_player_name(), std::string("Zed"));
+            ASSERT_EQ(app.sim().get_player_name(1), std::string("Bot (Easy)"));
+            app.hud().dismiss_match_start_modal();
+            app.sim().set_match_time_remaining_ms(1000);
+            for (int i = 0; i < 200 && !app.sim().is_match_over(); ++i) app.update_simulation(0.05f);
+            ASSERT_TRUE(app.sim().is_match_over());
+            app.update_results(0.0f);
+            app.update_results(0.3f);
+            std::vector<std::string> names;
+            for (const auto& row : app.scorecard().rows()) names.push_back(row.name);
+            ASSERT_TRUE(std::find(names.begin(), names.end(), "Zed") != names.end());          // the results' local row
+            ASSERT_TRUE(std::find(names.begin(), names.end(), "Alice") == names.end());
+        }
+        {   // the next run: the name that was typed is in the field (nothing proposes another), and Continue with it as it is makes that the game's name
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("a.ini"))));
+            ASSERT_EQ(app.start_menu().name(), std::string("Zed"));
+            click(app, MenuId::Single);
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().get_player_name(0), std::string("Zed"));
+        }
+        {   // --name beats what was stored, as it does for Join and Host
+            Application app;
+            ApplicationConfig cfg = menu_config(server.address(), temp.file("a.ini"));
+            cfg.player_name = "Carol";
+            ASSERT_TRUE(app.init(cfg));
+            click(app, MenuId::Single);
+            MenuElement field;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::SingleName, field) && field.text == "Carol");
+        }
+        write_no_quick_help(temp.file("b.ini"));
+        {   // nothing stored and no --name: the panel proposes Player, and the game is called that (not the computer's user name that a game without the menu has)
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("b.ini"))));
+            click(app, MenuId::Single);
+            MenuElement field;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::SingleName, field) && field.text == "Player");
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.sim().get_player_name(0), std::string("Player"));
+        }
+        {   // a name that Join would refuse is refused on the panel: no game starts, the field has the focus, the line says why; typing takes the line away and a good name goes on
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("b.ini"))));
+            click(app, MenuId::Single);
+            fill(app, MenuId::SingleName, "Bot (Hard)");
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            ASSERT_EQ(app.state(), AppState::StartMenu);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Single);
+            ASSERT_EQ(app.start_menu().selected(), MenuId::SingleName);
+            ASSERT_HAS(app.start_menu().message(), "A name that starts with \"Bot (\" is for computer players");
+            ASSERT_TRUE(app.bots() == nullptr && app.sim().get_player_name(0) != "Bot (Hard)");
+            click(app, MenuId::SingleName);                                                  // (typing nothing keeps the selection: Ctrl+A and Backspace empty the field)
+            press(app, SDLK_a, KMOD_CTRL);
+            press(app, SDLK_BACKSPACE);
+            click(app, MenuId::Continue);
+            ASSERT_EQ(app.start_menu().panel(), MenuPanel::Single);
+            ASSERT_EQ(app.start_menu().selected(), MenuId::SingleName);
+            ASSERT_EQ(app.start_menu().message(), std::string("Type your name first."));
+            fill(app, MenuId::SingleName, "Bob");
+            ASSERT_TRUE(app.start_menu().message().empty());
+            press(app, SDLK_RETURN);                                                         // Enter in the field asks for the game too
+            app.pump_network(0.01f);
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.sim().get_player_name(0), std::string("Bob"));
+        }
+        {   // a game that never saw the menu keeps its rule: --name, else the computer's user name
+            Application app;
+            ApplicationConfig cfg = menu_config(server.address(), temp.file("b.ini"));
+            cfg.start_menu = false;
+            cfg.player_name = "Carl";
+            ASSERT_TRUE(app.init(cfg));
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.sim().get_player_name(0), std::string("Carl"));
         }
     } TEST_END();
 
@@ -1267,17 +1455,21 @@ int main(int argc, char** argv) {
         ASSERT_HAS(app.start_menu().message(), "Try again");
         ASSERT_TRUE(app.net() == nullptr);
         ASSERT_EQ(app.window_title(), std::string("Ants"));
-        // the room was left: a single-player game from the menu is the local player's (the name that the room had is not carried into it)
+        // the room was left: a single-player game from the menu has the name that the panel's field holds, and the field is the same text as the Host panel's (one name for the three panels): the
+        // name that was typed for the room, which the field shows
         hall.peers.clear();
         press(app, SDLK_ESCAPE);                                                              // the Host panel's Back
         ASSERT_TRUE(on_panel(app, MenuPanel::Main));
         click(app, MenuId::Single);
+        MenuElement name_field;
+        ASSERT_TRUE(app.start_menu().find_element(MenuId::SingleName, name_field) && name_field.text == "Hostess");
         click(app, MenuId::Continue);
         app.pump_network(0.01f);
         ASSERT_EQ(app.state(), AppState::MapSelect);
         ASSERT_FALSE(app.map_select().room().networked);
-        ASSERT_EQ(app.hud().get_player_name(), local_name);
-        ASSERT_TRUE(app.hud().get_player_name() != "Hostess");
+        ASSERT_EQ(app.hud().get_player_name(), std::string("Hostess"));
+        ASSERT_EQ(app.hud().get_player_name(), app.start_menu().name());                      // (what the field holds, and nothing else of the room: not its other players' names, not its title)
+        ASSERT_EQ(app.window_title(), std::string("Ants"));
     } TEST_END();
 
     TEST_CASE("A4.3 Host: a room that fills up while its code is on the screen starts by itself (nobody has to press anything): the match begins, the title keeps the code, and Leave afterwards brings the player back to the menu") {
@@ -1639,7 +1831,7 @@ int main(int argc, char** argv) {
         ASSERT_EQ(app.window_title(), std::string("Ants"));
         ASSERT_TRUE(app.bots() == nullptr);
         ASSERT_EQ(app.hud().get_player_name(), local_name);                                  // the name that was typed for the room is gone from the screens at once
-        // the menu works again: a single-player game from here (the local name is back)
+        // the menu works again: a single-player game from here (the name of its field, which is the one typed for the room)
         hall.peers.clear();
         click(app, MenuId::Single);
         click(app, MenuId::Continue);
@@ -1651,8 +1843,9 @@ int main(int argc, char** argv) {
         ASSERT_EQ(app.state(), AppState::Playing);
         ASSERT_EQ(app.sim().roster_mask(), 0x0F);                                            // the original's single-player game again
         ASSERT_FALSE(app.network_active());
-        ASSERT_TRUE(app.sim().get_player_name(0) != "Hostess" && !app.sim().get_player_name(0).empty());   // the local name is back: the name that was typed for the room is not the single player's
-        ASSERT_EQ(app.sim().get_player_name(0), local_name);
+        ASSERT_EQ(app.sim().get_player_name(0), std::string("Hostess"));                     // the panel's field holds the name that was typed for the room (one name for the three panels), and the game takes it
+        ASSERT_EQ(app.sim().get_player_name(0), app.start_menu().name());
+        ASSERT_EQ(app.sim().get_player_name(1), std::string("Red"));                         // (nothing else of the room's game: the other seats have their colours' names)
     } TEST_END();
 
     TEST_CASE("A6.2 A network game that is lost or left goes back to the menu too: the server closes the room in the middle of the match (the notice names it), a room that dies under the player, Leave on the room's screen, and the quit dialog's Yes; without the menu the same Leave ends the program as it always did") {
@@ -2027,6 +2220,42 @@ int main(int argc, char** argv) {
         ASSERT_EQ(app.sim().get_player_name(3), std::string("Bot (Medium)"));
     } TEST_END();
 
+    TEST_CASE("A10.5 --start-menu together with --teams (the way the tests and the screenshots show it): the Teams choice starts as the command line says when the seats offer it (three bots: You + Blue), a team of a seat that has no bot is no choice, and --teams without a mode does not skip the menu") {
+        TempDir temp;
+        write_no_quick_help(temp.file("s.ini"));
+        {
+            std::vector<std::string> args = {"ants", "--start-menu", "--headless", "--bot", "1", "--bot", "2", "--bot", "3", "--teams", "0+2", "--settings", temp.file("s.ini")};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            ASSERT_TRUE(cfg.start_menu && cfg.startup_error.empty() && cfg.teams.set);
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::StartMenu);
+            ASSERT_TRUE(app.start_menu().teams() == LocalTeams({true, 0, 2}));
+            click(app, MenuId::Single);
+            MenuElement row;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "You + Blue");
+            ASSERT_FALSE(std::ifstream(temp.file("s.ini")).good() && read_file(temp.file("s.ini")).find("teams=") != std::string::npos);     // nothing is written until the player changes it
+        }
+        {   // a team of a seat that has no bot (two bots, the team is with the third seat): free for all
+            std::vector<std::string> args = {"ants", "--start-menu", "--headless", "--bot", "1", "--bot", "2", "--teams", "0+3", "--settings", temp.file("s.ini")};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_TRUE(app.start_menu().teams() == LocalTeams{});
+            click(app, MenuId::Single);
+            MenuElement row;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "Free for all");
+        }
+        {   // --teams alone is no mode: the start menu shows (as it does for --name)
+            std::vector<std::string> args = {"ants", "--teams", "0+1"};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            ASSERT_TRUE(cfg.start_menu && cfg.teams.set);
+        }
+    } TEST_END();
+
     TEST_CASE("A10.4 The window's own event loop reaches the menu (the tests above call the menu's handler directly): keys, typed text and the mouse queued in SDL's event queue change the panels in the next frame, and the window's close button ends the program from the menu") {
         TempDir temp;
         Application app;
@@ -2167,7 +2396,8 @@ int main(int argc, char** argv) {
         {   // "Single player" and the Red seat's row: the second click changed Red to an Easy bot and wrote it to the settings
             Application app;
             ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "b.ini"))));
-            const Pt entry = middle_of(app, MenuId::Single);
+            Pt entry = middle_of(app, MenuId::Single);
+            entry.y += 16;                                                                   // (a place of the button that the Red row has under it on the panel that it opens: the name field is above that row)
             queue_click(entry, 1);
             app.run_frame_with_delta(0.016f);
             ASSERT_EQ(app.start_menu().panel(), MenuPanel::Single);
