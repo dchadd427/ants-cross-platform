@@ -557,12 +557,24 @@ check "a second report right after it (inside the ten seconds that the next writ
 stop_server
 check "the second server stops cleanly and the stop saved the 122" "$([ "$(file_local_total)" = "122" ]; echo $?)"
 printf 'this is no statistics' > "$STATS_FILE"
+mkdir "$WORK/results/site-stats.json.tmp"      # (a folder where the counters' temporary file goes: the first write of this start cannot be made)
 start_stats_server "$WORK/server3.log"
 check "a start over a file that is no statistics is up" "$?"
 STATS3="http://127.0.0.1:$WS2/stats"
 check "... it puts the file aside whole (named .broken-<time>), says so in its log, and counts again from 0" "$([ "$(ls "$WORK/results" | grep -c '^site-stats.json.broken-')" = "1" ] && [ "$(cat "$WORK"/results/site-stats.json.broken-*)" = "this is no statistics" ] && grep -q 'site statistics: .* cannot be used .* put aside as .*broken-.*counters start at 0' "$WORK/server3.log" && stats_check 0 0 0 0 "$STATS3"; echo $?)"
+# a file that cannot be written is said in the log while the server runs, once (the next try is ten seconds on); the stop writes it when the place is free again
+SAID=1
+for _ in $(seq 1 30); do
+    grep -q 'site statistics could not be saved' "$WORK/server3.log" && { SAID=0; break; }
+    sleep 0.1
+done
+check "a file that cannot be written is said in the log while the server runs" "$SAID"
+sleep 1.5
+check "... once" "$([ "$(grep -c 'site statistics could not be saved' "$WORK/server3.log")" = "1" ]; echo $?)"
+rmdir "$WORK/results/site-stats.json.tmp"
 stop_server
-check "the next stop wrote a good file beside the one that was put aside" "$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); sys.exit(0 if d["format"] == 1 and d["online"]["total"] == 0 else 1)' "$STATS_FILE"; echo $?)"
+check "the stop wrote the file when the place was free again, and said so" "$(grep -q 'site statistics are saved again' "$WORK/server3.log" && [ "$(file_local_total)" = "0" ] && [ ! -e "$STATS_FILE.tmp" ]; echo $?)"
+check "the good file beside the one that was put aside is a statistics file: format 1, no online game" "$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); sys.exit(0 if d["format"] == 1 and d["online"]["total"] == 0 else 1)' "$STATS_FILE"; echo $?)"
 fi
 
 # ---- part secret: the control secret that the server makes, keeps, shows and reads from a file --------------------------------------------------------------------

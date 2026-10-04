@@ -342,6 +342,8 @@ void run_site_stats_tests() {
         const std::string longest = big.json(most);
         ASSERT_TRUE(longest.find("9223372036854775807") != std::string::npos && longest.find("4294967295") != std::string::npos && longest.find("9999-12-31") != std::string::npos);
         ASSERT_TRUE(longest.size() < net::kWsMaxStatusBytes);
+        big.count_online();                                                                     // one more than a signed number holds: shown as the largest, never as a negative one
+        ASSERT_TRUE(big.json(BusyCounts()).find("\"online\":{\"day\":1,\"total\":9223372036854775807}") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("S3.145 The file: made at the first save (so that `since` outlives a restart), written whole and renamed (no temporary file is left), read back by the next start with every number, the day read at the new time, only the buckets of the window written; a save is due every 10 s while something changed, and at a stop") {
@@ -436,14 +438,46 @@ void run_site_stats_tests() {
             stats.open(own);
             ASSERT_TRUE(stats.save());
             ASSERT_TRUE(fs::exists(own));
+            back.now += 30;
+            ASSERT_FALSE(stats.save_if_due());                                                  // nothing changed, however long ago the last write was: nothing is written
             fs::remove(own);
-            ASSERT_TRUE(stats.save());
+            ASSERT_TRUE(stats.save());                                                          // (a save with nothing changed: nothing to do, the file that was removed is not made again)
             ASSERT_FALSE(fs::exists(own));
             stats.count_online();
-            ASSERT_FALSE(stats.save_if_due());                                                  // (the file was written this second)
-            back.now -= 100;                                                                    // the clock was set back: the last write was in the future, the next is not held back for 100 s
-            ASSERT_TRUE(stats.save_if_due());
+            ASSERT_TRUE(stats.save_if_due());                                                   // something changed and the last write is 30 s old: due
             ASSERT_TRUE(fs::exists(own) && !stats.dirty());
+            stats.count_online();
+            ASSERT_FALSE(stats.save_if_due());                                                  // (written this very second)
+            back.now -= 100;                                                                    // the clock was set back: the last write is in the future, the next is not held back for 100 s
+            ASSERT_TRUE(stats.save_if_due());
+            ASSERT_FALSE(stats.dirty());
+        }
+        {   // a report that counts makes the counters dirty (the file is written for it); one that the cap refuses changes nothing, so there is nothing to write
+            const std::string own = (fs::path(temp_dir_for("stats-local-dirty")) / SiteStats::kFileName).string();
+            StatsClock c;
+            SiteStats stats(c.fn());
+            stats.open(own);
+            ASSERT_TRUE(stats.save());
+            ASSERT_FALSE(stats.dirty());
+            ASSERT_TRUE(stats.count_local());
+            ASSERT_TRUE(stats.dirty());
+            for (size_t i = 1; i < SiteStats::kLocalPerMinute; ++i) ASSERT_TRUE(stats.count_local());
+            c.now += 20;
+            ASSERT_TRUE(stats.save_if_due());
+            ASSERT_FALSE(stats.dirty());
+            ASSERT_FALSE(stats.count_local());                                                  // the 121st of the minute
+            ASSERT_FALSE(stats.dirty());
+            ASSERT_EQ(stats.local().total, uint64_t{120});
+        }
+        {   // the file holds the buckets of the window only: the bucket of an hour that has not come yet (the clock was set back) stays out of it
+            const fs::path own = fs::path(temp_dir_for("stats-future")) / SiteStats::kFileName;
+            StatsClock c;
+            SiteStats stats(c.fn());
+            stats.open(own.string());
+            stats.count_online();                                                               // the hour 497532
+            c.now = kT0 - 3 * kH;
+            ASSERT_TRUE(stats.save());
+            ASSERT_EQ(stats_slurp(own), std::string("{\"format\":1,\"since\":\"2026-10-04\",\"online\":{\"total\":1,\"hours\":[]},\"local\":{\"total\":0,\"hours\":[]}}\n"));
         }
     } TEST_END();
 
@@ -474,6 +508,9 @@ void run_site_stats_tests() {
             {"a day 0", stats_file_text("2026-10-00")},
             {"a date before 1970", stats_file_text("1969-12-31")},
             {"a date with letters", stats_file_text("2026-1O-04")},
+            {"a date with a digit too many", stats_file_text("2026-10-041")},
+            {"a date with a blank behind it", stats_file_text("2026-10-04 ")},
+            {"a date with a blank before it", stats_file_text(" 2026-10-04")},
             {"a date with a sign", stats_file_text("+026-10-04")},
             {"a date as a number", "{\"format\":1,\"since\":20261004,\"online\":{\"total\":5,\"hours\":[]},\"local\":{\"total\":0,\"hours\":[]}}"},
             {"no online counter", "{\"format\":1,\"since\":\"2026-10-04\",\"local\":{\"total\":0,\"hours\":[]}}"},

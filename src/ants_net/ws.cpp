@@ -675,8 +675,7 @@ WsHandshakeResult ws_parse_handshake(const std::string& request, const WsServerO
         if (!is_token_char(static_cast<unsigned char>(c))) return rejected(400, consumed);
     }
     // The post path takes a POST of exactly that path (no query: the target is compared whole) and nothing else; its 405 says POST, every other 405 says GET
-    const bool post_enabled = !options.post_path.empty() && options.post_action;
-    const bool post_path = post_enabled && target == options.post_path;
+    const bool post_path = options.post_action != nullptr && target == options.post_path;
     if (method != "GET" && !(method == "POST" && post_path)) return rejected(405, consumed, post_path ? "POST" : "GET");
     if (version != "HTTP/1.1") return rejected(400, consumed);
     if (target[0] != '/') return rejected(400, consumed);                               // origin form only: what a proxy sends

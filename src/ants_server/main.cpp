@@ -7,14 +7,14 @@
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
-//   --ws-port N        the WebSocket port of browsers and Electron behind a reverse proxy that ends TLS (0: none; default 0); this machine only
+//   --ws-port N        the WebSocket port of browsers and Electron behind a reverse proxy that ends TLS (0: none; default 0); this machine only. It also answers the public GET /busy, GET /stats and POST /stats/local
 //   --ctl-port N       the control interface: HTTP + JSON on this machine only, with a bearer secret (0: none; default 0; needs the secret)
 //   --public           the TCP game port accepts connections from other machines
 //   --ws-any-interface, --ctl-any-interface
 //                      the WebSocket / control port listens on every interface instead of the loopback address. For a container only: a port that is published
 //                      from a container does not reach a program that listens on the container's loopback address. The host decides who can connect
 //                      (docker run -p 127.0.0.1:4010:4010 ...); never use these on a machine without that protection, the control interface speaks plain HTTP.
-//   --results-dir DIR  every ended room writes <code>.json there
+//   --results-dir DIR  every ended room writes <code>.json there, and the site statistics (the counters of GET /stats) are kept in site-stats.json (without it they live in memory)
 //   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
 //   --max-rooms N      the most rooms at a time (default 256)
 //   --demo-rooms N     for a public test page: a Hello for a not yet existing room "demo-..." makes it (4 players, the --demo-map, unless its code chooses: see --demo-maps), at most N at a time. N is 1 to
@@ -388,7 +388,6 @@ int main(int argc, char** argv) {
     // The numbers of the front page (site_stats.hpp): the games that ended on this server and the single-player games that browsers report, kept in the results folder when there is one
     ants::server::SiteStats stats;
     if (!o.results_dir.empty()) stats.open((std::filesystem::path(o.results_dir) / ants::server::SiteStats::kFileName).string());
-    for (const std::string& line : stats.take_notices()) log(line);
     if (ws) {                                                    // GET /stats (numbers only) and POST /stats/local (a browser tells that a single-player game began: counted, answered 204)
         ws->add_status("/stats", [&rooms, &stats]() { return stats.json(rooms.busy(now_ms())); });
         ws->set_post("/stats/local", [&stats]() { stats.count_local(); });
