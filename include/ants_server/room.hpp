@@ -220,17 +220,14 @@ public:
     /// The server's restart records (restart_record.hpp; it must outlive the room): a room that holds seats and whose match starts keeps a record there. Set it right after the room is made, before its
     /// match is started. Null (the default): the room keeps none.
     void set_restart_store(RestartStore* store) noexcept { restart_store_ = store; }
-    /// Bringing a match back from a record (a server that starts again: RoomManager::restore_rooms queues the records and update() replays them in SLICES, so that the rooms that run are served meanwhile),
-    /// first half. begin_replay() does everything before the turns: the bots sit down again, the engine is made from the start message, the session gets its keys and its rejoin start. The room
-    /// must be fresh (Waiting, made from room_spec_of(record.head)) and `record` must stay alive until replay_step() has said Replayed or Refused (the turns are read from it as they are replayed).
-    /// Refused, with the reason in `why` (the room is then thrown away: it holds a half-built match). `restart_vote_after_ms` is how long the others wait before they may vote on a seat that
-    /// has not come back (never less than the room's own time).
+    /// Bringing a match back from a record, first half (RoomManager replays the queue in slices from update(), so that the server serves meanwhile). begin_replay() does everything before the turns: the
+    /// bots, the engine, the session with its keys. The room must be fresh (Waiting, made from room_spec_of(record.head)) and `record` must stay alive until replay_step() has said Replayed or Refused.
+    /// Refused, with the reason in `why`: the room holds a half-built match and is thrown away. `restart_vote_after_ms`: how long the others wait before they may vote on a seat that has not come back.
     enum class ReplayBegin : uint8_t { Ready, Refused };
     ReplayBegin begin_replay(const RestartLoaded& record, uint32_t restart_vote_after_ms, std::string& why);
-    /// Replays turns for at most `slice_ms` by `clock` (real milliseconds; empty: restart_steady_ms), looking at the clock after every 20th turn, so a slice runs at most 20 turns' work past its time:
-    /// every turn goes into the turn log and into the referee's runner, and at every checkpoint the referee's state hash must be the one that the old server stored. More: the replay goes on in the
-    /// next slice. Replayed: the match is rebuilt and waits for begin_restored(); the record may go. Refused, with the reason: the replay does not agree with the hashes, the turn log cannot hold the
-    /// match, the record's turns cannot be read, or the SUMMED work of the slices passed RestartConfig::replay_budget_ms (too slow): the room is thrown away. The room's clocks are not touched.
+    /// Replays turns for at most `slice_ms` by `clock` (real milliseconds; empty: restart_steady_ms), looking at it after every 20th turn (a slice runs at most 20 turns' work past its time); at every
+    /// checkpoint the referee's state hash must be the stored one. More: go on in the next slice. Replayed: the match is rebuilt and waits for begin_restored(). Refused, with the reason: the replay
+    /// disagrees with the hashes, the log cannot hold the match, the turns cannot be read, or the SUMMED work of the slices passed RestartConfig::replay_budget_ms (too slow). The room's clocks are not touched.
     enum class ReplayStep : uint8_t { More, Replayed, Refused };
     ReplayStep replay_step(uint32_t slice_ms, const std::function<uint32_t()>& clock, std::string& why);
     /// begin_replay() and then every slice in one go (no slice): Replayed or Refused

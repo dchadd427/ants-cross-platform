@@ -122,16 +122,12 @@ public:
     bool enable_restart_records(RestartConfig config, std::string& why);
     /// The server's restart records (null when it keeps none)
     const RestartStore* restart_store() const noexcept { return restart_.get(); }
-    /// Reads the records of the folder, the newest first (by the time of their last write), and judges each one's head and file: a record that cannot be read is a line in the log and is deleted; one that
-    /// cannot be restored (another network protocol, a map that is gone or has changed, too old, a room that this server would not make, no room for it) becomes a FAILED room with the reason (the control
-    /// interface shows it, the log and the result file report it) and is moved to `refused`; every other record is QUEUED: its code is taken (create_room answers 409) and its room is brought back by update(),
-    /// which spends at most RestartConfig::restore_slice_ms of every pass on the queue (a room for which a Hello waits first, then the newest record first): the engine is made again from the match's start
-    /// message and every sealed turn replayed in slices (Room::begin_replay, Room::replay_step; checked against the state hashes of the record; one room's replay may take RestartConfig::replay_budget_ms of
-    /// work in all, beyond it its record is refused as too slow), and the room begins when ITS replay ends, with a clock that starts then (Room::begin_restored): the seats of the persons are held absent (the
-    /// match is paused until the players come back with their keys: a Hello with a key finds the room by its code, as before the restart) and the bots start again at the restored tick. So the server serves
-    /// while it restores: the rooms that run go on, and a Hello for a room that waits for its replay is parked (see above). `should_stop` is asked between the records that are judged: when it says yes the
-    /// restore ends at once and every record that is left is left on disk as it was (RestoreReport::stopped). Call it once, after enable_restart_records() and before the first update(). The report
-    /// has what was decided at once; restore_report() has every record's fate as it is decided.
+    /// Reads the records of the folder, newest first (by the time of their last write), and judges each one: a record that cannot be read is a line in the log and is deleted; one that cannot be restored
+    /// (another network protocol, a map that is gone or has changed, too old, no room for it, ...) becomes a FAILED room with the reason and is moved to `refused`; every other record is QUEUED (its code is
+    /// taken: create_room answers 409). update() replays the queue in slices of RestartConfig::restore_slice_ms a pass (a room for which a Hello waits first, then the newest record), so the server serves
+    /// while it restores, and a room begins when ITS replay ends, with a clock that starts then (Room::begin_restored). `should_stop` is asked between the records that are judged: when it says yes the
+    /// restore ends and every record that is left stays on disk as it was (RestoreReport::stopped). Call it once, after enable_restart_records() and before the first update(). The report has what was
+    /// decided at once; restore_report() has every record's fate as it is decided.
     RestoreReport restore_rooms(uint32_t now_ms, const std::function<bool()>& should_stop = nullptr);
     /// Every record's fate so far: refused or unreadable at once, restored when its replay ended, refused in its replay (the queued records are not in it yet)
     const RestoreReport& restore_report() const noexcept { return report_; }
