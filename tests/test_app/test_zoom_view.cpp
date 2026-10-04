@@ -1,16 +1,18 @@
-// The zoom of the map view in the renderer, the HUD and the application (milestone M4 of the widescreen work). The model (levels, anchoring, the camera, the edge scroll in screen pixels)
-// is test_zoom_model; this program is what is drawn and what is done with it:
+// The zoom of the map view in the renderer, the HUD and the application (milestone M4 of the widescreen work; many levels since the batch after v0.2.0). The model (the levels, the limit, anchoring,
+// the camera, the edge scroll in screen pixels, the plan of the world pass) is test_zoom_model; this program is what is drawn and what is done with it:
 //   * RENDERER: the world pass at a zoom is checked against the direct pass, which draws what it always drew. At the zoom 1 the offscreen target (forced through a test hook) gives the
 //     direct picture pixel for pixel; at 2 the view is the nearest-neighbour 2 x 2 enlargement of the direct picture of the same origin (and, from a half-pixel origin, the same shifted by
-//     one screen pixel); at 0.5 it is the 2 x 2 average of the direct picture of a view twice as large. Ants of every type, effects, score bubbles, selection markers, the click marker, the
-//     fog of war, the hill's brackets, and the small maps (centred, black around them) all pass through it. The hit point digits are one size at every zoom; nothing is drawn outside
-//     the view.
+//     one screen pixel); at 0.5 it is the 2 x 2 average of the direct picture of a view twice as large (0.25: the 4 x 4 average). Group "levels": EVERY level of a map (the series 2^(k/4)
+//     from 2 to the map's limit) against the picture that the design specifies, built from the zoom 1 picture of the whole map: the exact levels pixel for pixel, the others as the smooth
+//     picture (the software renderer is a pixel off at most), never a gap in the view, a scroll that only moves the picture, frames of the levels in any order. Ants of every type, effects,
+//     score bubbles, selection markers, the click marker, the fog of war, the hill's brackets, and the small maps (centred, black around them) all pass through it. The hit point digits
+//     are one size at every zoom; nothing is drawn outside the view.
 //   * HUD: the cursor, the clicks and orders (also at the first and the last pixel of the view), the rubber band, the minimap and the edge scroll follow the zoom, each against an
 //     independent computation; a dialog, a captured press and the panels do not zoom.
-//   * APPLICATION: the wheel (up zooms in, down out, natural scrolling, the precise deltas, over the map only, not during a drag or with a dialog open), the middle button, the
-//     anchoring at the pointer, the fairness rule per kind of match (no zoom-out in a match of the network), the settings key, --zoom, the start view and the sound listener at every zoom,
-//     a network match in which the two machines have different zooms and stay identical, and the setup screen after a zoomed match (the map preview is the zoom 1 preview, the wheel does
-//     nothing there).
+//   * APPLICATION: the wheel (up zooms in, down out, one level a notch, natural scrolling, the precise deltas, over the map only, not during a drag or with a dialog open), the middle
+//     button, the anchoring at the pointer, the same levels in a local game and in a match of the network (no limit of the kind of match), the settings key, --zoom, the start view and the
+//     sound listener at every zoom, a network match in which the two machines have different zooms and stay identical, and the setup screen after a zoomed match (the map preview is the
+//     zoom 1 preview, the wheel does nothing there).
 // Usage: test_zoom_view. Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -266,6 +268,276 @@ void test_zoom_out_pass(const assets::AssetArchive& arc) {
                     }
                     check(left_black && right_black && middle_lit, where + "the margins at the sides of the centred map are black and the map is drawn in between");
                 }
+            }
+        }
+    }
+}
+
+
+// =====================================================================================================================================================
+// Renderer: the picture at every level
+// =====================================================================================================================================================
+
+// The pictures of the levels are checked against the picture that the design specifies, built here from the zoom 1 picture of the same world with plain arithmetic and none of the renderer's:
+// the direct picture is halved as often as the level needs (every halving the exact average of 2 x 2 pixels, from a corner that is a multiple of the block) and sampled bilinearly at the world
+// point under the centre of every screen pixel. The software renderer (the one of these tests) puts the last copy on whole pixels, so a level between the exact ones is checked as a picture: its
+// error against the specified one is small, a whole pixel off or the nearest pixel instead of the smooth one is worse; the levels 2, 1, 0.5 and 0.25 are exact (to SDL's rounding of an average).
+struct Img {
+    int32_t w{0};
+    int32_t h{0};
+    std::vector<float> c;                                        // r, g, b of every pixel
+    float at(int32_t x, int32_t y, int ch) const {
+        x = std::clamp(x, 0, w - 1);
+        y = std::clamp(y, 0, h - 1);
+        return c[(static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3u + static_cast<size_t>(ch)];
+    }
+};
+
+Img img_of(const Picture& p, const LayoutRect& v) {
+    Img out;
+    out.w = v.w;
+    out.h = v.h;
+    out.c.resize(static_cast<size_t>(v.w) * static_cast<size_t>(v.h) * 3u);
+    for (int32_t y = 0; y < v.h; ++y) {
+        for (int32_t x = 0; x < v.w; ++x) {
+            for (int ch = 0; ch < 3; ++ch) out.c[(static_cast<size_t>(y) * static_cast<size_t>(v.w) + static_cast<size_t>(x)) * 3u + static_cast<size_t>(ch)] = p.at(v.x + x, v.y + y)[ch];
+        }
+    }
+    return out;
+}
+
+/// The exact average of 2 x 2 pixels
+Img halved(const Img& a) {
+    Img out;
+    out.w = a.w / 2;
+    out.h = a.h / 2;
+    out.c.resize(static_cast<size_t>(out.w) * static_cast<size_t>(out.h) * 3u);
+    for (int32_t y = 0; y < out.h; ++y) {
+        for (int32_t x = 0; x < out.w; ++x) {
+            for (int ch = 0; ch < 3; ++ch) {
+                out.c[(static_cast<size_t>(y) * static_cast<size_t>(out.w) + static_cast<size_t>(x)) * 3u + static_cast<size_t>(ch)] =
+                    (a.at(2 * x, 2 * y, ch) + a.at(2 * x + 1, 2 * y, ch) + a.at(2 * x, 2 * y + 1, ch) + a.at(2 * x + 1, 2 * y + 1, ch)) * 0.25f;
+            }
+        }
+    }
+    return out;
+}
+
+/// The bilinear sample at the position (tx, ty) of the image (pixel k covers [k, k + 1), its centre is k + 0.5; the edge pixels are repeated outside)
+double sampled(const Img& a, double tx, double ty, int ch) {
+    const double u = tx - 0.5;
+    const double v = ty - 0.5;
+    const int32_t i = static_cast<int32_t>(std::floor(u));
+    const int32_t j = static_cast<int32_t>(std::floor(v));
+    const double fx = u - static_cast<double>(i);
+    const double fy = v - static_cast<double>(j);
+    const double top = static_cast<double>(a.at(i, j, ch)) * (1.0 - fx) + static_cast<double>(a.at(i + 1, j, ch)) * fx;
+    const double bottom = static_cast<double>(a.at(i, j + 1, ch)) * (1.0 - fx) + static_cast<double>(a.at(i + 1, j + 1, ch)) * fx;
+    return top * (1.0 - fy) + bottom * fy;
+}
+
+/// The specified picture of a level from the direct picture of the whole map (its pixel k is the world pixel k): the direct picture halved `depth` times, as the level needs it
+struct Spec {
+    std::vector<Img> by_depth;
+    int depth{0};
+    double value(double wx, double wy, int ch, bool point) const {
+        if (point) return static_cast<double>(by_depth[0].at(static_cast<int32_t>(std::floor(wx)), static_cast<int32_t>(std::floor(wy)), ch));
+        const double t = static_cast<double>(1 << depth);
+        return sampled(by_depth[static_cast<size_t>(depth)], wx / t, wy / t, ch);
+    }
+};
+
+Spec spec_for(const Img& direct, float z) {
+    Spec s;
+    double scale = static_cast<double>(z);
+    while (scale < 0.5 && s.depth < 8) {
+        scale *= 2.0;
+        ++s.depth;
+    }
+    s.by_depth.push_back(direct);
+    for (int k = 1; k <= s.depth; ++k) s.by_depth.push_back(halved(s.by_depth.back()));
+    return s;
+}
+
+/// The mean error of a picture's view against the specified picture of the camera (cx, cy) at the zoom z, with the specified picture moved by (sx, sy) screen pixels (every third pixel is
+/// looked at); `point`: against the nearest pixel of the direct picture instead (what a nearest enlargement, or a thinning out, shows)
+double picture_error(const Picture& p, const LayoutRect& view, const Spec& spec, double cx, double cy, float z, double sx, double sy, bool point) {
+    double total = 0.0;
+    long n = 0;
+    for (int32_t j = 4; j < view.h - 4; j += 3) {
+        for (int32_t i = 4; i < view.w - 4; i += 3) {
+            const double wx = cx + (static_cast<double>(i) + 0.5 + sx) / static_cast<double>(z);
+            const double wy = cy + (static_cast<double>(j) + 0.5 + sy) / static_cast<double>(z);
+            for (int ch = 0; ch < 3; ++ch) {
+                total += std::fabs(spec.value(wx, wy, ch, point) - static_cast<double>(p.at(view.x + i, view.y + j)[ch]));
+                ++n;
+            }
+        }
+    }
+    return total / static_cast<double>(n);
+}
+
+/// The smallest mean error over the shifts of the specified picture by whole and half screen pixels up to `reach` (the software renderer puts the last copy on whole pixels: its picture may
+/// be up to a pixel off), and the shift that gives it
+struct BestFit {
+    double error{1.0e9};
+    double sx{0.0};
+    double sy{0.0};
+};
+BestFit best_fit(const Picture& p, const LayoutRect& view, const Spec& spec, double cx, double cy, float z, bool point, double reach) {
+    BestFit best;
+    for (double sy = -reach; sy <= reach + 1e-9; sy += 0.5) {
+        for (double sx = -reach; sx <= reach + 1e-9; sx += 0.5) {
+            const double e = picture_error(p, view, spec, cx, cy, z, sx, sy, point);
+            if (e < best.error) best = BestFit{e, sx, sy};
+        }
+    }
+    return best;
+}
+
+/// The largest error of any pixel of the view (the exact levels)
+double picture_max_error(const Picture& p, const LayoutRect& view, const Spec& spec, double cx, double cy, float z, bool point) {
+    double worst = 0.0;
+    for (int32_t j = 0; j < view.h; ++j) {
+        for (int32_t i = 0; i < view.w; ++i) {
+            const double wx = cx + (static_cast<double>(i) + 0.5) / static_cast<double>(z);
+            const double wy = cy + (static_cast<double>(j) + 0.5) / static_cast<double>(z);
+            for (int ch = 0; ch < 3; ++ch) worst = std::max(worst, std::fabs(spec.value(wx, wy, ch, point) - static_cast<double>(p.at(view.x + i, view.y + j)[ch])));
+        }
+    }
+    return worst;
+}
+
+/// Is there a row or a column of the view that is entirely black (a gap that the map does not fill)?
+int black_lines(const Picture& p, const LayoutRect& view) {
+    int lines = 0;
+    for (int32_t y = view.y; y < view.bottom(); ++y) {
+        bool black = true;
+        for (int32_t x = view.x; x < view.right() && black; ++x) black = p.at(x, y)[0] == 0 && p.at(x, y)[1] == 0 && p.at(x, y)[2] == 0;
+        if (black) ++lines;
+    }
+    for (int32_t x = view.x; x < view.right(); ++x) {
+        bool black = true;
+        for (int32_t y = view.y; y < view.bottom() && black; ++y) black = p.at(x, y)[0] == 0 && p.at(x, y)[1] == 0 && p.at(x, y)[2] == 0;
+        if (black) ++lines;
+    }
+    return lines;
+}
+
+bool is_power_of_two_level(float z) {
+    const double l = std::log2(static_cast<double>(z));
+    return std::fabs(l - std::round(l)) < 1e-9;
+}
+
+void test_level_pictures(const assets::AssetArchive& arc) {
+    group("levels", "the picture at every level of a map: the exact levels (2, 1, 0.5, 0.25) pixel for pixel, the others as the smooth picture of the zoom 1 world; never a gap; a scroll only moves it");
+    for (const Shape& s : kShapes) {
+        const LayoutRect view = ScreenLayout::with_size(s.cw, s.ch).view();
+        for (const char* map : {"GAUNTLET", "TINY"}) {
+            PixelRig rig(arc, map, s.cw, s.ch);
+            check(rig.ok, std::string("the rig for ") + map + " in the " + s.name + " picture is up");
+            if (!rig.ok) continue;
+            const int32_t map_w = static_cast<int32_t>(rig.tiles_w) * 32;
+            const int32_t map_h = static_cast<int32_t>(rig.tiles_h) * 32;
+            const std::string where = std::string(map) + " " + s.name + ": ";
+            zoom::Fit fit;
+            fit.view_w = view.w;
+            fit.view_h = view.h;
+            fit.map_w = map_w;
+            fit.map_h = map_h;
+            const std::vector<float> levels = zoom::levels(fit, zoom::Limits::any());
+            check(levels.size() >= 5 && levels.front() == 2.0f, where + "the map offers its levels");
+
+            // the world: ants of every type spread over the whole map, effects and score bubbles in a few windows, a click marker
+            populate(rig.world, arc, 0, 0, map_w, map_h, map_w * map_h / 2400, 31337u);
+            for (const auto& at : {std::pair<int32_t, int32_t>{0, 0}, {map_w / 2 - 300, map_h / 2 - 250}, {map_w - 700, map_h - 600}}) add_effects(rig.world, std::max(0, at.first), std::max(0, at.second), 640, 480);
+            rig.renderer.spawn_transient_effect("xmarks", map_w / 2, map_h / 2);
+
+            // the direct picture of the whole map (one frame of a rig whose view is the map)
+            const Shape whole_shape = shape_for_view(map_w, map_h);
+            PixelRig whole(arc, map, whole_shape.cw, whole_shape.ch);
+            check(whole.ok, where + "the rig for the whole map is up");
+            if (!whole.ok) continue;
+            whole.world = rig.world;
+            whole.renderer.spawn_transient_effect("xmarks", map_w / 2, map_h / 2);
+            whole.look(0.0, 0.0, 1.0f);
+            const LayoutRect whole_view = whole.layout.view();
+            check(whole_view.w == map_w && whole_view.h == map_h && whole.cam().x == 0.0f && whole.cam().y == 0.0f, where + "the whole rig shows the whole map from its corner");
+            const Picture direct = whole.shoot(-1, {}, 0, false);
+            const Img direct_img = img_of(direct, whole_view);
+
+            for (const float z : levels) {
+                const Spec spec = spec_for(direct_img, z);
+                const std::string at = where + "at " + zoom::level_name(z) + ": ";
+                const struct { const char* name; double x; double y; } cameras[3] = {{"top left", 0.0, 0.0}, {"middle", map_w / 2.0 - 300.0, map_h / 2.0 - 200.0}, {"bottom right", 1.0e9, 1.0e9}};
+                for (const auto& cam : cameras) {
+                    rig.look(cam.x, cam.y, z);
+                    const double cx = static_cast<double>(rig.cam().x);
+                    const double cy = static_cast<double>(rig.cam().y);
+                    const uint64_t passes = rig.renderer.world_target_passes();
+                    const Picture p = rig.shoot(-1, {}, 0, false);
+                    const std::string here = at + cam.name + ": ";
+                    check(rig.renderer.world_target_passes() == passes + (z == 1.0f ? 0u : 1u), here + "the world went through the offscreen target once (not at all at the zoom 1)");
+                    check(!rig.renderer.world_target_failed(), here + "the pass did not fail");
+                    check(outside_not_black(p, view) == 0, here + "nothing is drawn outside the view");
+                    check(black_lines(p, view) == 0, here + "the map fills the view: no row and no column of it is black");
+                    if (z == 2.0f || z == 1.0f || z == 0.5f || z == 0.25f) {
+                        const double tolerance = z >= 1.0f ? 0.0 : (z == 0.5f ? 1.0 : 2.0);
+                        const double worst = picture_max_error(p, view, spec, cx, cy, z, z >= 1.0f);
+                        check(worst <= tolerance, here + "the exact level: no pixel is more than " + num(tolerance) + " levels from the specified picture, worst " + num(worst));
+                    } else {
+                        const BestFit smooth = best_fit(p, view, spec, cx, cy, z, false, 2.0);
+                        const BestFit thin = best_fit(p, view, spec, cx, cy, z, true, 2.0);
+                        check(std::fabs(smooth.sx) <= 1.0 && std::fabs(smooth.sy) <= 1.0, here + "it is in its place, to a pixel: the specified picture fits best moved by (" + num(smooth.sx) + ", " + num(smooth.sy) + ") screen pixels");
+                        check(smooth.error <= 10.0, here + "the picture is the specified one: mean error " + num(smooth.error) + " of 255 at its best fit");
+                        check(smooth.error + 1.0 <= thin.error, here + "it is smooth: closer to the specified picture than to the nearest pixel's (" + num(smooth.error) + " against " + num(thin.error) + ")");
+                    }
+                }
+            }
+
+            // a scroll by whole screen pixels only moves the picture (the exact levels: every pixel; the camera is on the lattice of screen pixels)
+            for (const float z : levels) {
+                if (!is_power_of_two_level(z) || z == 1.0f) continue;
+                const double g = zoom::grid(z);
+                rig.look(8.0 * g + 40.0, 8.0 * g + 40.0, z);
+                const double ox = static_cast<double>(rig.cam().x);
+                const double oy = static_cast<double>(rig.cam().y);
+                const Picture base = rig.shoot(-1, {}, 0, false);
+                for (const int k : {1, 2, 3}) {
+                    rig.look(ox + static_cast<double>(k) * g, oy + static_cast<double>(k) * g, z);
+                    check(std::fabs(static_cast<double>(rig.cam().x) - (ox + static_cast<double>(k) * g)) < 1e-9 && std::fabs(static_cast<double>(rig.cam().y) - (oy + static_cast<double>(k) * g)) < 1e-9,
+                          where + "at " + zoom::level_name(z) + " the camera moves by " + std::to_string(k) + " screen pixels");
+                    const Picture moved = rig.shoot(-1, {}, 0, false);
+                    int bad = 0;
+                    for (int32_t y = view.y; y < view.bottom() - k; ++y) {
+                        for (int32_t x = view.x; x < view.right() - k; ++x) {
+                            if (std::memcmp(moved.at(x, y), base.at(x + k, y + k), 3) != 0) ++bad;
+                        }
+                    }
+                    check(bad == 0, where + "at " + zoom::level_name(z) + " a scroll by " + std::to_string(k) + " screen pixels (right and down) only moves the picture: " + std::to_string(bad) + " pixels are not those of the picture " + std::to_string(k) + " pixels on");
+                }
+            }
+
+            // the frames of the levels in any order give the same pictures (the textures are reused and made again as the size changes)
+            {
+                std::vector<float> order = levels;
+                std::reverse(order.begin(), order.end());
+                order.insert(order.end(), levels.begin(), levels.end());
+                std::vector<uint64_t> first(levels.size(), 0);
+                bool same = true;
+                for (size_t round = 0; round < 2; ++round) {
+                    for (size_t i = 0; i < levels.size(); ++i) {
+                        const float z = order[round * levels.size() + i];
+                        rig.look(map_w / 2.0 - 250.0, map_h / 2.0 - 180.0, z);
+                        const Picture p = rig.shoot(-1, {}, 0, false);
+                        uint64_t h = 1469598103934665603ULL;
+                        for (const uint8_t b : p.px) h = (h ^ b) * 1099511628211ULL;
+                        const size_t slot = static_cast<size_t>(std::find(levels.begin(), levels.end(), z) - levels.begin());
+                        if (round == 0) first[slot] = h;
+                        else if (first[slot] != h) same = false;
+                    }
+                }
+                check(same, where + "a level's frame is the same picture when it comes again after the frames of the other levels");
             }
         }
     }
@@ -551,14 +823,12 @@ void test_hud_cursor(const assets::AssetArchive& arc) {
     for (const bool wide : {false, true}) {
         HudRig rig(arc, wide);
         const LayoutRect view = rig.layout.view();
-        for (const float z : kZooms) {
+        for (const float z : zooms_for(wide)) {
             rig.hud.select_ant(rig.mine);
             const sim::AntSnapshot& foe = rig.ant(rig.foe);
             const sim::AntSnapshot& mine = rig.ant(rig.mine);
             rig.camera.zoom = z;
             rig.camera.center_on(foe.px - 80, foe.py, 60, 60);
-            const int64_t ox2 = origin2_of(rig.camera.x);
-            const int64_t oy2 = origin2_of(rig.camera.y);
             // the sweep: the foe's hit box and its surroundings, and the own worker's
             int attack = 0;
             int select = 0;
@@ -566,12 +836,19 @@ void test_hud_cursor(const assets::AssetArchive& arc) {
             int wrong = 0;
             for (int32_t sy = view.y + 10; sy < view.bottom() - 10; sy += 1) {
                 for (int32_t sx = view.x + 10; sx < view.right() - 10; sx += (wide ? 2 : 1)) {
-                    const int32_t wx = world_under(ox2, z, sx - view.x);
-                    const int32_t wy = world_under(oy2, z, sy - view.y);
-                    const bool in_foe = wx >= foe.px - 20 && wx < foe.px + 20 && wy >= foe.py - 32 && wy < foe.py + 16;
-                    const bool in_mine = wx >= mine.px - 20 && wx < mine.px + 20 && wy >= mine.py - 32 && wy < mine.py + 16;
+                    const int32_t wx = world_under_f(rig.camera.x, z, sx - view.x);
+                    const int32_t wy = world_under_f(rig.camera.y, z, sy - view.y);
+                    bool in_foe = false;                                                     // (every ant of the world: a level that shows the whole map has the far ants in view too)
+                    bool in_mine = false;
+                    for (const auto& a : rig.world().ants) {
+                        const bool in = wx >= a.px - 20 && wx < a.px + 20 && wy >= a.py - 32 && wy < a.py + 16;
+                        if (a.player_id == mine.player_id) in_mine = in_mine || in;
+                        else in_foe = in_foe || in;
+                    }
                     const CursorType want = in_foe ? CursorType::Attack : in_mine ? CursorType::Select : CursorType::Move;
                     const CursorType got = rig.hud.evaluate_cursor(sx, sy, rig.world(), rig.sim.grid(), rig.camera);
+                    if (got != want && wrong == 0) std::fprintf(stderr, "  (first wrong cursor: screen (%d, %d) world (%d, %d) got %d want %d, camera (%g, %g) zoom %g, foe at (%d, %d), mine at (%d, %d))\n", sx, sy, wx, wy, static_cast<int>(got), static_cast<int>(want),
+                                                                static_cast<double>(rig.camera.x), static_cast<double>(rig.camera.y), static_cast<double>(z), foe.px, foe.py, mine.px, mine.py);
                     if (got != want) ++wrong;
                     attack += got == CursorType::Attack;
                     select += got == CursorType::Select;
@@ -580,9 +857,11 @@ void test_hud_cursor(const assets::AssetArchive& arc) {
             }
             const std::string at = std::string(wide ? "wide" : "classic") + " at " + zoom::level_name(z) + ": ";
             check(wrong == 0, at + "every pixel's cursor is the one of the world under it: " + std::to_string(wrong) + " wrong");
-            check(attack > 100 && select > 100 && move > 1000, at + "the sweep meets the attack, select and move cursors (" + std::to_string(attack) + ", " + std::to_string(select) + ", " + std::to_string(move) + ")");
+            const double box = 40.0 * 48.0 * static_cast<double>(z) * static_cast<double>(z) * 0.7 / (wide ? 2.0 : 1.0);           // (most of a hit box's pixels: the sweep's step is 2 across in the wide view)
+            check(attack > box && select > box && move > 1000, at + "the sweep meets the attack, select and move cursors (" + std::to_string(attack) + ", " + std::to_string(select) + ", " + std::to_string(move) + ")");
             // the hit box in screen pixels is 40 x 48 world pixels times the zoom
-            check(attack == static_cast<int>(std::lround(40.0 * z)) * static_cast<int>(std::lround(48.0 * z)) / (wide ? 2 : 1) || wide, at + "the attack area is the foe's hit box scaled by the zoom: " + std::to_string(attack));
+            if (z == 0.5f || z == 1.0f || z == 2.0f) check(attack == static_cast<int>(std::lround(40.0 * z)) * static_cast<int>(std::lround(48.0 * z)) / (wide ? 2 : 1) || wide, at + "the attack area is the foe's hit box scaled by the zoom: " + std::to_string(attack));
+            else check(wide || std::fabs(attack - 40.0 * 48.0 * static_cast<double>(z) * z) <= (40.0 + 48.0) * z + 2.0, at + "the attack area is the foe's hit box scaled by the zoom, to a pixel's edge: " + std::to_string(attack));
         }
     }
 }
@@ -592,7 +871,7 @@ void test_hud_orders(const assets::AssetArchive& arc) {
     for (const bool wide : {false, true}) {
         HudRig rig(arc, wide);
         const LayoutRect view = rig.layout.view();
-        for (const float z : kZooms) {
+        for (const float z : zooms_for(wide)) {
             const std::string at = std::string(wide ? "wide" : "classic") + " at " + zoom::level_name(z) + ": ";
             struct Spot {
                 double ox, oy;
@@ -616,10 +895,8 @@ void test_hud_orders(const assets::AssetArchive& arc) {
                 rig.hud.select_ant(rig.mine);
                 rig.sink.commands.clear();
                 rig.markers.clear();
-                const int64_t ox2 = origin2_of(rig.camera.x);
-                const int64_t oy2 = origin2_of(rig.camera.y);
-                const int32_t wx = world_under(ox2, z, sp.sx - view.x);
-                const int32_t wy = world_under(oy2, z, sp.sy - view.y);
+                const int32_t wx = world_under_f(rig.camera.x, z, sp.sx - view.x);
+                const int32_t wy = world_under_f(rig.camera.y, z, sp.sy - view.y);
                 // (a spot that has an ant under it is a select or an attack, not an order: the far ants and the two near ones are away from every spot of these cameras, except the corner
                 // cameras: the ants of the corners are skipped)
                 bool ant_there = false;
@@ -644,16 +921,14 @@ void test_hud_orders(const assets::AssetArchive& arc) {
             // an order at the foe: an attack at its tile (the pointer at an edge of its hit box)
             rig.look(0.0, 0.0, z);
             rig.camera.center_on(rig.ant(rig.foe).px, rig.ant(rig.foe).py, 60, 60);
-            const int64_t ox2 = origin2_of(rig.camera.x);
-            const int64_t oy2 = origin2_of(rig.camera.y);
             for (const uint8_t button : {static_cast<uint8_t>(SDL_BUTTON_LEFT), static_cast<uint8_t>(SDL_BUTTON_RIGHT)}) {
                 const char* const which = button == SDL_BUTTON_LEFT ? "left" : "right";
                 int attacks = 0;
                 int expected = 0;
                 for (int32_t sy = view.y + view.h / 2 - 60; sy < view.y + view.h / 2 + 60; ++sy) {
                     for (int32_t sx = view.x + view.w / 2 - 60; sx < view.x + view.w / 2 + 60; ++sx) {
-                        const int32_t wx = world_under(ox2, z, sx - view.x);
-                        const int32_t wy = world_under(oy2, z, sy - view.y);
+                        const int32_t wx = world_under_f(rig.camera.x, z, sx - view.x);
+                        const int32_t wy = world_under_f(rig.camera.y, z, sy - view.y);
                         const auto& foe = rig.ant(rig.foe);
                         const bool in = wx >= foe.px - 20 && wx < foe.px + 20 && wy >= foe.py - 32 && wy < foe.py + 16;
                         rig.hud.select_ant(rig.mine);
@@ -665,7 +940,7 @@ void test_hud_orders(const assets::AssetArchive& arc) {
                         if (attacked != in) check(false, at + "an attack with the " + which + " button at (" + std::to_string(sx) + ", " + std::to_string(sy) + ") is the foe's hit box under the pointer");
                     }
                 }
-                check(attacks == expected && attacks > 100, at + "the " + which + " button orders an attack exactly where the foe's hit box is: " + std::to_string(attacks) + " of " + std::to_string(expected));
+                check(attacks == expected && attacks > 40.0 * 48.0 * static_cast<double>(z) * static_cast<double>(z) * 0.7, at + "the " + which + " button orders an attack exactly where the foe's hit box is: " + std::to_string(attacks) + " of " + std::to_string(expected));
             }
         }
     }
@@ -676,19 +951,17 @@ void test_hud_rubber_band(const assets::AssetArchive& arc) {
     for (const bool wide : {false, true}) {
         HudRig rig(arc, wide);
         const LayoutRect view = rig.layout.view();
-        for (const float z : kZooms) {
+        for (const float z : zooms_for(wide)) {
             const std::string at = std::string(wide ? "wide" : "classic") + " at " + zoom::level_name(z) + ": ";
             const sim::AntSnapshot& target = rig.ant(rig.mine);
             rig.camera.zoom = z;
             rig.camera.center_on(target.px, target.py, 60, 60);
-            const int64_t ox2 = origin2_of(rig.camera.x);
-            const int64_t oy2 = origin2_of(rig.camera.y);
             // the screen position of the ant's hit box: left edge world px - 20, right px + 20, top py - 32, bottom py + 16
             auto expected_selected = [&](int32_t left, int32_t top, int32_t right, int32_t bottom) {
-                const int32_t wl = world_under(ox2, z, left - view.x);
-                const int32_t wt = world_under(oy2, z, top - view.y);
-                const int32_t wr = edge_under(ox2, z, right - view.x);
-                const int32_t wb = edge_under(oy2, z, bottom - view.y);
+                const int32_t wl = world_under_f(rig.camera.x, z, left - view.x);
+                const int32_t wt = world_under_f(rig.camera.y, z, top - view.y);
+                const int32_t wr = edge_under_f(rig.camera.x, z, right - view.x);
+                const int32_t wb = edge_under_f(rig.camera.y, z, bottom - view.y);
                 return std::max(wl, target.px - 20) < std::min(wr, target.px + 20) && std::max(wt, target.py - 32) < std::min(wb, target.py + 16);
             };
             int selected = 0;
@@ -741,7 +1014,8 @@ void test_hud_minimap_and_scroll(const assets::AssetArchive& arc) {
         const LayoutRect view = rig.layout.view();
         const LayoutRect mini = rig.layout.minimap();
         // 1. the minimap: a press, the 50 ms ticks, the middle of the world that is seen is the point under the pointer
-        for (const float z : kZooms) {
+        for (const float z : zooms_for(wide, kTiles)) {
+            if (z < 0.25f) continue;                                          // (the world seen at a smaller zoom is most of this 4000 px map: the model's own test (test_zoom_model) has the tiny levels on a bigger one)
             const std::string at = std::string(wide ? "wide" : "classic") + " at " + zoom::level_name(z) + ": ";
             int tested = 0;
             int centred = 0;
@@ -759,11 +1033,11 @@ void test_hud_minimap_and_scroll(const assets::AssetArchive& arc) {
                         ++tested;
                         const double cxw = rig.camera.x + half_w;
                         const double cyw = rig.camera.y + half_h;
-                        if (std::fabs(cxw - want_x) <= zoom::grid(z) + 1e-9 && std::fabs(cyw - want_y) <= zoom::grid(z) + 1e-9) ++centred;
+                        if (std::fabs(cxw - want_x) <= 2.0 * zoom::grid(z) + 1e-9 && std::fabs(cyw - want_y) <= 2.0 * zoom::grid(z) + 1e-9) ++centred;           // (the minimap works in whole screen pixels: two of them)
                     }
                 }
             }
-            check(tested > 100 && centred == tested, at + "a press on the minimap centres the world that is seen on the point under the pointer: " + std::to_string(centred) + " of " + std::to_string(tested));
+            check(tested > (z < 0.5f ? 20 : 100) && centred == tested, at + "a press on the minimap centres the world that is seen on the point under the pointer: " + std::to_string(centred) + " of " + std::to_string(tested));
             // a right click on the minimap orders the point's tile, whatever the zoom
             rig.look(600.0, 600.0, z);
             rig.hud.select_ant(rig.mine);
@@ -784,7 +1058,8 @@ void test_hud_minimap_and_scroll(const assets::AssetArchive& arc) {
             for (int32_t x : {0, 1, 2, 3, 4, 6, 9, 11, pw - 12, pw - 10, pw - 7, pw - 5, pw - 4, pw - 3, pw - 2, pw - 1}) ring.emplace_back(x, y);
         }
         for (int32_t rate : {0, 50, 99}) {
-            for (const float z : kZooms) {
+            for (const float z : zooms_for(wide, kTiles)) {
+                if (z < 0.4f) continue;                                       // (a step of up to 109 screen pixels from (700, 700) must not reach the far edge of the 4000 px map)
                 const std::string at = std::string(wide ? "wide" : "classic") + " at " + zoom::level_name(z) + ", rate " + std::to_string(rate) + ": ";
                 int differences = 0;
                 int moved = 0;
@@ -807,7 +1082,7 @@ void test_hud_minimap_and_scroll(const assets::AssetArchive& arc) {
                     r.hud.input_tick(r.camera, kTiles, kTiles, p.first, p.second);
                     const double dx = (r.camera.x - zx) * z;
                     const double dy = (r.camera.y - zy) * z;
-                    if (std::fabs(dx - base_dx) > 1e-4 || std::fabs(dy - base_dy) > 1e-4) ++differences;
+                    if (std::fabs(dx - base_dx) > 3e-3 || std::fabs(dy - base_dy) > 3e-3) ++differences;                 // (the origin is a float: 13000 world pixels are a thousandth of a pixel)
                     if (base_dx != 0.0 || base_dy != 0.0) ++moved;
                 }
                 check(differences == 0, at + "the distance on the screen is the zoom 1 distance at every pixel of the picture's edge: " + std::to_string(differences) + " of " + std::to_string(ring.size()) + " differ");
@@ -819,17 +1094,19 @@ void test_hud_minimap_and_scroll(const assets::AssetArchive& arc) {
         {
             const CursorType kArrows[8] = {CursorType::ScrollN, CursorType::ScrollNE, CursorType::ScrollE, CursorType::ScrollSE, CursorType::ScrollS, CursorType::ScrollSW, CursorType::ScrollW, CursorType::ScrollNW};
             const std::pair<int32_t, int32_t> at_dir[8] = {{pw / 2, 4}, {pw - 4, 4}, {pw - 4, ph / 2}, {pw - 4, ph - 4}, {pw / 2, ph - 4}, {4, ph - 4}, {4, ph / 2}, {4, 4}};
-            for (const float z : kZooms) {
-                const double vis_w = view.w / static_cast<double>(z);
-                const double vis_h = view.h / static_cast<double>(z);
+            for (const float z : zooms_for(wide, kTiles)) {
+                // the origin in whole screen pixels and the map in whole screen pixels at the zoom: the view can move while it has a pixel of the map left on that side
+                const double map_screen = std::floor(kMapPx * static_cast<double>(z) + 1e-9);
                 for (const auto& cam_at : {std::pair<double, double>{0.0, 0.0}, std::pair<double, double>{1.0e9, 1.0e9}, std::pair<double, double>{0.0, 1.0e9}, std::pair<double, double>{1.0e9, 0.0}, std::pair<double, double>{500.0, 500.0}}) {
                     rig.look(cam_at.first, cam_at.second, z);
                     const double ox = rig.camera.x;
                     const double oy = rig.camera.y;
-                    const bool west = ox > 0.0;
-                    const bool east = ox < kMapPx - vis_w;
-                    const bool north = oy > 0.0;
-                    const bool south = oy < kMapPx - vis_h;
+                    const double ox_s = std::round(ox * static_cast<double>(z));
+                    const double oy_s = std::round(oy * static_cast<double>(z));
+                    const bool west = ox_s > 0.0;
+                    const bool east = ox_s + view.w < map_screen;
+                    const bool north = oy_s > 0.0;
+                    const bool south = oy_s + view.h < map_screen;
                     const bool can[8] = {north, east || north, east, east || south, south, west || south, west, west || north};
                     for (int d = 0; d < 8; ++d) {
                         rig.hud.clear_selection();
@@ -849,7 +1126,7 @@ void test_hud_radar_frame(const assets::AssetArchive& arc) {
         HudRig rig(arc, wide);
         const LayoutRect view = rig.layout.view();
         const LayoutRect mini = rig.layout.minimap();
-        for (const float z : kZooms) {
+        for (const float z : zooms_for(wide)) {
             for (const auto& cam_at : {std::pair<double, double>{0.0, 0.0}, std::pair<double, double>{333.0, 479.0}, std::pair<double, double>{1.0e9, 1.0e9}, std::pair<double, double>{500.5, 700.5}}) {
                 rig.look(cam_at.first, cam_at.second, z);
                 RectRenderer rec;
@@ -863,8 +1140,8 @@ void test_hud_radar_frame(const assets::AssetArchive& arc) {
                 if (frame == nullptr) continue;
                 // the frame: the seen world scaled to the image, plus one; at the image's far edges it is moved inside; the origin scaled down
                 const int64_t world = 1920;
-                const int32_t seen_w = z == 0.5f ? 2 * view.w : z == 1.0f ? view.w : (view.w + 1) / 2;
-                const int32_t seen_h = z == 0.5f ? 2 * view.h : z == 1.0f ? view.h : (view.h + 1) / 2;
+                const int32_t seen_w = seen_f(view.w, z);
+                const int32_t seen_h = seen_f(view.h, z);
                 const int32_t frame_w = static_cast<int32_t>(seen_w * static_cast<int64_t>(mini.w) / world) + 1;
                 const int32_t frame_h = static_cast<int32_t>(seen_h * static_cast<int64_t>(mini.h) / world) + 1;
                 int32_t fl = mini.x + static_cast<int32_t>(static_cast<int32_t>(rig.camera.x) * static_cast<int64_t>(mini.w) / world);
@@ -873,6 +1150,8 @@ void test_hud_radar_frame(const assets::AssetArchive& arc) {
                 int32_t fb = ft + frame_h;
                 if (fr >= mini.x + mini.w) { fr = mini.x + mini.w; fl = fr - frame_w; }
                 if (fb >= mini.y + mini.h) { fb = mini.y + mini.h; ft = fb - frame_h; }
+                if (seen_w >= world) { fl = mini.x; fr = mini.x + mini.w; }                // the view shows the map's whole width (the zoom-out's limit): the frame is the image's whole width
+                if (seen_h >= world) { ft = mini.y; fb = mini.y + mini.h; }
                 check(frame->x == fl && frame->y == ft && frame->w == fr - fl && frame->h == fb - ft,
                       at + "the frame is (" + std::to_string(fl) + ", " + std::to_string(ft) + ", " + std::to_string(fr - fl) + " x " + std::to_string(fb - ft) + "), the HUD drew (" + std::to_string(frame->x) + ", " + std::to_string(frame->y) + ", " +
                           std::to_string(frame->w) + " x " + std::to_string(frame->h) + ")");
@@ -979,7 +1258,7 @@ void test_hud_ctrl_n(const assets::AssetArchive& arc) {
     int moved_right = 0;
     int moved_down = 0;
     for (const bool wide : {false, true}) {
-        for (const float z : kZooms) {
+        for (const float z : zooms_for(wide)) {
             for (const Origin& org : origins) {
                 if (org.half_pixel && z != 2.0f) continue;
                 for (const char key : {'n', 'p'}) {
@@ -996,8 +1275,8 @@ void test_hud_ctrl_n(const assets::AssetArchive& arc) {
                     }
                     const sim::AntSnapshot chosen = key == 'n' ? own.front() : own[own.size() - 2];
                     rig.hud.handle_key_down(key, rig.sim, rig.camera, KMOD_CTRL);
-                    const int32_t vis_w = z == 0.5f ? 2 * view.w : z == 1.0f ? view.w : (view.w + 1) / 2;
-                    const int32_t vis_h = z == 0.5f ? 2 * view.h : z == 1.0f ? view.h : (view.h + 1) / 2;
+                    const int32_t vis_w = seen_f(view.w, z);
+                    const int32_t vis_h = seen_f(view.h, z);
                     const int32_t l = std::max(chosen.px - 128, 0);
                     const int32_t t = std::max(chosen.py - 128, 0);
                     const int32_t r = std::min(chosen.px + 128, 1920);
@@ -1012,17 +1291,23 @@ void test_hud_ctrl_n(const assets::AssetArchive& arc) {
                     else if (b > oiy + vis_h) dy = b - (oiy + vis_h);
                     moved_right += dx > 0 ? 1 : 0;
                     moved_down += dy > 0 ? 1 : 0;
-                    const double want_x = std::clamp(ox + dx, 0.0, 1920.0 - view.w / static_cast<double>(z));
-                    const double want_y = std::clamp(oy + dy, 0.0, 1920.0 - view.h / static_cast<double>(z));
+                    // (the origin goes to the lattice of the zoom and is held in [0, the map less the world that is seen], whose far end is on the lattice too)
+                    const auto held = [z](double v, int32_t len) {
+                        const double zz = static_cast<double>(z);
+                        return std::clamp(std::floor(v * zz + 0.5) / zz, 0.0, std::floor((1920.0 - len / zz) * zz + 1e-9) / zz);
+                    };
+                    const double want_x = held(ox + dx, view.w);
+                    const double want_y = held(oy + dy, view.h);
                     const std::string at = std::string(wide ? "wide" : "classic") + " at " + zoom::level_name(z) + " from (" + num(org.x) + ", " + num(org.y) + ") with Ctrl+" + static_cast<char>(key - 32) + ": ";
-                    check(rig.camera.x == static_cast<float>(want_x) && rig.camera.y == static_cast<float>(want_y),
+                    check(std::fabs(rig.camera.x - static_cast<float>(want_x)) < 1e-3f && std::fabs(rig.camera.y - static_cast<float>(want_y)) < 1e-3f,
                           at + "the view moves from (" + num(ox) + ", " + num(oy) + ") to (" + num(want_x) + ", " + num(want_y) + "), it went to (" + num(rig.camera.x) + ", " + num(rig.camera.y) + ")");
                     check(rig.camera.world_x == static_cast<int32_t>(std::floor(rig.camera.x)) && rig.camera.world_y == static_cast<int32_t>(std::floor(rig.camera.y)), at + "the whole parts of the origin follow it");
                     // the square is in view when it fits in the world that is seen (from a half-pixel origin the left / top edge of the square, a margin of 128 pixels around the ant, may end
                     // half a world pixel = one screen pixel outside: the scroll counts from the whole part of the origin)
-                    const float slack = org.half_pixel ? 0.5f : 0.0f;
+                    const bool exact_level = z == 0.5f || z == 1.0f || z == 2.0f;
+                    const float slack = exact_level ? (org.half_pixel ? 0.5f : 0.0f) : 1.0f + static_cast<float>(0.5 * zoom::grid(z)) + 1e-3f;          // (an origin that is not on the whole pixel: the scroll counts from its whole part, a world pixel, and the lattice rounds it by half a screen pixel)
                     if (r - l <= vis_w && b - t <= vis_h) {
-                        check(rig.camera.x <= static_cast<float>(l) + slack && rig.camera.x + static_cast<float>(vis_w) >= static_cast<float>(r) && rig.camera.y <= static_cast<float>(t) + slack && rig.camera.y + static_cast<float>(vis_h) >= static_cast<float>(b),
+                        check(rig.camera.x <= static_cast<float>(l) + slack && rig.camera.x + static_cast<float>(vis_w) + slack >= static_cast<float>(r) && rig.camera.y <= static_cast<float>(t) + slack && rig.camera.y + static_cast<float>(vis_h) + slack >= static_cast<float>(b),
                               at + "the ant's square is in the world that the view shows");
                     }
                 }
@@ -1048,38 +1333,68 @@ void test_app_wheel() {
         const LayoutRect view = app.layout().view();
         const LayoutRect mini = app.layout().minimap();
         check(app.state() == AppState::Playing && app.zoom() == 1.0f && app.remembered_zoom() == 1.0f, pic + "a match starts at the zoom 1");
-        check(app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}), pic + "a local game offers 0.5, 1 and 2 on GAUNTLET");
+        // the levels of GAUNTLET (1920 x 1920): from 2 down to the map's width in this view, 762 / 1920 = 0.397 in the wide one, 442 / 1920 = 0.230 in the classic one
+        const std::vector<float> levels = app.zoom_levels();
+        const std::vector<double> want_levels = wide ? std::vector<double>{2.0, 1.68179, 1.41421, 1.18921, 1.0, 0.84090, 0.70711, 0.59460, 0.5, 0.42045, 0.396875}
+                                                     : std::vector<double>{2.0, 1.68179, 1.41421, 1.18921, 1.0, 0.84090, 0.70711, 0.59460, 0.5, 0.42045, 0.35355, 0.29730, 0.25, 0.230208};
+        bool listed = levels.size() == want_levels.size();
+        for (size_t i = 0; listed && i < levels.size(); ++i) listed = std::fabs(static_cast<double>(levels[i]) - want_levels[i]) < 5e-5;
+        check(listed, pic + "a local game offers the series from 2 down to the map's limit on GAUNTLET: " + std::to_string(levels.size()) + " levels");
+        if (!listed || levels.size() < 9) continue;
+        const float in1 = levels[3];                                         // 1.19: one notch from 1
+        const float out1 = levels[5];                                        // 0.84
+        const float bottom = levels.back();
         const int32_t px = view.x + 284;
         const int32_t py = view.y + 183;
         app.note_pointer(px, py);
+        const auto near_world = [](const std::pair<int32_t, int32_t>& a, const std::pair<int32_t, int32_t>& b, int32_t tolerance) { return std::abs(a.first - b.first) <= tolerance && std::abs(a.second - b.second) <= tolerance; };
 
-        // up zooms in towards the pointer: the world point under it stays under it
+        // up zooms in towards the pointer: the world point under it stays under it (to the rounding of the origin to the lattice of the new zoom: a world pixel)
         const auto before = rig.world_at(px, py);
         notch(app, +1);
-        check(app.zoom() == 2.0f, pic + "a notch away zooms in to 2");
-        check(rig.world_at(px, py) == before, pic + "the world point under the pointer is the same after the zoom in: (" + std::to_string(before.first) + ", " + std::to_string(before.second) + ")");
-        check(app.remembered_zoom() == 2.0f, pic + "the level is remembered");
+        check(app.zoom() == in1, pic + "a notch away zooms in to the next level, 1.19");
+        check(near_world(rig.world_at(px, py), before, 1), pic + "the world point under the pointer is the same after the zoom in, to a world pixel: (" + std::to_string(before.first) + ", " + std::to_string(before.second) + ")");
+        check(app.remembered_zoom() == in1, pic + "the level is remembered");
+        for (int i = 2; i >= 0; --i) {                                       // one level a notch, up to 2
+            notch(app, +1);
+            check(app.zoom() == levels[static_cast<size_t>(i)], pic + "a notch away is the next level: " + std::to_string(static_cast<double>(levels[static_cast<size_t>(i)])));
+            check(near_world(rig.world_at(px, py), before, 1), pic + "... with the same world point under the pointer");
+        }
         notch(app, +1);
         check(app.zoom() == 2.0f, pic + "there is no level above 2");
+        for (size_t i = 1; i <= 4; ++i) {                                    // one level a notch, back down to 1
+            notch(app, -1);
+            check(app.zoom() == levels[i], pic + "a notch toward is the next level out: " + std::to_string(static_cast<double>(levels[i])));
+        }
+        check(app.zoom() == 1.0f && near_world(rig.world_at(px, py), before, 1), pic + "a notch per level back to 1, with the same world point under the pointer");
         notch(app, -1);
-        check(app.zoom() == 1.0f && rig.world_at(px, py) == before, pic + "a notch toward goes back to 1 with the same world point under the pointer");
-        notch(app, -1);
-        check(app.zoom() == 0.5f, pic + "another notch toward zooms out to 0.5");
+        check(app.zoom() == out1, pic + "another notch toward zooms out to 0.84");
         const auto after_out = rig.world_at(px, py);
-        check(std::abs(after_out.first - before.first) <= 1 && std::abs(after_out.second - before.second) <= 1, pic + "the world point under the pointer stays (within a world pixel: the origin of the zoom 0.5 lies on a grid of two)");
+        check(near_world(after_out, before, 1), pic + "the world point under the pointer stays (within a world pixel)");
+        for (size_t i = 6; i < levels.size(); ++i) {                         // and on down to the map's limit
+            notch(app, -1);
+            check(app.zoom() == levels[i], pic + "a notch toward is the next level out: " + std::to_string(static_cast<double>(levels[i])));
+        }
+        check(app.zoom() == bottom, pic + "the last level is the map's limit: " + std::to_string(static_cast<double>(bottom)));
+        {   // at the limit the view shows the map's whole width and nothing outside the map
+            const ViewportCamera& cam = app.renderer().camera();
+            check(cam.x >= 0.0f && cam.y >= 0.0f && cam.x + static_cast<float>(view.w) / bottom <= 1920.0f + 1e-3f && cam.y + static_cast<float>(view.h) / bottom <= 1920.0f + 1e-3f && cam.x == 0.0f, pic + "at the limit the camera shows the whole width of the map and nothing beyond it: (" + std::to_string(static_cast<double>(cam.x)) + ", " + std::to_string(static_cast<double>(cam.y)) + ")");
+        }
         notch(app, -1);
-        check(app.zoom() == 0.5f, pic + "there is no level below 0.5");
+        check(app.zoom() == bottom, pic + "there is no level below the map's limit");
         notch(app, +1);
-        check(app.zoom() == 1.0f, pic + "a notch away from 0.5 goes to 1");
+        check(app.zoom() == levels[levels.size() - 2], pic + "a notch away from the limit is the level above it");
+        for (size_t i = levels.size() - 2; i > 4; --i) notch(app, +1);
+        check(app.zoom() == 1.0f, pic + "(back at 1)");
 
         // natural scrolling: SDL has inverted the numbers and says so (FLIPPED); the wheel rolled away still zooms in
         notch(app, +1, true);
-        check(app.zoom() == 2.0f, pic + "a flipped event of a wheel rolled away (its numbers are negative) zooms in");
+        check(app.zoom() == in1, pic + "a flipped event of a wheel rolled away (its numbers are negative) zooms in");
         notch(app, -1, true);
         check(app.zoom() == 1.0f, pic + "a flipped event of a wheel rolled toward zooms out");
         // the same numbers without the flag are the other way round
         app.handle_mouse_wheel(wheel_event(-1, -1.0f, false));
-        check(app.zoom() == 0.5f, pic + "the same negative numbers, not flipped, zoom out");
+        check(app.zoom() == out1, pic + "the same negative numbers, not flipped, zoom out");
         app.handle_mouse_wheel(wheel_event(-1, -1.0f, true));
         check(app.zoom() == 1.0f, pic + "... and flipped they zoom in");
 
@@ -1088,11 +1403,11 @@ void test_app_wheel() {
         app.handle_mouse_wheel(wheel_event(0, 0.4f));
         check(app.zoom() == 1.0f, pic + "0.4 + 0.4 is not a step");
         app.handle_mouse_wheel(wheel_event(0, 0.4f));
-        check(app.zoom() == 2.0f, pic + "0.4 + 0.4 + 0.4 is one step: in");
+        check(app.zoom() == in1, pic + "0.4 + 0.4 + 0.4 is one step: in");
         app.handle_mouse_wheel(wheel_event(0, -0.3f));
         app.handle_mouse_wheel(wheel_event(0, -0.3f));
         app.handle_mouse_wheel(wheel_event(0, -0.3f));
-        check(app.zoom() == 2.0f, pic + "-0.9 is not a step yet (the left-over 0.2 of the last step was dropped by the change of direction)");
+        check(app.zoom() == in1, pic + "-0.9 is not a step yet (the left-over 0.2 of the last step was dropped by the change of direction)");
         app.handle_mouse_wheel(wheel_event(0, -0.3f));
         check(app.zoom() == 1.0f, pic + "-1.2 is one step: out");
         app.handle_mouse_wheel(wheel_event(0, 0.6f));
@@ -1117,7 +1432,7 @@ void test_app_wheel() {
         for (const auto& edge : {std::pair<int32_t, int32_t>{view.x, view.y}, std::pair<int32_t, int32_t>{view.right() - 1, view.bottom() - 1}, std::pair<int32_t, int32_t>{view.x, view.bottom() - 1}, std::pair<int32_t, int32_t>{view.right() - 1, view.y}}) {
             app.note_pointer(edge.first, edge.second);
             notch(app, +1);
-            check(app.zoom() == 2.0f, pic + "the wheel over the view's corner pixel (" + std::to_string(edge.first) + ", " + std::to_string(edge.second) + ") zooms");
+            check(app.zoom() == in1, pic + "the wheel over the view's corner pixel (" + std::to_string(edge.first) + ", " + std::to_string(edge.second) + ") zooms");
             notch(app, -1);
             check(app.zoom() == 1.0f, pic + "... and back");
         }
@@ -1137,7 +1452,7 @@ void test_app_wheel() {
         app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_ENTER; return we; }());
         app.note_pointer(px, py);
         notch(app, +1);
-        check(app.zoom() == 2.0f, pic + "... and zooms again when it is back");
+        check(app.zoom() == in1, pic + "... and zooms again when it is back");
         notch(app, -1);
 
         // not while a press holds the mouse: the rubber band, the minimap, a button, the right button, the chat log
@@ -1148,7 +1463,7 @@ void test_app_wheel() {
             check(app.zoom() == 1.0f, pic + "no zoom during a rubber band");
             app.handle_mouse_button(button_event(SDL_BUTTON_LEFT, SDL_MOUSEBUTTONUP, px, py));
             notch(app, +1);
-            check(app.zoom() == 2.0f, pic + "... and zoom after it");
+            check(app.zoom() == in1, pic + "... and zoom after it");
             notch(app, -1);
             app.handle_mouse_button(button_event(SDL_BUTTON_LEFT, SDL_MOUSEBUTTONDOWN, mini.x + 20, mini.y + 20));
             app.note_pointer(px, py);
@@ -1170,7 +1485,7 @@ void test_app_wheel() {
             app.hud().close_quick_help();
             app.note_pointer(px, py);                                       // (the release left the pointer on the button)
             notch(app, +1);
-            check(app.zoom() == 2.0f, pic + "... and zoom after it");
+            check(app.zoom() == in1, pic + "... and zoom after it");
             notch(app, -1);
         }
         // not while a dialog or a page is open: quit, options, quick help, "get ready", an alliance question
@@ -1200,7 +1515,7 @@ void test_app_wheel() {
             check(app.zoom() == 1.0f, pic + "no zoom with an alliance question open");
             app.hud().handle_key_down('n', app.sim(), app.renderer().camera());
             notch(app, +1);
-            check(app.zoom() == 2.0f, pic + "... and zoom when everything is closed again");
+            check(app.zoom() == in1, pic + "... and zoom when everything is closed again");
             notch(app, -1);
             // the results screen
             app.scorecard().show(app.sim().get_world_state().match_result, 0);
@@ -1208,7 +1523,7 @@ void test_app_wheel() {
             check(app.zoom() == 1.0f, pic + "no zoom while the results are shown");
             app.scorecard().hide();
             notch(app, +1);
-            check(app.zoom() == 2.0f, pic + "... and zoom after");
+            check(app.zoom() == in1, pic + "... and zoom after");
             notch(app, -1);
         }
         check(app.zoom() == 1.0f, pic + "(the test's own bookkeeping: back at 1)");
@@ -1226,7 +1541,7 @@ void test_app_wheel() {
             e.wheel = wheel_event(1, 1.0f);
             SDL_PushEvent(&e);
             app.run_frame_with_delta(0.016f);
-            check(app.zoom() == 2.0f, "a wheel event in the queue zooms the match in the next frame");
+            check(app.zoom() == zoom::series(1), "a wheel event in the queue zooms the match in the next frame");
             SDL_Event m{};
             m.type = SDL_MOUSEBUTTONDOWN;
             m.button = button_event(SDL_BUTTON_MIDDLE, SDL_MOUSEBUTTONDOWN, 300, 250);
@@ -1300,15 +1615,26 @@ void test_app_zoom_api() {
     if (!rig.ok) return;
     Application& app = rig.app;
     const LayoutRect view = app.layout().view();
+    const std::vector<float> levels = app.zoom_levels();                      // GAUNTLET in the wide view: 2 ... 1 ... 0.397
+    check(levels.size() == 11 && levels.front() == 2.0f && levels[4] == 1.0f && levels.back() == zoom::floor_zoom(app.zoom_fit()), "the levels of a local game on GAUNTLET in the wide view: 11, from 2 down to the map's limit");
     check(!app.set_zoom(1.0f, 300, 200), "the level that is set already changes nothing (false)");
-    check(!app.set_zoom(0.75f, 300, 200) && !app.set_zoom(0.0f, 300, 200) && !app.set_zoom(4.0f, 300, 200) && app.zoom() == 1.0f, "a number that is not a level is refused");
+    for (const float bad : {0.0f, -1.0f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
+        check(!app.set_zoom(bad, 300, 200) && app.zoom() == 1.0f, "a number that is no zoom is refused: " + num(static_cast<double>(bad)));
+    }
+    check(app.set_zoom(0.75f, 300, 200) && app.zoom() == zoom::series(-2), "a zoom that is not a level goes to the nearest level: 0.75 is 0.71");
+    check(app.set_zoom(4.0f, 300, 200) && app.zoom() == 2.0f, "beyond the largest level it goes to 2");
+    check(app.set_zoom(0.01f, 300, 200) && app.zoom() == levels.back(), "below the map's limit it goes to the limit (a pinch that goes too far is held there)");
+    check(app.set_zoom(1.0f, 300, 200) && app.zoom() == 1.0f, "1 is a level like the others");
     check(app.set_zoom(2.0f, 300, 200) && app.zoom() == 2.0f, "a level of the list is taken (true)");
     check(app.set_zoom(0.5f, 300, 200) && app.zoom() == 0.5f, "from 2 straight to 0.5 (the API goes to any offered level)");
-    check(app.step_zoom(+1, 300, 200) && app.zoom() == 1.0f && app.step_zoom(+1, 300, 200) && app.zoom() == 2.0f && !app.step_zoom(+1, 300, 200), "step_zoom(+1) goes up level by level and then says no");
-    check(app.step_zoom(-1, 300, 200) && app.step_zoom(-1, 300, 200) && app.zoom() == 0.5f && !app.step_zoom(-1, 300, 200), "step_zoom(-1) goes down level by level and then says no");
+    for (size_t i = 8; i-- > 0;) check(app.step_zoom(+1, 300, 200) && app.zoom() == levels[i], "step_zoom(+1) goes up one level: " + num(static_cast<double>(levels[i])));
+    check(!app.step_zoom(+1, 300, 200) && app.zoom() == 2.0f, "... and then says no at 2");
+    for (size_t i = 1; i < levels.size(); ++i) check(app.step_zoom(-1, 300, 200) && app.zoom() == levels[i], "step_zoom(-1) goes down one level: " + num(static_cast<double>(levels[i])));
+    check(!app.step_zoom(-1, 300, 200) && app.zoom() == levels.back(), "... and then says no at the map's limit");
     check(!app.step_zoom(0, 300, 200), "no direction, no step");
     // the anchor is a point of the picture: outside the view it is held to the view's nearest pixel
     check(app.set_zoom(1.0f, -500, -500) && app.set_zoom(2.0f, 5000, 5000) && app.zoom() == 2.0f, "an anchor outside the picture is held to the view");
+    app.set_zoom(1.0f, view.x + 1, view.y + 1);
     {
         // ... to the view's own pixel: an anchor beyond an edge gives the camera that the edge pixel gives, and the anchor does matter inside the view
         const uint32_t tiles_w = app.sim().grid().width();
@@ -1330,7 +1656,7 @@ void test_app_zoom_api() {
     const auto before = rig.world_at(view.x + 400, view.y + 250);
     app.set_zoom(2.0f, view.x + 400, view.y + 250);
     check(rig.world_at(view.x + 400, view.y + 250) == before, "the anchor of set_zoom is a point of the picture: its world point stays");
-    check(app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}), "the levels that are offered now (a local game on a big map)");
+    check(app.zoom_levels() == levels, "the levels that are offered now are the same (a local game on a big map)");
     // not in a screen that is not a match
     AppRig setup(Aspect::Wide16x9, 1.0f, false, std::string(), false);
     check(setup.ok && setup.app.state() == AppState::MapSelect, "the setup screen is up");
@@ -1401,8 +1727,8 @@ void test_app_setup_screen() {
         const SetupAfterMatch at1 = setup_after_zoomed_match(1.0f, pair.match, pair.shown);
         check(at1.ok && at1.preview.size() > 100000u && at1.colours > 30, name + "(setup) the preview after a match at the zoom 1 is a picture of the map (" + std::to_string(at1.colours) + " colours)");
         if (!at1.ok) continue;
-        for (const float level : {0.5f, 2.0f}) {
-            const std::string label = name + "after a match at the zoom " + (level == 0.5f ? "0.5" : "2") + ": ";
+        for (const float level : {zoom::series(-1), zoom::series(2), 2.0f}) {                  // (levels that both maps offer: TINY's own limit is 0.768 in this view)
+            const std::string label = name + "after a match at the zoom " + zoom::level_name(level) + ": ";
             const SetupAfterMatch other = setup_after_zoomed_match(level, pair.match, pair.shown);
             check(other.ok && other.live_zoom == level && other.remembered == level, label + "the setup screen is up, the camera still has the match's zoom and the level is remembered");
             size_t different = 0;
@@ -1481,11 +1807,11 @@ void test_app_setup_screen() {
 }
 
 void test_app_fairness_local() {
-    group("fair", "a local game and a game with bots offer the zoom-out");
+    group("fair", "a local game and a game with bots offer the zoom-out (and so does a match of the network: the next group)");
     {
         AppRig rig(Aspect::Wide16x9);
         if (rig.ok) {
-            check(rig.app.zoom_limits() == zoom::Limits::any() && rig.app.zoom_levels().front() == 0.5f, "a local game: any level");
+            check(rig.app.zoom_limits() == zoom::Limits::any() && rig.app.zoom_levels().front() == 2.0f && rig.app.zoom_levels().back() < 0.5f, "a local game: any level, down to the map's limit");
         }
     }
     {
@@ -1498,11 +1824,11 @@ void test_app_fairness_local() {
         cfg.bots.push_back(spec);
         Application app;
         check(app.init(cfg) && !app.network_active() && app.bots() != nullptr, "a game with a bot is up and is not a game of the network");
-        check(app.zoom_limits() == zoom::Limits::any() && app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}), "a game with bots offers the zoom-out");
+        check(app.zoom_limits() == zoom::Limits::any() && app.zoom_levels().size() == 11 && app.zoom_levels().back() < 0.5f, "a game with bots offers the zoom-out, down to the map's limit");
         app.renderer().camera().set_origin(700.0, 700.0, app.sim().grid().width(), app.sim().grid().height());
         app.note_pointer(300, 200);
         notch(app, -1);
-        check(app.zoom() == 0.5f, "... and the wheel zooms out in it");
+        check(app.zoom() == zoom::series(-1), "... and the wheel zooms out in it, one level a notch");
     }
 }
 
@@ -1526,7 +1852,7 @@ int lines_with(const std::string& text, const std::string& needle) {
 
 void test_app_guards() {
     group("guard", "the zoom is always a level that is allowed and drawn: no offscreen target (the hook and a refused texture), a network match, and a wheel that is not a number");
-    const std::vector<float> all_levels{0.5f, 1.0f, 2.0f};
+    std::vector<float> all_levels;                                      // (the levels of MEDIUM in the wide view, taken from the first match below)
     const std::vector<float> only_one{1.0f};
 
     // 1. the target cannot be made (the hook: the pass finds it failing): the zoom drops to 1 at the next frame, only 1 is offered, one line says so, and a later success restores the levels
@@ -1538,8 +1864,10 @@ void test_app_guards() {
         Application& app = rig.app;
         const LayoutRect view = app.layout().view();
         app.note_pointer(view.x + 200, view.y + 150);
-        notch(app, start_zoom < 1.0f ? -1 : +1);
-        check(app.zoom() == start_zoom && app.zoom_levels() == all_levels, at + "the zoom is " + num(static_cast<double>(start_zoom)) + " and three levels are offered");
+        if (all_levels.empty()) all_levels = app.zoom_levels();
+        check(all_levels.size() == 11 && all_levels.front() == 2.0f && all_levels.back() < 0.5f, at + "(the levels of MEDIUM in the wide view: 11)");
+        check(app.set_zoom(start_zoom, view.x + 200, view.y + 150), at + "the zoom is set");
+        check(app.zoom() == start_zoom && app.zoom_levels() == all_levels, at + "the zoom is " + num(static_cast<double>(start_zoom)) + " and the whole series is offered");
         check(frames_with_stderr(app, 3).empty() && app.renderer().world_target_passes() > 0, at + "its frames go through the offscreen target and write nothing");
         const auto centre_before = rig.world_at(view.x + view.w / 2, view.y + view.h / 2);
         const uint64_t passes = app.renderer().world_target_passes();
@@ -1567,7 +1895,7 @@ void test_app_guards() {
         check(frames_with_stderr(app, 3).empty(), at + "(and nothing is written)");
         app.note_pointer(view.x + 200, view.y + 150);
         notch(app, start_zoom < 1.0f ? -1 : +1);
-        check(app.zoom() == start_zoom, at + "the wheel zooms again");
+        check(app.zoom() == (start_zoom < 1.0f ? zoom::series(-1) : zoom::series(1)), at + "the wheel zooms again, a level a notch");
         // a second failure is a new one: one line again
         app.renderer().set_fail_world_target(true);
         const std::string again = frames_with_stderr(app, 20);
@@ -1584,9 +1912,10 @@ void test_app_guards() {
             const LayoutRect view = app.layout().view();
             app.note_pointer(view.x + 200, view.y + 150);
             check(frames_with_stderr(app, 2).empty() && app.renderer().world_target_error().empty(), "(refused texture) at the zoom 1 no target is needed and nothing is wrong");
+            all_levels = app.zoom_levels();
             app.renderer().set_fail_world_target_creation(true);
             notch(app, +1);
-            check(app.zoom() == 2.0f, "(refused texture) the wheel zooms in: nothing is known to be wrong yet");
+            check(app.zoom() == zoom::series(1), "(refused texture) the wheel zooms in: nothing is known to be wrong yet");
             const std::string first = frames_with_stderr(app, 2);
             check(app.renderer().world_target_failed() && !app.renderer().world_target_error().empty(), "(refused texture) the pass that could not make the target keeps the failure");
             check(app.zoom() == 1.0f && app.zoom_levels() == only_one, "(refused texture) and the next frame has the camera at 1 with only that level offered");
@@ -1602,12 +1931,12 @@ void test_app_guards() {
             const uint64_t before = app.renderer().world_target_passes();
             notch(app, +1);
             app.run_frame_with_delta(0.016f);
-            check(app.zoom() == 2.0f && app.renderer().world_target_passes() > before, "(refused texture) the player zooms in again and the frame is drawn through the target");
+            check(app.zoom() == zoom::series(1) && app.renderer().world_target_passes() > before, "(refused texture) the player zooms in again and the frame is drawn through the target");
         }
     }
 
-    // 3. a camera that something put outside the allowed levels is taken back at the next frame: in a match of the network never below 1 (defence in depth: the wheel, the API and the match start
-    // already keep to it); the same for a local game's levels (0.5 stays, it is allowed there)
+    // 3. a camera that something put outside the allowed levels is taken back at the next frame: never below the map's limit (defence in depth: the wheel, the API and the match start
+    // already keep to it), and the levels in between are left alone
     {
         AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
         check(rig.ok && start_ticked_match(rig.app, "MEDIUM"), "(clamp) a local match is up");
@@ -1617,6 +1946,19 @@ void test_app_guards() {
             app.renderer().camera().set_zoom(0.5f, view.w / 2, view.h / 2, app.sim().grid().width(), app.sim().grid().height());
             app.run_frame_with_delta(0.016f);
             check(app.zoom() == 0.5f, "(clamp) in a local game a camera at 0.5 is left alone");
+            const float limit = zoom::floor_zoom(app.zoom_fit());
+            check(limit > 0.39f && limit < 0.4f, "(clamp) the limit of MEDIUM in the wide view is 762 / 1920");
+            app.renderer().camera().set_zoom(0.25f, view.w / 2, view.h / 2, app.sim().grid().width(), app.sim().grid().height());
+            check(app.zoom() == 0.25f, "(clamp) (forced) the camera is below the map's limit, where the view would show more than the map");
+            app.run_frame_with_delta(0.016f);
+            check(app.zoom() == limit && app.renderer().camera().x >= 0.0f && app.renderer().camera().x + static_cast<float>(view.w) / limit <= 1920.0f + 1e-3f, "(clamp) the next frame takes it to the map's limit, and the view shows no more than the map");
+            check(app.remembered_zoom() == 1.0f, "(clamp) what the player chose last (nothing: the camera was set by hand) is not touched by the correction");
+            app.renderer().camera().set_zoom(0.7f, view.w / 2, view.h / 2, app.sim().grid().width(), app.sim().grid().height());
+            app.run_frame_with_delta(0.016f);
+            check(app.zoom() == 0.7f, "(clamp) a zoom between two levels (not a level, but inside the limits) is left alone");
+            app.renderer().camera().set_zoom(2.0f, view.w / 2, view.h / 2, app.sim().grid().width(), app.sim().grid().height());
+            app.run_frame_with_delta(0.016f);
+            check(app.zoom() == 2.0f, "(clamp) 2 is the most, and is left alone");
         }
     }
 }
@@ -1639,8 +1981,10 @@ void test_app_wheel_garbage() {
     app.handle_mouse_wheel(wheel_event(3, nan));
     check(app.zoom() == 1.0f, "a NaN with a whole amount of 3 does not zoom either (the event cannot be trusted)");
     g_clock_ms += 2000;
+    const std::vector<float> levels = app.zoom_levels();                        // MEDIUM in the wide view: 11 levels, 2 down to 0.397
+    check(levels.size() == 11, "(MEDIUM offers 11 levels in the wide view)");
     notch(app, +1);
-    check(app.zoom() == 2.0f, "a normal notch afterwards still zooms (the accumulator is not poisoned)");
+    check(app.zoom() == zoom::series(1), "a normal notch afterwards still zooms (the accumulator is not poisoned)");
     notch(app, -1);
     check(app.zoom() == 1.0f, "and back");
     // a trackpad's fractions around a NaN: 0.4 + (NaN) + 0.7 is one step with 0.1 left; nothing was forgotten and nothing was added
@@ -1648,12 +1992,12 @@ void test_app_wheel_garbage() {
     app.handle_mouse_wheel(wheel_event(0, nan, false, 16));
     check(app.zoom() == 1.0f, "0.4 and a NaN: no step yet");
     app.handle_mouse_wheel(wheel_event(0, 0.7f));
-    check(app.zoom() == 2.0f, "... and 0.7 completes the step: the 0.4 was not forgotten");
-    // an absurd amount is one event's worth at most (never more than the levels there are)
+    check(app.zoom() == zoom::series(1), "... and 0.7 completes the step: the 0.4 was not forgotten");
+    // an absurd amount is one event's worth at most: the accumulator's bound, 8 levels (the series has 11 here)
     app.handle_mouse_wheel(wheel_event(0, -1.0e30f, false, 2000));
-    check(app.zoom() == 0.5f, "an absurd amount toward zooms out as far as there are levels");
+    check(app.zoom() == levels.back(), "an absurd amount toward zooms out as far as there are levels (at most 8 of them)");
     app.handle_mouse_wheel(wheel_event(0, 1.0e30f, false, 2000));
-    check(app.zoom() == 2.0f, "an absurd amount away zooms in as far as there are levels");
+    check(app.zoom() == levels[levels.size() - 1 - static_cast<size_t>(zoom::WheelAccumulator::kMaxSteps)], "an absurd amount away zooms in by 8 levels, the most that one event can ask for");
 }
 
 void test_app_settings() {
@@ -1673,11 +2017,11 @@ void test_app_settings() {
         check(read_file().find("zoom") == std::string::npos, "a start writes no zoom");
         rig.app.note_pointer(300, 200);
         notch(rig.app, +1);
-        check(read_file().find("zoom=2") != std::string::npos, "the wheel writes the key at once: zoom=2");
+        check(read_file().find("zoom=1.19") != std::string::npos, "the wheel writes the key at once, the level's name in three digits: zoom=1.19");
         notch(rig.app, -1);
         notch(rig.app, -1);
-        check(read_file().find("zoom=0.5") != std::string::npos && read_file().find("zoom=2") == std::string::npos, "and the next change replaces it: zoom=0.5");
-        check(rig.app.set_zoom(2.0f, 300, 200), "(2 again)");
+        check(read_file().find("zoom=0.841") != std::string::npos && read_file().find("zoom=1.19") == std::string::npos, "and the next change replaces it: zoom=0.841");
+        check(rig.app.set_zoom(2.0f, 300, 200) && read_file().find("zoom=2") != std::string::npos, "(2 again)");
     }
     {
         AppRig rig(Aspect::Wide16x9, 1.0f, false, file);
@@ -1689,7 +2033,30 @@ void test_app_settings() {
         check(rig.ok && rig.app.remembered_zoom() == 0.5f && rig.app.zoom() == 0.5f, "--zoom 0.5 wins over the key");
         check(read_file().find("zoom=2") != std::string::npos, "and it does not change the file");
     }
-    for (const char* bad : {"3", "abc", "", "1.5", "0x1", "2 "}) {
+    {   // any zoom of the range is taken, and a match starts at the nearest level that its map offers in its view (GAUNTLET, wide: 2 ... 0.5, 0.42, 0.397)
+        AppRig rig(Aspect::Wide16x9, 1.5f, true, file);
+        check(rig.ok && rig.app.remembered_zoom() == 1.5f && rig.app.zoom() == zoom::series(2), "--zoom 1.5 is remembered as it is and the match starts at the nearest level, 1.41");
+        AppRig fine(Aspect::Wide16x9, 0.6f, true, file);
+        check(fine.ok && fine.app.remembered_zoom() == 0.6f && fine.app.zoom() == zoom::series(-3), "--zoom 0.6 starts at 0.59");
+        AppRig low(Aspect::Wide16x9, 0.1f, true, file);
+        check(low.ok && low.app.remembered_zoom() == 0.1f && low.app.zoom() == zoom::floor_zoom(low.app.zoom_fit()) && low.app.zoom() > 0.39f && low.app.zoom() < 0.4f, "--zoom 0.1 is beyond the map's limit: the match starts at the limit, 0.397");
+        check(low.app.start_game(maps_dir() + "TINY.LVL") && low.app.zoom() == zoom::floor_zoom(low.app.zoom_fit()) && low.app.zoom() > 0.76f && low.app.zoom() < 0.77f && low.app.remembered_zoom() == 0.1f,
+              "... and on TINY the limit is 0.768; what was asked for stays remembered");
+        check(low.app.start_game(maps_dir() + "TREASURE.LVL") && low.app.zoom() > 0.39f && low.app.zoom() < 0.4f, "... and TREASURE's is 0.397 again");
+        AppRig whole(Aspect::Wide16x9, 0.5f, true, file);
+        check(whole.ok && whole.app.start_game(maps_dir() + "TINY.LVL") && whole.app.zoom() > 0.76f && whole.app.zoom() < 0.77f, "--zoom 0.5 on TINY (992 px: 0.5 would show more than the map) starts at the limit");
+    }
+    {   // a settings key is a zoom too: the same rule
+        {
+            std::ofstream out(file, std::ios::trunc);
+            out << "zoom=0.35\n";
+        }
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, file);
+        check(rig.ok && rig.app.remembered_zoom() == 0.35f && rig.app.zoom() == zoom::floor_zoom(rig.app.zoom_fit()), "zoom=0.35 in the file: remembered as it is, the match starts at the map's limit (0.397)");
+        AppRig classic(Aspect::Classic4x3, 1.0f, false, file);
+        check(classic.ok && classic.app.zoom() == zoom::series(-6), "... and in the classic view, where 0.35 is a level, it starts there");
+    }
+    for (const char* bad : {"3", "abc", "", "0.04", "2.01", "-1", "0x1", "2 ", "0.5.0"}) {
         {
             std::ofstream out(file, std::ios::trunc);
             out << "zoom=" << bad << "\n";
@@ -1710,13 +2077,13 @@ void test_app_settings() {
         };
         ApplicationConfig none = parse({"--map", "x.LVL"});
         check(!none.zoom_given && none.zoom == 1.0f && none.startup_error.empty(), "no --zoom: not given, 1");
-        for (const char* ok : {"0.5", "1", "2", "2.0", ".5"}) {
+        for (const char* ok : {"0.5", "1", "2", "2.0", ".5", "1.5", "1.41", "0.397", "0.05", "0.6", "1.99"}) {
             ApplicationConfig c = parse({"--zoom", ok, "--map", "x.LVL"});
-            check(c.zoom_given && zoom::is_level(c.zoom) && c.startup_error.empty(), std::string("--zoom ") + ok + " is taken");
+            check(c.zoom_given && c.zoom >= zoom::kSmallest && c.zoom <= zoom::kIn && c.startup_error.empty(), std::string("--zoom ") + ok + " is taken");
         }
-        for (const char* bad : {"3", "1.5", "x", "0"}) {
+        for (const char* bad : {"3", "x", "0", "0.04", "2.01", "-1", "1e0", "1,5"}) {
             ApplicationConfig c = parse({"--zoom", bad});
-            check(!c.zoom_given && c.startup_error.find("--zoom") != std::string::npos && c.startup_error.find("only 0.5, 1 and 2") != std::string::npos, std::string("--zoom ") + bad + " is refused: " + c.startup_error);
+            check(!c.zoom_given && c.startup_error.find("--zoom") != std::string::npos && c.startup_error.find("a zoom from 0.05 to 2") != std::string::npos, std::string("--zoom ") + bad + " is refused: " + c.startup_error);
         }
         ApplicationConfig missing = parse({"--zoom"});
         check(!missing.zoom_given && missing.startup_error.find("--zoom needs") != std::string::npos, "--zoom without a value is refused: " + missing.startup_error);
@@ -1804,15 +2171,20 @@ void test_app_start_view_and_listener() {
     const char* maps[6] = {"GAUNTLET", "ISLANDS", "MEDIUM", "SMALL", "TINY", "TREASURE"};
     for (const Aspect aspect : {Aspect::Wide16x9, Aspect::Classic4x3}) {
         const bool wide = aspect == Aspect::Wide16x9;
-        for (const float z : kZooms) {
-            AppRig rig(aspect, z, true);
+        for (const float asked : {0.5f, 1.0f, 2.0f, 1.5f, 0.7f, 0.3f}) {
+            AppRig rig(aspect, asked, true);
             check(rig.ok, "the application is up");
             if (!rig.ok) continue;
             Application& app = rig.app;
             const LayoutRect view = app.layout().view();
             for (const char* map : maps) {
                 check(app.start_game(maps_dir() + map + ".LVL"), std::string("the match on ") + map + " starts");
-                check(app.zoom() == z, std::string(wide ? "wide" : "classic") + " " + map + ": a match starts at the level that was asked for, " + zoom::level_name(z));
+                // a match starts at the nearest level that its map offers in this view to the one that was asked for (or remembered): 0.5 on TINY is its limit, 0.768
+                const float z = app.zoom();
+                const std::vector<float> offered = app.zoom_levels();
+                check(z == zoom::nearest(asked, offered) && std::find(offered.begin(), offered.end(), z) != offered.end() && app.remembered_zoom() == asked,
+                      std::string(wide ? "wide" : "classic") + " " + map + ": a match starts at the nearest level to " + num(static_cast<double>(asked)) + " that the map offers, " + zoom::level_name(z) + ", and the level that was asked for stays remembered");
+                if (asked == 1.0f || asked == 2.0f) check(z == asked, std::string(wide ? "wide" : "classic") + " " + map + ": 1 and 2 are offered on every map");
                 const int32_t map_w = static_cast<int32_t>(app.sim().grid().width()) * 32;
                 const int32_t map_h = static_cast<int32_t>(app.sim().grid().height()) * 32;
                 for (uint8_t player = 0; player < 4; ++player) {
@@ -1829,7 +2201,9 @@ void test_app_start_view_and_listener() {
                     // the original's rule over the world that is seen: just far enough right / down to show the square's far edge
                     const double want_x = wide && map_w <= vis_w ? (map_w - vis_w) / 2.0 : std::max(0, std::min(ax + 192, map_w) - zoom::visible(view.w, z));
                     const double want_y = wide && map_h <= vis_h ? (map_h - vis_h) / 2.0 : std::max(0, std::min(ay + 192, map_h) - zoom::visible(view.h, z));
-                    if (map_w > vis_w && map_h > vis_h) check(cam.x == static_cast<float>(zoom::snap(want_x, z)) && cam.y == static_cast<float>(zoom::snap(want_y, z)), at + "the origin is the original's start view over the world that is seen: (" + num(want_x) + ", " + num(want_y) + "), it is (" + num(cam.x) + ", " + num(cam.y) + ")");
+                    // (rounded to the lattice of the zoom and held in the range whose far end is on the lattice: at the levels that are not powers of two the origin is not the whole number of the rule)
+                    const auto lattice = [z](double v, double map_px, double vis) { return std::clamp(std::floor(v * static_cast<double>(z) + 0.5) / static_cast<double>(z), 0.0, std::floor((map_px - vis) * static_cast<double>(z) + 1e-9) / static_cast<double>(z)); };
+                    if (map_w > vis_w && map_h > vis_h) check(std::fabs(cam.x - static_cast<float>(lattice(want_x, map_w, vis_w))) < 1e-3f && std::fabs(cam.y - static_cast<float>(lattice(want_y, map_h, vis_h))) < 1e-3f, at + "the origin is the original's start view over the world that is seen: (" + num(want_x) + ", " + num(want_y) + "), it is (" + num(cam.x) + ", " + num(cam.y) + ")");
                     // the listener: the middle of the world that is seen
                     app.update_simulation(0.0f);
                     const int32_t listen_x = static_cast<int32_t>(std::floor(cam.x + vis_w / 2.0));
@@ -1857,11 +2231,12 @@ void test_app_start_view_and_listener() {
 
 void test_local_determinism(const assets::AssetArchive&) {
     group("client", "the zoom is the player's own: the same orders at the same ticks give the same match at any zoom");
-    // The same script of orders (to world points) on three runs that differ in nothing but the zoom, the scrolling and the pointer: the clicks are computed from the camera so that they
-    // hit the same world pixels, and the state hash of the simulation must be the same
+    // The same script of orders (to world points) on runs that differ in nothing but the zoom, the scrolling and the pointer (one run for every level of the series, 0.397 to 2): the clicks are
+    // computed from the camera so that they hit the same world pixels, and the state hash of the simulation must be the same
     std::vector<sim::StateHash> hashes;
     std::vector<uint64_t> ticks;
-    for (const float z : kZooms) {
+    const std::vector<float> run_levels = zooms_for(true);
+    for (const float z : run_levels) {
         const QuietStdout quiet;
         SDL_Init(SDL_INIT_VIDEO);
         AppRig rig(Aspect::Wide16x9, z, true);
@@ -1880,14 +2255,12 @@ void test_local_determinism(const assets::AssetArchive&) {
                 const int32_t target_y = hy + ((step / 40) % 3) * 90 - 60;
                 ViewportCamera& cam = app.renderer().camera();
                 cam.center_on(target_x, target_y, app.sim().grid().width(), app.sim().grid().height());
-                const int64_t ox2 = origin2_of(cam.x);
-                const int64_t oy2 = origin2_of(cam.y);
                 // find a pixel of the view whose world pixel is in the target's tile (the tile decides the order)
                 int32_t cx = -1;
                 int32_t cy = -1;
                 for (int32_t sy = view.y + 20; sy < view.bottom() - 20 && cx < 0; ++sy) {
                     for (int32_t sx = view.x + 20; sx < view.right() - 20; ++sx) {
-                        if (world_under(ox2, z, sx - view.x) / 32 == target_x / 32 && world_under(oy2, z, sy - view.y) / 32 == target_y / 32) {
+                        if (world_under_f(cam.x, z, sx - view.x) / 32 == target_x / 32 && world_under_f(cam.y, z, sy - view.y) / 32 == target_y / 32) {
                             cx = sx;
                             cy = sy;
                             break;
@@ -1907,8 +2280,14 @@ void test_local_determinism(const assets::AssetArchive&) {
         hashes.push_back(app.sim().state_hash());
         ticks.push_back(app.sim().current_tick());
     }
-    check(hashes.size() == 3 && ticks[0] == ticks[1] && ticks[1] == ticks[2] && ticks[0] >= 300, "the three runs ran the same number of ticks: " + std::to_string(ticks.empty() ? 0 : ticks[0]));
-    check(hashes.size() == 3 && hashes[0] == hashes[1] && hashes[1] == hashes[2], "the state hash of the simulation is the same at the zoom 0.5, 1 and 2");
+    bool same_ticks = hashes.size() == run_levels.size() && ticks.size() == run_levels.size();
+    bool same_hash = same_ticks;
+    for (size_t i = 1; same_ticks && i < ticks.size(); ++i) {
+        same_ticks = same_ticks && ticks[i] == ticks[0];
+        same_hash = same_hash && hashes[i] == hashes[0];
+    }
+    check(same_ticks && ticks[0] >= 300, "the runs at every level ran the same number of ticks: " + std::to_string(ticks.empty() ? 0 : ticks[0]));
+    check(same_hash, "the state hash of the simulation is the same at every level of the series: " + std::to_string(run_levels.size()) + " runs");
 }
 
 // =====================================================================================================================================================
@@ -1916,8 +2295,8 @@ void test_local_determinism(const assets::AssetArchive&) {
 // =====================================================================================================================================================
 
 void test_network_match() {
-    group("net", "in a match of the network the zoom-out is not offered (host or guest), the zoom in is, and the view stays the client's own");
-    // 1. a guest that remembered 0.5
+    group("net", "a match of the network offers the same levels as a local game (host or guest), and the view stays the client's own");
+    // 1. a guest that remembered 0.5, on TINY (992 px: the limit of the zoom-out is 762 / 992 = 0.768 in the wide view)
     {
         const QuietStdout quiet;
         SDL_Init(SDL_INIT_VIDEO);
@@ -1926,65 +2305,84 @@ void test_network_match() {
         check(join_and_start(app, host, network_config(0.5f, true)), "the guest and the host are in the match on TINY");
         if (app.state() == AppState::Playing) {
             check(app.network_active() && !app.net()->is_host(), "it is a match of the network and this machine is a guest");
-            check(app.remembered_zoom() == 0.5f && app.zoom() == 1.0f, "a network match starts at 1 even though 0.5 is remembered (and stays remembered)");
-            check(app.zoom_limits() == zoom::Limits::no_zoom_out() && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}), "the levels offered are 1 and 2");
+            const float limit = zoom::floor_zoom(app.zoom_fit());
+            check(limit > 0.76f && limit < 0.77f, "the limit of the zoom-out on TINY in the wide view is 0.768: " + num(static_cast<double>(limit)));
+            check(app.zoom() == limit && app.remembered_zoom() == 0.5f, "a network match starts at the nearest level to the remembered 0.5 that the map offers, its limit (and 0.5 stays remembered)");
+            check(app.zoom_limits() == zoom::Limits::any(), "a match of the network has no limit of its own: the same levels as a local game");
+            {   // (the levels that a local game has on TINY in this view, written out: another Application cannot be made here, the end of one closes SDL for the other)
+                const std::vector<double> want = {2.0, 1.68179, 1.41421, 1.18921, 1.0, 0.84090, 0.768145};
+                const std::vector<float> got = app.zoom_levels();
+                bool same = got.size() == want.size();
+                for (size_t i = 0; same && i < got.size(); ++i) same = std::fabs(static_cast<double>(got[i]) - want[i]) < 5e-5;
+                check(same, "the levels of the match of the network are the levels of a local game on TINY in this view: 2 ... 0.84, 0.768");
+            }
             app.hud().dismiss_match_start_modal();
-            // defence in depth (the review of v0.1.0): the wheel, the API and the match start already keep to the limits, and every frame holds the camera to them as well: a camera that
-            // something put at 0.5 in a match of the network is at 1 after the next frame, and the level that the player remembered is not touched
+            // the camera is held to the map's limit at every frame, in a match of the network as anywhere, and the level that the player remembered is not touched
             {
                 const LayoutRect gview = app.layout().view();
                 app.renderer().camera().set_zoom(0.5f, gview.w / 2, gview.h / 2, app.sim().grid().width(), app.sim().grid().height());
-                check(app.zoom() == 0.5f && app.network_active(), "(forced) the camera is at 0.5 in a match of the network");
+                check(app.zoom() == 0.5f && app.network_active(), "(forced) the camera is at 0.5, below TINY's limit, in a match of the network");
                 app.run_frame_with_delta(0.016f);
-                check(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f, "the next frame takes the camera back to 1 (a network match never zooms out, whatever put it there)");
+                check(app.zoom() == limit && app.remembered_zoom() == 0.5f, "the next frame takes the camera to the map's limit (the view would show more than the map)");
                 app.renderer().camera().set_zoom(2.0f, gview.w / 2, gview.h / 2, app.sim().grid().width(), app.sim().grid().height());
                 app.run_frame_with_delta(0.016f);
-                check(app.zoom() == 2.0f, "a camera at 2 is left alone (zooming in is allowed)");
-                app.renderer().camera().set_zoom(1.0f, gview.w / 2, gview.h / 2, app.sim().grid().width(), app.sim().grid().height());
+                check(app.zoom() == 2.0f, "a camera at 2 is left alone");
+                app.renderer().camera().set_zoom(0.9f, gview.w / 2, gview.h / 2, app.sim().grid().width(), app.sim().grid().height());
+                app.run_frame_with_delta(0.016f);
+                check(app.zoom() == 0.9f, "a camera between two levels, inside the limits, is left alone");
+                app.renderer().camera().set_zoom(limit, gview.w / 2, gview.h / 2, app.sim().grid().width(), app.sim().grid().height());
             }
             app.note_pointer(300, 200);
             notch(app, -1);
-            check(app.zoom() == 1.0f, "the wheel toward does not zoom out");
-            check(!app.set_zoom(0.5f, 300, 200) && app.zoom() == 1.0f, "set_zoom(0.5) is refused");
-            check(!app.step_zoom(-1, 300, 200) && app.zoom() == 1.0f, "step_zoom(-1) is refused");
+            check(app.zoom() == limit, "the wheel toward does not go below the map's limit");
+            check(!app.step_zoom(-1, 300, 200) && app.zoom() == limit, "step_zoom(-1) says no at the limit");
+            check(app.set_zoom(0.3f, 300, 200) == false && app.zoom() == limit, "set_zoom(0.3) goes to the nearest level, the limit, where it already is");
             app.handle_mouse_wheel(wheel_event(0, -0.6f));
             app.handle_mouse_wheel(wheel_event(0, -0.6f));
-            check(app.zoom() == 1.0f, "a trackpad's creep toward does not zoom out either");
-            app.handle_mouse_button(button_event(SDL_BUTTON_MIDDLE, SDL_MOUSEBUTTONDOWN, 300, 200));
-            check(app.zoom() == 1.0f, "the middle button at 1 stays at 1");
-            check(app.remembered_zoom() == 0.5f, "none of that changed what is remembered");
-            // zoom in is fair: and the way back goes to 1 and no further
+            check(app.zoom() == limit, "a trackpad's creep toward does not go below it either");
+            check(app.remembered_zoom() == limit || app.remembered_zoom() == 0.5f, "(what is remembered is the player's own choice)");
+            // the wheel away zooms in, a level a notch, and the way back goes to the limit and no further
             notch(app, +1);
-            check(app.zoom() == 2.0f, "the wheel away zooms in");
+            check(app.zoom() == zoom::series(-1), "the wheel away zooms in to the next level, 0.84");
             notch(app, -1);
-            check(app.zoom() == 1.0f, "and back to 1");
-            notch(app, -1);
-            check(app.zoom() == 1.0f, "and no further");
-            check(app.set_zoom(2.0f, 300, 200), "(2 again)");
+            check(app.zoom() == limit, "and back to the limit");
+            check(app.set_zoom(2.0f, 300, 200) && app.zoom() == 2.0f, "(2 again)");
             app.handle_mouse_button(button_event(SDL_BUTTON_MIDDLE, SDL_MOUSEBUTTONDOWN, 300, 200));
             check(app.zoom() == 1.0f, "the middle button goes back to 1 from 2");
             check(app.remembered_zoom() == 1.0f, "(the player's own choice 1 is what is remembered now)");
         }
-        // the match is over for this machine: back to the setup screen; a local game offers the zoom-out again
+        // the match is over for this machine: back to the setup screen
         app.return_to_map_select();
         check(!app.network_active(), "the network is gone");
-        check(app.zoom_limits() == zoom::Limits::any(), "a local game offers any level again");
+        check(app.zoom_limits() == zoom::Limits::any(), "a local game offers any level too");
     }
-    // 2. a guest that remembered 0.5 leaves the match and plays a local one: it starts at 0.5
+    // 2. a guest on a bigger map: the whole series, the zoom-out included, down to the map's limit, as in a local game
     {
         const QuietStdout quiet;
         SDL_Init(SDL_INIT_VIDEO);
         Peer host;
         Application app;
-        check(join_and_start(app, host, network_config(0.5f, true)), "(the second guest is in the match)");
+        check(join_and_start(app, host, network_config(0.5f, true), "TREASURE"), "(the second guest is in the match on TREASURE)");
         if (app.state() == AppState::Playing) {
-            check(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f, "(started at 1, 0.5 remembered)");
+            check(app.network_active() && app.zoom() == 0.5f && app.remembered_zoom() == 0.5f, "a match of the network on TREASURE starts at the remembered 0.5: the zoom-out is offered in a match of the network");
+            const std::vector<float> levels = app.zoom_levels();
+            check(levels.size() == 11 && levels.front() == 2.0f && levels[8] == 0.5f && levels.back() == zoom::floor_zoom(app.zoom_fit()), "TREASURE offers 2 ... 0.5, 0.42 and its limit 0.397 to a guest");
+            app.hud().dismiss_match_start_modal();
+            app.note_pointer(300, 200);
+            check(app.set_zoom(0.5f, 300, 200) == false, "(at 0.5 already)");
+            notch(app, -1);
+            check(app.zoom() == levels[9], "the wheel toward zooms out a level, in a match of the network");
+            notch(app, -1);
+            check(app.zoom() == levels.back(), "... and to the limit");
+            notch(app, -1);
+            check(app.zoom() == levels.back(), "... and no further");
+            check(app.step_zoom(+1, 300, 200) && app.zoom() == levels[9], "step_zoom(+1) goes in a level");
+            // a local game that follows keeps what the player chose last
             app.return_to_map_select();
-            check(app.start_game(maps_dir() + "TINY.LVL"), "a local match starts");
-            check(app.zoom() == 0.5f, "and it starts at the remembered 0.5: the network's reset was for the network's match only");
+            check(app.start_game(maps_dir() + "TREASURE.LVL") && app.zoom() == levels[9], "a local game after it starts at the level that was chosen last, 0.42");
         }
     }
-    // 3. a host: the same rule; the view stays the client's own: a zoomed machine and a machine without a view play the same match
+    // 3. a host: the same levels; the view stays the client's own: a zoomed machine and a machine without a view play the same match
     {
         const QuietStdout quiet;
         SDL_Init(SDL_INIT_VIDEO);
@@ -2002,12 +2400,15 @@ void test_network_match() {
         app.map_select().handle_key_down(SDLK_RETURN);
         check(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000), "the match starts on both machines");
         if (app.state() == AppState::Playing) {
-            check(app.zoom() == 1.0f && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}), "a host starts at 1 and is offered 1 and 2 only");
+            const std::vector<float> host_levels = app.zoom_levels();
+            check(host_levels == zoom::levels(app.zoom_fit(), zoom::Limits::any()) && host_levels.size() >= 7 && host_levels.back() < 0.8f, "a host is offered the whole series, the zoom-out included");
+            check(app.zoom() == zoom::nearest(0.5f, host_levels) && app.remembered_zoom() == 0.5f, "a host starts at the nearest level to the remembered 0.5 that its map offers");
+            const size_t start_index = static_cast<size_t>(std::find(host_levels.begin(), host_levels.end(), app.zoom()) - host_levels.begin());
             app.hud().dismiss_match_start_modal();
             const LayoutRect view = app.layout().view();
             app.note_pointer(view.x + 300, view.y + 200);
             notch(app, +1);
-            check(app.zoom() == 2.0f, "the host zooms in");
+            check(start_index > 0 && start_index < host_levels.size() && app.zoom() == host_levels[start_index - 1], "the host zooms in a level");
             const auto* hill = app.sim().grid().find_anthill(0);
             const int32_t hx = hill != nullptr ? hill->x * 32 + 64 : 400;
             const int32_t hy = hill != nullptr ? hill->y * 32 + 64 : 400;
@@ -2094,7 +2495,7 @@ void test_network_match() {
 
 int main(int argc, char* argv[]) {
     // (SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one)
-    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net, guard, garbage)
+    std::string only;                                           // --only NAME: run the test NAME alone (pass, out, levels, state, cursor, orders, band, scroll, radar, gating, ctrln, wheel, middle, api, ants, setup, fair, settings, start, client, net, guard, garbage)
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
             only = argv[++i];
@@ -2114,6 +2515,7 @@ int main(int argc, char* argv[]) {
     }
     if (run("pass")) test_world_pass(arc);
     if (run("out")) test_zoom_out_pass(arc);
+    if (run("levels")) test_level_pictures(arc);
     if (run("state")) test_pass_state(arc);
     if (run("cursor")) test_hud_cursor(arc);
     if (run("orders")) test_hud_orders(arc);

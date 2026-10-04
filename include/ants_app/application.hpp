@@ -72,9 +72,9 @@ struct ApplicationConfig {
     /// by hand keeps the 4:3 that it is built with. `aspect_given` is true when the command line said it (the settings key then does not count).
     Aspect aspect{Aspect::Classic4x3};
     bool aspect_given{false};
-    /// --zoom 0.5 | 1 | 2 (the settings key `zoom` when the command line does not say): the zoom of the map view that a match starts with (view_zoom.hpp; the mouse wheel changes it and the
-    /// new level is remembered). 1 is the original's picture. In a match of the network a zoom-out is not allowed (it would show more of the map than the other players see): the match
-    /// starts at 1 then, and the remembered level stays for the next local game. `zoom_given` is true when the command line said it (the settings key then does not count).
+    /// --zoom N, 0.05 .. 2 (the settings key `zoom` when the command line does not say): the zoom of the map view that a match starts with, the nearest level that its map offers (view_zoom.hpp;
+    /// the mouse wheel changes it and the new level is remembered). 1 is the original's picture. A match of the network has the same levels as a local game. `zoom_given` is true when the command
+    /// line said it (the settings key then does not count).
     float zoom{zoom::kNormal};
     bool zoom_given{false};
     bool headless{false};
@@ -232,18 +232,22 @@ public:
     Aspect aspect() const noexcept { return aspect_; }
     CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
     const LayoutRect& picture() const noexcept { return picture_; }
-    /// THE ZOOM OF THE MAP VIEW (milestone M4; view_zoom.hpp, Renderer::zoomed): one of 0.5, 1 (the original's picture) and 2. The mouse wheel up zooms in, down zooms out, towards the pointer
-    /// (the world point under it stays under it as far as the map's edges allow); the middle button goes back to 1. They act only over the map view, and not while a dialog or a page is
-    /// open (options, quick help, quit, alliance, "get ready"), a rubber band or a button holds the mouse, or the results are up (`view_zoom_allowed`). The level is remembered in the
-    /// settings (key `zoom`). THE API THAT OTHER INPUT USES (a touch screen's pinch calls it): `zoom_levels()` says what is offered now, `set_zoom(level, anchor)` goes to one of them (the anchor is a
-    /// point of the picture, the pointer's own coordinates: the screen pixel that keeps its world point), `step_zoom(direction, anchor)` goes one level in or out.
-    /// FAIRNESS: in a match of the network (a server's room or a LAN game, host or guest) the zoom-out is not offered (the level 0.5 shows more of the map than the others see; zooming in is always
-    /// fair); a local game and a game with bots offer it. A level is also not offered when the level above it already shows the whole map (it would add only black).
+    /// THE ZOOM OF THE MAP VIEW (view_zoom.hpp, Renderer::zoomed): a level from the map's limit up to 2, four to a doubling (2, 1.68, 1.41, 1.19, 1 (the original's picture), 0.84, 0.71, 0.59, 0.5 ...),
+    /// the last zoom-out level being the exact limit of the map: the view never shows anything outside it (the map's width or its height just fills the view). The mouse wheel up zooms in, down zooms
+    /// out, one level a notch, towards the pointer (the world point under it stays under it as far as the map's edges allow); the middle button goes back to 1. They act only over the map view, and
+    /// not while a dialog or a page is open (options, quick help, quit, alliance, "get ready"), a rubber band or a button holds the mouse, or the results are up (`view_zoom_allowed`). The level is
+    /// remembered in the settings (key `zoom`). THE API THAT OTHER INPUT USES (a touch screen's pinch calls it): `zoom_levels()` says what is offered now, `set_zoom(level, anchor)` goes to the
+    /// nearest of them (the anchor is a point of the picture, the pointer's own coordinates: the screen pixel that keeps its world point), `step_zoom(direction, anchor)` goes one level in or out.
+    /// FAIRNESS: the zoom is the player's own view and nothing else (the simulation, the network, the bots and every state hash never see it), and every player of a match runs the same game and has
+    /// the same levels for the same picture: a match of the network offers the zoom-out as a local game does (before the batch after v0.2.0 it did not: it showed more of the map than the other
+    /// players saw; now the minimap already shows the whole map to everybody, and a modified game could zoom out anyway).
     float zoom() const noexcept { return renderer_ ? renderer_->camera().zoom : zoom::kNormal; }
-    /// What the kind of match allows now: a network match has no zoom-out, and while the renderer cannot make the offscreen target of a zoom (Renderer::world_target_failed) only the zoom 1 can be
-    /// drawn: both offer only the levels that are drawn. enforce_zoom_limits() holds the camera to this at every frame (a camera that is outside it, by whatever way, is taken to the nearest level
-    /// that it allows, anchored at the view's centre, and what the player chose last stays remembered).
+    /// What the renderer allows now: while it cannot make the offscreen target of a zoom (Renderer::world_target_failed) only the zoom 1 can be drawn, and only that level is offered.
+    /// enforce_zoom_limits() holds the camera to this and to the map's limit at every frame (a camera that is outside it, by whatever way, is taken to the nearest level that is allowed, anchored at
+    /// the view's centre, and what the player chose last stays remembered).
     zoom::Limits zoom_limits() const noexcept;
+    /// What decides the levels now: the map view, the map and what the renderer's texture can hold (view_zoom.hpp Fit)
+    zoom::Fit zoom_fit() const noexcept;
     std::vector<float> zoom_levels() const;
     bool set_zoom(float level, int32_t anchor_x, int32_t anchor_y);
     bool step_zoom(int direction, int32_t anchor_x, int32_t anchor_y);
@@ -251,7 +255,7 @@ public:
     bool view_zoom_allowed(int32_t x, int32_t y) const;
     /// The wheel (SDL_MOUSEWHEEL): the precise deltas add up to whole steps (zoom::WheelAccumulator), one step is one level; public for the tests
     void handle_mouse_wheel(const SDL_MouseWheelEvent& wheel);
-    /// The level that the player chose last (what the next match starts with when it is offered); the match's own level is `zoom()`
+    /// The level that the player chose last (what the next match starts with: the nearest level that its map offers); the match's own level is `zoom()`
     float remembered_zoom() const noexcept { return zoom_wanted_; }
 
     /// Alt+Enter (native builds): the window leaves fullscreen or enters it (SDL's desktop fullscreen, the same as --fullscreen); true when it is fullscreen afterwards. The web
@@ -571,7 +575,7 @@ private:
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered
     void apply_match_zoom();                              // a match starts: the camera takes the remembered level if the kind of match and the map offer it, else 1
-    void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() (a network match never below 1; no zoom while the offscreen target cannot be made), one report when that failure begins
+    void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() and the map's limit (no zoom while the offscreen target cannot be made), one report when that failure begins
     bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
 #if defined(__APPLE__)

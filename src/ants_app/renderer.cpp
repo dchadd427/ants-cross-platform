@@ -154,7 +154,7 @@ void ViewportCamera::clamp_to_bounds(uint32_t map_w, uint32_t map_h) {
 }
 
 void ViewportCamera::set_zoom(float level, int32_t anchor_dx, int32_t anchor_dy, uint32_t map_w, uint32_t map_h) {
-    if (!zoom::is_level(level)) return;
+    if (!(level >= zoom::kSmallest && level <= zoom::kIn)) return;          // (also a NaN)
     zoom::Camera from;
     from.x = static_cast<double>(zoom == zoom::kNormal ? static_cast<float>(world_x) : x);        // (at the zoom 1 the origin that the input code reads is world_x)
     from.y = static_cast<double>(zoom == zoom::kNormal ? static_cast<float>(world_y) : y);
@@ -374,6 +374,9 @@ bool Renderer::init(SDL_Window* window,
         }
     }
 
+    SDL_RendererInfo info{};
+    software_ = SDL_GetRendererInfo(renderer_, &info) == 0 && (info.flags & SDL_RENDERER_SOFTWARE) != 0;
+
     // Nearest neighbor scaling ensures retro pixel art stays sharp and crisp when scaled
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 
@@ -458,18 +461,9 @@ void Renderer::shutdown() {
         SDL_DestroyTexture(rgba_texture_);
         rgba_texture_ = nullptr;
     }
-    if (world_target_) {
-        SDL_DestroyTexture(world_target_);
-        world_target_ = nullptr;
-        world_target_w_ = 0;
-        world_target_h_ = 0;
-    }
-    if (scaled_target_) {
-        SDL_DestroyTexture(scaled_target_);
-        scaled_target_ = nullptr;
-        scaled_target_w_ = 0;
-        scaled_target_h_ = 0;
-    }
+    for (PassTexture& t : pass_levels_) destroy_texture(t);
+    pass_levels_.clear();
+    destroy_texture(lattice_);
     for (auto& glyph : fixed_glyphs_) {
         if (glyph) SDL_DestroyTexture(glyph);
         glyph = nullptr;
@@ -739,20 +733,26 @@ LayoutRect Renderer::map_view_rect(uint32_t map_w, uint32_t map_h) const {
 // The world pass at a zoom: the world is drawn at one texel per world pixel into an offscreen target, which is then copied into the view
 // ----------------------------------------------------------------------------
 
-// The target of tw x th texels: the one that there is when it is of that size, else a new one. A failure is kept in world_target_error_ and reported once (while it lasts, the Application takes
-// the camera to the zoom 1 at its next frame and no pass asks again, see world_target_failed()); `report` false is the retry's (the failure is already reported).
-bool Renderer::ensure_world_target(int32_t tw, int32_t th, bool report) {
-    if (world_target_ != nullptr && world_target_w_ == tw && world_target_h_ == th) return true;
-    if (world_target_ != nullptr) SDL_DestroyTexture(world_target_);
-    world_target_ = fail_world_target_creation_ ? nullptr : SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, tw, th);
-    world_target_w_ = world_target_ != nullptr ? tw : 0;
-    world_target_h_ = world_target_ != nullptr ? th : 0;
-    if (world_target_ == nullptr) {
+// A texture of the pass of tw x th texels: the one that there is when it is of that size, else a new one. A failure is kept in world_target_error_ and reported once (while it lasts, the
+// Application takes the camera to the zoom 1 at its next frame and no pass asks again, see world_target_failed()); `report` false is the retry's (the failure is already reported).
+bool Renderer::ensure_texture(PassTexture& t, int32_t tw, int32_t th, bool report) {
+    if (t.texture != nullptr && t.w == tw && t.h == th) return true;
+    destroy_texture(t);
+    SDL_Texture* tex = (fail_world_target_creation_ || tw <= 0 || th <= 0) ? nullptr : SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, tw, th);
+    if (tex == nullptr) {
         if (report) note_world_target_error(fail_world_target_creation_ ? "the test refuses the texture" : SDL_GetError());
         return false;
     }
-    SDL_SetTextureBlendMode(world_target_, SDL_BLENDMODE_NONE);
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE);
+    t.texture = tex;
+    t.w = tw;
+    t.h = th;
     return true;
+}
+
+void Renderer::destroy_texture(PassTexture& t) noexcept {
+    if (t.texture != nullptr) SDL_DestroyTexture(t.texture);
+    t = PassTexture{};
 }
 
 void Renderer::note_world_target_error(const char* what) {
@@ -761,34 +761,47 @@ void Renderer::note_world_target_error(const char* what) {
     std::cerr << "[Renderer] Cannot make the offscreen target of the zoom: " << world_target_error_ << std::endl;
 }
 
-// The way back from a real failure: the picture is the zoom 1 and no pass asks for the target, so the renderer asks now and then, with the largest target that a zoom needs (the 0.5's) and the
-// switch to it as the drawing target. A try that fails again is the failure that is already reported: no second report.
+int32_t Renderer::max_world_extent() const noexcept {
+    if (!renderer_) return 0;
+    SDL_RendererInfo info{};
+    if (SDL_GetRendererInfo(renderer_, &info) != 0) return 0;
+    const int32_t side = std::min(info.max_texture_width, info.max_texture_height);
+    return side > 0 ? std::max(0, side - kPassMargin) : 0;
+}
+
+// The way back from a real failure: the picture is the zoom 1 and no pass asks for the target, so the renderer asks now and then, with the largest target that a zoom needs (the whole map, the
+// limit of the zoom-out; twice the view when no level is set) and the switch to it as the drawing target. A try that fails again is the failure that is already reported: no second report.
 void Renderer::retry_world_target() {
     if (!renderer_ || in_world_target_ || world_target_error_.empty()) return;
     if (++world_target_retry_frames_ < kWorldTargetRetryFrames) return;
     world_target_retry_frames_ = 0;
     const LayoutRect view = layout_.view();
-    if (!ensure_world_target(zoom::visible(view.w, zoom::kOut) + 1, zoom::visible(view.h, zoom::kOut) + 1, false)) return;
-    if (SDL_SetRenderTarget(renderer_, world_target_) != 0) return;
+    const int32_t tw = std::max(2 * view.w, static_cast<int32_t>(map_width_) * TILE_SIZE);
+    const int32_t th = std::max(2 * view.h, static_cast<int32_t>(map_height_) * TILE_SIZE);
+    if (pass_levels_.empty()) pass_levels_.resize(1);
+    if (!ensure_texture(pass_levels_[0], tw, th, false)) return;
+    if (SDL_SetRenderTarget(renderer_, pass_levels_[0].texture) != 0) return;
     SDL_SetRenderTarget(renderer_, nullptr);
     world_target_error_.clear();                                  // it works again: the zoom levels come back, and a new failure is a new report
 }
 
-bool Renderer::begin_world_target() {
+// The pass begins: the plan (view_zoom.hpp plan: what part of the map the target covers, how often it is halved, where the last level lands), the textures for it, and the renderer in the state
+// of the world code: a camera of the zoom 1 over the target, the target as the picture.
+bool Renderer::begin_world_target(int64_t map_w_px, int64_t map_h_px) {
     if (!renderer_ || in_world_target_ || fail_world_target_) return false;
-    const LayoutRect view = layout_.view();
-    const float z = camera_.zoom;
-    // The target covers the world from the whole pixel (cx, cy) on: the world that the view shows at this zoom, and one texel more (the origin of the zoom 2 lies half a pixel inside a texel;
-    // the copy then starts one screen pixel left of / above the view)
-    const double ox = static_cast<double>(camera_.x);
-    const double oy = static_cast<double>(camera_.y);
-    const int32_t cx = static_cast<int32_t>(std::floor(ox));
-    const int32_t cy = static_cast<int32_t>(std::floor(oy));
-    const int32_t tw = zoom::visible(view.w, z) + 1;
-    const int32_t th = zoom::visible(view.h, z) + 1;
     if (!world_target_error_.empty()) return false;               // (a failure that lasts: no new attempt at every frame; retry_world_target is the way back)
-    if (!ensure_world_target(tw, th, true)) return false;
-    if (SDL_SetRenderTarget(renderer_, world_target_) != 0) {
+    const LayoutRect view = layout_.view();
+    const zoom::Pass plan = zoom::plan(static_cast<double>(camera_.x), static_cast<double>(camera_.y), camera_.zoom, view.w, view.h, map_w_px, map_h_px, smooth_upscale_);
+    if (plan.w <= 0 || plan.h <= 0) return false;                 // (nothing of the map is in the view: the zoom 1 picture of the same origin, which is that as well)
+    if (pass_levels_.size() > static_cast<size_t>(plan.depth) + 1) {
+        for (size_t k = static_cast<size_t>(plan.depth) + 1; k < pass_levels_.size(); ++k) destroy_texture(pass_levels_[k]);      // (the halvings of an earlier zoom: not kept)
+    }
+    pass_levels_.resize(static_cast<size_t>(plan.depth) + 1);
+    for (int k = 0; k <= plan.depth; ++k) {
+        if (!ensure_texture(pass_levels_[static_cast<size_t>(k)], plan.cap_w >> k, plan.cap_h >> k, true)) return false;
+    }
+    if (!ensure_texture(lattice_, view.w + kLatticeMargin, view.h + kLatticeMargin, true)) return false;
+    if (SDL_SetRenderTarget(renderer_, pass_levels_[0].texture) != 0) {
         note_world_target_error(SDL_GetError());
         return false;
     }
@@ -797,17 +810,14 @@ bool Renderer::begin_world_target() {
     pass_.picture = picture_;
     pass_.picture_inset = picture_inset_;
     pass_.origin = origin_;
-    pass_.cx = cx;
-    pass_.cy = cy;
-    pass_.shift_x = static_cast<int32_t>(std::lround((ox - static_cast<double>(cx)) * static_cast<double>(z)));
-    pass_.shift_y = static_cast<int32_t>(std::lround((oy - static_cast<double>(cy)) * static_cast<double>(z)));
+    plan_ = plan;
     camera_.zoom = zoom::kNormal;                              // (a camera of the zoom 1 whose view is the target: the world code's numbers are texels)
-    camera_.x = static_cast<float>(cx);
-    camera_.y = static_cast<float>(cy);
-    camera_.world_x = cx;
-    camera_.world_y = cy;
-    camera_.set_view(LayoutRect{0, 0, tw, th});
-    target_view_ = LayoutRect{0, 0, tw, th};
+    camera_.x = static_cast<float>(plan.x0);
+    camera_.y = static_cast<float>(plan.y0);
+    camera_.world_x = plan.x0;
+    camera_.world_y = plan.y0;
+    camera_.set_view(LayoutRect{0, 0, plan.w, plan.h});
+    target_view_ = LayoutRect{0, 0, plan.w, plan.h};
     picture_ = target_view_;
     picture_inset_ = false;
     origin_ = LayoutPoint{};
@@ -818,58 +828,72 @@ bool Renderer::begin_world_target() {
     return true;
 }
 
+// The pass ends. The world is in the first texture: it is halved as often as the plan says (a copy to half the size with the linear filter is the exact average of 2 x 2 texels), the last level is
+// scaled by the plan's scale into the lattice of whole screen pixels at the fractional place that the plan gives (nearest at the zoom 2 and the zoom 1, else the linear filter), and the view is
+// cut out of that, one screen pixel for one pixel: whatever the camera's origin is, the picture is the lattice's, so a scroll by whole screen pixels moves it and never changes it. A scaled copy
+// that a clip cuts is cut by SDL's software renderer with a rounding of its source (and it truncates a fractional rectangle), which is why the view is cut out of a texture that holds the
+// whole scaled picture, by an unscaled copy; a renderer that places a rectangle at a fraction of a pixel (every one but the software renderer) puts the last level at its exact place.
 void Renderer::end_world_target() {
     if (!in_world_target_) return;
     in_world_target_ = false;
-    const float z = pass_.camera.zoom;
     camera_ = pass_.camera;
     picture_ = pass_.picture;
     picture_inset_ = pass_.picture_inset;
     origin_ = pass_.origin;
-    // The copy: the target's texels are z screen pixels wide. The copy that is wanted starts shift_x / shift_y screen pixels before the view (so that the zoom 2 may show the half-pixel origin) and
-    // covers copy_w x copy_h pixels, which is the source (whole texels) times the zoom: a zoom 2 over an odd width takes one texel more.
+    const zoom::Pass& p = plan_;
     const LayoutRect view = layout_.view();
-    const int32_t dst_w = view.w + pass_.shift_x;
-    const int32_t dst_h = view.h + pass_.shift_y;
-    const int32_t src_w = std::min(world_target_w_, zoom::visible(dst_w, z));
-    const int32_t src_h = std::min(world_target_h_, zoom::visible(dst_h, z));
-    const SDL_Rect src{0, 0, src_w, src_h};
-    const int32_t copy_w = static_cast<int32_t>(std::lround(static_cast<double>(src_w) * static_cast<double>(z)));
-    const int32_t copy_h = static_cast<int32_t>(std::lround(static_cast<double>(src_h) * static_cast<double>(z)));
-    SDL_SetTextureScaleMode(world_target_, z < zoom::kNormal ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
-    SDL_Texture* from = world_target_;
-    SDL_Rect from_src = src;
-    SDL_Rect dst{};
-    if (pass_.shift_x == 0 && pass_.shift_y == 0 && copy_w == view.w && copy_h == view.h) {
-        // the copy is exactly the view: one step (the 0.5, the 1 of the test hook, the 2 over an even size from a whole origin)
-        SDL_SetRenderTarget(renderer_, nullptr);
-        dst = placed(view.x, view.y, copy_w, copy_h);
-    } else {
-        // The copy is not the view (a half-pixel origin starts one screen pixel before it, an odd size ends one after it): a scaled copy that a clip cuts is cut by SDL's software renderer
-        // with a rounding of the source, and the picture is not what the nearest enlargement gives. So the enlargement goes into a texture of its own, whole, and the view is cropped
-        // out of it by a copy of the same size (no scaling, no cut: exact in every renderer).
-        if (scaled_target_ == nullptr || scaled_target_w_ != copy_w || scaled_target_h_ != copy_h) {
-            if (scaled_target_ != nullptr) SDL_DestroyTexture(scaled_target_);
-            scaled_target_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, copy_w, copy_h);
-            scaled_target_w_ = scaled_target_ != nullptr ? copy_w : 0;
-            scaled_target_h_ = scaled_target_ != nullptr ? copy_h : 0;
-            if (scaled_target_ != nullptr) SDL_SetTextureBlendMode(scaled_target_, SDL_BLENDMODE_NONE);
-        }
-        if (scaled_target_ != nullptr && SDL_SetRenderTarget(renderer_, scaled_target_) == 0) {
-            const SDL_Rect whole{0, 0, copy_w, copy_h};
-            SDL_RenderCopy(renderer_, world_target_, &src, &whole);
-            SDL_SetRenderTarget(renderer_, nullptr);
-            from = scaled_target_;
-            from_src = SDL_Rect{pass_.shift_x, pass_.shift_y, std::min(view.w, copy_w - pass_.shift_x), std::min(view.h, copy_h - pass_.shift_y)};
-            dst = placed(view.x, view.y, from_src.w, from_src.h);
-        } else {                                                     // (no second target: the cut copy, as good as the renderer makes it)
-            SDL_SetRenderTarget(renderer_, nullptr);
-            dst = placed(view.x - pass_.shift_x, view.y - pass_.shift_y, copy_w, copy_h);
-        }
+    int32_t lw = p.w;
+    int32_t lh = p.h;
+    for (int k = 1; k <= p.depth; ++k) {
+        SDL_Texture* from = pass_levels_[static_cast<size_t>(k) - 1].texture;
+        SDL_Texture* to = pass_levels_[static_cast<size_t>(k)].texture;
+        const SDL_Rect src{0, 0, lw, lh};
+        lw >>= 1;
+        lh >>= 1;
+        const SDL_Rect dst{0, 0, lw, lh};
+        SDL_SetTextureScaleMode(from, SDL_ScaleModeLinear);
+        SDL_SetRenderTarget(renderer_, to);
+        SDL_RenderCopy(renderer_, from, &src, &dst);
     }
+    SDL_Texture* last = pass_levels_[static_cast<size_t>(p.depth)].texture;
+    SDL_SetTextureScaleMode(last, p.smooth ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+    // where the last level lands, in the lattice of the screen pixels from the view's corner: its first texel at (left, top), fw x fh pixels
+    const double fw = static_cast<double>(lw) * p.scale;
+    const double fh = static_cast<double>(lh) * p.scale;
+    const int64_t m0x = static_cast<int64_t>(std::floor(p.left));
+    const int64_t m0y = static_cast<int64_t>(std::floor(p.top));
+    const double fx = p.left - static_cast<double>(m0x);
+    const double fy = p.top - static_cast<double>(m0y);
+    const int32_t sw = static_cast<int32_t>(std::ceil(fx + fw));
+    const int32_t sh = static_cast<int32_t>(std::ceil(fy + fh));
+    SDL_SetRenderTarget(renderer_, lattice_.texture);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+    SDL_RenderClear(renderer_);
+    const SDL_Rect src{0, 0, lw, lh};
+    if (software_) {
+        const SDL_Rect whole{0, 0, sw, sh};
+        SDL_RenderCopy(renderer_, last, &src, &whole);
+    } else {
+        const SDL_FRect exact{static_cast<float>(fx), static_cast<float>(fy), static_cast<float>(fw), static_cast<float>(fh)};
+        SDL_RenderCopyF(renderer_, last, &src, &exact);
+    }
+    SDL_SetRenderTarget(renderer_, nullptr);
     const SDL_Rect clip = placed(view.x, view.y, view.w, view.h);
     SDL_RenderSetClipRect(renderer_, &clip);
-    SDL_RenderCopy(renderer_, from, &from_src, &dst);
+    const int32_t vx0 = static_cast<int32_t>(std::max<int64_t>(0, m0x));
+    const int32_t vy0 = static_cast<int32_t>(std::max<int64_t>(0, m0y));
+    const int32_t vx1 = static_cast<int32_t>(std::min<int64_t>(view.w, m0x + sw));
+    const int32_t vy1 = static_cast<int32_t>(std::min<int64_t>(view.h, m0y + sh));
+    if (vx0 > 0 || vy0 > 0 || vx1 < view.w || vy1 < view.h) {                      // (the picture does not cover the view: a small map; the rest is black)
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+        SDL_RenderFillRect(renderer_, &clip);
+    }
+    if (vx1 > vx0 && vy1 > vy0) {
+        const SDL_Rect cut{static_cast<int32_t>(vx0 - m0x), static_cast<int32_t>(vy0 - m0y), vx1 - vx0, vy1 - vy0};
+        const SDL_Rect dst = placed(view.x + vx0, view.y + vy0, vx1 - vx0, vy1 - vy0);
+        SDL_SetTextureScaleMode(lattice_.texture, SDL_ScaleModeNearest);
+        SDL_RenderCopy(renderer_, lattice_.texture, &cut, &dst);
+    }
 }
 
 // What the pass leaves for the screen: the hit point digits (one size at every zoom: the numbers of Ctrl+L are text, not world art), at the screen position of the sprite's position
@@ -903,7 +927,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     // At a zoom the world is drawn into the offscreen target (begin_world_target); at the zoom 1 straight into the view, exactly as it always was. A renderer that cannot make the target
     // (none that SDL has: every one supports targets) draws the zoom 1 picture of the same origin instead of a broken one.
     const float zoom_kept = camera_.zoom;
-    const bool target = (zoomed() || force_world_target_) && begin_world_target();
+    const bool target = (zoomed() || force_world_target_) && begin_world_target(static_cast<int64_t>(grid.width()) * TILE_SIZE, static_cast<int64_t>(grid.height()) * TILE_SIZE);
     if (!target && zoomed()) camera_.zoom = zoom::kNormal;
 
     // 1. Clip exclusively to the part of the playfield that the map covers (the whole view, unless the map is smaller than it)
@@ -1039,7 +1063,7 @@ void Renderer::draw_template_world(int32_t anim_id, int32_t world_x, int32_t wor
 void Renderer::render_map_layers(const ants::sim::Grid& grid, const ants::sim::WorldState* world) {
     if (!renderer_) return;
     const float zoom_kept = camera_.zoom;
-    const bool target = (zoomed() || force_world_target_) && begin_world_target();
+    const bool target = (zoomed() || force_world_target_) && begin_world_target(static_cast<int64_t>(grid.width()) * TILE_SIZE, static_cast<int64_t>(grid.height()) * TILE_SIZE);
     if (!target && zoomed()) camera_.zoom = zoom::kNormal;       // (as in render_world: the zoom 1 picture rather than a broken one)
     const LayoutRect covered = map_view_rect(grid.width(), grid.height());
     const SDL_Rect clip_rect = placed(covered.x, covered.y, covered.w, covered.h);
@@ -1901,9 +1925,15 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    // (a debug aid on the screen: at a zoom a tile is `ts` screen pixels and the view shows `vis_w` x `vis_h` world pixels; at the zoom 1 these are the numbers it always had)
+    // (a debug aid on the screen: at a zoom a tile is about `ts` screen pixels (its outline is cut at the lattice line of its own edges, so that the outlines meet at a fractional zoom) and the
+    // view shows `vis_w` x `vis_h` world pixels; at the zoom 1 these are the numbers it always had)
     const LayoutRect view = world_view();
     const int32_t ts = static_cast<int32_t>(static_cast<double>(TILE_SIZE) * static_cast<double>(camera_.zoom));
+    const auto tile_outline = [&](int32_t col, int32_t row, int32_t sx, int32_t sy, int32_t inset) {
+        int32_t ex = 0, ey = 0;
+        camera_.world_to_screen((col + 1) * TILE_SIZE, (row + 1) * TILE_SIZE, ex, ey);
+        return placed(sx + inset, sy + inset, std::max(1, ex - sx - 2 * inset), std::max(1, ey - sy - 2 * inset));
+    };
     const int32_t vis_w = zoom::visible(view.w, camera_.zoom);
     const int32_t vis_h = zoom::visible(view.h, camera_.zoom);
     int32_t start_col = std::max(0, static_cast<int32_t>(camera_.x) / TILE_SIZE);
@@ -1934,7 +1964,7 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
 
             // Subtle semi-transparent tile outline
             SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 75);
-            const SDL_Rect tile_rect = placed(sx, sy, ts, ts);
+            const SDL_Rect tile_rect = tile_outline(c, r, sx, sy, 0);
             SDL_RenderDrawRect(renderer_, &tile_rect);
 
             // Coordinates inside bottom-left of tile (a tile of half size has no room for them)
@@ -1951,10 +1981,10 @@ void Renderer::render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, in
         int32_t hsx = 0, hsy = 0;
         camera_.world_to_screen(hover_tx * TILE_SIZE, hover_ty * TILE_SIZE, hsx, hsy);
         SDL_SetRenderDrawColor(renderer_, 0, 255, 255, 255);
-        const SDL_Rect h1 = placed(hsx, hsy, ts, ts);
+        const SDL_Rect h1 = tile_outline(hover_tx, hover_ty, hsx, hsy, 0);
         SDL_RenderDrawRect(renderer_, &h1);
         SDL_SetRenderDrawColor(renderer_, 255, 255, 0, 220);
-        const SDL_Rect h2 = placed(hsx + 1, hsy + 1, ts - 2, ts - 2);
+        const SDL_Rect h2 = tile_outline(hover_tx, hover_ty, hsx, hsy, 1);
         SDL_RenderDrawRect(renderer_, &h2);
     }
 
