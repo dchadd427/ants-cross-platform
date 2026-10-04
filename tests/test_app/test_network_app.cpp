@@ -245,11 +245,16 @@ struct Hall {
     Server& server;
     Application* app{nullptr};
     std::vector<Peer*> peers;
+    Application* second{nullptr};           // a second application (a guest that is a whole game: its HUD tells the News Flash)
     void step(uint32_t ms) {
         for (uint32_t t = 0; t < ms; t += 10) {
             if (app != nullptr) {
                 app->pump_network(0.010f);
                 app->update_simulation(0.010f);
+            }
+            if (second != nullptr) {
+                second->pump_network(0.010f);
+                second->update_simulation(0.010f);
             }
             for (Peer* p : peers) {
                 p->now += 10;
@@ -267,6 +272,7 @@ struct Hall {
         }
         for (int i = 0; i < 2000 && !cond(); ++i) {       // real time for a late kernel, game clock standing still (see Duo)
             if (app != nullptr) app->pump_network(0.0f);
+            if (second != nullptr) second->pump_network(0.0f);
             for (Peer* p : peers) p->update();
             server.update();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -663,7 +669,7 @@ void run_bot_tests() {
         ASSERT_TRUE(ApplicationConfig{}.bots.empty() && ApplicationConfig{}.startup_error.empty());
     } TEST_END();
 
-    TEST_CASE("AI6.13 Command Line: --teams ffa | A+B (Two Different Seats Of 0 To 3, ffa In Any Case Is The Default, The Last One Wins) Is For A Game On This Computer: Anything Else Is A Startup Error That Names The Option, A Room (--host, --join, --join-url) Refuses It With The Reason, ffa Is Fine Everywhere, And It Is No Mode (The Start Menu Still Shows)") {
+    TEST_CASE("AI6.13 Command Line: --teams ffa | A+B (Two Different Seats Of 0 To 3, ffa In Any Case Is The Default, The Last One Wins) Is The Choice Of The START That This Machine Leads (A Game On This Computer Makes It At Once, A Room (--host, --join, --join-url) Sends It With Its START Since Protocol 13): Anything Else Is A Startup Error That Names The Option, ffa Is Fine Everywhere, And It Is No Mode (The Start Menu Still Shows)") {
         std::vector<std::string> args;
         std::vector<char*> st;
         const auto parsed = [&](std::vector<std::string> a) {
@@ -705,16 +711,21 @@ void run_bot_tests() {
             ApplicationConfig two = parsed({"ants", "--headless", "--teams", "9", "--teams", "8"});           // (and a second bad value does not replace it)
             ASSERT_TRUE(two.startup_error.find("--teams 9:") == 0);
         }
-        {   // a room cannot choose teams yet (whatever the order of the options); ffa is the default of a room too
+        {   // a room takes --teams too (protocol 13: it is the choice of the START that this machine leads; changed on purpose: protocol 12 refused it with "--teams is for a game on this computer"),
+            // whatever the order of the options; ffa is the default of a room too
             for (const std::vector<std::string>& line : {std::vector<std::string>{"ants", "--teams", "0+1", "--host"}, std::vector<std::string>{"ants", "--host", "--teams", "0+1"},
                                                           std::vector<std::string>{"ants", "--join", "127.0.0.1", "--teams", "0+1"}, std::vector<std::string>{"ants", "--teams", "0+1", "--join-url", "ws://example.test/ws"}}) {
-                ApplicationConfig c = parsed(line);
-                ASSERT_TRUE(c.startup_error.find("--teams is for a game on this computer") == 0);
-                Application app;
-                ASSERT_FALSE(app.init(c));
+                const ApplicationConfig c = parsed(line);
+                ASSERT_TRUE(c.startup_error.empty() && c.teams.set && c.teams.a == 0 && c.teams.b == 1 && c.net_role != ApplicationConfig::NetRole::None);
             }
             ApplicationConfig ok = parsed({"ants", "--teams", "ffa", "--host"});
             ASSERT_TRUE(ok.startup_error.empty() && !ok.teams.set);
+            for (const char* bad : {"0+0", "0+4", "none", ""}) {                                              // a bad value is a startup error in a room too
+                const ApplicationConfig c = parsed({"ants", "--host", "--teams", bad});
+                ASSERT_TRUE(!c.teams.set && c.startup_error.find(std::string("--teams ") + bad + ":") == 0);
+            }
+            const ApplicationConfig both = parsed({"ants", "--join", "127.0.0.1", "--room", "R-1", "--fill-bots", "none,none,easy,hard", "--teams", "0+2"});      // (the two choices of one START)
+            ASSERT_TRUE(both.startup_error.empty() && both.teams.set && both.teams.a == 0 && both.teams.b == 2 && both.fill_bots == net::FillPlan(std::array<net::FillLevel, 4>{net::FillLevel::None, net::FillLevel::None, net::FillLevel::Easy, net::FillLevel::Hard}));
         }
         {   // it is no mode: a native game that is started with --teams alone still shows the start menu, which takes the choice as the panel's own
             ApplicationConfig c = parsed({"ants", "--teams", "0+1"});
@@ -3769,6 +3780,259 @@ void run_room_bot_tests() {
         }
         ASSERT_TRUE(same);
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        app.quit();
+    } TEST_END();
+    TEST_CASE("N5.77 Command Line: --fill-bots Takes One Word (Every Seat) Or Four Joined By Commas (The Seats 0 To 3: A Level For Each Seat, Protocol 13), Any Case; Anything Else Is A Startup Error That Names The Option And Says What Is Wrong; The Application's Setters Take A Plan Or One Level") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parsed = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            return Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        };
+        using L = net::FillLevel;
+        const std::pair<const char*, net::FillPlan> good[] = {
+            {"easy", net::FillPlan(L::Easy)},
+            {"none,none,easy,hard", net::FillPlan(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard})},
+            {"NONE,Easy,MEDIUM,hard", net::FillPlan(std::array<L, 4>{L::None, L::Easy, L::Medium, L::Hard})},
+            {"hard,hard,hard,hard", net::FillPlan(L::Hard)},
+            {"none,none,none,none", net::FillPlan()},
+        };
+        for (const auto& g : good) {
+            const ApplicationConfig c = parsed({"ants", "--host", "--fill-bots", g.first});
+            ASSERT_TRUE(c.startup_error.empty() && c.fill_bots == g.second);
+        }
+        ASSERT_TRUE(parsed({"ants", "--fill-bots", "none,none,easy,hard", "--fill-bots", "medium", "--host"}).fill_bots == net::FillPlan(L::Medium));        // the last one wins
+        for (const char* bad : {"none,easy", "none,none,easy", "none,none,easy,hard,hard", "none,,easy,hard", "none, none, easy, hard", ",none,easy,hard", "easy,", "none;none;easy;hard", "harder,easy,easy,easy", "1,2,3,4"}) {
+            const ApplicationConfig c = parsed({"ants", "--host", "--fill-bots", bad});
+            ASSERT_TRUE(c.fill_bots == net::FillPlan() && c.startup_error.find(std::string("--fill-bots ") + bad + ": ") == 0 && c.startup_error.size() > std::string("--fill-bots ") .size() + std::string(bad).size() + 4);
+            Application refuses;
+            ASSERT_FALSE(refuses.init(c));
+        }
+        const ApplicationConfig missing = parsed({"ants", "--fill-bots"});
+        ASSERT_TRUE(missing.startup_error.find("--fill-bots needs none, easy, medium or hard") == 0 && missing.startup_error.find("four") != std::string::npos);
+        {   // the setters: a plan, or one level (every seat); the NetGame has it
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            cfg.net_port = 0;
+            cfg.net_loopback_only = true;
+            cfg.player_name = "Alice";
+            cfg.fill_bots = net::FillPlan(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});
+            cfg.teams = LocalTeams{true, 0, 2};
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_TRUE(app.net()->fill_bots() == cfg.fill_bots && app.net()->start_teams() == LocalTeams({true, 0, 2}));      // the machine's START carries both choices
+            app.set_fill_bots(L::Medium);
+            ASSERT_TRUE(app.fill_bots() == net::FillPlan(L::Medium) && app.net()->fill_bots() == net::FillPlan(L::Medium));
+            app.set_fill_bots(net::FillPlan(std::array<L, 4>{L::None, L::Hard, L::None, L::None}));
+            ASSERT_TRUE(app.fill_bots() == net::FillPlan(std::array<L, 4>{L::None, L::Hard, L::None, L::None}) && app.net()->fill_bots() == app.fill_bots());
+            app.set_start_teams(LocalTeams{true, 1, 2});
+            ASSERT_TRUE(app.start_teams() == LocalTeams({true, 1, 2}) && app.net()->start_teams() == LocalTeams({true, 1, 2}));
+            app.set_start_teams(LocalTeams{});
+            ASSERT_TRUE(!app.start_teams().set && !app.net()->start_teams().set);
+            app.quit();
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.78 Protocol 13, A Server's Room With Two Games, Two Bots Of Their Own Levels And The Leader's Teams: The Prompt And The Footer Say The Plan; Every Engine (The Referee's, Both Machines') Has The Alliances Before Its First Tick, Each Game's Chat Log Has The News Flash Once For Each Pair, The Hashes Agree, Nobody Is Told That Teams Could Not Be Made") {
+        using L = net::FillLevel;
+        Server server;
+        ASSERT_TRUE(server.make_room("TEAMS-APP", 4));
+        ApplicationConfig lead_cfg = join_config(server, "TEAMS-APP", "Leader");
+        lead_cfg.fill_bots = net::FillPlan(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});       // Blue gets an Easy bot, Black a Hard bot (seat 1 is the guest's)
+        lead_cfg.teams = LocalTeams{true, 0, 2};                                                         // Green + Blue against Red + Black: the leader and the Easy bot against the guest and the Hard bot
+        Application leader;
+        ASSERT_TRUE(leader.init(lead_cfg));
+        Hall hall{server, &leader, {}};
+        ASSERT_TRUE(hall.until([&]() { return leader.net()->phase() == net::NetGame::Phase::Room && leader.net()->is_leader(); }, 8000));
+        Application guest;
+        ASSERT_TRUE(guest.init(join_config(server, "TEAMS-APP", "Guest")));
+        hall.second = &guest;
+        ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room && leader.net()->room().slots[1].state == net::SlotState::Client && leader.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        hall.step(300);
+        // what the leader is told before START: the longest way of saying it that fits the label
+        const std::vector<std::string>& prompts = leader.net()->prompt_texts();
+        ASSERT_TRUE(prompts.size() >= 4 && prompts.front() == "Press START: Blue gets an Easy bot, Black a Hard bot; teams Green + Blue against Red + Black.");
+        const std::string shown = leader.map_select().room().status;
+        ASSERT_TRUE(std::find(prompts.begin(), prompts.end(), shown) != prompts.end() && leader.map_select().prompt_fits(leader.renderer(), shown));
+        for (const std::string& text : prompts) {
+            if (text == shown) break;
+            ASSERT_FALSE(leader.map_select().prompt_fits(leader.renderer(), text));                      // (every longer way did not fit: this is the longest that does)
+        }
+        ASSERT_TRUE(shown.find("Blue") != std::string::npos && shown.find("Black") != std::string::npos && shown.find("teams") != std::string::npos);
+        ASSERT_EQ(guest.map_select().room().status, std::string(sim::strings::text(sim::strings::kWaitingForHost)));      // a guest keeps its own line
+        click_start(leader);
+        ASSERT_TRUE(hall.until([&]() { return leader.state() == AppState::Playing && guest.state() == AppState::Playing; }, 15000));
+        server::RoomStatus s = server.status("TEAMS-APP");
+        ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.bots.size() == 2);
+        ASSERT_TRUE(s.bots[0].seat == 2 && s.bots[0].level == "easy" && s.bots[0].name == "Bot (Easy)" && s.bots[1].seat == 3 && s.bots[1].level == "hard" && s.bots[1].name == "Bot (Hard)");
+        ASSERT_EQ(s.teams, std::string("0+2"));
+        ASSERT_TRUE(s.allies[0] == 2 && s.allies[1] == 3 && s.allies[2] == 0 && s.allies[3] == 1);        // the referee's engine, in the dialog: tick 0
+        ASSERT_EQ(s.ticks, 0u);
+        for (Application* a : {&leader, &guest}) {                                                        // both games: made on the Start, before any tick
+            ASSERT_EQ(a->sim().current_tick(), uint64_t{0});
+            for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_EQ(a->sim().alliance_of(seat), static_cast<uint8_t>(seat == 0 ? 2 : seat == 1 ? 3 : seat == 2 ? 0 : 1));
+            ASSERT_EQ(a->sim().get_world_state().pending_invite_from[0], 255);                           // no invitation is left open (no dialog)
+        }
+        ASSERT_EQ(leader.net()->start_info().team_a, 0);
+        ASSERT_EQ(guest.net()->start_info().team_b, 2);
+        hall.step(kDialogMs + 1500);                                                                     // the match runs: the first tick, the News Flash
+        const auto count_of = [](const std::string& text, const std::string& what) {
+            size_t n = 0;
+            for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
+            return n;
+        };
+        for (Application* a : {&leader, &guest}) {
+            const std::string log = a->hud().chat_transcript("t");
+            ASSERT_EQ(count_of(log, "are a team now!"), size_t{2});                                       // once for each pair, on each machine
+            ASSERT_TRUE(log.find("Leader (Green) and Bot (Easy) (Blue) are a team now!") != std::string::npos);
+            ASSERT_TRUE(log.find("Guest (Red) and Bot (Hard) (Black) are a team now!") != std::string::npos);
+            ASSERT_TRUE(a->net()->pregame_chat().empty() || !a->net()->pregame_chat().back().notice());      // nobody was told that teams could not be made
+        }
+        ASSERT_TRUE(hall.identical(leader.sim(), guest.sim()));
+        ASSERT_FALSE(leader.net()->desynced() || guest.net()->desynced());
+        hall.step(3000);
+        s = server.status("TEAMS-APP");
+        ASSERT_TRUE(s.state == server::RoomState::Running && s.ticks > 60 && s.allies[0] == 2 && s.allies[3] == 1);        // (the referee agrees to the hash of every 20th turn: a room that disagreed would have failed)
+        ASSERT_TRUE(leader.bots() == nullptr && guest.bots() == nullptr);                                // the server runs the bots
+        leader.quit();
+        guest.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.79 Protocol 13, The Host Of A Room On The Local Network: START Seats The Bots Of Their Own Levels (This Machine Runs Them: The Controller Holds Those Seats With Those Levels) And Puts The Host's Teams Into The Start; A Guest's Engine Has The Alliances At Tick 0 And Stands At The Host's State; Teams That Cannot Be Made Say Why On The Host's Status Line And In A Notice To The Guest") {
+        using L = net::FillLevel;
+        {
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            cfg.net_port = 0;
+            cfg.net_loopback_only = true;
+            cfg.player_name = "Alice";
+            cfg.fill_bots = net::FillPlan(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});
+            cfg.teams = LocalTeams{true, 0, 2};
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            Peer bob;
+            ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+            Duo duo{app, bob};
+            ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+            duo.step(200);
+            ASSERT_EQ(app.map_select().room().status.find("Blue gets an Easy bot, Black a Hard bot") == std::string::npos, false);        // the host's prompt says the plan
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+            ASSERT_EQ(app.sim().roster_mask(), 0x0F);
+            ASSERT_TRUE(app.bots() != nullptr);
+            ASSERT_EQ(app.bots()->seat_mask(), 0x0C);                                                  // exactly seats 2 and 3, each with its own level
+            ASSERT_TRUE(app.bots()->profile(2) != nullptr && app.bots()->profile(3) != nullptr);
+            ASSERT_EQ(app.bots()->profile(2)->rate_milli_cps, ai::profile_for(ai::Level::Easy).rate_milli_cps);
+            ASSERT_EQ(app.bots()->profile(3)->rate_milli_cps, ai::profile_for(ai::Level::Hard).rate_milli_cps);
+            ASSERT_TRUE(ai::profile_for(ai::Level::Easy).rate_milli_cps != ai::profile_for(ai::Level::Hard).rate_milli_cps);
+            ASSERT_TRUE(app.sim().get_player_name(2) == "Bot (Easy)" && app.sim().get_player_name(3) == "Bot (Hard)");
+            ASSERT_EQ(app.net()->start_info().team_a, 0);
+            ASSERT_EQ(bob.net.start_info().team_b, 2);
+            ASSERT_EQ(app.sim().current_tick(), uint64_t{0});
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                const uint8_t want = static_cast<uint8_t>(seat == 0 ? 2 : seat == 1 ? 3 : seat == 2 ? 0 : 1);
+                ASSERT_TRUE(app.sim().alliance_of(seat) == want && bob.sim.alliance_of(seat) == want);
+            }
+            duo.step(kDialogMs + 3000);
+            const std::string log = app.hud().chat_transcript("t");
+            size_t told = 0;
+            for (size_t at = log.find("are a team now!"); at != std::string::npos; at = log.find("are a team now!", at + 1)) ++told;
+            ASSERT_EQ(told, size_t{2});
+            ASSERT_TRUE(app.bots()->stats(2).decisions > 0 && app.bots()->stats(3).decisions > 0);
+            ASSERT_TRUE(duo.until([&]() { return app.sim().current_tick() == bob.sim.current_tick(); }, 4000));
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+            ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+            for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_EQ(app.sim().alliance_of(seat), static_cast<uint8_t>(seat == 0 ? 2 : seat == 1 ? 3 : seat == 2 ? 0 : 1));       // (the standard bots never broke a team)
+            app.quit();
+        }
+        {   // teams that cannot be made: two people play (the host and Bob, no bots), the team would be both of them
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            cfg.net_port = 0;
+            cfg.net_loopback_only = true;
+            cfg.player_name = "Alice";
+            cfg.teams = LocalTeams{true, 0, 1};
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            Peer bob;
+            ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+            Duo duo{app, bob};
+            ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+            duo.step(200);
+            ASSERT_TRUE(app.map_select().room().status.find("teams Green + Red") != std::string::npos);                                // the prompt says the choice
+            app.map_select().handle_key_down(SDLK_RETURN);
+            const std::string text = std::string(net::kNoticeNoTeams) + "only two seats play: a team of them would end the match at once.";
+            ASSERT_EQ(app.net()->status_text(), text);
+            ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing && !bob.net.pregame_chat().empty(); }, 8000));
+            ASSERT_TRUE(bob.net.pregame_chat().size() == 1 && bob.net.pregame_chat()[0].notice() && bob.net.pregame_chat()[0].text == text);
+            for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_TRUE(app.sim().alliance_of(seat) == sim::ALLIANCE_NONE && bob.sim.alliance_of(seat) == sim::ALLIANCE_NONE);
+            ASSERT_EQ(app.net()->start_info().team_a, net::kNoTeam);
+            app.quit();
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.80 Protocol 13, The Texts Fit Their Places With The Real Font: The Leader's Prompt Has A Way Of Being Said That Fits The Two Lines Of The Status Label On The Classic Page (293 px) And On The 16:9 Page (363 px) For Every Plan And Every Teams Choice; Every Line Of The Footer Fits The Players' Status Box At 12 px At The Latest (18 px For The Footer Of Protocol 11)") {
+        using L = net::FillLevel;
+        ApplicationConfig cfg = headless_config();
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        const Renderer& r = app.renderer();
+        std::vector<net::FillPlan> plans = {net::FillPlan(), net::FillPlan(L::Easy), net::FillPlan(L::Medium), net::FillPlan(L::Hard)};
+        for (const std::array<L, 3>& abc : {std::array<L, 3>{L::None, L::None, L::Hard}, std::array<L, 3>{L::Easy, L::None, L::Hard}, std::array<L, 3>{L::Easy, L::Hard, L::Medium},
+                                            std::array<L, 3>{L::Medium, L::Medium, L::Medium}, std::array<L, 3>{L::Hard, L::Easy, L::Medium}, std::array<L, 3>{L::None, L::Medium, L::Easy},
+                                            std::array<L, 3>{L::Medium, L::None, L::None}, std::array<L, 3>{L::None, L::Hard, L::None}, std::array<L, 3>{L::Easy, L::Easy, L::Hard},
+                                            std::array<L, 3>{L::Hard, L::Medium, L::Hard}}) {
+            plans.push_back(net::FillPlan(std::array<L, 4>{L::None, abc[0], abc[1], abc[2]}));        // (the host's own seat has no level)
+        }
+        std::vector<sim::StartTeams> teams = {sim::StartTeams{}};
+        for (uint8_t a = 0; a < 4; ++a) {
+            for (uint8_t b = 0; b < 4; ++b) {
+                if (a != b) teams.push_back(sim::StartTeams{true, a, b});
+            }
+        }
+        const std::vector<std::vector<uint8_t>> rooms = {{0}, {0, 2}, {1, 2, 3}, {0, 1, 2, 3}};
+        using MS = MapSelectScreen;
+        size_t checked = 0;
+        size_t widest_classic = 0;
+        int32_t widest_footer = 0;
+        for (const net::FillPlan& plan : plans) {
+            for (const sim::StartTeams& t : teams) {
+                for (const std::vector<uint8_t>& people : rooms) {
+                    for (const bool fog : {false, true}) {
+                        net::RoomMsg room;
+                        for (const uint8_t seat : people) room.slots[seat] = {net::SlotState::Client, "P", 10};
+                        const std::vector<std::string> prompts = net::NetGame::start_prompt_texts(plan, t, room, fog);
+                        if (!prompts.empty()) {
+                            // the shortest way of saying it fits the two lines of the classic label (293 px) and of the wide one (363 px); the longest that fits is what a screen picks
+                            ASSERT_TRUE(wrap_label_text(r, prompts.back(), 293, FontSize::Px14).size() <= 2);
+                            ASSERT_TRUE(wrap_label_text(r, prompts.back(), 363, FontSize::Px14).size() <= 2);
+                            widest_classic = std::max(widest_classic, wrap_label_text(r, prompts.back(), 293, FontSize::Px14).size());
+                            for (size_t i = 1; i < prompts.size(); ++i) ASSERT_TRUE(prompts[i].size() <= prompts[i - 1].size());
+                        }
+                        const net::NetGame::FooterTexts footer = net::NetGame::start_footer(plan, t, room, fog);
+                        for (const std::vector<std::string>& line : footer.line) {
+                            if (line.empty()) continue;
+                            bool fits = false;
+                            for (const std::string& text : line) {
+                                const int32_t w = r.get_text_width(text, FontSize::Px12);
+                                widest_footer = std::max(widest_footer, w);
+                                fits = fits || w <= MS::footer_width();
+                            }
+                            ASSERT_TRUE(fits);                                                      // some way of saying the line fits the box at 12 px
+                        }
+                        ++checked;
+                    }
+                }
+            }
+        }
+        ASSERT_TRUE(checked > 1000 && widest_footer > 0);
+        ASSERT_EQ(widest_classic, size_t{2});                                                        // (the shortest ways take the two lines that the label has, and no more)
+        // the footer of protocol 11 is at 18 px: its lines fit the box at the size that the screen has always used
+        ASSERT_EQ(MS::footer_font(r, "Empty seats at START:"), FontSize::Px18);
+        ASSERT_EQ(MS::footer_font(r, "Medium bots"), FontSize::Px18);
+        ASSERT_EQ(MS::footer_font(r, "Blue Easy, Black Hard"), FontSize::Px18);
+        ASSERT_TRUE(MS::footer_font(r, "Teams: Green + Red against Blue + Black") != FontSize::Px18);
+        ASSERT_EQ(MS::footer_font(r, std::string(80, 'W')), FontSize::Px12);                         // (what fits at no size is cut at 12 px by the screen)
         app.quit();
     } TEST_END();
 }

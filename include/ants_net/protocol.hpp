@@ -42,6 +42,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "ants_sim/command.hpp"
@@ -247,6 +248,37 @@ std::string fill_level_title(FillLevel level);
 /// What the room calls the bot that a fill seats: "Bot (Easy)", "Bot (Medium)", "Bot (Hard)" (the name of the standard bot of that level: ants_ai's bot_display_name says the same; a
 /// person can never take a name that starts with "Bot (": the lobby renames it). Empty for None.
 std::string fill_bot_name(FillLevel level);
+/// The bots that a START asks for: the level of each seat (protocol 13; protocol 11 had one level for all of them). A single level converts to the plan that gives every seat that level, so a
+/// choice of one level ("--fill-bots hard", the one-level calls of protocol 11) still means what it meant.
+struct FillPlan {
+    std::array<FillLevel, sim::MAX_PLAYERS> level{};
+    constexpr FillPlan() noexcept = default;
+    constexpr FillPlan(FillLevel all) noexcept : level{all, all, all, all} {}                                                     // (implicit on purpose)
+    constexpr FillPlan(const std::array<FillLevel, sim::MAX_PLAYERS>& per_seat) noexcept : level(per_seat) {}                     // (implicit on purpose)
+    /// Some seat has a level
+    constexpr bool any() const noexcept {
+        for (const FillLevel l : level) {
+            if (l != FillLevel::None) return true;
+        }
+        return false;
+    }
+    /// Every seat has the same level (none included)
+    constexpr bool uniform() const noexcept { return level[0] == level[1] && level[1] == level[2] && level[2] == level[3]; }
+    friend bool operator==(const FillPlan& a, const FillPlan& b) noexcept { return a.level == b.level; }
+    friend bool operator!=(const FillPlan& a, const FillPlan& b) noexcept { return !(a == b); }
+};
+/// "none", "easy", "medium", "hard" (one word: every seat has that level) or four of them joined by commas, for the seats 0 - 3 ("none,none,easy,hard"), in any case; false (`out` unchanged, `why` says
+/// what is wrong) for anything else
+bool parse_fill_plan(std::string_view text, FillPlan& out, std::string& why);
+/// One word when every seat has the same level, else four words: what parse_fill_plan reads back
+std::string fill_plan_text(const FillPlan& plan);
+/// The bots that a START seats in `room`: for the seats 0 - 3 in order, an empty seat whose level is not none gets it, while fewer than `players` seats are taken (the cap is the room's player count;
+/// a seat that a person took is skipped and its level ignored). The one rule of the server's Room and of a LAN host's START, and what the leader's screens show.
+std::vector<std::pair<uint8_t, FillLevel>> plan_fill_seats(const FillPlan& plan, const RoomMsg& room, uint8_t players);
+/// What a person is told about those bots: "Red gets an Easy bot, Black a Hard bot" (the colour words of the seats; "an Easy", "a Medium", "a Hard")
+std::string fill_seats_sentence(const std::vector<std::pair<uint8_t, FillLevel>>& seats);
+/// ... and in the short form of a narrow place: "Red Easy, Black Hard"
+std::string fill_seats_short(const std::vector<std::pair<uint8_t, FillLevel>>& seats);
 /// "No team" in the team bytes of StartRequest and Start (protocol 13): both bytes are kNoTeam for free for all, else they are two different seats, 0 - 3
 inline constexpr uint8_t kNoTeam = 255;
 /// The leader's request to start the match now with the players who are in the room (protocol 7, client -> server), to seat bots in the seats that are still empty (up to the room's player count)

@@ -308,11 +308,12 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--start-when") == 0 && i + 1 < argc) {
             const int players = std::atoi(argv[++i]);                          // a test hook: the leader of a server's room presses START once this many players are in
             if (players >= 1 && players <= 4) cfg.net_start_when = static_cast<uint8_t>(players);       // (1: a leader with --fill-bots starts alone)
-        } else if (std::strcmp(argv[i], "--fill-bots") == 0) {                // the bots that this player's START seats in the empty seats of its room (protocol 11)
+        } else if (std::strcmp(argv[i], "--fill-bots") == 0) {                // the bots that this player's START seats in the empty seats of its room (protocol 11; a level for each seat since 13)
             if (i + 1 >= argc) {
-                if (cfg.startup_error.empty()) cfg.startup_error = "--fill-bots needs none, easy, medium or hard";
-            } else if (!net::parse_fill_level(argv[++i], cfg.fill_bots) && cfg.startup_error.empty()) {
-                cfg.startup_error = "--fill-bots " + std::string(argv[i]) + ": none, easy, medium or hard";
+                if (cfg.startup_error.empty()) cfg.startup_error = "--fill-bots needs none, easy, medium or hard (or four of them, one for each seat: none,none,easy,hard)";
+            } else {
+                std::string why;
+                if (!net::parse_fill_plan(argv[++i], cfg.fill_bots, why) && cfg.startup_error.empty()) cfg.startup_error = "--fill-bots " + std::string(argv[i]) + ": " + why;
             }
         } else if (std::strcmp(argv[i], "--say") == 0 && i + 1 < argc) {
             cfg.net_say = argv[++i];                                           // a test hook: a line to say in the waiting room
@@ -405,9 +406,6 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         }
     }
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
-    if (cfg.teams.set && cfg.net_role != ApplicationConfig::NetRole::None && cfg.startup_error.empty()) {
-        cfg.startup_error = "--teams is for a game on this computer: a room cannot choose its teams yet (its players team up in the match, with the team-up button).";
-    }
 #if !defined(__EMSCRIPTEN__)
     if (menu_forced) {
         // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
@@ -1225,7 +1223,7 @@ bool Application::start_local_bots(uint32_t match_seed) {
 // --teams: each pair of the plan becomes a team with the original's own commands, applied straight to the simulation before its first tick: the first seat invites, the second accepts (so the News Flash
 // "... are a team now!" is in the chat log and no dialog opens). What cannot be made is said, and the game starts without teams.
 void Application::form_start_teams() {
-    if (!config_.teams.set) return;                                    // (a room never gets here: the parser refuses --teams for one)
+    if (!config_.teams.set) return;                                    // (a room never gets here: its machines make the teams of the Start message, net_load_match)
     const LocalTeamsPlan plan = plan_local_teams(config_.teams, sim_.roster_mask());
     if (!plan.why.empty()) {
         show_setup_notice("--teams " + local_teams_text(config_.teams) + ": " + plan.why + " The game starts without teams.");
@@ -2363,6 +2361,19 @@ void Application::sync_room_view() {
     } else {
         view.status = net_->status_text();                                                       // (the 16:9 page: the status line keeps the prompt, the typed line is in the chat box)
     }
+    {
+        // The leader's prompt says what START will do (the bots of each seat, the teams) in several ways, the longest first: the longest that fits this screen's label is the line
+        const std::vector<std::string>& prompts = net_->prompt_texts();
+        if (renderer_ && !prompts.empty() && view.status == prompts.front()) {
+            view.status = prompts.back();
+            for (const std::string& text : prompts) {
+                if (map_select_.prompt_fits(*renderer_, text)) {
+                    view.status = text;
+                    break;
+                }
+            }
+        }
+    }
     map_select_.set_room(view);
     // The chat box of the 16:9 page (the Online and Guest variants): the newest lines of the waiting room (names in front, a room's notices as they are, styled by the screen), the line that is
     // typed and the caret. And the foot of the leader's Players' Status box: what fills the empty seats at START (the choice of the host panel / --fill-bots; not with Fog of War, which seats no
@@ -2378,9 +2389,17 @@ void Application::sync_room_view() {
         }
         panel.typed = room_chat_.text();                                                         // (empty while the input is closed, and the caret is off then)
         panel.caret = room_chat_.caret(static_cast<uint32_t>(net_time_ms_));
-        if (map_select_.setup_variant() == SetupVariant::Online && config_.fill_bots != net::FillLevel::None && !room.fog) {
-            fill_first = "Empty seats at START:";
-            fill_second = net::fill_level_title(config_.fill_bots) + " bots";
+        if (map_select_.setup_variant() == SetupVariant::Online) {
+            // what START will do with the empty seats and the teams (the choices of the host panel / the command line; not for a guest, who cannot START): each line in its ways, the longest that fits the box
+            const net::NetGame::FooterTexts footer = net::NetGame::start_footer(config_.fill_bots, config_.teams, room, room.fog);
+            const auto pick = [this](const std::vector<std::string>& ways) {
+                for (const std::string& text : ways) {
+                    if (renderer_ && renderer_->get_text_width(text, FontSize::Px12) <= MapSelectScreen::footer_width()) return text;       // (it fits at the smallest size: the screen draws it as big as it can)
+                }
+                return ways.empty() ? std::string() : ways.back();
+            };
+            fill_first = pick(footer.line[0]);
+            fill_second = pick(footer.line[1]);
         }
     }
     map_select_.set_chat_panel(std::move(panel));
@@ -2493,7 +2512,7 @@ void Application::net_start_from_setup(const std::string& map_path) {
     // The host's own START with a fill level (protocol 11): the empty seats get bots first, which this machine runs from the moment the match begins (as for --bot); one player is then
     // enough. With Fog of War nothing is seated (the status line says why). A START that does not go through takes them out again.
     std::vector<uint8_t> filled;
-    if (config_.fill_bots != net::FillLevel::None) net_->fill_bots(config_.fill_bots, &filled);
+    if (config_.fill_bots.any()) net_->fill_bots(config_.fill_bots, &filled);
     std::random_device rd;
     if (!net_->start_match(static_cast<uint32_t>(rd()), hash)) {
         for (const uint8_t seat : filled) net_->remove_bot(seat);
@@ -2501,7 +2520,10 @@ void Application::net_start_from_setup(const std::string& map_path) {
         return;
     }
     fill_specs_.clear();
-    for (const uint8_t seat : filled) fill_specs_.push_back(ai::BotSpec{seat, "standard", config_.fill_bots == net::FillLevel::Easy ? ai::Level::Easy : config_.fill_bots == net::FillLevel::Hard ? ai::Level::Hard : ai::Level::Medium});
+    for (const uint8_t seat : filled) {                                      // (each seat's bot has the level of its seat)
+        const net::FillLevel level = config_.fill_bots.level[seat];
+        fill_specs_.push_back(ai::BotSpec{seat, "standard", level == net::FillLevel::Easy ? ai::Level::Easy : level == net::FillLevel::Hard ? ai::Level::Hard : ai::Level::Medium});
+    }
     map_select_.lock();                                                      // START ran: the map and the fog option are fixed (+0x130)
 }
 
@@ -2564,6 +2586,7 @@ void Application::net_load_match() {
     if (ok) {
         if (renderer_) renderer_->set_hud_team(local_player_id_);
         apply_team_names(start.names, start.roster);
+        sim::apply_start_teams(sim_, start.teams());                         // (protocol 13: the teams of the Start, with the original's own commands, after init and the names and before the first tick: every machine, the referee and a machine that comes back from nothing do the same)
     }
     net_->report_loaded(ok);
 }

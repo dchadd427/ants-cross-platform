@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "ants_net/wire.hpp"
+#include "ants_sim/game_strings.hpp"
 
 namespace ants::net {
 
@@ -617,6 +618,74 @@ std::string fill_level_title(FillLevel level) {
         case FillLevel::None: break;
     }
     return std::string();
+}
+
+bool parse_fill_plan(std::string_view text, FillPlan& out, std::string& why) {
+    std::array<FillLevel, sim::MAX_PLAYERS> levels{};
+    size_t count = 0;
+    size_t from = 0;
+    for (;;) {
+        const size_t comma = text.find(',', from);
+        const std::string_view word = text.substr(from, comma == std::string_view::npos ? std::string_view::npos : comma - from);
+        FillLevel level = FillLevel::None;
+        if (!parse_fill_level(word, level)) {
+            why = "write none, easy, medium or hard for every seat, or four of them joined by commas for the seats 0 to 3 (none,none,easy,hard).";
+            return false;
+        }
+        if (count < levels.size()) levels[count] = level;
+        ++count;
+        if (comma == std::string_view::npos) break;
+        from = comma + 1;
+    }
+    if (count == 1) {
+        out = FillPlan(levels[0]);
+        return true;
+    }
+    if (count != levels.size()) {
+        why = "give one level for every seat, or exactly four, one for each of the seats 0 to 3 (none,none,easy,hard).";
+        return false;
+    }
+    out = FillPlan(levels);
+    return true;
+}
+
+std::string fill_plan_text(const FillPlan& plan) {
+    if (plan.uniform()) return fill_level_name(plan.level[0]);
+    std::string out;
+    for (size_t seat = 0; seat < plan.level.size(); ++seat) out += (seat == 0 ? "" : ",") + std::string(fill_level_name(plan.level[seat]));
+    return out;
+}
+
+std::vector<std::pair<uint8_t, FillLevel>> plan_fill_seats(const FillPlan& plan, const RoomMsg& room, uint8_t players) {
+    std::vector<std::pair<uint8_t, FillLevel>> seats;
+    size_t taken = 0;
+    for (const RoomMsg::Slot& slot : room.slots) taken += slot.state != SlotState::Empty ? 1u : 0u;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS && taken + seats.size() < players; ++seat) {
+        if (plan.level[seat] != FillLevel::None && room.slots[seat].state == SlotState::Empty) seats.emplace_back(seat, plan.level[seat]);
+    }
+    return seats;
+}
+
+namespace {
+
+std::string seat_colour_word(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(sim::strings::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
+
+}  // namespace
+
+std::string fill_seats_sentence(const std::vector<std::pair<uint8_t, FillLevel>>& seats) {
+    std::string out;
+    for (size_t i = 0; i < seats.size(); ++i) {
+        const std::string level = fill_level_title(seats[i].second);
+        const std::string article = seats[i].second == FillLevel::Easy ? "an " : "a ";
+        out += (i == 0 ? "" : ", ") + seat_colour_word(seats[i].first) + (i == 0 ? " gets " : " ") + article + level + " bot";
+    }
+    return out;
+}
+
+std::string fill_seats_short(const std::vector<std::pair<uint8_t, FillLevel>>& seats) {
+    std::string out;
+    for (size_t i = 0; i < seats.size(); ++i) out += (i == 0 ? "" : ", ") + seat_colour_word(seats[i].first) + " " + fill_level_title(seats[i].second);
+    return out;
 }
 
 std::string fill_bot_name(FillLevel level) {

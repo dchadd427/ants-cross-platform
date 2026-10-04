@@ -2258,6 +2258,69 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("N4.17c The Fill Plan (Protocol 13): One Level Or A Level For Each Seat (One Word Or Four Joined By Commas, In Any Case, Nothing Else), The Seats That A START Seats (Empty Seats With A Level, The Lowest First, Never More Than The Room's Players, A Taken Seat Skipped), The Words That Tell It") {
+        using Seats = std::vector<std::pair<uint8_t, FillLevel>>;
+        // one level converts to the plan that gives it to every seat; the plan knows when it asks for nothing and when it is one level
+        const FillPlan hard = FillLevel::Hard;
+        ASSERT_TRUE(hard.uniform() && hard.any() && hard.level[0] == FillLevel::Hard && hard.level[3] == FillLevel::Hard);
+        ASSERT_TRUE(FillPlan().uniform() && !FillPlan().any() && FillPlan() == FillLevel::None);
+        const FillPlan mixed(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::None, FillLevel::Hard});
+        ASSERT_TRUE(mixed.any() && !mixed.uniform() && mixed != hard && mixed == mixed && hard == FillLevel::Hard && hard != FillLevel::Easy);
+        // parse: one word is every seat, four are the seats 0 to 3; any case; nothing else (and the target is left alone)
+        FillPlan out = FillLevel::Medium;
+        std::string why;
+        for (const char* good : {"none", "easy", "Medium", "HARD", "none,none,easy,hard", "Easy,MEDIUM,hard,None", "hard,hard,hard,hard"}) {
+            out = FillLevel::Medium;
+            ASSERT_TRUE(parse_fill_plan(good, out, why));
+        }
+        ASSERT_TRUE(parse_fill_plan("Easy", out, why) && out == FillLevel::Easy);
+        ASSERT_TRUE(parse_fill_plan("none,easy,none,hard", out, why) && out == mixed);
+        ASSERT_TRUE(parse_fill_plan("NONE,Easy,NONE,Hard", out, why) && out == mixed);
+        ASSERT_TRUE(parse_fill_plan("none,none,easy,hard", out, why) && out == FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard}));      // (the order is the seats')
+        ASSERT_TRUE(parse_fill_plan("hard,hard,hard,hard", out, why) && out == hard && out.uniform());
+        for (const char* bad : {"", "harder", "none,easy", "none,none,easy", "none,none,easy,hard,hard", "none,,easy,hard", ",,,", "easy medium", "none, easy, medium, hard", "1", "easy,", ",easy", "none,none,easy,hardd", "none;none;easy;hard"}) {
+            out = FillLevel::Medium;
+            why.clear();
+            ASSERT_FALSE(parse_fill_plan(bad, out, why));
+            ASSERT_TRUE(out == FillLevel::Medium && !why.empty());
+        }
+        // the text reads back: one word for one level in every seat, four words otherwise
+        ASSERT_EQ(fill_plan_text(FillPlan()), std::string("none"));
+        ASSERT_EQ(fill_plan_text(hard), std::string("hard"));
+        ASSERT_EQ(fill_plan_text(mixed), std::string("none,easy,none,hard"));
+        for (const FillPlan& plan : {FillPlan(), hard, mixed, FillPlan(FillLevel::Easy), FillPlan(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::Medium, FillLevel::Easy, FillLevel::None})}) {
+            FillPlan back = FillLevel::Medium;
+            ASSERT_TRUE(parse_fill_plan(fill_plan_text(plan), back, why) && back == plan);
+        }
+        // the seats that a START seats: the lowest empty seats that have a level, up to the room's players
+        RoomMsg room;
+        room.slots[0] = {SlotState::Client, "Ann", 10};
+        const auto seats_of = [&](const FillPlan& plan, uint8_t players) { return plan_fill_seats(plan, room, players); };
+        const FillPlan ems(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::Medium, FillLevel::Hard});
+        ASSERT_TRUE(seats_of(ems, 4) == (Seats{{1, FillLevel::Easy}, {2, FillLevel::Medium}, {3, FillLevel::Hard}}));
+        ASSERT_TRUE(seats_of(ems, 3) == (Seats{{1, FillLevel::Easy}, {2, FillLevel::Medium}}));              // (the room's players: one person and two bots)
+        ASSERT_TRUE(seats_of(ems, 2) == (Seats{{1, FillLevel::Easy}}));
+        ASSERT_TRUE(seats_of(ems, 1).empty());                                                               // (a room for one is full)
+        ASSERT_TRUE(seats_of(FillPlan(), 4).empty());
+        ASSERT_TRUE(seats_of(hard, 4) == (Seats{{1, FillLevel::Hard}, {2, FillLevel::Hard}, {3, FillLevel::Hard}}));   // (the person's own seat is never filled: it is taken)
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::None, FillLevel::None, FillLevel::None}), 4).empty());          // a level for the seat of a person asks for nothing
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::None, FillLevel::Hard}), 2) == (Seats{{3, FillLevel::Hard}}));    // the lowest seat WITH a level
+        room.slots[2] = {SlotState::Client, "Bob", 10};                                                      // a person took seat 2: its level is skipped, and it counts for the room's players
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::Hard, FillLevel::Medium}), 4) == (Seats{{1, FillLevel::Easy}, {3, FillLevel::Medium}}));
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::Hard, FillLevel::Medium}), 3) == (Seats{{1, FillLevel::Easy}}));
+        room.slots[1] = {SlotState::Bot, "Bot (Easy)", 0};                                                   // a bot of the room's own specification holds a seat too
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Hard, FillLevel::Hard, FillLevel::Medium}), 4) == (Seats{{3, FillLevel::Medium}}));
+        // the words (the colour words of the seats: 0 green, 1 red, 2 blue, 3 black)
+        ASSERT_EQ(fill_seats_sentence(Seats{{2, FillLevel::Easy}, {3, FillLevel::Hard}}), std::string("Blue gets an Easy bot, Black a Hard bot"));
+        ASSERT_EQ(fill_seats_sentence(Seats{{1, FillLevel::Medium}}), std::string("Red gets a Medium bot"));
+        ASSERT_EQ(fill_seats_sentence(Seats{{1, FillLevel::Medium}, {2, FillLevel::Hard}, {3, FillLevel::Easy}}), std::string("Red gets a Medium bot, Blue a Hard bot, Black an Easy bot"));
+        ASSERT_EQ(fill_seats_sentence(Seats{{0, FillLevel::Easy}}), std::string("Green gets an Easy bot"));
+        ASSERT_EQ(fill_seats_sentence(Seats{}), std::string());
+        ASSERT_EQ(fill_seats_short(Seats{{2, FillLevel::Easy}, {3, FillLevel::Hard}}), std::string("Blue Easy, Black Hard"));
+        ASSERT_EQ(fill_seats_short(Seats{{1, FillLevel::Medium}, {2, FillLevel::Hard}, {3, FillLevel::Easy}}), std::string("Red Medium, Blue Hard, Black Easy"));
+        ASSERT_EQ(fill_seats_short(Seats{}), std::string());
+    } TEST_END();
+
     TEST_CASE("N4.18 Chat In The Waiting Room (Protocol 11): A Line Is Relayed To Everybody In The Room, The Sender Included, With The Seat Of The Connection (Not The Payload's) And The Name, No Team; A Late Joiner Hears Only What Is Said After It Came; Chat Works While The Map Loads; A Line That Does Not Decode (Too Long, Not Printable, A Wrong Flag) Is A Violation As In The Match; An Empty Line Is Ignored; The Lines Are Kept (The Last 200) And Handed On Once; The Room Can Speak To One Guest") {
         HostLobby::Config hc;
         hc.host_seat = 255;

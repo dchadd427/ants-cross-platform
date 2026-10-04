@@ -42,7 +42,10 @@ void Application::init_start_menu() {
         if (bot.seat < 4 && bot.kind == "standard") settings.seats[bot.seat] = seat_choice_of_level(bot.level);
     }
     if (config_.teams.set) settings.teams = config_.teams;                                        // --start-menu --teams 0+1: the Teams choice starts as the command line says (it counts when the seats offer it)
-    if (config_.fill_bots != net::FillLevel::None) settings.host_fill = config_.fill_bots;       // --start-menu --fill-bots hard: the Host panel starts as the command line says
+    if (config_.fill_bots.any()) {                                                                // --start-menu --fill-bots hard: the Host panel starts as the command line says
+        settings.host_fill = config_.fill_bots.level[0];                                          // (one level for now: the panel's per-seat choice comes with the next step)
+        for (const net::FillLevel level : config_.fill_bots.level) settings.host_fill = settings.host_fill == net::FillLevel::None ? level : settings.host_fill;
+    }
     start_menu_.set_settings(settings);
 
     // The server: --server, else the stored `server`, else the public beta server
@@ -133,6 +136,7 @@ void Application::process_menu_request(const MenuRequest& request) {
             break;
         case MenuRequest::Type::Join:
             set_fill_bots(net::FillLevel::None);                          // (a player who joins fills nothing: only the leader's START seats bots, and the room's choice is its host's)
+            set_start_teams(LocalTeams{});                                // (and chooses no teams)
             begin_menu_connection(false, request.room, request.name, 0, 0);
             break;
         case MenuRequest::Type::Host: {
@@ -392,6 +396,7 @@ void Application::attach_net() {
     net_->set_prediction_enabled(prediction_wanted_);                              // the prediction of the player's own orders (net::Prediction): --prediction, the settings' key
     net_->set_on_prediction_dropped([this]() { hud_.set_sim_query(&sim_); });      // (its engine is gone: the HUD's special-target question goes back to the confirmed one at once)
     net_->set_fill_bots(config_.fill_bots);                                        // the bots that this machine's START seats in the empty seats (protocol 11; the menu's Host panel sets it)
+    net_->set_start_teams(config_.teams);                                          // ... and the teams that it makes (protocol 13)
     net_->set_on_tick([this]() { post_tick(); });
     net_->set_on_wake([this]() { background_pump(); });                            // the browser build: a message of the server wakes a hidden page (docs/NETWORK_PORT.md)
     net_->set_on_chat([this](const net::ChatMsg& m) {

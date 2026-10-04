@@ -236,15 +236,34 @@ public:
     /// room is not open, or fewer than two players are in it: the same answer as the host's START gives when `start_match` refuses (the application plays the can't-go cue).
     /// True means the request was sent, not that the server will start: it starts at once when it can, otherwise nothing happens.
     bool request_start();
-    /// The bots that this machine's START asks for when it leads a server's room (protocol 11): None (the default) is the START of protocol 7. With a level, request_start() also works with
-    /// one player in the room (the server seats bots in the empty seats and starts); Fog of War and bots refuse each other: the server says so in a notice to this machine and starts without
-    /// them only if two people are there. Set it before the START (the application does from --fill-bots).
-    void set_fill_bots(FillLevel level) noexcept { fill_ = level; }
-    FillLevel fill_bots() const noexcept { return fill_; }
-    /// What the status line of the setup screen says to somebody who can START a room that has a fill level (the host of a room on the local network, the leader of a server's room), in
-    /// place of the original's "Press START when all players' thumbs have appeared.": "Press START: the empty seats get Medium bots." and, in a room with Fog of War (bots and fog never
-    /// mix), "Fog of War is on, so START seats no bots."
+    /// The bots that this machine's START asks for when it leads a server's room: a level for each seat (protocol 13; one level for all in protocol 11). None everywhere (the default) is the START
+    /// of protocol 7. With a level somewhere, request_start() also works with one player in the room (the server seats a bot of the seat's level in each empty seat that has one, and starts);
+    /// Fog of War and bots refuse each other: the server says so in a notice to this machine and starts without them only if two people are there. One level converts to the plan that gives it to
+    /// every seat. Set it before the START (the application does from --fill-bots and the screens).
+    void set_fill_bots(const FillPlan& plan) noexcept { fill_ = plan; }
+    const FillPlan& fill_bots() const noexcept { return fill_; }
+    /// The teams that this machine's START asks for (protocol 13): free for all (the default) or a pair of seats, and the other two as a team when both play; the room makes them when the seats
+    /// that play can (else the match starts without them and everybody in the room is told why). A LAN host's own START and a server's leader's request carry them.
+    void set_start_teams(const sim::StartTeams& teams) noexcept { teams_ = teams; }
+    const sim::StartTeams& start_teams() const noexcept { return teams_; }
+    /// What the status line of the setup screen says to somebody who can START a room that has a fill level or teams (the host of a room on the local network, the leader of a server's room), in
+    /// place of the original's "Press START when all players' thumbs have appeared.": "Press START: the empty seats get Medium bots." (one level for every empty seat), "Press START: Red gets
+    /// an Easy bot, Black a Hard bot; teams Green + Red against Blue + Black." and, in a room with Fog of War (bots and fog never mix), "Fog of War is on, so START seats no bots."
     static std::string start_prompt(FillLevel level, bool fog);
+    /// The same line for a plan and teams over the seats of `room`, and shorter ways to say it for a label that is too narrow (the longest first); empty when there is nothing to say (no bot
+    /// would be seated and no teams are chosen: the original's own prompt stands)
+    static std::vector<std::string> start_prompt_texts(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog);
+    /// The foot of the leader's Players' Status box on the 16:9 setup screen (two lines, each in the ways it can be said, the longest first; the screen takes the first that fits): "Empty seats at
+    /// START:" / "Medium bots" for one level in every empty seat (the footer of protocol 11), "Empty seats at START:" / "Red Easy, Black Hard" for a level for each seat, "Teams at START:" / "Green + Red
+    /// against Blue + Black" for teams alone, and with both the bots in the first line and "Teams: ..." in the second. Empty lines: nothing to say (no bot would be seated, no teams, Fog of War).
+    struct FooterTexts {
+        std::array<std::vector<std::string>, 2> line;
+        bool empty() const noexcept { return line[0].empty() && line[1].empty(); }
+    };
+    static FooterTexts start_footer(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog);
+    /// The START prompt that status_text() shows in the room, in its other (shorter) ways of saying it, longest first: the application picks the longest that fits its label. Empty while the
+    /// original's own prompt stands (a guest, a START that seats no bot and makes no teams).
+    const std::vector<std::string>& prompt_texts() const noexcept { return prompts_; }
     /// The words of a refusal, as the status line shows them when a join fails (the original's text for a dropped machine, the remake's for the rest). `in_browser`: the game runs in a web page,
     /// where reloading the page is how a player gets the current version (a tab that was opened before the server was updated is the old game), so the refusal for another version says so; every
     /// other refusal is the same words everywhere (the desktop start menu has texts of its own, Application::menu_failure_text).
@@ -287,14 +306,15 @@ public:
     /// built by the application once the match begins and sends its commands with submit_bot(). False when the seat is taken, the room is full or Fog of War is on.
     bool add_bot(uint8_t seat, const std::string& name);
     void remove_bot(uint8_t seat);
-    /// Host only, in the room (protocol 11: the host's own START with a fill level): seats a bot named fill_bot_name(level) in every empty seat (a room on the local network has four) and
-    /// appends the seats to `seats` when it is given; returns how many. Fog of War is refused (a notice on the status line, 0 seated). The application builds the bots of those seats when the
-    /// match begins, as for --bot, and takes them out again (remove_bot) when the start is cancelled.
-    size_t fill_bots(FillLevel level, std::vector<uint8_t>* seats = nullptr);
+    /// Host only, in the room (protocol 11: the host's own START with a fill level; a level for each seat since 13): seats a bot named fill_bot_name(level) in every empty seat that has a level
+    /// (a room on the local network has four seats) and appends the seats to `seats` when it is given; returns how many. Fog of War is refused (a notice on the status line, 0 seated). The
+    /// application builds the bots of those seats when the match begins, as for --bot, and takes them out again (remove_bot) when the start is cancelled.
+    size_t fill_bots(const FillPlan& plan, std::vector<uint8_t>* seats = nullptr);
     /// Host only, during the match: a command of the bot at `seat` (the issuer is stamped with that seat). False unless this machine is the host and the seat is a bot seat.
     /// The simulation's verdict arrives with the turn, like every command's; a bot ignores it.
     bool submit_bot(uint8_t seat, const sim::Command& command);
-    /// Host only, at least two players: sends Start (the map named in the room, `seed`, the roster) to everybody and expects report_loaded()
+    /// Host only, at least two players: sends Start (the map named in the room, `seed`, the roster, the teams of set_start_teams when the seats that play can make them) to everybody and
+    /// expects report_loaded(). Teams that the seats cannot make: the match starts without them and every person in the room is told why (the notice "No teams: ...", also on this machine's status line).
     bool start_match(uint32_t seed, uint64_t map_hash);
     bool can_start() const;
     /// The map, seed, roster and names of the match (valid from Loading on)
@@ -456,7 +476,8 @@ private:
     [[maybe_unused]] bool room_loopback_only_{false};   // host(): the door accepts this machine only, so the announcements stay here too (native builds)
     [[maybe_unused]] uint32_t room_id_{0};              // names the room in the announcements (native builds)
     std::string game_version_;
-    FillLevel fill_{FillLevel::None};       // the bots that this machine's START asks for (protocol 11)
+    FillPlan fill_;                         // the bots that this machine's START asks for: a level for each seat (protocol 11, 13)
+    sim::StartTeams teams_;                 // the teams that this machine's START asks for (protocol 13)
     JoinTarget target_;                     // client: how the first link was made (join, join_url)
     bool way_back_{false};                  // client: the session was built to come back by itself (a dedicated server's room that gave this machine a key)
     bool reload_used_{false};               // client: the BadRequest fallback (reload_after_bad_request) was taken in this match
@@ -467,6 +488,7 @@ private:
     ClientSession::Mode last_mode_{ClientSession::Mode::Normal};      // client: the session's mode at the last look (note_session_mode)
     std::function<void(const RejoinKey&)> on_key_;
     std::function<void(const RejoinKey&)> on_forget_key_;
+    std::vector<std::string> prompts_;      // the START prompt of the leader / host in its ways of saying it, longest first (prompt_texts()); empty when the original's prompt stands
     std::vector<ChatLine> pending_chat_;    // the waiting room's lines that take_pregame_chat() has not handed out
     bool chat_status_mirror_{true};         // the lines of the room are shown on the status line too (set_chat_status_mirror)
 

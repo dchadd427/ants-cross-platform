@@ -337,24 +337,13 @@ void Room::update(uint32_t now_ms) {
         // The fill (protocol 11, a level for each seat since 13): only the leader's request seats bots, in the seats that are still empty and whose level is not none, the lowest seat first, up to the players
         // the room expects (the seat that a person took meanwhile is skipped, its level is ignored); a room that is full starts by itself with nobody added. Bots and Fog of War never mix (docs/BOTS.md
         // rule 8): the leader is told, and the match starts without bots if two people are there. The teams (protocol 13) are the leader's too, and are checked against the seats that really play below.
-        std::array<net::FillLevel, sim::MAX_PLAYERS> fill{};
-        if (early && !full) fill = asked_fill;
-        const auto asks_bots = [&fill]() {
-            for (const net::FillLevel level : fill) {
-                if (level != net::FillLevel::None) return true;
-            }
-            return false;
-        };
-        if (asks_bots() && lobby_.fog()) {
+        net::FillPlan fill;
+        if (early && !full) fill = net::FillPlan(asked_fill);
+        if (fill.any() && lobby_.fog()) {
             lobby_.notify(asked_by, net::kNoticeFillFog);
-            fill = std::array<net::FillLevel, sim::MAX_PLAYERS>{};
+            fill = net::FillPlan();
         }
-        std::vector<std::pair<uint8_t, net::FillLevel>> fill_seats;           // (seat, level) of the bots that this START would seat
-        if (asks_bots()) {
-            for (uint8_t seat = 0; seat < sim::MAX_PLAYERS && lobby_.players() + fill_seats.size() < spec_.players; ++seat) {
-                if (fill[seat] != net::FillLevel::None && lobby_.room().slots[seat].state == net::SlotState::Empty) fill_seats.emplace_back(seat, fill[seat]);
-            }
-        }
+        const std::vector<std::pair<uint8_t, net::FillLevel>> fill_seats = net::plan_fill_seats(fill, lobby_.room(), spec_.players);       // (seat, level) of the bots that this START seats
         const bool can = !fill_seats.empty() ? lobby_.can_start_filled() : lobby_.can_start();
         if (can && (full || early)) {
             uint8_t roster = 0;                                      // the seats that play: a map is playable for some rosters and not for others (a start marker outside the grid)

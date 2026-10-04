@@ -784,6 +784,60 @@ void run_way_back_tests() {
         ASSERT_TRUE(b2.count(NetGame::Event::Type::Rejoined) == 1 && b2.keys_forgotten.size() == 1);     // it caught up: the screen leaves the loading view; the match is over: the key is let go of
     } TEST_END();
 
+    TEST_CASE("RJ1.3b Protocol 13: A Machine That Starts From Nothing Is Given The Start With The Leader's Teams: Its Engine Has The Alliances Before Its First Tick (Made From The Start Message, After Init And The Names), The Catch-Up Runs On Top Of Them, And It Stands At The State Of The Machine That Never Left, Tick For Tick; The Room's Own Engine Agrees (Its Status Says The Teams)") {
+        using net::FillLevel;
+        const auto allies_of = [](const sim::SimulationEngine& e) {
+            std::string out;
+            for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) out += std::to_string(static_cast<unsigned>(e.alliance_of(seat)));
+            return out;                                                                  // by seat: the ally's seat, 4 for none
+        };
+        World w("rejoin-teams");
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-T", 4), w.server_now()).ok);
+        Machine& a = w.join("Ann", "RJ-T");
+        Machine& b = w.join("Bob", "RJ-T");
+        ASSERT_TRUE(w.run_until([&]() { return a.net.is_leader() && b.net.phase() == NetGame::Phase::Room && a.net.room().slots[1].state == net::SlotState::Client; }, 8000));
+        a.net.set_fill_bots(net::FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard}));        // Blue (seat 2) an Easy bot, Black (3) a Hard one
+        a.net.set_start_teams(sim::StartTeams{true, 1, 2});                              // Red + Blue (Bob and the Easy bot) against Green + Black (Ann and the Hard bot)
+        ASSERT_TRUE(a.net.request_start());
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+        ASSERT_EQ(allies_of(a.sim), std::string("3210"));
+        ASSERT_EQ(allies_of(b.sim), std::string("3210"));
+        ASSERT_TRUE(a.net.start_info().team_a == 1 && a.net.start_info().team_b == 2);
+        RoomStatus s = w.status("RJ-T");
+        ASSERT_TRUE(s.state == RoomState::Running && s.teams == "1+2" && s.allies[0] == 3 && s.allies[1] == 2 && s.bots.size() == 2 && s.bots[0].level == "easy" && s.bots[1].level == "hard");
+        w.run(15000);                                                                    // some 300 turns
+        const uint8_t seat = b.net.my_seat();
+        const net::SeatKey key = w.server.read_record("RJ-T").head.keys[seat];
+        ASSERT_FALSE(net::key_is_zero(key));
+        w.machines.erase(w.machines.begin() + 1);                                        // Bob's page is gone: its game, its engine and its links with it
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-T").paused; }, 3000));
+        const uint32_t sealed = w.status("RJ-T").turns;
+        ASSERT_TRUE(sealed > 200);
+        Machine& b2 = w.add_machine("Bob");                                              // a new machine with nothing but the key
+        ASSERT_TRUE(b2.net.join("127.0.0.1", w.server.port(), "Bob", seat, "RJ-T", "", key));
+        ASSERT_TRUE(w.run_until([&]() { return b2.net.phase() == NetGame::Phase::Playing && !w.status("RJ-T").paused; }, 30000));
+        ASSERT_EQ(b2.loads, 1u);                                                         // it loaded the map and made its engine from the Start
+        bool from_nothing = false;
+        for (const NetGame::Event& e : b2.events) from_nothing = from_nothing || (e.type == NetGame::Event::Type::StartRequested && e.rejoin);
+        ASSERT_TRUE(from_nothing);
+        ASSERT_TRUE(b2.net.start_info().team_a == 1 && b2.net.start_info().team_b == 2);   // the Start that a machine from nothing is sent has the teams
+        ASSERT_EQ(allies_of(b2.sim), std::string("3210"));                               // (after the catch-up too: nobody broke a team)
+        ASSERT_TRUE(b2.net.turns_executed() >= sealed);
+        w.run(6000);
+        size_t common = 0;                                                               // the ticks that both machines ran live: the same hash at every one of them
+        for (const auto& tick_hash : b2.hash_at) {
+            const auto other = a.hash_at.find(tick_hash.first);
+            if (other == a.hash_at.end()) continue;
+            ASSERT_EQ(other->second, tick_hash.second);
+            ++common;
+        }
+        ASSERT_TRUE(common > 30);
+        s = w.status("RJ-T");
+        ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 1 && s.teams == "1+2" && s.allies[1] == 2);
+        ASSERT_FALSE(a.net.desynced() || b2.net.desynced());
+    } TEST_END();
+
     TEST_CASE("RJ1.4 A Server That Lost The Last Second Of Its Record Answers The Hello Of A Machine That Is Ahead Of It With BadRequest: The NetGame Starts The Match From Nothing With Its Key (A New Lobby, Start, The Stream), Once; A Second BadRequest Ends It As Any Refusal Does And Nothing Tries Again") {
         {   // the real thing: a server restarted on a record that lacks the last 40 turns, two machines that ran them
             World w("rejoin-ahead");
