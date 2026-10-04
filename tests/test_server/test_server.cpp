@@ -10,11 +10,13 @@
 #include "ants_net/session.hpp"
 #include "ants_net/tcp.hpp"
 #include "ants_net/wire.hpp"
+#include "ants_net/ws.hpp"
 #include "ants_server/control.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/room.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
+#include "ants_server/site_stats.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
@@ -8437,6 +8439,8 @@ void run_persist_review_process_tests_2() {
 #endif
 
 
+#include "site_stats_tests.hpp"      // (the site statistics: a file of its own, in this translation unit)
+
 int main() {
     std::cout << "=======================================================\n";
     std::cout << " Dedicated game server: map store, rooms, the door, control calls\n";
@@ -8461,6 +8465,7 @@ int main() {
     run_persist_server_tests_5();
     run_persist_server_tests_6();
     run_persist_review_tests();
+    run_site_stats_tests();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();
     run_persist_review_process_tests();
