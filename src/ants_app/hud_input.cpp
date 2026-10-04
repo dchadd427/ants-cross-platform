@@ -429,10 +429,9 @@ void HUD::pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, in
         pointer_click(sim, camera, x, y, shift);
         return;
     }
-    // the band is in screen pixels; the world that it covers: the left / top edges of its first pixels, the right / bottom edges of its last (rounded outward at a zoom: every world pixel
-    // that a pixel of the band covers is inside)
+    // the band is in screen pixels; its corners are the world pixels under the centres of its corner pixels, by the rule of a click, at both edges
     const LayoutRect view = layout_.view();
-    select_ants_in_rect(camera.world_x_at(rect.left - view.x), camera.world_y_at(rect.top - view.y), camera.world_x_edge(rect.right - view.x), camera.world_y_edge(rect.bottom - view.y),
+    select_ants_in_rect(camera.world_x_at(rect.left - view.x), camera.world_y_at(rect.top - view.y), camera.world_x_at(rect.right - view.x), camera.world_y_at(rect.bottom - view.y),
                         sim.get_world_state(), shift);
 }
 

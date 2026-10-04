@@ -6,7 +6,8 @@
 // one world pixel is z screen pixels, so the view shows view / z world pixels. THE LEVELS are the series 2^(k/4), four to a doubling, from 2 (every world pixel a crisp 2 x 2 square, the
 // most that the view zooms in) down to the map's own limit: 2, 1.68, 1.41, 1.19, 1 (the original's picture, drawn exactly as it always was), 0.84, 0.71, 0.59, 0.5, 0.42, 0.35, 0.30, 0.25 ...
 // THE LIMIT of the zoom-out is the map's: the view never shows anything outside the map, so the smallest zoom is max(view_w / map_w, view_h / map_h) (the map's width or its height just fills
-// the view, whichever comes first; a map that the view already covers at 1 has no zoom-out) and that exact number is the last level. 2, 1, 0.5, 0.25 ... are exact in a float: their
+// the view, whichever comes first; a map that the view already covers at 1 has no zoom-out) and that exact number is the last level. It depends on the view's shape: on TREASURE it is 0.230 in the
+// original's 4:3 picture (the whole map) and 0.397 in the 16:9 one (two thirds of it). 2, 1, 0.5, 0.25 ... are exact in a float: their
 // pictures are exact (nearest, or the average of 2 x 2 world pixels at every halving). This header is the model of all that and nothing else (pure, no SDL): the levels, the nearest and the
 // next one, the camera after a zoom that keeps the world point under the pointer where it is, the clamps, the scroll model in screen pixels, the plan of the renderer's world pass, the
 // accumulation of a wheel's precise deltas and the text of the settings key. The renderer draws it, the HUD converts the pointer with it, the application gives it its input
@@ -80,11 +81,11 @@ inline double snap_down(double v, float z) noexcept {
 /// (a map of 1920 world pixels is 1612 screen pixels and 0.6 at the zoom 0.84: the 0.6 is never in a view that is on the lattice)
 inline int32_t map_screen(int64_t map_px, float z) noexcept { return static_cast<int32_t>(std::floor(static_cast<double>(map_px) * static_cast<double>(z) + 1e-9)); }
 
-/// The world pixel under a screen pixel that is `offset` screen pixels from the view's corner, when the view's origin is `origin` (world pixels). At the zoom 1 with a whole
-/// origin this is origin + offset, as it always was.
-inline int32_t world_at(double origin, float z, int32_t offset) noexcept { return static_cast<int32_t>(std::floor(origin + static_cast<double>(offset) / static_cast<double>(z))); }
-/// The world coordinate of the EDGE of a screen pixel (the right / bottom edge of a rubber band) rounded up: every world pixel that the screen pixels cover is inside
-inline int32_t world_edge_up(double origin, float z, int32_t offset) noexcept { return static_cast<int32_t>(std::ceil(origin + static_cast<double>(offset) / static_cast<double>(z))); }
+/// The world pixel under the CENTRE of a screen pixel that is `offset` screen pixels from the view's corner, when the view's origin is `origin` (world pixels): floor(origin + (offset + 0.5) / z).
+/// A click means the middle of the pixel, so it picks the tile that covers most of the pixel (below 1 and at 1.19 / 1.41 / 1.68 a pixel straddles tile edges; its left edge would pick the
+/// neighbour that covers less). At the zoom 1 with a whole origin this is origin + offset, as it always was, and at 2 the tile of every pixel is the same as that of its left edge.
+/// A rubber band's rectangle takes this at both of its edges.
+inline int32_t world_at(double origin, float z, int32_t offset) noexcept { return static_cast<int32_t>(std::floor(origin + (static_cast<double>(offset) + 0.5) / static_cast<double>(z))); }
 
 /// What a kind of match or a renderer allows. There is no limit of the kind of match: every player of a match runs the same game and has the same levels, and the zoom is the player's own view
 /// (before the batch after v0.2.0 a match of the network offered no zoom-out). A renderer that cannot make the offscreen target of a zoom can draw the original's picture only.
@@ -301,8 +302,9 @@ inline double wheel_amount(int32_t y, float precise_y, bool flipped) noexcept {
     return flipped ? -amount : amount;
 }
 
-/// The wheel's deltas added up to whole steps: one notch is one step, a trackpad's fractions add up (0.4 + 0.4 + 0.4 is one step with 0.2 left); a pause of more than kStaleMs
-/// forgets a left-over fraction and a change of direction starts again from nothing. A step is a change of one level.
+/// The wheel's deltas added up to whole steps. An event worth a step or more (a mouse notch: 1, or 1.2 when the browser's 120 is taken at the page's 100 a step) is the nearest whole number of
+/// steps, at least one, and leaves no fraction (a kept 0.2 made the fifth notch of a burst two steps); events worth less than a step (a trackpad's) add up (0.4 + 0.4 + 0.4 is one step with
+/// 0.2 left). A pause of more than kStaleMs forgets a left-over fraction and a change of direction starts again from nothing. A step is a change of one level.
 class WheelAccumulator {
 public:
     static constexpr uint32_t kStaleMs = 500;
@@ -315,6 +317,10 @@ public:
         if (have_ && static_cast<int64_t>(time_ms) - static_cast<int64_t>(last_ms_) > static_cast<int64_t>(kStaleMs)) acc_ = 0.0;
         have_ = true;
         last_ms_ = time_ms;
+        if (std::fabs(amount) >= 1.0) {
+            acc_ = 0.0;
+            return static_cast<int>(std::lround(amount));                    // (at least one: 1.2 is 1, 1.6 is 2)
+        }
         if (amount * acc_ < 0.0) acc_ = 0.0;
         acc_ += amount;
         const double whole = std::trunc(acc_);

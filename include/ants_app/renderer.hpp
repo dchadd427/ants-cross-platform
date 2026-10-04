@@ -163,13 +163,11 @@ struct ViewportCamera {
     int32_t visible_w() const noexcept { return zoom::visible(viewport_w, zoom); }
     int32_t visible_h() const noexcept { return zoom::visible(viewport_h, zoom); }
 
-    /// The world pixel under the screen pixel that is `offset` screen pixels right of / below the view's corner. At the zoom 1 it is the whole origin plus the offset (the
-    /// input code has always done that sum with `world_x`, which is what the tests of the classic picture set); at another zoom it is the origin plus the offset over the zoom.
+    /// The world pixel under the CENTRE of the screen pixel that is `offset` screen pixels right of / below the view's corner (what a click, the cursor and the corners of a rubber band mean). At the
+    /// zoom 1 it is the whole origin plus the offset (the input code has always done that sum with `world_x`, which is what the tests of the classic picture set); at another zoom it is
+    /// zoom::world_at: the origin plus the offset and half a pixel over the zoom.
     int32_t world_x_at(int32_t offset) const noexcept { return zoom == zoom::kNormal ? world_x + offset : zoom::world_at(static_cast<double>(x), zoom, offset); }
     int32_t world_y_at(int32_t offset) const noexcept { return zoom == zoom::kNormal ? world_y + offset : zoom::world_at(static_cast<double>(y), zoom, offset); }
-    /// The world coordinate of the right / bottom EDGE of the screen pixel at the offset, rounded up (the end of a rubber band: every world pixel the screen pixels cover is in)
-    int32_t world_x_edge(int32_t offset) const noexcept { return zoom == zoom::kNormal ? world_x + offset : zoom::world_edge_up(static_cast<double>(x), zoom, offset); }
-    int32_t world_y_edge(int32_t offset) const noexcept { return zoom == zoom::kNormal ? world_y + offset : zoom::world_edge_up(static_cast<double>(y), zoom, offset); }
     /// The origin in screen pixels at the zoom (world pixels times the zoom): the edge scroll's and the minimap's numbers (edge_scroll.hpp). At the zoom 1 it is world_x / world_y.
     int32_t origin_screen_x() const noexcept { return zoom == zoom::kNormal ? world_x : static_cast<int32_t>(std::lround(static_cast<double>(x) * static_cast<double>(zoom))); }
     int32_t origin_screen_y() const noexcept { return zoom == zoom::kNormal ? world_y : static_cast<int32_t>(std::lround(static_cast<double>(y) * static_cast<double>(zoom))); }

@@ -85,8 +85,10 @@ int32_t oracle_visible(int32_t len, float z) {
 int oracle_half_per_pixel(float z) { return z == 0.5f ? 4 : z == 1.0f ? 2 : 1; }
 /// floor division
 int64_t fdiv(int64_t a, int64_t b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
-/// the world pixel under the screen pixel at `offset`, the origin given in HALF world pixels
-int32_t oracle_world_at(int64_t origin2, float z, int32_t offset) { return static_cast<int32_t>(fdiv(origin2 + static_cast<int64_t>(offset) * oracle_half_per_pixel(z), 2)); }
+/// the world pixel under the CENTRE of the screen pixel at `offset`, the origin given in HALF world pixels (the centre in quarter pixels: 2 * origin2 + (2 * offset + 1) * half_per_pixel)
+int32_t oracle_world_at(int64_t origin2, float z, int32_t offset) { return static_cast<int32_t>(fdiv(2 * origin2 + (2 * static_cast<int64_t>(offset) + 1) * oracle_half_per_pixel(z), 4)); }
+/// ... and under the pixel's LEFT EDGE, which is what a click picked before the centre rule: the zoom 1 and the zoom 2 must give the same world pixel with both
+int32_t oracle_world_at_left_edge(int64_t origin2, float z, int32_t offset) { return static_cast<int32_t>(fdiv(origin2 + static_cast<int64_t>(offset) * oracle_half_per_pixel(z), 2)); }
 /// a world point in half pixels under the screen pixel at `offset` (the pixel's own corner)
 int64_t oracle_point2(int64_t origin2, float z, int32_t offset) { return origin2 + static_cast<int64_t>(offset) * oracle_half_per_pixel(z); }
 /// the origin rounded (half up) to its grid
@@ -219,31 +221,53 @@ void test_levels() {
             const double origin = o2 / 2.0;
             for (int32_t d = -3; d <= 1600; d += (d < 12 ? 1 : 37)) {
                 check(zoom::world_at(origin, z, d) == oracle_world_at(o2, z, d), "world_at origin " + num(origin) + " zoom " + zoom::level_name(z) + " offset " + std::to_string(d));
-                const int64_t edge2 = oracle_point2(o2, z, d);
-                check(zoom::world_edge_up(origin, z, d) == static_cast<int32_t>(fdiv(edge2 + 1, 2)), "world_edge_up origin " + num(origin) + " zoom " + zoom::level_name(z) + " offset " + std::to_string(d));
             }
         }
     }
-    // ... and at the levels that are not exact: the origin n / z (the lattice of screen pixels), the world point under a pixel's left edge is (n + offset) / z, in long doubles
+    // the centre of the pixel does not move the levels 1 and 2: from any origin on the lattice, EVERY pixel of both pictures' views (762 and 500 pixels, 442 and 440) is over the same world pixel (so the
+    // same tile) as with the pixel's left edge, which is what a click picked before; 0.5 is the exact level where it is the second of the two world pixels that a screen pixel covers (the same tile too)
+    for (const float z : {1.0f, 2.0f, 0.5f}) {
+        long compared = 0;
+        long same_pixel = 0;
+        long same_tile = 0;
+        const int step2 = oracle_half_per_pixel(z);
+        for (int o2 : {0, 2, 4, 62, 64, 1000, 1002, 2598, 2600, 3840}) {
+            if (o2 % step2 != 0) continue;                                        // (the origin is on the grid of the zoom: 4, 2, 1 half pixels)
+            for (int32_t d = 0; d < 762; ++d) {
+                const int32_t centre = oracle_world_at(o2, z, d);
+                const int32_t left = oracle_world_at_left_edge(o2, z, d);
+                check(zoom::world_at(static_cast<double>(o2) / 2.0, z, d) == centre, "world_at is the centre's world pixel, zoom " + zoom::level_name(z) + " origin " + std::to_string(o2) + " / 2 offset " + std::to_string(d));
+                ++compared;
+                same_pixel += centre == left ? 1 : 0;
+                same_tile += centre / 32 == left / 32 ? 1 : 0;
+            }
+        }
+        check(compared > 3000 && same_tile == compared, "the zoom " + zoom::level_name(z) + ": every pixel's tile is the same with its centre and with its left edge (" + std::to_string(same_tile) + " of " + std::to_string(compared) + ")");
+        if (z != 0.5f) check(same_pixel == compared, "the zoom " + zoom::level_name(z) + ": every pixel's world pixel is the same too (" + std::to_string(same_pixel) + " of " + std::to_string(compared) + ")");
+        else check(same_pixel == 0, "at 0.5 a screen pixel covers two world pixels and the centre is the second: never the left one (" + std::to_string(same_pixel) + " of " + std::to_string(compared) + " the same)");
+    }
+    // ... and at the levels that are not exact: the origin n / z (the lattice of screen pixels), the world point under a pixel's centre is (n + offset + 0.5) / z, in long doubles
     for (const float z : kEvery) {
         int tested = 0;
         for (int n = -60; n <= 3000; n += (n < 40 ? 1 : 29)) {
             const double origin = static_cast<double>(n) / static_cast<double>(z);
             for (int32_t d = -3; d <= 1600; d += (d < 12 ? 1 : 41)) {
-                const long double exact = (static_cast<long double>(n) + d) / static_cast<long double>(z);
+                const long double exact = (static_cast<long double>(n) + d + 0.5L) / static_cast<long double>(z);
                 const bool is_exact_level = z == 0.5f || z == 1.0f || z == 2.0f || z == 0.25f;                // (a power of two: the quotient is exact, there is no rounding to disagree about)
                 if (!is_exact_level && !away_from_whole(exact)) continue;
                 ++tested;
                 check(zoom::world_at(origin, z, d) == static_cast<int32_t>(std::floor(exact)), "world_at lattice " + std::to_string(n) + " zoom " + num(static_cast<double>(z)) + " offset " + std::to_string(d));
-                check(zoom::world_edge_up(origin, z, d) == static_cast<int32_t>(std::ceil(exact)), "world_edge_up lattice " + std::to_string(n) + " zoom " + num(static_cast<double>(z)) + " offset " + std::to_string(d));
             }
         }
         check(tested > 1000, "the sweep at " + num(static_cast<double>(z)) + " has samples: " + std::to_string(tested));
     }
-    check(zoom::world_at(100.0, 1.0f, 17) == 117 && zoom::world_at(100.0, 2.0f, 17) == 108 && zoom::world_at(100.5, 2.0f, 17) == 109 && zoom::world_at(100.0, 0.5f, 17) == 134,
-          "worked examples: at 1 the pixel 17 over is 117, at 2 it is 108, from 100.5 it is 109, at 0.5 it is 134");
-    check(zoom::world_edge_up(100.0, 2.0f, 17) == 109 && zoom::world_edge_up(100.0, 1.0f, 17) == 117 && zoom::world_edge_up(100.0, 2.0f, 16) == 108, "the edge of a screen pixel rounds up at the zoom 2");
-    check(zoom::world_at(100.0, ref_series(-2), 17) == 124 && zoom::world_at(100.0, ref_series(2), 17) == 112 && zoom::world_at(100.0, 0.25f, 17) == 168, "worked examples: from 100 the pixel 17 over is 124 at 0.71, 112 at 1.41 and 168 at 0.25");
+    check(zoom::world_at(100.0, 1.0f, 17) == 117 && zoom::world_at(100.0, 2.0f, 17) == 108 && zoom::world_at(100.5, 2.0f, 17) == 109 && zoom::world_at(100.0, 0.5f, 17) == 135,
+          "worked examples: at 1 the pixel 17 over is 117, at 2 it is 108, from 100.5 it is 109, at 0.5 it is 135 (the centre of the pixel is 100 + 17.5 * 2)");
+    check(zoom::world_at(100.0, ref_series(-2), 17) == 124 && zoom::world_at(100.0, ref_series(2), 17) == 112 && zoom::world_at(100.0, 0.25f, 17) == 170, "worked examples: from 100 the pixel 17 over is 124 at 0.71, 112 at 1.41 and 170 at 0.25");
+    // a pixel that straddles a tile edge goes to the tile that covers most of it: at 0.397 a pixel is 2.5 world pixels wide, so from 0 the pixel 12 spans 30.24 .. 32.76 (the tile 0 covers 1.76 of it, the
+    // tile 1 0.76: the tile 0's, its centre is 31.5) and the pixel 13 spans 32.76 .. 35.28 (the tile 1's); at 0.84 the pixel 26 spans 30.92 .. 32.11 (1.08 of its 1.19 in the tile 0: the tile 0's)
+    check(zoom::world_at(0.0, 0.396875f, 12) / 32 == 0 && zoom::world_at(0.0, 0.396875f, 13) / 32 == 1 && zoom::world_at(0.0, ref_series(-1), 26) / 32 == 0 && zoom::world_at(0.0, ref_series(-1), 27) / 32 == 1,
+          "a pixel that straddles a tile edge goes to the tile that covers most of it (0.397 and 0.84, from 0)");
 }
 
 // =====================================================================================================================================================
@@ -798,7 +822,7 @@ void test_camera() {
     for (const ViewSize& v : kViews) {
         for (float z : kExact) {
             ViewportCamera c = camera_of(v, 16, 21, z, true);
-            c.set_origin(700.0, 650.5, 125, 125);                                   // (the grid takes the half pixel at 2 and rounds it elsewhere)
+            c.set_origin(700.0, z == 2.0f ? 650.5 : 650.0, 125, 125);               // (the half pixel is a point of the grid at 2 only; at the zoom 1 the camera's own arithmetic keeps a fraction)
             const int64_t ox2 = static_cast<int64_t>(std::llround(c.x * 2.0));
             const int64_t oy2 = static_cast<int64_t>(std::llround(c.y * 2.0));
             for (int32_t sy = 21; sy < 21 + v.h; sy += 11) {
@@ -823,12 +847,12 @@ void test_camera() {
                   std::string("a pixel outside the view does not convert at ") + zoom::level_name(z));
         }
     }
-    // ... at the levels between: the world pixel under a screen pixel's left edge is the floor of the exact point, in long doubles; the pixel that is found, drawn at the screen pixel that
+    // ... at the levels between: the world pixel under a screen pixel's centre is the floor of the exact point, in long doubles; the pixel that is found, drawn at the screen pixel that
     // world_to_screen gives, covers the point (the picture and the pointer agree), and the pair of exact conversions is the identity
     for (const ViewSize& v : kViews) {
         for (const float z : kEvery) {
             ViewportCamera c = camera_of(v, 16, 21, z, true);
-            c.set_origin(700.3, 650.8, 125, 125);
+            c.set_origin(z == 1.0f ? 700.0 : 700.3, z == 1.0f ? 650.0 : 650.8, 125, 125);          // (the zoom 1 keeps the camera's own arithmetic: a whole origin, as every scroll step makes it)
             const long double zz = z;
             const long double ox = c.x;
             const long double oy = c.y;
@@ -836,36 +860,36 @@ void test_camera() {
             int tested = 0;
             for (int32_t sy = 21; sy < 21 + v.h; sy += 7) {
                 for (int32_t sx = 16; sx < 16 + v.w; sx += 11) {
-                    const long double px = ox + (sx - 16) / zz;
-                    const long double py = oy + (sy - 21) / zz;
+                    const long double px = ox + (sx - 16 + 0.5L) / zz;
+                    const long double py = oy + (sy - 21 + 0.5L) / zz;
                     const bool is_exact_level = z == 0.5f || z == 1.0f || z == 2.0f || z == 0.25f;
                     if (!is_exact_level && (!away_from_whole(px) || !away_from_whole(py))) continue;
                     int32_t wx = -1;
                     int32_t wy = -1;
                     check(c.screen_to_world(sx, sy, wx, wy) && wx == static_cast<int32_t>(std::floor(px)) && wy == static_cast<int32_t>(std::floor(py)),
-                          std::string("screen_to_world at ") + num(static_cast<double>(z)) + " (" + std::to_string(sx) + ", " + std::to_string(sy) + ") is the floor of the exact point (" + std::to_string(wx) + ", " + std::to_string(wy) + ")");
+                          std::string("screen_to_world at ") + num(static_cast<double>(z)) + " (" + std::to_string(sx) + ", " + std::to_string(sy) + ") is the floor of the exact point under the centre (" + std::to_string(wx) + ", " + std::to_string(wy) + ")");
                     check(c.world_x_at(sx - 16) == wx && c.world_y_at(sy - 21) == wy, std::string("world_x_at / world_y_at agree with screen_to_world at ") + num(static_cast<double>(z)));
                     int32_t bx = 0;
                     int32_t by = 0;
                     c.world_to_screen(wx, wy, bx, by);
-                    // the world pixel's span on the screen [(w - o) z, (w + 1 - o) z) contains the left edge of the pixel (sx - 16): the pixel that was found is under it
-                    check((wx - ox) * zz <= (sx - 16) + 1e-6L && (sx - 16) < (wx + 1 - ox) * zz + 1e-6L && (wy - oy) * zz <= (sy - 21) + 1e-6L && (sy - 21) < (wy + 1 - oy) * zz + 1e-6L,
-                          std::string("the world pixel found under a screen pixel covers its left edge at ") + num(static_cast<double>(z)));
+                    // the world pixel's span on the screen [(w - o) z, (w + 1 - o) z) contains the centre of the pixel (sx - 16 + 0.5): the pixel that was found is under it
+                    check((wx - ox) * zz <= (sx - 16 + 0.5L) + 1e-6L && (sx - 16 + 0.5L) < (wx + 1 - ox) * zz + 1e-6L && (wy - oy) * zz <= (sy - 21 + 0.5L) + 1e-6L && (sy - 21 + 0.5L) < (wy + 1 - oy) * zz + 1e-6L,
+                          std::string("the world pixel found under a screen pixel covers its centre at ") + num(static_cast<double>(z)));
                     check(sx - 16 - (bx - 16) >= 0 && sx - 16 - (bx - 16) <= static_cast<int32_t>(std::ceil(z)) && sy - 21 - (by - 21) >= 0 && sy - 21 - (by - 21) <= static_cast<int32_t>(std::ceil(z)),
                           std::string("world_to_screen of that pixel is at most ceil(zoom) screen pixels from the one that found it, at ") + num(static_cast<double>(z)));
                     // the exact conversions are inverses of each other
                     const long double back = (px - ox) * zz;
-                    check(std::fabs(static_cast<double>(back) - (sx - 16)) < 1e-9, "screen -> world -> screen is the identity for the exact conversions");
+                    check(std::fabs(static_cast<double>(back) - (sx - 16 + 0.5)) < 1e-9, "screen centre -> world -> screen is the identity for the exact conversions");
                     ++tested;
                 }
             }
             check(tested > 1000, std::string("the sweep at ") + num(static_cast<double>(z)) + " has samples: " + std::to_string(tested));
         }
     }
-    {   // the edge of a screen pixel, the origin in screen pixels, the middle of the view
+    {   // the pixel's own world pixel, the origin in screen pixels, the middle of the view
         ViewportCamera c = camera_of(kViews[1], 16, 21, 2.0f, true);
         c.set_origin(700.5, 650.0, 125, 125);
-        check(c.world_x_edge(10) == 706 && c.world_x_at(10) == 705 && c.world_x_edge(11) == 706 && c.world_x_at(11) == 706, "at 2 from 700.5: the pixel 10 covers 705.5 .. 706, its edge is 706");
+        check(c.world_x_at(9) == 705 && c.world_x_at(10) == 705 && c.world_x_at(11) == 706, "at 2 from 700.5: the pixel 10 covers 705.5 .. 706, its centre is 705.75, the world pixel 705; the pixel 11 is the 706's");
         check(c.origin_screen_x() == 1401 && c.origin_screen_y() == 1300, "the origin in screen pixels at 2 is twice the world one");
         check(c.centre_world_x() == 891 && c.centre_world_y() == 775, "the middle of the view at 2: the origin plus half of 381 x 250");
         c.zoom = 1.0f;
@@ -1150,6 +1174,31 @@ void test_wheel() {
     check(w.feed(0.7, 4000000000u) == 0 && w.feed(0.7, 4000000100u) == 1, "the clock's large values are fine");
     w.reset();
     check(w.feed(5.0, 100) == 5 && w.feed(-3.0, 110) == -3 && w.feed(100.0, 120) == zoom::WheelAccumulator::kMaxSteps && w.feed(-100.0, 130) == -zoom::WheelAccumulator::kMaxSteps, "several notches in one event are that many steps, to a bound");
+    // a mouse notch worth more than a step (the browser's 120 at the page's 100 a step is 1.2): the nearest whole number of steps, at least one, and nothing left over. The 0.2 of every notch
+    // used to be kept, so that the fifth notch of a burst was two levels (1, 1, 1, 1, 2)
+    for (const double sign : {1.0, -1.0}) {
+        w.reset();
+        int ones = 0;
+        int total = 0;
+        for (uint32_t i = 0; i < 5; ++i) {
+            const int s = w.feed(sign * 1.2, 1000u + 80u * i);
+            ones += s == static_cast<int>(sign) ? 1 : 0;
+            total += s;
+        }
+        check(ones == 5 && total == 5 * static_cast<int>(sign) && w.pending() == 0.0, "five notches of 1.2 within 400 ms are five steps of one and nothing is left over (not 1, 1, 1, 1, 2)");
+        w.reset();
+        int run = 0;
+        for (uint32_t i = 0; i < 1000; ++i) run += w.feed(sign * 1.2, 5000u + 10u * i);
+        check(run == 1000 * static_cast<int>(sign), "a thousand notches of 1.2 are a thousand steps: no drift");
+    }
+    w.reset();
+    check(w.feed(1.6, 100) == 2 && w.feed(-1.6, 110) == -2 && w.feed(2.4, 120) == 2 && w.feed(-2.4, 130) == -2 && w.feed(1.49, 140) == 1 && w.feed(7.6, 150) == 8 && w.feed(1.0, 160) == 1 && w.pending() == 0.0,
+          "a notch worth a step or more is the nearest whole number of steps: 1.6 is 2, 2.4 is 2, 1.49 is 1, 1 is 1");
+    w.reset();
+    check(w.feed(0.4, 100) == 0 && std::fabs(w.pending() - 0.4) < 1e-12 && w.feed(1.2, 110) == 1 && w.pending() == 0.0 && w.feed(0.4, 120) == 0 && w.feed(0.4, 130) == 0 && std::fabs(w.pending() - 0.8) < 1e-12,
+          "a notch clears a pending fraction: 0.4, 1.2 is one step with nothing left, and 0.4 + 0.4 after it is not a step");
+    w.reset();
+    check(w.feed(0.4, 100) == 0 && w.feed(1.0, 110) == 1 && w.pending() == 0.0 && w.feed(0.4, 120) == 0 && w.feed(-1.2, 130) == -1 && w.pending() == 0.0, "a notch of exactly 1 clears it too, and so does a notch the other way: no fraction survives a whole notch");
     w.reset();
     check(w.feed(0.5, 100) == 0 && w.pending() == 0.5, "half a notch is pending");
     w.reset();
