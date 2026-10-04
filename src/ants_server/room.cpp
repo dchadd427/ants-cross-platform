@@ -83,6 +83,7 @@ Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, 
     retry_at_ms_ = now_ms;                                       // (not 0: the server's clock is its uptime, and a signed comparison against a stale 0 breaks after 24.8 days)
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
+    lobby_.set_before_start([this](const net::StartMsg&, uint32_t now) { record_open(now); });      // the match is fixed (the start message, the keys): its record is made before the Start is sent to anybody
     for (const ai::BotSpec& bot : spec_.bots) {                  // the room's own bots sit down before anybody comes (the lobby refuses what the specification should not have asked: fog, a full room)
         if (lobby_.add_bot(bot.seat, ai::bot_display_name(bot))) bot_specs_.push_back(bot);
     }
@@ -358,8 +359,7 @@ void Room::update(uint32_t now_ms) {
                 }
                 if (seated && lobby_.start(seed_, map_.hash, now_ms)) {
                     state_ = RoomState::Loading;
-                    lobby_.host_loaded(true);                        // the server loaded the map when it made the room
-                    record_open(now_ms);                             // the match is fixed (the start message, the keys): a restart from here on can bring it back
+                    lobby_.host_loaded(true);                        // the server loaded the map when it made the room (the record of the match was made by the lobby's hook before its Start went out)
                 } else {
                     unseat_fill();                                   // (the lobby refused: the room is as it was)
                 }

@@ -142,6 +142,23 @@ private:
     net::Connection* c_;
 };
 
+// A connection that forwards to one that somebody else owns and tells what is sent through it, in order (what the server sends to a machine: a test looks at the world at that moment)
+class TapSend final : public net::Connection {
+public:
+    TapSend(net::Connection* c, const std::function<void(const std::vector<uint8_t>&)>* tap) : c_(c), tap_(tap) {}
+    bool send(const std::vector<uint8_t>& m) override {
+        if (tap_ != nullptr && *tap_) (*tap_)(m);
+        return c_->send(m);
+    }
+    bool poll(std::vector<uint8_t>& m) override { return c_->poll(m); }
+    State state() const override { return c_->state(); }
+    void close() override { c_->close(); }
+
+private:
+    net::Connection* c_;
+    const std::function<void(const std::vector<uint8_t>&)>* tap_;
+};
+
 // A connection that hands the game one message every `period_ms` at the most (0: everything that is there): a slow downlink. What is not handed over waits in the link.
 class Throttled final : public net::Connection {
 public:
@@ -848,6 +865,7 @@ struct PWorld : LinkSource {
     std::string maps;
     RestoreReport report;                                   // what the last start of the server brought back
     std::function<bool()> restore_should_stop;              // the server's stop flag while it restores (empty: none)
+    std::function<void(const std::vector<uint8_t>&)> on_server_send;     // told every message that the server sends on any link (empty: nothing)
     std::vector<std::string> notices;                       // every line that the server would have written to its log, in order
     size_t kept_at_stop{0};
     int starts{0};
@@ -883,7 +901,7 @@ struct PWorld : LinkSource {
             net.cut(ends.first, true);
             return ends.second;
         }
-        mgr->add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", server_now());
+        mgr->add_connection(std::make_unique<TapSend>(ends.first, &on_server_send), "127.0.0.1", server_now());
         server_ends.push_back(ends.first);
         return ends.second;
     }
@@ -8095,6 +8113,39 @@ void run_persist_review_process_tests_2() {
         ASSERT_TRUE(log_text.find("the restore was stopped by the server's stop: 8 restart record(s) are left on disk as they were") != std::string::npos);
         ASSERT_TRUE(log_text.find(" restored: ") == std::string::npos && log_text.find("was not restored") == std::string::npos);
         std::cout << "\n      [stop in a restore] the program left " << stop_ms << " ms after SIGTERM, in the middle of the replays of eight matches of " << turns << " turns, with every record untouched" << std::flush;
+    } TEST_END();
+
+    TEST_CASE("S3.108 The Record Exists Before The Start Is Sent (L3 Of The Review): A Room Of Two Machines Is Started; At The Moment The Server Sends The Start Message To Each Of Them (A Tap On The Server's End Of The Links Looks At The Folder) The Record Of The Room Is On Disk, Whole, With Both Keys And The Start Message That Is Being Sent; A Start That Is Cancelled (A Machine That Cannot Load The Map) Takes Its Record Away And The Next Start Makes It Again Before Its Start Is Sent") {
+        PWorld w("persist-108");
+        w.start_server(500);
+        int starts_sent = 0;
+        int with_record = 0;
+        int whole_and_the_same = 0;
+        w.on_server_send = [&](const std::vector<uint8_t>& m) {
+            if (net::peek_type(m) != net::MsgType::Start) return;
+            ++starts_sent;
+            const std::string path = w.record_path("L3-1");
+            if (!fs::exists(path)) return;
+            ++with_record;
+            const RestartLoaded rec = read_restart_record(path, 1ull << 30);
+            net::StartMsg sent;
+            if (rec.ok() && rec.head.code == "L3-1" && rec.turns.empty() && !net::key_is_zero(rec.head.keys[0]) && !net::key_is_zero(rec.head.keys[1]) && net::decode(m, sent) && sent.seed == rec.head.start.seed && sent.roster == rec.head.start.roster &&
+                sent.map_hash == rec.head.start.map_hash) {
+                ++whole_and_the_same;                                                           // (the addresses of the clients are the one thing that the record's copy does not have: it has no business with them)
+            }
+        };
+        ASSERT_TRUE(w.mgr->create_room(held_spec("L3-1", 2), w.server_now()).ok);
+        w.connect("Ann", "L3-1");
+        RClient& bad = w.connect("Bob", "L3-1");
+        bad.fail_load = true;                                                                   // Bob cannot load the map: the first start is cancelled
+        ASSERT_TRUE(w.until([&]() { return starts_sent >= 2 && w.status("L3-1").state == RoomState::Waiting; }, 20000));
+        ASSERT_TRUE(w.record_files().empty());                                                  // the cancel took the record away
+        ASSERT_EQ(starts_sent, 2);
+        ASSERT_TRUE(with_record == 2 && whole_and_the_same == 2);                               // both Starts of the first attempt were sent with the record on disk
+        bad.fail_load = false;                                                                  // (Bob stays in the room: the retry comes two seconds after the cancel, and now he can load the map)
+        ASSERT_TRUE(w.until([&]() { return w.status("L3-1").state == RoomState::Running; }, 30000));
+        ASSERT_TRUE(starts_sent >= 4 && with_record == starts_sent && whole_and_the_same == starts_sent);       // every Start of every attempt was sent with its record on disk
+        ASSERT_TRUE(w.status("L3-1").record_kept && w.record_files().size() == 1);
     } TEST_END();
 }
 #endif

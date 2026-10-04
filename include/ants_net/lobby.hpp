@@ -166,6 +166,9 @@ public:
 
     /// Sends Start to everybody: the host loads the map itself too and reports host_loaded(). False unless can_start().
     bool start(uint32_t seed, uint64_t map_hash, uint32_t now_ms);
+    /// Called by start() once the start message is built (start_info() is it, the keys are known) and BEFORE the first byte of it is sent to anybody: a server's room makes its restart record here, so that
+    /// the record of a match exists before any machine can act on its Start. It must not call start() or cancel(). Unset (the default): nothing is called.
+    void set_before_start(std::function<void(const StartMsg& start, uint32_t now_ms)> fn) { before_start_ = std::move(fn); }
     void host_loaded(bool ok);
     /// The host abandons the start (Cancel to everybody, back to the room)
     void cancel();
@@ -234,6 +237,7 @@ private:
     uint32_t ignored_start_requests_{0};
     uint32_t takeovers_{0};
     ChatLog chat_;
+    std::function<void(const StartMsg&, uint32_t)> before_start_;
 };
 
 class ClientLobby {

@@ -280,6 +280,7 @@ bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms) {
     host_loaded_ = false;
     load_started_ms_ = now_ms;
     for (auto& g : guests_) g.loaded = false;
+    if (before_start_) before_start_(start_, now_ms);            // (a server's room makes its restart record: before any machine has the Start)
     broadcast(encode(start_));
     return true;
 }
