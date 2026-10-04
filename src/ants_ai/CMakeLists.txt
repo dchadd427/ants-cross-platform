@@ -9,6 +9,7 @@ add_library(ants_ai STATIC
     tactics.cpp
     standard_tasks.cpp
     standard_bot.cpp
+    team_up.cpp
     worker_bot.cpp
     baselines.cpp
     arena.cpp

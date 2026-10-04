@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <cstdlib>
 #include <cassert>
 #include <cmath>
 #include <algorithm>
@@ -29,6 +30,7 @@
 #include "ants_app/scorecard.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/application.hpp"
+#include "ants_app/local_teams.hpp"
 #include "ants_app/version.hpp"
 #include "ants_test_paths.hpp"
 
@@ -1609,6 +1611,380 @@ void run_suite_7_input_controls() {
             app.shutdown();
             std::error_code ignore;
             std::filesystem::remove(settings, ignore);
+        }
+    } TEST_END();
+
+    TEST_CASE("7.6e A bot that declines the player's invitation to team up says why: ONE line in the chat log right after the original's \"... rejected teaming up\" (only two teams left, the player has a teammate, the bot has one, the worker bot never teams up), nothing for a bot that accepts or for a person's answer, and never twice") {
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        const auto bot = [](uint8_t seat, const char* kind = "standard") {
+            ants::ai::BotSpec spec;
+            spec.seat = seat;
+            spec.kind = kind;
+            spec.level = ants::ai::Level::Medium;
+            return spec;
+        };
+        const std::string two_left = "Bots team up only while three or more teams play.";
+        const std::string you_have = "You already have a teammate.";
+        const std::string never = "This bot never teams up.";
+        const auto count_of = [](const std::string& text, const std::string& what) {
+            size_t n = 0;
+            for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
+            return n;
+        };
+        const auto transcript = [](Application& app) { return app.hud().chat_transcript(std::string()); };
+        // A local game of the setup screen's own START (as the web page's Play makes it): the dialog is dismissed and the simulation runs by hand, one tick for each call, the bots acting in post_tick
+        const auto start = [&](Application& app, const std::vector<ants::ai::BotSpec>& bots, const std::array<std::string, 4>& names = {}) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            cfg.default_map_path = tiny;
+            cfg.play_at_once = true;
+            cfg.bots = bots;
+            cfg.team_names = names;
+            if (!app.init(cfg) || app.state() != AppState::Playing) return false;
+            app.hud().dismiss_match_start_modal();
+            return true;
+        };
+        // Ticks until `done()` holds (at most `limit`); returns whether it did. The check is made after every tick: the status line and the chat log are looked at in the very tick of the news
+        const auto run_until = [](Application& app, const std::function<bool()>& done, int limit) {
+            for (int t = 0; t < limit; ++t) {
+                app.update_simulation(0.05f);
+                if (done()) return true;
+            }
+            return false;
+        };
+        const auto invite = [](Application& app, uint8_t from, uint8_t to) {          // the invitation as a command, whatever the HUD would have asked first
+            Command c;
+            c.type = CommandType::AllianceInvite;
+            c.issuer = from;
+            c.other_player = to;
+            return app.sim().apply_command(c).accepted();
+        };
+        const std::vector<std::string> all_notes = {two_left, you_have, never, "already has a teammate."};
+        const auto notes_in = [&](const std::string& log) {
+            size_t n = 0;
+            for (const std::string& note : all_notes) n += count_of(log, note);
+            return n + count_of(log, "News Flash: \n");                                                   // (a flash with no text is a line of the log too: it counts as a note that must not be there)
+        };
+
+        {   // one bot: two teams play, the alliance would end the match at once. The player asks through the HUD (the pedestal's request), the bot says no, the game says why
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1)}));
+            app.hud().request_team_up(app.sim(), 1);
+            ASSERT_EQ(app.sim().get_world_state().pending_invite_from[1], 0);
+            ASSERT_TRUE(run_until(app, [&] { return count_of(transcript(app), two_left) > 0; }, 400));
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Bot (Medium) rejected teaming up"));    // the original's text, unchanged, is the status of this very tick
+            ASSERT_EQ(count_of(transcript(app), "News Flash: " + two_left), 1u);                           // ... and the line is a News Flash of the chat log
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            for (int t = 0; t < 300; ++t) app.update_simulation(0.05f);                                    // nothing says it again
+            ASSERT_EQ(count_of(transcript(app), two_left), 1u);
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            app.shutdown();
+        }
+        {   // the player already has a teammate (a command that the HUD would have asked about first: it breaks the team before it invites; here the team stands when the bot answers)
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}));
+            app.sim().form_alliance(0, 1);
+            ASSERT_TRUE(invite(app, 0, 2));
+            ASSERT_TRUE(run_until(app, [&] { return count_of(transcript(app), you_have) > 0; }, 400));
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Bot (Medium) rejected teaming up"));
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            for (int t = 0; t < 200; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            app.shutdown();
+        }
+        {   // the bot already has a teammate (two bots that are a team): the line names the bot as the game names it (-N / --team-name wins over "Bot (Medium)")
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}, {"", "", "Maple", ""}));
+            app.sim().form_alliance(2, 3);
+            app.hud().request_team_up(app.sim(), 2);
+            ASSERT_TRUE(run_until(app, [&] { return count_of(transcript(app), "Maple already has a teammate.") > 0; }, 400));
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Maple rejected teaming up"));
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            app.shutdown();
+        }
+        {   // the worker bot (the tournaments' yardstick) never teams up: its own line, although the standard rule would accept in this world of four teams
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1, "worker"), bot(2), bot(3)}));
+            app.hud().request_team_up(app.sim(), 1);
+            ASSERT_TRUE(run_until(app, [&] { return count_of(transcript(app), never) > 0; }, 400));
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Bot (Worker) rejected teaming up"));
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            app.shutdown();
+        }
+        {   // a bot that accepts: the original's texts only (the team is made), no line of ours
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}));
+            app.hud().request_team_up(app.sim(), 1);
+            ASSERT_TRUE(run_until(app, [&] { return app.sim().get_world_state().player_alliances[0] == 1; }, 400));
+            for (int t = 0; t < 20; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(notes_in(transcript(app)), 0u);
+            ASSERT_EQ(count_of(transcript(app), "are a team now!"), 1u);
+            app.shutdown();
+        }
+        {   // the same where the system's user and machine make a long default name (a macOS runner's machine name is about 50 characters): the name is cut as a typed one (32 printable
+            // characters), so the original's "... are a team now!" stays whole in its chat entry (100 characters)
+            struct LongUser {
+                std::string saved;
+                bool had{false};
+                static void put(const char* value) {
+#if defined(_WIN32)
+                    _putenv_s("USER", value);                                         // ("" removes it)
+#else
+                    if (*value != '\0') ::setenv("USER", value, 1);
+                    else ::unsetenv("USER");
+#endif
+                }
+                LongUser() {
+                    const char* old = std::getenv("USER");
+                    had = old != nullptr;
+                    if (had) saved = old;
+                    put(std::string(60, 'u').c_str());
+                }
+                ~LongUser() { put(had ? saved.c_str() : ""); }
+            } long_user;
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}));
+            ASSERT_EQ(app.sim().get_player_name(0), std::string(32, 'u'));
+            app.hud().request_team_up(app.sim(), 1);
+            ASSERT_TRUE(run_until(app, [&] { return app.sim().get_world_state().player_alliances[0] == 1; }, 400));
+            for (int t = 0; t < 20; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(count_of(transcript(app), "are a team now!"), 1u);
+            app.shutdown();
+        }
+        {   // a person's answer is the person's own business: seat 1 of a game with no bots says no, the status line carries the original's text and the chat log gets no line (although the rule would
+            // have a reason for a bot: seat 1 has a teammate, so a bot there would have said "... already has a teammate.")
+            Application app;
+            ASSERT_TRUE(start(app, {}));
+            ASSERT_TRUE(app.bots() == nullptr);
+            app.sim().form_alliance(1, 2);
+            ASSERT_TRUE(invite(app, 0, 1));
+            Command deny;
+            deny.type = CommandType::AllianceDeny;
+            deny.issuer = 1;
+            deny.other_player = 0;
+            ASSERT_TRUE(app.sim().apply_command(deny).accepted());
+            app.update_simulation(0.05f);
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Red rejected teaming up"));
+            for (int t = 0; t < 40; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(notes_in(transcript(app)), 0u);
+            app.shutdown();
+        }
+        {   // a bot seat answers a person's invitation to ANOTHER player's seat in no way: only the local player's own invitation is explained (a refusal that is told to somebody else is not this screen's news)
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}));
+            app.sim().apply_command([] { Command c; c.type = CommandType::AllianceInvite; c.issuer = 2; c.other_player = 3; return c; }());
+            Command deny;                                                                                 // seat 3 (a bot seat, answered by hand) refuses seat 2: the news goes to seat 2, not to the local seat 0
+            deny.type = CommandType::AllianceDeny;
+            deny.issuer = 3;
+            deny.other_player = 2;
+            ASSERT_TRUE(app.sim().apply_command(deny).accepted());
+            for (int t = 0; t < 10; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(notes_in(transcript(app)), 0u);
+            app.shutdown();
+        }
+    } TEST_END();
+
+    TEST_CASE("7.6f The teams of a game on this computer, as a model: --teams ffa | A+B (two different seats, any case of ffa, nothing else), what a match of a roster makes of them (the pair, then the two other seats when both play; nothing, with the reason, for a seat that does not play or when the teams would be the whole match), and the choices that a screen offers (only with two or more bots)") {
+        LocalTeams t;
+        std::string why;
+        ASSERT_TRUE(parse_local_teams("0+1", t, why) && t.set && t.a == 0 && t.b == 1);
+        ASSERT_TRUE(parse_local_teams("3+2", t, why) && t.set && t.a == 3 && t.b == 2);                    // the order is the player's: the first seat is the one that invites
+        ASSERT_TRUE(parse_local_teams("ffa", t, why) && !t.set);
+        ASSERT_TRUE(parse_local_teams("FFA", t, why) && !t.set && parse_local_teams("Ffa", t, why) && !t.set);
+        for (const char* bad : {"", "0", "01", "0+", "+1", "0+0", "2+2", "0+4", "4+0", "9+1", "a+b", "0-1", "0 1", "0 + 1", " 0+1", "0+1 ", "0+1+2", "0+10", "ff", "ffaa", "free for all", "none", "-1+0"}) {
+            t = LocalTeams{true, 1, 2};
+            why.clear();
+            ASSERT_FALSE(parse_local_teams(bad, t, why));
+            ASSERT_TRUE(t.set && t.a == 1 && t.b == 2);                                                    // (nothing changed)
+            ASSERT_FALSE(why.empty());
+        }
+        parse_local_teams("1+1", t, why);
+        ASSERT_TRUE(why.find("two different seats") != std::string::npos);
+        ASSERT_EQ(local_teams_text(LocalTeams{}), std::string("ffa"));
+        ASSERT_EQ(local_teams_text(LocalTeams{true, 0, 1}), std::string("0+1"));
+        ASSERT_EQ(local_teams_text(LocalTeams{true, 3, 2}), std::string("3+2"));
+        ASSERT_TRUE(parse_local_teams(local_teams_text(LocalTeams{true, 2, 0}), t, why) && t == LocalTeams({true, 2, 0}));
+
+        const auto pairs_of = [](const LocalTeams& teams, uint8_t roster) {
+            std::string out;
+            const LocalTeamsPlan plan = plan_local_teams(teams, roster);
+            for (const auto& p : plan.pairs) out += std::to_string(p[0]) + "+" + std::to_string(p[1]) + " ";
+            return out + "[" + plan.why + "]";
+        };
+        ASSERT_EQ(pairs_of(LocalTeams{}, 0x0F), std::string("[]"));                                          // free for all: nothing to make, nothing to say
+        ASSERT_EQ(pairs_of(LocalTeams{true, 0, 1}, 0x0F), std::string("0+1 2+3 []"));                       // four seats: two teams
+        ASSERT_EQ(pairs_of(LocalTeams{true, 1, 0}, 0x0F), std::string("1+0 2+3 []"));                       // (the first seat of the pair invites)
+        ASSERT_EQ(pairs_of(LocalTeams{true, 2, 3}, 0x0F), std::string("2+3 0+1 []"));
+        ASSERT_EQ(pairs_of(LocalTeams{true, 1, 3}, 0x0F), std::string("1+3 0+2 []"));
+        ASSERT_EQ(pairs_of(LocalTeams{true, 0, 1}, 0x07), std::string("0+1 []"));                           // three seats: one team, the third seat alone
+        ASSERT_EQ(pairs_of(LocalTeams{true, 1, 2}, 0x07), std::string("1+2 []"));
+        ASSERT_EQ(pairs_of(LocalTeams{true, 0, 3}, 0x0B), std::string("0+3 []"));
+        ASSERT_EQ(pairs_of(LocalTeams{true, 0, 3}, 0x07), std::string("[seat 3 does not play in this match.]"));      // a seat that does not play: no team, the reason
+        ASSERT_EQ(pairs_of(LocalTeams{true, 3, 0}, 0x07), std::string("[seat 3 does not play in this match.]"));
+        ASSERT_EQ(pairs_of(LocalTeams{true, 1, 2}, 0x0D), std::string("[seat 1 does not play in this match.]"));
+        ASSERT_EQ(pairs_of(LocalTeams{true, 0, 1}, 0x03), std::string("[these are the only two seats that play, and a match in which every team is allied ends at once.]"));
+        ASSERT_EQ(pairs_of(LocalTeams{true, 0, 2}, 0x05), std::string("[these are the only two seats that play, and a match in which every team is allied ends at once.]"));
+        ASSERT_EQ(pairs_of(LocalTeams{true, 0, 1}, 0x00), std::string("[seat 0 does not play in this match.]"));
+
+        const auto choices_of = [](uint8_t own, uint8_t filled) {
+            std::string out;
+            for (const LocalTeams& c : local_team_choices(own, filled)) out += local_teams_text(c) + " ";
+            return out;
+        };
+        ASSERT_EQ(choices_of(0, 0x0E), std::string("ffa 0+1 0+2 0+3 "));                                    // three bots
+        ASSERT_EQ(choices_of(0, 0x06), std::string("ffa 0+1 0+2 "));                                        // two bots
+        ASSERT_EQ(choices_of(0, 0x0A), std::string("ffa 0+1 0+3 "));
+        ASSERT_EQ(choices_of(0, 0x02), std::string("ffa "));                                                // one bot: the team would be the whole match, nothing to choose
+        ASSERT_EQ(choices_of(0, 0x00), std::string("ffa "));
+        ASSERT_EQ(choices_of(0, 0x0F), std::string("ffa 0+1 0+2 0+3 "));                                    // (the own seat's bit means nothing)
+        ASSERT_EQ(choices_of(2, 0x0B), std::string("ffa 2+0 2+1 2+3 "));                                    // the player at another seat
+        ASSERT_EQ(choices_of(2, 0x01), std::string("ffa "));
+        ASSERT_EQ(choices_of(7, 0x0F), std::string("ffa "));
+        for (uint8_t own = 0; own < 4; ++own) {                                                             // every choice that is offered can be made by a match of exactly those seats
+            for (uint8_t filled = 0; filled < 16; ++filled) {
+                const uint8_t roster = static_cast<uint8_t>((filled & 0x0Fu) | (1u << own));
+                for (const LocalTeams& c : local_team_choices(own, filled)) {
+                    ASSERT_TRUE(plan_local_teams(c, roster).why.empty());
+                }
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("7.6g --teams in a local game: the teams are made with the original's own commands when the match starts (before its first tick, no invitation dialog, the engine's News Flash in the chat log), the standard bots keep them for the whole match, two bots make one team and a lone third seat, a seat that does not play or a match of two seats makes no team and says why (stderr, the setup screen), free for all makes none; the direct start of --map and the player's own seat too") {
+        const std::string treasure = "Original-Ants/Maps/TREASURE.LVL";
+        const auto bot = [](uint8_t seat) {
+            ants::ai::BotSpec spec;
+            spec.seat = seat;
+            return spec;
+        };
+        const auto count_of = [](const std::string& text, const std::string& what) {
+            size_t n = 0;
+            for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
+            return n;
+        };
+        const auto allies_of = [](Application& app) {
+            std::string out;
+            for (uint8_t a : app.sim().get_world_state().player_alliances) out += std::to_string(a);
+            return out;                                                                                    // by seat: the ally's seat, 4 for none
+        };
+        const auto config = [&](const std::vector<ants::ai::BotSpec>& bots, const LocalTeams& teams) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            cfg.default_map_path = treasure;
+            cfg.play_at_once = true;
+            cfg.player_name = "Alice";
+            cfg.bots = bots;
+            cfg.teams = teams;
+            return cfg;
+        };
+        {   // three bots, --teams 0+1: the player and Red against Blue and Black
+            Application app;
+            ASSERT_TRUE(app.init(config({bot(1), bot(2), bot(3)}, LocalTeams{true, 0, 1})));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_TRUE(app.hud().is_match_start_modal_active());                                          // the "Get ready" dialog is up and no tick has run
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            ASSERT_EQ(allies_of(app), std::string("1032"));                                                // 0 + 1 and 2 + 3, before the first tick
+            ASSERT_TRUE(app.hud().alliance_dialog() == HUD::AllianceDialog::None);                         // the invitation was answered in the same breath: no dialog, nothing waits
+            ASSERT_TRUE(app.sim().get_world_state().pending_invite_from[0] == 255 && app.sim().get_world_state().pending_invite_from[1] == 255);
+            ASSERT_TRUE(app.sim().get_world_state().pending_invite_from[2] == 255 && app.sim().get_world_state().pending_invite_from[3] == 255);
+            app.hud().dismiss_match_start_modal();
+            app.update_simulation(0.05f);                                                                  // the first tick: the news of the engine reach the chat log
+            ASSERT_TRUE(app.hud().alliance_dialog() == HUD::AllianceDialog::None);
+            const std::string log = app.hud().chat_transcript(std::string());
+            ASSERT_EQ(count_of(log, "are a team now!"), 2u);
+            ASSERT_EQ(count_of(log, "Alice (Green) and Bot (Medium) (Red) are a team now!"), 1u);          // the proposer first, as the engine words it
+            ASSERT_EQ(count_of(log, "Bot (Medium) (Blue) and Bot (Medium) (Black) are a team now!"), 1u);
+            ASSERT_EQ(count_of(log, "rejected teaming up"), 0u);
+            for (int t = 0; t < 3000; ++t) app.update_simulation(0.05f);                                   // the bots never break a team and never invite
+            ASSERT_FALSE(app.sim().is_match_over());
+            ASSERT_EQ(allies_of(app), std::string("1032"));
+            ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "are a team now!"), 2u);
+            ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "no longer a team"), 0u);
+            ASSERT_TRUE(app.bots() != nullptr && app.bots()->stats(1).released > 0);                       // (the bots played)
+            app.shutdown();
+        }
+        {   // the first seat of the pair is the one that invites: 3+2 makes the same two teams, and the News Flash names Black first
+            Application app;
+            ASSERT_TRUE(app.init(config({bot(1), bot(2), bot(3)}, LocalTeams{true, 3, 2})));
+            ASSERT_EQ(allies_of(app), std::string("1032"));
+            app.hud().dismiss_match_start_modal();
+            app.update_simulation(0.05f);
+            const std::string log = app.hud().chat_transcript(std::string());
+            ASSERT_EQ(count_of(log, "Bot (Medium) (Black) and Bot (Medium) (Blue) are a team now!"), 1u);
+            ASSERT_EQ(count_of(log, "Alice (Green) and Bot (Medium) (Red) are a team now!"), 1u);
+            app.shutdown();
+        }
+        {   // two bots (seat 3 empty): the player and Red are a team, Blue plays alone
+            Application app;
+            ASSERT_TRUE(app.init(config({bot(1), bot(2)}, LocalTeams{true, 0, 1})));
+            ASSERT_EQ(app.sim().roster_mask(), 0x07);
+            ASSERT_EQ(allies_of(app), std::string("1044"));
+            app.hud().dismiss_match_start_modal();
+            for (int t = 0; t < 400; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(allies_of(app), std::string("1044"));
+            ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "are a team now!"), 1u);
+            app.shutdown();
+        }
+        {   // a pair with a seat that does not play (the empty seat 3): no team, and the game says why on the setup screen's status line (and on stderr)
+            Application app;
+            ASSERT_TRUE(app.init(config({bot(1), bot(2)}, LocalTeams{true, 0, 3})));
+            ASSERT_EQ(app.state(), AppState::Playing);                                                     // the game starts all the same
+            ASSERT_EQ(allies_of(app), std::string("4444"));
+            ASSERT_TRUE(app.map_select().room().status.find("--teams 0+3: seat 3 does not play in this match. The game starts without teams.") != std::string::npos);
+            app.hud().dismiss_match_start_modal();
+            for (int t = 0; t < 100; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(allies_of(app), std::string("4444"));
+            ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "are a team now!"), 0u);
+            app.shutdown();
+        }
+        {   // two seats only: the team would be the whole match (the original ends such a match at the first point): no team, the reason
+            Application app;
+            ASSERT_TRUE(app.init(config({bot(1)}, LocalTeams{true, 0, 1})));
+            ASSERT_EQ(allies_of(app), std::string("4444"));
+            ASSERT_TRUE(app.map_select().room().status.find("only two seats that play") != std::string::npos);
+            app.shutdown();
+        }
+        {   // free for all (the default): nobody is a team, and the setup screen says nothing about it
+            Application app;
+            ASSERT_TRUE(app.init(config({bot(1), bot(2), bot(3)}, LocalTeams{})));
+            ASSERT_EQ(allies_of(app), std::string("4444"));
+            ASSERT_TRUE(app.map_select().room().status.find("--teams") == std::string::npos);
+            app.hud().dismiss_match_start_modal();
+            for (int t = 0; t < 50; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "are a team now!"), 0u);
+            app.shutdown();
+        }
+        {   // the player at another seat (--player 2), bots at 0, 1 and 3, --teams 2+3: the same two teams
+            Application app;
+            ApplicationConfig cfg = config({bot(0), bot(1), bot(3)}, LocalTeams{true, 2, 3});
+            cfg.local_player_id = 2;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(allies_of(app), std::string("1032"));
+            app.shutdown();
+        }
+        {   // the direct start of --map (no setup screen, no dialog): the teams are there at tick 0 of the running game
+            Application app;
+            ApplicationConfig cfg = config({bot(1), bot(2), bot(3)}, LocalTeams{true, 0, 2});
+            cfg.start_in_map_select = false;
+            cfg.play_at_once = false;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_FALSE(app.hud().is_match_start_modal_active());
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            ASSERT_EQ(allies_of(app), std::string("2301"));                                                // 0 + 2 and 1 + 3
+            ASSERT_TRUE(app.hud().alliance_dialog() == HUD::AllianceDialog::None);
+            app.update_simulation(0.05f);
+            ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "are a team now!"), 2u);
+            app.shutdown();
+        }
+        {   // a game without bots (the original's single player: the other colours stand still): the teams are made among the four seats, as asked
+            Application app;
+            ASSERT_TRUE(app.init(config({}, LocalTeams{true, 0, 1})));
+            ASSERT_TRUE(app.bots() == nullptr);
+            ASSERT_EQ(allies_of(app), std::string("1032"));
+            app.shutdown();
         }
     } TEST_END();
 

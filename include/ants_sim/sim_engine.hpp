@@ -227,6 +227,9 @@ struct NewsEvent {
     uint16_t    string_id{0};         // id in the original's string table (game_strings.hpp)
     bool        blink{false};         // status posted with the flash flag: a 500 ms flicker before the steady text
     NewsChannel channel{NewsChannel::Status};
+    /// The seat that the text is about when it names one as the answer to an invitation to team up does (80 "... rejected teaming up", 81 "... accepted ...": the team that answered; 82 "...
+    /// withdrew offer ...": the team that withdrew); 255 otherwise. Presentation only: no rule and no state hash reads it (the application says why a bot declined).
+    uint8_t     subject{255};
 };
 
 struct AntSnapshot {
@@ -393,8 +396,17 @@ public:
     SimulationEngine();
     ~SimulationEngine();
 
-    SimulationEngine(const SimulationEngine&) = delete;
-    SimulationEngine& operator=(const SimulationEngine&) = delete;
+    /// Value semantics: a deep copy, a second engine in exactly the state of `other`. EVERYTHING is copied (every ant, the map with its food and structures, the clocks, both
+    /// PRNGs, the occupancy grid, the path managers with the searches that are half done, the eggs and the hatches, the pending cues and news, the effects, the fog and the
+    /// names) and NOTHING is shared: the two engines go on independently, and given the same commands they stay identical (state_hash() equal at every tick, the same
+    /// cues, news and world state). The lock-step client uses it to show a player's own orders at once (client-side prediction): the predicted engine is a copy of the
+    /// confirmed one plus the orders that the server has not sealed yet. The only thing that is not copied is the cached world state (get_world_state() rebuilds it).
+    /// The copy constructor is explicit: a copy moves the whole map and every ant (see the measurements in docs/audit/rollback_notes.md), so it must be asked for and
+    /// cannot happen by accident (an engine passed by value, say).
+    explicit SimulationEngine(const SimulationEngine& other);
+    /// The same, into an engine that exists. The target keeps the memory it has (the cells, the ants, the lists) wherever the shapes fit, so rebuilding a second engine
+    /// from the first every frame allocates next to nothing. Copying a moved-from engine gives an empty, usable engine.
+    SimulationEngine& operator=(const SimulationEngine& other);
     SimulationEngine(SimulationEngine&&) noexcept;
     SimulationEngine& operator=(SimulationEngine&&) noexcept;
 

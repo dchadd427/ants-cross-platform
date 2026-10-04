@@ -1,14 +1,15 @@
 @echo off
 rem Starts Ants (Windows).
 rem
-rem   start_game.bat                 four games on this machine, one player each, in a 2 x 2 grid, playing one networked match together:
-rem                                  window 0 hosts (green), windows 1 - 3 join (red, blue, black), every player has a random name.
-rem                                  The windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the
-rem                                  same as the games on web/lobby.html): black top left, green top right, red bottom left, blue bottom right
-rem   start_game.bat --players N     N windows (1 - 4); 2 windows sit side by side (green left, red right), 3 are green, red, blue in the first three
-rem                                  cells of the grid (black, green, red, blue keep their order without holes), 1 is the plain single game
-rem   start_game.bat --single        the same as --players 1 (one plain game: the desktop start menu comes first, then the original's screens as always; add --map-select
-rem                                  to start on the setup screen at once). The four windows of the default rig never show the menu: each has --host or --join
+rem   start_game.bat                 one plain game: the desktop start menu comes first (Single player, Join, Host, Quit), then the original's screens as always
+rem                                  (add --map-select to start on the setup screen at once)
+rem   start_game.bat --players N     the test rig: N games on this machine (2 - 4), one player each, playing one networked match together: window 0 hosts
+rem                                  (green), the others join (red, blue, black), every player has a random name. Four lie in a 2 x 2 grid by colour, the way
+rem                                  the four hills lie on the Small and Treasure maps (the owner's layout, the same as the games on web/lobby.html): black top
+rem                                  left, green top right, red bottom left, blue bottom right; two sit side by side (green left, red right), three are green,
+rem                                  red, blue in the first three cells of the grid. The windows of the rig never show the menu: each has --host or --join.
+rem                                  --players 1 is the plain game
+rem   start_game.bat --single        the plain game (the default; the same as --players 1)
 rem   start_game.bat --dry-run ...   print the command line of every window and stop (nothing is built or started)
 rem   every other argument goes to every window (the game's own options, see README.md)
 rem   --host, --join, --bot, --lan-list, --headless, --screenshot and --map are options of one game: given without --players they make this a single game,
@@ -23,7 +24,7 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
-set "PLAYERS=4"
+set "PLAYERS=1"
 set "GIVEN=0"
 set "DRYRUN=0"
 set "PASS="
@@ -103,7 +104,7 @@ echo.
 echo ----------------------------------------------------------------------
 echo                       AUTHENTIC CONTROL SCHEME
 echo ----------------------------------------------------------------------
-echo  START MENU (A PLAIN GAME, start_game.bat --single; the four-window rig starts in its room):
+echo  START MENU (start_game.bat; the test rig of start_game.bat --players 4 starts in its room):
 echo    * Single player (with computer players per seat), Join with a code, Host an online match, Quit.
 echo    * Up / Down and Enter, or the mouse; Esc goes back (on the first panel: quits).
 echo.

@@ -1236,6 +1236,78 @@ int main() {
         ASSERT_EQ(ends.first->last_message_age_ms(), 0u);                  // (this end polled nothing)
     } TEST_END();
 
+    TEST_CASE("N9.37 FeltDelayMeter: The Delay Is The Time From The Frame That Took The Order To The End Of The First Frame After The Predicted Engine's Next Tick; Nothing Is Shown Before The First One") {
+        FeltDelayMeter m;
+        ASSERT_TRUE(!m.measured() && m.felt_ms() == 0 && m.samples() == 0 && m.pending() == 0 && m.stale(0));
+        m.on_order(1000);                                                // the click, in the frame at 1000
+        m.on_frame_end(1004);                                            // (the frame draws before any tick: the order has no effect in the picture yet)
+        ASSERT_TRUE(!m.measured() && m.pending() == 1);
+        m.on_tick_shown();                                               // the next tick of the predicted engine: the ants' first step
+        ASSERT_TRUE(!m.measured());                                      // (not felt before a frame has drawn it)
+        m.on_frame_end(1030);
+        ASSERT_TRUE(m.measured() && m.felt_ms() == 30 && m.last_ms() == 30 && m.samples() == 1 && m.pending() == 0);
+        ASSERT_FALSE(m.stale(1030));
+        ASSERT_FALSE(m.stale(1030 + FeltDelayMeter::kStaleAfterMs));
+        ASSERT_TRUE(m.stale(1030 + FeltDelayMeter::kStaleAfterMs + 1));  // a number that is older than ten seconds is no longer about now
+    } TEST_END();
+
+    TEST_CASE("N9.38 FeltDelayMeter: Orders Of One Frame Share It, Each Order Is Felt From Its Own Frame, The Number Is The Median Of The Last Five (One Odd Order Does Not Show), And The Oldest Leaves") {
+        FeltDelayMeter m;
+        for (uint32_t i = 0; i < 4; ++i) {
+            m.on_order(1000 + i * 100);
+            m.on_tick_shown();
+            m.on_frame_end(1000 + i * 100 + 20 + i);                     // 20, 21, 22, 23
+        }
+        ASSERT_EQ(m.samples(), 4u);
+        ASSERT_EQ(m.felt_ms(), 22u);                                     // the mean of the two in the middle (21, 22), rounded up
+        m.on_order(2000);                                                // a stall: this order is drawn a second later
+        m.on_tick_shown();
+        m.on_frame_end(3000);
+        ASSERT_EQ(m.samples(), 5u);
+        ASSERT_EQ(m.felt_ms(), 22u);                                     // 20 21 22 23 1000: the middle one (the odd one does not show)
+        // two orders in one frame: both are felt at the end of the frame that follows the tick, each from the frame that took it
+        m.on_order(4000);
+        m.on_order(4000);
+        m.on_tick_shown();
+        m.on_frame_end(4017);
+        ASSERT_EQ(m.samples(), 5u);                                      // (the window holds five: 22 23 1000 17 17)
+        ASSERT_EQ(m.felt_ms(), 22u);
+        ASSERT_EQ(m.pending(), 0u);
+        // an order that came after the tick is not shown by it: it waits for the next tick
+        m.on_order(5000);
+        m.on_tick_shown();
+        m.on_order(5010);
+        m.on_frame_end(5020);
+        ASSERT_EQ(m.pending(), 1u);                                      // (the first was drawn; the second has no tick behind it yet)
+        ASSERT_EQ(m.last_ms(), 20u);
+        m.on_tick_shown();
+        m.on_frame_end(5060);
+        ASSERT_EQ(m.pending(), 0u);
+        ASSERT_EQ(m.last_ms(), 50u);
+    } TEST_END();
+
+    TEST_CASE("N9.39 FeltDelayMeter: An Order Whose Effect Is Never Drawn (The Prediction Ended, The Page Was Hidden) Is Forgotten After Five Seconds And Never Counts; The Waiting List Is Bounded; forget_pending Empties It") {
+        FeltDelayMeter m;
+        m.on_order(1000);
+        m.on_frame_end(1000 + FeltDelayMeter::kForgetAfterMs);
+        ASSERT_EQ(m.pending(), 1u);                                      // (exactly five seconds: still waited for)
+        m.on_frame_end(1000 + FeltDelayMeter::kForgetAfterMs + 1);
+        ASSERT_EQ(m.pending(), 0u);
+        ASSERT_FALSE(m.measured());
+        for (uint32_t i = 0; i < 40; ++i) m.on_order(2000 + i);
+        ASSERT_EQ(m.pending(), FeltDelayMeter::kMaxPending);
+        m.on_tick_shown();
+        m.on_frame_end(2100);
+        ASSERT_EQ(m.samples(), FeltDelayMeter::kOrdersKept);             // the newest 16 were felt: the median of the last five of them (2100 - 2039 .. 2100 - 2035)
+        ASSERT_EQ(m.felt_ms(), 63u);                                     // 65 64 63 62 61
+        m.on_order(3000);
+        m.forget_pending();
+        ASSERT_EQ(m.pending(), 0u);
+        m.on_tick_shown();
+        m.on_frame_end(3010);
+        ASSERT_EQ(m.last_ms(), 61u);                                     // (nothing new was felt: the last number is still the one of the newest of the sixteen)
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

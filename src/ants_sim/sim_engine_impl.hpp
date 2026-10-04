@@ -10,10 +10,74 @@
 #include <unordered_map>
 #include <memory>
 #include <algorithm>
+#include <cstddef>
+#include <type_traits>
 #include <vector>
 #include <array>
 
 namespace ants::sim {
+
+// ---- Value semantics of the engine (SimulationEngine's copy, docs/NETWORK_PORT.md "Prediction of one's own orders") ----------------------------------------------
+// SimulationEngineImpl is copied member by member, by the copy operations that the compiler writes. Every member therefore copies itself correctly or the class does not
+// compile, and a member that is added later cannot be forgotten by a hand-written copy. Three members need more than the default, and each is a type of its own:
+//   * the ants (AntPtr): the table owns its ants through pointers, so that an ant keeps its address while the table grows; a copy must clone them;
+//   * the path managers (PathManager, path_planner.hpp): a search points into the pool of its manager;
+//   * the cached world state (WorldStateCache, StaleFlag): derived from the rest of the engine, so a copy does not take it along.
+
+/// An owning pointer to an ant of the table `ants_`. The ant lives at a stable address (the engine hands out references to ants and the table grows), and a COPY of the
+/// pointer clones the ant: a copy of the engine shares no ant with the original. An assignment into a pointer that already owns an ant copies into that ant (its waypoint list
+/// keeps its memory), so that a second engine that is rebuilt from the first every frame allocates nothing.
+class AntPtr {
+public:
+    AntPtr() noexcept = default;
+    AntPtr(std::unique_ptr<AntUnit> ant) noexcept : ant_(std::move(ant)) {}
+    AntPtr(const AntPtr& other) : ant_(other.ant_ ? std::make_unique<AntUnit>(*other.ant_) : nullptr) {}
+    AntPtr(AntPtr&&) noexcept = default;
+    AntPtr& operator=(const AntPtr& other) {
+        if (this == &other) return *this;
+        if (!other.ant_) ant_.reset();
+        else if (ant_) *ant_ = *other.ant_;
+        else ant_ = std::make_unique<AntUnit>(*other.ant_);
+        return *this;
+    }
+    AntPtr& operator=(AntPtr&&) noexcept = default;
+
+    AntUnit* get() const noexcept { return ant_.get(); }
+    AntUnit* operator->() const noexcept { return ant_.get(); }
+    AntUnit& operator*() const noexcept { return *ant_; }
+    explicit operator bool() const noexcept { return ant_ != nullptr; }
+    friend bool operator==(const AntPtr& a, std::nullptr_t) noexcept { return a.ant_ == nullptr; }
+    friend bool operator!=(const AntPtr& a, std::nullptr_t) noexcept { return a.ant_ != nullptr; }
+    friend bool operator==(std::nullptr_t, const AntPtr& a) noexcept { return a.ant_ == nullptr; }
+    friend bool operator!=(std::nullptr_t, const AntPtr& a) noexcept { return a.ant_ != nullptr; }
+
+private:
+    std::unique_ptr<AntUnit> ant_;
+};
+// The table of ants grows by push_back: it must MOVE its ants when it reallocates (a copy would clone every ant and move it to a new address)
+static_assert(std::is_nothrow_move_constructible<AntPtr>::value, "a growing table of ants moves its ants");
+
+/// The WorldState that get_world_state() builds on demand: derived from the rest of the engine, and as big as the map. A copy of the engine does not copy it (that would
+/// move the whole map once more for a cache that is rebuilt when somebody asks): the copy starts with an empty one, flagged stale (StaleFlag), and an assignment into an
+/// engine leaves the cache that the target holds, memory included, and flags it stale.
+struct WorldStateCache : WorldState {
+    WorldStateCache() = default;
+    WorldStateCache(const WorldStateCache&) : WorldState() {}
+    WorldStateCache& operator=(const WorldStateCache&) { return *this; }
+};
+
+/// "The cached world state is out of date": true from the start, and true again in a copy of an engine and in an engine that was assigned to (see WorldStateCache).
+class StaleFlag {
+public:
+    StaleFlag() noexcept = default;
+    StaleFlag(const StaleFlag&) noexcept {}
+    StaleFlag& operator=(const StaleFlag&) noexcept { stale_ = true; return *this; }
+    StaleFlag& operator=(bool stale) noexcept { stale_ = stale; return *this; }
+    operator bool() const noexcept { return stale_; }
+
+private:
+    bool stale_{true};
+};
 
 class SimulationEngineImpl {
 public:
@@ -56,7 +120,7 @@ public:
     void set_match_clock(int64_t ms);          // jumps the clock (start, test hook): CHECKGO runs at its next tick
     void set_match_clock_running(int64_t ms);  // the clock advances with the game
 
-    std::vector<std::unique_ptr<AntUnit>> ants_;
+    std::vector<AntPtr> ants_;
     uint32_t next_ant_id_{1};
 
     std::vector<AudioEvent> audio_queue_;
@@ -152,8 +216,8 @@ public:
     void flower_dropper_sound(FlowerDropper& d);
     void flower_dropper_land(FlowerDropper& d);
 
-    mutable WorldState world_state_cache_;
-    mutable bool       world_state_dirty_{true};
+    mutable WorldStateCache world_state_cache_;
+    mutable StaleFlag       world_state_dirty_;
     // Effect sprite created at pixel (px, py); tile effects pass the tile top-left and y_key = row*32.
     // Sound ownership (tracked sounds): effect sprites get an owner id from here (ants use their own id)
     uint32_t next_audio_owner_{0x40000000u};
@@ -394,9 +458,9 @@ public:
     void add_score(uint8_t player, int32_t amount);    // FUN_01010cc9
     SimulationEngine::HatchResult hatch_request(uint8_t player, AntType type, bool force);   // FUN_01010aca
     /// PostStatus of the original for one player (255 = everybody): the text of `string_id` with `%s` filled by a..d, the flash flag
-    /// of that id. The remake posts to the player that the original's "local player" test would pass.
+    /// of that id. The remake posts to the player that the original's "local player" test would pass. `subject`: NewsEvent::subject.
     void post_news(uint8_t player, uint16_t string_id, const std::string& a = {}, const std::string& b = {},
-                   const std::string& c = {}, const std::string& d = {});
+                   const std::string& c = {}, const std::string& d = {}, uint8_t subject = 255);
     /// A "News Flash" line of the chat log (AddNewsFlash 0x100e9bb).
     void post_news_flash(uint16_t string_id, const std::string& a = {}, const std::string& b = {},
                          const std::string& c = {}, const std::string& d = {});

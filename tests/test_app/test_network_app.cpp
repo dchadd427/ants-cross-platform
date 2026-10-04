@@ -662,6 +662,67 @@ void run_bot_tests() {
         ASSERT_TRUE(ApplicationConfig{}.bots.empty() && ApplicationConfig{}.startup_error.empty());
     } TEST_END();
 
+    TEST_CASE("AI6.13 Command Line: --teams ffa | A+B (Two Different Seats Of 0 To 3, ffa In Any Case Is The Default, The Last One Wins) Is For A Game On This Computer: Anything Else Is A Startup Error That Names The Option, A Room (--host, --join, --join-url) Refuses It With The Reason, ffa Is Fine Everywhere, And It Is No Mode (The Start Menu Still Shows)") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parsed = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            return Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        };
+        {   // valid
+            ApplicationConfig c = parsed({"ants", "--teams", "0+1", "--headless"});
+            ASSERT_TRUE(c.teams.set && c.teams.a == 0 && c.teams.b == 1 && c.startup_error.empty());
+            c = parsed({"ants", "--headless", "--teams", "3+2"});
+            ASSERT_TRUE(c.teams.set && c.teams.a == 3 && c.teams.b == 2 && c.startup_error.empty());        // (the order is kept: the first seat invites)
+            for (const char* ffa : {"ffa", "FFA", "Ffa"}) {
+                c = parsed({"ants", "--teams", ffa, "--headless"});
+                ASSERT_TRUE(!c.teams.set && c.startup_error.empty());
+            }
+            c = parsed({"ants", "--teams", "2+3", "--teams", "ffa", "--headless"});                           // the last one wins
+            ASSERT_TRUE(!c.teams.set && c.startup_error.empty());
+            c = parsed({"ants", "--teams", "ffa", "--teams", "1+0", "--headless"});
+            ASSERT_TRUE(c.teams.set && c.teams.a == 1 && c.teams.b == 0 && c.startup_error.empty());
+            c = parsed({"ants", "--headless"});                                                              // not asked for: free for all
+            ASSERT_TRUE(!c.teams.set && c.startup_error.empty());
+            c = parsed({"ants", "--bot", "1", "--bot", "2", "--bot", "3", "--teams", "0+1"});                 // with the bots: both are kept
+            ASSERT_TRUE(c.bots.size() == 3 && c.teams.set && c.teams.a == 0 && c.teams.b == 1 && c.startup_error.empty());
+        }
+        {   // anything else is a startup error that names the option (and the game does not start)
+            for (const char* bad : {"0+0", "1+1", "0+4", "4+0", "01", "0+", "+1", "0 + 1", "0+1+2", "fff", "none", "-1+0", ""}) {
+                ApplicationConfig c = parsed({"ants", "--headless", "--teams", bad});
+                ASSERT_TRUE(!c.teams.set);
+                ASSERT_TRUE(c.startup_error.find(std::string("--teams ") + bad + ":") == 0);
+                Application app;
+                ASSERT_FALSE(app.init(c));
+            }
+            ApplicationConfig same = parsed({"ants", "--headless", "--teams", "2+2"});
+            ASSERT_TRUE(same.startup_error.find("two different seats") != std::string::npos);
+            ApplicationConfig missing = parsed({"ants", "--headless", "--teams"});
+            ASSERT_TRUE(missing.startup_error.find("--teams needs ffa or two seats like 0+1") == 0);
+            ApplicationConfig first = parsed({"ants", "--headless", "--teams", "9", "--teams", "0+1"});        // the first problem is the one that is told
+            ASSERT_TRUE(first.startup_error.find("--teams 9:") == 0);
+            ApplicationConfig two = parsed({"ants", "--headless", "--teams", "9", "--teams", "8"});           // (and a second bad value does not replace it)
+            ASSERT_TRUE(two.startup_error.find("--teams 9:") == 0);
+        }
+        {   // a room cannot choose teams yet (whatever the order of the options); ffa is the default of a room too
+            for (const std::vector<std::string>& line : {std::vector<std::string>{"ants", "--teams", "0+1", "--host"}, std::vector<std::string>{"ants", "--host", "--teams", "0+1"},
+                                                          std::vector<std::string>{"ants", "--join", "127.0.0.1", "--teams", "0+1"}, std::vector<std::string>{"ants", "--teams", "0+1", "--join-url", "ws://example.test/ws"}}) {
+                ApplicationConfig c = parsed(line);
+                ASSERT_TRUE(c.startup_error.find("--teams is for a game on this computer") == 0);
+                Application app;
+                ASSERT_FALSE(app.init(c));
+            }
+            ApplicationConfig ok = parsed({"ants", "--teams", "ffa", "--host"});
+            ASSERT_TRUE(ok.startup_error.empty() && !ok.teams.set);
+        }
+        {   // it is no mode: a native game that is started with --teams alone still shows the start menu, which takes the choice as the panel's own
+            ApplicationConfig c = parsed({"ants", "--teams", "0+1"});
+            ASSERT_TRUE(c.start_menu && c.teams.set);
+            c = parsed({"ants", "--teams", "0+1", "--map", "Original-Ants/Maps/TINY.LVL"});
+            ASSERT_FALSE(c.start_menu);
+        }
+    } TEST_END();
+
     TEST_CASE("AI6.2 Refusals At Startup: A Seat Clash With The Local Player (Whatever The Order Of The Options), Two Bots On One Seat, --join With --bot, A Room's Host Seat") {
         const auto refused = [](const std::function<void(ApplicationConfig&)>& setup) {
             ApplicationConfig cfg = headless_config();
@@ -1072,6 +1133,69 @@ void run_bot_tests() {
         ASSERT_TRUE(bot_ticks.size() >= 3);                                                                // the bot played (its commands are in the guest's turn stream, with its seat)
         const ai::Profile hard = ai::profile_for(ai::Level::Hard);
         ASSERT_TRUE(bot_ticks.front() >= 3u + hard.reaction_delay * 3 / 4);                                // the first look is on tick 3 (seat 2), its first order leaves 6 to 10 ticks later (and travels through a turn)
+        ASSERT_EQ(app.sim().current_tick(), bob.sim.current_tick());
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        app.quit();
+        app.return_to_map_select();
+    } TEST_END();
+
+    TEST_CASE("AI6.12 A Room With A Bot Says Why Its Bot Declined: Bob's Invitation Is Accepted (Three Teams Play), The Host's Own Invitation To The Bot Is Declined And ONE Line Of The Chat Log Says That The Bot Has A Teammate (The Slot Of The Room Says Bot), Bob's Refusal Of The Host's Invitation Is A Person's And Adds No Line; Both Machines Stay Identical") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.bots = {bot_spec("2:hard")};
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start(); }, 8000));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_TRUE(app.net()->room().slots[2].state == net::SlotState::Bot);
+        ASSERT_TRUE(duo.until([&]() { return app.sim().current_tick() > 0 && bob.sim.current_tick() > 0; }, 8000));
+        duo.step(1000);
+        const std::string has_teammate = "Bot (Hard) already has a teammate.";
+        const auto count_of = [](const std::string& text, const std::string& what) {
+            size_t n = 0;
+            for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
+            return n;
+        };
+        const auto transcript = [&]() { return app.hud().chat_transcript(std::string()); };
+        // Bob (seat 1) asks the bot (seat 2): three teams play, the bot accepts
+        Command invite;
+        invite.type = CommandType::AllianceInvite;
+        invite.other_player = 2;
+        ASSERT_EQ(bob.net.submit(invite).status, sim::CommandResult::Status::Applied);
+        ASSERT_TRUE(duo.until([&]() { return app.sim().stats_manager().are_allies(1, 2) && bob.sim.stats_manager().are_allies(1, 2); }, 20000));
+        ASSERT_EQ(count_of(transcript(), "teammate."), 0u);                                       // nothing was declined yet
+        // the host asks Bob, and Bob (a person) says no: the original's text only
+        app.hud().request_team_up(app.sim(), 1);
+        ASSERT_TRUE(duo.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::Waiting; }, 5000));
+        Command deny;
+        deny.type = CommandType::AllianceDeny;
+        deny.other_player = 0;
+        ASSERT_EQ(bob.net.submit(deny).status, sim::CommandResult::Status::Applied);
+        ASSERT_TRUE(duo.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::None && app.hud().status_line().text() == "Bob rejected teaming up"; }, 5000));
+        duo.step(600);
+        ASSERT_EQ(count_of(transcript(), "teammate."), 0u);
+        ASSERT_EQ(count_of(transcript(), "three or more teams"), 0u);
+        // the host asks the bot, which has Bob as its teammate: it declines, and the line names it as the room does
+        app.hud().request_team_up(app.sim(), 2);
+        bool said_no = false;
+        ASSERT_TRUE(duo.until([&]() {
+            said_no = said_no || app.hud().status_line().text() == "Bot (Hard) rejected teaming up";
+            return count_of(transcript(), has_teammate) > 0;
+        }, 20000));
+        ASSERT_TRUE(said_no);                                                                      // (the original's text came first, and stays)
+        ASSERT_EQ(count_of(transcript(), "News Flash: " + has_teammate), 1u);
+        duo.step(3000);
+        ASSERT_EQ(count_of(transcript(), has_teammate), 1u);                                       // once
+        app.net()->freeze();
+        duo.step(3000);
         ASSERT_EQ(app.sim().current_tick(), bob.sim.current_tick());
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
@@ -5217,7 +5341,25 @@ void run_room_chat_box_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N5.69 A Match Started From A Room With Bots (The Leader's Fill, A Server's Room) Starts At The Zoom 1 And Offers No Zoom-Out Although 0.5 Is Remembered - The Server's Bots Are Not A Local Game - And Leaves The Level Remembered: The Local Game After It Starts At 0.5 And Has The Zoom-Out Back") {
+    // The zoom levels are the player's own view: a match of the network offers the levels of a local game on the same map and screen (the series 2^(k/4) from 2 down to the map's limit,
+    // max(view_w / map_w, view_h / map_h): TINY (992 x 992) over the 16:9 view of 762 x 500 ends at 762 / 992 = 0.768), and the wheel zooms through them in the match. Nothing of it is sent.
+    const auto tiny_wide_levels_ok = [](const std::vector<float>& levels) {
+        if (levels.size() != 7) return false;
+        const float want[6] = {2.0f, 1.6817928f, 1.4142135f, 1.1892071f, 1.0f, 0.8408964f};
+        for (int i = 0; i < 6; ++i) {
+            if (std::fabs(levels[static_cast<size_t>(i)] - want[i]) > 1e-6f) return false;
+        }
+        return levels[6] >= 762.0f / 992.0f && levels[6] < 762.0f / 992.0f + 1e-5f;                  // the limit is the last level
+    };
+    const auto nearest_to = [](float z, const std::vector<float>& list) {
+        float best = list.front();
+        for (const float l : list) {
+            if (std::fabs(std::log(z / l)) < std::fabs(std::log(z / best))) best = l;
+        }
+        return best;
+    };
+
+    TEST_CASE("N5.69 A Match Started From A Room With Bots (The Leader's Fill, A Server's Room) Has The Zoom Levels Of A Local Game On The Same Map And Screen: It Starts At The Nearest One To The Remembered 0.5 (Which Stays Remembered), The Wheel Zooms Out And In Through Them In The Match, And The Local Game After It Starts At The Level That Was Chosen") {
         BoxRoom d;
         ASSERT_TRUE(open_leader(d, "ZM-FILL", Aspect::Wide16x9, net::FillLevel::Medium, false, true, 0.5f, true));
         Application& app = d.app;
@@ -5225,35 +5367,51 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(start_room_match(d, "ZM-FILL"));
         ASSERT_TRUE(app.network_active());
         const LayoutRect view = app.layout().view();
-        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);                    // started at 1 (the zoom-out is not offered here), 0.5 stays remembered
-        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::no_zoom_out() && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}));
+        const std::vector<float> levels = app.zoom_levels();
+        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::any() && tiny_wide_levels_ok(levels));      // (no limit of the kind of match)
+        ASSERT_TRUE(app.zoom() == levels.back() && app.remembered_zoom() == 0.5f);           // 0.5 is below this map's limit: the match starts at the limit, 0.5 stays remembered
         app.note_pointer(view.x + 300, view.y + 200);
         notch(app, -1);
-        ASSERT_EQ(app.zoom(), 1.0f);                                                         // the wheel toward does not zoom out
+        ASSERT_EQ(app.zoom(), levels.back());                                                // the wheel toward cannot go beyond the map's limit
         app.handle_mouse_wheel(wheel_event(0, -0.6f));
         app.handle_mouse_wheel(wheel_event(0, -0.6f));
-        ASSERT_EQ(app.zoom(), 1.0f);                                                         // nor does a trackpad's creep
-        ASSERT_TRUE(!app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));
+        ASSERT_EQ(app.zoom(), levels.back());                                                // nor can a trackpad's creep
+        ASSERT_TRUE(!app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));        // (0.5 is no level here: the nearest is where the view is)
+        ASSERT_EQ(app.remembered_zoom(), 0.5f);                                              // none of that changed what is remembered
+        notch(app, +1);                                                                      // one notch in: the next level
+        ASSERT_EQ(app.zoom(), levels[5]);
+        ASSERT_EQ(app.remembered_zoom(), levels[5]);                                         // a level that is chosen in the match is remembered
+        app.handle_mouse_wheel(wheel_event(0, 0.6f));
+        ASSERT_EQ(app.zoom(), levels[5]);                                                    // a trackpad's creep adds up: 0.6 is no notch ...
+        app.handle_mouse_wheel(wheel_event(0, 0.6f));
+        ASSERT_EQ(app.zoom(), levels[4]);                                                    // ... and 1.2 is one
+        notch(app, +2);
+        ASSERT_EQ(app.zoom(), levels[2]);
         middle_click(app, view.x + 300, view.y + 200);
-        ASSERT_EQ(app.zoom(), 1.0f);
-        ASSERT_TRUE(queue_motion(view.x + 300, view.y + 200) && queue_wheel(-1, -1.0f) && queue_button(SDL_BUTTON_MIDDLE, true, view.x + 300, view.y + 200) && queue_button(SDL_BUTTON_MIDDLE, false, view.x + 300, view.y + 200));
+        ASSERT_EQ(app.zoom(), 1.0f);                                                         // the middle button: back to 1
+        notch(app, -2);
+        ASSERT_EQ(app.zoom(), levels.back());                                                // two notches out from 1: the limit again
+        ASSERT_TRUE(queue_motion(view.x + 300, view.y + 200) && queue_wheel(1, 1.0f));
         app.run_frame_with_delta(0.016f);                                                    // (through the window's own event loop, in the match)
+        ASSERT_EQ(app.zoom(), levels[5]);
+        ASSERT_TRUE(queue_motion(view.x + 300, view.y + 200) && queue_button(SDL_BUTTON_MIDDLE, true, view.x + 300, view.y + 200) && queue_button(SDL_BUTTON_MIDDLE, false, view.x + 300, view.y + 200));
+        app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.zoom(), 1.0f);
-        ASSERT_EQ(app.remembered_zoom(), 0.5f);                                              // none of it changed what is remembered
-        d.hall.step(kDialogMs + 3000);                                                       // the match goes on, at the zoom 1, with the server's bots (its first turn is sealed kDialogMs after it began)
+        ASSERT_EQ(app.remembered_zoom(), 1.0f);
+        d.hall.step(kDialogMs + 3000);                                                       // the match goes on at a zoom of the player's own, with the server's bots (its first turn is sealed kDialogMs after it began)
         ASSERT_TRUE(!app.net()->desynced() && d.server.status("ZM-FILL").ticks > 40);
-        // the match is left: the local setup screen follows, and a local game starts at the remembered level and has the zoom-out
+        app.note_pointer(view.x + 300, view.y + 200);                                        // (a queued button release in a headless run reads as a release outside the window)
+        notch(app, -1);                                                                      // the level that the match ends at: what the next game starts with
+        ASSERT_EQ(app.zoom(), levels[5]);
         app.return_to_map_select();
         ASSERT_TRUE(!app.network_active() && app.zoom_limits() == zoom::Limits::any());
         ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
         app.hud().dismiss_match_start_modal();
-        ASSERT_TRUE(app.zoom() == 0.5f && app.remembered_zoom() == 0.5f);
-        ASSERT_TRUE(app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}));
+        ASSERT_TRUE(app.zoom() == levels[5] && app.remembered_zoom() == levels[5]);
+        ASSERT_TRUE(app.zoom_levels() == levels);                                            // (the same levels as the match of the network had)
         app.note_pointer(view.x + 300, view.y + 200);
-        notch(app, +1);
-        ASSERT_EQ(app.zoom(), 1.0f);
         notch(app, -1);
-        ASSERT_EQ(app.zoom(), 0.5f);                                                         // (the zoom-out works in the local game after the network's)
+        ASSERT_EQ(app.zoom(), levels.back());
         app.quit();
     } TEST_END();
 
@@ -5265,6 +5423,8 @@ void run_room_chat_box_tests() {
         const LayoutRect view = app.layout().view();
         const int32_t px = view.x + 300;
         const int32_t py = view.y + 200;
+        const float in1 = zoom::series(1);                                                   // one level in from 1 (1.19) and one out (0.84): the levels are not 2 and 0.5 any more
+        const float out1 = zoom::series(-1);
         ASSERT_TRUE(queue_motion(px, py));
         app.run_frame_with_delta(0.016f);
         ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input().empty());
@@ -5273,19 +5433,19 @@ void run_room_chat_box_tests() {
         ASSERT_EQ(app.hud().get_chat_input(), std::string("hel"));
         ASSERT_TRUE(queue_wheel(1, 1.0f));                                                   // zoom in, in the middle of the line
         app.run_frame_with_delta(0.016f);
-        ASSERT_TRUE(app.zoom() == 2.0f && app.hud().get_chat_input() == "hel");
+        ASSERT_TRUE(app.zoom() == in1 && app.hud().get_chat_input() == "hel");
         ASSERT_TRUE(queue_text("lo"));
         app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.hud().get_chat_input(), std::string("hello"));
         ASSERT_TRUE(queue_text(" +-="));                                                     // the characters that a zoom key would have: they are text, the zoom stays
         app.run_frame_with_delta(0.016f);
-        ASSERT_TRUE(app.zoom() == 2.0f && app.hud().get_chat_input() == "hello +-=");
+        ASSERT_TRUE(app.zoom() == in1 && app.hud().get_chat_input() == "hello +-=");
         ASSERT_TRUE(queue_button(SDL_BUTTON_MIDDLE, true, px, py) && queue_button(SDL_BUTTON_MIDDLE, false, px, py));       // the middle button: back to 1, the line stays
         app.run_frame_with_delta(0.016f);
         ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input() == "hello +-=");
-        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(-1, -1.0f));                         // toward: no zoom-out in this match (a queued button release in a headless run reads as a release outside the window: the motion puts the pointer back)
+        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(-1, -1.0f));                         // toward: zoomed out one level (a queued button release in a headless run reads as a release outside the window: the motion puts the pointer back)
         app.run_frame_with_delta(0.016f);
-        ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input() == "hello +-=");
+        ASSERT_TRUE(app.zoom() == out1 && app.hud().get_chat_input() == "hello +-=");
         ASSERT_TRUE(queue_text(" team"));
         app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.hud().get_chat_input(), std::string("hello +-= team"));
@@ -5294,9 +5454,9 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(app.hud().get_chat_input().empty() && log_has(app.hud().get_chat_log(), "hello +-= team"));
         ASSERT_TRUE(d.hall.until([&]() { return !d.peer.chats.empty(); }, 8000));
         ASSERT_EQ(d.peer.chats.back().text, std::string("hello +-= team"));
-        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(1, 1.0f));                           // zoomed again, a second line while zoomed, and the match goes on
+        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(2, 2.0f));                           // zoomed in two levels (0.84 -> 1 -> 1.19), a second line while zoomed, and the match goes on
         app.run_frame_with_delta(0.016f);
-        ASSERT_EQ(app.zoom(), 2.0f);
+        ASSERT_EQ(app.zoom(), in1);
         ASSERT_TRUE(queue_text("second"));
         app.run_frame_with_delta(0.016f);
         ASSERT_TRUE(queue_key(SDLK_RETURN));
@@ -5304,14 +5464,14 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(d.hall.until([&]() { return d.peer.chats.size() == 2; }, 8000));
         ASSERT_EQ(d.peer.chats.back().text, std::string("second"));
         d.hall.step(2000);
-        ASSERT_TRUE(!app.net()->desynced() && app.zoom() == 2.0f && app.remembered_zoom() == 2.0f);
-        app.return_to_map_select();                                                          // the level chosen in the match (the zoom in) is what a local game starts with
+        ASSERT_TRUE(!app.net()->desynced() && app.zoom() == in1 && app.remembered_zoom() == in1);
+        app.return_to_map_select();                                                          // the level chosen in the match is what a local game starts with
         ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
-        ASSERT_EQ(app.zoom(), 2.0f);
+        ASSERT_EQ(app.zoom(), in1);
         app.quit();
     } TEST_END();
 
-    TEST_CASE("N5.71 The Same For The Host Of A Room On The Local Network Whose START Seats Bots Itself (This Machine Runs Them): The Match Is A Match Of The Network - It Starts At The Zoom 1 And Offers No Zoom-Out Although 0.5 Is Remembered, Bots Or Not - And The Local Game After It Starts At 0.5") {
+    TEST_CASE("N5.71 The Same For The Host Of A Room On The Local Network Whose START Seats Bots Itself (This Machine Runs Them): The Match Is A Match Of The Network With The Zoom Levels Of A Local Game On Its Map - It Starts At The Nearest One To The Remembered 0.5, The Wheel Zooms Out And In, Bots Or Not - And The Local Game After It Has The Same Levels") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;
         cfg.net_port = 0;
@@ -5338,19 +5498,27 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(app.network_active());                                                   // ... and it is still a match of the network
         app.hud().dismiss_match_start_modal();
         const LayoutRect view = app.layout().view();
-        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);
-        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::no_zoom_out() && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}));
+        const std::vector<float> levels = app.zoom_levels();
+        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::any() && levels.size() >= 5 && levels.front() == 2.0f);      // (no limit of the kind of match)
+        ASSERT_TRUE(std::count(levels.begin(), levels.end(), 1.0f) == 1 && std::is_sorted(levels.rbegin(), levels.rend()));
+        const float start = nearest_to(0.5f, levels);
+        ASSERT_TRUE(app.zoom() == start && app.remembered_zoom() == 0.5f);
+        const int32_t map_px = static_cast<int32_t>(app.sim().grid().width()) * 32;          // the last level is the map's limit: the view's smaller-relative side just fills it
+        const float limit = std::max(static_cast<float>(view.w) / static_cast<float>(map_px), static_cast<float>(view.h) / static_cast<float>(static_cast<int32_t>(app.sim().grid().height()) * 32));
+        ASSERT_TRUE(levels.back() >= limit && levels.back() < limit + 1e-5f);
         app.note_pointer(view.x + 300, view.y + 200);
-        notch(app, -1);
-        ASSERT_TRUE(app.zoom() == 1.0f && !app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));
-        middle_click(app, view.x + 300, view.y + 200);
-        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);
+        notch(app, +1);
+        ASSERT_TRUE(app.zoom() > start && app.remembered_zoom() == app.zoom());              // zooming in works, and it is what is remembered then
+        notch(app, -3);
+        ASSERT_TRUE(app.zoom() < start || app.zoom() == levels.back());                      // zooming out works (or the view is at the map's limit)
+        const float chosen = app.zoom();
         duo.step(3000 + kDialogMs);                                                          // (the host seals the first turn kDialogMs after the match began; the bots look from the first tick on)
         ASSERT_TRUE(!app.net()->desynced() && !bob.net.desynced() && app.bots()->stats(2).decisions > 0);
+        ASSERT_TRUE(app.zoom() == chosen);
         app.return_to_map_select();
         ASSERT_TRUE(!app.network_active() && app.bots() == nullptr && app.zoom_limits() == zoom::Limits::any());
-        ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
-        ASSERT_TRUE(app.zoom() == 0.5f && app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}));
+        ASSERT_TRUE(app.start_game(maps_dir() + "GAUNTLET.LVL"));                            // a local game on a map of 1920 x 1920 (this level list is a different one: the match's map may be another)
+        ASSERT_TRUE(app.zoom() == nearest_to(chosen, app.zoom_levels()) && app.zoom_levels().front() == 2.0f);
         app.quit();
     } TEST_END();
 

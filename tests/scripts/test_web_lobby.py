@@ -3,9 +3,10 @@
 the play online tab by setting to 1 player consolidate them". The Play online page (web/lobby.html, once web/four.html) is the front page at "/" and has single player in it; the game page
 (web/shell.html) has a Menu button that goes back to it in the same tab and reads the local parameters of a game on this computer through a whitelist.
 
-  - the pages' own rules are RUN (node, when it is installed): what the form means (players 1 is a game on this computer: its address; the opponents that a browser remembered; a first visit
-    has Medium), the game page's whitelist (the six maps by key, the three levels, a cleaned name: never the text of the address) and the two pages agreeing (tests/scripts/web_lobby_check.js);
-  - what needs no browser is read from the files: the form's markup (players 1 - 4, the two rows of bots, the button), the header links and the footer of the front page, that nothing opens a new tab
+  - the pages' own rules are RUN (node, when it is installed): what the form means (players 1 is a game on this computer: its address; the level of each of the three bases and the team that a
+    browser remembered; a first visit has Medium), the game page's whitelist (the six maps by key, the levels, the teams, a cleaned name: never the text of the address) and the two pages
+    agreeing (tests/scripts/web_lobby_check.js);
+  - what needs no browser is read from the files: the form's markup (players 1 - 4, the rows of bots, the Teams, the button), the header links and the footer of the front page, that nothing opens a new tab
     but the links that leave the game, the Menu link of the game page, one name for the catalog link on both pages, the Dockerfile that copies the lobby and the game page's second path, the CI's
     page check, and the documents.
 The routes of nginx are run in tests/scripts/test_nginx_routes.py; the whole flow in a real browser is tests/scripts/web_home_check.py (opt-in).
@@ -46,24 +47,37 @@ class TheFrontPageMarkup(PageCase):
         for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
 
-    def test_the_form_offers_players_1_to_4_and_a_row_of_bots_for_each_mode(self):
+    def test_the_form_offers_players_1_to_4_a_row_of_bots_for_each_mode_a_level_for_each_base_and_the_teams(self):
         select = re.search(r'<select id="players">(.*?)</select>', self.page, re.S)
         self.assertEqual(re.findall(r'<option value="(\d)">', select.group(1)), ["1", "2", "3", "4"])
-        for select_id, first in (("fill", ("", "Leave empty")), ("opponents", ("", "None"))):
-            body = re.search(r'<select id="%s">(.*?)</select>' % select_id, self.page, re.S).group(1)
-            self.assertEqual(re.findall(r'<option value="([a-z]*)">([^<]*)</option>', body), [first, ("easy", "Easy bots"), ("medium", "Medium bots"), ("hard", "Hard bots")], select_id)
-        self.found(self.page, r'<label for="opponents">Opponents</label>')
+        fill = re.search(r'<select id="fill">(.*?)</select>', self.page, re.S).group(1)
+        self.assertEqual(re.findall(r'<option value="([a-z]*)">([^<]*)</option>', fill), [("", "Leave empty"), ("easy", "Easy bots"), ("medium", "Medium bots"), ("hard", "Hard bots")])
         self.found(self.page, r'<label for="fill">Empty seats at START</label>')
-        self.found(self.page, r'<div class="fillline" id="solo-line" hidden>')
+        # single player: one select for each of the other three bases, in the order of the game's --bot seats (1 Red, 2 Blue, 3 Black), no select of one level for all
+        self.assertNotIn('id="opponents"', self.page)
+        self.found(self.page, r'<div class="fillline" id="solo-line" role="group" aria-labelledby="opponents-label" hidden>')
+        self.found(self.page, r'<span class="linelabel" id="opponents-label">Opponents</span>')
+        seats = re.findall(r'<label class="seatpick" for="(opponent-\d)">(\w+)\s*<select id="(opponent-\d)">(.*?)</select>\s*</label>', self.page, re.S)
+        self.assertEqual([(a, b, c) for a, b, c, _ in seats], [("opponent-1", "Red", "opponent-1"), ("opponent-2", "Blue", "opponent-2"), ("opponent-3", "Black", "opponent-3")])
+        for _, _, select_id, body in seats:
+            self.assertEqual(re.findall(r'<option value="([a-z]*)">([^<]*)</option>', body), [("", "None"), ("easy", "Easy"), ("medium", "Medium"), ("hard", "Hard")], select_id)
+        # the Teams: a line that the script shows for two or more bots, and a select that the script fills (the choices depend on the bots)
+        self.found(self.page, r'<div class="fillline" id="teams-line" hidden>\s*<label for="teams">Teams</label>\s*<select id="teams"></select>\s*</div>')
         self.found(self.page, r'<button id="create" type="button" class="btn go">Create the match</button>')           # (the script makes it Play for 1 player)
         self.assertIn("$('create').textContent = solo ? 'Play' : 'Create the match';", self.page)
 
-    def test_a_first_visit_is_treasure_one_player_medium(self):
+    def test_a_first_visit_is_treasure_one_player_medium_in_all_three_bases(self):
         self.assertIn("var DEFAULT_MAP_KEY = 'treasure';", self.page)
         self.assertIn("playersSelect.value = String(playersChoice(recall('ants-four-players'), 1));", self.page)
         self.assertIn("function soloBots(stored) { return stored === null || stored === undefined ? 'medium' : validFill(stored); }", self.page)
-        self.assertIn("opponentsSelect.value = soloBots(recall('ants-solo-bots'));", self.page)
+        self.assertIn("var levels = soloSeats(recall('ants-solo-seats'), recall('ants-solo-bots'));", self.page)               # (the new key, else the old one: one level for all three)
         self.assertIn("fillSelect.value = validFill(recall('ants-four-fill'));", self.page)                  # (the rooms' choice is what it always was: leave empty until chosen)
+
+    def test_the_old_key_of_the_opponents_is_read_and_never_written(self):
+        self.assertEqual(len(re.findall(r"recall\('ants-solo-bots'\)", self.page)), 1)
+        self.assertNotIn("remember('ants-solo-bots'", self.page)
+        for needle in ("remember('ants-solo-seats', soloSeatsText(levels));", "if (solo) remember('ants-solo-teams', team);", "var soloTeamWanted = recall('ants-solo-teams');"):
+            self.assertIn(needle, self.page, needle)
 
     def test_the_header_links_the_footer_the_name_the_aspect_choice_and_the_room_buttons_are_there(self):
         for needle in ('href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"', 'href="https://github.com/dchadd427/ants-cross-platform/issues"'):

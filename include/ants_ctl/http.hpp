@@ -107,6 +107,9 @@ public:
     size_t connection_count() const;
     /// Changes the time a request may take from accept to complete (tests; the default is kRequestTimeoutMs)
     void set_request_timeout_ms(uint32_t ms);
+    /// Gives each connection accepted from now on a kernel send buffer of `bytes` (tests: a client that never reads then fills it at once, whatever
+    /// the system's buffers are; 0, the default, keeps the system's)
+    void set_send_buffer_bytes(int bytes);
 
 private:
     struct Impl;

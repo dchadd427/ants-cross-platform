@@ -220,6 +220,10 @@ void HUD::poll_sim_events(sim::SimulationEngine& sim) {
         } else {
             status_line_.post(ev.message_text, ev.blink);
         }
+        if (news_note_) {
+            const std::string note = news_note_(ev);
+            if (!note.empty()) add_news_flash(ev.timestamp_ms, note);
+        }
     }
 }
 
@@ -1559,9 +1563,8 @@ bool HUD::is_input_captured() const noexcept {
 // camera's world origin and the map's own size: the function that was always called.
 EdgeScroll HUD::edge_step(const ViewportCamera& camera, int32_t x, int32_t y, int32_t rate, int32_t map_tiles_w, int32_t map_tiles_h) const noexcept {
     if (camera.zoom == zoom::kNormal) return edge_scroll_step(x, y, rate, camera.world_x, camera.world_y, map_tiles_w, map_tiles_h, layout_);
-    const double z = static_cast<double>(camera.zoom);
-    return edge_scroll_step_px(x, y, rate, camera.origin_screen_x(), camera.origin_screen_y(), static_cast<int32_t>(std::lround(map_tiles_w * 32 * z)),
-                               static_cast<int32_t>(std::lround(map_tiles_h * 32 * z)), layout_);
+    return edge_scroll_step_px(x, y, rate, camera.origin_screen_x(), camera.origin_screen_y(), zoom::map_screen(static_cast<int64_t>(map_tiles_w) * 32, camera.zoom),
+                               zoom::map_screen(static_cast<int64_t>(map_tiles_h) * 32, camera.zoom), layout_);
 }
 
 // The INPUT task (0x100ae26, every 50 ms) as far as the view is concerned: FUN_01026aa3 for the edge strips, or, while the left button
@@ -1571,9 +1574,8 @@ bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int
     const int32_t rate = options_.state().scroll_speed;       // the profile's Scroll Speed 0 .. 99 (FUN_01027329: the half extent is rate + 10)
     EdgeScroll step;
     if (is_radar_dragging_) {
-        const double z = static_cast<double>(camera.zoom);
-        step = minimap_scroll_step_px(mouse_x, mouse_y, camera.origin_screen_x(), camera.origin_screen_y(), static_cast<int32_t>(std::lround(static_cast<double>(map_w) * 32.0 * z)),
-                                      static_cast<int32_t>(std::lround(static_cast<double>(map_h) * 32.0 * z)), layout_);
+        step = minimap_scroll_step_px(mouse_x, mouse_y, camera.origin_screen_x(), camera.origin_screen_y(), zoom::map_screen(static_cast<int64_t>(map_w) * 32, camera.zoom),
+                                      zoom::map_screen(static_cast<int64_t>(map_h) * 32, camera.zoom), layout_);
     } else if (!is_input_captured()) {
         step = edge_step(camera, mouse_x, mouse_y, rate, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
     }

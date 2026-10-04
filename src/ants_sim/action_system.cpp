@@ -54,7 +54,7 @@ void SimulationEngineImpl::add_score(uint8_t player, int32_t amount) {
 }
 
 void SimulationEngineImpl::post_news(uint8_t player, uint16_t string_id, const std::string& a, const std::string& b,
-                                     const std::string& c, const std::string& d) {
+                                     const std::string& c, const std::string& d, uint8_t subject) {
     NewsEvent ev;
     ev.target_player = player;
     ev.message_text = strings::format(string_id, a, b, c, d);
@@ -62,6 +62,7 @@ void SimulationEngineImpl::post_news(uint8_t player, uint16_t string_id, const s
     ev.string_id = string_id;
     ev.blink = strings::blinks(string_id);
     ev.channel = NewsChannel::Status;
+    ev.subject = subject;
     news_queue_.push_back(std::move(ev));
 }
 

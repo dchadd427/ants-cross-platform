@@ -6,7 +6,7 @@ Needs a running web page that has nginx's routes (the web image of this tree: `d
 Python 3; nothing else (the DevTools protocol is spoken with the client of web_hidden_check.py, standard library only). Each part opens the site in a throwaway headless browser (its own
 profile and port; nothing of yours is touched). What it checks:
 
-  * the FRONT PAGE at "/" (a first visit: Treasure, 1 player, Medium opponents, the button reads Play; the header links, the footer's version and build, the picture's selector, the name field);
+  * the FRONT PAGE at "/" (a first visit: Treasure, 1 player, Medium opponents in all three bases, the button reads Play; the header links, the footer's version and build, the picture's selector, the name field);
   * PLAY: the button of 1 player takes THIS tab to the game page on the chosen map (no new tab or window is opened), the game's own arguments are the chosen map, the setup screen's own
     START (--play), the Medium bots of the three other bases and the typed name; the quick help closes with Enter and the match starts at once, with the "Get ready" dialog; the bots'
     scores, which the HUD shows at the bottom ("Bot (Medium)"), rise from 0, so their ants move (the bots are run by the game in the browser: no server); with Opponents None the match
@@ -139,12 +139,12 @@ def main():
             load(web, settle=1.5)
             shot("home_front")
             info = json.loads(value("""JSON.stringify({title: document.title, path: location.pathname, players: document.getElementById('players').value, map: document.getElementById('map').value,
-                opponents: document.getElementById('opponents').value, button: document.getElementById('create').textContent, solo: !document.getElementById('solo-line').hidden,
+                opponents: ['opponent-1', 'opponent-2', 'opponent-3'].map(function (id) { return document.getElementById(id).value; }).join(), button: document.getElementById('create').textContent, solo: !document.getElementById('solo-line').hidden,
                 fill: !document.getElementById('fill-line').hidden, name: document.getElementById('player-name').value, aspect: document.getElementById('aspect-select').value,
                 links: Array.prototype.map.call(document.querySelectorAll('header a'), function (a) { return [a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target')]; }),
                 footer: document.querySelector('footer').textContent, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
             check(info["title"].startswith("Ants (1998)") and info["path"] == "/", "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
-            check(info["players"] == "1" and info["map"] == "treasure" and info["opponents"] == "medium", "a first visit: 1 player, Treasure, Medium opponents (%s, %s, %s)" % (info["players"], info["map"], info["opponents"]))
+            check(info["players"] == "1" and info["map"] == "treasure" and info["opponents"] == "medium,medium,medium", "a first visit: 1 player, Treasure, Medium opponents in all three bases (%s, %s, %s)" % (info["players"], info["map"], info["opponents"]))
             check(info["button"] == "Play" and info["solo"] and not info["fill"], "the button reads Play and the row is Opponents, not Empty seats at START (%r)" % info["button"])
             check(info["name"] == "" and info["aspect"] == "16:9", "no name yet, the picture is 16:9")
             hrefs = [l[1] for l in info["links"]]
@@ -165,7 +165,7 @@ def main():
         def play_with(opponents, label, seconds):
             clear_storage()
             load(web, settle=1.5)
-            tab.ev("var o = document.getElementById('opponents'); o.value = %s; o.dispatchEvent(new Event('change')); 1" % json.dumps(opponents))
+            tab.ev("['opponent-1', 'opponent-2', 'opponent-3'].forEach(function (id) { var o = document.getElementById(id); o.value = %s; o.dispatchEvent(new Event('change')); }); 1" % json.dumps(opponents))
             tab.ev("var n = document.getElementById('player-name'); n.value = 'Bob'; n.dispatchEvent(new Event('input')); 1")
             before = pages()
             tab.ev("document.getElementById('create').click(); 1")
@@ -222,8 +222,8 @@ def main():
                     tab.ev("document.getElementById('menu-btn').click(); 1")
                     back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20)
                     check(back and pages() == before, "menu: Yes goes back to the front page in the same tab (no new tab)")
-                    remembered = json.loads(tab.ev("JSON.stringify({players: document.getElementById('players').value, map: document.getElementById('map').value, opponents: document.getElementById('opponents').value, name: document.getElementById('player-name').value})")) if back else {}
-                    check(remembered == {"players": "1", "map": "treasure", "opponents": "medium", "name": "Bob"}, "menu: the front page remembers the choices and the name (%s)" % remembered)
+                    remembered = json.loads(tab.ev("JSON.stringify({players: document.getElementById('players').value, map: document.getElementById('map').value, opponents: ['opponent-1', 'opponent-2', 'opponent-3'].map(function (id) { return document.getElementById(id).value; }).join(), name: document.getElementById('player-name').value})")) if back else {}
+                    check(remembered == {"players": "1", "map": "treasure", "opponents": "medium,medium,medium", "name": "Bob"}, "menu: the front page remembers the choices and the name (%s)" % remembered)
 
         if wanted("alone"):
             print("[web home] Play with Opponents: None: the original's single player, alone")

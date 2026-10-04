@@ -7,9 +7,12 @@
 //   AI8.4   the opening: the ants that go to the contested centre of TREASURE at the start (Easy none, Medium one, Hard two), and none where nothing is contested
 //   AI8.1   the accept rule: accepted with four or three live teams, denied when the alliance would unite all live teams, when the bot or the inviter already has an ally; the worker
 //           bot (the yardstick) still denies; the standard bot never invites, withdraws or breaks
+//   AI8.7   the accept rule is one pure function with a reason (team_up_answer): every case of AI8.1 with its reason, the order of the reasons, the inviter that is gone, the texts
+//           that tell a player why a bot declined
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
+#include "ants_ai/team_up.hpp"
 #include "ants_ai/worker_bot.hpp"
 
 using namespace ai_test;
@@ -485,6 +488,82 @@ void run_b41_team_tests() {
                     ordered = ordered || (e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == bomber && e.second.tile_x == 53 && e.second.tile_y == 8);
                 }
                 ASSERT_EQ(ordered, help);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI8.7 The Accept Rule Is One Pure Function With A Reason (team_up_answer): Every Case Of AI8.1 Gives Its Answer, Where Two Reasons Apply The Bot's Own Team Comes First, Then The Inviter, Then The Number Of Live Teams; An Inviter That Is Not A Team Of The Match, Has Dropped Out Or Is The Bot Itself Is Gone; The Standard Bot Answers By It; The Texts That Tell A Player Why A Bot Declined Are Short And Say The Reason")
+    {
+        struct Case {
+            uint8_t alive_mask;
+            uint8_t dropped_mask;
+            bool bot_has_ally;
+            bool inviter_has_ally;
+            TeamUpAnswer answer;
+        };
+        // the cases of AI8.1 (bot = seat 0, inviter = seat 1), then the order of the reasons
+        const Case cases[] = {
+            {0x0F, 0x00, false, false, TeamUpAnswer::Accept},                  // four live teams
+            {0x07, 0x08, false, false, TeamUpAnswer::Accept},                  // team 3 dropped out: three live teams
+            {0x0B, 0x00, false, false, TeamUpAnswer::Accept},                  // team 2 has no ant in sight but is not gone: three live teams (0, 1, 3)
+            {0x03, 0x0C, false, false, TeamUpAnswer::TwoTeamsLeft},            // two live teams: the alliance would unite them all
+            {0x03, 0x00, false, false, TeamUpAnswer::TwoTeamsLeft},            // (teams 2 and 3 have no ants in sight: the same)
+            {0x0F, 0x00, true, false, TeamUpAnswer::BotHasTeammate},           // the bot has an ally: accepting would break it
+            {0x0F, 0x00, false, true, TeamUpAnswer::InviterHasTeammate},       // the inviter has an ally
+            {0x0F, 0x00, true, true, TeamUpAnswer::BotHasTeammate},            // both: the bot's own team is the reason
+            {0x03, 0x00, true, false, TeamUpAnswer::BotHasTeammate},           // the bot has an ally and two teams are live: the bot's own team, not the count
+            {0x03, 0x00, false, true, TeamUpAnswer::InviterHasTeammate},       // the inviter has an ally and two teams are live: the inviter, not the count
+            {0x07, 0x04, false, false, TeamUpAnswer::TwoTeamsLeft},            // team 2 dropped out (its ants die at once, nobody sees them): two live teams (0 and 1)
+            {0x06, 0x00, false, false, TeamUpAnswer::TwoTeamsLeft},            // the bot's own team has no ant in sight: it is not live either (1 and 2 are)
+        };
+        for (const Case& k : cases) {
+            sim::SimulationEngine sim;
+            world_of(sim, k.alive_mask);
+            if (k.dropped_mask & 8u) sim.drop_player(3);
+            if (k.dropped_mask & 4u) sim.drop_player(2);
+            if (k.bot_has_ally) sim.form_alliance(0, 2);
+            if (k.inviter_has_ally) sim.form_alliance(1, 3);
+            const BotView view = BotView::build(sim, 0);
+            ASSERT_TRUE(team_up_answer(view, 1) == k.answer);
+            ASSERT_EQ(StandardBot::accepts_invitation(view, 1), k.answer == TeamUpAnswer::Accept);       // the bot answers by the function: the same decision
+        }
+        {   // an inviter that is gone: dropped out, not in the roster, no seat at all, or the bot itself (every one of them is no one to team up with)
+            sim::SimulationEngine sim;
+            world_of(sim, 0x0F);
+            sim.drop_player(1);
+            const BotView view = BotView::build(sim, 0);
+            ASSERT_TRUE(team_up_answer(view, 1) == TeamUpAnswer::InviterGone);
+            ASSERT_TRUE(team_up_answer(view, 0) == TeamUpAnswer::InviterGone);                              // the bot itself
+            ASSERT_TRUE(team_up_answer(view, 4) == TeamUpAnswer::InviterGone);
+            ASSERT_TRUE(team_up_answer(view, 255) == TeamUpAnswer::InviterGone);
+            ASSERT_TRUE(!StandardBot::accepts_invitation(view, 1) && !StandardBot::accepts_invitation(view, 0) && !StandardBot::accepts_invitation(view, 255));
+        }
+        {   // a team that is not in the match (a three-seat match on TREASURE: seat 3 has no player)
+            sim::SimulationEngine sim;
+            start_match(sim, "TREASURE", 5, 0x07);
+            const BotView view = BotView::build(sim, 0);
+            ASSERT_TRUE(team_up_answer(view, 3) == TeamUpAnswer::InviterGone);
+            ASSERT_TRUE(team_up_answer(view, 1) == TeamUpAnswer::Accept);                                    // three teams play, seat 1 is one of them
+        }
+        {   // the same match with only two seats: the other seat's invitation is the one that would end the match
+            sim::SimulationEngine sim;
+            start_match(sim, "TREASURE", 5, 0x03);
+            const BotView view = BotView::build(sim, 0);
+            ASSERT_TRUE(team_up_answer(view, 1) == TeamUpAnswer::TwoTeamsLeft);
+        }
+        {   // the texts: the reason in a few words (the chat log's body holds 100 characters), nothing for Accept and for a gone inviter
+            ASSERT_EQ(team_up_decline_text(TeamUpAnswer::TwoTeamsLeft, "Bot (Easy)"), std::string("Bots team up only while three or more teams play."));
+            ASSERT_EQ(team_up_decline_text(TeamUpAnswer::InviterHasTeammate, "Bot (Easy)"), std::string("You already have a teammate."));
+            ASSERT_EQ(team_up_decline_text(TeamUpAnswer::BotHasTeammate, "Bot (Hard)"), std::string("Bot (Hard) already has a teammate."));
+            ASSERT_EQ(team_up_decline_text(TeamUpAnswer::BotHasTeammate, "Maple"), std::string("Maple already has a teammate."));
+            ASSERT_EQ(team_up_decline_text(TeamUpAnswer::BotHasTeammate, ""), std::string("This bot already has a teammate."));
+            ASSERT_EQ(team_up_decline_text(TeamUpAnswer::Accept, "Bot (Easy)"), std::string());
+            ASSERT_EQ(team_up_decline_text(TeamUpAnswer::InviterGone, "Bot (Easy)"), std::string());
+            ASSERT_EQ(std::string(kWorkerNeverTeamsUpText), std::string("This bot never teams up."));
+            const std::string cut = team_up_decline_text(TeamUpAnswer::BotHasTeammate, std::string(80, 'x'));
+            ASSERT_EQ(cut, std::string(32, 'x') + " already has a teammate.");                              // a long name is cut at 32 characters
+            for (const TeamUpAnswer a : {TeamUpAnswer::TwoTeamsLeft, TeamUpAnswer::InviterHasTeammate, TeamUpAnswer::BotHasTeammate}) {
+                ASSERT_TRUE(team_up_decline_text(a, std::string(80, 'y')).size() <= 100);
             }
         }
     } TEST_END();

@@ -23,6 +23,8 @@
 #include "ants_ai/bot_controller.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_net/cue_router.hpp"
+#include "ants_net/latency.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
@@ -34,6 +36,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
+#include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/net_overlay.hpp"
@@ -72,11 +75,15 @@ struct ApplicationConfig {
     /// by hand keeps the 4:3 that it is built with. `aspect_given` is true when the command line said it (the settings key then does not count).
     Aspect aspect{Aspect::Classic4x3};
     bool aspect_given{false};
-    /// --zoom 0.5 | 1 | 2 (the settings key `zoom` when the command line does not say): the zoom of the map view that a match starts with (view_zoom.hpp; the mouse wheel changes it and the
-    /// new level is remembered). 1 is the original's picture. In a match of the network a zoom-out is not allowed (it would show more of the map than the other players see): the match
-    /// starts at 1 then, and the remembered level stays for the next local game. `zoom_given` is true when the command line said it (the settings key then does not count).
+    /// --zoom N, 0.05 .. 2 (the settings key `zoom` when the command line does not say): the zoom of the map view that a match starts with, the nearest level that its map offers (view_zoom.hpp;
+    /// the mouse wheel changes it and the new level is remembered). 1 is the original's picture. A match of the network has the same levels as a local game. `zoom_given` is true when the command
+    /// line said it (the settings key then does not count).
     float zoom{zoom::kNormal};
     bool zoom_given{false};
+    /// --prediction on | off (--no-prediction is --prediction off; the settings key `prediction` when the command line does not say): whether a match of the network shows the player's own
+    /// orders at once (net::Prediction, docs/NETWORK_PORT.md). OFF by default (opt-in); a game of one machine never predicts. `prediction_given`: the command line said it (the settings key then does not count).
+    bool prediction{false};
+    bool prediction_given{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -148,6 +155,9 @@ struct ApplicationConfig {
     /// --bot SEAT[:SPEC] (repeatable): computer players at these seats (docs/BOTS.md). A local game then plays the seats that are taken (the local player and the bots); with
     /// --host the room shows the bots as players and the host's machine runs them. Empty by default: a game without --bot runs no bot code at all.
     std::vector<ai::BotSpec> bots;
+    /// --teams ffa | A+B (docs/BOTS.md, "Alliances"), for a game on this computer: ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the
+    /// match start with the original's commands (Application::form_start_teams); a pair that cannot be made starts the game without teams and says why. A room refuses it.
+    LocalTeams teams;
     /// For the tests: builds the bot of a spec instead of the registry (which has the idle bot and, since B3, the worker bot), so that the application's door for a
     /// bot's commands (the local sink, the room's sink) can be exercised with a bot of the test's own that acts in a way it wants to. Empty in a game that is played.
     std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> bot_factory;
@@ -176,6 +186,9 @@ struct ApplicationConfig {
 /**
  * @brief Master application lifecycle coordinator handling loop, events, sim, and audio.
  */
+/// The text of a switch: on / off, yes / no, true / false, 1 / 0, in any case (the command line's --prediction and the settings key `prediction`). False, and `out` untouched, for any other text.
+bool parse_switch(const std::string& text, bool& out);
+
 class Application {
 public:
     Application();
@@ -228,6 +241,11 @@ public:
     void set_local_player(uint8_t team_id);
 
     ants::sim::SimulationEngine& sim() noexcept { return sim_; }
+    /// The engine that the match screen SHOWS and that the HUD asks (the picture, the minimap, the panel, the selection, the pointer's cursor, what a click picks): `sim()`, the confirmed
+    /// engine, except in a match of the network that predicts the player's own orders (net::Prediction, docs/NETWORK_PORT.md "Prediction of one's own orders"), where it is the predicted
+    /// engine: the player's orders show at once and everything else is the confirmed state a few ticks ahead. The cues, the news, the scores, the end of the match and the hashes stay the
+    /// confirmed engine's. One call may rebuild a predicted engine that a turn has shown to be wrong, so a frame asks once.
+    ants::sim::SimulationEngine& view_sim();
     Renderer& renderer() noexcept { return *renderer_; }
     /// The geometry of the picture that the HUD, the renderer, the edge scroll and the pointer work in (screen_layout.hpp)
     const ScreenLayout& layout() const noexcept { return layout_; }
@@ -238,18 +256,24 @@ public:
     Aspect aspect() const noexcept { return aspect_; }
     CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
     const LayoutRect& picture() const noexcept { return picture_; }
-    /// THE ZOOM OF THE MAP VIEW (milestone M4; view_zoom.hpp, Renderer::zoomed): one of 0.5, 1 (the original's picture) and 2. The mouse wheel up zooms in, down zooms out, towards the pointer
-    /// (the world point under it stays under it as far as the map's edges allow); the middle button goes back to 1. They act only over the map view, and not while a dialog or a page is
-    /// open (options, quick help, quit, alliance, "get ready"), a rubber band or a button holds the mouse, or the results are up (`view_zoom_allowed`). The level is remembered in the
-    /// settings (key `zoom`). THE API THAT OTHER INPUT USES (a touch screen's pinch calls it): `zoom_levels()` says what is offered now, `set_zoom(level, anchor)` goes to one of them (the anchor is a
-    /// point of the picture, the pointer's own coordinates: the screen pixel that keeps its world point), `step_zoom(direction, anchor)` goes one level in or out.
-    /// FAIRNESS: in a match of the network (a server's room or a LAN game, host or guest) the zoom-out is not offered (the level 0.5 shows more of the map than the others see; zooming in is always
-    /// fair); a local game and a game with bots offer it. A level is also not offered when the level above it already shows the whole map (it would add only black).
+    /// THE ZOOM OF THE MAP VIEW (view_zoom.hpp, Renderer::zoomed): a level from the map's limit up to 2, four to a doubling (2, 1.68, 1.41, 1.19, 1 (the original's picture), 0.84, 0.71, 0.59, 0.5 ...),
+    /// the last zoom-out level being the exact limit of the map: the view never shows anything outside it (the map's width or its height just fills the view). The mouse wheel up zooms in, down zooms
+    /// out, one level a notch, towards the pointer (the world point under it stays under it as far as the map's edges allow); the middle button goes back to 1. They act only over the map view, and
+    /// not while a dialog or a page is open (options, quick help, quit, alliance, "get ready"), a rubber band or a button holds the mouse, or the results are up (`view_zoom_allowed`). The level is
+    /// remembered in the settings (key `zoom`). THE API THAT OTHER INPUT USES (a touch screen's pinch calls it): `zoom_levels()` says what is offered now, `set_zoom(level, anchor)` goes to the
+    /// nearest of them (the anchor is a point of the picture, the pointer's own coordinates: the screen pixel that keeps its world point), `step_zoom(direction, anchor)` goes one level in or out.
+    /// FAIRNESS: the zoom is the player's own view and nothing else (the simulation, the network, the bots and every state hash never see it), and every kind of match has the same levels for the
+    /// same picture, a match of the network included (up to v0.2.0 it had no zoom-out). With Fog of War on every level draws exactly what the zoom 1 draws (one world pass, the same culling and
+    /// gates; the minimap respects the fog too), so the zoom-out adds breadth and no new kind of information: the types and states of the ants, bombs, effects and hit point digits that are visible,
+    /// over a wider area at once (positions were already on the minimap). THE PICTURE'S SHAPE decides the limit: on TREASURE a player in the 4:3 picture can zoom out to the whole map (0.230), one in
+    /// the 16:9 picture to two thirds of it (0.397; at the zoom 1 that picture already shows about twice the area), and every player can choose either shape.
     float zoom() const noexcept { return renderer_ ? renderer_->camera().zoom : zoom::kNormal; }
-    /// What the kind of match allows now: a network match has no zoom-out, and while the renderer cannot make the offscreen target of a zoom (Renderer::world_target_failed) only the zoom 1 can be
-    /// drawn: both offer only the levels that are drawn. enforce_zoom_limits() holds the camera to this at every frame (a camera that is outside it, by whatever way, is taken to the nearest level
-    /// that it allows, anchored at the view's centre, and what the player chose last stays remembered).
+    /// What the renderer allows now: while it cannot make the offscreen target of a zoom (Renderer::world_target_failed) only the zoom 1 can be drawn, and only that level is offered.
+    /// enforce_zoom_limits() holds the camera to this and to the map's limit at every frame (a camera that is outside it, by whatever way, is taken to the nearest level that is allowed, anchored at
+    /// the view's centre, and what the player chose last stays remembered).
     zoom::Limits zoom_limits() const noexcept;
+    /// What decides the levels now: the map view, the map and what the renderer's texture can hold (view_zoom.hpp Fit)
+    zoom::Fit zoom_fit() const noexcept;
     std::vector<float> zoom_levels() const;
     bool set_zoom(float level, int32_t anchor_x, int32_t anchor_y);
     bool step_zoom(int direction, int32_t anchor_x, int32_t anchor_y);
@@ -257,7 +281,7 @@ public:
     bool view_zoom_allowed(int32_t x, int32_t y) const;
     /// The wheel (SDL_MOUSEWHEEL): the precise deltas add up to whole steps (zoom::WheelAccumulator), one step is one level; public for the tests
     void handle_mouse_wheel(const SDL_MouseWheelEvent& wheel);
-    /// The level that the player chose last (what the next match starts with when it is offered); the match's own level is `zoom()`
+    /// The level that the player chose last (what the next match starts with: the nearest level that its map offers); the match's own level is `zoom()`
     float remembered_zoom() const noexcept { return zoom_wanted_; }
 
     /// Alt+Enter (native builds): the window leaves fullscreen or enters it (SDL's desktop fullscreen, the same as --fullscreen); true when it is fullscreen afterwards. The web
@@ -308,10 +332,19 @@ public:
     net::NetGame* net() noexcept { return net_.get(); }
     /// True while a room or a network match exists
     bool network_active() const noexcept { return net_ && net_->active(); }
+    /// Who plays which cue of a network match that predicts (net::CueRouter): the own ants' own actions from the predicted engine, in step with the picture, everything else from the confirmed
+    /// engine. Public for the tests (what was played from where, what was dropped)
+    const net::CueRouter& cue_router() const noexcept { return cue_router_; }
     /// Advances the network by `dt` seconds of game time and handles what it reports (run once per frame; the tests call it directly). `gap_seconds` is real time that
     /// `dt` did not count (a hidden page that was not woken for a while, see background_run): once the connection has been read, a host that said nothing has been silent
     /// for that time as well (NetGame::note_gap).
     void pump_network(float dt, double gap_seconds = 0.0);
+    /// What the player feels of an order while the prediction is on, from the frame that took it to the end of the frame that shows it (net::FeltDelayMeter); public for the tests
+    const net::FeltDelayMeter& felt_delay() const noexcept { return felt_delay_; }
+    /// Whether the matches of the network that this application makes predict the player's own orders (--prediction, the settings key `prediction`)
+    bool prediction_wanted() const noexcept { return prediction_wanted_; }
+    /// The number that the corner's "delay" shows now (nothing: a dash): what the player feels of an order while the prediction is on, the network's delay otherwise
+    std::optional<uint32_t> corner_delay_ms() const;
 
     /// A page that is not drawn (a hidden or minimised browser tab, the web build) runs no frames, and the browser slows its timers: but the page's WebSocket events still
     /// arrive. So while the page is hidden a ROOM or a MATCH of the network is driven by those events instead of by the frame loop: every message of the game server wakes
@@ -432,6 +465,12 @@ private:
     bool wake_may_step();                                 // the wake-ups drive the match now: hidden page, network, no step running, and the frame loop slower than the turns
     void background_run(double elapsed);                  // the step itself: the network for `elapsed` seconds (at most kMaxWakeSeconds for the clock, see there), no sound
     uint64_t now_counter() const { return clock_ ? clock_() : SDL_GetPerformanceCounter(); }   // the clock of frames and wake-ups (set_clock)
+    void note_orders();                                   // the orders that input gave the predicted engine since the last look begin to be felt (net::FeltDelayMeter)
+    struct OrdersNoted {                                  // (the end of an input handler: whatever it ordered is looked at, by whichever way the handler leaves)
+        Application& app;
+        ~OrdersNoted() { app.note_orders(); }
+    };
+    uint32_t frame_ms() const { return static_cast<uint32_t>(static_cast<double>(now_counter()) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency())); }   // ... in milliseconds
     void apply_pending_music();                           // what a hidden page's steps left for the ears: the music of a match that began, ended or was lost meanwhile
     void note_hidden_period();                            // the page is shown again: the console's line about the period
     void play_effect(uint32_t sound_id, uint32_t owner = 0);   // a sound effect that no tick makes: none in a background step
@@ -471,6 +510,11 @@ private:
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<net::NetGame> net_;
+    net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
+    net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
+    bool prediction_wanted_{false};                       // --prediction, else the settings' key `prediction`, else off: given to every NetGame that this application makes
+    uint64_t prediction_cooldowns_reported_{0};           // the cool-downs of this match's prediction that the console has said so of
+    uint64_t orders_seen_{0};                             // the orders that the prediction has taken and the felt delay has been told of
     double net_time_ms_{0.0};
     double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START
     bool page_hidden_{false};                              // the browser's page is hidden (set_page_hidden): a network match belongs to the wake-ups, see background_pump
@@ -535,7 +579,7 @@ private:
     void menu_connection_failed(const std::string& message);
     void abort_menu_connection();                         // Cancel, Back from the room, a failure: nothing of the connection stays
     void menu_connected();                                // the player is in the server's room
-    void menu_start_single(const std::vector<ai::BotSpec>& bots);
+    void menu_start_single(const MenuRequest& request);
     std::string menu_failure_text() const;                // what a failed join says, in the menu's words
     bool room_has_chosen_map() const;                     // hosting: the room that the server made is on the map that the player chose
     void show_opening_screens();                          // after the menu (or the loading screen of a game without one): the quick help when the option asks for it, else the setup screen
@@ -566,7 +610,11 @@ private:
     bool start_local_bots(uint32_t match_seed);                        // after the simulation was initialised: the controller, one LocalBotSink per seat
     bool add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::string& why);   // seats one bot (the registry's, or the tests' factory's)
     void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
+    void form_start_teams();                                           // --teams: the pairs of the plan become teams with the original's commands, before the first tick of a local match
     void stop_bots();
+    const ai::BotSpec* bot_spec_of(uint8_t seat) const;                // the --bot spec of a seat, null for the others
+    bool is_bot_seat(uint8_t seat) const;                              // a computer player holds the seat: a local game's specs, in a room the slots that the room calls bots
+    std::string declined_team_up_note(const sim::NewsEvent& event) const;   // the line that says why a bot declined the local player's invitation (the HUD's news note); "" for any other event
 
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
     bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same canvas: wide_page.hpp)
@@ -576,8 +624,9 @@ private:
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered
+    void choose_prediction();                             // --prediction, else the settings' key `prediction`, else off: whether the matches of the network predict the player's own orders
     void apply_match_zoom();                              // a match starts: the camera takes the remembered level if the kind of match and the map offer it, else 1
-    void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() (a network match never below 1; no zoom while the offscreen target cannot be made), one report when that failure begins
+    void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() and the map's limit (no zoom while the offscreen target cannot be made), one report when that failure begins
     bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
 #if defined(__APPLE__)

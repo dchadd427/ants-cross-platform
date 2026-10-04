@@ -104,6 +104,9 @@ public:
     // Per-tick / per-frame update
     void update(const sim::WorldState& world, uint32_t delta_ticks);
     void poll_sim_events(sim::SimulationEngine& sim);
+    /// A note after the text of a news event: called for every event that this player sees (the engine's own texts are never changed); a text that comes back is added to the chat log as one more
+    /// News Flash, with the time of the event, right after the event's own text. The application uses it to say why a bot declined an invitation to team up.
+    void set_news_note(std::function<std::string(const sim::NewsEvent&)> note) { news_note_ = std::move(note); }
 
     // Rendering pipeline
     void render(IRenderer& renderer, const assets::AssetArchive& assets,
@@ -130,6 +133,8 @@ public:
                                const sim::WorldState& world,
                                const sim::Grid& grid,
                                const ViewportCamera& camera) const;
+    /// The cursor that the last evaluate_cursor chose (the frame's, or the one of the click that was handled last)
+    CursorType current_cursor() const noexcept { return current_cursor_; }
     void set_on_spawn_click_marker(std::function<void(int32_t, int32_t)> cb) { on_spawn_click_marker_ = std::move(cb); }
     void spawn_click_marker(int32_t world_x, int32_t world_y) {
         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
@@ -251,6 +256,7 @@ public:
     bool homogeneous_type(const sim::WorldState& world, sim::AntType& type, bool for_orders = false) const;
     /// The simulation that answers the cursor's special-target question (FUN_01026f91); without it no tile is a special target.
     void set_sim_query(const sim::SimulationEngine* sim) noexcept { sim_query_ = sim; }
+    const sim::SimulationEngine* sim_query() const noexcept { return sim_query_; }
     /// Where the HUD sends the player's commands (group orders, Stop, hatch, alliance offers): a single-player game applies them at once (null =
     /// the engine itself), a network match hands them to the turn manager, which applies them at the agreed turn.
     void set_command_sink(sim::CommandSink* sink) noexcept { command_sink_ = sink; }
@@ -415,6 +421,7 @@ private:
     bool is_multi_select_mode_{false};
     int32_t selected_base_team_id_{-1};
     std::function<void(const std::string&, bool)> on_chat_send_;
+    std::function<std::string(const sim::NewsEvent&)> news_note_;
     // The chat log (docs 5.56): the entries with their layout, the display lines that derive from them, and the state of the window
     struct ChatEntry {
         std::string header;                    // "Name:" ...

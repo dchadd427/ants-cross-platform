@@ -5,7 +5,7 @@
 //   - the name step (runNameStep): filled in from what the browser remembered, a bad name explained and not accepted, the button or Enter accepts once, the name is remembered;
 //   - web/shell.html: which addresses ask for a name (a shared link: ANTS_PAGE.asksForName), the address without its name (withoutName), and the gate that holds the game back until the name
 //     is chosen (makeNameGate): the game is not started, so it does not connect, before the button; the chosen name goes into the game's arguments as --name;
-//   - web/lobby.html (the front page) as a whole, with a small fake of the browser's DOM: a first visit (1 player, Treasure, Medium opponents), single player (Play takes this tab to the game page of this computer),
+//   - web/lobby.html (the front page) as a whole, with a small fake of the browser's DOM: a first visit (1 player, Treasure, Medium opponents in all three bases), single player (one level for each base and the Teams; Play takes this tab to the game page of this computer),
 //     the host's own seat in this tab, and the field that Host and Join share is remembered and filled in, its name goes to the seat that this person plays
 //     (the first seat of the page) and the other seats of the page keep random names, a link made for somebody else carries none, bad names start nothing, a name with < > & is only
 //     ever text (the page writes no markup at all), an empty field falls back to a random name (and to Player for a join), a shared link of the page asks first and starts nothing before.
@@ -543,53 +543,106 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobb
     check('an address with only a picture is the plain page', !env.$('setup').hidden && env.$('who-go').hidden);
 }
 
-// ---- the front page: a first visit, and single player (the owner: "you can play single on the play online tab by setting to 1 player")
+// ---- the front page: a first visit, and single player (the owner: "you can play single on the play online tab by setting to 1 player"); one level for each of the three other bases and the Teams
+const SEAT_IDS = ['opponent-1', 'opponent-2', 'opponent-3'];
+const seatLevels = (env) => SEAT_IDS.map((id) => env.$(id).value);
+const setSeats = (env, levels) => levels.forEach((level, i) => { env.$(SEAT_IDS[i]).value = level; env.$(SEAT_IDS[i]).fire('change', {}); });
+const teamChoices = (env) => env.$('teams').children.map((o) => [o.value, o.textContent]);
+const FFA_ONLY = [['ffa', 'Free for all']];
+const ALL_TEAMS = [['ffa', 'Free for all'], ['0+1', 'You + Red'], ['0+2', 'You + Blue'], ['0+3', 'You + Black']];
 {
     const env = runLobby('', {}, { firstVisit: true });
-    same('a first visit: 1 player, Treasure, Medium opponents, and the button reads Play', [env.$('players').value, env.$('map').value, env.$('opponents').value, env.$('create').textContent], ['1', 'treasure', 'medium', 'Play']);
+    same('a first visit: 1 player, Treasure, Medium in all three bases, and the button reads Play', [env.$('players').value, env.$('map').value, seatLevels(env), env.$('create').textContent], ['1', 'treasure', ['medium', 'medium', 'medium'], 'Play']);
     same('... the row of the opponents is shown (not the empty seats\') and so is the single player\'s hint', [env.$('solo-line').hidden, env.$('fill-line').hidden, env.$('setup-hint-solo').hidden, env.$('setup-hint').hidden], [false, true, false, true]);
+    same('... with three bots the Teams select is shown: free for all (chosen), and the player with each bot', [env.$('teams-line').hidden, teamChoices(env), env.$('teams').value], [false, ALL_TEAMS, 'ffa']);
     check('... the choice of the empty seats of a room is what it always was: leave empty', env.$('fill').value === '');
     check('... the front page shows the setup, the join form and the one name field', !env.$('setup').hidden && !env.$('join').hidden && !!env.$('player-name') && env.$('who-go').hidden);
     check('nothing was written by merely loading', Object.keys(env.storage.data).length === 0, JSON.stringify(env.storage.data));
     env.$('create').click();
     check('Play: this tab goes to the game page of this computer (one assignment, no window opened)', env.assigned.length === 1 && env.opened.length === 0, JSON.stringify(env.assigned));
     const url = new URL(env.assigned[0] || 'https://x/');
-    check('... /play.html, the map, the Medium bots, the name Player and the 16:9 picture', url.pathname === '/play.html' && env.param(url.href, 'map') === 'treasure' && env.param(url.href, 'bots') === 'medium' && env.param(url.href, 'name') === 'Player' && env.param(url.href, 'aspect') === '16:9', url.href);
+    check('... /play.html, the map, the Medium bots (one word: all three alike), no teams, the name Player and the 16:9 picture', url.pathname === '/play.html' && env.param(url.href, 'map') === 'treasure' && env.param(url.href, 'bots') === 'medium' && env.param(url.href, 'teams') === null && env.param(url.href, 'name') === 'Player' && env.param(url.href, 'aspect') === '16:9', url.href);
     check('... no room, no server, no seat, no frame (nothing of a match on the game server)', ['join', 'room', 'seat', 'embed', 'fill'].every((k) => env.param(url.href, k) === null) && !env.roomStarted() && env.replaced.length === 0 && env.frames().length === 0);
-    same('... and the choices are remembered: the map, one player, the opponents (the multiplayer choice of bots is not touched)', [env.storage.data['ants-four-map'], env.storage.data['ants-four-players'], env.storage.data['ants-solo-bots'], 'ants-four-fill' in env.storage.data], ['treasure', '1', 'medium', false]);
+    same('... and the choices are remembered: the map, one player, the three levels, the teams (the multiplayer choice of bots is not touched, and the old key is never written)',
+         [env.storage.data['ants-four-map'], env.storage.data['ants-four-players'], env.storage.data['ants-solo-seats'], env.storage.data['ants-solo-teams'], 'ants-solo-bots' in env.storage.data, 'ants-four-fill' in env.storage.data], ['treasure', '1', 'medium,medium,medium', 'ffa', false, false]);
 }
 {
     const env = runLobby('', { 'ants-four-map': 'islands' }, { firstVisit: true });
     env.type('player-name', '  Bob  ');
-    env.$('opponents').value = '';
-    env.$('opponents').fire('change', {});
+    setSeats(env, ['', '', '']);
+    same('Opponents: None in all three bases: no teams to choose', [env.$('teams-line').hidden, teamChoices(env)], [true, FFA_ONLY]);
     env.$('create').click();
     const u = env.assigned[0] || '';
-    check('Opponents: None, a typed name, another map: no bots parameter (alone, as in the original), the name, the map', env.param(u, 'bots') === null && env.param(u, 'name') === 'Bob' && env.param(u, 'map') === 'islands', u);
-    same('... "none" is what the browser remembers for it, and the name too', [env.storage.data['ants-solo-bots'], env.storage.data['ants.name']], ['none', 'Bob']);
+    check('... a typed name, another map: no bots parameter (alone, as in the original), no teams, the name, the map', env.param(u, 'bots') === null && env.param(u, 'teams') === null && env.param(u, 'name') === 'Bob' && env.param(u, 'map') === 'islands', u);
+    same('... "none" three times is what the browser remembers for it, and the name too', [env.storage.data['ants-solo-seats'], env.storage.data['ants.name']], ['none,none,none', 'Bob']);
     const again = runLobby('', env.storage.data, { firstVisit: true });
-    same('the next visit comes back with those choices: None (not Medium), Islands, 1 player, the name', [again.$('opponents').value, again.$('map').value, again.$('players').value, again.$('player-name').value], ['', 'islands', '1', 'Bob']);
+    same('the next visit comes back with those choices: None in all three (not Medium), Islands, 1 player, the name', [seatLevels(again), again.$('map').value, again.$('players').value, again.$('player-name').value], [['', '', ''], 'islands', '1', 'Bob']);
+}
+{   // a level for each base, and the team: the player with Black
+    const env = runLobby('', {}, { firstVisit: true });
+    setSeats(env, ['easy', '', 'hard']);
+    same('a level for each base (Red Easy, Blue None, Black Hard): the Teams select offers the player with the two bots that play', [env.$('teams-line').hidden, teamChoices(env), env.$('teams').value], [false, [['ffa', 'Free for all'], ['0+1', 'You + Red'], ['0+3', 'You + Black']], 'ffa']);
+    env.$('teams').value = '0+3';
+    env.$('teams').fire('change', {});
+    env.$('create').click();
+    const u = env.assigned[0] || '';
+    check('Play: the three words for seats 1, 2, 3 and the team (the + is encoded: it is read back as 0+3)', env.param(u, 'bots') === 'easy,none,hard' && env.param(u, 'teams') === '0+3' && /[?&]teams=0%2B3(&|$)/.test(u), u);
+    same('... remembered: the levels and the team', [env.storage.data['ants-solo-seats'], env.storage.data['ants-solo-teams']], ['easy,none,hard', '0+3']);
+    const again = runLobby('', env.storage.data, { firstVisit: true });
+    same('the next visit shows them again: the levels, the team chosen, the same game', [seatLevels(again), again.$('teams').value, again.$('teams-line').hidden, (again.$('create').click(), again.param(again.assigned[0], 'bots')), again.param(again.assigned[0], 'teams')], [['easy', '', 'hard'], '0+3', false, 'easy,none,hard', '0+3']);
+}
+{   // a team that the bots no longer allow is free for all, and stays so
+    const env = runLobby('', { 'ants-solo-seats': 'easy,medium,hard', 'ants-solo-teams': '0+1' }, { firstVisit: true });
+    same('a remembered team that the remembered bots allow is chosen', [env.$('teams').value, env.$('teams-line').hidden], ['0+1', false]);
+    setSeats(env, ['', 'medium', 'hard']);
+    same('Red set to None: "You + Red" is gone and the team is free for all', [teamChoices(env), env.$('teams').value], [[['ffa', 'Free for all'], ['0+2', 'You + Blue'], ['0+3', 'You + Black']], 'ffa']);
+    setSeats(env, ['easy', 'medium', 'hard']);
+    same('... and it stays free for all when Red comes back (the player chooses a team again)', [teamChoices(env), env.$('teams').value], [ALL_TEAMS, 'ffa']);
+    setSeats(env, ['', '', 'hard']);
+    same('one bot only: nothing to choose, the Teams select is hidden', [env.$('teams-line').hidden, teamChoices(env)], [true, FFA_ONLY]);
+    env.$('create').click();
+    const u = env.assigned[0] || '';
+    check('... and Play carries no teams', env.param(u, 'bots') === 'none,none,hard' && env.param(u, 'teams') === null, u);
+}
+{   // a remembered team that is no choice (a seat with no bot, a text that is no team) is free for all
+    for (const [seats, team] of [['easy,none,hard', '0+2'], ['easy,medium,none', '0+3'], ['none,none,hard', '0+3'], ['easy,medium,hard', '0+4'], ['easy,medium,hard', '1+2'], ['easy,medium,hard', 'junk'], ['easy,medium,hard', '0 1']]) {
+        const env = runLobby('', { 'ants-solo-seats': seats, 'ants-solo-teams': team }, { firstVisit: true });
+        check('remembered bots ' + seats + ' and team ' + JSON.stringify(team) + ': the team is free for all, and Play carries none', env.$('teams').value === 'ffa' && (env.$('create').click(), env.param(env.assigned[0], 'teams') === null), env.$('teams').value);
+    }
 }
 for (const level of ['easy', 'medium', 'hard']) {
     const env = runLobby('', { 'ants-solo-bots': level }, { firstVisit: true });
-    check('the opponents that were remembered (' + level + ') are shown again and played', env.$('opponents').value === level && (env.$('create').click(), env.param(env.assigned[0], 'bots') === level));
+    check('the opponents that the first versions remembered (' + level + ') are shown in all three bases and played', seatLevels(env).every((l) => l === level) && (env.$('create').click(), env.param(env.assigned[0], 'bots') === level));
+    same('... the old key is left as it was, and the new one holds what was played', [env.storage.data['ants-solo-bots'], env.storage.data['ants-solo-seats']], [level, [level, level, level].join(',')]);
+}
+{
+    const env = runLobby('', { 'ants-solo-bots': 'none' }, { firstVisit: true });
+    same('the old key\'s none is None in all three bases', seatLevels(env), ['', '', '']);
 }
 for (const junk of ['extreme', 'MEDIUM2', '1', ' hard']) {
     const env = runLobby('', { 'ants-solo-bots': junk }, { firstVisit: true });
-    check('a remembered value that is no level (' + JSON.stringify(junk) + ') is None, not a bot', env.$('opponents').value === '');
+    check('a remembered value of the old key that is no level (' + JSON.stringify(junk) + ') is None, not a bot', seatLevels(env).every((l) => l === ''));
+}
+{
+    const env = runLobby('', { 'ants-solo-seats': 'hard,none,easy', 'ants-solo-bots': 'medium' }, { firstVisit: true });
+    same('the new key beats the old one', seatLevels(env), ['hard', '', 'easy']);
+}
+for (const junk of ['easy', 'easy,medium', 'easy,medium,hard,easy', 'easy,,hard', 'easy,medium,extreme', 'EXTREME', '']) {
+    const env = runLobby('', { 'ants-solo-seats': junk, 'ants-solo-bots': 'hard' }, { firstVisit: true });
+    check('a remembered ants-solo-seats that is not three levels (' + JSON.stringify(junk) + ') is not used: the old key (Hard) is', seatLevels(env).every((l) => l === 'hard'), JSON.stringify(seatLevels(env)));
 }
 {
     const env = runLobby('', { 'ants-four-players': '3', 'ants-four-fill': 'easy', 'ants-solo-bots': 'hard' }, { firstVisit: true });
-    same('a browser that chose 3 players, Easy empty seats and Hard solo opponents: the form is the room\'s (Create the match, the empty seats row), each choice in its own row', [env.$('players').value, env.$('create').textContent, env.$('fill').value, env.$('opponents').value, env.$('fill-line').hidden, env.$('solo-line').hidden], ['3', 'Create the match', 'easy', 'hard', false, true]);
+    same('a browser that chose 3 players, Easy empty seats and Hard solo opponents: the form is the room\'s (Create the match, the empty seats row), each choice in its own row', [env.$('players').value, env.$('create').textContent, env.$('fill').value, seatLevels(env), env.$('fill-line').hidden, env.$('solo-line').hidden, env.$('teams-line').hidden], ['3', 'Create the match', 'easy', ['hard', 'hard', 'hard'], false, true, true]);
     env.$('players').value = '1';
     env.$('players').fire('change', {});
-    same('... setting the players to 1 turns it into the single player\'s: Play, Opponents Hard (the empty seats\' choice stays Easy)', [env.$('create').textContent, env.$('opponents').value, env.$('fill').value, env.$('solo-line').hidden, env.$('fill-line').hidden], ['Play', 'hard', 'easy', false, true]);
+    same('... setting the players to 1 turns it into the single player\'s: Play, Hard in all three bases, the Teams (the empty seats\' choice stays Easy)', [env.$('create').textContent, seatLevels(env), env.$('fill').value, env.$('solo-line').hidden, env.$('fill-line').hidden, env.$('teams-line').hidden], ['Play', ['hard', 'hard', 'hard'], 'easy', false, true, false]);
     env.$('players').value = '4';
     env.$('players').fire('change', {});
-    same('... and back to 4 the room\'s again', [env.$('create').textContent, env.$('fill').value, env.$('setup-hint').hidden, env.$('setup-hint-solo').hidden], ['Create the match', 'easy', false, true]);
+    same('... and back to 4 the room\'s again (no Teams)', [env.$('create').textContent, env.$('fill').value, env.$('setup-hint').hidden, env.$('setup-hint-solo').hidden, env.$('teams-line').hidden], ['Create the match', 'easy', false, true, true]);
     env.$('create').click();
     check('... and Create the match makes the room (the empty seats\' bots Easy in the code\'s links), as ever', env.roomStarted() && env.assigned.length === 0 && /fill=easy/.test(env.$('any-link').value) && /room=demo-treasure-4p-/.test(env.$('any-link').value), env.$('any-link').value);
-    same('... and remembers the room\'s choices without touching the opponents\' (still the Hard that the browser had)', [env.storage.data['ants-four-players'], env.storage.data['ants-four-fill'], env.storage.data['ants-solo-bots']], ['4', 'easy', 'hard']);
+    same('... and remembers the room\'s choices without touching the opponents\' (the old key still Hard, nothing written for the new ones)', [env.storage.data['ants-four-players'], env.storage.data['ants-four-fill'], env.storage.data['ants-solo-bots'], 'ants-solo-seats' in env.storage.data, 'ants-solo-teams' in env.storage.data], ['4', 'easy', 'hard', false, false]);
 }
 for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
     const env = runLobby('', {}, { firstVisit: true });
@@ -617,6 +670,13 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
     env.$('who-go').click();
     const u = env.assigned[0] || '';
     check('... then the game of this computer on that map with the Hard bots and the name', env.assigned.length === 1 && env.param(u, 'map') === 'small' && env.param(u, 'bots') === 'hard' && env.param(u, 'name') === 'Maya', u);
+}
+{   // an address names one level for all three bases and no teams: that game is played so, and what the form remembered for the Teams is not touched (the form's own Play writes it)
+    const env = runLobby('?map=small&players=1&fill=hard', { 'ants.name': 'Maya', 'ants-solo-seats': 'easy,medium,hard', 'ants-solo-teams': '0+1' }, { firstVisit: true });
+    env.$('who-go').click();
+    const u = env.assigned[0] || '';
+    check('an address with &fill=hard: Hard in all three bases, no teams', env.param(u, 'bots') === 'hard' && env.param(u, 'teams') === null, u);
+    same('... the levels that were played are remembered, the team that the form remembered is left as it was', [env.storage.data['ants-solo-seats'], env.storage.data['ants-solo-teams']], ['hard,hard,hard', '0+1']);
 }
 {
     const env = runLobby('?map=treasure&players=1&play=here', {}, { firstVisit: true });

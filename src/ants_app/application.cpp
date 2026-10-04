@@ -9,8 +9,10 @@
 #include "ants_app/version.hpp"
 #include "ants_ai/bot.hpp"
 #include "ants_ai/bot_controller.hpp"
+#include "ants_ai/team_up.hpp"
 #include <iostream>
 #include <fstream>
+#include <cctype>
 #include <ctime>
 #include <cstring>
 #include <algorithm>
@@ -88,9 +90,11 @@ std::string get_system_username() {
         if (dot != std::string::npos) {
             h = h.substr(0, dot);
         }
-        return u + "@" + h;
+        u += "@" + h;
     }
-    return u;
+    // Cut as a typed name is (printable, at most 32 characters): a long machine name pushed the end of the original's news ("... are a team now!") out of its chat entry (100 characters)
+    const std::string name = clean_player_name(u);
+    return name.empty() ? std::string("Player") : name;
 #endif
 }
 
@@ -357,15 +361,26 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--aspect " + why;
             }
-        } else if (std::strcmp(argv[i], "--zoom") == 0) {                        // --zoom 0.5 | 1 | 2: the zoom of the map view that a match starts with (view_zoom.hpp)
+        } else if (std::strcmp(argv[i], "--zoom") == 0) {                        // --zoom 0.05 .. 2: the zoom of the map view that a match starts with, the nearest level that its map offers (view_zoom.hpp)
             std::string why;
             if (i + 1 >= argc) {
-                if (cfg.startup_error.empty()) cfg.startup_error = "--zoom needs 0.5, 1 or 2";
+                if (cfg.startup_error.empty()) cfg.startup_error = "--zoom needs a number from 0.05 to 2";
             } else if (zoom::parse_level(argv[++i], cfg.zoom, why)) {
                 cfg.zoom_given = true;
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--zoom " + why;
             }
+        } else if (std::strcmp(argv[i], "--prediction") == 0) {                  // --prediction on | off: the prediction of the player's own orders in a match of the network (net::Prediction)
+            if (i + 1 >= argc || !parse_switch(argv[i + 1], cfg.prediction)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--prediction needs on or off";
+                if (i + 1 < argc) ++i;
+            } else {
+                ++i;
+                cfg.prediction_given = true;
+            }
+        } else if (std::strcmp(argv[i], "--no-prediction") == 0) {              // the same as --prediction off
+            cfg.prediction = false;
+            cfg.prediction_given = true;
         } else if (std::strcmp(argv[i], "--bot") == 0) {                       // a computer player: --bot SEAT[:SPEC], repeatable (docs/BOTS.md)
             mode_given = true;
             ai::BotSpec spec;
@@ -377,12 +392,22 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--bot " + std::string(argv[i]) + ": " + why;
             }
+        } else if (std::strcmp(argv[i], "--teams") == 0) {                     // the teams of a game on this computer: ffa | A+B (docs/BOTS.md, "Alliances")
+            std::string why;
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--teams needs ffa or two seats like 0+1";
+            } else if (!parse_local_teams(argv[++i], cfg.teams, why) && cfg.startup_error.empty()) {
+                cfg.startup_error = "--teams " + std::string(argv[i]) + ": " + why;
+            }
         } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
             cfg.play_at_once = true;
             mode_given = true;
         }
     }
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
+    if (cfg.teams.set && cfg.net_role != ApplicationConfig::NetRole::None && cfg.startup_error.empty()) {
+        cfg.startup_error = "--teams is for a game on this computer: a room cannot choose its teams yet (its players team up in the match, with the team-up button).";
+    }
 #if !defined(__EMSCRIPTEN__)
     if (menu_forced) {
         // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
@@ -489,6 +514,7 @@ bool Application::init(const ApplicationConfig& config) {
     config_store_.load();
     choose_aspect();
     choose_zoom();
+    choose_prediction();
 
     // 6. Create Desktop Window
     uint32_t win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -585,6 +611,7 @@ bool Application::init(const ApplicationConfig& config) {
     });
 
     hud_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
+    hud_.set_news_note([this](const sim::NewsEvent& event) { return declined_team_up_note(event); });     // (a computer player that declines to team up says why)
 
     hud_.set_on_spawn_click_marker([this](int32_t wx, int32_t wy) {
         if (renderer_) {
@@ -725,6 +752,7 @@ bool Application::init(const ApplicationConfig& config) {
             scorecard_.show(mr, 0);
             scorecard_.update(0.25f);                                // the preview shows the rows, not the waiting label
         }
+        form_start_teams();                                          // --teams: the teams are made before the first tick
         if (local_bots) {                                            // --map with --bot: the game is running already, the bots join it
             hud_.set_roster_mask(local_roster_);                     // (the bots are named: every taken seat has its label and its row)
             scorecard_.set_shown_teams(local_roster_);
@@ -824,8 +852,35 @@ void Application::choose_aspect() {
     }
 }
 
-// --zoom, else the settings' key `zoom` ("0.5", "1" or "2": the remake's own key, written when the player zooms), else 1. A settings file never stops the game: a value that is not a level
-// is reported and ignored.
+// The text of a switch (a command line option, a settings key): on / off, yes / no, true / false, 1 / 0, in any case
+bool parse_switch(const std::string& text, bool& out) {
+    std::string lower;
+    for (const char ch : text) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    if (lower == "on" || lower == "yes" || lower == "true" || lower == "1") {
+        out = true;
+        return true;
+    }
+    if (lower == "off" || lower == "no" || lower == "false" || lower == "0") {
+        out = false;
+        return true;
+    }
+    return false;
+}
+
+// --prediction, else the settings' key `prediction` ("on" or "off": a key that the owner of the settings file writes, nothing in the game does), else off. A settings file never stops the game: a
+// value that is not a switch is reported and ignored.
+void Application::choose_prediction() {
+    prediction_wanted_ = config_.prediction;
+    if (!config_.prediction_given && config_store_.has("prediction")) {
+        const std::string text = config_store_.get_string("prediction", "", 16);
+        bool from_settings = true;
+        if (parse_switch(text, from_settings)) prediction_wanted_ = from_settings;
+        else std::cerr << "[Application] settings: prediction=" << text << " needs on or off (ignored)" << std::endl;
+    }
+}
+
+// --zoom, else the settings' key `zoom` (a number from 0.05 to 2: the remake's own key, written when the player zooms), else 1. A settings file never stops the game: a value that is not a zoom is
+// reported and ignored.
 void Application::choose_zoom() {
     zoom_wanted_ = zoom::kNormal;
     if (config_.zoom_given) {
@@ -839,25 +894,35 @@ void Application::choose_zoom() {
     }
 }
 
-// A match starts (the local game's START, the network's start, the first map of a game that starts at once): the camera takes the level that the player chose last when the kind of
-// match and this map offer it, else the level 1. A network match never starts zoomed out; the level that was chosen stays remembered for the next local game.
+// A match starts (the local game's START, the network's start, the first map of a game that starts at once): the camera takes the nearest level to the one that the player chose last (or gave with
+// --zoom) among those that this map offers in this view (1 when the setting is not a zoom). The level that was chosen stays remembered for the next match.
 void Application::apply_match_zoom() {
     if (!renderer_) return;
-    const LayoutRect view = layout_.view();
-    renderer_->camera().zoom = zoom::level_for_match(zoom_wanted_, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE,
-                                                     static_cast<int64_t>(current_level_.height()) * TILE_SIZE);
+    renderer_->camera().zoom = zoom::level_for_match(zoom_wanted_, zoom_fit(), zoom_limits());
 }
 
+// Every player of a match has the same levels (FAIRNESS, application.hpp): the zoom is the view's own. Only a renderer that cannot make the offscreen target is limited: it draws the zoom 1.
 zoom::Limits Application::zoom_limits() const noexcept {
     if (renderer_ && renderer_->world_target_failed()) return zoom::Limits::only_normal();      // (a zoom is drawn through the target: with none there is only the original's picture)
-    return network_active() ? zoom::Limits::no_zoom_out() : zoom::Limits::any();
+    return zoom::Limits::any();
 }
 
-// The camera's zoom, in a match, is always a level that zoom_limits() allows (and so a level that is drawn): at every frame, before anything of it is used. A network match never zoomed out (a test, or
-// anything else, that put the camera there is corrected at the next frame); and when the renderer cannot make the offscreen target the picture it draws is the zoom 1 whatever the camera says,
-// so the camera says 1 (the clicks, the minimap's frame and the edge scroll then agree with the picture), only that level is offered, and one line is written when the failure begins (not at
-// every frame). The level that the player chose stays remembered (it is not the player's choice that is wrong): the next match starts with it when the target works again. The correction goes
-// as set_zoom's does, anchored at the view's centre.
+zoom::Fit Application::zoom_fit() const noexcept {
+    zoom::Fit fit;
+    const LayoutRect view = layout_.view();
+    fit.view_w = view.w;
+    fit.view_h = view.h;
+    fit.map_w = static_cast<int64_t>(current_level_.width()) * TILE_SIZE;
+    fit.map_h = static_cast<int64_t>(current_level_.height()) * TILE_SIZE;
+    fit.max_world = renderer_ ? renderer_->max_world_extent() : 0;
+    return fit;
+}
+
+// The camera's zoom, in a match, is always inside what is allowed and drawn: at every frame, before anything of it is used. It is never below the map's limit (the view shows nothing outside the
+// map; the limit follows the view, which a new picture changes), and when the renderer cannot make the offscreen target the picture it draws is the zoom 1 whatever the camera says, so the camera
+// says 1 (the clicks, the minimap's frame and the edge scroll then agree with the picture), only that level is offered, and one line is written when the failure begins (not at every frame). The
+// level that the player chose stays remembered (it is not the player's choice that is wrong): the next match starts with it when the target works again. The correction goes as set_zoom's does,
+// anchored at the view's centre.
 void Application::enforce_zoom_limits() {
     if (!renderer_) return;
     const bool failed = renderer_->world_target_failed();
@@ -871,42 +936,38 @@ void Application::enforce_zoom_limits() {
     if (state_ != AppState::Playing) return;                               // (the map view is drawn in a match only: the setup screens, a room's included, leave the camera as it is; the next match start chooses its level, apply_match_zoom)
     ViewportCamera& camera = renderer_->camera();
     const zoom::Limits limits = zoom_limits();
-    const float held = std::clamp(camera.zoom, limits.min_zoom, limits.max_zoom);
+    const float bottom = std::max(zoom::floor_zoom(zoom_fit()), limits.min_zoom);
+    const float top = std::min(limits.max_zoom, zoom::kIn);
+    const float held = std::clamp(camera.zoom, std::min(bottom, top), top);
     if (held == camera.zoom) return;
     const LayoutRect view = layout_.view();
     camera.set_zoom(held, view.w / 2, view.h / 2, current_level_.width(), current_level_.height());
 }
 
 std::vector<float> Application::zoom_levels() const {
-    std::vector<float> levels;
-    if (!renderer_) return levels;
-    const LayoutRect view = layout_.view();
-    for (const float level : zoom::kLevels) {
-        if (zoom::offered(level, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE, static_cast<int64_t>(current_level_.height()) * TILE_SIZE)) levels.push_back(level);
-    }
-    return levels;
+    if (!renderer_) return {};
+    return zoom::levels(zoom_fit(), zoom_limits());
 }
 
-// The zoom API (application.hpp): to one of the offered levels, keeping the world point under the screen pixel (anchor_x, anchor_y) of the picture under it as far as the map's edges allow
+// The zoom API (application.hpp): to the nearest of the offered levels, keeping the world point under the screen pixel (anchor_x, anchor_y) of the picture under it as far as the map's edges allow
 bool Application::set_zoom(float level, int32_t anchor_x, int32_t anchor_y) {
     if (!renderer_ || state_ != AppState::Playing) return false;
+    if (!std::isfinite(level) || level <= 0.0f) return false;
     ViewportCamera& camera = renderer_->camera();
-    if (level == camera.zoom) return false;
+    const float target = zoom::nearest(level, zoom::levels(zoom_fit(), zoom_limits()));
+    if (target == camera.zoom) return false;
     const LayoutRect view = layout_.view();
-    if (!zoom::offered(level, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE, static_cast<int64_t>(current_level_.height()) * TILE_SIZE)) return false;
     const int32_t dx = std::clamp(anchor_x - view.x, 0, std::max(0, view.w - 1));
     const int32_t dy = std::clamp(anchor_y - view.y, 0, std::max(0, view.h - 1));
-    camera.set_zoom(level, dx, dy, current_level_.width(), current_level_.height());
-    zoom_wanted_ = level;                                                 // remembered: the next match starts with it
-    config_store_.set_string("zoom", zoom::level_name(level));
+    camera.set_zoom(target, dx, dy, current_level_.width(), current_level_.height());
+    zoom_wanted_ = target;                                                // remembered: the next match starts with it
+    config_store_.set_string("zoom", zoom::level_name(target));
     return true;
 }
 
 bool Application::step_zoom(int direction, int32_t anchor_x, int32_t anchor_y) {
     if (!renderer_) return false;
-    const LayoutRect view = layout_.view();
-    const float next = zoom::step(renderer_->camera().zoom, direction, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE,
-                                  static_cast<int64_t>(current_level_.height()) * TILE_SIZE);
+    const float next = zoom::step(renderer_->camera().zoom, direction, zoom_fit(), zoom_limits());
     return set_zoom(next, anchor_x, anchor_y);
 }
 
@@ -994,6 +1055,7 @@ bool Application::start_game(const std::string& map_path) {
     if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled())) return false;
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
     enter_match();
+    form_start_teams();                                               // --teams: the teams are made before the first tick (the dialog of the start is up)
     if (!config_.bots.empty()) start_local_bots(config_.random_seed);
     return true;
 }
@@ -1023,7 +1085,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 
     if (renderer_) {
         renderer_->set_level(current_level_);
-        apply_match_zoom();                                                   // (a match of the network starts at 1: the zoom-out is not offered there)
+        apply_match_zoom();                                                   // (the remembered level, or the nearest that this map offers)
         show_start_view();
     }
     uint8_t labelled = roster;                                                // the teams that get a score label
@@ -1054,6 +1116,10 @@ void Application::enter_match() {
     hud_.init(local_player_id_);
     hud_.reset();
     hud_.start_match_modal(network_active());                               // (the simulation waits for it: update_simulation, post_tick)
+    cue_router_.reset();                                                    // (no cue of an earlier match is waited for)
+    felt_delay_ = net::FeltDelayMeter();
+    orders_seen_ = 0;                                                       // (the match's own prediction counts its orders from none)
+    prediction_cooldowns_reported_ = 0;
     tick_accumulator_ = 0.0f;                                               // the dialog and the match are counted from now
     start_dialog_clock_ms_ = 0.0;
     scorecard_.hide();
@@ -1156,6 +1222,29 @@ bool Application::start_local_bots(uint32_t match_seed) {
     return all;
 }
 
+// --teams: each pair of the plan becomes a team with the original's own commands, applied straight to the simulation before its first tick: the first seat invites, the second accepts (so the News Flash
+// "... are a team now!" is in the chat log and no dialog opens). What cannot be made is said, and the game starts without teams.
+void Application::form_start_teams() {
+    if (!config_.teams.set) return;                                    // (a room never gets here: the parser refuses --teams for one)
+    const LocalTeamsPlan plan = plan_local_teams(config_.teams, sim_.roster_mask());
+    if (!plan.why.empty()) {
+        show_setup_notice("--teams " + local_teams_text(config_.teams) + ": " + plan.why + " The game starts without teams.");
+        return;
+    }
+    for (const std::array<uint8_t, 2>& pair : plan.pairs) {
+        sim::Command invite;
+        invite.type = sim::CommandType::AllianceInvite;
+        invite.issuer = pair[0];
+        invite.other_player = pair[1];
+        sim_.apply_command(invite);
+        sim::Command accept;
+        accept.type = sim::CommandType::AllianceAccept;
+        accept.issuer = pair[1];
+        accept.other_player = pair[0];
+        sim_.apply_command(accept);
+    }
+}
+
 // The host of a room runs the room's bots: their commands go into the host's sequencer. A guest (and a guest that took over as host) never does.
 void Application::start_net_bots() {
     stop_bots();
@@ -1180,6 +1269,30 @@ bool Application::add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::
 void Application::stop_bots() {
     bots_.reset();                                                    // (the controller first: it holds the sinks)
     bot_sinks_.clear();
+}
+
+const ai::BotSpec* Application::bot_spec_of(uint8_t seat) const {
+    for (const ai::BotSpec& b : config_.bots) {
+        if (b.seat == seat) return &b;
+    }
+    return nullptr;
+}
+
+// A computer player holds the seat: in a local game the seats of the specs, in a room the slots that the room itself calls bots (a guest knows no more than that)
+bool Application::is_bot_seat(uint8_t seat) const {
+    if (seat >= 4) return false;
+    if (network_active()) return net_->room().slots[seat].state == net::SlotState::Bot;
+    return bot_spec_of(seat) != nullptr;
+}
+
+// Why a bot declined the local player's invitation: the original's "... rejected teaming up" says that it did, never why, so ONE chat-log line follows it (docs/BOTS.md, "Alliances"), from the rule
+// the bot answers by (ai::team_up_answer) asked of the world as it is now. Nothing for any other event, a person's answer, or a rule that would accept now.
+std::string Application::declined_team_up_note(const sim::NewsEvent& event) const {
+    if (event.string_id != sim::strings::kTeamRejected || !is_bot_seat(event.subject)) return std::string();      // (the HUD hands over only the local player's events)
+    const ai::BotSpec* spec = bot_spec_of(event.subject);
+    if (spec != nullptr && spec->kind == "worker") return ai::kWorkerNeverTeamsUpText;
+    const ai::BotView view = ai::BotView::build(sim_, event.subject);
+    return ai::team_up_decline_text(ai::team_up_answer(view, local_player_id_), sim_.get_player_name(event.subject));
 }
 
 void Application::quit() {
@@ -1285,7 +1398,7 @@ void Application::run_frame_with_delta(float delta_time) {
 
     handle_events();
 
-    enforce_zoom_limits();                      // the camera's zoom is one that is allowed and drawn (a network match: never below 1; no offscreen target: 1)
+    enforce_zoom_limits();                      // the camera's zoom is one that is allowed and drawn (never below the map's limit; no offscreen target: 1)
 
     handle_camera_panning(delta_time);
 
@@ -1438,10 +1551,23 @@ void Application::background_run(double elapsed) {
 }
 
 #if defined(__EMSCRIPTEN__)
+namespace {
+// What the frames cost, for the page's browser checks (ants_probe 12 - 15): the time that the game's own frame function takes (input, network, ticks, the picture), not what the browser does
+// with the canvas afterwards
+double g_frame_work_sum_ms = 0.0;
+double g_frame_work_max_ms = 0.0;
+uint32_t g_frame_work_frames = 0;
+}  // namespace
+
 extern "C" void emscripten_main_loop_iter(void* arg) {
     auto* app = static_cast<Application*>(arg);
     if (app && app->is_running()) {
+        const double began = emscripten_get_now();
         app->run_frame();
+        const double took = emscripten_get_now() - began;
+        g_frame_work_sum_ms += took;
+        g_frame_work_max_ms = std::max(g_frame_work_max_ms, took);
+        ++g_frame_work_frames;
     }
 }
 
@@ -1460,6 +1586,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // For the page's browser check (tests/scripts/web_edge_check.py): what the game believes about the pointer and the view, read-only. 0 and 1: the pointer's x and y on the picture (what the
 // game draws its cursor at and scrolls from); 2: 1 while the game takes the pointer as gone from its window (no cursor, no scrolling); 3 and 4: the map view's origin in world pixels
 // (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
+// The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the corner's "delay" in ms as the player reads it (the felt delay while the prediction is on, the
+// network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 cooling down after its budget; 10: the
+// orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
+// 15: reads 0 and starts again).
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
     if (g_web_app == nullptr) return -1;
@@ -1471,6 +1601,38 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 4: return g_web_app->match_running() ? g_web_app->renderer().camera().world_y : -1;
         case 5: return g_web_app->match_running() ? (g_web_app->hud().is_modal_open() ? 1 : 0) : -1;
         case 6: return static_cast<int>(g_web_app->zoom() * 100.0f + 0.5f);
+        case 7: {
+            const std::optional<uint32_t> delay = g_web_app->corner_delay_ms();
+            return delay ? static_cast<int>(*delay) : -1;
+        }
+        case 8: {
+            const net::NetGame* game = g_web_app->net();
+            const std::optional<uint32_t> delay = game != nullptr ? game->command_delay_ms() : std::nullopt;
+            return delay ? static_cast<int>(*delay) : -1;
+        }
+        case 9: {
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return 0;
+            return game->prediction_cooling_down() ? 2 : (game->predicting() ? 1 : 0);
+        }
+        case 10: {                                                              // (no game: -1; a game that has no prediction (the default is off: it is never made) predicted nothing: 0)
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return -1;
+            return game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().commands_predicted) : 0;
+        }
+        case 11: {
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return -1;
+            return game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().rebuilds) : 0;
+        }
+        case 12: return g_frame_work_frames != 0 ? static_cast<int>(g_frame_work_sum_ms * 1000.0 / static_cast<double>(g_frame_work_frames)) : -1;
+        case 13: return static_cast<int>(g_frame_work_max_ms * 1000.0);
+        case 14: return static_cast<int>(g_frame_work_frames);
+        case 15:
+            g_frame_work_sum_ms = 0.0;
+            g_frame_work_max_ms = 0.0;
+            g_frame_work_frames = 0;
+            return 0;
         default: return -1;
     }
 }
@@ -1899,6 +2061,7 @@ void Application::handle_camera_panning(float dt) {
 }
 
 void Application::handle_key_down(const SDL_KeyboardEvent& key) {
+    const OrdersNoted noted{*this};
     if (scorecard_.is_open()) {
         // FUN_01015b17: Enter and the letters C, Q and X (either case, whatever the modifiers) leave, at any time; nothing else does anything (Esc included)
         const SDL_Keycode sym = key.keysym.sym;
@@ -1916,7 +2079,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod, key.repeat != 0);
+    hud_.handle_key_down(key.keysym.sym, view_sim(), renderer_->camera(), key.keysym.mod, key.repeat != 0);
 }
 
 void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
@@ -1930,10 +2093,11 @@ void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
         return;
     }
 
-    hud_.handle_mouse_motion(motion.x, motion.y, sim_, renderer_->camera());
+    hud_.handle_mouse_motion(motion.x, motion.y, view_sim(), renderer_->camera());
 }
 
 void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
+    const OrdersNoted noted{*this};
     mouse_screen_x_ = button.x;
     mouse_screen_y_ = button.y;
     mouse_has_moved_ = true;
@@ -1957,10 +2121,22 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
 
     uint16_t mod = static_cast<uint16_t>(SDL_GetModState());
     if (button.type == SDL_MOUSEBUTTONDOWN) {
-        hud_.handle_mouse_down(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
+        hud_.handle_mouse_down(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     } else if (button.type == SDL_MOUSEBUTTONUP) {
-        hud_.handle_mouse_up(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
+        hud_.handle_mouse_up(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     }
+}
+
+// The orders that input has given the predicted engine since the last look are felt from this frame (net::FeltDelayMeter). Every order of the player is a mouse button or a key, and those two
+// handlers look when they are done.
+void Application::note_orders() {
+    const uint64_t taken = net_ != nullptr && net_->prediction() != nullptr ? net_->prediction()->stats().commands_predicted : 0u;
+    for (; orders_seen_ < taken; ++orders_seen_) felt_delay_.on_order(frame_ms());
+    orders_seen_ = taken;
+}
+
+sim::SimulationEngine& Application::view_sim() {
+    return network_active() ? net_->view_engine() : sim_;       // (the confirmed engine while the prediction is off, and in every game of one machine)
 }
 
 void Application::update_simulation(float dt) {
@@ -1993,7 +2169,7 @@ void Application::update_simulation(float dt) {
             start_dialog_clock_ms_ += static_cast<double>(dt) * 1000.0;
             while (start_dialog_clock_ms_ >= static_cast<double>(sim::TICK_MS) && hud_.is_match_start_modal_active()) {
                 start_dialog_clock_ms_ -= static_cast<double>(sim::TICK_MS);
-                hud_.update(sim_.get_world_state(), 1);
+                hud_.update(view_sim().get_world_state(), 1);
             }
         }
     } else {
@@ -2013,8 +2189,8 @@ void Application::update_simulation(float dt) {
     }
 
     // Update spatial audio listener position
-    audio_mixer_.set_listener_position(renderer_->camera().world_x_at(layout_.view().w / 2),
-                                       renderer_->camera().world_y_at(layout_.view().h / 2));      // (the middle of the world that the view shows, at any zoom)
+    audio_mixer_.set_listener_position(renderer_->camera().centre_world_x(),
+                                       renderer_->camera().centre_world_y());      // (the middle of the world that the view shows, at any zoom: the exact middle, not the world pixel under a pixel's centre)
 
     if (renderer_) {
         renderer_->update_transient_effects(dt);
@@ -2027,13 +2203,43 @@ void Application::post_tick() {
     // The first turn of a match of the network has executed: the ants can move now, and the "Get ready" dialog (which every machine opened when the match began, while the host waited for it)
     // is gone. (A local game's dialog ends before its first tick, in update_simulation.)
     if (hud_.is_match_start_modal_active()) hud_.dismiss_match_start_modal();
-    const auto& world = sim_.get_world_state();
+    const sim::SimulationEngine& shown = view_sim();        // (what the screen shows: with the prediction on, the predicted engine, a tick further for every tick)
+    const auto& world = shown.get_world_state();
     hud_.update(world, 1);
-    hud_.poll_sim_events(sim_);
+    hud_.poll_sim_events(sim_);                              // (the news are the confirmed engine's: they are told once, whatever was shown before)
 
     if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
+    if (net_ != nullptr && net_->predicting()) felt_delay_.on_tick_shown();      // (what an order of this frame did is in the picture now: the next frame that is drawn shows it)
+    net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;
+    if (prediction != nullptr && prediction->stats().cooldowns != prediction_cooldowns_reported_) {
+        prediction_cooldowns_reported_ = prediction->stats().cooldowns;
+        std::cerr << "[Application] The prediction of your orders switched itself off for " << (prediction->cooldown_ticks_left() * sim::TICK_MS + 999u) / 1000u
+                  << " s: its work took longer than its budget too often. The match goes on as it did without it, and the prediction tries again afterwards." << std::endl;
+    }
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
-    if (!background_stepping_) audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);   // a background step makes no sound: its events are dropped, not saved up
+    std::vector<sim::AudioEvent> predicted_cues;
+    if (prediction != nullptr || !cue_router_.idle()) {
+        // The cues of the own ants' own actions come from the predicted engine, when it runs the tick that makes them (in step with the picture), and the confirmed engine's copies of them
+        // are dropped when they come; every other cue is the confirmed engine's (net::CueRouter). The predicted engine's news are never told: the confirmed engine's are. The router runs
+        // while there is a prediction, and after it is gone for as long as a cue that it played still waits for its copy; with neither, every cue is the confirmed engine's as it was.
+        const auto owns_in = [this](const sim::SimulationEngine& engine) {
+            return [&engine, me = local_player_id_](uint32_t ant_id) {
+                for (const auto& a : engine.get_world_state().ants) {
+                    if (a.id == ant_id) return a.player_id == me;
+                }
+                return false;
+            };
+        };
+        if (prediction != nullptr) {
+            predicted_cues = cue_router_.from_predicted(prediction->take_audio(), owns_in(shown));
+            prediction->take_news();
+        }
+        audio_events = cue_router_.from_confirmed(std::move(audio_events), sim_.current_tick() - 1, owns_in(sim_));
+    }
+    if (!background_stepping_) {                             // a background step makes no sound: its events are dropped, not saved up
+        audio_mixer_.ingest_simulation_events(predicted_cues, local_player_id_);
+        audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);
+    }
 
 #if defined(__EMSCRIPTEN__)
     // A page that embeds several games (web/lobby.html) shows that the machines stay in step: every 100 ticks the game tells its parent page the tick and the
@@ -2102,6 +2308,7 @@ void Application::pump_network(float dt, double gap_seconds) {
     room_chat_.end_of_frame();                                   // (the text event of the T that opened the chat input has been dealt with: it came in the same batch of events)
     if (menu_enabled_) update_start_menu(dt);                    // the start menu's clock, what it asked for and its connection (application_menu.cpp)
     if (!net_ || !net_->active()) return;
+    net_->set_prediction_suspended(page_hidden_ || background_stepping_);   // a hidden page shows nothing: its match is stepped by the wake-ups, and the prediction would be work for no picture
     net_->set_chat_status_mirror(room_chat_box() == nullptr);   // (the lines of the room go to the chat box of the 16:9 setup screen when it has one, to the status line otherwise)
     net_time_ms_ += static_cast<double>(dt) * 1000.0;
     net_->update(static_cast<uint32_t>(net_time_ms_));        // (the connection is read here: whatever waited counts as heard)
@@ -2445,6 +2652,17 @@ void Application::render_net_overlay() {
 
 // The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" and "delay NN ms" while a room or a match of a network game is on screen. A game of one
 // machine, the loading and quick help screens, a connection that is being made, one that failed or is over draw nothing here.
+// What the corner's "delay" says. With the prediction on it is what the click FEELS: from the frame that took the order to the frame that shows it (a dash until an order has been felt, and for ten
+// seconds after the last one); the network's delay, the time until the CONFIRMED engine applies the order, is what it was before, and is what the player feels when the prediction is off
+std::optional<uint32_t> Application::corner_delay_ms() const {
+    if (!network_active()) return std::nullopt;
+    if (net_->predicting()) {
+        if (felt_delay_.stale(frame_ms())) return std::nullopt;
+        return felt_delay_.felt_ms();
+    }
+    return net_->command_delay_ms();
+}
+
 void Application::render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate) {
     if (!network_active()) return;
     const CornerScreen screen = state_ == AppState::MapSelect ? CornerScreen::Setup
@@ -2454,7 +2672,7 @@ void Application::render_latency_corner(int32_t version_x, int32_t text_y, const
     if (!left_limit) return;
     LatencyReadout readout;
     readout.ping_ms = net_->ping_ms();
-    readout.delay_ms = net_->command_delay_ms();
+    readout.delay_ms = corner_delay_ms();
     last_latency_layout_ = latency_corner_layout(*renderer_, readout, version_x, text_y, *left_limit, plate);
     draw_latency_corner(*renderer_, readout, version_x, text_y, *left_limit, plate);
 }
@@ -2476,9 +2694,10 @@ void Application::render_frame() {
     } else if (scorecard_.is_open()) {
         scorecard_.render(*renderer_, assets_);
     } else {
-        const auto& world = sim_.get_world_state();
+        sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
+        const auto& world = view.get_world_state();
         renderer_->set_show_hp(hud_.is_show_hp());
-        renderer_->render_world(world, sim_.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
+        renderer_->render_world(world, view.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,
                                 hud_.get_selected_base_team_id(),
@@ -2551,11 +2770,14 @@ void Application::render_frame() {
     renderer_->set_picture(picture_);
     CursorType cur = CursorType::Normal;
     if (state_ == AppState::Playing && !scorecard_.is_open()) {
-        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, sim_.get_world_state(), sim_.grid(), renderer_->camera());
+        sim::SimulationEngine& view = view_sim();
+        hud_.set_sim_query(&view);                           // (the cursor's special-target question is asked of the picture's own engine)
+        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, view.get_world_state(), view.grid(), renderer_->camera());
     }
     if (!pointer_outside_) renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()));
 
     renderer_->end_frame();
+    felt_delay_.on_frame_end(frame_ms());                    // (an order whose effect is in this frame is felt now)
 }
 
 // FUN_0100e6ce: the intro (intro.mid, `play AntsMidi from 0 notify`) plays ONCE; its end (MM_MCINOTIFY) starts the random in-game pieces (update_music).

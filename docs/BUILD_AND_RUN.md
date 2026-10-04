@@ -36,7 +36,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
 ./build/src/ants_app/ants
 ```
-`./build/src/ants_app/ants` with no options opens the desktop start menu (Single player with computer players, Join with a code, Host an online match, Quit; README "Start Menu"); an option that chooses a mode (`--map-select` for the setup screen at once, `--map`, `--host`, `--join`, `--headless` ...) skips it. `./start_game.sh` builds (when needed) and launches (four windows in one match by default; `./start_game.sh --single` is one plain game with the menu). If the build stops with an Xcode licence error on macOS, accept the licence (`sudo xcodebuild -license`) or set `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for the shell that builds.
+`./build/src/ants_app/ants` with no options opens the desktop start menu (Single player with computer players, Join with a code, Host an online match, Quit; README "Start Menu"); an option that chooses a mode (`--map-select` for the setup screen at once, `--map`, `--host`, `--join`, `--headless` ...) skips it. `./start_game.sh` builds (when needed) and launches one game with the menu (`./start_game.sh --players 4` is the test rig: four windows in one match). If the build stops with an Xcode licence error on macOS, accept the licence (`sudo xcodebuild -license`) or set `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for the shell that builds.
 
 ## Testing
 All test suites are run with `./run_tests.sh` (macOS, Apple clang; `./run_tests.sh --fast` is the quick tier of about a minute for every change, `./run_tests.sh --list` names what a choice of options runs). The suites and what each one checks are listed in the README under [Testing & Verification](../README.md#testing--verification), the totals are what `./run_tests.sh` prints, and [`WORKFLOW.md`](WORKFLOW.md) says which tier runs when.
@@ -52,7 +52,7 @@ Or directly execute:
 ```cmd
 build\src\ants_app\Release\ants.exe
 ```
-With no options the game opens the start menu (`start_game.bat --single` does the same; the default four-window rig of `start_game.bat` starts each window in its room and shows no menu). An option that chooses a mode, such as `--map-select`, skips the menu.
+With no options the game opens the start menu (`start_game.bat` does the same; its test rig, `start_game.bat --players 4`, starts each window in its room and shows no menu). An option that chooses a mode, such as `--map-select`, skips the menu.
 Headless verification with screenshot capture can also be executed:
 ```cmd
 build\src\ants_app\Release\ants.exe --headless --frames 60 --screenshot "output.bmp"

@@ -273,6 +273,36 @@ endif()
 add_test(NAME test_network_app COMMAND test_network_app)
 set_tests_properties(test_network_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The prediction of one's own orders in the application (R3 of the rollback): what the match screen reads. A headless Application plays a real match against a bare machine over loopback
+add_executable(test_prediction_app
+    test_prediction_app.cpp
+)
+
+target_include_directories(test_prediction_app PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_prediction_app PRIVATE
+    ants_app
+)
+
+target_link_libraries(test_prediction_app PRIVATE ants_test_paths)
+
+if(APPLE)
+    target_link_libraries(test_prediction_app PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_prediction_app PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_prediction_app COMMAND test_prediction_app)
+set_tests_properties(test_prediction_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # View fingerprint (M0 of the widescreen / zoom / touch work): what the game draws (draw-call and pixel hashes) and what the pointer does (every pixel of the 640 x 480 screen), pinned at the classic picture
 add_executable(test_view_fingerprint
     test_view_fingerprint.cpp
