@@ -14,22 +14,24 @@ Handover notes of the branch: what it does, what was checked, what is left. Shor
 
 ## Verified
 
-- Quick tier `./run_tests.sh --fast`: 48 suites, 0 failed (on the final tree of the branch).
+- Quick tier `./run_tests.sh --fast`: 48 suites, 0 failed (earlier rounds); on every commit of the last round 47 of 48: in suite 5.2 only the process-cleanup tests of `test_mutate_tool` and `test_run_tests` fail, in the build container only.
 - Node: `web_lobby_check.js` 127 checks, `web_name_check.js` 272, `web_edge_check.js` 106, 0 failures.
 - nginx routes in a real nginx container: 184 checks; 8 mutants of `docker/nginx.conf` all caught.
 - Margin: 70 browser checks; 9 mutants of `web/shell.html` all caught (31 of 68 checks failed on the old page).
-- Front page in a real browser on the built web image (`web_home_check.py`, opt-in): 45 checks, 0 failed: Play goes loading screen, quick help, Enter, match with the "Get ready" dialog; the Medium bots' scores move within 45 s; nothing moves alone; Menu asks and No / Yes work; old addresses and the host's "Play in this tab" work.
-- The web image builds; the version, build id and staging label substitutions work on both pages; the CI page check was updated and run by hand.
+- Front page in a real browser on the built web image of an earlier commit (`web_home_check.py`, opt-in): 45 checks, 0 failed: Play goes loading screen, quick help, Enter, match with the "Get ready" dialog; the Medium bots' scores move within 45 s; nothing moves alone; Menu asks and No / Yes work; old addresses and the host's "Play in this tab" work.
+- The web image of an earlier commit builds; the version, build id and staging label substitutions work on both pages; the CI page check was updated and run by hand.
 - Aspect check on the web image of the front page: the whole `web_aspect_check.py`, 535 checks, 0 failed (the image was built before two comment-only edits of `web/shell.html`).
+- Full-tier C++ cases, built with warnings as errors (GCC 13): `test_network_app` 89 cases, 9138 assertions, 0 failed (with `AI6.11`); `test_start_menu_app` 40 tests, 891 assertions, 0 failures (with `A1.1b`).
+- Mutation proofs of `--play` (`tools/mutate.py`, six mutants, each caught by the case that it is named for, at an assertion inside that case): no `start_game` call in `enter_map_select` (7.6d); no `!networked` (AI6.11); no `!menu_enabled_` (A1.1b); no `start_in_map_select` line for `--play` (M9.3); no `mode_given = true` for `--play` (M9.1); no `play_pending_ = false` (7.6d). The `!menu_enabled_` mutant first survived, because A1.1b stopped at the menu and the flag is read only at the setup screen's first visit; A1.1b now follows Single and Continue to the setup screen and asserts that no match starts.
+- Leak scan of the whole branch (added lines, commit messages, file names): no local path, no address but the loopback ones, no token, secret or e-mail address of a person; what matched are protocol fields, variable names, test strings and the public site and repository addresses.
+- Partial, on a stand-in for the image (the real `docker/nginx.conf` without its IPv6 listen line, the real lobby page, a stand-in game page): `web_routes_check.py` 184 checks, 0 failed; the front page part of `web_home_check.py` (`--only front`, a real browser) 9 checks, 0 failed.
 
 ## Not verified yet (the next steps, in this order)
 
-1. Build the web image from the committed tree and run against it: `web_routes_check.py`, `web_home_check.py`, `web_edge_check.py`, and the whole `web_aspect_check.py` (535 passed on the earlier image).
-2. Full-tier C++ cases written but NOT run locally: `AI6.11` (`test_network_app`) and `A1.1b` (`test_start_menu_app`); build the two programs with warnings as errors and run them.
-3. Mutation proofs of `--play` (each must fail its case): remove the `start_game` call in `enter_map_select` (7.6d); drop `!networked` (AI6.11); drop `!menu_enabled_` (A1.1b); remove `if (cfg.play_at_once) cfg.start_in_map_select = true;` (M9.3); remove `mode_given = true` in the `--play` branch (M9.1); remove `play_pending_ = false` (7.6d's one-shot check).
-4. Leak scan of the added lines of the branch (local paths, hostnames, tokens), then the CI run of the pull request.
-5. Merge notes: `tests/scripts/test_ants_server.sh` line 101 still names `web/four.html` (another branch changes that line); two comments in `src/ants_app/application.cpp` (near lines 40 and 2030) still name `web/four.html`; `ants_probe` and `application.*` are also touched by the rollback branch (the hunks lie apart); `build_web.sh`'s local server shows the lobby at `/lobby.html` (its python server serves the game page at `/`); `run_tests.sh` needs no new line (the new `test_*.py` files are found by suite 5.2).
-6. `VERSION`, `CHANGELOG.md`, `STATUS.md` and the version line of `README.md` are not touched (the release batch does them).
+1. The web image of the committed tree and the four checks on it, NOT done in the last round: the Emscripten build could not download its ports (the archives of SDL2, SDL2_ttf and FreeType from GitHub; the network of the build container refused them), so there was no image. Where those downloads work: build it (`docker build -t ants-beta --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) .`), run it, then `web_routes_check.py`, `web_home_check.py`, `web_edge_check.py` and the whole `web_aspect_check.py` (535 passed on the earlier image). On a host without IPv6 the conf's `listen [::]:80` stops nginx from starting, and `test_nginx_routes.TheRoutesRun` then skips and still reports ok.
+2. The CI run of the pull request.
+3. Merge notes: `tests/scripts/test_ants_server.sh` line 101 still names `web/four.html` (another branch changes that line); two comments in `src/ants_app/application.cpp` (near lines 40 and 2030) still name `web/four.html`; `ants_probe` and `application.*` are also touched by the rollback branch (the hunks lie apart); `build_web.sh`'s local server shows the lobby at `/lobby.html` (its python server serves the game page at `/`); `run_tests.sh` needs no new line (the new `test_*.py` files are found by suite 5.2).
+4. `VERSION`, `CHANGELOG.md`, `STATUS.md` and the version line of `README.md` are not touched (the release batch does them).
 
 ## Draft changelog lines
 
