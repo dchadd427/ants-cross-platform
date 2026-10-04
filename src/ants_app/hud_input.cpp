@@ -347,6 +347,7 @@ void HUD::stop_selected(sim::SimulationEngine& sim) {
 void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift) {
     const auto& world = sim.get_world_state();
     if (!over_ground(x, y, camera, sim.grid())) return;     // the black around a small map is no ground: a click there does nothing at all (no deselect, no order, no marker)
+    sim_query_ = &sim;                                      // (the special-target question is asked of the engine whose world the click picks from: the one the screen shows)
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
     const int32_t world_x = camera.world_x_at(x - layout_.view().x);
     const int32_t world_y = camera.world_y_at(y - layout_.view().y);
@@ -453,6 +454,7 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
     }
     if (capture != 1) return;
     if (!over_ground(press_x, press_y, camera, sim.grid())) return;     // pressed on the black around a small map: no ground, no order, no marker
+    sim_query_ = &sim;
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
     if (mode == CursorType::Attack) {                           // mode 5: the ant under the pointer at the release (FUN_01026904)
         const LayoutRect view = layout_.view();

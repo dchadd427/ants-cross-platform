@@ -29,6 +29,7 @@
 
 #include "ants_net/lan.hpp"
 #include "ants_net/lobby.hpp"
+#include "ants_net/prediction.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/session.hpp"
 #include "ants_net/transport.hpp"
@@ -214,8 +215,43 @@ public:
 
     // ---- the match ---------------------------------------------------------------------------------------------------------------------------------
     /// The HUD's sink: the command is stamped with this machine's seat and queued for the next turn; the answer carries the predicted acknowledgement
-    /// (the ant that will say "Yessir!") so that the click feels immediate although the order reaches the simulation a few turns later.
+    /// (the ant that will say "Yessir!") so that the click feels immediate although the order reaches the simulation a few turns later. While the prediction is on (below), an order
+    /// that it handles (group moves, special orders, attacks, Stop) is also applied to the predicted engine at once and the answer is that engine's own verdict.
     sim::CommandResult submit(const sim::Command& command) override;
+
+    // ---- the prediction of one's own orders (prediction.hpp, docs/NETWORK_PORT.md "Prediction of one's own orders") --------------------------------------
+    /// Off by default (opt-in: the application turns it on when asked to); off, every order waits for its turn as before. A local game has no delay to hide. Takes effect with the next update:
+    /// a match that is asked for it makes the prediction then (it begins with the next tick), and one that is not asked never makes it; switched off, it is destroyed (not suspended).
+    void set_prediction_enabled(bool on) noexcept { prediction_enabled_ = on; }
+    bool prediction_enabled() const noexcept { return prediction_enabled_; }
+    /// Told whenever the predicted engine is destroyed (switched off, the match left, this object destroyed): whoever points at its engine (the HUD's special-target query) points elsewhere
+    /// at once. Called from update(), shutdown and the destructor.
+    void set_on_prediction_dropped(std::function<void()> fn) { on_prediction_dropped_ = std::move(fn); }
+    /// The application suspends the prediction where only it knows that the match is not simply following the live stream (a hidden page's background steps, a screen over the match)
+    void set_prediction_suspended(bool suspended) noexcept { app_suspends_prediction_ = suspended; }
+    /// True during a cool-down of the prediction (Prediction::Config::budget_ns): its work cost more than the budget too often, so it is off for a while: the confirmed engine is shown and
+    /// orders go as they did before the prediction. It begins again by itself.
+    bool prediction_cooling_down() const noexcept { return prediction_ != nullptr && prediction_->cooling_down(); }
+    /// The budget of the prediction's work for the NEXT prediction (the tests and the diagnostics): a rebuild or a run of predicted ticks that costs more than `ns` is a strike, `strikes` of
+    /// them within 10 s start a cool-down of `cooldown_ticks`. The defaults are Prediction::Config's; default_prediction_budget_ns() is what a NetGame starts with (a test program that
+    /// runs under a sanitizer raises it)
+    void set_prediction_budget(uint64_t ns, uint32_t strikes, uint32_t cooldown_ticks = Prediction::Config{}.cooldown_ticks) noexcept {
+        prediction_budget_ns_ = ns;
+        prediction_budget_strikes_ = strikes;
+        prediction_cooldown_ticks_ = cooldown_ticks;
+    }
+    /// The tests: something that runs inside every timed block of the prediction (Prediction::Config::work_hook)
+    void set_prediction_work_hook(std::function<void()> hook) { prediction_work_hook_ = std::move(hook); }
+    static uint64_t& default_prediction_budget_ns() noexcept;
+    /// True while the predicted engine is the one that the screen shows: a match is running, the prediction is on and not suspended, and at least one tick has run
+    bool predicting() const noexcept { return prediction_ != nullptr && prediction_->active(); }
+    /// The engine that the screen shows and that the HUD asks (the cursor, the selection, the panel, the minimap): the predicted engine while predicting(), else the confirmed one that
+    /// this object was given. Never the engine that orders go to: they go through submit().
+    sim::SimulationEngine& view_engine();
+    const Prediction* prediction() const noexcept { return prediction_.get(); }
+    Prediction* prediction() noexcept { return prediction_.get(); }
+    /// The match's lock-step runner (null before a match has begun and after it); for the tests and the diagnostics: the application does not drive it
+    LockstepRunner* runner() const;
     /// (the chat() above is the match's too) the message goes through the host and comes back to everybody (own text included); use the callback to show it
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
     /// After every simulation tick / for every applied command (see LockstepRunner); may be set before the match begins
@@ -269,9 +305,14 @@ private:
     void set_notice(std::string text);
     void begin_match();
     void install_hooks();
+    void make_prediction();
+    void drop_prediction();
+    void refresh_prediction();
+    /// The lag of the player's orders, as a delay in ms, until the prediction has learned it from the orders: the measured delay of the last orders, else the round trip, half a seal and the
+    /// jitter buffer, less the tick that the delay counts and the lag does not
+    uint32_t expected_command_delay_ms() const;
     void shutdown_transport();
     void announce_room();
-    LockstepRunner* runner() const;
     /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
     void collect_room_chat();
 
@@ -306,6 +347,7 @@ private:
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void()> on_wake_;
     std::function<void()> on_tick_;
+    std::function<void()> on_prediction_dropped_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
 
     // transport (owned here, borrowed by the lobbies and sessions)
@@ -315,6 +357,13 @@ private:
     std::unique_ptr<ClientLobby> client_lobby_;
     std::unique_ptr<HostSession> host_session_;
     std::unique_ptr<ClientSession> client_session_;
+    std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first; made by refresh_prediction() when it is wanted, never otherwise)
+    bool prediction_enabled_{false};
+    bool app_suspends_prediction_{false};
+    uint64_t prediction_budget_ns_{default_prediction_budget_ns()};
+    uint32_t prediction_budget_strikes_{Prediction::Config{}.budget_strikes};
+    uint32_t prediction_cooldown_ticks_{Prediction::Config{}.cooldown_ticks};
+    std::function<void()> prediction_work_hook_;
 };
 
 }  // namespace ants::net

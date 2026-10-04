@@ -130,6 +130,8 @@ public:
                                const sim::WorldState& world,
                                const sim::Grid& grid,
                                const ViewportCamera& camera) const;
+    /// The cursor that the last evaluate_cursor chose (the frame's, or the one of the click that was handled last)
+    CursorType current_cursor() const noexcept { return current_cursor_; }
     void set_on_spawn_click_marker(std::function<void(int32_t, int32_t)> cb) { on_spawn_click_marker_ = std::move(cb); }
     void spawn_click_marker(int32_t world_x, int32_t world_y) {
         if (on_spawn_click_marker_) on_spawn_click_marker_(world_x, world_y);
@@ -251,6 +253,7 @@ public:
     bool homogeneous_type(const sim::WorldState& world, sim::AntType& type, bool for_orders = false) const;
     /// The simulation that answers the cursor's special-target question (FUN_01026f91); without it no tile is a special target.
     void set_sim_query(const sim::SimulationEngine* sim) noexcept { sim_query_ = sim; }
+    const sim::SimulationEngine* sim_query() const noexcept { return sim_query_; }
     /// Where the HUD sends the player's commands (group orders, Stop, hatch, alliance offers): a single-player game applies them at once (null =
     /// the engine itself), a network match hands them to the turn manager, which applies them at the agreed turn.
     void set_command_sink(sim::CommandSink* sink) noexcept { command_sink_ = sink; }

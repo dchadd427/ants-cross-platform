@@ -11,6 +11,7 @@
 #include "ants_ai/bot_controller.hpp"
 #include <iostream>
 #include <fstream>
+#include <cctype>
 #include <ctime>
 #include <cstring>
 #include <algorithm>
@@ -366,6 +367,17 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--zoom " + why;
             }
+        } else if (std::strcmp(argv[i], "--prediction") == 0) {                  // --prediction on | off: the prediction of the player's own orders in a match of the network (net::Prediction)
+            if (i + 1 >= argc || !parse_switch(argv[i + 1], cfg.prediction)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--prediction needs on or off";
+                if (i + 1 < argc) ++i;
+            } else {
+                ++i;
+                cfg.prediction_given = true;
+            }
+        } else if (std::strcmp(argv[i], "--no-prediction") == 0) {              // the same as --prediction off
+            cfg.prediction = false;
+            cfg.prediction_given = true;
         } else if (std::strcmp(argv[i], "--bot") == 0) {                       // a computer player: --bot SEAT[:SPEC], repeatable (docs/BOTS.md)
             mode_given = true;
             ai::BotSpec spec;
@@ -489,6 +501,7 @@ bool Application::init(const ApplicationConfig& config) {
     config_store_.load();
     choose_aspect();
     choose_zoom();
+    choose_prediction();
 
     // 6. Create Desktop Window
     uint32_t win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -824,6 +837,33 @@ void Application::choose_aspect() {
     }
 }
 
+// The text of a switch (a command line option, a settings key): on / off, yes / no, true / false, 1 / 0, in any case
+bool parse_switch(const std::string& text, bool& out) {
+    std::string lower;
+    for (const char ch : text) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    if (lower == "on" || lower == "yes" || lower == "true" || lower == "1") {
+        out = true;
+        return true;
+    }
+    if (lower == "off" || lower == "no" || lower == "false" || lower == "0") {
+        out = false;
+        return true;
+    }
+    return false;
+}
+
+// --prediction, else the settings' key `prediction` ("on" or "off": a key that the owner of the settings file writes, nothing in the game does), else off. A settings file never stops the game: a
+// value that is not a switch is reported and ignored.
+void Application::choose_prediction() {
+    prediction_wanted_ = config_.prediction;
+    if (!config_.prediction_given && config_store_.has("prediction")) {
+        const std::string text = config_store_.get_string("prediction", "", 16);
+        bool from_settings = true;
+        if (parse_switch(text, from_settings)) prediction_wanted_ = from_settings;
+        else std::cerr << "[Application] settings: prediction=" << text << " needs on or off (ignored)" << std::endl;
+    }
+}
+
 // --zoom, else the settings' key `zoom` ("0.5", "1" or "2": the remake's own key, written when the player zooms), else 1. A settings file never stops the game: a value that is not a level
 // is reported and ignored.
 void Application::choose_zoom() {
@@ -1054,6 +1094,10 @@ void Application::enter_match() {
     hud_.init(local_player_id_);
     hud_.reset();
     hud_.start_match_modal(network_active());                               // (the simulation waits for it: update_simulation, post_tick)
+    cue_router_.reset();                                                    // (no cue of an earlier match is waited for)
+    felt_delay_ = net::FeltDelayMeter();
+    orders_seen_ = 0;                                                       // (the match's own prediction counts its orders from none)
+    prediction_cooldowns_reported_ = 0;
     tick_accumulator_ = 0.0f;                                               // the dialog and the match are counted from now
     start_dialog_clock_ms_ = 0.0;
     scorecard_.hide();
@@ -1438,10 +1482,23 @@ void Application::background_run(double elapsed) {
 }
 
 #if defined(__EMSCRIPTEN__)
+namespace {
+// What the frames cost, for the page's browser checks (ants_probe 12 - 15): the time that the game's own frame function takes (input, network, ticks, the picture), not what the browser does
+// with the canvas afterwards
+double g_frame_work_sum_ms = 0.0;
+double g_frame_work_max_ms = 0.0;
+uint32_t g_frame_work_frames = 0;
+}  // namespace
+
 extern "C" void emscripten_main_loop_iter(void* arg) {
     auto* app = static_cast<Application*>(arg);
     if (app && app->is_running()) {
+        const double began = emscripten_get_now();
         app->run_frame();
+        const double took = emscripten_get_now() - began;
+        g_frame_work_sum_ms += took;
+        g_frame_work_max_ms = std::max(g_frame_work_max_ms, took);
+        ++g_frame_work_frames;
     }
 }
 
@@ -1460,6 +1517,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // For the page's browser check (tests/scripts/web_edge_check.py): what the game believes about the pointer and the view, read-only. 0 and 1: the pointer's x and y on the picture (what the
 // game draws its cursor at and scrolls from); 2: 1 while the game takes the pointer as gone from its window (no cursor, no scrolling); 3 and 4: the map view's origin in world pixels
 // (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
+// The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the corner's "delay" in ms as the player reads it (the felt delay while the prediction is on, the
+// network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 cooling down after its budget; 10: the
+// orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
+// 15: reads 0 and starts again).
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
     if (g_web_app == nullptr) return -1;
@@ -1471,6 +1532,38 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 4: return g_web_app->match_running() ? g_web_app->renderer().camera().world_y : -1;
         case 5: return g_web_app->match_running() ? (g_web_app->hud().is_modal_open() ? 1 : 0) : -1;
         case 6: return static_cast<int>(g_web_app->zoom() * 100.0f + 0.5f);
+        case 7: {
+            const std::optional<uint32_t> delay = g_web_app->corner_delay_ms();
+            return delay ? static_cast<int>(*delay) : -1;
+        }
+        case 8: {
+            const net::NetGame* game = g_web_app->net();
+            const std::optional<uint32_t> delay = game != nullptr ? game->command_delay_ms() : std::nullopt;
+            return delay ? static_cast<int>(*delay) : -1;
+        }
+        case 9: {
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return 0;
+            return game->prediction_cooling_down() ? 2 : (game->predicting() ? 1 : 0);
+        }
+        case 10: {                                                              // (no game: -1; a game that has no prediction (the default is off: it is never made) predicted nothing: 0)
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return -1;
+            return game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().commands_predicted) : 0;
+        }
+        case 11: {
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return -1;
+            return game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().rebuilds) : 0;
+        }
+        case 12: return g_frame_work_frames != 0 ? static_cast<int>(g_frame_work_sum_ms * 1000.0 / static_cast<double>(g_frame_work_frames)) : -1;
+        case 13: return static_cast<int>(g_frame_work_max_ms * 1000.0);
+        case 14: return static_cast<int>(g_frame_work_frames);
+        case 15:
+            g_frame_work_sum_ms = 0.0;
+            g_frame_work_max_ms = 0.0;
+            g_frame_work_frames = 0;
+            return 0;
         default: return -1;
     }
 }
@@ -1899,6 +1992,7 @@ void Application::handle_camera_panning(float dt) {
 }
 
 void Application::handle_key_down(const SDL_KeyboardEvent& key) {
+    const OrdersNoted noted{*this};
     if (scorecard_.is_open()) {
         // FUN_01015b17: Enter and the letters C, Q and X (either case, whatever the modifiers) leave, at any time; nothing else does anything (Esc included)
         const SDL_Keycode sym = key.keysym.sym;
@@ -1916,7 +2010,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    hud_.handle_key_down(key.keysym.sym, sim_, renderer_->camera(), key.keysym.mod, key.repeat != 0);
+    hud_.handle_key_down(key.keysym.sym, view_sim(), renderer_->camera(), key.keysym.mod, key.repeat != 0);
 }
 
 void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
@@ -1930,10 +2024,11 @@ void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
         return;
     }
 
-    hud_.handle_mouse_motion(motion.x, motion.y, sim_, renderer_->camera());
+    hud_.handle_mouse_motion(motion.x, motion.y, view_sim(), renderer_->camera());
 }
 
 void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
+    const OrdersNoted noted{*this};
     mouse_screen_x_ = button.x;
     mouse_screen_y_ = button.y;
     mouse_has_moved_ = true;
@@ -1957,10 +2052,22 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
 
     uint16_t mod = static_cast<uint16_t>(SDL_GetModState());
     if (button.type == SDL_MOUSEBUTTONDOWN) {
-        hud_.handle_mouse_down(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
+        hud_.handle_mouse_down(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     } else if (button.type == SDL_MOUSEBUTTONUP) {
-        hud_.handle_mouse_up(button.x, button.y, button.button, sim_, renderer_->camera(), mod);
+        hud_.handle_mouse_up(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     }
+}
+
+// The orders that input has given the predicted engine since the last look are felt from this frame (net::FeltDelayMeter). Every order of the player is a mouse button or a key, and those two
+// handlers look when they are done.
+void Application::note_orders() {
+    const uint64_t taken = net_ != nullptr && net_->prediction() != nullptr ? net_->prediction()->stats().commands_predicted : 0u;
+    for (; orders_seen_ < taken; ++orders_seen_) felt_delay_.on_order(frame_ms());
+    orders_seen_ = taken;
+}
+
+sim::SimulationEngine& Application::view_sim() {
+    return network_active() ? net_->view_engine() : sim_;       // (the confirmed engine while the prediction is off, and in every game of one machine)
 }
 
 void Application::update_simulation(float dt) {
@@ -1993,7 +2100,7 @@ void Application::update_simulation(float dt) {
             start_dialog_clock_ms_ += static_cast<double>(dt) * 1000.0;
             while (start_dialog_clock_ms_ >= static_cast<double>(sim::TICK_MS) && hud_.is_match_start_modal_active()) {
                 start_dialog_clock_ms_ -= static_cast<double>(sim::TICK_MS);
-                hud_.update(sim_.get_world_state(), 1);
+                hud_.update(view_sim().get_world_state(), 1);
             }
         }
     } else {
@@ -2027,13 +2134,43 @@ void Application::post_tick() {
     // The first turn of a match of the network has executed: the ants can move now, and the "Get ready" dialog (which every machine opened when the match began, while the host waited for it)
     // is gone. (A local game's dialog ends before its first tick, in update_simulation.)
     if (hud_.is_match_start_modal_active()) hud_.dismiss_match_start_modal();
-    const auto& world = sim_.get_world_state();
+    const sim::SimulationEngine& shown = view_sim();        // (what the screen shows: with the prediction on, the predicted engine, a tick further for every tick)
+    const auto& world = shown.get_world_state();
     hud_.update(world, 1);
-    hud_.poll_sim_events(sim_);
+    hud_.poll_sim_events(sim_);                              // (the news are the confirmed engine's: they are told once, whatever was shown before)
 
     if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
+    if (net_ != nullptr && net_->predicting()) felt_delay_.on_tick_shown();      // (what an order of this frame did is in the picture now: the next frame that is drawn shows it)
+    net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;
+    if (prediction != nullptr && prediction->stats().cooldowns != prediction_cooldowns_reported_) {
+        prediction_cooldowns_reported_ = prediction->stats().cooldowns;
+        std::cerr << "[Application] The prediction of your orders switched itself off for " << (prediction->cooldown_ticks_left() * sim::TICK_MS + 999u) / 1000u
+                  << " s: its work took longer than its budget too often. The match goes on as it did without it, and the prediction tries again afterwards." << std::endl;
+    }
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
-    if (!background_stepping_) audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);   // a background step makes no sound: its events are dropped, not saved up
+    std::vector<sim::AudioEvent> predicted_cues;
+    if (prediction != nullptr || !cue_router_.idle()) {
+        // The cues of the own ants' own actions come from the predicted engine, when it runs the tick that makes them (in step with the picture), and the confirmed engine's copies of them
+        // are dropped when they come; every other cue is the confirmed engine's (net::CueRouter). The predicted engine's news are never told: the confirmed engine's are. The router runs
+        // while there is a prediction, and after it is gone for as long as a cue that it played still waits for its copy; with neither, every cue is the confirmed engine's as it was.
+        const auto owns_in = [this](const sim::SimulationEngine& engine) {
+            return [&engine, me = local_player_id_](uint32_t ant_id) {
+                for (const auto& a : engine.get_world_state().ants) {
+                    if (a.id == ant_id) return a.player_id == me;
+                }
+                return false;
+            };
+        };
+        if (prediction != nullptr) {
+            predicted_cues = cue_router_.from_predicted(prediction->take_audio(), owns_in(shown));
+            prediction->take_news();
+        }
+        audio_events = cue_router_.from_confirmed(std::move(audio_events), sim_.current_tick() - 1, owns_in(sim_));
+    }
+    if (!background_stepping_) {                             // a background step makes no sound: its events are dropped, not saved up
+        audio_mixer_.ingest_simulation_events(predicted_cues, local_player_id_);
+        audio_mixer_.ingest_simulation_events(audio_events, local_player_id_);
+    }
 
 #if defined(__EMSCRIPTEN__)
     // A page that embeds several games (web/lobby.html) shows that the machines stay in step: every 100 ticks the game tells its parent page the tick and the
@@ -2102,6 +2239,7 @@ void Application::pump_network(float dt, double gap_seconds) {
     room_chat_.end_of_frame();                                   // (the text event of the T that opened the chat input has been dealt with: it came in the same batch of events)
     if (menu_enabled_) update_start_menu(dt);                    // the start menu's clock, what it asked for and its connection (application_menu.cpp)
     if (!net_ || !net_->active()) return;
+    net_->set_prediction_suspended(page_hidden_ || background_stepping_);   // a hidden page shows nothing: its match is stepped by the wake-ups, and the prediction would be work for no picture
     net_->set_chat_status_mirror(room_chat_box() == nullptr);   // (the lines of the room go to the chat box of the 16:9 setup screen when it has one, to the status line otherwise)
     net_time_ms_ += static_cast<double>(dt) * 1000.0;
     net_->update(static_cast<uint32_t>(net_time_ms_));        // (the connection is read here: whatever waited counts as heard)
@@ -2445,6 +2583,17 @@ void Application::render_net_overlay() {
 
 // The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" and "delay NN ms" while a room or a match of a network game is on screen. A game of one
 // machine, the loading and quick help screens, a connection that is being made, one that failed or is over draw nothing here.
+// What the corner's "delay" says. With the prediction on it is what the click FEELS: from the frame that took the order to the frame that shows it (a dash until an order has been felt, and for ten
+// seconds after the last one); the network's delay, the time until the CONFIRMED engine applies the order, is what it was before, and is what the player feels when the prediction is off
+std::optional<uint32_t> Application::corner_delay_ms() const {
+    if (!network_active()) return std::nullopt;
+    if (net_->predicting()) {
+        if (felt_delay_.stale(frame_ms())) return std::nullopt;
+        return felt_delay_.felt_ms();
+    }
+    return net_->command_delay_ms();
+}
+
 void Application::render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate) {
     if (!network_active()) return;
     const CornerScreen screen = state_ == AppState::MapSelect ? CornerScreen::Setup
@@ -2454,7 +2603,7 @@ void Application::render_latency_corner(int32_t version_x, int32_t text_y, const
     if (!left_limit) return;
     LatencyReadout readout;
     readout.ping_ms = net_->ping_ms();
-    readout.delay_ms = net_->command_delay_ms();
+    readout.delay_ms = corner_delay_ms();
     last_latency_layout_ = latency_corner_layout(*renderer_, readout, version_x, text_y, *left_limit, plate);
     draw_latency_corner(*renderer_, readout, version_x, text_y, *left_limit, plate);
 }
@@ -2476,9 +2625,10 @@ void Application::render_frame() {
     } else if (scorecard_.is_open()) {
         scorecard_.render(*renderer_, assets_);
     } else {
-        const auto& world = sim_.get_world_state();
+        sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
+        const auto& world = view.get_world_state();
         renderer_->set_show_hp(hud_.is_show_hp());
-        renderer_->render_world(world, sim_.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
+        renderer_->render_world(world, view.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,
                                 hud_.get_selected_base_team_id(),
@@ -2551,11 +2701,14 @@ void Application::render_frame() {
     renderer_->set_picture(picture_);
     CursorType cur = CursorType::Normal;
     if (state_ == AppState::Playing && !scorecard_.is_open()) {
-        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, sim_.get_world_state(), sim_.grid(), renderer_->camera());
+        sim::SimulationEngine& view = view_sim();
+        hud_.set_sim_query(&view);                           // (the cursor's special-target question is asked of the picture's own engine)
+        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, view.get_world_state(), view.grid(), renderer_->camera());
     }
     if (!pointer_outside_) renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()));
 
     renderer_->end_frame();
+    felt_delay_.on_frame_end(frame_ms());                    // (an order whose effect is in this frame is felt now)
 }
 
 // FUN_0100e6ce: the intro (intro.mid, `play AntsMidi from 0 notify`) plays ONCE; its end (MM_MCINOTIFY) starts the random in-game pieces (update_music).

@@ -48,6 +48,31 @@ uint32_t cell_f(uint32_t cell) noexcept {
 // PathGridPool
 // ============================================================================
 
+PathGridPool::PathGridPool(const PathGridPool& other) {
+    *this = other;
+}
+
+PathGridPool& PathGridPool::operator=(const PathGridPool& other) {
+    if (this == &other) return *this;
+    for (size_t i = 0; i < slots_.size(); ++i) {
+        Slot& d = slots_[i];
+        const Slot& s = other.slots_[i];
+        d.rows = s.rows;
+        d.cols = s.cols;
+        d.free = s.free;
+        if (s.free) {
+            // The block of a free slot is never read: acquire() allocates it again when it is not marked allocated, and the search that takes it zeroes it (PathSearch::init).
+            // Copying it would be a megabyte of memory traffic for nothing. (clear() keeps the memory that this slot already has for its next use.)
+            d.cells.clear();
+            d.allocated = false;
+        } else {
+            d.cells = s.cells;
+            d.allocated = s.allocated;
+        }
+    }
+    return *this;
+}
+
 int PathGridPool::acquire(uint16_t rows, uint16_t cols) {
     for (int i = 0; i < kSlots; ++i) {
         Slot& s = slots_[static_cast<size_t>(i)];
@@ -96,6 +121,22 @@ PathSearch::PathSearch(uint32_t ant_id, TileCoord start, TileCoord goal, uint16_
     : ant_id_(ant_id), start_(start), goal_(goal), rows_(rows), cols_(cols), pool_(&pool) {
     init();  // the ctor runs Init immediately (0x101989e)
 }
+
+// The copy of a search for the copy of its manager. Every member is copied by value; only the two pointers into the pool are not: they are the copy pool's, and the slot's
+// cell block holds the same cells there (PathGridPool's copy copies the blocks of the slots in use). The slot itself is already marked in use in the copy pool, so this
+// constructor does not take one (it must not run Init: that would zero the cells).
+PathSearch::PathSearch(const PathSearch& other, PathGridPool& pool)
+    : ant_id_(other.ant_id_),
+      start_(other.start_),
+      goal_(other.goal_),
+      rows_(other.rows_),
+      cols_(other.cols_),
+      pool_(&pool),
+      slot_(other.slot_),
+      grid_(other.slot_ >= 0 ? pool.cells(other.slot_) : nullptr),
+      heap_(other.heap_),
+      finished_(other.finished_),
+      path_(other.path_) {}
 
 PathSearch::~PathSearch() {
     // 0x1019a39: only a request that holds a grid frees its slot.
@@ -288,6 +329,26 @@ int PathSearch::step(uint16_t budget, const StepCostFn& cost) {
 // ============================================================================
 
 PathManager::PathManager() : pool_(std::make_unique<PathGridPool>()) {}
+
+// Deep copy. The new pool is a copy of the old one (the slots in use with their cells), and every queued search is copied into the new queue in the same order and attached
+// to the new pool, so that nothing is shared and the copy delivers the same paths in the same runs as the original.
+PathManager::PathManager(const PathManager& other)
+    : pool_(other.pool_ ? std::make_unique<PathGridPool>(*other.pool_) : nullptr) {
+    for (const auto& search : other.queue_) queue_.push_back(std::make_unique<PathSearch>(*search, *pool_));
+}
+
+PathManager& PathManager::operator=(const PathManager& other) {
+    if (this == &other) return *this;
+    queue_.clear();                                    // release our searches while our pool still exists
+    if (!other.pool_) {                                // a moved-from manager: no pool, no searches
+        pool_.reset();
+        return *this;
+    }
+    if (pool_) *pool_ = *other.pool_;                  // keeps the memory of our slots where it fits
+    else pool_ = std::make_unique<PathGridPool>(*other.pool_);
+    for (const auto& search : other.queue_) queue_.push_back(std::make_unique<PathSearch>(*search, *pool_));
+    return *this;
+}
 
 PathManager& PathManager::operator=(PathManager&& other) noexcept {
     if (this != &other) {

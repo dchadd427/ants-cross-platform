@@ -1381,6 +1381,14 @@
             return makeNameGate(asks, ANTS_ARGS, ui, store);
         })();
 
+        // ?prediction=on in the address turns on the prediction of the player's own orders in a match of the network (the game's --prediction on; net::Prediction: they show at once and the confirmed
+        // match stays what it was). Off is the default; ?prediction=off says it. Nothing else of the address reaches the game through it.
+        (function () {
+            var wanted = null;
+            try { wanted = new URLSearchParams(window.location.search).get('prediction'); } catch (e) { /* no address to read */ }
+            if (wanted === 'on' || wanted === 'off') ANTS_ARGS.push('--prediction', wanted);
+        })();
+
         var Module = {
             arguments: ANTS_ARGS,
             preRun: [],

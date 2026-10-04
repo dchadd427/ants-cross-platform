@@ -23,6 +23,8 @@
 #include "ants_ai/bot_controller.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_net/cue_router.hpp"
+#include "ants_net/latency.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
@@ -77,6 +79,10 @@ struct ApplicationConfig {
     /// starts at 1 then, and the remembered level stays for the next local game. `zoom_given` is true when the command line said it (the settings key then does not count).
     float zoom{zoom::kNormal};
     bool zoom_given{false};
+    /// --prediction on | off (--no-prediction is --prediction off; the settings key `prediction` when the command line does not say): whether a match of the network shows the player's own
+    /// orders at once (net::Prediction, docs/NETWORK_PORT.md). OFF by default (opt-in); a game of one machine never predicts. `prediction_given`: the command line said it (the settings key then does not count).
+    bool prediction{false};
+    bool prediction_given{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -176,6 +182,9 @@ struct ApplicationConfig {
 /**
  * @brief Master application lifecycle coordinator handling loop, events, sim, and audio.
  */
+/// The text of a switch: on / off, yes / no, true / false, 1 / 0, in any case (the command line's --prediction and the settings key `prediction`). False, and `out` untouched, for any other text.
+bool parse_switch(const std::string& text, bool& out);
+
 class Application {
 public:
     Application();
@@ -228,6 +237,11 @@ public:
     void set_local_player(uint8_t team_id);
 
     ants::sim::SimulationEngine& sim() noexcept { return sim_; }
+    /// The engine that the match screen SHOWS and that the HUD asks (the picture, the minimap, the panel, the selection, the pointer's cursor, what a click picks): `sim()`, the confirmed
+    /// engine, except in a match of the network that predicts the player's own orders (net::Prediction, docs/NETWORK_PORT.md "Prediction of one's own orders"), where it is the predicted
+    /// engine: the player's orders show at once and everything else is the confirmed state a few ticks ahead. The cues, the news, the scores, the end of the match and the hashes stay the
+    /// confirmed engine's. One call may rebuild a predicted engine that a turn has shown to be wrong, so a frame asks once.
+    ants::sim::SimulationEngine& view_sim();
     Renderer& renderer() noexcept { return *renderer_; }
     /// The geometry of the picture that the HUD, the renderer, the edge scroll and the pointer work in (screen_layout.hpp)
     const ScreenLayout& layout() const noexcept { return layout_; }
@@ -308,10 +322,19 @@ public:
     net::NetGame* net() noexcept { return net_.get(); }
     /// True while a room or a network match exists
     bool network_active() const noexcept { return net_ && net_->active(); }
+    /// Who plays which cue of a network match that predicts (net::CueRouter): the own ants' own actions from the predicted engine, in step with the picture, everything else from the confirmed
+    /// engine. Public for the tests (what was played from where, what was dropped)
+    const net::CueRouter& cue_router() const noexcept { return cue_router_; }
     /// Advances the network by `dt` seconds of game time and handles what it reports (run once per frame; the tests call it directly). `gap_seconds` is real time that
     /// `dt` did not count (a hidden page that was not woken for a while, see background_run): once the connection has been read, a host that said nothing has been silent
     /// for that time as well (NetGame::note_gap).
     void pump_network(float dt, double gap_seconds = 0.0);
+    /// What the player feels of an order while the prediction is on, from the frame that took it to the end of the frame that shows it (net::FeltDelayMeter); public for the tests
+    const net::FeltDelayMeter& felt_delay() const noexcept { return felt_delay_; }
+    /// Whether the matches of the network that this application makes predict the player's own orders (--prediction, the settings key `prediction`)
+    bool prediction_wanted() const noexcept { return prediction_wanted_; }
+    /// The number that the corner's "delay" shows now (nothing: a dash): what the player feels of an order while the prediction is on, the network's delay otherwise
+    std::optional<uint32_t> corner_delay_ms() const;
 
     /// A page that is not drawn (a hidden or minimised browser tab, the web build) runs no frames, and the browser slows its timers: but the page's WebSocket events still
     /// arrive. So while the page is hidden a ROOM or a MATCH of the network is driven by those events instead of by the frame loop: every message of the game server wakes
@@ -432,6 +455,12 @@ private:
     bool wake_may_step();                                 // the wake-ups drive the match now: hidden page, network, no step running, and the frame loop slower than the turns
     void background_run(double elapsed);                  // the step itself: the network for `elapsed` seconds (at most kMaxWakeSeconds for the clock, see there), no sound
     uint64_t now_counter() const { return clock_ ? clock_() : SDL_GetPerformanceCounter(); }   // the clock of frames and wake-ups (set_clock)
+    void note_orders();                                   // the orders that input gave the predicted engine since the last look begin to be felt (net::FeltDelayMeter)
+    struct OrdersNoted {                                  // (the end of an input handler: whatever it ordered is looked at, by whichever way the handler leaves)
+        Application& app;
+        ~OrdersNoted() { app.note_orders(); }
+    };
+    uint32_t frame_ms() const { return static_cast<uint32_t>(static_cast<double>(now_counter()) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency())); }   // ... in milliseconds
     void apply_pending_music();                           // what a hidden page's steps left for the ears: the music of a match that began, ended or was lost meanwhile
     void note_hidden_period();                            // the page is shown again: the console's line about the period
     void play_effect(uint32_t sound_id, uint32_t owner = 0);   // a sound effect that no tick makes: none in a background step
@@ -471,6 +500,11 @@ private:
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<net::NetGame> net_;
+    net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
+    net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
+    bool prediction_wanted_{false};                       // --prediction, else the settings' key `prediction`, else off: given to every NetGame that this application makes
+    uint64_t prediction_cooldowns_reported_{0};           // the cool-downs of this match's prediction that the console has said so of
+    uint64_t orders_seen_{0};                             // the orders that the prediction has taken and the felt delay has been told of
     double net_time_ms_{0.0};
     double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START
     bool page_hidden_{false};                              // the browser's page is hidden (set_page_hidden): a network match belongs to the wake-ups, see background_pump
@@ -576,6 +610,7 @@ private:
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered
+    void choose_prediction();                             // --prediction, else the settings' key `prediction`, else off: whether the matches of the network predict the player's own orders
     void apply_match_zoom();                              // a match starts: the camera takes the remembered level if the kind of match and the map offer it, else 1
     void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() (a network match never below 1; no zoom while the offscreen target cannot be made), one report when that failure begins
     bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)

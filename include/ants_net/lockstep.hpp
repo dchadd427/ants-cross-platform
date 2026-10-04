@@ -93,6 +93,17 @@ public:
     /// The session's own observer, called for every command a turn applies just before on_command: the session measures the delay of the player's commands with it
     /// (latency.hpp). A separate hook, so that the application's on_command stays free; whoever takes the runner over (host migration) installs its own.
     void set_on_applied(std::function<void(const sim::Command&)> fn) { on_applied_ = std::move(fn); }
+    /// Called for every LIVE turn that the runner has queued, after it is queued (queued_turn() finds it, next_turn_expected() is the number after it); not for the turns of the catch-up
+    /// (on_catch_up_turn). The client-side prediction (prediction.hpp) compares each turn that arrives with what it assumed for that tick.
+    void set_on_turn(std::function<void(const TurnMsg&)> fn) { on_turn_ = std::move(fn); }
+    /// The turn number `turn` when it has been received and not yet executed (it stands in the queue: the jitter buffer), else null. The commands of the turns in hand are KNOWN before
+    /// the engine runs them: the prediction runs them ahead of the engine as certain input. Between two turns, and inside the hooks of update() (a turn is popped when it runs, so the
+    /// first turn that this answers for is the one after it), the answer is always about turns that have not run.
+    const TurnMsg* queued_turn(uint32_t turn) const noexcept {
+        if (queue_.empty() || turn >= next_receive_) return nullptr;
+        const uint32_t first = next_receive_ - static_cast<uint32_t>(queue_.size());
+        return turn >= first ? &queue_[turn - first] : nullptr;
+    }
 
     /// The turns received last (up to kTurnLogTurns), kept so that a machine that becomes the host after the old one left can hand the turns that others
     /// are missing to them (docs/NETWORK_PORT.md, host migration). Null when the turn is older than the log or not received yet.
@@ -163,6 +174,7 @@ private:
     std::function<void()> on_tick_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
     std::function<void(const sim::Command&)> on_applied_;
+    std::function<void(const TurnMsg&)> on_turn_;
 };
 
 }  // namespace ants::net

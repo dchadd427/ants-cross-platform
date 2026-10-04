@@ -127,3 +127,20 @@ target_include_directories(test_jitter PRIVATE
 )
 
 add_test(NAME test_jitter COMMAND test_jitter)
+
+# The client-side prediction of one's own orders (ants_net/prediction.hpp): a rig that plays the server, a real runner and engines, and an oracle
+add_executable(test_prediction
+    test_prediction.cpp
+)
+
+target_link_libraries(test_prediction PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_prediction PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_prediction COMMAND test_prediction)
