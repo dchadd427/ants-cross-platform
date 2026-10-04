@@ -55,6 +55,8 @@ Two changes to the map view. Part 1 is finished. Part 2 is built, proven by muta
 | the wheel's double step (INFO) | Fixed: the page counts 100 of scroll delta as a step, so a mouse notch of 120 is 1.2 and the kept 0.2 made the fifth notch of a burst two levels. A notch worth a step or more is the nearest whole number of steps (at least one) and keeps no fraction; a trackpad's small deltas add up as before. Tests in `test_zoom_model` and `test_zoom_view`; 5 of 5 mutants caught. |
 | L1, L2 and the other INFO items | Not part of this batch; they stay as they are. |
 
+**Sanitizers.** AddressSanitizer + UBSan (halting on the first report, leak check on; built with `-DANTS_WERROR=OFF` because of the known `-Wsign-conversion` warnings of files that these fixes do not touch): `test_zoom_model`, `test_zoom_view` (with the new `fog` group and the wheel tests) and `test_zoom_fingerprint` ran clean.
+
 ## Left to do
 
 1. **A native GPU run** (the owner's Mac or any desktop): the exact levels (2, 1, 0.5, 0.25) byte-identical with the software renderer, and no black row or column at the limit. Every picture test ran on SDL's software renderer.
