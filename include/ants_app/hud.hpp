@@ -253,6 +253,7 @@ public:
     bool homogeneous_type(const sim::WorldState& world, sim::AntType& type, bool for_orders = false) const;
     /// The simulation that answers the cursor's special-target question (FUN_01026f91); without it no tile is a special target.
     void set_sim_query(const sim::SimulationEngine* sim) noexcept { sim_query_ = sim; }
+    const sim::SimulationEngine* sim_query() const noexcept { return sim_query_; }
     /// Where the HUD sends the player's commands (group orders, Stop, hatch, alliance offers): a single-player game applies them at once (null =
     /// the engine itself), a network match hands them to the turn manager, which applies them at the agreed turn.
     void set_command_sink(sim::CommandSink* sink) noexcept { command_sink_ = sink; }

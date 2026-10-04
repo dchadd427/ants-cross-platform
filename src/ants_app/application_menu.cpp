@@ -386,6 +386,7 @@ void Application::leave_game() {
 // The tick, chat and HUD hooks of a NetGame that the application owns (a room or a match)
 void Application::attach_net() {
     net_->set_prediction_enabled(prediction_wanted_);                              // the prediction of the player's own orders (net::Prediction): --prediction, the settings' key
+    net_->set_on_prediction_dropped([this]() { hud_.set_sim_query(&sim_); });      // (its engine is gone: the HUD's special-target question goes back to the confirmed one at once)
     net_->set_fill_bots(config_.fill_bots);                                        // the bots that this machine's START seats in the empty seats (protocol 11; the menu's Host panel sets it)
     net_->set_on_tick([this]() { post_tick(); });
     net_->set_on_wake([this]() { background_pump(); });                            // the browser build: a message of the server wakes a hidden page (docs/NETWORK_PORT.md)

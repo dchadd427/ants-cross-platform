@@ -1510,7 +1510,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
 // The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the corner's "delay" in ms as the player reads it (the felt delay while the prediction is on, the
 // network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 cooling down after its budget; 10: the
-// orders that it has predicted; 11: the rebuilds that it has made; 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
+// orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
 // 15: reads 0 and starts again).
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
@@ -1537,13 +1537,15 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             if (game == nullptr) return 0;
             return game->prediction_cooling_down() ? 2 : (game->predicting() ? 1 : 0);
         }
-        case 10: {
+        case 10: {                                                              // (no game: -1; a game that has no prediction (the default is off: it is never made) predicted nothing: 0)
             const net::NetGame* game = g_web_app->net();
-            return game != nullptr && game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().commands_predicted) : -1;
+            if (game == nullptr) return -1;
+            return game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().commands_predicted) : 0;
         }
         case 11: {
             const net::NetGame* game = g_web_app->net();
-            return game != nullptr && game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().rebuilds) : -1;
+            if (game == nullptr) return -1;
+            return game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().rebuilds) : 0;
         }
         case 12: return g_frame_work_frames != 0 ? static_cast<int>(g_frame_work_sum_ms * 1000.0 / static_cast<double>(g_frame_work_frames)) : -1;
         case 13: return static_cast<int>(g_frame_work_max_ms * 1000.0);
@@ -2138,9 +2140,10 @@ void Application::post_tick() {
     }
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
     std::vector<sim::AudioEvent> predicted_cues;
-    if (prediction != nullptr) {
+    if (prediction != nullptr || !cue_router_.idle()) {
         // The cues of the own ants' own actions come from the predicted engine, when it runs the tick that makes them (in step with the picture), and the confirmed engine's copies of them
-        // are dropped when they come; every other cue is the confirmed engine's (net::CueRouter). The predicted engine's news are never told: the confirmed engine's are.
+        // are dropped when they come; every other cue is the confirmed engine's (net::CueRouter). The predicted engine's news are never told: the confirmed engine's are. The router runs
+        // while there is a prediction, and after it is gone for as long as a cue that it played still waits for its copy; with neither, every cue is the confirmed engine's as it was.
         const auto owns_in = [this](const sim::SimulationEngine& engine) {
             return [&engine, me = local_player_id_](uint32_t ant_id) {
                 for (const auto& a : engine.get_world_state().ants) {
@@ -2149,8 +2152,10 @@ void Application::post_tick() {
                 return false;
             };
         };
-        predicted_cues = cue_router_.from_predicted(prediction->take_audio(), owns_in(shown));
-        prediction->take_news();
+        if (prediction != nullptr) {
+            predicted_cues = cue_router_.from_predicted(prediction->take_audio(), owns_in(shown));
+            prediction->take_news();
+        }
         audio_events = cue_router_.from_confirmed(std::move(audio_events), sim_.current_tick() - 1, owns_in(sim_));
     }
     if (!background_stepping_) {                             // a background step makes no sound: its events are dropped, not saved up

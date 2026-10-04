@@ -108,7 +108,7 @@ NetGame::NetGame(sim::SimulationEngine& sim) : sim_(sim) {}
 NetGame::~NetGame() { shutdown_transport(); }
 
 void NetGame::shutdown_transport() {
-    prediction_.reset();                                        // (it holds the runner of a session: it goes first)
+    drop_prediction();                                          // (it holds the runner of a session: it goes first)
     host_session_.reset();
     client_session_.reset();
     host_lobby_.reset();
@@ -691,7 +691,6 @@ void NetGame::begin_match() {
         }
         transport_->listener.reset();                       // no late join: the door closes when the match begins
         known_host_ = seat_;
-        make_prediction();
         install_hooks();
         host_session_->start(now_);
     } else
@@ -707,7 +706,6 @@ void NetGame::begin_match() {
         known_host_ = cc.host;
         client_session_ = std::make_unique<ClientSession>(sim_, cc);
         client_session_->set_connection(transport_->uplink.get());
-        make_prediction();
         install_hooks();
         client_session_->start(now_);
         pump_peers();                                           // hands over the links that were made while the map loaded (none in the browser)
@@ -780,13 +778,25 @@ uint32_t NetGame::expected_command_delay_ms() const {
     return delay > kTurnMs ? delay - kTurnMs : 0u;
 }
 
-// Once per update: the prediction is on only while the match simply follows the live stream. Every state in which the confirmed engine does not (a pause, a catch-up, a rejoin, a host
-// change, a desync) and the switches of the user and of the application turn it off; it begins again with the first tick after they are gone.
+void NetGame::drop_prediction() {
+    if (!prediction_) return;
+    prediction_.reset();
+    if (on_prediction_dropped_) on_prediction_dropped_();
+}
+
+// Once per update: there is a prediction only where it is wanted (it is made here, when the match plays and the user asked for it, and destroyed when the user switches it off: a default
+// match never has one), and it is on only while the match simply follows the live stream. Every state in which the confirmed engine does not (a pause, a catch-up, a rejoin, a host
+// change, a desync) and the application's switch turn it off; it begins again with the first tick after they are gone.
 // A pause is the runner's `held` (the sessions hold it for as long as the match is paused: a seat that is away, the countdown that follows), and a host change, a rejoin and the like are a
 // client session that is not in its Normal mode: the sessions' own `paused()` and `electing()` say the same thing and are not asked again.
 void NetGame::refresh_prediction() {
+    if (!prediction_enabled_) {
+        drop_prediction();
+        return;
+    }
+    if (!prediction_ && phase_ == Phase::Playing) make_prediction();
     if (!prediction_) return;
-    bool off = !prediction_enabled_ || app_suspends_prediction_ || phase_ != Phase::Playing || desynced();
+    bool off = app_suspends_prediction_ || phase_ != Phase::Playing || desynced();
     if (client_session_) off = off || client_session_->mode() != ClientSession::Mode::Normal || client_session_->catching_up();
     if (const LockstepRunner* r = runner()) off = off || r->held();
     prediction_->set_suspended(off);

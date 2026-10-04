@@ -249,6 +249,34 @@ std::vector<uint8_t> canvas_region(Application& app, int32_t x, int32_t y, int32
     return px;
 }
 
+// The order that sends the player's first ant to the food that stands nearest to its hill (it walks there and harvests: the own-action cues of the cue router)
+bool food_order(Application& app, sim::Command& go) {
+    const sim::Grid& grid = app.sim().grid();
+    const auto* hill = grid.find_anthill(0);
+    if (hill == nullptr) return false;
+    sim::TileCoord food{-1, -1};
+    int32_t best = 1 << 30;
+    for (int32_t y = 0; y < static_cast<int32_t>(grid.height()); ++y) {
+        for (int32_t x = 0; x < static_cast<int32_t>(grid.width()); ++x) {
+            if (grid.food_object_at_cell(sim::TileCoord{x, y}) < 0) continue;
+            const int32_t d = std::max(std::abs(x - static_cast<int32_t>(hill->x)), std::abs(y - static_cast<int32_t>(hill->y)));
+            if (d < best) {
+                best = d;
+                food = sim::TileCoord{x, y};
+            }
+        }
+    }
+    const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
+    if (food.x < 0 || mine.empty()) return false;
+    go = sim::Command{};
+    go.type = sim::CommandType::GroupMove;
+    go.issuer = 0;
+    go.tile_x = static_cast<int16_t>(food.x);
+    go.tile_y = static_cast<int16_t>(food.y);
+    go.ants = {mine[0]};
+    return true;
+}
+
 // The match is up and the application predicts: the dialog is over, the first turns have run
 bool predicting_match(Application& app, Peer& bob, Duo& duo) {
     if (!begin_match(app, bob, duo)) return false;
@@ -446,30 +474,8 @@ int main(int argc, char* argv[]) {
         Duo duo{app, bob};
         ASSERT_TRUE(predicting_match(app, bob, duo));
         // the food nearest to the player's hill, and an own worker
-        const sim::Grid& grid = app.sim().grid();
-        const auto* hill = grid.find_anthill(0);
-        ASSERT_TRUE(hill != nullptr);
-        sim::TileCoord food{-1, -1};
-        int32_t best = 1 << 30;
-        for (int32_t y = 0; y < static_cast<int32_t>(grid.height()); ++y) {
-            for (int32_t x = 0; x < static_cast<int32_t>(grid.width()); ++x) {
-                if (grid.food_object_at_cell(sim::TileCoord{x, y}) < 0) continue;
-                const int32_t d = std::max(std::abs(x - static_cast<int32_t>(hill->x)), std::abs(y - static_cast<int32_t>(hill->y)));
-                if (d < best) {
-                    best = d;
-                    food = sim::TileCoord{x, y};
-                }
-            }
-        }
-        ASSERT_TRUE(food.x >= 0);
-        const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
-        ASSERT_TRUE(!mine.empty());
         sim::Command go;
-        go.type = sim::CommandType::GroupMove;
-        go.issuer = 0;
-        go.tile_x = static_cast<int16_t>(food.x);
-        go.tile_y = static_cast<int16_t>(food.y);
-        go.ants = {mine[0]};
+        ASSERT_TRUE(food_order(app, go));
         const size_t channels_before = app.audio_mixer().active_channel_count();
         ASSERT_EQ(app.net()->submit(go).status, sim::CommandResult::Status::Applied);
         const net::CueRouter::Stats before = app.cue_router().stats();
@@ -575,7 +581,8 @@ int main(int argc, char* argv[]) {
             ASSERT_FALSE(app.prediction_wanted());
             ASSERT_FALSE(app.net()->prediction_enabled() || app.net()->predicting());
             ASSERT_TRUE(&app.view_sim() == &app.sim());
-            ASSERT_TRUE(app.net()->prediction() == nullptr || (app.net()->prediction()->stats().commands_predicted == 0 && app.net()->prediction()->stats().starts == 0));      // (it never began)
+            ASSERT_TRUE(app.net()->prediction() == nullptr);                               // there is no prediction at all, not a suspended one: a default match pays nothing for it
+            ASSERT_TRUE(app.cue_router().idle());                                          // ... and the cue router has nothing to do
             sim::Command go;
             go.type = sim::CommandType::GroupMove;
             go.issuer = 0;
@@ -679,6 +686,104 @@ int main(int argc, char* argv[]) {
         app.net()->freeze();
         for (int i = 0; i < 150; ++i) frame();
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+    } TEST_END();
+
+    TEST_CASE("PA7 The Cue Router Runs Only While There Is A Prediction Or A Cue That It Played Still Waits For Its Copy: A Default Match Never Runs It (An Own Ant's Cues Are The Confirmed Engine's, As They Were); Switched Off At Run Time While The Predicted Engine's Cue Waits For Its Copy, It Still Drops That Copy (No Second Sound) And Is Idle Again After It") {
+        {                                                                                  // a default match: nothing is routed
+            const ApplicationConfig cfg = host_config();
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(begin_match(app, bob, duo, cfg));
+            ASSERT_TRUE(duo.until([&]() { return app.sim().current_tick() > 60; }, 20000));
+            ASSERT_TRUE(app.net()->prediction() == nullptr && app.cue_router().idle());
+            sim::Command go;
+            ASSERT_TRUE(food_order(app, go));
+            ASSERT_EQ(app.net()->submit(go).status, sim::CommandResult::Status::Applied);
+            const uint32_t ant = go.ants[0];
+            ASSERT_TRUE(duo.until([&]() {                                                  // it harvests: the engine made the cues of the ant's own action
+                const sim::AntSnapshot* a = ant_in(app.sim(), ant);
+                return a != nullptr && (a->is_holding || a->carried_points > 0);
+            }, 30000));
+            duo.step(300);
+            const net::CueRouter::Stats& st = app.cue_router().stats();                    // (a router that ran would have counted them: the confirmed engine's cues of an own ant's own action)
+            ASSERT_EQ(st.played_predicted + st.replays_dropped + st.repeats_dropped + st.duplicates_dropped + st.played_confirmed_own + st.phantoms, uint64_t{0});
+            ASSERT_TRUE(app.cue_router().idle());
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        }
+        {                                                                                  // switched off at run time with a cue that waits for its copy
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(predicting_match(app, bob, duo));
+            sim::Command go;
+            ASSERT_TRUE(food_order(app, go));
+            const size_t channels_before = app.audio_mixer().active_channel_count();
+            ASSERT_EQ(app.net()->submit(go).status, sim::CommandResult::Status::Applied);
+            for (int i = 0; i < 3000 && app.cue_router().stats().played_predicted == 0; ++i) duo.step(10);
+            const uint64_t played = app.cue_router().stats().played_predicted;
+            ASSERT_TRUE(played > 0);
+            ASSERT_EQ(app.audio_mixer().active_channel_count(), channels_before + 1);      // (heard from the predicted engine, which is ahead: the confirmed engine has not made it yet)
+            ASSERT_EQ(app.cue_router().stats().duplicates_dropped, 0u);
+            app.net()->set_prediction_enabled(false);
+            app.pump_network(0.0f);
+            ASSERT_TRUE(app.net()->prediction() == nullptr);                               // the prediction is gone ...
+            ASSERT_FALSE(app.cue_router().idle());                                         // ... and the cue that it played still waits for its copy
+            for (int i = 0; i < 300 && !app.cue_router().idle(); ++i) {                    // the confirmed engine makes the same cues a few ticks later: they are the copies
+                duo.step(10);
+                ASSERT_TRUE(app.audio_mixer().active_channel_count() <= channels_before + 1);          // (never a second sound)
+            }
+            ASSERT_TRUE(app.cue_router().idle());
+            const net::CueRouter::Stats& st = app.cue_router().stats();
+            ASSERT_EQ(st.duplicates_dropped, played);                                      // every cue that was played from the predicted engine met its copy
+            ASSERT_EQ(st.phantoms, 0u);
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+            ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        }
+    } TEST_END();
+
+    TEST_CASE("PA8 A Prediction That Is Switched Off At Run Time Is Destroyed, And The HUD's Special-Target Question Goes Back To The Confirmed Engine At Once (A Pointer To The Predicted Engine Never Outlives It): The Question Is Asked Of The Confirmed Engine Afterwards, Before Any Frame Has Set It Anew") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
+        ASSERT_TRUE(!mine.empty());
+        const sim::AntSnapshot* ant = ant_in(app.view_sim(), mine[0]);
+        ASSERT_TRUE(ant != nullptr);
+        const int32_t ant_wx = ant->px;
+        const int32_t ant_wy = ant->py;
+        int32_t sx = 0, sy = 0;
+        ASSERT_TRUE(place_camera(app, ant_wx, ant_wy, 0, 0));
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(ant_wx, ant_wy, sx, sy));
+        click(app, SDL_BUTTON_LEFT, sx, sy);                                               // an own ant is selected: the cursor over open ground asks the engine about a special target
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);
+        app.render_frame();
+        const sim::SimulationEngine* predicted = &app.view_sim();
+        ASSERT_TRUE(predicted != &app.sim() && app.hud().sim_query() == predicted);       // (the frame asks the engine that it shows)
+        app.net()->set_prediction_enabled(false);
+        app.pump_network(0.0f);
+        ASSERT_TRUE(app.net()->prediction() == nullptr);                                   // destroyed, not suspended
+        ASSERT_TRUE(app.hud().sim_query() == &app.sim());                                  // at once: no frame has been drawn since
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(far_goal(app.sim(), 0, gx, gy));
+        const int32_t goal_wx = gx * 32 + 16;
+        const int32_t goal_wy = gy * 32 + 16;
+        ASSERT_TRUE(place_camera(app, goal_wx, goal_wy, 0, 0));
+        int32_t gsx = 0, gsy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(goal_wx, goal_wy, gsx, gsy));
+        const CursorType cursor = app.hud().evaluate_cursor(gsx, gsy, app.sim().get_world_state(), app.sim().grid(), app.renderer().camera());     // (reads the query: a sanitizer sees a pointer that dangles)
+        ASSERT_TRUE(cursor == CursorType::Move || cursor == CursorType::Target);           // open ground, an own ant selected
+        app.render_frame();
+        ASSERT_TRUE(app.hud().sim_query() == &app.sim());
+        app.net()->freeze();
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

@@ -62,6 +62,8 @@ public:
     const Stats& stats() const noexcept { return stats_; }
     /// The occurrences that were played from the predicted engine and that the confirmed engine has not met yet (about the lead's worth, in a running match)
     size_t outstanding() const noexcept;
+    /// True when no cue waits for its copy: with no prediction either, the router has nothing to do and the owner need not run it
+    bool idle() const noexcept { return outstanding() == 0; }
 
 private:
     struct Kind {

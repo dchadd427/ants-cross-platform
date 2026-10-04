@@ -220,9 +220,13 @@ public:
     sim::CommandResult submit(const sim::Command& command) override;
 
     // ---- the prediction of one's own orders (prediction.hpp, docs/NETWORK_PORT.md "Prediction of one's own orders") --------------------------------------
-    /// Off by default (opt-in: the application turns it on when asked to); off, every order waits for its turn as before. A local game has no delay to hide. Takes effect at once.
+    /// Off by default (opt-in: the application turns it on when asked to); off, every order waits for its turn as before. A local game has no delay to hide. Takes effect with the next update:
+    /// a match that is asked for it makes the prediction then (it begins with the next tick), and one that is not asked never makes it; switched off, it is destroyed (not suspended).
     void set_prediction_enabled(bool on) noexcept { prediction_enabled_ = on; }
     bool prediction_enabled() const noexcept { return prediction_enabled_; }
+    /// Told whenever the predicted engine is destroyed (switched off, the match left, this object destroyed): whoever points at its engine (the HUD's special-target query) points elsewhere
+    /// at once. Called from update(), shutdown and the destructor.
+    void set_on_prediction_dropped(std::function<void()> fn) { on_prediction_dropped_ = std::move(fn); }
     /// The application suspends the prediction where only it knows that the match is not simply following the live stream (a hidden page's background steps, a screen over the match)
     void set_prediction_suspended(bool suspended) noexcept { app_suspends_prediction_ = suspended; }
     /// True during a cool-down of the prediction (Prediction::Config::budget_ns): its work cost more than the budget too often, so it is off for a while: the confirmed engine is shown and
@@ -302,6 +306,7 @@ private:
     void begin_match();
     void install_hooks();
     void make_prediction();
+    void drop_prediction();
     void refresh_prediction();
     /// The lag of the player's orders, as a delay in ms, until the prediction has learned it from the orders: the measured delay of the last orders, else the round trip, half a seal and the
     /// jitter buffer, less the tick that the delay counts and the lag does not
@@ -342,6 +347,7 @@ private:
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void()> on_wake_;
     std::function<void()> on_tick_;
+    std::function<void()> on_prediction_dropped_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
 
     // transport (owned here, borrowed by the lobbies and sessions)
@@ -351,7 +357,7 @@ private:
     std::unique_ptr<ClientLobby> client_lobby_;
     std::unique_ptr<HostSession> host_session_;
     std::unique_ptr<ClientSession> client_session_;
-    std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first)
+    std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first; made by refresh_prediction() when it is wanted, never otherwise)
     bool prediction_enabled_{false};
     bool app_suspends_prediction_{false};
     uint64_t prediction_budget_ns_{default_prediction_budget_ns()};

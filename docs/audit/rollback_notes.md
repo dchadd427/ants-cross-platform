@@ -511,7 +511,9 @@ Every mutant of R1 - R6 was run again against the final tree (R2 - R5 had been r
 - **Web**: the web image builds (`docker build -t ants-beta:rb .`, Emscripten 3.1.58: the probes of the web build compile) and its inputs are identical to the final tree's (`src`, `include`, `web`, `CMakeLists.txt`, `cmake`, `VERSION` and the assets did not change after it); in a headless Chrome against a local server: `test_web_prediction.sh` 17 checks, 0 failed; `test_web_hidden.sh` 11 / 0; `test_web_edge.sh` 102 / 0; `test_web_aspect.sh` 535 checks, 7 failed (the same seven as on `origin/main`).
 - **Mutants**: 138, five that no test kills and that are explained (the table above).
 
-## R7: the budget counts CPU time and ends in a cool-down (the review's HIGH finding)
+## R7: the review's fixes: the budget counts CPU time and ends in a cool-down (HIGH), and a match that does not ask for the prediction has none (the default costs nothing)
+
+### The budget
 
 **Why.** R5 timed a block of work with the wall clock and four strikes ended the prediction for the rest of the match, so a stall of the whole process (a tab in the background, an overloaded machine, a descheduled thread) cost "time" that the prediction never spent and could take it away for good from a machine that was never too slow.
 
@@ -552,3 +554,31 @@ Every mutant of R1 - R6 was run again against the final tree (R2 - R5 had been r
 | `N19_cooldown_ticks_not_given`, `N20_work_hook_not_given`, `N13_budget_not_given`, `N21_strikes_not_given` | `NetGame` does not give the prediction its cool-down, hook, budget or strike count | KILLED by N3.30 |
 
 (The R5 mutants G1 - G8 and N13 of the table above were run against the permanent give-up; their successors are CD1 - CD22.)
+
+### The prediction is made only where it is wanted
+
+**Why.** The object was made at the start of every match and merely suspended when off: a default match carried an idle second engine and ran the application's cue router on every tick. Now a default match has no `Prediction` at all.
+
+| Item | Where |
+|---|---|
+| `NetGame::refresh_prediction()` (once per update) **makes** the prediction when it is wanted and missing (`prediction_enabled_` and the match plays) and **destroys** it when the user switches it off (`drop_prediction()`); a suspension (hidden page, pause, host change, desync, cool-down) keeps the object. `begin_match` makes nothing. `set_prediction_budget` and the work hook apply to the next one made | `netgame.cpp` |
+| **`NetGame::set_on_prediction_dropped`**: told at once whenever the object is destroyed (switched off, the match left, the NetGame destroyed). The application points the HUD's special-target question (`HUD::set_sim_query`, new getter `sim_query()`) back at the confirmed engine then: it could point at the destroyed engine until the next frame (the review's INFO) | `netgame.hpp`, `application_menu.cpp` (`attach_net`) |
+| **`CueRouter::idle()`** (no cue waits for its copy): the application runs the router while there is a prediction and, after it is gone, for as long as it is not idle, so that a cue that the predicted engine played is not played twice when the prediction is switched off before the confirmed engine makes its copy; a default match never runs it. The web probes 10 and 11 read 0 for a game without a prediction (the browser check expects 0 where nothing predicts) | `cue_router.hpp`, `application.cpp` |
+
+**Tests.** N3.32 (tightened: no object at all in a default match, and nobody is told of a drop), N3.33 (a machine that was not asked has none; switched off at run time there is none left, switched on again a new one begins with one start; the callback is told once at the switch and once when the machine leaves), PA4 (tightened: no object, router idle), PA7 (a default match never runs the router: an own worker harvests and nothing is routed; switched off at run time while a cue waits for its copy, the copy is dropped, no second sound, idle afterwards), PA8 (the HUD's query is the confirmed engine at once after the switch-off, before any frame; the cursor is evaluated on it; run under AddressSanitizer a pointer to the destroyed engine would be read there).
+
+**Mutants** (16, `tools/mutate.py`; the unmutated tree passed all baselines):
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `LZ1_made_when_not_wanted` | the prediction is made and runs although it is not asked for | KILLED by N3.25, N3.26, N3.32, N3.33 |
+| `LZ2_switched_off_is_only_suspended` | switched off, the object is suspended, not destroyed | KILLED by N3.33 |
+| `LZ3_never_made` / `LZ4_made_again_every_update` | it is never made / made again at every update | KILLED by N3.25 - N3.33 |
+| `LZ5_made_in_every_phase` | made without asking for the phase | SURVIVED: equivalent where the suites reach (a runner exists only while the match plays or is over, and no NetGame test loses its connection; an object made after the match would be suspended at once) |
+| `LZ6_dropped_not_told` / `LZ7_leaving_does_not_tell` | the owner is not told when it is switched off / when the match is left | KILLED by N3.33 |
+| `LZ8h_host_makes_it_at_the_start`, `LZ8g_guest_makes_it_at_the_start` | `begin_match` makes it again (it would live until the first update, then be dropped) | KILLED by N3.32 (nobody is told of a drop in a default match; they survived the first run, which only looked at the object a few seconds later) |
+| `RT1_router_always_idle` / `RT2_router_never_idle` | `idle()` always / never true | KILLED by PA7 / PA4, PA7 |
+| `AP1_router_only_with_a_prediction` | the router stops with the prediction (the copy is played again) | KILLED by PA7 |
+| `AP2_router_always_runs` | the router runs in a default match too | KILLED by PA7 |
+| `AP3_predicted_cues_without_a_prediction` | the predicted cues are asked of a prediction that is not there | KILLED by PA7 (a segmentation fault) |
+| `HP1_hud_not_told` / `HP2_hud_pointed_at_nothing` | the HUD keeps / loses its engine when the prediction is dropped | KILLED by PA8 |

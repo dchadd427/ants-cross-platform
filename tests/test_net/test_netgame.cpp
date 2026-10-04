@@ -1634,10 +1634,12 @@ void run_prediction_tests() {
     } TEST_END();
 
     TEST_CASE("N3.32 Prediction: A Match With The Defaults Has No Predicted Engine (Nothing Starts, The View Engine Is The Confirmed One, An Order Is The Old Guess And Waits For Its Turn, The Machines End Identical); Asked For At Run Time It Begins With The Next Tick") {
+        int told = 0;                                                                          // (declared before the table: the callbacks hold it)
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
+        for (Machine* m : {&host, &bob}) m->net.set_on_prediction_dropped([&told]() { ++told; });
         host.net.set_map("SMALL.LVL");
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
@@ -1648,8 +1650,9 @@ void run_prediction_tests() {
             ASSERT_FALSE(m->net.prediction_enabled());                                         // the default
             ASSERT_FALSE(m->net.predicting());
             ASSERT_TRUE(&m->net.view_engine() == &m->sim);                                     // the screen reads the confirmed engine
-            ASSERT_TRUE(m->net.prediction() == nullptr || m->net.prediction()->stats().starts == 0u);
+            ASSERT_TRUE(m->net.prediction() == nullptr);                                        // there is none at all (not a suspended one): a match that does not ask for it pays nothing
         }
+        ASSERT_EQ(told, 0);                                                                    // (none was ever made, so none was dropped: not one that lived until the next update)
         const uint32_t ant = first_ant(bob, 1);
         int16_t gx = 0, gy = 0;
         ASSERT_TRUE(open_goal_near_hill(bob.sim, 1, gx, gy));
@@ -1664,10 +1667,51 @@ void run_prediction_tests() {
         ASSERT_TRUE(t.run_until([&]() { return bob.net.predicting(); }, 1000));
         ASSERT_TRUE(bob.net.view_engine().current_tick() > bob.sim.current_tick());
         ASSERT_FALSE(host.net.predicting());
+        ASSERT_TRUE(bob.net.prediction() != nullptr && host.net.prediction() == nullptr);      // (made on the machine that was asked, not on the other)
         host.net.freeze();
         t.run(3000);
         ASSERT_TRUE(all_equal(t));
         ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("N3.33 Prediction: It Is Made Only Where It Is Wanted And Destroyed When It Is Switched Off (A Machine That Was Not Asked Has None; Switched Off At Run Time There Is None Left, Not A Suspended One; Switched On Again A New One Begins), And Whoever Points At Its Engine Is Told At Once Each Time (When It Is Switched Off And When The Machine Leaves The Match)") {
+        int dropped = 0;                                                                         // (declared before the table: the callback holds it)
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        bob.net.set_prediction_enabled(true);                                                    // Bob is asked to, the host is not
+        bob.net.set_on_prediction_dropped([&dropped]() { ++dropped; });
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(33, hash));
+        ASSERT_TRUE(bob.net.prediction() == nullptr);                                            // (nothing is made before the match plays)
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting(); }, kUntilRunning));
+        ASSERT_TRUE(bob.net.prediction() != nullptr && host.net.prediction() == nullptr);
+        ASSERT_EQ(dropped, 0);
+        t.run(500);
+        // switched off: it is destroyed with the next update, and the owner is told then
+        bob.net.set_prediction_enabled(false);
+        ASSERT_EQ(dropped, 0);
+        t.run(30);
+        ASSERT_TRUE(bob.net.prediction() == nullptr);
+        ASSERT_EQ(dropped, 1);
+        ASSERT_FALSE(bob.net.predicting());
+        ASSERT_TRUE(&bob.net.view_engine() == &bob.sim);
+        t.run(500);
+        ASSERT_EQ(dropped, 1);                                                                   // (told once)
+        // switched on again: a new prediction begins, the old one is not resumed
+        bob.net.set_prediction_enabled(true);
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.predicting(); }, 2000));
+        ASSERT_EQ(bob.net.prediction()->stats().starts, 1u);
+        ASSERT_EQ(dropped, 1);
+        // leaving the match destroys it too
+        host.net.freeze();
+        t.run(500);
+        bob.net.leave();
+        ASSERT_TRUE(bob.net.prediction() == nullptr);
+        ASSERT_EQ(dropped, 2);
     } TEST_END();
 }
 
