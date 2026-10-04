@@ -37,6 +37,8 @@ std::string match_lost_text(ClientSession::LostReason reason) {
 
 struct NetGame::Transport {
     std::unique_ptr<Connection> uplink;                     // client: the connection to the host (TCP) or to a server (TCP natively, a WebSocket in the browser)
+    std::unique_ptr<Connection> relink;                     // client: the link that the way back made last (the session holds it; the one before it is let go when a new one is made). The lobby holds the first,
+                                                            // `uplink`, for as long as this object lives, so that one is never replaced
 #ifndef __EMSCRIPTEN__
     struct PendingPeer {
         std::unique_ptr<TcpConnection> conn;
@@ -121,6 +123,7 @@ void NetGame::shutdown_transport() {
         }
         close_peer_links();
 #endif
+        if (transport_->relink) transport_->relink->close();
         if (transport_->uplink) transport_->uplink->close();
         transport_.reset();
     }
@@ -177,6 +180,7 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     const uint16_t peer_port = peer_listener ? peer_listener->port() : uint16_t{0};
     begin_client(std::move(conn), peer_port, name, want_seat, room, token);
     transport_->peer_listener = std::move(peer_listener);
+    target_ = JoinTarget{address, port, std::string(), name, want_seat, room, token};        // (the way back of a server's room makes its links from this)
     return true;
 #endif
 }
@@ -188,13 +192,11 @@ bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t 
     if (!conn) return false;
     WasmWsConnection* raw = conn.get();
     begin_client(std::move(conn), 0, name, want_seat, room, token);       // no port for the other guests: a server's room has no links between guests
+    target_ = JoinTarget{std::string(), 0, url, name, want_seat, room, token};
     raw->set_on_open([this]() {                                           // the Hello goes out when the socket opens, not at the next frame: a page that is not drawn
         if (client_lobby_) client_lobby_->send_hello();                   // runs no frames, and the server closes a connection that says nothing for 10 s
     });
-    raw->set_on_wake([this]() {                                           // news from the server (a message, an error, the close) reaches the application at once, also
-        const std::function<void()> wake = on_wake_;                      // while the page is hidden; the application's step may end the session and with it this very
-        if (wake) wake();                                                 // connection and its callbacks: so the function runs from a copy
-    });
+    raw->set_on_wake(wake_function());                                    // news from the server (a message, an error, the close) reaches the application at once, also while the page is hidden
     return true;
 #else
     (void)url;
@@ -235,6 +237,8 @@ void NetGame::leave() {
     seat_ = 255;
     status_.clear();
     fail_reason_ = FailReason::None;
+    target_ = JoinTarget{};
+    way_back_ = false;
 }
 
 std::vector<NetGame::Event> NetGame::take_events() {
@@ -535,6 +539,7 @@ void NetGame::update_client() {
     if (phase_ == Phase::Loading || phase_ == Phase::Playing) pump_peers();
     if (phase_ == Phase::Playing && client_session_) {
         client_session_->update(now_);
+        if (client_session_->wants_connection(now_)) attach_new_link();       // the way back: the session lost its link and asks for a new one (a failed attempt is told to it too)
         if (!desync_reported_ && client_session_->desynced()) {
             desync_reported_ = true;
             status_ = "The game is out of sync.";
@@ -581,6 +586,60 @@ void NetGame::promote() {
 #endif
     set_notice("You are the host now.");
     events_.push_back(Event{Event::Type::HostChanged, seat_});
+}
+
+// ---- the way back --------------------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+// What the lobby says of a name: printable ASCII, at most kMaxNameChars (a Hello with anything else does not decode: the server would answer BadRequest)
+std::string printable_name(const std::string& name) {
+    std::string out;
+    for (const char c : name) {
+        if (out.size() >= kMaxNameChars) break;
+        const unsigned char u = static_cast<unsigned char>(c);
+        if (u >= 0x20 && u <= 0x7E) out.push_back(c);
+    }
+    return out;
+}
+
+}  // namespace
+
+std::function<void()> NetGame::wake_function() {
+    return [this]() {                                                     // the application's step may end the session and with it the connection that calls this and its callbacks:
+        const std::function<void()> wake = on_wake_;                      // so the function runs from a copy
+        if (wake) wake();
+    };
+}
+
+HelloMsg NetGame::way_back_hello() const {
+    HelloMsg h;
+    h.name = printable_name(target_.name);
+    h.room = target_.room;
+    h.token = target_.token;
+    h.want_seat = seat_;                                                  // (the key decides the seat: this is only what the server would be told by anybody)
+    return h;
+}
+
+std::unique_ptr<Connection> NetGame::make_link() {
+    if (link_maker_) return link_maker_();
+#ifdef __EMSCRIPTEN__
+    if (target_.url.empty()) return nullptr;
+    auto conn = WasmWsConnection::connect(target_.url);
+    if (conn) conn->set_on_wake(wake_function());                         // as for the first link: news from the server reaches a page that is not drawn (the session says Hello when the link opens)
+    return conn;
+#else
+    if (target_.address.empty()) return nullptr;
+    return TcpConnection::connect(target_.address, target_.port);
+#endif
+}
+
+void NetGame::attach_new_link() {
+    if (!transport_ || !client_session_) return;
+    std::unique_ptr<Connection> link = make_link();
+    Connection* raw = link.get();
+    transport_->relink = std::move(link);                                 // (the session holds no pointer to the link before this one: it was let go when the attempt failed)
+    client_session_->attach(raw, now_);                                   // null: no link could be made, the next attempt is due in two seconds
 }
 
 // ---- the links between guests --------------------------------------------------------------------------------------------------------------------
@@ -703,6 +762,16 @@ void NetGame::begin_match() {
             if (room_.slots[s].state == SlotState::Host) cc.host = s;
         }
         cc.migration = cc.host != kNoSeat;                      // a room without a Host slot is a dedicated server's: nobody can take over from it
+        way_back_ = false;
+        const SeatKey key = client_lobby_ ? client_lobby_->key() : SeatKey{};
+        if (!cc.migration && !key_is_zero(key) && (!target_.address.empty() || !target_.url.empty())) {
+            // A dedicated server's room that holds seats gave this machine a key: a lost link is not the end of the match. The session asks for a new link (update) and says Hello with the key
+            cc.reconnect = true;
+            cc.key = key;
+            cc.hello = way_back_hello();
+            cc.rejoin = client_lobby_->rejoined();               // (a machine that starts from nothing is given the match: its lobby did the Hello, Welcome, Start, Loaded, Begin)
+            way_back_ = true;
+        }
         known_host_ = cc.host;
         client_session_ = std::make_unique<ClientSession>(sim_, cc);
         client_session_->set_connection(transport_->uplink.get());

@@ -19,6 +19,10 @@
 //
 // Raw TCP (LAN and development) is the transport of native builds; a WebAssembly build has none yet (host() and join() return false there) until the
 // WebRTC transport of the network port arrives. The class does not care which Connection it talks to.
+//
+// The way back (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A client of a dedicated server's room that holds seats is given a key with its Welcome; its ClientSession is then built to come
+// back by itself when its link is lost (the room is not left: Phase stays Playing), and this class makes the new links that the session asks for (a JoinTarget keeps how the first one was made).
+// LAN and direct games are exactly what they were (host migration).
 
 #include <cstdint>
 #include <functional>
@@ -44,6 +48,18 @@ bool hash_file(const std::string& path, uint64_t& out);
 /// What the player is told when the match is lost to this machine (NetGame::status_text after the event HostLeft): the reason as the session knows it. A server that closed
 /// the link of a machine that held half a minute of the match unplayed dropped it for being away (a hidden tab, a process that was stopped); anything else is a link that is gone.
 std::string match_lost_text(ClientSession::LostReason reason);
+
+/// How a client reached its server, kept by join() and join_url() so that the way back can make the same link again: the TCP address and port of a native client, or the WebSocket URL of the
+/// browser build, and what the Hello said (the name, the seat that was asked for, the room's code, the token: carried, never interpreted, never written to a log).
+struct JoinTarget {
+    std::string address;               // native: the host to connect to (empty in the browser)
+    uint16_t port{0};
+    std::string url;                   // the browser build: the ws:// or wss:// URL (empty natively)
+    std::string name;
+    uint8_t want_seat{255};
+    std::string room;
+    std::string token;
+};
 
 class NetGame final : public sim::CommandSink {
 public:
@@ -116,6 +132,8 @@ public:
     /// background step from here (Application::background_pump), which calls update() and take_events() like a frame does. The function may end the session (leave()).
     /// A native build never calls it (its transports are polled by the frame loop).
     void set_on_wake(std::function<void()> fn) { on_wake_ = std::move(fn); }
+    /// The tests: the way back asks this function for every new link instead of connecting to the JoinTarget; null means that no link could be made (the name does not resolve: the network is down)
+    void set_link_maker_for_test(std::function<std::unique_ptr<Connection>()> fn) { link_maker_ = std::move(fn); }
 
     // ---- state -----------------------------------------------------------------------------------------------------------------------------------
     Phase phase() const noexcept { return phase_; }
@@ -286,6 +304,8 @@ public:
     uint32_t turns_executed() const;
     /// The host is gone and the guests are agreeing on a new one: no turns arrive meanwhile (the game shows a message)
     bool electing() const;
+    /// How this machine reached its server (valid after a successful join() or join_url(); empty before): the way back makes its new links from it
+    const JoinTarget& join_target() const noexcept { return target_; }
     /// The seat that seals the turns now
     uint8_t host_seat() const noexcept { return known_host_; }
     /// What just happened in the match ("Bob is the host now."), for five seconds; empty otherwise
@@ -315,6 +335,15 @@ private:
     void announce_room();
     /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
     void collect_room_chat();
+    // The way back (see the head of this file)
+    /// A new link to the server, made the way the first one was (TCP natively, a WebSocket in the browser); null when none can be made (the session tries again in two seconds)
+    std::unique_ptr<Connection> make_link();
+    /// The session wants a new link: makes one and hands it over (attach), a failed attempt too (null)
+    void attach_new_link();
+    /// The browser's connections tell the application that they have news (set_on_wake); the same function for the first link and every new one
+    std::function<void()> wake_function();
+    /// What a new link says as its Hello (the session adds the version, the key and the number of turns): the name, the room, the token and this machine's seat
+    HelloMsg way_back_hello() const;
 
     sim::SimulationEngine& sim_;
     Role role_{Role::None};
@@ -341,11 +370,14 @@ private:
     [[maybe_unused]] uint32_t room_id_{0};              // names the room in the announcements (native builds)
     std::string game_version_;
     FillLevel fill_{FillLevel::None};       // the bots that this machine's START asks for (protocol 11)
+    JoinTarget target_;                     // client: how the first link was made (join, join_url)
+    bool way_back_{false};                  // client: the session was built to come back by itself (a dedicated server's room that gave this machine a key)
     std::vector<ChatLine> pending_chat_;    // the waiting room's lines that take_pregame_chat() has not handed out
     bool chat_status_mirror_{true};         // the lines of the room are shown on the status line too (set_chat_status_mirror)
 
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void()> on_wake_;
+    std::function<std::unique_ptr<Connection>()> link_maker_;      // (the tests: make_link)
     std::function<void()> on_tick_;
     std::function<void()> on_prediction_dropped_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
