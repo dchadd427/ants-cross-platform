@@ -158,16 +158,18 @@ public:
     bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
                   const SeatKey& key = SeatKey{});
     /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone. This works in every state of the way back: a machine whose link is up
-    /// (during a pause too, when no Quit command would be sealed) says Leave; one that has no link cannot tell the server (its seat is held until the others vote or the cap drops it). The key is forgotten.
+    /// (during a pause too, when no Quit command would be sealed) says Leave; one that has no link cannot tell the server (its seat is held until the others vote or the cap drops it). The key is forgotten,
+    /// unless the session had ended by itself (Over, Failed): its end decided about the key (a refusal that keeps it, a link that never opened), and the application's way back to its menu only cleans up.
     void leave();
 
     // ---- the way back (docs/NETWORK_PORT.md "Reconnect") ---------------------------------------------------------------------------------------------
     /// Told when a Welcome has handed this machine a key (a dedicated server's room that holds seats): where to keep it so that the match can be taken up again if the game is closed or the page reloaded
     /// (join / join_url with the key). Told again at the Welcome of every rejoin, with the same key. Never for a room that gives none (a game on the local network, a room that holds no seats).
+    /// The function may end the session (leave()).
     void set_on_key(std::function<void(const RejoinKey&)> fn) { on_key_ = std::move(fn); }
     /// Told once per key when it can no longer be used and is to be let go of: the match ended (freeze), the server dropped the seat or has no such match any more or does not hold the seat, the time to
     /// wait ran out, the player left (leave), or the room that took the code does not know the key (a new room). Not told when another window has the seat (Superseded) or when the server would not take
-    /// the machine back just now (RejoinFailed): the player may use Rejoin later.
+    /// the machine back just now (RejoinFailed): the player may use Rejoin later. The function may end the session (leave()) too.
     void set_on_forget_key(std::function<void(const RejoinKey&)> fn) { on_forget_key_ = std::move(fn); }
     /// The match is held for this machine: a seat is missing from it or the countdown after a pause runs (the server's word), or this machine is not following the live match itself (its link is lost, a new one
     /// is being made, or it catches up). Nothing is sealed meanwhile, so a Quit command would be lost: the application leaves with leave() instead.

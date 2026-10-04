@@ -10,6 +10,7 @@
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room.hpp"
 #include "ants_server/room_manager.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
 
@@ -249,6 +250,10 @@ public:
                 ++i;
             }
         }
+        for (const std::shared_ptr<net::TcpConnection>& link : scripted_links_) {        // what the machines say after their Hello (a scripted conversation reads it)
+            std::vector<uint8_t> msg;
+            while (link->poll(msg)) scripted_inbox.push_back(msg);
+        }
         if (mgr != nullptr) mgr->update(now(world_now));
     }
     // The link that was accepted last and is still open: the machine that said Hello last (or came back last) is on it. Closing it is the cut of a cable: both ends see it closed
@@ -260,6 +265,28 @@ public:
                     return true;
                 }
             }
+        }
+        return false;
+    }
+    // A scripted conversation (script_messages answered the Hello and the link stayed open): a message to the newest of those links that is open, and the cut of it
+    bool scripted_send(const std::vector<uint8_t>& message) {
+        for (size_t i = scripted_links_.size(); i > 0; --i) {
+            if (scripted_links_[i - 1]->is_open()) return scripted_links_[i - 1]->send(message);
+        }
+        return false;
+    }
+    bool scripted_cut() {
+        for (size_t i = scripted_links_.size(); i > 0; --i) {
+            if (scripted_links_[i - 1]->is_open()) {
+                scripted_links_[i - 1]->close();
+                return true;
+            }
+        }
+        return false;
+    }
+    bool scripted_heard(net::MsgType type) const {
+        for (const std::vector<uint8_t>& m : scripted_inbox) {
+            if (net::peek_type(m) == type) return true;
         }
         return false;
     }
@@ -325,6 +352,7 @@ public:
     uint32_t refused{0};
     uint32_t scripted{0};
     std::vector<net::HelloMsg> scripted_hellos; // what the scripted connections said (the tests look at the Hello: the key, the turns)
+    std::vector<std::vector<uint8_t>> scripted_inbox;       // ... and what they said after it
     size_t kept_at_stop{0};
     RestoreReport report;                       // what the last start brought back
     int starts{0};
@@ -375,11 +403,19 @@ struct Machine {
     bool hung{false};                             // the window does not run: no frames at all
     std::vector<net::RejoinKey> keys_given;       // what set_on_key was told, in order (the place that keeps the key of the seat)
     std::vector<net::RejoinKey> keys_forgotten;   // what set_on_forget_key was told
+    size_t leave_on_key{0};                       // the n-th time that the machine is given its key it leaves, from inside that very call (0: never)
+    bool leave_on_forget{false};                  // the first time that it is told to let go of the key it leaves, from inside that very call
 
     explicit Machine(std::string n, uint32_t seed = 1) : name(std::move(n)), rng(seed) {
         net.set_discovery(0);
-        net.set_on_key([this](const net::RejoinKey& k) { keys_given.push_back(k); });
-        net.set_on_forget_key([this](const net::RejoinKey& k) { keys_forgotten.push_back(k); });
+        net.set_on_key([this](const net::RejoinKey& k) {
+            keys_given.push_back(k);
+            if (leave_on_key != 0 && keys_given.size() == leave_on_key) net.leave();
+        });
+        net.set_on_forget_key([this](const net::RejoinKey& k) {
+            keys_forgotten.push_back(k);
+            if (leave_on_forget) net.leave();
+        });
         net.set_on_tick([this]() {
             ++ticks;
             hash_at[sim.current_tick()] = sim.state_hash().total;
@@ -478,9 +514,9 @@ struct World {
         return *machines.back();
     }
     // A new machine joins the room (the TCP link is made at once; the room answers as the clock runs)
-    Machine& join(const std::string& name, const std::string& room, uint8_t want_seat = 255) {
+    Machine& join(const std::string& name, const std::string& room, uint8_t want_seat = 255, const std::string& token = std::string()) {
         Machine& m = add_machine(name);
-        if (!m.net.join("127.0.0.1", server.port(), name, want_seat, room)) throw std::runtime_error("join failed");
+        if (!m.net.join("127.0.0.1", server.port(), name, want_seat, room, token)) throw std::runtime_error("join failed");
         const uint32_t before = server.accepted;
         run_until([&]() { return server.accepted > before; }, 2000);          // (the machine's link is the newest one that the door accepted: a test can cut it)
         return m;
@@ -633,6 +669,8 @@ void run_way_back_tests() {
         ASSERT_TRUE(a.keys_forgotten.size() == 1 && b.keys_forgotten.size() == 1);        // the match is over: the keys can be let go of, once each
         ASSERT_TRUE(net::key_matches(a.keys_forgotten[0].key, a.keys_given[0].key) && net::key_matches(b.keys_forgotten[0].key, b.keys_given[0].key));
         ASSERT_TRUE(b.keys_forgotten[0].room == "RJ-1" && b.keys_forgotten[0].seat == bob);
+        a.net.leave();                                                                   // the player's Leave on the scorecard: the key was let go of at the end of the match, and is not again
+        ASSERT_EQ(a.keys_forgotten.size(), size_t{1});
     } TEST_END();
 
     TEST_CASE("RJ1.2 The Server Restarts With Its Records (Stopped After Some Play, Started Again On The Same Records Folder And Port): Both NetGames Look For It By Themselves, Come Back With Their Turns, The Match Goes On And Ends In The Same State On Both And The Restored Referee") {
@@ -779,6 +817,9 @@ void run_way_back_tests() {
             RoomStatus s = w.status("RJ-4");
             ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.rejoins == 2 && s.absent.empty() && s.turns >= sealed - 40);
             ASSERT_TRUE(a_dropped == 1 && b_dropped == 1);                               // told once, when the old session went
+            ASSERT_TRUE(a.keys_given.size() == 2 && b.keys_given.size() == 2);           // the Welcome of the room, and the Welcome of the new start: the same key, said again
+            ASSERT_TRUE(net::key_matches(a.keys_given[0].key, a.keys_given[1].key) && net::key_matches(b.keys_given[0].key, b.keys_given[1].key));
+            ASSERT_TRUE(a.keys_given[1].seat == a.net.my_seat() && b.keys_given[1].seat == b.net.my_seat() && a.keys_forgotten.empty() && b.keys_forgotten.empty());
             ASSERT_TRUE(w.run_until([&]() { return a.net.predicting() && b.net.predicting(); }, 5000));
             ASSERT_TRUE(a.net.prediction()->stats().starts == 1 && b.net.prediction()->stats().starts == 1);      // a new prediction on the new session, not the old one resumed
             w.run(4000);
@@ -826,6 +867,30 @@ void run_way_back_tests() {
             w.run(10000);
             ASSERT_EQ(w.server.accepted, seen);                                          // nothing tries again
             ASSERT_EQ(b.net.phase(), NetGame::Phase::Over);
+        }
+        {   // the new lobby is refused in its turn (the seat was dropped meanwhile): the words and the rule of the way back, because the machine still holds its key
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-4D"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-4D");
+            Machine& b = w.join("Bob", "RJ-4D");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+            w.run(2000);
+            w.server.script_reason = net::RejectReason::BadRequest;                      // the session's Hello is answered BadRequest ...
+            w.server.door = Server::Door::Scripted;
+            ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 5000));
+            w.server.script_reason = net::RejectReason::Dropped;                         // ... and the Hello of the new lobby Dropped
+            ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Failed; }, 5000));
+            ASSERT_EQ(w.server.scripted, 2u);
+            ASSERT_TRUE(b.net.fail_reason() == NetGame::FailReason::Rejected && b.net.reject_reason() == net::RejectReason::Dropped);
+            ASSERT_EQ(b.net.status_text(), std::string("You were dropped from the match."));
+            ASSERT_TRUE(b.keys_forgotten.size() == 1 && net::key_matches(b.keys_forgotten[0].key, b.keys_given[0].key));
+            ASSERT_TRUE(b.saw(NetGame::Event::Type::Failed) && b.count(NetGame::Event::Type::StartRequested) == 1);
+            ASSERT_TRUE(w.server.scripted_hellos.size() == 2 && w.server.scripted_hellos[1].have_turns == 0 && net::key_matches(w.server.scripted_hellos[1].key, b.keys_given[0].key));      // (the new lobby starts from nothing, with the key)
+            const uint32_t seen = w.server.accepted;
+            w.run(5000);
+            ASSERT_EQ(w.server.accepted, seen);                                          // nothing tries again
         }
         {   // a machine that has run no turn (its link is cut in the seconds of the start dialog) says Hello with no turns: BadRequest to that is not "ahead of the record", it is a refusal
             World w;
@@ -889,6 +954,10 @@ void run_way_back_tests() {
                 ASSERT_EQ(w.server.accepted, seen);                                      // nothing tries again (an attempt would come every two seconds)
                 ASSERT_EQ(b.net.phase(), NetGame::Phase::Over);
                 ASSERT_EQ(a.net.phase(), NetGame::Phase::Playing);                       // (the others wait for it: the real server was not told)
+                b.net.leave();                                                           // the application's way back to its menu: the end of the way back decided about the key, this lets go of nothing more
+                b.net.freeze();
+                ASSERT_EQ(b.keys_forgotten.size(), r.forgets ? size_t{1} : size_t{0});       // (a key that was kept stays: the other window has the seat, or the player tries Rejoin in a minute)
+                ASSERT_EQ(b.net.phase(), NetGame::Phase::Off);
             }
             {   // from nothing: a machine joins with the key and the server's door answers its Hello with the reason
                 World w;
@@ -909,7 +978,24 @@ void run_way_back_tests() {
                 const uint32_t seen = w.server.accepted;
                 w.run(5000);
                 ASSERT_EQ(w.server.accepted, seen);
+                m.net.leave();
+                m.net.freeze();
+                ASSERT_EQ(m.keys_forgotten.size(), r.forgets ? size_t{1} : size_t{0});
             }
+        }
+        {   // a machine that joins with its key and cannot reach the server: the key is good, and the application's way back to its menu keeps it
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            w.server.door = Server::Door::Refusing;
+            net::SeatKey key{};
+            for (size_t i = 0; i < key.size(); ++i) key[i] = static_cast<uint8_t>(i * 7u + 3u);
+            Machine& m = w.add_machine("Bob");
+            ASSERT_TRUE(m.net.join("127.0.0.1", w.server.port(), "Bob", 2, "RJ-5", "", key));
+            ASSERT_TRUE(w.run_until([&]() { return m.net.phase() == NetGame::Phase::Failed; }, 5000));
+            ASSERT_TRUE(m.keys_forgotten.empty() && m.keys_given.empty());
+            m.net.leave();
+            ASSERT_TRUE(m.keys_forgotten.empty());                                       // (the player may use Rejoin when the server is back)
+            ASSERT_EQ(m.net.phase(), NetGame::Phase::Off);
         }
         {   // a first join is told what it always was (the key makes the difference): the words of a join that has no seat to come back to
             World w;
@@ -1096,6 +1182,8 @@ void run_way_back_tests() {
         const uint32_t seen_refused = w.server.refused;
         w.run(10000);
         ASSERT_TRUE(w.server.accepted == seen_accepted && w.server.refused == seen_refused);        // nothing tries again
+        a.net.leave();                                                                   // the application's way back to its menu: the key was let go of when the time ran out, and is not again
+        ASSERT_EQ(a.keys_forgotten.size(), size_t{1});
     } TEST_END();
 
     TEST_CASE("RJ1.8 The Vote Of The Others, Through The NetGame: After Five Seconds Away The Screens Show It (Who, How Many Vote, This Machine's Own Choice), One Of Two Voters Is Not Enough, The Last Choice Of A Player Counts, Two Of Two Drop The Seat, The Machine That Was Away Is Told That It Was Dropped, And The Others Go On Without It And End In The Same State") {
@@ -1242,6 +1330,48 @@ void run_way_back_tests() {
             ASSERT_EQ(guest.net.phase(), NetGame::Phase::Playing);
             ASSERT_FALSE(guest.saw(NetGame::Event::Type::HostLeft));
         }
+        {   // a room that has a Host slot, the way of a game on the local network, and hands out a key all the same: the host is a player there, so a lost link is host migration, and no way back is made
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            net::SeatKey key{};
+            for (size_t i = 0; i < key.size(); ++i) key[i] = static_cast<uint8_t>(i * 13u + 5u);
+            net::WelcomeMsg welcome;
+            welcome.player = 1;
+            welcome.players = sim::MAX_PLAYERS;
+            welcome.key = key;
+            net::RoomMsg room;
+            room.you = 1;
+            room.map_name = "TINY.LVL";
+            room.slots[0].state = net::SlotState::Host;
+            room.slots[0].name = "Ann";
+            room.slots[1].state = net::SlotState::Client;
+            room.slots[1].name = "Bob";
+            w.server.door = Server::Door::Scripted;
+            w.server.script_messages = {net::encode(welcome), net::encode(room)};
+            Machine& m = w.add_machine("Bob");
+            m.orders = false;
+            ASSERT_TRUE(m.net.join("127.0.0.1", w.server.port(), "Bob", 1, "RJ-10L"));
+            ASSERT_TRUE(w.run_until([&]() { return m.net.phase() == NetGame::Phase::Room; }, 5000));
+            ASSERT_TRUE(m.keys_given.size() == 1 && net::key_matches(m.keys_given[0].key, key));        // (the key was handed out)
+            uint64_t hash = 0;
+            ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+            net::StartMsg start;
+            start.seed = 8;
+            start.map_name = "TINY.LVL";
+            start.map_hash = hash;
+            start.roster = 0x03;
+            start.names[0] = "Ann";
+            start.names[1] = "Bob";
+            ASSERT_TRUE(w.server.scripted_send(net::encode(start)));
+            ASSERT_TRUE(w.run_until([&]() { return w.server.scripted_heard(net::MsgType::Loaded); }, 5000));        // the machine loaded the map
+            ASSERT_TRUE(w.server.scripted_send(net::encode_begin()));
+            ASSERT_TRUE(w.run_until([&]() { return m.net.phase() == NetGame::Phase::Playing; }, 5000));
+            ASSERT_TRUE(w.server.scripted_cut());                                        // the host's link is gone
+            ASSERT_TRUE(w.run_until([&]() { return m.saw(NetGame::Event::Type::HostChanged); }, 15000));
+            ASSERT_TRUE(m.net.is_host() && !m.net.pause_info().reconnecting && m.net.phase() == NetGame::Phase::Playing);       // the guest took over: the way of a game on the local network
+            ASSERT_FALSE(m.saw(NetGame::Event::Type::HostLeft) || m.saw(NetGame::Event::Type::Rejoined));
+            ASSERT_EQ(w.server.accepted, 1u);                                            // nothing tried to come back
+        }
         {   // a server's room that does not hold seats: no key, no way back
             World w;
             ASSERT_TRUE(w.server.start(w.now));
@@ -1263,7 +1393,35 @@ void run_way_back_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RJ1.11 A Link That Cannot Be Made (The Name Does Not Resolve, The Network Is Down) Is Told To The Session: The Next Attempt Is Two Seconds Later And Not At The Next Frame (A Lookup Every Frame Would Freeze The Game), And The First Link That Can Be Made Brings The Machine Back") {
+    TEST_CASE("RJ1.11 A Link That Cannot Be Made (The Name Does Not Resolve, The Network Is Down) Is Told To The Session: The Next Attempt Is Two Seconds Later And Not At The Next Frame (A Lookup Every Frame Would Freeze The Game), And The First Link That Can Be Made Brings The Machine Back; The Same For The Link Of A New Start From Nothing") {
+        {   // the link of the new start cannot be made (a server that answered BadRequest, a network that went down at that moment): the machine is where a join that cannot connect is, and keeps its key
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-11B"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-11B");
+            Machine& b = w.join("Bob", "RJ-11B");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+            int calls = 0;
+            const uint16_t port = w.server.port();
+            b.net.set_link_maker_for_test([&]() -> std::unique_ptr<net::Connection> {
+                ++calls;
+                if (calls > 1) return nullptr;                                           // the way back's own link reaches the server, the one for the new lobby cannot be made
+                return net::TcpConnection::connect("127.0.0.1", port);
+            });
+            w.server.script_reason = net::RejectReason::BadRequest;
+            w.server.door = Server::Door::Scripted;
+            ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Failed; }, 5000));
+            ASSERT_EQ(calls, 2);
+            ASSERT_TRUE(b.net.fail_reason() == NetGame::FailReason::Unreachable && b.saw(NetGame::Event::Type::Failed));
+            ASSERT_EQ(b.net.status_text(), std::string(sim::strings::text(sim::strings::kUnableToConnect)));
+            ASSERT_TRUE(b.keys_forgotten.empty());                                       // (the key is good: the player may use Rejoin when the network is back)
+            ASSERT_FALSE(b.net.pause_info().reconnecting);
+            w.run(6000);
+            ASSERT_EQ(calls, 2);                                                         // nothing tries again
+            b.net.leave();                                                               // the application's way back to its menu keeps the key too: the session ended by itself, the key is good
+            ASSERT_TRUE(b.keys_forgotten.empty());
+        }
         World w;
         ASSERT_TRUE(w.server.start(w.now));
         ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-11"), w.server_now()).ok);
@@ -1400,6 +1558,210 @@ void run_way_back_tests() {
             }
             ASSERT_TRUE(w.status("RJ-13C").absent.empty() && w.status("RJ-13C").rejoins == 0);
         }
+    } TEST_END();
+
+    TEST_CASE("RJ1.14 What The Server Is Told By A Machine That Comes Back: The Hello Of The Way Back Has The Name As The Lobby Says It (Printable, At Most 32 Characters: Anything Else Does Not Decode And Would Be Answered BadRequest), The Room, The Token, The Machine's Own Seat (Not The One It Asked For), Its Key And The Turns It Has") {
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-14"), w.server_now()).ok);
+        Machine& a = w.join("Ann", "RJ-14", 1);                                          // Ann asks for seat 1 and has it
+        const std::string odd = std::string("B\xC3\xA9") + "b\x01 " + std::string(40, 'x');      // not printable ASCII, and longer than a name may be
+        Machine& b = w.join(odd, "RJ-14", 1, "tok-14");                                  // Bob asks for the same seat: the first free one is his (seat 0)
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+        ASSERT_TRUE(a.net.my_seat() == 1 && b.net.my_seat() == 0);
+        w.server.script_reason = net::RejectReason::RejoinFailed;
+        w.server.door = Server::Door::Scripted;                                          // the door shows what Bob's new link says
+        ASSERT_TRUE(w.server.cut_newest());
+        ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 5000));
+        ASSERT_EQ(w.server.scripted_hellos.size(), size_t{1});                           // (a Hello that does not decode is not in the list: a real server would say BadRequest to it)
+        const net::HelloMsg& hello = w.server.scripted_hellos[0];
+        ASSERT_EQ(hello.name, "Bb " + std::string(29, 'x'));                             // what the lobby's Hello said: printable, 32 characters
+        ASSERT_EQ(hello.room, std::string("RJ-14"));
+        ASSERT_EQ(hello.token, std::string("tok-14"));
+        ASSERT_EQ(hello.want_seat, uint8_t{0});                                          // its own seat: the key decides, but this is what anybody's Hello says
+        ASSERT_TRUE(net::key_matches(hello.key, b.keys_given[0].key) && hello.have_turns > 0 && hello.version == net::kProtocolVersion);
+        ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Over; }, 3000));
+        ASSERT_EQ(b.count(NetGame::Event::Type::StartRequested), size_t{1});             // (it was refused for what it is: nothing made it start again from nothing)
+    } TEST_END();
+
+    TEST_CASE("RJ1.15 The Functions That Are Told About The Key May End The Session From Inside The Call (leave()): At The Welcome Of The Room, At The Welcome Of A Rejoin, When The Key Is Let Go Of At The End Of The Match, And When A Refusal Lets Go Of It In Memory And From Nothing; Nothing That Is Gone Is Touched After It") {
+        {   // at the Welcome of the room
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-15"), w.server_now()).ok);
+            Machine& a = w.add_machine("Ann");
+            a.leave_on_key = 1;
+            ASSERT_TRUE(a.net.join("127.0.0.1", w.server.port(), "Ann", 255, "RJ-15"));
+            ASSERT_TRUE(w.run_until([&]() { return !a.keys_given.empty(); }, 5000));
+            ASSERT_EQ(a.net.phase(), NetGame::Phase::Off);
+            ASSERT_EQ(a.keys_forgotten.size(), size_t{1});                               // (leaving lets go of the key)
+            w.run(500);
+            ASSERT_EQ(a.net.phase(), NetGame::Phase::Off);
+        }
+        {   // at the Welcome of a rejoin: the machine is back and leaves at that very moment
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-15B"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-15B");
+            Machine& b = w.join("Bob", "RJ-15B");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+            b.leave_on_key = 2;                                                          // (the first call was the Welcome of the room)
+            ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.run_until([&]() { return b.keys_given.size() == 2; }, 10000));
+            ASSERT_EQ(b.net.phase(), NetGame::Phase::Off);
+            ASSERT_EQ(b.keys_forgotten.size(), size_t{1});
+            w.run(1000);
+            ASSERT_EQ(b.net.phase(), NetGame::Phase::Off);
+        }
+        {   // when the key is let go of at the end of the match
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-15C"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-15C");
+            Machine& b = w.join("Bob", "RJ-15C");
+            a.leave_on_forget = true;
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+            w.run(1000);
+            b.quit();
+            ASSERT_TRUE(w.run_until([&]() { return a.net.phase() == NetGame::Phase::Off; }, 20000));
+            ASSERT_EQ(a.keys_forgotten.size(), size_t{1});
+            w.run(500);
+            ASSERT_EQ(a.net.phase(), NetGame::Phase::Off);
+        }
+        {   // when a refusal lets go of it, in memory
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-15D"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-15D");
+            Machine& b = w.join("Bob", "RJ-15D");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+            b.leave_on_forget = true;
+            w.server.script_reason = net::RejectReason::Dropped;
+            w.server.door = Server::Door::Scripted;
+            ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.run_until([&]() { return !b.keys_forgotten.empty(); }, 5000));
+            ASSERT_EQ(b.net.phase(), NetGame::Phase::Off);
+            ASSERT_EQ(b.keys_forgotten.size(), size_t{1});
+            w.run(500);
+            ASSERT_EQ(b.net.phase(), NetGame::Phase::Off);
+        }
+        {   // ... and from nothing (the machine joined with the key)
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            w.server.script_reason = net::RejectReason::NoSuchRoom;
+            w.server.door = Server::Door::Scripted;
+            net::SeatKey key{};
+            for (size_t i = 0; i < key.size(); ++i) key[i] = static_cast<uint8_t>(i * 7u + 3u);
+            Machine& m = w.add_machine("Bob");
+            m.leave_on_forget = true;
+            ASSERT_TRUE(m.net.join("127.0.0.1", w.server.port(), "Bob", 2, "RJ-15E", "", key));
+            ASSERT_TRUE(w.run_until([&]() { return !m.keys_forgotten.empty(); }, 5000));
+            ASSERT_EQ(m.net.phase(), NetGame::Phase::Off);
+            ASSERT_EQ(m.keys_forgotten.size(), size_t{1});
+            w.run(500);
+            ASSERT_EQ(m.net.phase(), NetGame::Phase::Off);
+        }
+    } TEST_END();
+
+    TEST_CASE("RJ1.16 What The Screens Are Told Is What The Server Said, Field By Field (A Scripted Server's Presence Messages): The Seats That Are Missing With Their Names, Seconds And Progress, The Vote With Its Counts And This Machine's Own Choice, The Countdown; paused() Follows The Server's Hold; vote() Sends The Choice For The Seat The Vote Is About, And Nothing When No Vote Is Open") {
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        net::SeatKey key{};
+        for (size_t i = 0; i < key.size(); ++i) key[i] = static_cast<uint8_t>(i * 11u + 2u);
+        net::WelcomeMsg welcome;                                                         // a dedicated server's room: no seat is the host's, and the Welcome gives a key
+        welcome.player = 1;
+        welcome.players = sim::MAX_PLAYERS;
+        welcome.key = key;
+        net::RoomMsg room;
+        room.you = 1;
+        room.leader = 0;
+        room.map_name = "TINY.LVL";
+        const char* const names[3] = {"Ann", "Bob", "Cat"};
+        for (size_t s = 0; s < 3; ++s) {
+            room.slots[s].state = net::SlotState::Client;
+            room.slots[s].name = names[s];
+        }
+        w.server.door = Server::Door::Scripted;
+        w.server.script_messages = {net::encode(welcome), net::encode(room)};
+        Machine& m = w.add_machine("Bob");
+        m.orders = false;
+        ASSERT_TRUE(m.net.join("127.0.0.1", w.server.port(), "Bob", 1, "RJ-16"));
+        ASSERT_TRUE(w.run_until([&]() { return m.net.phase() == NetGame::Phase::Room; }, 5000));
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+        net::StartMsg start;
+        start.seed = 8;
+        start.map_name = "TINY.LVL";
+        start.map_hash = hash;
+        start.roster = 0x07;
+        for (size_t s = 0; s < 3; ++s) start.names[s] = names[s];
+        ASSERT_TRUE(w.server.scripted_send(net::encode(start)));
+        ASSERT_TRUE(w.run_until([&]() { return w.server.scripted_heard(net::MsgType::Loaded); }, 5000));
+        ASSERT_TRUE(w.server.scripted_send(net::encode_begin()));
+        ASSERT_TRUE(w.run_until([&]() { return m.net.phase() == NetGame::Phase::Playing; }, 5000));
+        ASSERT_TRUE(!m.net.paused() && m.net.my_seat() == 1);
+        net::PauseInfo pi = m.net.pause_info();
+        ASSERT_TRUE(!pi.reconnecting && !pi.catching_up && pi.missing.empty() && !pi.vote_open && pi.resume_seconds_left == 0);
+        const auto votes_sent = [&]() {                                                  // the votes that this machine has said, in order (true: continue without the seat)
+            std::vector<std::pair<uint8_t, bool>> out;
+            for (const std::vector<uint8_t>& message : w.server.scripted_inbox) {
+                net::VoteMsg v;
+                if (net::peek_type(message) == net::MsgType::Vote && net::decode(message.data(), message.size(), v)) out.emplace_back(v.seat, v.continue_without);
+            }
+            return out;
+        };
+        const auto say = [&](const net::PresenceMsg& presence, const std::function<bool()>& read) {      // the server's word, and the moment when the machine has read it
+            return w.server.scripted_send(net::encode(presence)) && w.run_until(read, 3000);
+        };
+        ASSERT_TRUE(!m.net.vote(true) && !m.net.vote(false) && votes_sent().empty());      // no vote is open: nothing is sent
+
+        net::PresenceMsg p;                                                              // Cat has been away for 40 s; Ann is back and is being given the match (60 percent); a vote about Cat
+        p.missing.push_back(net::PresenceMsg::Entry{2, net::PresenceMsg::State::Absent, 40, 0});
+        p.missing.push_back(net::PresenceMsg::Entry{0, net::PresenceMsg::State::CatchingUp, 12, 60});
+        p.vote_seat = 2;
+        p.votes_continue = 1;
+        p.voters = 2;
+        p.your_vote = 2;
+        p.cap_s = 1500;
+        ASSERT_TRUE(say(p, [&]() { return m.net.pause_info().missing.size() == 2; }));
+        pi = m.net.pause_info();
+        ASSERT_TRUE(m.net.paused() && !pi.reconnecting && !pi.catching_up && pi.away_s == 0 && pi.attempts == 0 && pi.give_up_s == 0 && pi.catch_up_percent == 0);
+        ASSERT_EQ(pi.missing.size(), size_t{2});
+        ASSERT_TRUE(pi.missing[0].seat == 2 && pi.missing[0].name == "Cat" && pi.missing[0].away_s == 40 && !pi.missing[0].catching_up && pi.missing[0].progress == 0);
+        ASSERT_TRUE(pi.missing[1].seat == 0 && pi.missing[1].name == "Ann" && pi.missing[1].away_s == 12 && pi.missing[1].catching_up && pi.missing[1].progress == 60);
+        ASSERT_TRUE(pi.vote_open && pi.vote_seat == 2 && pi.vote_name == "Cat" && pi.votes_continue == 1 && pi.voters == 2 && pi.my_vote == net::PauseInfo::Choice::Continue);
+        ASSERT_EQ(static_cast<unsigned>(pi.resume_seconds_left), 0u);
+        ASSERT_TRUE(m.net.vote(true));                                                   // keep waiting for Cat: the choice goes out for the seat that the vote is about
+        ASSERT_TRUE(m.net.vote(false));                                                  // ... and continue without it
+        ASSERT_TRUE(w.run_until([&]() { return votes_sent().size() == 2; }, 3000));
+        ASSERT_TRUE((votes_sent() == std::vector<std::pair<uint8_t, bool>>{{2, false}, {2, true}}));
+
+        p.votes_continue = 0;                                                            // the server counted again: this machine's last choice is to keep waiting
+        p.your_vote = 1;
+        ASSERT_TRUE(say(p, [&]() { return m.net.pause_info().my_vote == net::PauseInfo::Choice::KeepWaiting; }));
+        pi = m.net.pause_info();
+        ASSERT_TRUE(pi.vote_open && pi.votes_continue == 0 && pi.my_vote == net::PauseInfo::Choice::KeepWaiting);
+
+        p.vote_seat = 255;                                                               // the vote is closed and this machine has no choice
+        p.votes_continue = 0;
+        p.voters = 0;
+        p.your_vote = 0;
+        ASSERT_TRUE(say(p, [&]() { return !m.net.pause_info().vote_open; }));
+        pi = m.net.pause_info();
+        ASSERT_TRUE(m.net.paused() && !pi.vote_open && pi.vote_seat == 255 && pi.vote_name.empty() && pi.votes_continue == 0 && pi.voters == 0 && pi.my_vote == net::PauseInfo::Choice::None);
+        ASSERT_EQ(pi.missing.size(), size_t{2});
+        ASSERT_TRUE(!m.net.vote(true) && votes_sent().size() == 2);                      // (nothing is voted when no vote is open)
+
+        p = net::PresenceMsg{};                                                          // everybody is back: the match goes on after a countdown of 7 s
+        p.resume_s = 7;
+        ASSERT_TRUE(say(p, [&]() { return m.net.pause_info().resume_seconds_left == 7; }));
+        pi = m.net.pause_info();
+        ASSERT_TRUE(m.net.paused() && pi.missing.empty() && !pi.vote_open && pi.resume_seconds_left == 7);
+
+        p.resume_s = 0;                                                                  // the match runs
+        ASSERT_TRUE(say(p, [&]() { return !m.net.paused(); }));
+        pi = m.net.pause_info();
+        ASSERT_TRUE(!m.net.paused() && pi.missing.empty() && pi.resume_seconds_left == 0);
     } TEST_END();
 }
 

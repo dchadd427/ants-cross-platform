@@ -274,7 +274,8 @@ void NetGame::leave() {
         if (client_session_) client_session_->leave();
         else if (client_lobby_) client_lobby_->leave();
     }
-    forget_key();                                               // the player left: the seat is gone, and the key with it
+    if (phase_ != Phase::Over && phase_ != Phase::Failed) forget_key();      // the player left: the seat is gone, and the key with it (a session that ended by itself decided about its key then)
+    have_key_ = false;
     shutdown_transport();
     role_ = Role::None;
     phase_ = Phase::Off;
@@ -527,6 +528,7 @@ void NetGame::update_client() {
     if ((phase_ == Phase::Connecting || phase_ == Phase::Room || phase_ == Phase::Loading) && client_lobby_) {
         client_lobby_->update(now_);
         note_lobby_welcome();
+        if (!client_lobby_) return;                              // (the function that is told about the key may have ended the session: leave())
         collect_room_chat();
         for (const ClientLobby::Event& ev : client_lobby_->take_events()) {
             switch (ev.type) {
@@ -596,6 +598,7 @@ void NetGame::update_client() {
         client_session_->update(now_);
         if (client_session_->wants_connection(now_)) attach_new_link();       // the way back: the session lost its link and asks for a new one (a failed attempt is told to it too)
         note_session_mode();
+        if (!client_session_) return;                            // (the same)
         if (!desync_reported_ && client_session_->desynced()) {
             desync_reported_ = true;
             status_ = "The game is out of sync.";
@@ -1000,10 +1003,10 @@ void NetGame::begin_match() {
         }
         known_host_ = cc.host;
         client_session_ = std::make_unique<ClientSession>(sim_, cc);
-        last_mode_ = client_session_->mode();                   // (CatchingUp for a machine that is given its match, else Normal)
         client_session_->set_connection(transport_->uplink.get());
         install_hooks();
         client_session_->start(now_);
+        last_mode_ = client_session_->mode();                   // (CatchingUp for a machine that is given its match, else Normal)
         pump_peers();                                           // hands over the links that were made while the map loaded (none in the browser)
     }
     phase_ = Phase::Playing;
