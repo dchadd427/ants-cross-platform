@@ -165,15 +165,16 @@ Command random_unpredicted(Lcg& rng, uint8_t seat) {
     return make_command(CommandType::AllianceBreak, seat);
 }
 
-// Work that costs `ns` of the thread's CPU time: a spin on the very clock that the budget reads, so that it is what it says on every platform (Windows' counts in ticks). A clock that
-// stands still fails the tests instead of hanging them: the spin gives up when the clock has not moved in 100 ms of the time that goes by.
+// Work that costs `ns` of the thread's CPU time AND of wall time: a block is charged the smaller of the two (work_cost_ns), and Windows' thread clock moves in steps of about
+// 15.6 ms, so it can read 25 ms after 10 ms of work. A clock that stands still fails the tests instead of hanging them: the spin gives up when the clock has not moved in 100 ms.
 void burn_cpu(uint64_t ns) {
     const uint64_t t0 = thread_cpu_ns();
     const auto wall0 = std::chrono::steady_clock::now();
     for (;;) {
         const uint64_t spent = thread_cpu_ns() - t0;
-        if (spent >= ns) return;
-        if (spent == 0 && std::chrono::steady_clock::now() - wall0 > std::chrono::milliseconds(100)) return;
+        const auto wall = std::chrono::steady_clock::now() - wall0;
+        if (spent >= ns && wall >= std::chrono::nanoseconds(static_cast<std::chrono::nanoseconds::rep>(ns))) return;
+        if (spent == 0 && wall > std::chrono::milliseconds(100)) return;
     }
 }
 
