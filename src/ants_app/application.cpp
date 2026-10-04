@@ -90,9 +90,11 @@ std::string get_system_username() {
         if (dot != std::string::npos) {
             h = h.substr(0, dot);
         }
-        return u + "@" + h;
+        u += "@" + h;
     }
-    return u;
+    // Cut as a typed name is (printable, at most 32 characters): a long machine name pushed the end of the original's news ("... are a team now!") out of its chat entry (100 characters)
+    const std::string name = clean_player_name(u);
+    return name.empty() ? std::string("Player") : name;
 #endif
 }
 
