@@ -301,6 +301,11 @@ public:
     void movement_reset();
     void movement_tick();
     void loco_sync(AntUnit& a);
+    /// The clip of SetAction(idle) (FUN_0101ad02) for the ant `a` facing `dir` on a tile of the terrain class `terr`: the water clip on water, else the clip of the ant's type, direction and load
+    movement::MotionClip idle_motion_clip(const AntUnit& a, uint8_t dir, int16_t terr) const;
+    /// The clip that the next loco_sync would start on an ant whose locomotion has not begun (invalid when it starts none): every ant of a level before the first tick.
+    /// get_world_state shows it then (the original starts the clip when it creates the ant, 0x100ef18).
+    movement::MotionClip pending_idle_clip(const AntUnit& a) const;
 
     // occupancy (FUN_0100f17f / FUN_0100f2cd / FUN_0100f421 / FUN_0100f3ca)
     OccCell* occ_cell(TileCoord t) noexcept;

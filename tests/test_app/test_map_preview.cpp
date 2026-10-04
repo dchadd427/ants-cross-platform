@@ -1001,7 +1001,7 @@ void test_engine(const assets::AssetArchive& arc) {
         check(a.state_hash() == b.state_hash(), "... and so is every tick after");
     }
     // what the renderer is given: the world of a match that was set up for the level with every team (four hills, the cells of the level), and no ants (the engine of a match puts
-    // its starting ants in the state at once, though they are not drawn before the first tick: the preview's picture is of the map, so the ants are taken out)
+    // its starting ants in the state at once, and the snapshot shows them standing before the first tick: the preview's picture is of the map, so the ants are taken out)
     {
         Stub stub(Stub::World::Synthetic);
         const assets::LevelData level = load_level("GAUNTLET");
