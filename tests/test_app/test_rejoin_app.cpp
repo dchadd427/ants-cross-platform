@@ -336,6 +336,18 @@ struct World {
         app_wire = server.accepted > 0 ? server.accepted - 1 : 0;
         return *app;
     }
+    // An application with the start menu (no join arguments: it connects when the player presses a button)
+    Application& start_menu_app(const fs::path& dir) {
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        cfg.start_menu = true;
+        cfg.lan_port = 0;
+        cfg.settings_path = (dir / "settings.ini").string();
+        app = std::make_unique<Application>();
+        if (!app->init(cfg)) throw std::runtime_error("the application could not start");
+        return *app;
+    }
     // The game dies (a crash, a power cut, a closed tab): its link is cut, nothing is said to the server, and the file of its keys is as it was (the game's own goodbye, which lets go of the key,
     // is what a program that is closed on purpose does: here it does not run, so the file is put back as the death left it)
     void crash_app(const fs::path& dir) {
@@ -430,6 +442,31 @@ net::SeatKey key_of(uint8_t tag) {
     net::SeatKey k{};
     for (size_t i = 0; i < k.size(); ++i) k[i] = static_cast<uint8_t>(tag + i * 7u + 1u);
     return k;
+}
+
+// A click on a control of the start menu: the pointer moves there, the left button goes down and up
+void click_menu(Application& app, MenuId id) {
+    MenuElement e;
+    if (!app.start_menu().find_element(id, e)) throw std::runtime_error("no such control on the panel");
+    const int32_t x = e.rect.x + e.rect.w / 2;
+    const int32_t y = e.rect.y + e.rect.h / 2;
+    app.start_menu().on_mouse_move(x, y);
+    app.start_menu().on_mouse_down(x, y, SDL_BUTTON_LEFT);
+    app.start_menu().on_mouse_up(x, y, SDL_BUTTON_LEFT);
+}
+
+bool menu_has(Application& app, MenuId id) {
+    MenuElement e;
+    return app.start_menu().find_element(id, e);
+}
+
+// The quit dialog's Yes, as the keys give it: Ctrl+Q opens the dialog, Y answers it
+void quit_by_dialog(Application& app) {
+    app.hud().open_quit_dialog();
+    SDL_KeyboardEvent ke{};
+    ke.type = SDL_KEYDOWN;
+    ke.keysym.sym = SDLK_y;
+    app.handle_key_down(ke);
 }
 
 }  // namespace
@@ -596,6 +633,123 @@ void run_use_tests() {
     } TEST_END();
 }
 
+void run_menu_tests() {
+    TEST_CASE("RA7.1 The Start Menu Offers \"Rejoin your match (CODE)\" While A Fresh Key Is In The File And Not Without One; Pressing It Joins The Offer's Server, Room And Seat With The Key (Not The Menu's Own Server) And The Match Begins By Itself, Without The Quick Help Or The Room's Screens; Leaving The Match Lets Go Of The Key And The Button Is Gone") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-7"), w.server_now()).ok);
+        {   // a game with no key in its file: the first panel is the one it always was
+            Application plain;
+            ApplicationConfig pc;
+            pc.headless = true;
+            pc.start_in_map_select = true;
+            pc.start_menu = true;
+            pc.lan_port = 0;
+            pc.settings_path = (scratch_dir("ra71-plain") / "settings.ini").string();
+            ASSERT_TRUE(plain.init(pc));
+            ASSERT_EQ(plain.state(), AppState::StartMenu);
+            ASSERT_FALSE(plain.start_menu().rejoin().has_value() || menu_has(plain, MenuId::Rejoin));
+        }
+        const fs::path dir = scratch_dir("ra71");
+        Application& first = w.start_app(w.config(dir, "RA-7", "Ann"));
+        Machine& bob = w.join("Bob", "RA-7");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(10000);
+        const uint8_t seat = first.net()->my_seat();
+        const net::SeatKey key = first.rejoin_store()->entries()[0].key;
+        w.crash_app(dir);                                                                        // the game dies; its key stays in the file
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RA-7").paused; }, 3000));
+        // the game is started again with the menu and nothing on its command line: the first panel offers the match
+        Application& menu = w.start_menu_app(dir);
+        ASSERT_EQ(menu.state(), AppState::StartMenu);
+        ASSERT_TRUE(menu.start_menu().rejoin().has_value());
+        ASSERT_TRUE(menu.start_menu().rejoin()->room == "RA-7" && menu.start_menu().rejoin()->seat == seat);
+        ASSERT_TRUE(menu.start_menu().rejoin()->server.host == "127.0.0.1" && menu.start_menu().rejoin()->server.port == w.server.port());
+        ASSERT_FALSE(menu.start_menu().server().host == "127.0.0.1");                           // (the menu's own server is the default one: the offer's is used)
+        MenuElement button;
+        ASSERT_TRUE(menu.start_menu().find_element(MenuId::Rejoin, button) && button.text == "Rejoin your match (RA-7)");
+        click_menu(menu, MenuId::Rejoin);
+        ASSERT_EQ(menu.start_menu().panel(), MenuPanel::Connecting);
+        ASSERT_TRUE(w.run_until([&]() { return menu.state() == AppState::Playing && !w.status("RA-7").paused; }, 30000));
+        const server::RoomStatus s = w.status("RA-7");
+        ASSERT_TRUE(s.state == server::RoomState::Running && s.rejoins == 1 && s.absent.empty());
+        ASSERT_TRUE(menu.net() != nullptr && menu.net()->my_seat() == seat && menu.local_player_id() == seat);
+        ASSERT_TRUE(menu.window_title().find("room RA-7") != std::string::npos);
+        ASSERT_TRUE(menu.rejoin_store()->entries().size() == 1 && net::key_matches(menu.rejoin_store()->entries()[0].key, key));        // the Welcome of the rejoin said it again
+        w.run(2000);
+        ASSERT_TRUE(menu.net()->turns_executed() > 200);
+        // the player quits through the quit dialog (two sides: the quit ends the match for both): the match is over, the key is let go of; the results' Leave brings the menu back, and it has no button
+        quit_by_dialog(menu);
+        ASSERT_TRUE(w.run_until([&]() { return menu.scorecard().is_open(); }, 5000));
+        ASSERT_TRUE(menu.rejoin_store()->entries().empty());
+        ASSERT_FALSE(fs::exists(dir / "rejoin.txt"));
+        SDL_KeyboardEvent leave{};
+        leave.type = SDL_KEYDOWN;
+        leave.keysym.sym = SDLK_c;
+        menu.handle_key_down(leave);
+        ASSERT_EQ(menu.state(), AppState::StartMenu);
+        ASSERT_FALSE(menu.start_menu().rejoin().has_value() || menu_has(menu, MenuId::Rejoin));
+        ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("RA7.2 The Offer Is Only A Fresh Key Of A Server That The Menu Can Reach (An Entry Of More Than A Day, And The Browser's Entry, A URL, Are Not Offered); A Key That The Server Refuses (The Match Is Over) Comes Back To The First Panel With The Reason And The Button Is Gone; A Key That Was Let Go Of While The Menu Stood Open Says So At The Press") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        const std::string server = "127.0.0.1:" + std::to_string(w.server.port());
+        const int64_t now = wall_clock_ms();
+        const auto write_file = [](const fs::path& path, const std::string& text) {
+            std::ofstream out(path, std::ios::binary | std::ios::trunc);
+            out << text;
+        };
+        // not offered: a day and a minute old, a URL
+        {
+            const fs::path dir = scratch_dir("ra72a");
+            write_file(dir / "rejoin.txt", key_line(server, "OLD-1", 0, key_of(1), now - 24 * 3600 * 1000 - 60 * 1000) + key_line("wss://play.example.org/game", "WEB-1", 1, key_of(2), now));
+            Application& menu = w.start_menu_app(dir);
+            ASSERT_FALSE(menu.start_menu().rejoin().has_value() || menu_has(menu, MenuId::Rejoin));
+        }
+        // offered: the newest fresh one of a server that can be reached, of several
+        {
+            const fs::path dir = scratch_dir("ra72b");
+            write_file(dir / "rejoin.txt", key_line("wss://play.example.org/game", "WEB-1", 1, key_of(2), now) + key_line(server, "OLDER-1", 2, key_of(3), now - 120 * 1000) +
+                                               key_line(server, "NEWEST-1", 3, key_of(4), now - 60 * 1000));
+            Application& menu = w.start_menu_app(dir);
+            ASSERT_TRUE(menu.start_menu().rejoin().has_value() && menu.start_menu().rejoin()->room == "NEWEST-1" && menu.start_menu().rejoin()->seat == 3);   // (the URL is newer, and is no offer for this menu)
+        }
+        // a key for a match that is over: the server has no such room
+        {
+            const fs::path dir = scratch_dir("ra72c");
+            write_file(dir / "rejoin.txt", key_line(server, "GONE-1", 1, key_of(5), now - 60 * 1000));
+            Application& menu = w.start_menu_app(dir);
+            ASSERT_TRUE(menu.start_menu().rejoin().has_value());
+            click_menu(menu, MenuId::Rejoin);
+            ASSERT_TRUE(w.run_until([&]() { return menu.start_menu().panel() == MenuPanel::Main; }, 10000));
+            ASSERT_EQ(menu.state(), AppState::StartMenu);
+            ASSERT_EQ(menu.start_menu().message(), std::string("The match is over."));
+            ASSERT_FALSE(menu.start_menu().rejoin().has_value() || menu_has(menu, MenuId::Rejoin));      // the refusal let go of the key
+            ASSERT_FALSE(fs::exists(dir / "rejoin.txt"));
+            ASSERT_TRUE(menu.net() == nullptr);                                                          // (nothing of the attempt stays)
+        }
+        // the key is let go of while the menu stands open (another window left the match): the press says so
+        {
+            const fs::path dir = scratch_dir("ra72d");
+            write_file(dir / "rejoin.txt", key_line(server, "GONE-2", 0, key_of(6), now - 60 * 1000));
+            Application& menu = w.start_menu_app(dir);
+            ASSERT_TRUE(menu.start_menu().rejoin().has_value());
+            std::filesystem::remove(dir / "rejoin.txt");
+            click_menu(menu, MenuId::Rejoin);
+            w.run(100);
+            ASSERT_EQ(menu.start_menu().panel(), MenuPanel::Main);
+            ASSERT_TRUE(menu.start_menu().message().find("no match to rejoin") != std::string::npos);
+            ASSERT_FALSE(menu.start_menu().rejoin().has_value());
+            ASSERT_TRUE(menu.net() == nullptr);
+        }
+        ASSERT_FALSE(output.text().find(rejoin_key_hex(key_of(5))) != std::string::npos);
+    } TEST_END();
+}
+
 int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
@@ -603,6 +757,7 @@ int main(int argc, char* argv[]) {
     std::cout << "\n=======================================================\n [THE WAY BACK IN THE APPLICATION] the screens, the keys' storage, the start menu's Rejoin\n=======================================================\n";
     run_key_tests();
     run_use_tests();
+    run_menu_tests();
     std::cout << "\n" << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
     if (g_test_failures == 0) {
         std::cout << "ALL TESTS PASSED\n";

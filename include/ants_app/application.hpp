@@ -562,6 +562,9 @@ private:
         int players{4};                                   // hosting: the seats of the room
         int map{0};                                       // hosting: the index of the map that the player chose (menu_map)
         double elapsed_ms{0.0};                           // how long the attempt has taken (its time limit, menu_connect_timeout_ms)
+        bool rejoin{false};                               // "Rejoin your match": the join shows the key of the seat that this machine had (the room is `room`, the server is `server`, which need not be the menu's own)
+        uint8_t seat{255};                                // ... that seat
+        net::SeatKey key{};                               // ... that key (kept here until the join is made, never printed)
     } menu_conn_;
     int32_t mouse_screen_x_{320};
     int32_t mouse_screen_y_{240};
@@ -580,11 +583,14 @@ private:
     void enter_start_menu(const std::string& notice = std::string());   // state StartMenu, the first panel (with a line of notice when there is one)
     void update_start_menu(float dt);                     // the menu's clock, what it asked for, its connection (once per frame, from pump_network)
     void process_menu_request(const MenuRequest& request);
-    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map);
+    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map, const RejoinEntry* rejoin = nullptr, const ServerAddress* server = nullptr);
+    void begin_menu_rejoin(const MenuRequest& request);   // "Rejoin your match": the key of the offer's seat, from the store, joins that room on that server
+    std::optional<RejoinOffer> rejoin_offer();            // the newest fresh key that the menu can use (a server of host:port: the browser's entries are for its page), or none
     void pump_menu_connection();                          // the name lookup, the join, the room: what became of them
     void menu_connection_failed(const std::string& message);
     void abort_menu_connection();                         // Cancel, Back from the room, a failure: nothing of the connection stays
     void menu_connected();                                // the player is in the server's room
+    void menu_rejoined();                                 // a rejoin is under way: the match begins by itself (the net's events), not through the room's screens
     void menu_start_single(const MenuRequest& request);
     std::string menu_failure_text() const;                // what a failed join says, in the menu's words
     bool room_has_chosen_map() const;                     // hosting: the room that the server made is on the map that the player chose

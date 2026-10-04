@@ -242,6 +242,14 @@ std::vector<Variant> all_variants() {
     std::vector<Variant> v;
     v.push_back({"first panel", [](Rig& r) { r.menu.show_main(); }});
     v.push_back({"first panel with a long notice", [](Rig& r) { r.menu.show_main(long_message()); }});
+    v.push_back({"first panel with an offer to rejoin", [](Rig& r) {
+        r.menu.set_rejoin(RejoinOffer{"MEET-1", 2, ServerAddress{}});
+        r.menu.show_main();
+    }});
+    v.push_back({"first panel with an offer to rejoin, the longest code, and a long notice", [](Rig& r) {
+        r.menu.set_rejoin(RejoinOffer{std::string(32, 'W'), 3, ServerAddress{}});
+        r.menu.show_main(long_message());
+    }});
     v.push_back({"single player, nobody", [](Rig& r) { r.to_panel(MenuId::Single); }});
     v.push_back({"single player, three bots", [](Rig& r) {
         r.to_panel(MenuId::Single);
@@ -2311,6 +2319,170 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(j.menu.message(), std::string("The connection to the server was lost."));
         j.click(MenuId::Back);                                                             // a click that begins on this panel does
         ASSERT_EQ(j.menu.panel(), MenuPanel::Main);
+    } TEST_END();
+
+
+    // ---- the first panel's "Rejoin your match (CODE)" (a key of a running match is in the application's store, rejoin_store.hpp) ----
+
+    TEST_CASE("M12.1 Rejoin offer: with none the first panel is exactly what it was; with one there is one more button, \"Rejoin your match (CODE)\", above Single player in the gap under the title, and nothing else of the panel moves (the default selection stays Single player: a panel never preselects a button that acts)") {
+        Rig plain;
+        const std::vector<MenuElement> before = plain.menu.elements();
+        ASSERT_FALSE(plain.menu.rejoin().has_value());
+        ASSERT_FALSE(plain.exists(MenuId::Rejoin));
+        Rig r;
+        r.menu.set_rejoin(RejoinOffer{"MEET-1", 2, ServerAddress{"play.example.org", 4001}});
+        r.menu.show_main();
+        const std::vector<MenuElement> after = r.menu.elements();
+        ASSERT_EQ(after.size(), before.size() + 1);
+        size_t found = 0;
+        for (const MenuElement& e : after) {
+            if (e.id == MenuId::Rejoin) {
+                ++found;
+                ASSERT_EQ(e.text, std::string("Rejoin your match (MEET-1)"));
+                ASSERT_TRUE(e.kind == MenuKind::Button && e.font == FontSize::Px18 && e.centered);
+                continue;
+            }
+            bool same = false;                                                          // every other element is where it was, with the same words
+            for (const MenuElement& b : before) {
+                if (b.id == e.id && b.kind == e.kind && b.text == e.text && b.rect.x == e.rect.x && b.rect.y == e.rect.y && b.rect.w == e.rect.w && b.rect.h == e.rect.h) same = true;
+            }
+            ASSERT_TRUE(same);
+        }
+        ASSERT_EQ(found, size_t{1});
+        const MenuElement rejoin = r.element(MenuId::Rejoin);
+        const MenuElement single = r.element(MenuId::Single);
+        MenuElement title;
+        for (const MenuElement& e : after) {
+            if (e.kind == MenuKind::Title) title = e;
+        }
+        ASSERT_TRUE(rejoin.rect.y >= title.rect.y + title.rect.h && rejoin.rect.y + rejoin.rect.h <= single.rect.y);       // between the title and Single player
+        ASSERT_TRUE(rejoin.rect.x + rejoin.rect.w / 2 == single.rect.x + single.rect.w / 2);                                 // centred over it
+        const std::vector<MenuId> expected = {MenuId::Rejoin, MenuId::Single, MenuId::JoinWithCode, MenuId::HostOnline, MenuId::Quit};
+        ASSERT_TRUE(control_ids(r.menu) == expected);
+        ASSERT_EQ(r.menu.selected(), MenuId::Single);
+        // the 16:9 menu moves the button with the group that the others are in (+160, +30)
+        r.menu.set_wide_layout(true);
+        const MenuElement wide = r.element(MenuId::Rejoin);
+        ASSERT_TRUE(wide.rect.x == rejoin.rect.x + StartMenu::kWideDx && wide.rect.y == rejoin.rect.y + StartMenu::kWideMiddleDy);
+        ASSERT_TRUE(r.element(MenuId::Single).rect.y == single.rect.y + StartMenu::kWideMiddleDy);
+        // taking the offer away gives the panel back
+        r.menu.set_wide_layout(false);
+        r.menu.set_rejoin(std::nullopt);
+        ASSERT_FALSE(r.exists(MenuId::Rejoin));
+        ASSERT_EQ(r.menu.elements().size(), before.size());
+    } TEST_END();
+
+    TEST_CASE("M12.2 Rejoin offer: Up from Single player selects it (Down from Quit wraps to it), Enter or Space on it asks the application to rejoin that room, seat and server (the panel's name, cleaned; \"Player\" when it is not a name that the server would take) and the panel says \"Rejoining your match in room CODE...\"; the settling rule holds for it like for every button") {
+        Rig r(0, "Dave");
+        r.menu.set_rejoin(RejoinOffer{"MEET-1", 2, ServerAddress{"play.example.org", 4444}});
+        r.menu.show_main();
+        r.key(SDLK_UP);
+        ASSERT_EQ(r.menu.selected(), MenuId::Rejoin);
+        r.key(SDLK_UP);
+        ASSERT_EQ(r.menu.selected(), MenuId::Quit);                                      // (the wrap)
+        r.key(SDLK_DOWN);
+        ASSERT_EQ(r.menu.selected(), MenuId::Rejoin);
+        r.menu.show_main();                                                              // a fresh panel (the first panel keeps the selection that it had): Enter in a hurry does nothing
+        ASSERT_EQ(r.menu.selected(), MenuId::Rejoin);
+        r.quick_key(SDLK_RETURN);
+        ASSERT_FALSE(r.menu.has_request());
+        ASSERT_EQ(r.menu.panel(), MenuPanel::Main);
+        r.key(SDLK_RETURN);
+        ASSERT_EQ(r.menu.panel(), MenuPanel::Connecting);
+        ASSERT_TRUE(r.menu.has_request());
+        const MenuRequest q = r.take();
+        ASSERT_TRUE(q.type == MenuRequest::Type::Rejoin && q.room == "MEET-1" && q.seat == 2 && q.name == "Dave");
+        ASSERT_TRUE(q.server.host == "play.example.org" && q.server.port == 4444);
+        ASSERT_TRUE(has_text(r.menu.elements(), "Rejoining your match in room MEET-1..."));
+        ASSERT_EQ(r.menu.connect_origin(), MenuPanel::Main);
+        // Space acts like Enter on a button; a name that the server would rename (a bot's) is not sent
+        Rig s(0, "Bot (Hard)");
+        s.menu.set_rejoin(RejoinOffer{"R2", 0, ServerAddress{}});
+        s.menu.show_main();
+        s.key(SDLK_UP);
+        s.key(SDLK_SPACE);
+        const MenuRequest q2 = s.take();
+        ASSERT_TRUE(q2.type == MenuRequest::Type::Rejoin && q2.name == "Player" && q2.room == "R2" && q2.seat == 0);
+        // nothing offered, nothing to ask: Up from Single player is Quit, and the other entries ask nothing
+        Rig n;
+        n.key(SDLK_UP);
+        ASSERT_EQ(n.menu.selected(), MenuId::Quit);
+    } TEST_END();
+
+    TEST_CASE("M12.3 Rejoin offer: a click is a press and a release on the button (the click sound at the press); leaving the button before the release cancels it; the clicks of the other entries are what they were") {
+        Rig r;
+        r.menu.set_rejoin(RejoinOffer{"MEET-1", 1, ServerAddress{}});
+        r.menu.show_main();
+        const MenuElement b = r.element(MenuId::Rejoin);
+        const int32_t x = b.rect.x + b.rect.w / 2;
+        const int32_t y = b.rect.y + b.rect.h / 2;
+        r.menu.on_mouse_move(x, y);
+        ASSERT_EQ(r.menu.selected(), MenuId::Rejoin);
+        ASSERT_TRUE(r.menu.on_mouse_down(x, y, SDL_BUTTON_LEFT));
+        ASSERT_TRUE(r.element(MenuId::Rejoin).pressed);
+        ASSERT_EQ(r.sounds.count(sim::SoundID::ButtonClick), 1);
+        ASSERT_FALSE(r.menu.has_request());                                              // the action is at the release
+        const MenuElement single = r.element(MenuId::Single);
+        r.menu.on_mouse_move(single.rect.x + 5, single.rect.y + 5);                      // the pointer leaves the button: it is no longer pressed
+        r.menu.on_mouse_up(single.rect.x + 5, single.rect.y + 5, SDL_BUTTON_LEFT);
+        ASSERT_FALSE(r.menu.has_request());
+        ASSERT_EQ(r.menu.panel(), MenuPanel::Main);
+        r.click(MenuId::Rejoin);
+        ASSERT_EQ(r.menu.panel(), MenuPanel::Connecting);
+        const MenuRequest q = r.take();
+        ASSERT_TRUE(q.type == MenuRequest::Type::Rejoin && q.room == "MEET-1" && q.seat == 1);
+        r.menu.connection_cancelled();
+        r.click(MenuId::Single);                                                         // the others work as they did
+        ASSERT_EQ(r.menu.panel(), MenuPanel::Single);
+    } TEST_END();
+
+    TEST_CASE("M12.4 Rejoin offer: a rejoin that fails comes back to the FIRST panel with the reason (not to Join or Host), a cancel comes back to it with nothing said, and Esc on \"Rejoining...\" cancels; the offer is whatever the owner gives next") {
+        Rig r;
+        r.menu.set_rejoin(RejoinOffer{"MEET-1", 2, ServerAddress{}});
+        r.menu.show_main();
+        r.key(SDLK_UP);
+        r.key(SDLK_RETURN);
+        r.take();
+        r.menu.connection_failed("Sorry, you have been dropped from the game.");
+        ASSERT_EQ(r.menu.panel(), MenuPanel::Main);
+        ASSERT_EQ(r.menu.message(), std::string("Sorry, you have been dropped from the game."));
+        ASSERT_TRUE(has_text(r.menu.elements(), "Sorry, you have been dropped from the game."));
+        ASSERT_TRUE(r.exists(MenuId::Rejoin));                                           // (the owner takes the offer away when the key was let go of)
+        r.menu.set_rejoin(std::nullopt);
+        ASSERT_FALSE(r.exists(MenuId::Rejoin));
+        // Cancel and Esc
+        Rig c;
+        c.menu.set_rejoin(RejoinOffer{"MEET-1", 2, ServerAddress{}});
+        c.menu.show_main();
+        c.key(SDLK_UP);
+        c.key(SDLK_RETURN);
+        c.take();
+        ASSERT_EQ(c.menu.panel(), MenuPanel::Connecting);
+        c.key(SDLK_ESCAPE);
+        ASSERT_EQ(c.take().type, MenuRequest::Type::Cancel);
+        c.menu.connection_cancelled();
+        ASSERT_EQ(c.menu.panel(), MenuPanel::Main);
+        ASSERT_TRUE(c.menu.message().empty());
+        ASSERT_TRUE(c.exists(MenuId::Rejoin) && c.exists(MenuId::Single));
+        // a Join after it still fails back to Join (the origin is the panel that asked)
+        c.to_panel(MenuId::JoinWithCode);
+        c.type("Dave");
+        c.key(SDLK_DOWN);
+        c.type("ROOM-9");
+        c.key(SDLK_RETURN);
+        c.take();
+        c.menu.connection_failed("The room is full.");
+        ASSERT_EQ(c.menu.panel(), MenuPanel::Join);
+        // the selection that stood on the button does not stay on a button that is gone
+        Rig d;
+        d.menu.set_rejoin(RejoinOffer{"MEET-1", 2, ServerAddress{}});
+        d.menu.show_main();
+        d.key(SDLK_UP);
+        ASSERT_EQ(d.menu.selected(), MenuId::Rejoin);
+        d.menu.set_rejoin(std::nullopt);
+        ASSERT_EQ(d.menu.selected(), MenuId::Single);
+        d.menu.show_main();
+        ASSERT_EQ(d.menu.selected(), MenuId::Single);
     } TEST_END();
 
     std::cout << "\nstart menu model: " << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
