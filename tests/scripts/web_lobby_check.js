@@ -1,6 +1,6 @@
 // Runs the front page's OWN rules without a browser (the owner: "when you click the play online button it opens in a new tab can we just make that the default. you can play single on the
 // play online tab by setting to 1 player"):
-//   * web/lobby.html, the block LOBBY_BEGIN .. LOBBY_END: what the New match form means. playersChoice (1 .. 4, else the fallback), soloBots (the opponents that the first versions remembered:
+//   * web/lobby.html, the block LOBBY_BEGIN .. LOBBY_END: what the two cards mean. playersChoice (1 .. 4, else the fallback), hostPlayers (the Host card's 2 .. 4: an old stored 1 is 2), soloBots (the opponents that the first versions remembered:
 //     nothing remembered is Medium, anything that is no level is none), soloSeats (one level per seat from the new key, else the old one), soloTeamChoices / soloTeam (the Teams select), and
 //     localGameQuery (the address of a game on THIS computer: ?map=<key>[&bots=<levels>][&teams=0%2BN]&name=<name>&aspect=<shape>, never a ?join=, a room or a server);
 //   * web/shell.html, ANTS_PAGE.localArguments: the game page's local parameters through a WHITELIST (the map by its key out of the six shipped maps, the opponents by one level word or three,
@@ -51,7 +51,7 @@ const lobbyCode = [
     'function mapByKey(key) { for (var i = 0; i < MAPS.length; i++) if (MAPS[i].key === key) return MAPS[i]; return null; }',
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath),
-    'return { MAPS: MAPS, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, soloTeamChoices: soloTeamChoices, soloTeam: soloTeam, SOLO_SEATS: SOLO_SEATS, localGameQuery: localGameQuery, validFill: validFill };',
+    'return { MAPS: MAPS, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, soloTeamChoices: soloTeamChoices, soloTeam: soloTeam, SOLO_SEATS: SOLO_SEATS, localGameQuery: localGameQuery, validFill: validFill };',
 ].join('\n');
 const L = new Function(lobbyCode)();
 
@@ -92,6 +92,10 @@ try {
     for (const n of [1, 2, 3, 4]) same('playersChoice: "' + n + '" is ' + n, L.playersChoice(String(n), 9), n);
     for (const bad of ['0', '5', '', ' 1', '1 ', '01', '1.0', '+1', 'one', 'x', null, undefined, 1, 2.5, {}, [], '1,2', '١']) same('playersChoice: ' + JSON.stringify(bad) + ' is the fallback', L.playersChoice(bad, 7), 7);
     same('playersChoice: the fallback is what the caller says (the form starts with 1, an address that names no players hosts 4)', [L.playersChoice(null, 1), L.playersChoice('9', 4)], [1, 4]);
+    // the players of the Host card: 2 - 4; a 1 that an earlier page remembered (its Players select had 1 for a game on this computer, which has its own card now) is 2
+    same('hostPlayers: 2, 3 and 4 are themselves', [L.hostPlayers('2', 9), L.hostPlayers('3', 9), L.hostPlayers('4', 9)], [2, 3, 4]);
+    same('hostPlayers: an old stored 1 is 2 (not the fallback: the person had chosen something)', [L.hostPlayers('1', 4), L.hostPlayers('1', 2)], [2, 2]);
+    for (const bad of ['0', '5', '', ' 2', '2 ', '02', 'two', null, undefined, 3, {}, []]) same('hostPlayers: ' + JSON.stringify(bad) + ' is the fallback', L.hostPlayers(bad, 7), 7);
 
     same('soloBots: a browser that never chose starts with Medium', [L.soloBots(null), L.soloBots(undefined)], ['medium', 'medium']);
     same('soloBots: "none" is none (the original\'s single player, alone), and so is an empty value', [L.soloBots('none'), L.soloBots('')], ['', '']);

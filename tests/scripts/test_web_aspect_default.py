@@ -39,12 +39,13 @@ class PagesStartWith16x9(unittest.TestCase):
         self.assertIn("var ANTS_ASPECT = '16:9';", page)
         self.assertIn("return { aspect: '16:9', source: 'default' };", page)                 # nothing says otherwise: 16:9 on every device, a phone held upright included
 
-    def test_the_play_online_page_frames_and_form_start_with_16_9(self):
+    def test_the_front_page_frames_and_buttons_start_with_16_9(self):
         page = read(LOBBY)
         self.assertIn(".frame { position: relative; aspect-ratio: 16 / 9; }", page)
         self.assertIn('body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }', page)
         self.assertIn("var aspect = '16:9';", page)
-        self.assertRegex(page, r'<select id="aspect-select"[^>]*>\s*<option value="16:9">16:9</option>')
+        self.assertIn('<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9">16:9</label>', page)        # the picture's two buttons: 16:9 is the one that is checked
+        self.assertIn('<input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3">Classic 4:3</label>', page)
 
 
 class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
