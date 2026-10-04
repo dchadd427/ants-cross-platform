@@ -847,7 +847,7 @@ bool parse_switch(const std::string& text, bool& out) {
     return false;
 }
 
-// --prediction, else the settings' key `prediction` ("on" or "off": a key that the owner of the settings file writes, nothing in the game does), else on. A settings file never stops the game: a
+// --prediction, else the settings' key `prediction` ("on" or "off": a key that the owner of the settings file writes, nothing in the game does), else off. A settings file never stops the game: a
 // value that is not a switch is reported and ignored.
 void Application::choose_prediction() {
     prediction_wanted_ = config_.prediction;

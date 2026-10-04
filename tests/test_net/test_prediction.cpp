@@ -1448,12 +1448,12 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Median Of The Last Five Orders No Older Than 400 Ticks Plus One Tick Of Bias, Between 1 And 12 Ticks, Falls After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks") {
+    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Median Of The Last Five Orders No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Runs It), Between 1 And 12 Ticks, Falls After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks") {
         const Prediction::Config c;
         ASSERT_TRUE(c.learn_lead);
         ASSERT_EQ(c.lag_samples, 5u);
         ASSERT_EQ(c.lag_fresh_ticks, 400u);
-        ASSERT_EQ(c.lead_bias_ticks, 1u);
+        ASSERT_EQ(c.lead_bias_ticks, 0u);                                                        // (the owner's decision: a local game's feel and no hops; 1 shows an order 50 ms sooner at the price of a tile hop in one order of six)
         ASSERT_EQ(c.min_lead_ticks, 1u);
         ASSERT_EQ(c.max_lead_ticks, 12u);
         ASSERT_EQ(c.lead_fall_after_ticks, 40u);
@@ -1502,7 +1502,7 @@ void run_cue_tests() {
 // --measure: how often and how much the prediction corrects the picture (not a test: it prints tables and checks nothing). Seat 0 is the player whose screen it is; the other seats up to the
 // number of players give random orders at a steady rate (a person gives one every second or two: the table has 0.5 and 2 a second for each of them), and the player's own orders come at the
 // rate in the table. The link has a round trip of about 60 - 100 ms (a jitter buffer of one turn, a turn that takes one step to arrive and an order that takes one step to be sealed, a step
-// of jitter unless the line says none), the prediction is the product's (it learns its lead; bias one unless the line says another), and a ten minute match is played (12,000 ticks) for
+// of jitter unless the line says none), the prediction is the product's (it learns its lead, with no bias unless the line says another), and a ten minute match is played (12,000 ticks) for
 // every line. What a correction is: a rebuild after which at least one ant stands elsewhere at the display tick than it did before (Prediction::set_measure_corrections).
 struct MeasureLine {
     double own_rate;
@@ -1562,8 +1562,8 @@ void run_measure() {
         "\n own/s | players x foreign/s | bias | jitter | own orders | foreign orders | rebuilds: own timing / foreign / other | visible/min | ants/corr | px mean / max | rebuild ms mean / max | tick ms mean / max\n"
         " ------|---------------------|------|--------|------------|----------------|----------------------------------------|-------------|-----------|---------------|-----------------------|-------------------\n";
     std::cout << head;
-    const MeasureLine foreign_lines[] = {{1.0, 1, 0.0, 1, 1}, {0.0, 2, 0.5, 1, 1}, {0.0, 2, 2.0, 1, 1}, {0.0, 4, 0.5, 1, 1}, {0.0, 4, 2.0, 1, 1},
-                                         {1.0, 2, 0.5, 1, 1}, {1.0, 2, 2.0, 1, 1}, {1.0, 3, 0.5, 1, 1}, {1.0, 3, 2.0, 1, 1}, {1.0, 4, 0.5, 1, 1}, {1.0, 4, 2.0, 1, 1}};
+    const MeasureLine foreign_lines[] = {{1.0, 1, 0.0, 0, 1}, {0.0, 2, 0.5, 0, 1}, {0.0, 2, 2.0, 0, 1}, {0.0, 4, 0.5, 0, 1}, {0.0, 4, 2.0, 0, 1},
+                                         {1.0, 2, 0.5, 0, 1}, {1.0, 2, 2.0, 0, 1}, {1.0, 3, 0.5, 0, 1}, {1.0, 3, 2.0, 0, 1}, {1.0, 4, 0.5, 0, 1}, {1.0, 4, 2.0, 0, 1}};
     uint32_t n = 0;
     for (const MeasureLine& line : foreign_lines) measure_line(line, 1000u + 17u * n++);
     std::cout << "\n the bias, own orders only (the same orders, the same link; a jitter of one step is the lag changing by a tick from order to order):\n" << head;

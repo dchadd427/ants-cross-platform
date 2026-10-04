@@ -1525,9 +1525,7 @@ void run_guest_tests() {
         ASSERT_TRUE(trio.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::Waiting; }, 5000));
         ASSERT_EQ(app.hud().alliance_dialog_team(), 1);
         ASSERT_EQ(app.hud().alliance_dialog_text(), "Waiting for Bob (Red) to respond to your offer to team up.");
-        // Bob's simulation holds the offer as well (not yet at the moment of the dialog: the dialog is the shown engine's, which runs the turn that carries the offer, already in hand, a few ticks
-        // before the confirmed engines do: the player sees the wait begin at once)
-        ASSERT_TRUE(trio.until([&]() { return bob.sim.get_world_state().pending_invite_from[1] == 2; }, 3000));
+        ASSERT_EQ(bob.sim.get_world_state().pending_invite_from[1], 2);                   // Bob's simulation holds the offer as well
         // Bob refuses: the waiting dialog closes, the status line says so
         Command deny;
         deny.type = CommandType::AllianceDeny;
@@ -5459,7 +5457,6 @@ int main(int argc, char* argv[]) {
     // SDL's headers rename main to SDL_main (SDL2main on Windows calls it): the signature must be this one, or the linker finds no SDL_main (the build guard in CMakeLists.txt checks it)
     (void)argc;
     (void)argv;
-    net::NetGame::default_prediction_budget_ns() = UINT64_MAX;      // (a busy machine stalls the test process now and then: that is not the prediction's cost, and no test is to lose its prediction to it)
     std::cout << "\n=======================================================\n [SUITE] Network port: the application (names, room, thumbs, start, match)\n"
                  "=======================================================\n";
     run_command_line_tests();

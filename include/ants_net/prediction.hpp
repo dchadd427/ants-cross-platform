@@ -59,18 +59,14 @@ public:
         uint64_t budget_ns{12ull * 1000ull * 1000ull};     // 12 ms: three quarters of a frame at 60 Hz (a rebuild is a few hundred microseconds on the shipped maps, R1)
         uint32_t budget_strikes{4};                        // (not one: a machine that is busy with something else stalls a frame now and then, and that is not the prediction's cost)
         uint32_t budget_window_ticks{200};                 // 10 s
-        // The lead learns from the player's own orders. When an order comes back in a turn, the number of ticks between the confirmed tick that it was given at and the tick that the host
-        // sealed it into is its LAG (it does not depend on the lead). The lead is the MEDIAN lag (the upper one of an even number) of the last `lag_samples` orders that are not older than
-        // `lag_fresh_ticks`, plus `lead_bias_ticks`: one odd order (a stall) does not move the lead for the orders that follow it. The delay that the owner measures (set_expected_delay_ms, as a
-        // lag) is what it is until there is an order to learn from. Off, the lead is the owner's estimate alone (the tests that hold a wrong lead to account).
+        // The lead is the median lag (the upper one of an even number) of the last `lag_samples` own orders, none older than `lag_fresh_ticks`, plus `lead_bias_ticks`: one stalled order
+        // does not move it. Off: the owner's estimate alone (the tests that hold a wrong lead to account).
         bool learn_lead{true};
         uint32_t lag_samples{5};
         uint32_t lag_fresh_ticks{400};                     // 20 s
-        // The display stands this many ticks further ahead than the lag of the player's orders. An order is put at the display tick; with a bias of one it is run by the confirmed engine one tick
-        // BEFORE that, so when its turn comes it is corrected by one tick for the ordered ants (a rebuild that moves them one tick on, a few pixels) and the picture has had the order's first
-        // tick from the moment of the click: it shows what an order does 50 ms sooner than the lag alone would (measured: the ants stand up at 143 ms instead of 192), and the jitter of one
-        // tick in the lag never makes an order late, which is the correction that is seen (the ordered ants hover while the order is put at a later tick). With 0 an order lands where it will be run.
-        uint32_t lead_bias_ticks{1};
+        // Ticks that the display stands beyond the lag. 0: an order is put where the host runs it, so nothing is corrected while the lag holds. 1: the ants react 50 ms sooner, but about one
+        // order in six shows a whole-tile hop when its turn corrects it (docs/audit/rollback_notes.md, R6).
+        uint32_t lead_bias_ticks{0};
     };
 
     /// What the prediction did (for the tests and the measurements; nothing here is state)

@@ -80,9 +80,8 @@ struct ApplicationConfig {
     float zoom{zoom::kNormal};
     bool zoom_given{false};
     /// --prediction on | off (--no-prediction is --prediction off; the settings key `prediction` when the command line does not say): whether a match of the network shows the player's own
-    /// orders at once (net::Prediction, docs/NETWORK_PORT.md "Prediction of one's own orders"). On by default; off, every order waits for its turn as it did before the prediction existed.
-    /// A game of one machine has no delay to hide and never predicts. `prediction_given` is true when the command line said it (the settings key then does not count).
-    bool prediction{true};
+    /// orders at once (net::Prediction, docs/NETWORK_PORT.md). OFF by default (opt-in); a game of one machine never predicts. `prediction_given`: the command line said it (the settings key then does not count).
+    bool prediction{false};
     bool prediction_given{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
@@ -497,7 +496,7 @@ private:
     std::unique_ptr<net::NetGame> net_;
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
-    bool prediction_wanted_{true};                        // --prediction, else the settings' key `prediction`, else on: given to every NetGame that this application makes
+    bool prediction_wanted_{false};                       // --prediction, else the settings' key `prediction`, else off: given to every NetGame that this application makes
     bool prediction_gave_up_reported_{false};             // the console has said that this match's prediction switched itself off
     uint64_t orders_seen_{0};                             // the orders that the prediction has taken and the felt delay has been told of
     double net_time_ms_{0.0};
@@ -605,7 +604,7 @@ private:
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered
-    void choose_prediction();                             // --prediction, else the settings' key `prediction`, else on: whether the matches of the network predict the player's own orders
+    void choose_prediction();                             // --prediction, else the settings' key `prediction`, else off: whether the matches of the network predict the player's own orders
     void apply_match_zoom();                              // a match starts: the camera takes the remembered level if the kind of match and the map offer it, else 1
     void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() (a network match never below 1; no zoom while the offscreen target cannot be made), one report when that failure begins
     bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)

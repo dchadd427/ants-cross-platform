@@ -149,8 +149,16 @@ ApplicationConfig host_config() {
     return cfg;
 }
 
+// The prediction is OFF by default (opt-in); the tests that need it ask for it as `--prediction on` does
+ApplicationConfig predicting_config() {
+    ApplicationConfig cfg = host_config();
+    cfg.prediction = true;
+    cfg.prediction_given = true;
+    return cfg;
+}
+
 // The application hosts a room with Bob in it, SMALL.LVL, START: both play, the application is seat 0 and Bob seat 1. Returns when the match screen is up on both.
-bool begin_match(Application& app, Peer& bob, Duo& duo, const ApplicationConfig& config = host_config()) {
+bool begin_match(Application& app, Peer& bob, Duo& duo, const ApplicationConfig& config = predicting_config()) {
     if (!app.init(config) || !app.network_active()) return false;
     if (!bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob")) return false;
     if (!duo.until([&]() { return app.net()->can_start(); }, 8000)) return false;
@@ -493,7 +501,7 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
 
-    TEST_CASE("PA4 The Switches: --prediction on / off (and --no-prediction), The Settings' Key `prediction`, The Command Line Wins; Anything Else Is Refused On The Command Line And Ignored In The Settings; Off, The Match Shows The Confirmed Engine And Nothing Is Predicted") {
+    TEST_CASE("PA4 The Switches: Off By Default (Nothing Said, No Key: The Match Shows The Confirmed Engine And Nothing Is Predicted); --prediction on And The Settings' Key `prediction` = on Turn It On, --prediction off (And --no-prediction) Off; The Command Line Wins; Anything Else Is Refused On The Command Line And Ignored In The Settings") {
         bool on = false;
         ASSERT_TRUE(parse_switch("on", on) && on);
         ASSERT_TRUE(parse_switch("OFF", on) && !on);
@@ -516,7 +524,7 @@ int main(int argc, char* argv[]) {
             return Application::parse_arguments(static_cast<int>(args.size()), st.data());
         };
         ApplicationConfig c = parse({"ants"});
-        ASSERT_TRUE(c.prediction && !c.prediction_given && c.startup_error.empty());       // on by default, the command line said nothing
+        ASSERT_TRUE(!c.prediction && !c.prediction_given && c.startup_error.empty());      // off by default (opt-in), the command line said nothing
         c = parse({"ants", "--prediction", "off"});
         ASSERT_TRUE(!c.prediction && c.prediction_given && c.startup_error.empty());
         c = parse({"ants", "--prediction", "on"});
@@ -530,6 +538,8 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(c.startup_error, std::string("--prediction needs on or off"));
         c = parse({"ants", "--prediction", "off", "--prediction", "on"});
         ASSERT_TRUE(c.prediction && c.prediction_given);                                   // the last one wins
+        c = parse({"ants", "--prediction", "on", "--no-prediction"});
+        ASSERT_TRUE(!c.prediction && c.prediction_given);
         // the settings' key: an Application that remembers its options in a file
         const std::string settings = (std::filesystem::temp_directory_path() / ("ants_prediction_app_settings_" + std::to_string(static_cast<long long>(::getpid())) + ".ini")).string();
         const auto with_settings = [&](const std::string& line, bool given, bool given_value, bool expect_wanted) {
@@ -545,19 +555,18 @@ int main(int argc, char* argv[]) {
             if (!app.init(cfg)) return false;
             return app.prediction_wanted() == expect_wanted && app.net() != nullptr && app.net()->prediction_enabled() == expect_wanted;
         };
-        ASSERT_TRUE(with_settings("prediction=off", false, true, false));                  // the key says off, the command line says nothing: off
-        ASSERT_TRUE(with_settings("prediction=on", false, true, true));
+        ASSERT_TRUE(with_settings("prediction=off", false, false, false));                 // the key says off, the command line says nothing: off
+        ASSERT_TRUE(with_settings("prediction=on", false, false, true));                   // the key turns it on
         ASSERT_TRUE(with_settings("prediction=off", true, true, true));                    // the command line (on) wins over the key
         ASSERT_TRUE(with_settings("prediction=on", true, false, false));                   // ... and --prediction off over the key's on
-        ASSERT_TRUE(with_settings("prediction=maybe", false, true, true));                 // a value that is no switch is reported and ignored: the default
-        ASSERT_TRUE(with_settings("Music Volume=40", false, true, true));                  // no key: on
+        ASSERT_TRUE(with_settings("prediction=maybe", false, false, false));               // a value that is no switch is reported and ignored: the default, off
+        ASSERT_TRUE(with_settings("Music Volume=40", false, false, false));                // no key: off (the default)
+        ASSERT_TRUE(with_settings("Music Volume=40", true, true, true));                   // --prediction on and no key: on
         std::error_code removed;
         std::filesystem::remove(settings, removed);
-        // off: the match shows the confirmed engine, nothing is predicted, an order waits for its turn, and the confirmed engines are the same
+        // by default: the match shows the confirmed engine, nothing is predicted, an order waits for its turn, and the confirmed engines are the same
         {
-            ApplicationConfig cfg = host_config();
-            cfg.prediction_given = true;
-            cfg.prediction = false;
+            const ApplicationConfig cfg = host_config();                                   // (nothing said: the product's default)
             Application app;
             Peer bob;
             Duo duo{app, bob};
@@ -566,7 +575,7 @@ int main(int argc, char* argv[]) {
             ASSERT_FALSE(app.prediction_wanted());
             ASSERT_FALSE(app.net()->prediction_enabled() || app.net()->predicting());
             ASSERT_TRUE(&app.view_sim() == &app.sim());
-            ASSERT_TRUE(app.net()->prediction() == nullptr || app.net()->prediction()->stats().commands_predicted == 0);
+            ASSERT_TRUE(app.net()->prediction() == nullptr || (app.net()->prediction()->stats().commands_predicted == 0 && app.net()->prediction()->stats().starts == 0));      // (it never began)
             sim::Command go;
             go.type = sim::CommandType::GroupMove;
             go.issuer = 0;

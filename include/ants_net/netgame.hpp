@@ -220,7 +220,7 @@ public:
     sim::CommandResult submit(const sim::Command& command) override;
 
     // ---- the prediction of one's own orders (prediction.hpp, docs/NETWORK_PORT.md "Prediction of one's own orders") --------------------------------------
-    /// On by default in a match of the network (a local game has no delay to hide); off, every order waits for its turn as it did before the prediction existed. Takes effect at once.
+    /// Off by default (opt-in: the application turns it on when asked to); off, every order waits for its turn as before. A local game has no delay to hide. Takes effect at once.
     void set_prediction_enabled(bool on) noexcept { prediction_enabled_ = on; }
     bool prediction_enabled() const noexcept { return prediction_enabled_; }
     /// The application suspends the prediction where only it knows that the match is not simply following the live stream (a hidden page's background steps, a screen over the match)
@@ -349,7 +349,7 @@ private:
     std::unique_ptr<HostSession> host_session_;
     std::unique_ptr<ClientSession> client_session_;
     std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first)
-    bool prediction_enabled_{true};
+    bool prediction_enabled_{false};
     bool app_suspends_prediction_{false};
     uint64_t prediction_budget_ns_{default_prediction_budget_ns()};
     uint32_t prediction_budget_strikes_{Prediction::Config{}.budget_strikes};
