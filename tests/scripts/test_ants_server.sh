@@ -97,8 +97,8 @@ if grep -qF 'id="fill"' "$FOUR_PAGE" && grep -qF '<option value="easy">Easy bots
     && grep -qF '<option value="">Leave empty' "$FOUR_PAGE" && grep -qF "remember('ants-four-fill', level)" "$FOUR_PAGE" && grep -qF "recall('ants-four-fill')" "$FOUR_PAGE"; then FILL_FORM=0; fi
 check 'web/four.html offers "Empty seats at START" (Leave empty, Easy bots, Medium bots, Hard bots) in the New match form and remembers it' "$FILL_FORM"
 FILL_LINKS=1
-if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE" && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF 'id="fill-caption">Bots gather food; they do not fight yet.' "$FOUR_PAGE"; then FILL_LINKS=0; fi
-check "web/four.html puts the choice into every game link and into its own address as &fill=<word>, reads the address through validFill, and says under the choice that the bots gather food and do not fight yet" "$FILL_LINKS"
+if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE" && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF 'id="fill-caption">Bots gather food, raid and fight back.' "$FOUR_PAGE"; then FILL_LINKS=0; fi
+check "web/four.html puts the choice into every game link and into its own address as &fill=<word>, reads the address through validFill, and says under the choice what the bots do (gather food, raid and fight back)" "$FILL_LINKS"
 FILL_SHELL=1
 if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillArg(q.get('fill'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
 check "web/shell.html gives the game --fill-bots from antsFillArg's answer and nothing else (the line that takes the address's word and the line that hands it to the game)" "$FILL_SHELL"

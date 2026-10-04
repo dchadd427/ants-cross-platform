@@ -463,8 +463,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan, for the tournaments (the keys are those of apply_tune in this file, listed in docs/audit/B4_1_notes.md)
-"
+        "  --tune K=V,...     ablations of the standard bot's plan, for the tournaments (the keys are those of apply_tune in this file, listed in docs/audit/B4_1_notes.md)\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",

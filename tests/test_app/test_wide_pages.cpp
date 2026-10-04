@@ -1646,7 +1646,8 @@ constexpr Golden kGolden[] = {
     {"screen.wide.pages.menu_main", 0x0af18420436d3565, 160ull},
     {"screen.wide.pages.menu_single", 0x035577b7d780f805, 221ull},
     {"screen.wide.pages.menu_join", 0xc2108141358be108, 162ull},
-    {"screen.wide.pages.menu_host", 0x68f7eab483e4ee42, 224ull},
+    // menu_host moved deliberately in B4-1 (v0.3.0): the caption under the choice of the bots changed (see test_view_fingerprint.cpp, screen.menu.host.*); the draw-call count is the same.
+    {"screen.wide.pages.menu_host", 0x50bca38b5ce97ecb, 224ull},
     {"screen.wide.pages.menu_connecting", 0x9baf3e53f92d4060, 128ull},
     {"screen.wide.pages.menu_room", 0x1898efe83479baa8, 164ull},
     {"px.wide.pages.loading.t0", 0xc849e041f5dc9132, 518400ull},
