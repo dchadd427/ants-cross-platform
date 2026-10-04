@@ -651,12 +651,36 @@ bool Room::restore(const RestartLoaded& rec, uint32_t now_ms, uint32_t restart_v
     if (!start_bots(start.seed, why)) return false;              // (the bots start again at the restored tick: their tasks are soft, docs/BOTS.md; a bot that was running goes on from what it sees)
     state_ = RoomState::Running;
     restored_ = true;
+    restored_at_ms_ = now_ms;
     restored_turns_ = rec.turn_count;
     last_turns_ = session_->turns_sealed();
     last_ticks_ = static_cast<uint32_t>(sim_->current_tick());
     restore_ms_ = real_ms();
     if (sim_->is_match_over()) finish("the match had ended when the server stopped", now_ms);
     return true;
+}
+
+// What a restart would interrupt here. A room that waits counts its persons only; a match counts while a person is in it (present or catching up: the attendance knows, a bot has no seat in it), and a
+// room that a restart brought back also for kRestoredBusyWindowMs, with the seats that are held for the players who are not back yet; after that a room that nobody came back to counts nothing.
+RoomBusy Room::busy(uint32_t now_ms) const {
+    RoomBusy b;
+    if (state_ != RoomState::Waiting && state_ != RoomState::Loading && state_ != RoomState::Running) return b;      // a room that is over holds nobody who plays
+    if (state_ != RoomState::Running || session_ == nullptr) {
+        b.players = static_cast<uint32_t>(lobby_.humans());
+        b.match = state_ != RoomState::Waiting && b.players > 0;
+        return b;
+    }
+    uint32_t present = 0;
+    uint32_t held = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        const net::Attendance::State st = session_->attendance().state(seat);
+        if (st == net::Attendance::State::Present || st == net::Attendance::State::CatchingUp) ++present;
+        else if (st == net::Attendance::State::Absent) ++held;
+    }
+    const bool just_restored = restored_ && now_ms - restored_at_ms_ < kRestoredBusyWindowMs;
+    b.match = present > 0 || just_restored;
+    b.players = present + (just_restored ? held : 0u);
+    return b;
 }
 
 RoomStatus Room::status(uint32_t now_ms) const {

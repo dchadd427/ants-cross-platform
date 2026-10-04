@@ -474,12 +474,9 @@ bool RoomManager::status(const std::string& code, RoomStatus& out, uint32_t now_
 BusyCounts RoomManager::busy(uint32_t now_ms) const {
     BusyCounts counts;
     for (const auto& entry : rooms_) {
-        const Room& room = *entry.second;
-        const RoomState state = room.state();
-        if (state != RoomState::Waiting && state != RoomState::Loading && state != RoomState::Running) continue;      // a room that is over holds nobody who plays
-        const RoomStatus s = room.status(now_ms);
-        counts.players += s.joined > s.bots.size() ? static_cast<uint32_t>(s.joined - s.bots.size()) : 0u;
-        if (state != RoomState::Waiting) ++counts.matches;
+        const RoomBusy b = entry.second->busy(now_ms);                       // (a room that is over counts nothing; a restored room that nobody has come back to, after a few minutes, counts nothing either)
+        counts.players += b.players;
+        if (b.match) ++counts.matches;
     }
     return counts;
 }

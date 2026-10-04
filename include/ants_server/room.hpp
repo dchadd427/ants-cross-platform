@@ -105,6 +105,17 @@ inline constexpr size_t kMaxLogBytes = size_t{1} << 30;
 enum class RoomState : uint8_t { Waiting, Loading, Running, Finished, Failed };
 const char* room_state_name(RoomState state) noexcept;
 
+/// What a restart of the server would interrupt in one room, as the public /busy answer counts it (RoomManager::busy adds the rooms up; plain numbers: no name, no code)
+struct RoomBusy {
+    bool match{false};                      // a match loads or runs and a person is in it (present or catching up), or the room was brought back by a restart a moment ago (kRestoredBusyWindowMs)
+    uint32_t players{0};                    // the people: in a room that waits or loads, the persons in its lobby; in a match, the persons who are there and, in that window, the seats that are held for those who are not
+};
+
+/// How long after a restart a restored room still counts as a match that runs although none of its players is back (its players need that long to notice, wait for the server and come back; a
+/// restart now would interrupt them again). Beyond it a room that nobody has come back to counts nothing: a room whose players never come back must not hold a deploy for the pause cap (30 minutes
+/// to 24 hours).
+inline constexpr uint32_t kRestoredBusyWindowMs = 5u * 60u * 1000u;
+
 /// One row of the result, as the results screen shows it (an alliance is one row)
 struct RoomRow {
     uint8_t first{255};
@@ -245,6 +256,8 @@ public:
     /// The owner closes the room: every client is dropped, the state is Failed with `reason`
     void close(const std::string& reason, uint32_t now_ms);
     RoomStatus status(uint32_t now_ms) const;
+    /// What a restart would interrupt here (see RoomBusy): cheap, no status is built
+    RoomBusy busy(uint32_t now_ms) const;
 
 private:
     void fail(const std::string& reason, uint32_t now_ms);
@@ -310,6 +323,7 @@ private:
     uint32_t restored_turns_{0};
     uint32_t restore_ms_{0};
     uint64_t restored_hash_{0};
+    uint32_t restored_at_ms_{0};             // when the room was brought back (the server's clock): /busy counts the room as a match for kRestoredBusyWindowMs after it
 };
 
 /// The room's specification as a restart record's head says it (the bots of the specification only: the leader's fill is the record's `fill_mask`, seated by Room::restore). A restored room always

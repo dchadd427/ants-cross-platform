@@ -6979,10 +6979,11 @@ void run_persist_server_tests_6() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.102 A Restored Room Is A Match That Runs, As Far As /busy Counts (The Public Answer That A Deploy Waits On): After A Restart Of The Server Two Rooms Whose Players Have Not Come Back Count Two Matches And Their People (The Seats Are Held, A Restart Now Would Interrupt Them Again; A Bot Is No Person), And After A Restart That Cannot Bring Them Back (Another Game Version) They Count Nothing") {
+    TEST_CASE("S3.102 A Restored Room Is A Match That Runs, As Far As /busy Counts (The Public Answer That A Deploy Waits On), For Five Minutes (M3 Of The Review): After A Restart Of The Server Two Rooms Whose Players Have Not Come Back Count Two Matches And Their People (The Seats Are Held, A Restart Now Would Interrupt Them Again; A Bot Is No Person) up to 299.999 s After The Restore And Nothing From 300 s On (A Room That Nobody Comes Back To Must Not Hold A Deploy For The Pause Cap); A Player Who Is Back Makes Its Room Count Again, As Itself (The Held Seats Of The Others Count Only Inside The Window); In A Live Room A Seat Whose Link Is Lost Is Held And Is No Person Who Is There; After A Restart That Cannot Bring Them Back (Another Network Protocol) They Count Nothing") {
         PWorld w("persist-102");
         w.start_server(500);
-        const auto busy = [&w]() { return w.mgr->busy(w.server_now()); };
+        const auto busy_after = [&w](uint32_t ms) { return w.mgr->busy(w.server_now() + ms); };
+        const auto busy = [&]() { return busy_after(0); };
         RoomSpec one = held_spec("BZ-1", 2);
         one.bots.push_back(ai::BotSpec{1, "standard", ai::Level::Easy});
         ASSERT_TRUE(w.mgr->create_room(one, w.server_now()).ok);
@@ -6990,8 +6991,20 @@ void run_persist_server_tests_6() {
         std::vector<RClient*> two = play_room(w, held_spec("BZ-2", 2), 4000);
         ASSERT_TRUE(w.until([&]() { return w.status("BZ-1").state == RoomState::Running; }, 20000));
         ASSERT_TRUE(busy().matches == 2 && busy().players == 3);                              // Pat and two more people: the bot of BZ-1 is no person
+        const uint8_t seat_back = two[0]->lobby->my_seat();
+        const net::SeatKey key_back = two[0]->lobby->key();
         pat.reconnects = false;
         for (RClient* p : two) p->reconnects = false;
+        {   // a live room: a seat whose link is lost is held (the room pauses, the seat may come back) and is no person who is there; the room counts while anybody is
+            w.net.cut(two[1]->end);
+            w.run(1500);
+            ASSERT_TRUE(w.status("BZ-2").paused && w.status("BZ-2").absent.size() == 1);
+            ASSERT_TRUE(busy().matches == 2 && busy().players == 2);                          // Pat, and the one person who is left in BZ-2
+            w.net.cut(two[0]->end);
+            w.run(1500);
+            ASSERT_TRUE(w.status("BZ-2").paused && w.status("BZ-2").absent.size() == 2);
+            ASSERT_TRUE(busy().matches == 1 && busy().players == 1);                          // BZ-2 has nobody in it now: a restart would interrupt Pat's match only (its record is kept anyway)
+        }
         // ---- a restart: both rooms are back, paused, every seat of a person held and absent; they are matches that run, with their people ---------------------------------------------------------------
         w.stop_server(false);
         w.start_server(500);
@@ -7002,6 +7015,27 @@ void run_persist_server_tests_6() {
         }
         ASSERT_EQ(busy().matches, 2u);
         ASSERT_EQ(busy().players, 3u);                                                         // (nobody is connected: the held seats are the people that a restart now would interrupt again)
+        // ---- the window: five minutes from the restore, to the millisecond -------------------------------------------------------------------------------------------------------------------------
+        ASSERT_EQ(kRestoredBusyWindowMs, 300000u);
+        ASSERT_TRUE(busy_after(kRestoredBusyWindowMs - 1).matches == 2 && busy_after(kRestoredBusyWindowMs - 1).players == 3);
+        ASSERT_TRUE(busy_after(kRestoredBusyWindowMs).matches == 0 && busy_after(kRestoredBusyWindowMs).players == 0);       // nobody came back: the rooms hold no deploy (the pause cap would hold it for 30 minutes)
+        ASSERT_TRUE(busy_after(10u * 60u * 1000u).matches == 0 && busy_after(24u * 3600u * 1000u).players == 0);
+        // ---- a player comes back to BZ-2 (a machine from nothing, with its key): its room counts again, as itself --------------------------------------------------------------------------------------
+        RClient& back = w.connect("P0", "BZ-2", seat_back, key_back);
+        bool saw_catching_up = false;
+        for (int step = 0; step < 6000 && w.status("BZ-2").rejoins < 1; ++step) {
+            w.run(10);
+            for (const RoomStatus::Absent& a : w.status("BZ-2").absent) {
+                if (!a.catching_up) continue;
+                saw_catching_up = true;                                                        // a player who is being given the match is there: the room counts, beyond the window too
+                ASSERT_TRUE(busy_after(kRestoredBusyWindowMs).matches == 1 && busy_after(kRestoredBusyWindowMs).players == 1);
+            }
+        }
+        ASSERT_TRUE(saw_catching_up && w.status("BZ-2").rejoins == 1);
+        ASSERT_TRUE(back.session != nullptr && !back.lost);
+        ASSERT_TRUE(busy().matches == 2 && busy().players == 3);                               // still inside the window: BZ-2 has a person and a held seat, BZ-1 two held seats' worth of one person
+        ASSERT_TRUE(busy_after(kRestoredBusyWindowMs).matches == 1 && busy_after(kRestoredBusyWindowMs).players == 1);      // beyond it: the person who is there, and no held seat
+        ASSERT_TRUE(busy_after(24u * 3600u * 1000u).matches == 1 && busy_after(24u * 3600u * 1000u).players == 1);
         // ---- a restart that cannot bring them back (the network protocol is another one): they are failed rooms, and a failed room counts nothing ---------------------------------------------------
         w.stop_server(false);
         w.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1);

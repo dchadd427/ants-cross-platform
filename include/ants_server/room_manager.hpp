@@ -67,8 +67,8 @@ struct ServerLimits {
 /// The code prefix of the rooms that a Hello may make when demo rooms are on
 inline constexpr const char* kDemoRoomPrefix = "demo-";
 
-/// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running, and the people (bots are not people) in the rooms that wait, load or run. Plain
-/// counts: no name, no code.
+/// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running with a person in it (a room that a restart brought back also for its first minutes: Room::busy),
+/// and the people (bots are not people) in the rooms that wait, load or run. Plain counts: no name, no code; exactly these two fields (tools/deploy_wait.py accepts nothing else).
 struct BusyCounts {
     uint32_t matches{0};
     uint32_t players{0};
