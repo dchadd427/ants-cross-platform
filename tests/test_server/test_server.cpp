@@ -8296,6 +8296,32 @@ void run_persist_review_process_tests_2() {
             ASSERT_TRUE(!fs::exists(refused_dir(small) / name_of(small, "RF-4")));
         }
     } TEST_END();
+
+    TEST_CASE("S3.111 A Folder That Cannot Be Written Is Found Out At The Start (L5 Of The Review): prepare() Makes A Probe File And Deletes It; A Folder Where A Write Fails (The Process May Not Grow A File: EFBIG, As A Full Disk Or A Quota Would Answer) Is Refused With The Reason And Holds No Lock; A Folder That Can Be Written Leaves No Probe Behind; A Room Manager Over Such A Folder Keeps No Records And Says Why") {
+#ifndef _WIN32
+        {
+            RestartConfig cfg = test_restart_config("persist-111a");
+            std::string why;
+            {
+                RestartStore ok(cfg);
+                ASSERT_TRUE(ok.prepare(why));
+                ASSERT_EQ(entries_but_lock(cfg.dir), size_t{0});                                   // no probe is left behind
+            }
+            {
+                const FileSizeLimit none(0);                                                       // every write fails (the limit is 0 bytes) and no signal comes
+                RestartStore refused(cfg);
+                ASSERT_FALSE(refused.prepare(why));
+                ASSERT_TRUE(why.find("cannot be written") != std::string::npos && why.find("File too large") != std::string::npos);
+                ASSERT_EQ(entries_but_lock(cfg.dir), size_t{0});                                   // (and the probe that was made is deleted)
+                RoomManager keeper{MapStore(maps_dir())};
+                ASSERT_FALSE(keeper.enable_restart_records(cfg, why));
+                ASSERT_TRUE(keeper.restart_store() == nullptr && why.find("cannot be written") != std::string::npos);
+            }
+            RestartStore again(cfg);                                                               // the refused store holds no lock: the folder is free once writes work
+            ASSERT_TRUE(again.prepare(why));
+        }
+#endif
+    } TEST_END();
 }
 #endif
 

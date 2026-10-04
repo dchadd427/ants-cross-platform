@@ -235,8 +235,8 @@ public:
     bool enabled() const noexcept { return !cfg_.dir.empty(); }
     const RestartConfig& config() const noexcept { return cfg_; }
     /// Makes the folder (POSIX: mode 700 when it is made here), takes the folder's lock for the life of this store (one server to a folder: the file `.lock`, held with flock (Windows: opened with no
-    /// sharing); a lock that another process or another store of this process holds fails this), and only then removes the
-    /// temporary files that a crashed start of a record left. False, with the reason, when the folder cannot be used. Calling it again on a store that holds the lock is fine.
+    /// sharing); a lock that another process or another store of this process holds fails this), proves that the folder can be written (a probe file, made, written and deleted: a read-only
+    /// volume, a quota or a full disk is found out here, not at the first match that needs a record), and only then removes the temporary files that a crashed start of a record left. False, with the reason, when the folder cannot be used. Calling it again on a store that holds the lock is fine.
     bool prepare(std::string& why);
     /// Where the record of the room with this code is
     std::string path_for(const std::string& code) const;

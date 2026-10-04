@@ -854,6 +854,26 @@ bool RestartStore::prepare(std::string& why) {
         return false;
     }
     if (!take_lock(why)) return false;
+    {   // a folder that cannot be written is found out now (a read-only volume, a quota, a full disk), not at the first match that needs a record
+        uint8_t random[8];
+        if (!random_bytes(random, sizeof random)) {
+            why = "no random numbers for a temporary name";
+            release_lock();
+            return false;
+        }
+        const std::string probe = (fs::path(cfg_.dir) / (std::string(kRecordPrefix) + "probe-" + hex_digits(random, sizeof random) + kTempSuffix)).string();
+        NativeFile f;
+        std::string reason;
+        const uint8_t bytes[8] = {'p', 'r', 'o', 'b', 'e', 0, 0, 0};
+        const bool wrote = native_create_exclusive(probe, f, reason) && native_write_all(f, bytes, sizeof bytes, reason);
+        native_close(f);
+        native_remove(probe);
+        if (!wrote) {
+            why = "the restart folder '" + cfg_.dir + "' cannot be written: " + reason;
+            release_lock();                                         // (a store that could not prepare the folder holds nothing)
+            return false;
+        }
+    }
     // the temporary files of a record whose making was cut short: ours (the name says so), and nothing can be using them: the lock says that no other server has this folder
     for (fs::directory_iterator it(cfg_.dir, ec), end; !ec && it != end; it.increment(ec)) {
         const std::string name = it->path().filename().string();
