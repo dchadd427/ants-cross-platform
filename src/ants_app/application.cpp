@@ -986,7 +986,7 @@ bool Application::step_zoom(int direction, int32_t anchor_x, int32_t anchor_y) {
 }
 
 bool Application::view_zoom_allowed(int32_t x, int32_t y) const {
-    return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !pointer_outside_ && hud_.view_zoom_allowed() && hud_.over_map(x, y);
+    return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !catch_up_screen_active() && !pointer_outside_ && hud_.view_zoom_allowed() && hud_.over_map(x, y);
 }
 
 // SDL_MOUSEWHEEL over the map view: the wheel rolled away zooms in, towards the pointer, one level per notch (a trackpad's small deltas add up; zoom::wheel_amount undoes the system's
@@ -1115,22 +1115,23 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 }
 
 // The moment a match starts for the player: music and the start sound, the HUD, the "get ready" modal, the Playing state.
-void Application::enter_match() {
+void Application::enter_match(bool rejoin) {
     // In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3. A match that begins while the page is hidden (a background step) starts no music and no sound effect: the page
-    // is not heard; the music starts when it is shown (apply_pending_music)
+    // is not heard; the music starts when it is shown (apply_pending_music). A match that is rejoined is not announced: no start sound, no "Get ready" dialog below.
     if (background_stepping_) {
         pending_music_ = PendingMusic::InGame;
     } else {
         play_next_ingame_music();
         // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12)
-        play_startup_sound();
+        if (!rejoin) play_startup_sound();
     }
 
     // Reset HUD & Scorecard
-    hud_.init(local_player_id_);
-    hud_.reset();
-    hud_.start_match_modal(network_active());                               // (the simulation waits for it: update_simulation, post_tick)
+    hud_.init(local_player_id_, !rejoin);
+    hud_.reset(!rejoin);
+    if (!rejoin) hud_.start_match_modal(network_active());                  // (the simulation waits for it: update_simulation, post_tick)
     held_since_ms_ = -1.0;                                                  // (nothing of an earlier match's pauses and votes)
+    catch_up_backlog_ = false;
     prev_missing_.clear();
     back_name_.clear();
     vote_press_ = 0;
@@ -1836,7 +1837,7 @@ void Application::handle_events() {
         // Gameplay Event Dispatch
         switch (event.type) {
             case SDL_TEXTINPUT:
-                if (state_ == AppState::Playing) {
+                if (state_ == AppState::Playing && !catch_up_screen_active()) {
                     hud_.handle_text_input(event.text.text);
                 }
                 break;
@@ -2072,7 +2073,7 @@ void Application::handle_camera_panning(float dt) {
     input_accumulator_ += dt;
     while (input_accumulator_ >= 0.050f) {
         input_accumulator_ -= 0.050f;
-        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_) continue;
+        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_ || catch_up_screen_active()) continue;
         if (mouse_screen_x_ < 0 || mouse_screen_x_ >= layout_.width || mouse_screen_y_ < 0 || mouse_screen_y_ >= layout_.height) continue;
         hud_.input_tick(renderer_->camera(), current_level_.width(), current_level_.height(), mouse_screen_x_, mouse_screen_y_);
     }
@@ -2087,6 +2088,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
+    if (handle_way_back_key(key)) return;                    // Esc on the way back asks to leave; nothing else works on the catch-up screen
     if (handle_vote_key(key)) return;                        // F2 and F3 are the vote block's keys while a vote is open (the original's keys are F1 and F9 - F12)
 
     bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
@@ -2107,6 +2109,7 @@ void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
     mouse_screen_y_ = motion.y;
     mouse_has_moved_ = true;
     pointer_outside_ = false;
+    if (catch_up_screen_active() && !hud_.is_quit_dialog_open()) return;       // (no match is on the screen: its hover, rubber band and minimap have nothing to do)
 
     if (scorecard_.is_open()) {
         scorecard_.handle_mouse_motion(motion.x, motion.y);
@@ -2134,6 +2137,7 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
         return;
     }
 
+    if (catch_up_screen_active() && !hud_.is_quit_dialog_open()) return;  // (no match is on the screen: a click would give orders to a map that nobody sees)
     if (handle_vote_mouse(button)) return;                               // a press and a release on a button of the vote block are that choice (nothing of it reaches the map)
 
     if (button.button == SDL_BUTTON_MIDDLE) {                            // the original has no use for it; the remake's: back to the zoom 1, towards the pointer (the release is nobody's)
@@ -2147,6 +2151,23 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
     } else if (button.type == SDL_MOUSEBUTTONUP) {
         hud_.handle_mouse_up(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     }
+}
+
+// The keys of the way back: Esc (this machine's link is lost, or it catches up) opens the quit dialog that Ctrl+Q opens; a held Esc asks once. The catch-up screen has no match to give a key to:
+// no other key does anything there, except the open dialog's Y, N and Esc.
+bool Application::handle_way_back_key(const SDL_KeyboardEvent& key) {
+    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) return false;
+    const bool catching_up = catch_up_screen_active();
+    const bool away = catching_up || (net_->phase() == net::NetGame::Phase::Playing && net_->pause_info().reconnecting);
+    if (!away) return false;
+    if (key.keysym.sym == SDLK_ESCAPE) {
+        if (key.repeat != 0) return true;
+        if (hud_.is_quit_dialog_open() || (hud_.is_modal_open() && !hud_.is_match_start_modal_active())) return false;      // (a dialog's own Esc)
+        hud_.open_quit_dialog();
+        return true;
+    }
+    if (hud_.is_quit_dialog_open()) return false;                        // (the dialog takes its keys: Y and N)
+    return catching_up;                                                  // (the match is not on the screen: no other key reaches it)
 }
 
 // The vote block's keys: F2 keeps waiting, F3 goes on without the seat. A fresh press of the other key changes the vote (the server counts the last choice of every player). Only while a vote is open
@@ -2263,7 +2284,10 @@ void Application::post_tick() {
     const sim::SimulationEngine& shown = view_sim();        // (what the screen shows: with the prediction on, the predicted engine, a tick further for every tick)
     const auto& world = shown.get_world_state();
     hud_.update(world, 1);
-    hud_.poll_sim_events(sim_);                              // (the news are the confirmed engine's: they are told once, whatever was shown before)
+    // The first tick after a catch-up: the engine queued the sounds and news of every turn it ran without a picture. They are not played or said now (the news flashes of the chat log stay).
+    const bool replayed = catch_up_backlog_;
+    catch_up_backlog_ = false;
+    hud_.poll_sim_events(sim_, replayed);                    // (the news are the confirmed engine's: they are told once, whatever was shown before)
 
     if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
     if (net_ != nullptr && net_->predicting()) felt_delay_.on_tick_shown();      // (what an order of this frame did is in the picture now: the next frame that is drawn shows it)
@@ -2274,6 +2298,7 @@ void Application::post_tick() {
                   << " s: its work took longer than its budget too often. The match goes on as it did without it, and the prediction tries again afterwards." << std::endl;
     }
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
+    if (replayed) audio_events.clear();
     std::vector<sim::AudioEvent> predicted_cues;
     if (prediction != nullptr || !cue_router_.idle()) {
         // The cues of the own ants' own actions come from the predicted engine, when it runs the tick that makes them (in step with the picture), and the confirmed engine's copies of them
@@ -2342,6 +2367,12 @@ void Application::update_results(float dt) {
 // quitter, whose row goes last on every results screen, and the results (with Leave) follow. With more sides left the original sends the drop message and
 // exits; here the player leaves the same way as before (the network announces the departure to the others).
 void Application::confirm_quit() {
+    // A match that is held (a seat is missing, the countdown runs, this machine is on its way back) seals no turn: a Quit command would be lost and the player would stay. The player
+    // leaves for good instead (NetGame::leave: the key is let go of, the others are told when the link is up).
+    if (network_active() && net_->paused()) {
+        leave_game();
+        return;
+    }
     if (state_ == AppState::Playing && !sim_.is_match_over() && sim_.other_sides(local_player_id_) == 1) {
         sim::Command quit_command;
         quit_command.type = sim::CommandType::Quit;
@@ -2373,6 +2404,8 @@ void Application::pump_network(float dt, double gap_seconds) {
     handle_net_events();
     if (!net_) return;                                           // (a lost game brought the player back to the start menu, which let go of the net)
     track_net_state();
+    // The "Get ready to play!" dialog gives way to a pause (a seat lost before the first turn holds the match): it would hide the overlay and the vote block. It is closed for good.
+    if (hud_.is_match_start_modal_active() && net_->phase() == net::NetGame::Phase::Playing && (net_->paused() || net_->pause_info().vote_open)) hud_.dismiss_match_start_modal();
     if (menu_enabled_ && state_ == AppState::MapSelect && (net_->phase() == net::NetGame::Phase::Failed || net_->phase() == net::NetGame::Phase::Over)) {
         return_to_start_menu(net_->status_text());               // the room is dead (the server closed it, the connection is gone): not a room screen that nothing can happen on
         return;
@@ -2584,7 +2617,7 @@ void Application::handle_net_events() {
                 net_load_match();
                 break;
             case net::NetGame::Event::Type::Begun:
-                net_begin_match();
+                net_begin_match(ev.rejoin);
                 break;
             case net::NetGame::Event::Type::Cancelled:               // the start failed: back in the room, the host's controls work again
                 map_select_.unlock();
@@ -2638,14 +2671,16 @@ void Application::net_load_match() {
 }
 
 // Everybody has loaded: the match runs here from now on.
-void Application::net_begin_match() {
+void Application::net_begin_match(bool rejoin) {
     local_player_id_ = net_->my_seat();
     hud_.set_command_sink(net_.get());
     close_room_chat();
-    enter_match();
+    enter_match(rejoin);
     // The match's chat log starts with what was said in the waiting room (protocol 11: the lobby kept the last 200 lines, this player's own among them): the people of a room who talked
-    // before the START find their talk in the log of the match. The room's own notices ("Bots cannot play with Fog of War.") were for the setup screen and are not repeated.
+    // before the START find their talk in the log of the match. The room's own notices ("Bots cannot play with Fog of War.") were for the setup screen and are not repeated. A machine that
+    // rejoins has no waiting room behind it (and its second begin, after a server that lost the last turns, must not say the old lines again).
     for (const net::ChatLine& line : net_->pregame_chat()) {
+        if (rejoin) break;
         if (line.notice()) continue;
         // (under the name that the sender had when it spoke: the seat may have another player now, a player who left and a newcomer who took the seat)
         const std::string name = !line.name.empty() ? line.name : (line.seat < sim::MAX_PLAYERS ? sim_.get_player_name(line.seat) : std::string());
@@ -2746,6 +2781,30 @@ Application::NetVoteButtons Application::net_vote_buttons() const {
     return out;
 }
 
+// The catch-up screen (page_layout.hpp): the machine runs the match from the server's log without drawing it. A machine that starts the match again (NetGame's BadRequest fallback) has it from the
+// moment the old session ends: the loading picture, never the match that was reset behind it.
+bool Application::catch_up_screen_active() const {
+    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) return false;
+    switch (net_->phase()) {
+        case net::NetGame::Phase::Playing: return net_->pause_info().catching_up;
+        case net::NetGame::Phase::Connecting:
+        case net::NetGame::Phase::Loading: return true;
+        default: return false;
+    }
+}
+
+int32_t Application::catch_up_percent() const {
+    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return 0;
+    return net_->pause_info().catch_up_percent;
+}
+
+void Application::render_catch_up_screen() {
+    renderer_->set_picture(canvas().rect());                             // (the loading screen is the whole canvas, whatever picture the match has)
+    draw_catch_up_screen(*renderer_, assets_, wide_pages(), catch_up_percent());
+    renderer_->set_picture(picture_);
+    hud_.render_quit_dialog_alone(*renderer_, assets_);                  // (Esc asked: the dialog is the match's own, over this picture)
+}
+
 void Application::render_net_overlay() {
     const NetOverlayLine line = net_overlay_now();
     if (line.lines.empty() && !line.vote.open) return;
@@ -2783,6 +2842,7 @@ void Application::track_net_state() {
     }
     const net::PauseInfo p = net_->pause_info();
     const bool own_way_back = p.reconnecting || p.catching_up;
+    if (p.catching_up) catch_up_backlog_ = true;                         // (the turns that it runs now are not heard: see post_tick)
     const bool held = !own_way_back && (!p.missing.empty() || p.resume_seconds_left > 0);
     if (!held) held_since_ms_ = -1.0;
     else if (held_since_ms_ < 0.0) held_since_ms_ = net_time_ms_;
@@ -2853,6 +2913,8 @@ void Application::render_frame() {
         map_select_.render(*renderer_, assets_);
     } else if (scorecard_.is_open()) {
         scorecard_.render(*renderer_, assets_);
+    } else if (catch_up_screen_active()) {
+        render_catch_up_screen();
     } else {
         sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
         const auto& world = view.get_world_state();
@@ -2929,7 +2991,7 @@ void Application::render_frame() {
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65): the pointer is the picture's
     renderer_->set_picture(picture_);
     CursorType cur = CursorType::Normal;
-    if (state_ == AppState::Playing && !scorecard_.is_open()) {
+    if (state_ == AppState::Playing && !scorecard_.is_open() && !catch_up_screen_active()) {         // (the catch-up screen has no map to point at)
         sim::SimulationEngine& view = view_sim();
         hud_.set_sim_query(&view);                           // (the cursor's special-target question is asked of the picture's own engine)
         cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, view.get_world_state(), view.grid(), renderer_->camera());

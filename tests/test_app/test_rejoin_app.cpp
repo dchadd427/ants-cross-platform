@@ -10,6 +10,7 @@
 #include "ants_app/application.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_app/net_overlay.hpp"
+#include "ants_app/page_layout.hpp"
 #include "ants_app/rejoin_store.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_net/netgame.hpp"
@@ -19,6 +20,7 @@
 #include "ants_server/room.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_sim/command.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
 
@@ -38,6 +40,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <cstring>
+#include <deque>
 #include <string>
 #include <thread>
 #include <utility>
@@ -186,13 +189,36 @@ public:
     }
     uint16_t port() const noexcept { return port_; }
     uint32_t now(uint32_t world_now) const { return world_now + offset_; }
+    // What the door does with the next link that the listener accepts: Open hands it to the manager, as on a real server; Scripted answers its Hello with `script_reason` and closes it, the manager
+    // never sees it (the refusal of a server that lost the last second of its record, which no real moment of a test makes)
+    enum class Door : uint8_t { Open, Scripted };
+    Door door{Door::Open};
+    net::RejectReason script_reason{net::RejectReason::BadRequest};
+    uint32_t scripted{0};                                                                       // the links that were answered so
     void pump(uint32_t world_now) {
         if (!listener_) return;
         while (auto link = listener_->accept()) {
             ++accepted;
             std::shared_ptr<net::TcpConnection> shared(std::move(link));
+            if (door == Door::Scripted) {
+                pending_.push_back(shared);
+                continue;
+            }
             wires_.push_back(shared);
             mgr->add_connection(std::make_unique<Wire>(shared), "127.0.0.1", now(world_now));
+        }
+        for (size_t i = 0; i < pending_.size();) {
+            std::vector<uint8_t> msg;
+            if (pending_[i]->poll(msg)) {
+                if (net::peek_type(msg) == net::MsgType::Hello) {
+                    pending_[i]->send(net::encode(net::RejectMsg{script_reason}));
+                    pending_[i]->close();
+                    ++scripted;
+                    pending_.erase(pending_.begin() + static_cast<std::ptrdiff_t>(i));
+                    continue;
+                }
+            }
+            ++i;
         }
         mgr->update(now(world_now));
     }
@@ -221,6 +247,7 @@ private:
     uint16_t port_{0};
     uint32_t offset_{0};
     std::vector<std::weak_ptr<net::TcpConnection>> wires_;
+    std::vector<std::shared_ptr<net::TcpConnection>> pending_;                                  // the links of a scripted door that have not said Hello yet
 };
 
 // A room that holds the seats of players whose connections are lost (the countdown after a pause is off unless a test is about it: each would wait ten seconds after every return)
@@ -326,6 +353,14 @@ struct World {
         cfg.net_room = room;
         cfg.player_name = name;
         cfg.settings_path = (dir / "settings.ini").string();
+        return cfg;
+    }
+    // The same with a window of the picture's own size (640 x 480 for the original's 4:3): the screenshot of a frame is the canvas pixel for pixel
+    ApplicationConfig config_1to1(const fs::path& dir, const std::string& room, const std::string& name) const {
+        ApplicationConfig cfg = config(dir, room, name);
+        cfg.has_window_size = true;
+        cfg.window_w = 640;
+        cfg.window_h = 480;
         return cfg;
     }
     // The application joins (its link is the newest that the door accepted: a test can cut it)
@@ -470,6 +505,196 @@ void quit_by_dialog(Application& app) {
     app.handle_key_down(ke);
 }
 
+
+SDL_KeyboardEvent key_event(SDL_Keycode sym, bool repeat = false, uint16_t mod = 0) {
+    SDL_KeyboardEvent ke{};
+    ke.type = SDL_KEYDOWN;
+    ke.keysym.sym = sym;
+    ke.keysym.mod = mod;
+    ke.repeat = repeat ? 1 : 0;
+    return ke;
+}
+
+SDL_MouseButtonEvent mouse_event(uint32_t type, int32_t x, int32_t y) {
+    SDL_MouseButtonEvent be{};
+    be.type = type;
+    be.button = SDL_BUTTON_LEFT;
+    be.x = x;
+    be.y = y;
+    be.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+    be.clicks = 1;
+    return be;
+}
+
+// A click on a rectangle of the picture: the pointer goes there, the left button goes down and up
+void click(Application& app, const LayoutRect& r) {
+    const int32_t x = r.x + r.w / 2;
+    const int32_t y = r.y + r.h / 2;
+    app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONDOWN, x, y));
+    app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONUP, x, y));
+}
+
+// The machine is dead for good: it makes no new link (a person who closed the lid), whatever its NetGame tries
+void make_dead(Machine& m) {
+    m.net.set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
+}
+
+bool begins(const std::string& text, const std::string& start) { return text.compare(0, start.size(), start) == 0; }
+
+std::string first_line(Application& app) {
+    const NetOverlayLine l = app.net_overlay_now();
+    return l.lines.empty() ? std::string() : l.lines[0];
+}
+
+// What the application shows and has done at one moment of a way back
+struct Look {
+    bool catching{false};                     // the catch-up screen is up
+    int32_t percent{0};
+    bool dialog{false};                       // the "Get ready to play!" dialog is up
+    size_t channels{0};                       // the sounds that were started (nothing here plays them out: a channel stays until the mixer is told)
+    AppState state{AppState::StartMenu};
+    NetGame::Phase phase{NetGame::Phase::Off};
+    uint64_t tick{0};
+    std::string status;                       // the text of the status line
+    bool overlay{false};                      // a line or the vote block of the overlay is there
+};
+
+Look look_at(Application& app) {
+    Look l;
+    l.catching = app.catch_up_screen_active();
+    l.percent = app.catch_up_percent();
+    l.dialog = app.hud().is_match_start_modal_active();
+    l.channels = app.audio_mixer().active_channel_count();
+    l.state = app.state();
+    l.phase = app.net() != nullptr ? app.net()->phase() : NetGame::Phase::Off;
+    l.tick = app.sim().current_tick();
+    l.status = app.hud().status_line().text();
+    const NetOverlayLine overlay = app.net_overlay_now();
+    l.overlay = !overlay.lines.empty() || overlay.vote.open;
+    return l;
+}
+
+std::vector<uint32_t> own_ants(Application& app) {
+    std::vector<uint32_t> ids;
+    for (const auto& a : app.sim().get_world_state().ants) {
+        if (a.player_id == app.local_player_id() && a.hp > 0) ids.push_back(a.id);
+    }
+    return ids;
+}
+
+bool chat_has(Application& app, const std::string& text) {
+    for (const std::string& line : app.hud().get_chat_log()) {
+        if (line.find(text) != std::string::npos) return true;
+    }
+    return false;
+}
+
+// The picture of the next frame, read back: the renderer writes it as a BMP at the end of the frame
+struct Picture {
+    int32_t w{0};
+    int32_t h{0};
+    std::vector<uint8_t> rgba;
+    bool ok() const { return w > 0 && h > 0; }
+    bool is(int32_t x, int32_t y, uint8_t r, uint8_t g, uint8_t b) const {
+        if (x < 0 || y < 0 || x >= w || y >= h) return false;
+        const size_t i = (static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 4u;
+        return rgba[i] == r && rgba[i + 1] == g && rgba[i + 2] == b;
+    }
+    int64_t differing(const Picture& o) const {
+        if (w != o.w || h != o.h) return -1;
+        int64_t n = 0;
+        for (size_t i = 0; i + 3 < rgba.size(); i += 4) n += (rgba[i] != o.rgba[i] || rgba[i + 1] != o.rgba[i + 1] || rgba[i + 2] != o.rgba[i + 2]) ? 1 : 0;
+        return n;
+    }
+};
+
+Picture grab(Application& app, const fs::path& file) {
+    Picture p;
+    app.renderer().request_screenshot(file.string());
+    app.render_frame();
+    SDL_Surface* raw = SDL_LoadBMP(file.string().c_str());
+    if (raw == nullptr) return p;
+    SDL_Surface* conv = SDL_ConvertSurfaceFormat(raw, SDL_PIXELFORMAT_RGBA32, 0);
+    SDL_FreeSurface(raw);
+    if (conv == nullptr) return p;
+    p.w = conv->w;
+    p.h = conv->h;
+    p.rgba.resize(static_cast<size_t>(p.w) * static_cast<size_t>(p.h) * 4u);
+    for (int32_t y = 0; y < p.h; ++y) std::memcpy(p.rgba.data() + static_cast<size_t>(y) * static_cast<size_t>(p.w) * 4u, static_cast<const uint8_t*>(conv->pixels) + static_cast<size_t>(y) * static_cast<size_t>(conv->pitch), static_cast<size_t>(p.w) * 4u);
+    SDL_FreeSurface(conv);
+    return p;
+}
+
+// The catch-up screen as the application draws the classic page: the loading screen's orange margin and the bar filled to the percent (what the match shows at those places is the HUD's frame and the map)
+bool catch_up_picture(const Picture& pic, int32_t percent, std::string& why) {
+    const LoadingLayout& l = LoadingLayout::classic();
+    if (pic.w != 640 || pic.h != 480) {
+        why = "the picture is " + std::to_string(pic.w) + " x " + std::to_string(pic.h);
+        return false;
+    }
+    const int32_t fill = std::clamp(percent, 0, 100) * l.bar.w / 100;
+    const int32_t y = l.bar.y + l.bar.h / 2;
+    if (!pic.is(12, 12, 219, 75, 19)) why = "no orange at (12, 12)";
+    else if (fill == 0 && pic.is(l.bar.x, y, 31, 23, 51)) why = "the bar has a fill at 0%";
+    else if (fill > 0 && !(pic.is(l.bar.x, y, 31, 23, 51) && pic.is(l.bar.x + fill - 1, y, 31, 23, 51))) why = "the bar is not filled to " + std::to_string(fill) + " px";
+    else if (fill < l.bar.w && pic.is(l.bar.x + fill, y, 31, 23, 51)) why = "the bar is filled beyond " + std::to_string(fill) + " px";
+    return why.empty();
+}
+
+// An own ant (other than `except`) that stands in the map view: its screen place is where a click selects it (0: none does)
+uint32_t own_ant_in_view(Application& app, uint32_t except = 0) {
+    const ViewportCamera& cam = app.renderer().camera();
+    const LayoutRect view = app.layout().view();
+    for (const auto& a : app.sim().get_world_state().ants) {
+        if (a.player_id != app.local_player_id() || a.hp == 0 || a.id == except) continue;
+        const int32_t x = cam.view_x + (a.px - cam.world_x);
+        const int32_t y = cam.view_y + (a.py - cam.world_y);
+        if (x >= view.x + 20 && x < view.right() - 20 && y >= view.y + 20 && y < view.bottom() - 20) return a.id;
+    }
+    return 0;
+}
+
+// What the player does at once: the question whether the wheel may zoom the map, a click on an own ant, typed text (it goes to the chat box), a key of the match (Ctrl+O opens the options).
+// What of it reached the match?
+struct Reach {
+    bool wheel{false};
+    bool click{false};
+    bool text{false};
+    bool options{false};
+};
+
+Reach poke(Application& app, uint32_t ant_id) {
+    Reach r;
+    const LayoutRect view = app.layout().view();
+    r.wheel = app.view_zoom_allowed(view.x + view.w / 2, view.y + view.h / 2);
+    const uint32_t selected = app.hud().get_selected_ant_id();
+    for (const auto& a : app.sim().get_world_state().ants) {
+        if (a.id != ant_id) continue;
+        const ViewportCamera& cam = app.renderer().camera();
+        const int32_t x = cam.view_x + (a.px - cam.world_x);
+        const int32_t y = cam.view_y + (a.py - cam.world_y);
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = x;
+        motion.y = y;
+        app.handle_mouse_motion(motion);
+        app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONDOWN, x, y));
+        app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONUP, x, y));
+    }
+    r.click = app.hud().get_selected_ant_id() != selected;
+    SDL_Event typed{};                                                                           // text is an event of the loop: it is read there
+    typed.type = SDL_TEXTINPUT;
+    typed.text.windowID = SDL_GetWindowID(SDL_GetWindowFromID(1));
+    std::snprintf(typed.text.text, sizeof typed.text.text, "zz");
+    SDL_PushEvent(&typed);
+    app.run_frame_with_delta(0.001f);
+    r.text = !app.hud().get_chat_input().empty();
+    while (!app.hud().get_chat_input().empty()) app.handle_key_down(key_event(SDLK_BACKSPACE));
+    app.handle_key_down(key_event(SDLK_o, false, KMOD_LCTRL));
+    r.options = app.hud().is_modal_open();
+    return r;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -518,15 +743,17 @@ void run_key_tests() {
 }
 
 void run_use_tests() {
-    TEST_CASE("RA4.1 A Game That Is Started Again With The Join Arguments Of Its Room (--join ADDR --room CODE, No Seat) Finds The Key In Its File And Takes Its Seat In The Running Match: The Room Counts A Rejoin, The Seat Is The Same, The Game Is Given The Match From The Server's Log, And It Ends In The Same State As Bob; The File Has The Same Key Again") {
+    TEST_CASE("RA4.1 A Game That Is Started Again With The Join Arguments Of Its Room (--join ADDR --room CODE, No Seat) Finds The Key In Its File And Takes Its Seat In The Running Match: The Room Counts A Rejoin, The Seat Is The Same, The Game Is Given The Match From The Server's Log (The Catch-Up Screen With A Percent That Grows, Nothing Of The Match Reached By Key, Click Or Wheel), The Match Begins For It Without The Start Of A Match (No Dialog, No Start Sound, No Start News), And It Ends In The Same State As Bob; The File Has The Same Key Again") {
         const Captured output;
         World w;
         ASSERT_TRUE(w.server.start(w.now));
         ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-4"), w.server_now()).ok);
         const fs::path dir = scratch_dir("ra41");
-        const ApplicationConfig cfg = w.config(dir, "RA-4", "Ann");
+        const ApplicationConfig cfg = w.config_1to1(dir, "RA-4", "Ann");
         Application& first = w.start_app(cfg);
         Machine& bob = w.join("Bob", "RA-4");
+        ASSERT_TRUE(w.run_until([&]() { return first.state() == AppState::Playing; }, 12000));
+        ASSERT_TRUE(first.hud().is_match_start_modal_active() && first.audio_mixer().active_channel_count() >= 1 && chat_has(first, "Game started!") && !first.catch_up_screen_active());      // (a match that starts: the dialog, the start sound, the start news)
         ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
         w.run(25000);                                                                            // some 500 turns: the catch-up of a game that starts from nothing is more than a frame's work
         const uint8_t seat = first.net()->my_seat();
@@ -540,14 +767,67 @@ void run_use_tests() {
         ASSERT_TRUE(sealed > 400);
         FileRejoinStore file((dir / "rejoin.txt").string());                                     // (the file as the death left it: the key is there)
         ASSERT_TRUE(file.find("127.0.0.1:" + std::to_string(w.server.port()), "RA-4", seat) && net::key_matches(file.find("127.0.0.1:" + std::to_string(w.server.port()), "RA-4", seat)->key, key));
-        // the game is started again, with the arguments of its room and no key
+        // the game is started again, with the arguments of its room and no key. Every step of its way back is looked at
         Application& second = w.start_app(cfg);
-        ASSERT_TRUE(w.run_until([&]() { return second.state() == AppState::Playing && !w.status("RA-4").paused; }, 30000));
+        std::vector<Look> looks;
+        bool began = false;
+        bool poked = false;
+        Reach blocked;
+        bool picture_ok = false;
+        std::string picture_problem;
+        for (uint32_t elapsed = 0; elapsed < 30000; elapsed += 10) {
+            w.run(10);
+            const Look now = look_at(second);
+            looks.push_back(now);
+            if (!began && now.state == AppState::Playing) {                                      // the step in which the match begins for it
+                began = true;
+                ASSERT_TRUE(now.catching && !now.dialog && now.channels == 0);                  // the catch-up screen, no dialog, no start sound
+                ASSERT_FALSE(chat_has(second, "Game started!"));                                // no start news, and no "Welcome to Ants!" on the status line
+                ASSERT_TRUE(second.hud().status_line().text().empty() && second.hud().get_chat_log().empty());
+            }
+            if (!poked && now.catching && now.state == AppState::Playing) {                      // on the catch-up screen: the match takes no key, no click, no wheel
+                poked = true;
+                const uint32_t ant = own_ant_in_view(second);
+                ASSERT_TRUE(ant != 0);
+                blocked = poke(second, ant);
+                picture_ok = catch_up_picture(grab(second, dir / "ra41.bmp"), second.catch_up_percent(), picture_problem);
+            }
+            if (began && !now.catching && !w.status("RA-4").paused) break;
+        }
+        ASSERT_TRUE(began && poked);
+        ASSERT_FALSE(blocked.options || blocked.click || blocked.wheel || blocked.text);
+        if (!picture_ok) std::cout << "\n    [the catch-up screen] " << picture_problem;
+        ASSERT_TRUE(picture_ok);
+        size_t catching_steps = 0;
+        int32_t last_percent = -1;
+        bool grew = false;
+        uint64_t last_catching_tick = 0;
+        for (const Look& l : looks) {
+            if (l.state != AppState::Playing) continue;
+            ASSERT_FALSE(l.dialog);                                                              // no dialog at any moment of the way back
+            if (!l.catching) continue;
+            ++catching_steps;
+            ASSERT_TRUE(l.percent >= last_percent && l.percent <= 100);
+            grew = grew || (last_percent >= 0 && l.percent > last_percent);
+            last_percent = l.percent;
+            last_catching_tick = l.tick;
+        }
+        ASSERT_TRUE(catching_steps >= 2 && grew);                                                // the percent grew over several frames (500 turns, 200 a frame)
+        ASSERT_TRUE(second.state() == AppState::Playing && !second.catch_up_screen_active() && !w.status("RA-4").paused);
         const server::RoomStatus s = w.status("RA-4");
         ASSERT_TRUE(s.state == server::RoomState::Running && s.rejoins == 1 && s.absent.empty() && s.names[seat] == "Ann");
         ASSERT_EQ(second.net()->my_seat(), seat);
         ASSERT_EQ(second.local_player_id(), seat);
         ASSERT_TRUE(second.net()->turns_executed() >= sealed);                                   // the whole match was given to it
+        // the first tick after the catch-up does not play what the replay queued, and the match screen is back: the same key, click and wheel now reach it (what was refused above was the screen's doing)
+        ASSERT_TRUE(w.run_until([&]() { return second.sim().current_tick() > last_catching_tick; }, 2000));
+        ASSERT_EQ(second.audio_mixer().active_channel_count(), size_t{0});
+        const uint32_t ant = own_ant_in_view(second);
+        ASSERT_TRUE(ant != 0);
+        const Reach reached = poke(second, ant);
+        ASSERT_TRUE(reached.wheel && reached.click && reached.text && reached.options);
+        second.handle_key_down(key_event(SDLK_ESCAPE));                                          // (closes the options again)
+        ASSERT_FALSE(chat_has(second, "Game started!"));
         w.run(3000);
         ASSERT_TRUE(second.net()->turns_executed() > sealed + 40);                               // and it goes on
         // the Welcome of the rejoin said the key again: the file has it, the same one
@@ -755,48 +1035,6 @@ void run_menu_tests() {
 // The overlay, the vote and the countdown
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-namespace {
-
-SDL_KeyboardEvent key_event(SDL_Keycode sym, bool repeat = false) {
-    SDL_KeyboardEvent ke{};
-    ke.type = SDL_KEYDOWN;
-    ke.keysym.sym = sym;
-    ke.repeat = repeat ? 1 : 0;
-    return ke;
-}
-
-SDL_MouseButtonEvent mouse_event(uint32_t type, int32_t x, int32_t y) {
-    SDL_MouseButtonEvent be{};
-    be.type = type;
-    be.button = SDL_BUTTON_LEFT;
-    be.x = x;
-    be.y = y;
-    be.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
-    be.clicks = 1;
-    return be;
-}
-
-// A click on a rectangle of the picture: the pointer goes there, the left button goes down and up
-void click(Application& app, const LayoutRect& r) {
-    const int32_t x = r.x + r.w / 2;
-    const int32_t y = r.y + r.h / 2;
-    app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONDOWN, x, y));
-    app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONUP, x, y));
-}
-
-// The machine is dead for good: it makes no new link (a person who closed the lid), whatever its NetGame tries
-void make_dead(Machine& m) {
-    m.net.set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
-}
-
-bool begins(const std::string& text, const std::string& start) { return text.compare(0, start.size(), start) == 0; }
-
-std::string first_line(Application& app) {
-    const NetOverlayLine l = app.net_overlay_now();
-    return l.lines.empty() ? std::string() : l.lines[0];
-}
-
-}  // namespace
 
 void run_screen_tests() {
     TEST_CASE("RA1.2 The Application's Own Link Is Cut: The Overlay Says \"Connection lost. Reconnecting... 0:03\" With The Seconds Since The Loss And, From The Second Link On, The Attempt (And \"Esc leaves the match\" Under It); \"Waiting For The Other Players...\" Never Shows Meanwhile; The Words Are Gone When The Match Is Back") {
@@ -1148,6 +1386,389 @@ void run_overlay_table_tests() {
     } TEST_END();
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The catch-up screen, the start of a rejoin, the dialog that gives way, leaving while held
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+void run_way_back_tests() {
+    TEST_CASE("RA1.3 The Way Back Of A Link That Was Cut, Its Second Half: While The Machine Is Reconnecting The Match Stays On The Screen With The Overlay; When The Server Gives It The Match The Screen Is The Loading Screen's Picture With The Bar Filled To The Percent (No Overlay, No Key, Click Or Wheel Reaches The Match; Esc Asks To Leave With The Dialog Over It And N Takes It Away); When It Has Caught Up The Match Is There With Everything As It Was: The Selection, The Camera, The Log Of The Chat (No Second \"Game started!\"), No Dialog, The Same Key In The File") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-13"), w.server_now()).ok);
+        const fs::path dir = scratch_dir("ra13");
+        Application& app = w.start_app(w.config_1to1(dir, "RA-13", "Ann"));
+        Machine& bob = w.join("Bob", "RA-13");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(3000);
+        // what a blip must leave as it is: the selection, the camera, the log of the chat
+        const std::vector<uint32_t> mine = own_ants(app);
+        ASSERT_TRUE(mine.size() >= 2);
+        const ViewportCamera start_view = app.renderer().camera();
+        app.renderer().camera().scroll_pixels(24, 16, bob.map_w, bob.map_h);
+        const ViewportCamera camera = app.renderer().camera();
+        ASSERT_TRUE(camera.x != start_view.x || camera.y != start_view.y);                         // (the view is where the player put it, not where a match starts)
+        app.hud().select_ant(mine[0]);
+        app.hud().receive_chat_message(1, "Bob", "hello Ann", false, app.sim().get_world_state());
+        const std::deque<std::string> log = app.hud().get_chat_log();
+        ASSERT_TRUE(chat_has(app, "Game started!") && chat_has(app, "hello Ann"));
+        ASSERT_EQ(app.rejoin_store()->entries().size(), size_t{1});
+        const net::SeatKey key = app.rejoin_store()->entries()[0].key;
+        // the link is cut and the network stays down for three seconds: the match is still what the screen shows, with the words of the way back over it
+        app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
+        ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        w.run(3000);
+        ASSERT_TRUE(app.net()->pause_info().reconnecting);
+        ASSERT_FALSE(app.catch_up_screen_active());
+        ASSERT_TRUE(begins(first_line(app), "Connection lost. Reconnecting..."));
+        std::string why;
+        ASSERT_FALSE(catch_up_picture(grab(app, dir / "ra13-match.bmp"), 0, why));                // (the check of the picture can tell the match from the catch-up screen)
+        // the network is back: every step of the way is looked at
+        app.net()->set_link_maker_for_test(nullptr);
+        std::vector<Look> looks;
+        bool poked = false;
+        Reach blocked;
+        bool picture_ok = false;
+        std::string problem;
+        for (uint32_t elapsed = 0; elapsed < 30000; elapsed += 10) {
+            w.run(10);
+            const Look now = look_at(app);
+            looks.push_back(now);
+            if (!poked && now.catching) {
+                poked = true;
+                const uint32_t ant = own_ant_in_view(app, mine[0]);
+                ASSERT_TRUE(ant != 0);
+                blocked = poke(app, ant);
+                const auto pointer_at = [&app](int32_t x, int32_t y) {                           // (the game's own cursor is on the picture: the pictures below are compared with the pointer in one place)
+                    SDL_MouseMotionEvent motion{};
+                    motion.type = SDL_MOUSEMOTION;
+                    motion.x = x;
+                    motion.y = y;
+                    app.handle_mouse_motion(motion);
+                };
+                pointer_at(560, 380);
+                const Picture plain = grab(app, dir / "ra13-a.bmp");
+                picture_ok = catch_up_picture(plain, app.catch_up_percent(), problem);
+                app.handle_key_down(key_event(SDLK_ESCAPE));                                      // Esc asks: the dialog is drawn over the loading screen
+                ASSERT_TRUE(app.hud().is_quit_dialog_open());
+                ASSERT_TRUE(app.catch_up_screen_active());
+                const int64_t over = plain.differing(grab(app, dir / "ra13-b.bmp"));
+                ASSERT_TRUE(over > 2000);
+                const LayoutPoint m = app.layout().modal_offset();                                // the mouse works on the dialog too: a click on No, where it is drawn
+                const UIButton no = app.hud().quit_no_button();
+                click(app, LayoutRect{no.x + m.x, no.y + m.y, no.w, no.h});
+                ASSERT_FALSE(app.hud().is_quit_dialog_open());
+                ASSERT_TRUE(app.catch_up_screen_active());
+                pointer_at(560, 380);
+                ASSERT_EQ(plain.differing(grab(app, dir / "ra13-c.bmp")), int64_t{0});            // (the screen is as it was)
+                app.handle_key_down(key_event(SDLK_ESCAPE));
+                ASSERT_TRUE(app.hud().is_quit_dialog_open());
+                app.handle_key_down(key_event(SDLK_n));                                           // N is No as well
+                ASSERT_FALSE(app.hud().is_quit_dialog_open());
+            }
+            if (poked && !now.catching && !app.net()->paused()) break;
+        }
+        ASSERT_TRUE(poked);
+        ASSERT_FALSE(blocked.options || blocked.click || blocked.wheel || blocked.text);          // nothing of a key, a click, typed text or the wheel reached the match
+        if (!picture_ok) std::cout << "\n    [the catch-up screen] " << problem;
+        ASSERT_TRUE(picture_ok);
+        int32_t last_percent = -1;
+        for (const Look& l : looks) {
+            ASSERT_FALSE(l.dialog);
+            ASSERT_EQ(l.state, AppState::Playing);
+            if (!l.catching) continue;
+            ASSERT_TRUE(l.percent >= last_percent && l.percent <= 100);
+            last_percent = l.percent;
+            ASSERT_FALSE(l.overlay);                                                              // (the screen is the loading screen's: no overlay on it)
+        }
+        ASSERT_FALSE(app.net()->paused());
+        ASSERT_FALSE(app.catch_up_screen_active());
+        // the match is as it was
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);
+        const ViewportCamera& after = app.renderer().camera();
+        ASSERT_TRUE(after.x == camera.x && after.y == camera.y && after.world_x == camera.world_x && after.world_y == camera.world_y && after.zoom == camera.zoom);
+        ASSERT_TRUE(app.hud().get_chat_log() == log);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active() || app.hud().is_quit_dialog_open() || app.hud().is_modal_open());
+        ASSERT_TRUE(fs::exists(dir / "rejoin.txt") && app.rejoin_store()->entries().size() == 1 && net::key_matches(app.rejoin_store()->entries()[0].key, key));
+        ASSERT_TRUE(w.status("RA-13").rejoins == 1);
+        w.run(500);
+        ASSERT_TRUE(app.net_overlay_now().lines.empty());
+        // the match takes keys, clicks and the wheel again (what was refused on the catch-up screen was the screen's doing)
+        const uint32_t ant = own_ant_in_view(app, mine[0]);
+        ASSERT_TRUE(ant != 0);
+        const Reach reached = poke(app, ant);
+        if (!(reached.wheel && reached.click && reached.text && reached.options)) std::cout << "\n    [after the catch-up] the wheel " << reached.wheel << ", the click " << reached.click << ", the text " << reached.text << ", the key " << reached.options;
+        ASSERT_TRUE(reached.wheel && reached.click && reached.text && reached.options);
+        ASSERT_FALSE(app.net()->desynced());
+        ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("RA1.4 What The Engine Queued While The Match Was Run Without A Picture Is Neither Heard Nor Said When The Machine Is Back: A Sound And A Line Of The Status That Wait In The Engine's Queues When The Catch-Up Ends Are Dropped At The First Tick After It (A Replay Of A Whole Match Would Play Its Sounds At Once); The Same Things Outside A Catch-Up Are Played And Said At The Next Tick") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-14"), w.server_now()).ok);
+        Application& app = w.start_app(w.config(scratch_dir("ra14"), "RA-14", "Ann"));
+        Machine& bob = w.join("Bob", "RA-14");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(3000);
+        const uint8_t seat = app.local_player_id();
+        const std::string words = sim::strings::text(sim::strings::kNeed200Points);
+        app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
+        ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        w.run(3000);                                                                              // (the runner has run what it held: no tick comes until the match is back)
+        ASSERT_TRUE(app.net()->pause_info().reconnecting);
+        // the engine queues a sound and a line of the status, as the turns of a replay do: an order of the player's own that is refused (it changes nothing of the match)
+        const uint64_t before = app.sim().state_hash().total;
+        ASSERT_TRUE(app.sim().try_hatch(seat, sim::AntType::Worker) == sim::SimulationEngine::HatchResult::NotEnoughPoints);
+        ASSERT_TRUE(app.sim().state_hash().total == before);
+        ASSERT_TRUE(app.sim().has_targeted_audio_event(seat, sim::SoundID::AntStop) && app.sim().has_news_event(seat, sim::strings::kNeed200Points));
+        app.audio_mixer().stop_all();
+        app.hud().clear_status();
+        ASSERT_EQ(app.audio_mixer().active_channel_count(), size_t{0});
+        app.net()->set_link_maker_for_test(nullptr);
+        bool caught = false;
+        bool first_live = false;
+        uint64_t last_catching_tick = 0;
+        for (uint32_t elapsed = 0; elapsed < 30000 && !first_live; elapsed += 10) {
+            w.run(10);
+            const Look now = look_at(app);
+            ASSERT_TRUE(now.status != words);                                                     // never said
+            if (now.catching) {
+                caught = true;
+                last_catching_tick = now.tick;
+            } else if (caught && now.tick > last_catching_tick) {                                  // the first tick after the catch-up has run
+                first_live = true;
+                ASSERT_EQ(now.channels, size_t{0});                                               // and played nothing of what the engine queued
+            }
+        }
+        ASSERT_TRUE(caught && first_live);
+        // outside a catch-up the same two things are played and said at the next tick
+        w.run(500);
+        app.audio_mixer().stop_all();
+        app.hud().clear_status();
+        ASSERT_TRUE(app.sim().try_hatch(seat, sim::AntType::Worker) == sim::SimulationEngine::HatchResult::NotEnoughPoints);
+        ASSERT_TRUE(w.run_until([&]() { return app.audio_mixer().active_channel_count() >= 1 && app.hud().status_line().text() == words; }, 1000));
+        ASSERT_FALSE(app.net()->desynced());
+    } TEST_END();
+
+    TEST_CASE("RA5.1 The \"Get ready to play!\" Dialog Gives Way To A Pause: A Player Whose Link Is Cut Two Seconds After The Match Began (Three In The Room) Holds The Match Before Its First Turn; The Dialog Of Another Machine Closes At Once (It Would Take The Keys And Hide The Overlay), The Seat Is Named, The Vote Block Opens And F3 Votes, The Dialog Does Not Come Back, And The Match Goes On After The Vote") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        server::RoomSpec spec = held_spec("RA-51", 3);
+        spec.vote_after_ms = 5000;
+        ASSERT_TRUE(w.server.mgr->create_room(spec, w.server_now()).ok);
+        Application& app = w.start_app(w.config(scratch_dir("ra51"), "RA-51", "Ann"));
+        Machine& bob = w.join("Bob", "RA-51");
+        Machine& cat = w.join("Cat", "RA-51");
+        ASSERT_TRUE(w.run_until([&]() { return app.state() == AppState::Playing; }, 12000));
+        ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.sim().current_tick() == 0);        // the match began: the dialog is up
+        w.run(2000);
+        ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.sim().current_tick() == 0 && !app.net()->paused());
+        make_dead(bob);
+        ASSERT_TRUE(w.server.cut_wire(1));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->paused(); }, 3000));
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());                                    // the dialog gave way in the moment of the pause
+        ASSERT_EQ(app.sim().current_tick(), uint64_t{0});                                         // (the match has not begun to run: its first turn waits for the seat)
+        ASSERT_TRUE(w.run_until([&]() { return !app.net_overlay_now().lines.empty(); }, 3000));
+        ASSERT_TRUE(begins(first_line(app), "Bob (Red) lost the connection, waiting 0:0"));
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.open; }, 8000));
+        ASSERT_TRUE(app.net_overlay_now().vote.count == "0 of 2 voted to continue");
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());
+        app.handle_key_down(key_event(SDLK_F3));                                                  // the keys reach the vote
+        ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.go_on_pressed; }, 3000));
+        ASSERT_TRUE(app.net_overlay_now().vote.count == "1 of 2 voted to continue" && w.status("RA-51").votes_continue == 1);
+        ASSERT_TRUE(cat.net.vote(false));
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RA-51").drops_by_vote == 1; }, 5000));
+        ASSERT_TRUE(w.run_until([&]() { return !app.net()->paused() && app.net_overlay_now().lines.empty(); }, 5000));
+        ASSERT_TRUE(w.run_until([&]() { return app.sim().current_tick() >= 20; }, 8000));         // the first turn came: the match runs
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());                                    // and the dialog did not come back
+        ASSERT_FALSE(app.net()->desynced());
+    } TEST_END();
+
+    TEST_CASE("RA5.2 The Same For This Machine's Own Link: Cut In The Seconds Of The Dialog, The Dialog Gives Way To The Words Of The Way Back, And When The Machine Is Back (The Catch-Up Screen In Between) The Match Runs Without A Dialog") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-52"), w.server_now()).ok);
+        Application& app = w.start_app(w.config(scratch_dir("ra52"), "RA-52", "Ann"));
+        Machine& bob = w.join("Bob", "RA-52");
+        ASSERT_TRUE(w.run_until([&]() { return app.state() == AppState::Playing; }, 12000));
+        ASSERT_TRUE(app.hud().is_match_start_modal_active());
+        w.run(2000);
+        ASSERT_TRUE(app.hud().is_match_start_modal_active());
+        app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
+        ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->pause_info().reconnecting; }, 3000));
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());
+        w.run(1500);
+        ASSERT_TRUE(begins(first_line(app), "Connection lost. Reconnecting..."));
+        app.net()->set_link_maker_for_test(nullptr);
+        bool caught = false;
+        ASSERT_TRUE(w.run_until([&]() {
+            const Look now = look_at(app);
+            caught = caught || now.catching;
+            return !app.net()->paused() && !now.catching;
+        }, 30000));
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000));
+        w.run(2000);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());
+        ASSERT_TRUE(app.sim().current_tick() > 20 && !app.net()->desynced());
+    } TEST_END();
+
+    TEST_CASE("RA6.1 Quit While The Match Is Held (Two In The Room, The Other One Is Missing): The Quit Dialog's Yes Leaves For Good At Once - A Quit Command Would Be Discarded, No Turn Is Sealed - The Key Is Let Go Of, No Results Open, And When The Other One Is Back The Room Has Dropped The Seat (Bob Is Told)") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-61"), w.server_now()).ok);
+        const fs::path dir = scratch_dir("ra61");
+        Application& app = w.start_app(w.config(dir, "RA-61", "Ann"));
+        Machine& bob = w.join("Bob", "RA-61");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(3000);
+        const uint8_t seat = app.local_player_id();
+        make_dead(bob);
+        ASSERT_TRUE(w.server.cut_wire(1));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->paused() && !app.net_overlay_now().lines.empty(); }, 4000));
+        ASSERT_TRUE(begins(first_line(app), "Bob (Red) lost the connection, waiting 0:"));
+        ASSERT_EQ(app.rejoin_store()->entries().size(), size_t{1});
+        const net::SeatKey key = app.rejoin_store()->entries()[0].key;
+        quit_by_dialog(app);                                                                      // Ctrl+Q, Y
+        ASSERT_FALSE(app.is_running());                                                           // the player left (a game that was joined by arguments ends)
+        ASSERT_EQ(app.net()->phase(), NetGame::Phase::Off);
+        ASSERT_FALSE(app.scorecard().is_open());                                                  // (no Quit command: the match did not end)
+        ASSERT_TRUE(app.rejoin_store()->entries().empty());
+        ASSERT_FALSE(fs::exists(dir / "rejoin.txt"));
+        // Bob is back: the match goes on and the first turn after the pause drops the seat that left
+        bob.net.set_link_maker_for_test(nullptr);
+        ASSERT_TRUE(w.run_until([&]() { return !w.status("RA-61").paused; }, 25000));
+        w.run(1000);
+        bool left = false;
+        for (const NetGame::Event& e : bob.events) left = left || (e.type == NetGame::Event::Type::PlayerLeft && e.seat == seat);
+        ASSERT_TRUE(left);
+        ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("RA6.2 Esc: In A Match That Runs, And While Another Player's Seat Is Missing, It Is The Original's (Everything Is Deselected, No Dialog); On The Way Back, With This Machine's Link Lost, It Opens The Quit Dialog (A Held Key Does Not): N Or Esc Closes It, Y Leaves The Match For Good And The Key Is Let Go Of; The Selection Is Not Touched By The Esc That Asks") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-62"), w.server_now()).ok);
+        const fs::path dir = scratch_dir("ra62");
+        Application& app = w.start_app(w.config(dir, "RA-62", "Ann"));
+        Machine& bob = w.join("Bob", "RA-62");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(3000);
+        const std::vector<uint32_t> mine = own_ants(app);
+        ASSERT_FALSE(mine.empty());
+        // a match that runs
+        app.hud().select_ant(mine[0]);
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);
+        app.handle_key_down(key_event(SDLK_ESCAPE));
+        ASSERT_TRUE(app.hud().get_selected_ant_id() == 0 && !app.hud().is_quit_dialog_open());
+        // another player's seat is missing: this machine's link is fine, and Esc is still the original's
+        make_dead(bob);
+        ASSERT_TRUE(w.server.cut_wire(1));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->paused(); }, 3000));
+        ASSERT_FALSE(app.net()->pause_info().reconnecting);
+        app.hud().select_ant(mine[0]);
+        app.handle_key_down(key_event(SDLK_ESCAPE));
+        ASSERT_TRUE(app.hud().get_selected_ant_id() == 0 && !app.hud().is_quit_dialog_open());
+        // this machine's link is lost as well: the way back
+        app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
+        ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->pause_info().reconnecting; }, 3000));
+        app.hud().select_ant(mine[0]);
+        app.handle_key_down(key_event(SDLK_ESCAPE, true));                                       // a repeat of a held key (the press came before: it is not this test's) asks nothing and deselects nothing
+        ASSERT_TRUE(!app.hud().is_quit_dialog_open() && app.hud().get_selected_ant_id() == mine[0]);
+        app.handle_key_down(key_event(SDLK_ESCAPE));
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);                                      // (the Esc that asks deselects nothing)
+        app.handle_key_down(key_event(SDLK_ESCAPE, true));                                        // the key is held: its repeats do not close the dialog that it opened
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        app.handle_key_down(key_event(SDLK_n));                                                   // No
+        ASSERT_FALSE(app.hud().is_quit_dialog_open());
+        app.handle_key_down(key_event(SDLK_ESCAPE));
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        app.handle_key_down(key_event(SDLK_ESCAPE));                                              // the dialog's own Esc closes it
+        ASSERT_FALSE(app.hud().is_quit_dialog_open());
+        ASSERT_TRUE(app.is_running() && app.net()->pause_info().reconnecting && app.rejoin_store()->entries().size() == 1);
+        app.handle_key_down(key_event(SDLK_ESCAPE));
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        app.handle_key_down(key_event(SDLK_y));                                                   // Yes: the match is left for good
+        ASSERT_FALSE(app.is_running());
+        ASSERT_EQ(app.net()->phase(), NetGame::Phase::Off);
+        ASSERT_TRUE(app.rejoin_store()->entries().empty());
+        ASSERT_FALSE(fs::exists(dir / "rejoin.txt"));
+    } TEST_END();
+
+    TEST_CASE("RA9.1 The Match That Begins A Second Time In One Session (A Server That Lost The Last Second Of Its Record Answers BadRequest, The NetGame Starts The Match From Nothing With Its Key): The Screen Is The Catch-Up Screen From The Refusal On (Never The Match That Was Reset Behind It), No Dialog And No Start Sound Come, The HUD Starts Clean, The Key Is The Same In The File, And The Machine Ends In The Same State As Bob") {
+        const Captured output;
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-9"), w.server_now()).ok);
+        const fs::path dir = scratch_dir("ra9");
+        Application& app = w.start_app(w.config(dir, "RA-9", "Ann"));
+        Machine& bob = w.join("Bob", "RA-9");
+        ASSERT_TRUE(w.run_until([&]() { return app.state() == AppState::Playing; }, 12000));
+        ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.audio_mixer().active_channel_count() >= 1);          // (the first begin: the dialog and the start sound)
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(5000);
+        const std::vector<uint32_t> mine = own_ants(app);
+        ASSERT_FALSE(mine.empty());
+        app.hud().select_ant(mine[0]);
+        app.hud().receive_chat_message(1, "Bob", "hello Ann", false, app.sim().get_world_state());
+        ASSERT_EQ(app.rejoin_store()->entries().size(), size_t{1});
+        const net::SeatKey key = app.rejoin_store()->entries()[0].key;
+        const uint32_t sealed = w.status("RA-9").turns;
+        app.audio_mixer().stop_all();
+        // the refusal that makes the machine start from nothing: its Hello says it has turns, the server answers BadRequest, the next link goes to the real server
+        w.server.script_reason = net::RejectReason::BadRequest;
+        w.server.door = Server::Door::Scripted;
+        ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 8000));
+        w.server.door = Server::Door::Open;
+        std::vector<Look> looks;
+        bool reloaded = false;
+        uint64_t last_catching_tick = 0;
+        for (uint32_t elapsed = 0; elapsed < 60000; elapsed += 10) {
+            w.run(10);
+            const Look now = look_at(app);
+            looks.push_back(now);
+            reloaded = reloaded || now.phase == NetGame::Phase::Connecting || now.phase == NetGame::Phase::Loading;
+            if (now.catching) last_catching_tick = now.tick;
+            if (reloaded && now.phase == NetGame::Phase::Playing && !now.catching && !w.status("RA-9").paused && now.tick > last_catching_tick) break;
+        }
+        ASSERT_TRUE(reloaded);
+        for (const Look& l : looks) {
+            ASSERT_EQ(l.state, AppState::Playing);
+            ASSERT_FALSE(l.dialog);                                                               // no dialog at any moment
+            if (l.phase != NetGame::Phase::Playing) ASSERT_TRUE(l.catching);                      // the catch-up screen all the way: the match that was reset behind it is not shown
+        }
+        ASSERT_EQ(looks.back().channels, size_t{0});                                              // no start sound (the first live tick played nothing of the replay either)
+        ASSERT_EQ(app.net()->phase(), NetGame::Phase::Playing);
+        ASSERT_TRUE(w.status("RA-9").rejoins == 1 && w.status("RA-9").absent.empty());
+        ASSERT_TRUE(app.net()->turns_executed() >= sealed);
+        // the HUD starts clean: the selection and the log of the old session are gone, and there is no start news
+        ASSERT_TRUE(app.hud().get_selected_ant_id() == 0 && app.hud().get_chat_log().empty());
+        ASSERT_FALSE(app.hud().is_match_start_modal_active());
+        ASSERT_TRUE(app.rejoin_store()->entries().size() == 1 && net::key_matches(app.rejoin_store()->entries()[0].key, key));
+        w.run(3000);
+        ASSERT_TRUE(app.net()->turns_executed() > sealed + 40);
+        bool agree = false;
+        for (int i = 0; i < 400 && !agree; ++i) {
+            if (app.sim().current_tick() == bob.sim.current_tick()) agree = app.sim().state_hash() == bob.sim.state_hash();
+            if (!agree) w.run(10);
+        }
+        ASSERT_TRUE(agree);
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
+    } TEST_END();
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The screenshots (test_rejoin_app --shots DIR [--wide]): what the screens look like; nothing is compared
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -1219,6 +1840,33 @@ int make_shots(const std::string& out, bool wide) {
         w.run(3200);
         shot(app, out + "/06_the_way_back.bmp");
     }
+    {   // a game that is started again is given the match from the server's log: the catch-up screen, and Esc over it
+        World w;
+        if (!w.server.start(w.now)) return 1;
+        w.server.mgr->create_room(held_spec("SHOT-3"), w.server_now());
+        const fs::path dir = scratch_dir("shots-c");
+        const ApplicationConfig cfg = shots_config(w, dir, "SHOT-3", "Ann", wide);
+        Application& first = w.start_app(cfg);
+        Machine& bob = w.join("Bob", "SHOT-3");
+        (void)first;
+        if (!w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre)) return 1;
+        w.run(40000);
+        w.crash_app(dir);
+        if (!w.run_until([&]() { return w.status("SHOT-3").paused; }, 3000)) return 1;
+        Application& second = w.start_app(cfg);
+        bool shown = false;
+        for (uint32_t elapsed = 0; elapsed < 30000 && !shown; elapsed += 10) {
+            w.run(10);
+            if (second.catch_up_screen_active() && second.catch_up_percent() >= 20 && second.catch_up_percent() < 100) {
+                shot(second, out + "/07_catching_up.bmp");
+                second.handle_key_down(key_event(SDLK_ESCAPE));
+                shot(second, out + "/08_catching_up_esc.bmp");
+                second.handle_key_down(key_event(SDLK_n));
+                shown = true;
+            }
+        }
+        if (!shown) return 1;
+    }
     std::cout << "screenshots written to " << out << "\n";
     return 0;
 }
@@ -1240,6 +1888,7 @@ int main(int argc, char* argv[]) {
     run_menu_tests();
     run_screen_tests();
     run_overlay_table_tests();
+    run_way_back_tests();
     std::cout << "\n" << g_test_count << " tests, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
     if (g_test_failures == 0) {
         std::cout << "ALL TESTS PASSED\n";

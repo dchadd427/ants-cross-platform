@@ -445,6 +445,10 @@ public:
     NetOverlayInput net_overlay_input() const;
     /// The renderer's width of every text of the overlay (what the drawing and the mouse lay it out with): for the tests
     NetOverlayMetrics net_overlay_metrics_for_test(const NetOverlayLine& line) const { return net_overlay_metrics(line); }
+    /// The catch-up screen is up instead of the match: the machine is given the match from the server's log (a game started again, a page reloaded, a link lost) and runs it without drawing it; the
+    /// loading picture shows "Catching up N%" (catch_up_percent) until Event::Rejoined. Public for the tests.
+    bool catch_up_screen_active() const;
+    int32_t catch_up_percent() const;
     /// The vote block's buttons where the screen draws them now (net_overlay_layout over the lines of net_overlay_now): `open` is false, and the rectangles are empty, when no vote is on screen.
     /// A click inside one is that choice (F2 keeps waiting, F3 goes on without the seat: NetGame::vote). Public for the tests.
     struct NetVoteButtons {
@@ -560,6 +564,7 @@ private:
     std::vector<net::PauseInfo::Seat> prev_missing_;      // the seats that were missing at the last look: who came back when the list empties
     std::string back_name_;                               // the seat that came back, while the countdown that follows its return runs ("" when nobody did)
     uint8_t vote_press_{0};                               // a left press went down on a button of the vote block: 1 keep waiting, 2 go on without the seat (its release is the choice)
+    bool catch_up_backlog_{false};                        // this machine has caught up: the sounds that the engine queued meanwhile are dropped with the first live tick (post_tick)
     std::string net_notice_;
     std::string player_name_;
     std::string local_player_name_;                       // the name of a local game (the system user, --name): what a single-player game after a network game shows again
@@ -589,7 +594,7 @@ private:
 
     // The match set-up shared by the local game and the network game
     bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog);   // level, simulation, renderer (no HUD, no sound)
-    void enter_match();                                   // music, start sound, camera, HUD reset, "Get ready", state Playing
+    void enter_match(bool rejoin = false);                // music, start sound, camera, HUD reset, "Get ready", state Playing (a match that this machine rejoins: no start sound, no dialog)
     void post_tick();                                     // what every simulation tick shows: HUD, events, audio, the end of the match
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
@@ -622,12 +627,14 @@ private:
     // Network play
     void handle_net_events();
     void net_load_match();                                // the host said Start: load the map, initialise the simulation, report
-    void net_begin_match();                               // everybody loaded: the match runs on this machine
+    void net_begin_match(bool rejoin = false);            // everybody loaded: the match runs on this machine (a rejoin: it was given a match that runs, see NetGame::Event::rejoin)
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);
     void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
     void sync_room_view();
     void render_net_overlay();
+    void render_catch_up_screen();                        // the loading screen's picture with "Catching up N%" instead of the match (page_layout.hpp)
+    bool handle_way_back_key(const SDL_KeyboardEvent& key);   // Esc on the way back opens the quit dialog; on the catch-up screen no other key does anything
     void track_net_state();                               // every frame of a match of the network: how long the match has been held, who came back (the overlay's seconds and names)
     NetOverlayMetrics net_overlay_metrics(const NetOverlayLine& line) const;    // the renderer's width of every text of the overlay
     bool handle_vote_key(const SDL_KeyboardEvent& key);   // F2 / F3 while a vote is open
