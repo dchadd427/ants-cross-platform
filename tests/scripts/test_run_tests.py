@@ -18,12 +18,15 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SCRIPT = os.path.join(REPO, "run_tests.sh")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import process_state  # noqa: E402  (a zombie, a stopped process that is not collected yet, counts as stopped)
 
 STUB_TABLE = r'''
 suite "T1" sim   1 "-" "Quick simulation suite"      "QUICK SIM"        'touch "$MARK_DIR/t1"'
@@ -384,11 +387,7 @@ class ParallelHousekeeping(StubRunner):
         proc.communicate(timeout=20)
         self.assertEqual(proc.returncode, 130)
         time.sleep(0.3)
-        try:
-            os.kill(pid, 0)
-            alive = True
-        except OSError:
-            alive = False
+        alive = process_state.running(pid)
         if alive:
             os.kill(pid, signal.SIGKILL)
         self.assertFalse(alive, "a process that a suite started was left running")

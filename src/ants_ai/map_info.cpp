@@ -103,7 +103,10 @@ std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, const std::vecto
     return cost_field(grid, mask, std::vector<sim::TileCoord>{source});
 }
 
-std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, const std::vector<uint8_t>& mask, const std::vector<sim::TileCoord>& sources) {
+namespace {
+
+// The search behind the cost fields: `seeds` are (walkable tile, starting cost); a tile that is not walkable in `mask` is ignored
+std::vector<int32_t> flood(const sim::Grid& grid, const std::vector<uint8_t>& mask, const std::vector<std::pair<sim::TileCoord, int32_t>>& seeds) {
     const int w = static_cast<int>(grid.width());
     const int h = static_cast<int>(grid.height());
     std::vector<int32_t> d(static_cast<size_t>(std::max(w, 0)) * static_cast<size_t>(std::max(h, 0)), -1);
@@ -111,10 +114,13 @@ std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, const std::vecto
     if (w <= 0 || h <= 0 || mask.size() != d.size()) return d;
     using Item = std::pair<int32_t, int>;                                                       // (cost, index): the cost is final when popped, ties cannot matter
     std::priority_queue<Item, std::vector<Item>, std::greater<Item>> open;
-    for (const sim::TileCoord& source : sources) {
+    for (const auto& seed : seeds) {
+        const sim::TileCoord source = seed.first;
         if (!ok(source)) continue;                                                              // an unwalkable source is ignored
-        d[static_cast<size_t>(source.y) * static_cast<size_t>(w) + static_cast<size_t>(source.x)] = 0;
-        open.push({0, source.y * w + source.x});
+        int32_t& slot = d[static_cast<size_t>(source.y) * static_cast<size_t>(w) + static_cast<size_t>(source.x)];
+        if (slot >= 0 && slot <= seed.second) continue;
+        slot = seed.second;
+        open.push({seed.second, source.y * w + source.x});
     }
     while (!open.empty()) {
         const auto [cost, idx] = open.top();
@@ -124,7 +130,7 @@ std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, const std::vecto
         for (int k = 0; k < 8; ++k) {
             const sim::TileCoord n{cur.x + kDx[k], cur.y + kDy[k]};
             if (!ok(n)) continue;
-            const int32_t nc = cost + static_cast<int32_t>(step_cost(grid, cur, n));
+            const int32_t nc = cost + static_cast<int32_t>(MapInfo::step_cost(grid, cur, n));
             int32_t& slot = d[static_cast<size_t>(n.y) * static_cast<size_t>(w) + static_cast<size_t>(n.x)];
             if (slot < 0 || nc < slot) {
                 slot = nc;
@@ -133,6 +139,29 @@ std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, const std::vecto
         }
     }
     return d;
+}
+
+}  // namespace
+
+std::vector<int32_t> MapInfo::cost_field(const sim::Grid& grid, const std::vector<uint8_t>& mask, const std::vector<sim::TileCoord>& sources) {
+    std::vector<std::pair<sim::TileCoord, int32_t>> seeds;
+    seeds.reserve(sources.size());
+    for (const sim::TileCoord& s : sources) seeds.emplace_back(s, 0);
+    return flood(grid, mask, seeds);
+}
+
+std::vector<int32_t> MapInfo::cost_field_onto(const sim::Grid& grid, const std::vector<uint8_t>& mask, uint8_t team, sim::TileCoord cell, const WalkContext& ctx) {
+    std::vector<std::pair<sim::TileCoord, int32_t>> seeds;
+    if (can_step_onto(grid, team, cell, ctx)) {
+        for (int k = 0; k < 8; ++k) {
+            const sim::TileCoord n{cell.x + kDx[k], cell.y + kDy[k]};
+            if (!grid.in_bounds(n)) continue;
+            const int32_t onto = static_cast<int32_t>(step_cost(grid, n, cell));
+            if (onto >= kPathCostLimit) continue;                                               // the engine's search would give up before it
+            seeds.emplace_back(n, onto);
+        }
+    }
+    return flood(grid, mask, seeds);
 }
 
 // ---- construction ----------------------------------------------------------------------------------------------------------------------------------------

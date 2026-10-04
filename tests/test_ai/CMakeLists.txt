@@ -9,6 +9,13 @@ add_executable(test_ai
     test_ai_map.cpp
     test_ai_arena.cpp
     test_ai_b2fix.cpp
+    test_ai_b41.cpp
+    test_ai_b41_team.cpp
+    test_ai_b41_fight.cpp
+    test_ai_b41_gate.cpp
+    test_ai_b41_style.cpp
+    test_ai_b41_offence.cpp
+    test_ai_b41_cost.cpp
 )
 
 target_link_libraries(test_ai PRIVATE
@@ -20,6 +27,7 @@ target_link_libraries(test_ai PRIVATE
 
 target_include_directories(test_ai PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools
 )
 
 target_link_libraries(test_ai PRIVATE ants_test_paths)

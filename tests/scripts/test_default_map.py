@@ -6,7 +6,7 @@ test_start_menu_app A4.6) and a LAN host's room (test_network_app N5.3b). What n
   - docker-compose.stack.yml: the map of a demo room whose code names none (`--demo-map ${ANTS_DEMO_MAP:-TREASURE.LVL}`), the six maps that a code may choose, and the comments that
     say what the default is; the commented example of docker-compose.server.yml. (A real server started with these options makes a Treasure room for a code that names no map:
     tests/scripts/test_ants_server.sh.) An ANTS_DEMO_MAP set in the environment of a stack replaces the default; the file's own default is what is read here.
-  - web/four.html (Play online): the New match form is preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),
+  - web/lobby.html (the front page): the New match form is preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),
     a remembered choice and ?map= still win, and every place that falls back to a map falls back to the default.
   - the defaults of the program and of the page name the same map.
 """
@@ -66,7 +66,7 @@ class StackFile(unittest.TestCase):
 
 class PlayOnlinePage(unittest.TestCase):
     def setUp(self):
-        self.page = read("web", "four.html")
+        self.page = read("web", "lobby.html")
 
     def maps_of_the_list(self):
         block = re.search(r"var MAPS = \[(.*?)\];", self.page, re.DOTALL)
@@ -101,7 +101,7 @@ class OneDefaultEverywhere(unittest.TestCase):
 
     def test_the_page_the_stack_the_setup_screen_and_the_host_panel_agree(self):
         stack = stack_command.demo_options(stack_command.server_command(read("docker-compose.stack.yml")))["--demo-map"]
-        page = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", read("web", "four.html")).group(1)
+        page = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", read("web", "lobby.html")).group(1)
         screen = re.search(r'DEFAULT_MAP_FILE = "([A-Za-z0-9_.]+)";', read("include", "ants_app", "map_select.hpp")).group(1)
         index = int(re.search(r"kDefaultMenuMap = (\d+);", read("include", "ants_app", "start_menu.hpp")).group(1))
         keys = re.findall(r'\{"([a-z]+)", "[A-Za-z]+"\}', re.search(r"constexpr MenuMap kMaps\[kMenuMapCount\] = \{(.*?)\};", read("src", "ants_app", "start_menu.cpp"), re.DOTALL).group(1))

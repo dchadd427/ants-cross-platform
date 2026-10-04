@@ -725,7 +725,7 @@ void run_bot_tests() {
         ASSERT_TRUE(app.bots()->stats(1).decisions == 0 && app.bots()->stats(3).decisions == 0);
         ASSERT_TRUE(ants_of(app.sim(), 2).empty() && !ants_of(app.sim(), 1).empty());
         const uint64_t hash0 = app.sim().state_hash().total;
-        // the ticks of the local loop reach the controller: the bots look at the world (the idle one never acts; the standard one is the worker bot of B3 until B4 and sends its ants to the food).
+        // the ticks of the local loop reach the controller: the bots look at the world (the idle one never acts; the standard one sends its ants to the food).
         // The first kDialogSteps steps are the "Get ready" dialog, in which the simulation waits, so 400 ticks take kDialogSteps + 400 steps
         for (int i = 0; i < kDialogSteps + 400; ++i) app.update_simulation(0.05f);
         ASSERT_EQ(app.sim().current_tick(), 400u);
@@ -814,6 +814,25 @@ void run_bot_tests() {
         ASSERT_EQ(normal.sim().roster_mask(), 0x0F);
         for (int i = 0; i < 50; ++i) normal.update_simulation(0.05f);
         ASSERT_TRUE(normal.bots() == nullptr);
+    } TEST_END();
+
+    TEST_CASE("AI6.11 --play Does Nothing In A Room: A Host With The Flag And A Map Stays On The Room's Setup Screen (No Match Starts, No Bot Runs); The Flag Is For A Game Of One Machine") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.play_at_once = true;
+        cfg.default_map_path = "Original-Ants/Maps/TINY.LVL";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active() && app.net()->is_host());
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.match_running());
+        app.pump_network(0.01f);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.match_running());
+        ASSERT_TRUE(app.bots() == nullptr);
     } TEST_END();
 
     TEST_CASE("AI6.6 Room With A Bot: The Host's Setup Screen Shows The Bot, Fog Is Refused, START Runs The Bot On The Host's Machine, The Guest Stays Bit-Identical Without Any Bot Code") {

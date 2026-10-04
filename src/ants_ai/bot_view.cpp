@@ -67,7 +67,10 @@ BotView::BotView(const BotView& other)
       rows_(other.rows_),
       mine_(other.mine_),
       others_(other.others_),
-      piles_(other.piles_) {}
+      piles_(other.piles_),
+      powerups_(other.powerups_),
+      bombs_(other.bombs_),
+      fire_walls_(other.fire_walls_) {}
 
 BotView& BotView::operator=(const BotView& other) {
     if (this != &other) {
@@ -104,6 +107,16 @@ bool BotView::has_pending_path(uint32_t ant) const {
     const auto it = std::lower_bound(mine_.begin(), mine_.end(), ant, [](const AntView& a, uint32_t id) { return a.id < id; });
     if (it == mine_.end() || it->id != ant) return false;       // not an ant of the seat (or gone): a player does not know what other teams' ants were told
     return sim_->has_pending_path(ant);
+}
+
+const PowerUpView* BotView::powerup_at(sim::TileCoord tile) const noexcept {
+    const auto it = std::lower_bound(powerups_.begin(), powerups_.end(), tile, [](const PowerUpView& p, sim::TileCoord t) { return p.tile.y != t.y ? p.tile.y < t.y : p.tile.x < t.x; });
+    return it != powerups_.end() && it->tile == tile ? &*it : nullptr;
+}
+
+bool BotView::standing(const AntView& ant) const noexcept {
+    if (powerups_.empty() || powerup_at(ant.tile) == nullptr) return false;
+    return ant.state == sim::UnitState::Idle || ant.state == sim::UnitState::GuardIdle || ant.state == sim::UnitState::CantGo;
 }
 
 BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const MapInfo* map) {
@@ -154,6 +167,42 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
     const auto by_id = [](const AntView& x, const AntView& y) { return x.id < y.id; };
     if (!std::is_sorted(v.mine_.begin(), v.mine_.end(), by_id)) std::sort(v.mine_.begin(), v.mine_.end(), by_id);        // ids are unique: any sort gives one order
     if (!std::is_sorted(v.others_.begin(), v.others_.end(), by_id)) std::sort(v.others_.begin(), v.others_.end(), by_id);
+    // the power-ups on the map now, in reading order; then who stands on each (an ant whose tile holds one and that is not walking)
+    {
+        const sim::Grid& grid = sim.grid();
+        const std::vector<sim::TileCell>& cells = grid.cells();
+        const size_t w = grid.width();
+        for (size_t i = 0; i < cells.size(); ++i) {
+            const sim::TileCell& c = cells[i];
+            if (c.interactive_id == sim::TILE_EMPTY) continue;                                                   // nothing on layer 2 (the common case: one comparison per tile)
+            const sim::TileCoord tile{static_cast<int32_t>(i % w), static_cast<int32_t>(i / w)};
+            if (c.has_bomb()) {
+                v.bombs_.push_back(BombView{tile, c.interactive_owner});
+            } else if (c.has_fire()) {
+                v.fire_walls_.push_back(FireWallView{tile});
+            } else if (c.is_powerup && c.powerup_type >= 1 && c.powerup_type <= 5 && !c.is_empty_overlay()) {    // TileCell::has_powerup(), and a kind that makes an ant
+                PowerUpView p;
+                p.tile = tile;
+                p.kind = static_cast<sim::AntType>(c.powerup_type);                                              // 1 Bomber, 2 Fire, 3 Thief, 4 Combat, 5 Swimmer: the AntType numbers
+                v.powerups_.push_back(p);
+            }
+        }
+        if (!v.powerups_.empty()) {
+            for (const std::vector<AntView>* list : {&v.mine_, &v.others_}) {
+                for (const AntView& a : *list) {
+                    if (!v.standing(a)) continue;
+                    for (PowerUpView& p : v.powerups_) {
+                        if (p.tile != a.tile) continue;
+                        if (p.standing_ant == 0) {                                                               // (two ants cannot stand on one tile: the first by id wins)
+                            p.standing_team = a.team;
+                            p.standing_ant = a.id;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
     const std::vector<sim::FoodObject>& objects = sim.grid().food_objects();
     for (size_t i = 0; i < objects.size(); ++i) {
         const sim::FoodObject& o = objects[i];

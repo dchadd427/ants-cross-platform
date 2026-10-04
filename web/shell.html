@@ -723,7 +723,7 @@
             }
         }
 
-        /* Embedded in another page (web/four.html: ?embed=1): only the game, filling the frame */
+        /* Embedded in another page (web/lobby.html: ?embed=1): only the game, filling the frame */
         body.embed {
             padding: 0;
             min-height: 0;
@@ -766,11 +766,11 @@
             <span class="subtitle">beta.playants.org</span>
         </div>
         <div class="header-actions">
-            <a href="/four.html" target="_blank" rel="noopener noreferrer" class="nav-btn" title="Play on the game server: host a match, join one with a code, or play all four seats yourself">
-                🌐 <span class="btn-text">Play online</span><span class="btn-text-short">Online</span>
+            <a href="/" id="menu-btn" class="nav-btn" title="Back to the menu (in this tab): play on this computer, host a match or join one">
+                ☰ <span class="btn-text">Menu</span><span class="btn-text-short">Menu</span>
             </a>
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="nav-btn" title="View 1998 Sprites, Animations & Audio SFX">
-                🎨 <span class="btn-text">Asset Viewer</span><span class="btn-text-short">Assets</span>
+                🎨 <span class="btn-text">Sprites and sounds</span><span class="btn-text-short">Sprites</span>
             </a>
             <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="nav-btn" title="What changed in each version">
                 📋 <span class="btn-text">Changelog</span><span class="btn-text-short">Log</span>
@@ -852,7 +852,7 @@
                         <li><strong>Goal:</strong>&#8197;get the most points by getting&#8197;<strong>food</strong>. Send your ants to food: they pick it up and carry it home to your anthill, one piece at a time.</li>
                         <li><strong>Score:</strong>&#8197;yours is at the top of the screen, the other players' at the bottom. When the clock reaches 0:00 the highest score wins.</li>
                         <li><strong>Power-ups</strong>&#8197;dropped by special flowers give an ant a special power (see below); an ant holds one at a time.</li>
-                        <li><strong>Alone in the browser:</strong>&#8197;there are no computer opponents (the original had none). To play against friends, use the desktop version over a network.</li>
+                        <li><strong>Opponents:</strong>&#8197;the Menu button starts a game on this computer against Easy, Medium or Hard bots, or alone as in the original; there you can also host or join a match on the game server to play against friends.</li>
                         <li><strong>Help:</strong>&#8197;<kbd>F1</kbd>&#8197;or the Help button shows the original's quick help.</li>
                         <li><strong>Picture:</strong>&#8197;16:9 by default;&#8197;<em>Classic 4:3</em>&#8197;is the original's picture. Choose it under the game (the game restarts), or add&#8197;<kbd>?aspect=4:3</kbd>&#8197;to the address (<kbd>?aspect=16:9</kbd>&#8197;for the wide one).&#8197;<kbd>&#x26F6;</kbd>&#8197;Fullscreen makes the picture as big as your screen allows.</li>
                     </ul>
@@ -874,7 +874,7 @@
                 <summary><h3>🗺️ Scrolling</h3></summary>
                 <div class="info-content">
                     <ul>
-                        <li><strong>Edge scrolling:</strong>&#8197;move the pointer to the edge of the map: an arrow shows and the map scrolls. Options &rarr; Map Scroll Rate sets the speed.</li>
+                        <li><strong>Edge scrolling:</strong>&#8197;move the pointer to the edge of the map: an arrow shows and the map scrolls. Options &rarr; Map Scroll Rate sets the speed. In a window the map keeps scrolling while the pointer is just past the edge of the game (about an inch); it stops when the pointer goes farther, onto a button or a link of the page, or out of the window.</li>
                         <li><strong>Fullscreen:</strong>&#8197;<kbd>&#x26F6;</kbd>&#8197;in the header. The black bars of a screen that is not 16:9 count as the picture's edge: the map scrolls with the pointer anywhere beyond it, corners included. The mouse is held inside the game (<em>Fullscreen mouse: Locked</em>, under the game, is the default): your cursor cannot leave the picture, so every edge of the screen scrolls the map, and a Mac's Dock and menu bar stay away. A click on the game takes the mouse again if the browser let it go (that click does nothing else).</li>
                         <li class="note"><strong>Esc in fullscreen:</strong>&#8197;in Chrome and Edge Esc goes to the game (deselect, close a dialog) and&#8197;<em>holding</em>&#8197;it leaves fullscreen; in Safari and Firefox Esc gives the mouse back first (Safari leaves fullscreen with it). <em>Free</em>&#8197;under the game gives the browser's plain fullscreen.</li>
                         <li><strong>Minimap:</strong>&#8197;hold the left button on it and the view follows the pointer.</li>
@@ -928,7 +928,7 @@
     </div>
 
     <footer>
-        @@SITE_FOOTER@@<span id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span>&#8197;&bull;&#8197;</span>Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2 &bull;&#8197;<a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Asset Catalog Viewer</a>&#8197;&bull;&#8197;<a href="/four.html" target="_blank" rel="noopener noreferrer">Play online</a>&#8197;&bull;&#8197;<a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>&#8197;&bull;&#8197;<a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+        @@SITE_FOOTER@@<span id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span>&#8197;&bull;&#8197;</span>Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2 &bull;&#8197;<a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>&#8197;&bull;&#8197;<a href="/" id="menu-link">Menu</a>&#8197;&bull;&#8197;<a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>&#8197;&bull;&#8197;<a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
     </footer>
 
     <script>
@@ -954,7 +954,9 @@
         //   snapOffset where the box must stand for an exact pointer
         //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
         //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
+        //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
         //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
+        //   localArguments the arguments of a game on THIS computer (?map= &bots= &name=: the front page's Play), through a whitelist
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
 
@@ -1026,6 +1028,28 @@
             }
             function clientFor(left, top, pixel) {
                 return { clientX: Math.trunc(left) + pixel.x, clientY: Math.trunc(top) + pixel.y };
+            }
+
+            // THE MARGIN OF A WINDOWED PAGE (the owner: "go off the screen with the mouse and it not screw up the scrolling"). A pointer that left the game's box while the map scrolled used to stop the
+            // scrolling at once (the browser says that it left the canvas), so a player who overshot the edge by a few pixels lost the scroll. Now a pointer that is OUTSIDE the box but within `margin` CSS
+            // pixels of it, on each axis (a band around the box: its corners are squares), counts as at the picture's nearest edge pixel, as a pointer over the black bars of a fullscreen page does.
+            // marginPixel(left, top, width, height, clientX, clientY, margin) is that pixel (edgePixel's: the one that the game reads), or null for a pointer on the box itself (the browser's own events
+            // are the game's pointer there), beyond the band, or at a position, a box or a margin that is not a number. The edge of the box is exclusive on the right and at the bottom, as the browser's.
+            function marginPixel(left, top, width, height, clientX, clientY, margin) {
+                if (!(isFinite(clientX) && isFinite(clientY) && isFinite(left) && isFinite(top) && width > 0 && height > 0 && margin > 0)) return null;
+                var right = left + width;
+                var bottom = top + height;
+                if (clientX >= left && clientX < right && clientY >= top && clientY < bottom) return null;
+                var dx = clientX < left ? left - clientX : (clientX >= right ? clientX - right : 0);
+                var dy = clientY < top ? top - clientY : (clientY >= bottom ? clientY - bottom : 0);
+                if (dx > margin || dy > margin) return null;
+                return edgePixel(left, top, width, height, clientX, clientY);
+            }
+            // The page's own controls: a pointer over one of them is on the page and never at the game's edge (hovering a button, a link or a selector near the game must not scroll the map). `target` is
+            // the element under the pointer; anything inside a control counts.
+            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"]';
+            function overControl(target) {
+                return !!(target && typeof target.closest === 'function' && target.closest(CONTROLS));
             }
 
             // THE POINTER LOCK. While the browser holds the pointer for the game (fullscreen) it reports only how far the pointer moved (movementX / movementY, in CSS pixels, with the
@@ -1135,8 +1159,35 @@
                 return out;
             }
 
+            // A game on THIS computer (the front page's Play opens play.html?map=<key>[&bots=<level>]&name=<name>): the game's arguments come only from this whitelist, never from the address text.
+            // map: one of the six shipped maps, by key; bots: easy|medium|hard in seats 1-3 (the player is seat 0); name: printable ASCII, 32 characters (the address's, else the remembered ants.name).
+            // `--play` starts the map as the setup screen's START does (Get ready dialog, start sound, music) once the loading screen and quick help are done. No map, bots or name: no arguments (the setup screen).
+            var LOCAL_MAPS = { tiny: 'TINY.LVL', small: 'SMALL.LVL', medium: 'MEDIUM.LVL', gauntlet: 'GAUNTLET.LVL', treasure: 'TREASURE.LVL', islands: 'ISLANDS.LVL' };
+            function localArguments(search, remembered) {
+                var out = { args: [], map: '', bots: '', name: '' };
+                var q;
+                try { q = new URLSearchParams(search); } catch (e) { return out; }
+                var map = (q.get('map') || '').toLowerCase();
+                if (Object.prototype.hasOwnProperty.call(LOCAL_MAPS, map)) {
+                    out.map = map;
+                    out.args.push('--map', 'Original-Ants/Maps/' + LOCAL_MAPS[map], '--play');
+                }
+                var bots = antsFillArg(q.get('bots'));
+                if (bots) {
+                    out.bots = bots;
+                    for (var seat = 1; seat <= 3; seat++) out.args.push('--bot', seat + ':' + bots);
+                }
+                var name = q.has('name') ? q.get('name') : ((q.has('map') || q.has('bots')) ? remembered : '');
+                name = typeof name === 'string' ? name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32) : '';
+                if (name) {
+                    out.name = name;
+                    out.args.push('--name', name);
+                }
+                return out;
+            }
+
             // Does this address make the page ASK for a name before the game connects? A link that somebody shared does: a join of a room (a door and a room code that joinArguments accepts), not a
-            // frame of another page (embed), and with no `name` parameter at all. The page that makes an address of its own (web/four.html: its frames, its windows and its Join button) always puts
+            // frame of another page (embed), and with no `name` parameter at all. The page that makes an address of its own (web/lobby.html: its frames, its windows and its Join button) always puts
             // the name in, empty or not, because its player chose it there ("name=" with nothing behind it is a name that was chosen: none), so such an address asks nobody.
             function asksForName(search) {
                 var q;
@@ -1189,7 +1240,7 @@
             }
 
             return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, asksForName: asksForName, withoutName: withoutName, badDownload: badDownload,
+                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, withoutName: withoutName, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
@@ -1197,7 +1248,7 @@
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
         //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
         //   fill   the bots that this player's START seats in the empty seats of the room when this player is its leader (the first to connect): the game's --fill-bots; harmless for everybody else
-        //   embed  the page is a frame of another page (four.html): no header and no guide; sound only while this frame has the focus
+        //   embed  the page is a frame of another page (lobby.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
         var ANTS_EMBED = false;
         (function () {
@@ -1205,10 +1256,15 @@
             ANTS_EMBED = joined.embed;
             if (ANTS_EMBED) document.body.classList.add('embed');
             joined.args.forEach(function (a) { ANTS_ARGS.push(a); });
+            if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play.html?map=...&bots=...): its local parameters, through a whitelist
+                var remembered = '';
+                try { remembered = window.localStorage.getItem('ants.name') || ''; } catch (e) { /* private window: not remembered */ }
+                ANTS_PAGE.localArguments(window.location.search, remembered).args.forEach(function (a) { ANTS_ARGS.push(a); });
+            }
         })();
 
         // The shape of this page's picture, passed on to the game as --aspect (the game validates it too). The stage's data-aspect gives the box its shape in CSS.
-        // What the selector remembers lives under ANTS_ASPECT_KEY, and only the selector writes it (web/four.html reads and writes the same key). The key of the first versions of the page was
+        // What the selector remembers lives under ANTS_ASPECT_KEY, and only the selector writes it (web/lobby.html reads and writes the same key). The key of the first versions of the page was
         // 'ants.aspect': it is NOT read any more, so that a Classic 4:3 that a browser once remembered (anybody who tried it stayed on 4:3 for good) is forgotten once: every browser starts
         // with the 16:9 picture until its player picks Classic 4:3 again. ?aspect=4:3 in the address works as ever.
         var ANTS_ASPECT_KEY = 'ants.aspect.v2';
@@ -1229,7 +1285,7 @@
             });
         })();
         // ANTS_PAGE_END
-        // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/four.html and web/shell.html carry the same text)
+        // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
         // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
         // 32 characters, and nothing that starts with "Bot (" (blanks and case ignored: a computer player is always shown as one, so a room would rename such a name; here it is refused, with the reason).
@@ -1293,7 +1349,7 @@
         // NAMEGATE_END
 
         // The name step of a shared link (the gate above): a card in the loading screen, filled in with the name that this browser remembered. The address of a game that was opened with a name by
-        // web/four.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
+        // web/lobby.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
         var ANTS_NAME_GATE = (function () {
             var asks = !ANTS_EMBED && ANTS_PAGE.asksForName(window.location.search);
             if (!ANTS_EMBED) {
@@ -1722,8 +1778,8 @@
         document.getElementById('pseudo-exit').addEventListener('click', leaveFullscreen);
 
         // ---- The pointer in fullscreen: the bars, and the pointer lock ----
-        // Only a FULLSCREEN page (the browser's, or the page's own) does anything here; the windowed page behaves as it always did (a window never holds the pointer: a pointer that
-        // leaves the game's box stops the scrolling).
+        // The bars and the lock are for a FULLSCREEN page (the browser's, or the page's own). A WINDOWED page has the margin ("The margin of a windowed page" below): a pointer that goes a little
+        // beyond the game's box still counts as at its edge. Touch is left alone in both, and so is a frame of another page (ANTS_EMBED: the frame's edge is the frame's).
         //
         // THE BARS. A screen of another shape than the picture has bars (the stage's black: the top and bottom on a 16:10 screen, the sides on a 21:9 or 4:3 one). They are part of the
         // screen, so a pointer over a bar is at the nearest edge of the picture, as in the desktop game, whose window maps the bars to positions outside the picture that it holds to
@@ -1816,6 +1872,63 @@
         // either (the browser's page zoom of a ctrl + wheel, its menu)
         stageElement.addEventListener('wheel', function (e) { if (isFullscreen() && !boxElement.contains(e.target)) e.preventDefault(); }, { passive: false });
         stageElement.addEventListener('contextmenu', function (e) { if (isFullscreen()) e.preventDefault(); });
+
+        // THE MARGIN OF A WINDOWED PAGE (the owner: "go off the screen with the mouse and it not screw up the scrolling"; agreed: keep scrolling while the mouse is just past the game's edge, about an
+        // inch, and stop when it goes farther). The browser says that the pointer LEFT the canvas the moment it crosses the edge, which the game takes for a pointer that went away (no more
+        // scrolling), so a player who overshoots the edge of the game by a few pixels loses the scroll. As over the bars of a fullscreen page, the page hands the game what the browser does not:
+        // (1) a pointer that is outside the box but within ANTS_EDGE_MARGIN CSS pixels of it (ANTS_PAGE.marginPixel: a band around the box, corners included) is handed to the game as a motion at the
+        // picture's nearest edge pixel, so the map goes on scrolling; (2) the canvas's leave towards the margin is not passed on; (3) the pointer is gone, as it always was, when it goes beyond the
+        // margin, out of the browser window (the page's leave), or over one of the page's own controls (a button, a link, a field or a selector near the game: ANTS_PAGE.overControl: hovering those
+        // must never scroll the map). A click, the wheel and the context menu in the margin are the page's (SDL listens on the canvas: the game never hears of them; a button release that SDL
+        // sees without a press changes nothing there); the browser's own arrow shows in the margin (it is the page). Not for a frame of another page (ANTS_EMBED: the box fills the frame, there is no
+        // margin), not for touch, not for a locked pointer, not in fullscreen (the bars' rules above).
+        var ANTS_EDGE_MARGIN = 96;           // CSS pixels: one inch as CSS counts it (96 px): about the width of a hand's overshoot, small enough never to be mistaken for another place of the page
+        var marginLast = null;               // the last place of a mouse over the page ({ x, y, buttons }): a scroll or a resize moves the box under a pointer that did not move
+        // SDL (2.28.4) drops the FIRST leave of a page's life (see handToGame), so that the leave of a pointer that goes from the game onto a button of the page would not stop the scrolling when it is
+        // the first one. The first motion of a mouse over the game is therefore preceded by a leave of its own: SDL's focus goes (nothing is delivered), the browser's own motion gives it back with the
+        // window's flag set, and every leave after that is delivered.
+        function primeFocusOverTheGame(e) {
+            if (focusPrimed || !isReadyToPlay) return;
+            focusPrimed = true;
+            handingOver = true;
+            try {
+                canvas.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, cancelable: false, view: window, clientX: e.clientX, clientY: e.clientY }));
+            } finally {
+                handingOver = false;
+            }
+        }
+        function windowedPointer(x, y, target, buttons) {
+            var rect = canvas.getBoundingClientRect();
+            var pixel = ANTS_PAGE.overControl(target) ? null : ANTS_PAGE.marginPixel(rect.left, rect.top, rect.width, rect.height, x, y, ANTS_EDGE_MARGIN);
+            if (pixel && isReadyToPlay) {
+                edgeLast = pixel;
+                handToGame('mousemove', pixel, buttons);
+                edgeForwarded = true;
+            } else if (edgeForwarded) {
+                handLeaveToGame();                                              // beyond the margin, over a control, or over the page's other layers: the pointer is gone
+            }
+        }
+        window.addEventListener('pointermove', function (e) {
+            if (handingOver || ANTS_EMBED || e.pointerType === 'touch' || isLocked() || isFullscreen()) return;
+            marginLast = { x: e.clientX, y: e.clientY, buttons: e.buttons };
+            if (e.target === canvas) { primeFocusOverTheGame(e); return; }       // over the game itself the browser's own events are the game's pointer (the canvas's mousemove clears edgeForwarded)
+            windowedPointer(e.clientX, e.clientY, e.target, e.buttons);
+        }, true);
+        window.addEventListener('mouseleave', function (e) {                    // the canvas's leave towards the margin (window capture: before SDL's own listener)
+            if (handingOver || ANTS_EMBED || e.target !== canvas || !e.relatedTarget || isLocked() || isFullscreen()) return;      // (no relatedTarget: the pointer left the browser window: gone)
+            var rect = canvas.getBoundingClientRect();
+            if (!ANTS_PAGE.overControl(e.relatedTarget) && ANTS_PAGE.marginPixel(rect.left, rect.top, rect.width, rect.height, e.clientX, e.clientY, ANTS_EDGE_MARGIN)) e.stopPropagation();
+        }, true);
+        document.documentElement.addEventListener('mouseleave', function () {   // the pointer left the browser window: it is gone, wherever it was
+            marginLast = null;
+            if (!ANTS_EMBED && !isFullscreen() && edgeForwarded) handLeaveToGame();
+        });
+        function windowedAgain() {                                              // the page scrolled or was resized under a pointer that did not move: where is it now?
+            if (ANTS_EMBED || isFullscreen() || isLocked() || !edgeForwarded || !marginLast) return;
+            windowedPointer(marginLast.x, marginLast.y, document.elementFromPoint(marginLast.x, marginLast.y), marginLast.buttons);
+        }
+        window.addEventListener('scroll', windowedAgain, { passive: true });
+        window.addEventListener('resize', windowedAgain);
 
         // THE POINTER LOCK. On the Mac a pointer at the bottom or top edge of the screen makes the Dock or the menu bar appear, even in fullscreen, and a web page cannot stop that unless
         // the pointer is LOCKED: then the pointer stays where it was, the browser hides it and reports only how far the mouse moved. The page asks for the lock when the player's click on
@@ -1948,6 +2061,22 @@
         })();
         // ANTS_SELECTOR_END
 
+        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's Menu button and the footer's link go there in THIS tab (the owner: nothing opens a new tab by default). The game that is running
+        // here is left, and a seat of a room that is joined is lost, so a click asks first while a match is being played here or a room is joined (as the picture's selector does: ants_match_running, and
+        // --join-url among the arguments), and No stays.
+        (function () {
+            ['menu-btn', 'menu-link'].forEach(function (id) {
+                var link = document.getElementById(id);
+                if (!link) return;
+                link.addEventListener('click', function (e) {
+                    var joined = ANTS_ARGS.indexOf('--join-url') !== -1;
+                    var playing = false;
+                    try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { /* the game does not answer: it is not running a match */ }
+                    if ((joined || playing) && !window.confirm('Leave the game and go back to the menu?')) e.preventDefault();
+                });
+            });
+        })();
+
         // The fullscreen mouse: Locked (the default) or Free, the control next to the picture's selector. The browser remembers the choice under ANTS_LOCK_KEY (nothing else writes it; only
         // "off" turns the lock off, see ANTS_PAGE.lockSetting); the pointer lock above reads ANTS_POINTER_LOCK whenever the player enters fullscreen. A browser without a pointer lock
         // (an iPhone) does not show the control.
@@ -2076,7 +2205,7 @@
     </script>
     <script>
         // ---- The game's data (index.data, about 15 MB) ----
-        // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; two or four frames of web/four.html asked for the same file at the same
+        // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; two or four frames of web/lobby.html asked for the same file at the same
         // moment and one of them was refused by the browser's cache (net::ERR_CACHE_WRITE_FAILURE in Chromium), after which its card said "Downloading data (0%)" for ever. So the
         // page downloads the data itself, with fetch: the first try with the browser's cache (a repeat visit costs a 304), the retries (up to 3, after 0.4, 1.2 and 3 seconds)
         // without it, so that a cache entry that cannot be written cannot fail them again; progress is shown as before; the bytes are handed to the packager through

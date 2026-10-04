@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "ants_ai/idle_bot.hpp"
+#include "ants_ai/standard_bot.hpp"
 #include "ants_ai/worker_bot.hpp"
 
 namespace ants::ai {
@@ -68,6 +69,39 @@ bool parse_level(std::string_view text, Level& out) noexcept {
     return true;
 }
 
+const char* style_name(Style style) noexcept {
+    switch (style) {
+        case Style::Random: return "random";
+        case Style::Aggressive: return "aggressive";
+        case Style::Economic: return "economic";
+        case Style::Raider: return "raider";
+        case Style::Defensive: return "defensive";
+    }
+    return "random";
+}
+
+bool parse_style(std::string_view text, Style& out) noexcept {
+    for (const Style s : {Style::Random, Style::Aggressive, Style::Economic, Style::Raider, Style::Defensive}) {
+        const std::string_view w(style_name(s));
+        if (text.size() != w.size()) continue;
+        bool same = true;
+        for (size_t i = 0; i < w.size() && same; ++i) {
+            const char c = text[i] >= 'A' && text[i] <= 'Z' ? static_cast<char>(text[i] - 'A' + 'a') : text[i];
+            same = c == w[i];
+        }
+        if (same) {
+            out = s;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool style_allowed(Level level, Style style) noexcept {
+    if (style == Style::Random) return true;
+    return level != Level::Hard || style == Style::Aggressive || style == Style::Raider;
+}
+
 // The proposals of docs/BOTS.md (tuned by tournaments in a later milestone). Times in ticks of 50 ms: 100 ticks = 5 s.
 Profile profile_for(Level level) noexcept {
     Profile p;
@@ -112,8 +146,8 @@ bool parse_bot_spec(std::string_view text, BotSpec& out, std::string& error) {
         if (colon == std::string_view::npos) break;
         from = colon + 1;
     }
-    if (parts.size() > 3) {
-        error = "a bot is SEAT, SEAT:LEVEL, SEAT:KIND or SEAT:KIND:LEVEL, not " + quoted(text);
+    if (parts.size() > 4) {
+        error = "a bot is SEAT, SEAT:LEVEL, SEAT:KIND, SEAT:KIND:LEVEL, SEAT:LEVEL:STYLE or SEAT:KIND:LEVEL:STYLE, not " + quoted(text);
         return false;
     }
     const std::string_view seat = parts[0];
@@ -135,19 +169,44 @@ bool parse_bot_spec(std::string_view text, BotSpec& out, std::string& error) {
             error = "unknown bot " + quoted(parts[1]) + " (easy, medium, hard, idle, worker or standard)";
             return false;
         }
-    } else if (parts.size() == 3) {
-        const std::string kind = lower_ascii(parts[1]);
-        if (!known_bot_kind(kind)) {
-            error = "unknown bot kind " + quoted(parts[1]) + " (idle, worker or standard)";
-            return false;
-        }
+    } else if (parts.size() == 3 || parts.size() == 4) {
         Level level = Level::Medium;
-        if (!parse_level(parts[2], level)) {
-            error = "unknown bot level " + quoted(parts[2]) + " (easy, medium or hard)";
-            return false;
+        size_t level_at = 2;
+        const std::string kind = lower_ascii(parts[1]);
+        Level lone = Level::Medium;
+        if (parts.size() == 3 && parse_level(parts[1], lone)) {                          // SEAT:LEVEL:STYLE
+            spec.kind = "standard";
+            level = lone;
+            level_at = 1;
+        } else {
+            if (!known_bot_kind(kind)) {
+                error = "unknown bot kind " + quoted(parts[1]) + " (idle, worker or standard)";
+                return false;
+            }
+            if (!parse_level(parts[2], level)) {
+                error = "unknown bot level " + quoted(parts[2]) + " (easy, medium or hard)";
+                return false;
+            }
+            spec.kind = kind;
         }
-        spec.kind = kind;
         spec.level = level;
+        const size_t style_at = level_at + 1;
+        if (parts.size() > style_at) {
+            Style style = Style::Random;
+            if (!parse_style(parts[style_at], style)) {
+                error = "unknown bot style " + quoted(parts[style_at]) + " (aggressive, economic, raider, defensive or random)";
+                return false;
+            }
+            if (spec.kind != "standard" && style != Style::Random) {
+                error = "the " + spec.kind + " bot has no style (only the standard bot has)";
+                return false;
+            }
+            if (!style_allowed(level, style)) {
+                error = std::string("a ") + level_name(level) + " bot plays the aggressive or the raider style, not " + quoted(parts[style_at]);
+                return false;
+            }
+            spec.style = style;
+        }
     }
     out = std::move(spec);
     return true;
@@ -174,7 +233,9 @@ std::string check_setup(const SetupInfo& info) {
         }
         if ((taken & bit(b.seat)) != 0) return "Seat " + std::to_string(static_cast<unsigned>(b.seat)) + " has two bots.";
         taken = static_cast<uint8_t>(taken | bit(b.seat));
-        if (!known_bot_kind(b.kind)) return "Unknown bot kind " + quoted(b.kind) + ".";
+        if (!known_bot_kind(b.kind) && std::find(info.extra_kinds.begin(), info.extra_kinds.end(), b.kind) == info.extra_kinds.end()) return "Unknown bot kind " + quoted(b.kind) + ".";
+        if (b.style != Style::Random && b.kind != "standard" && b.kind.rfind("standard+", 0) != 0) return "The " + b.kind + " bot has no style.";
+        if (!style_allowed(b.level, b.style)) return std::string("A ") + level_name(b.level) + " bot cannot play the " + style_name(b.style) + " style.";
     }
     if (!info.allow_all_bots && (info.human_mask & info.roster) == 0) return "A game needs at least one person besides the bots.";
     return std::string();
@@ -205,6 +266,11 @@ void Orders::move(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priori
 
 void Orders::attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority) { group(sim::CommandType::GroupAttack, ants, tile, priority); }
 
+void Orders::pick_up(uint32_t ant, sim::TileCoord tile, Priority priority) {
+    group(sim::CommandType::GroupMove, std::vector<uint32_t>{ant}, tile, priority);
+    intents_.back().pickup = true;
+}
+
 void Orders::special(uint32_t ant, sim::TileCoord tile, Priority priority) { group(sim::CommandType::GroupSpecial, std::vector<uint32_t>{ant}, tile, priority); }
 
 void Orders::stop(const std::vector<uint32_t>& ants) {
@@ -234,14 +300,15 @@ void Orders::break_alliance() {
     intents_.push_back(Intent{std::move(c), Priority::Urgent});
 }
 
-void Orders::push_unchecked(sim::Command command, Priority priority) { intents_.push_back(Intent{std::move(command), priority}); }
+void Orders::push_unchecked(sim::Command command, Priority priority, bool pickup) { intents_.push_back(Intent{std::move(command), priority, pickup}); }
 
 // ---- the registry ------------------------------------------------------------------------------------------------------------------------------
 
 std::unique_ptr<Bot> make_bot(const BotSpec& spec) {
     if (!known_bot_kind(spec.kind)) return nullptr;
     if (spec.kind == "idle") return std::make_unique<IdleBot>();
-    return std::make_unique<WorkerBot>();        // "worker"; "standard" is an alias of it until the standard bot (B4) exists
+    if (spec.kind == "worker") return std::make_unique<WorkerBot>();
+    return std::make_unique<StandardBot>(spec.level, spec.style);
 }
 
 }  // namespace ants::ai

@@ -3,7 +3,7 @@
 the game instead of random", and "when joining a link from somebody else, it should ask you first what you want your name to be".
 
   - the pages' own code is RUN (node, when it is installed): the rules of a name (the desktop start menu's), the name step, the gate that holds the game of a shared link back until the name
-    is chosen, and the whole of web/four.html with a small fake of the browser's DOM: the shared field is remembered and filled in, its name goes to the seat that this person plays, bad
+    is chosen, and the whole of web/lobby.html with a small fake of the browser's DOM: the shared field is remembered and filled in, its name goes to the seat that this person plays, bad
     names start nothing, a name with < > & is only ever text, an empty field falls back to the random names, a shared link asks first (tests/scripts/web_name_check.js);
   - what needs no browser is read from the files: the old join-only field is gone, the one field is there, the README and docs/NETWORK_PORT.md say what the page does.
 """
@@ -15,7 +15,7 @@ import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SHELL = os.path.join(REPO, "web", "shell.html")
-FOUR = os.path.join(REPO, "web", "four.html")
+LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_name_check.js")
 
 
@@ -26,7 +26,7 @@ def read(path):
 
 class TheMarkup(unittest.TestCase):
     def test_the_play_online_page_has_one_name_field_for_host_and_join(self):
-        page = read(FOUR)
+        page = read(LOBBY)
         self.assertEqual(len(re.findall(r'<input[^>]*id="player-name"', page)), 1)
         self.assertNotIn('id="join-name"', page)                                           # (the field that only the Join form had)
         self.assertNotIn("ants-four-name", page)
@@ -38,7 +38,7 @@ class TheMarkup(unittest.TestCase):
         self.assertLess(page.index('id="who"'), page.index('id="join"'))
 
     def test_the_page_makes_no_markup_from_text(self):
-        page = read(FOUR)
+        page = read(LOBBY)
         self.assertNotRegex(page, r"\.innerHTML\s*[+]?=")
         self.assertNotIn("document.write", page)
         self.assertNotIn("insertAdjacentHTML", page)
@@ -63,7 +63,7 @@ class TheDocuments(unittest.TestCase):
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the pages' own code for the player's name was NOT run (tests/scripts/web_name_check.js)")
 class ThePagesOwnCode(unittest.TestCase):
     def test_the_rules_the_step_the_gate_and_the_whole_of_the_play_online_page(self):
-        done = subprocess.run([shutil.which("node"), CHECK_JS, SHELL, FOUR], capture_output=True, text=True, timeout=120)
+        done = subprocess.run([shutil.which("node"), CHECK_JS, SHELL, LOBBY], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn(" 0 failures", done.stdout)
 

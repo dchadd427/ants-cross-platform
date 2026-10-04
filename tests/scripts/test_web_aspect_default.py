@@ -18,7 +18,7 @@ import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SHELL = os.path.join(REPO, "web", "shell.html")
-FOUR = os.path.join(REPO, "web", "four.html")
+LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_aspect_key_check.js")
 NEW_KEY = "ants.aspect.v2"
 
@@ -40,7 +40,7 @@ class PagesStartWith16x9(unittest.TestCase):
         self.assertIn("return { aspect: '16:9', source: 'default' };", page)                 # nothing says otherwise: 16:9 on every device, a phone held upright included
 
     def test_the_play_online_page_frames_and_form_start_with_16_9(self):
-        page = read(FOUR)
+        page = read(LOBBY)
         self.assertIn(".frame { position: relative; aspect-ratio: 16 / 9; }", page)
         self.assertIn('body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }', page)
         self.assertIn("var aspect = '16:9';", page)
@@ -49,7 +49,7 @@ class PagesStartWith16x9(unittest.TestCase):
 
 class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
     def test_each_page_names_the_new_key_once_and_no_call_uses_the_old_one(self):
-        for path, constant in ((SHELL, "ANTS_ASPECT_KEY"), (FOUR, "ASPECT_KEY")):
+        for path, constant in ((SHELL, "ANTS_ASPECT_KEY"), (LOBBY, "ASPECT_KEY")):
             page = read(path)
             name = os.path.basename(path)
             self.assertEqual(len(re.findall(r"var " + constant + r" = '" + re.escape(NEW_KEY) + r"';", page)), 1, name)
@@ -59,16 +59,43 @@ class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
 
     def test_the_two_pages_use_the_same_key_and_the_browser_check_does_too(self):
         self.assertIn("var ANTS_ASPECT_KEY = '" + NEW_KEY + "';", read(SHELL))
-        self.assertIn("var ASPECT_KEY = '" + NEW_KEY + "';", read(FOUR))
+        self.assertIn("var ASPECT_KEY = '" + NEW_KEY + "';", read(LOBBY))
         browser = read(os.path.join(REPO, "tests", "scripts", "web_aspect_check.py"))
         self.assertIn("localStorage.setItem('" + NEW_KEY + "', '4:3')", browser)
         self.assertIn("localStorage.setItem('ants.aspect', '4:3')", browser)                  # (the old key is set on purpose: it must not give 4:3)
 
 
+class TheQuickHelpStartThatTheBrowserCheckTaps(unittest.TestCase):
+    """tests/scripts/web_aspect_check.py clicks the quick help's START! button where a person does. It used to tap the place that the original's 640 x 480 page has in the middle of the 16:9 canvas,
+    which the wide pages of v0.2.0 left empty (the page was right: START! is in the bottom right corner of the wide page); it now reads the button's rectangle from the layout's own source and
+    moves it as the wide page does. Here it is compared with what the game's own tests pin."""
+
+    def pinned(self, test_file):
+        with open(os.path.join(REPO, "tests", "test_app", test_file), encoding="utf-8") as f:
+            found = re.search(r"quick_help_start_button\(\)\.up_rect\(\) == ButtonRect\(\{(\d+), (\d+), (\d+), (\d+)\}\)", f.read())
+        self.assertIsNotNone(found, test_file + " no longer pins the quick help's START! rectangle")
+        x, y, w, h = (int(v) for v in found.groups())
+        return x + w / 2, y + h / 2
+
+    def test_it_is_the_middle_of_the_button_that_the_game_pins_for_each_picture(self):
+        import sys
+        sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
+        import web_aspect_check
+        self.assertEqual(web_aspect_check.quick_help_start((960, 540)), self.pinned("test_wide_pages.cpp"))        # the wide page: (849, 497, 98, 27)
+        self.assertEqual(web_aspect_check.quick_help_start((640, 480)), self.pinned("test_app_integration.cpp"))   # the original's own page: (529, 437, 98, 27)
+
+    def test_the_browser_checks_do_not_tap_the_places_of_the_original_s_page_on_the_wide_canvas(self):
+        for name in ("web_aspect_check.py", "web_edge_check.py"):
+            with open(os.path.join(REPO, "tests", "scripts", name), encoding="utf-8") as f:
+                text = f.read()
+            self.assertNotIn("160 + 576", text, name)
+            self.assertNotIn("(shape[0] - 640) / 2 + 576", text, name)
+
+
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the pages' own code for the picture's shape was NOT run (tests/scripts/web_aspect_key_check.js)")
 class ThePagesOwnCode(unittest.TestCase):
     def test_a_table_of_addresses_and_stored_values_and_the_selectors(self):
-        done = subprocess.run([shutil.which("node"), CHECK_JS, SHELL, FOUR], capture_output=True, text=True, timeout=120)
+        done = subprocess.run([shutil.which("node"), CHECK_JS, SHELL, LOBBY], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failures", done.stdout)
 

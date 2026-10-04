@@ -75,6 +75,18 @@ struct TeamRow {
 /// picture for all of them, so a view tells every bot this figure instead of the real value (a hidden number of the dead ant).
 inline constexpr uint16_t kLunchboxNominalValue = 30;
 
+/// A power-up that lies on the map now, as the screen draws it (the map's own, a flower dropper's drop that has landed, one that a typed ant left behind): the tile, the kind of ant it
+/// makes (the picture: Bomber, Fire, Thief, Combat or Swimmer) and who stands on it. Nothing about a dropper's interval or about the draw that picks its kind is here: a person sees the
+/// flower, the falling droplet and what has landed, never the clock behind it.
+struct PowerUpView {
+    sim::TileCoord tile{};
+    sim::AntType kind{sim::AntType::Bomber};
+    /// The team of the ant that STANDS on the power-up (255: nobody does), and its id (0: nobody). An ant that stands on a power-up cannot be attacked (no order reaches it, no
+    /// reflex, no bomb, no fire) and nobody else can take the power-up (docs/BOTS.md, "Power-ups"); an ant that is only walking over the tile on its way to take it does not stand.
+    uint8_t standing_team{255};
+    uint32_t standing_ant{0};
+};
+
 /// A food pile (or a lunchbox: a pile of one unit) with units left. A person sees the pile's picture; the view gives the exact units (a documented, harmless deviation: a
 /// person counts the bites, and this is the one place to coarsen it if that is ever wanted).
 struct PileView {
@@ -83,6 +95,18 @@ struct PileView {
     uint16_t remaining{0};               // units left (always more than 0 in a view)
     uint16_t value{0};                   // points per unit; for a lunchbox kLunchboxNominalValue, whatever the dead ant carried
     bool lunchbox{false};                // dropped by a dying ant: one unit
+};
+
+/// A planted bomb as the screen draws it: its tile and the team whose colour it is drawn in (every bomb is drawn, an enemy's too, in its owner's colour: Renderer, the layer-2 pass;
+/// with Fog of War a bomb on an unexplored tile is hidden, and bots are refused with fog). An ant that steps on an enemy bomb loses 2 hit points and is thrown 4 tiles.
+struct BombView {
+    sim::TileCoord tile{};
+    uint8_t owner{0};
+};
+
+/// A fire wall as the screen draws it: only its tile (one picture for every owner, so who lit it is not on any screen, and neither is how long it still burns)
+struct FireWallView {
+    sim::TileCoord tile{};
 };
 
 class BotView {
@@ -118,6 +142,19 @@ public:
     /// The piles that still have units, by index. The index is the engine's table position, which is MapInfo::piles()'s index for the piles of the map at the start; a lunchbox
     /// (PileView::lunchbox) is added to the table during the match and has an index past the end of MapInfo::piles() (MapInfo::pile() is null for it; approach_now works for it)
     const std::vector<PileView>& piles() const noexcept { return piles_; }
+    /// The power-ups that lie on the map now, in reading order (row by row, left to right), a COPY made at every look (the start list of MapInfo::powerups() is a hint that goes
+    /// stale at the first pick-up: a taken power-up stays on it and a dropped one never appears). The map's power-ups are tile ids 62 .. 66, so a community dictionary that calls them
+    /// "." changes nothing (the engine's cells decide); a power-up that a flower dropper has not yet landed is not here (a person sees the droplet falling, which this view does not).
+    const std::vector<PowerUpView>& powerups() const noexcept { return powerups_; }
+    /// The bombs on the map now (in reading order) with their owners, and the fire walls (tiles only): copies made at every look, like the power-ups
+    const std::vector<BombView>& bombs() const noexcept { return bombs_; }
+    const std::vector<FireWallView>& fire_walls() const noexcept { return fire_walls_; }
+    /// The power-up on `tile`, null when there is none (works on a COPY of a view too)
+    const PowerUpView* powerup_at(sim::TileCoord tile) const noexcept;
+    /// Whether the ant STANDS on a power-up: its tile holds one and it is not walking (idle, on guard or in the "can't go" clip). Such an ant is immune: an attack order on it is
+    /// acknowledged and then ends in "Can't go there." three or four ticks later, a Combat Ant's reflex fails the same way, and no bomb or fire wall can reach it. Own ants and other
+    /// teams' ants alike (an ant that has only crossed into the tile on its way to take the power-up is not standing yet: it takes it within a few ticks and is vulnerable again).
+    bool standing(const AntView& ant) const noexcept;
     /// The type that every ant shows until it takes a power-up: Worker, except on a level whose block 3 names a default type (some community maps: all their workers are
     /// Combat, Thief, Bomber, Swimmer or Fire ants, as the sprites and the panel say from the first second). An ant whose AntView::type is this one has not (visibly) changed.
     sim::AntType default_ant_type() const noexcept { return default_ant_type_; }
@@ -164,6 +201,9 @@ private:
     std::vector<AntView> mine_;
     std::vector<AntView> others_;
     std::vector<PileView> piles_;
+    std::vector<PowerUpView> powerups_;
+    std::vector<BombView> bombs_;
+    std::vector<FireWallView> fire_walls_;
 };
 
 }  // namespace ants::ai

@@ -475,6 +475,17 @@ void SimulationEngineImpl::attack_clip_end(AntUnit& a) {
 // Actions (FUN_0101ad02, locomotion subset)
 // ------------------------------------------------------------------------------------------------
 
+movement::MotionClip SimulationEngineImpl::idle_motion_clip(const AntUnit& a, uint8_t dir, int16_t terr) const {
+    // SetAction asks the type getter (0x101ae9f): the clip is that of the type the ant IS
+    return terr == movement::kTerrainWater ? movement::idle_water_clip() : movement::idle_clip(static_cast<uint8_t>(type_of(a)), dir, a.is_holding());
+}
+
+// What loco_sync does for an idle label (set_action idle at the ant's facing, on the class of its tile), without doing it
+movement::MotionClip SimulationEngineImpl::pending_idle_clip(const AntUnit& a) const {
+    if (!a.is_alive() || a.removed || a.loco_action != AntUnit::kActionNone || !is_idle_label(a.state)) return movement::MotionClip{};
+    return idle_motion_clip(a, static_cast<uint8_t>(a.facing), static_cast<int16_t>(grid_.terrain_class_at(pixel_tile(a))));
+}
+
 void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, int16_t terr_a, int16_t terr_b, bool flag) {
     // The old action is cleaned up first (Ants.exe 0x101ade0): its world effects happen here, whatever ends it.
     if (a.loco_action != AntUnit::kActionNone && !action_cleanup(a, a.loco_action, action)) return;
@@ -493,8 +504,7 @@ void SimulationEngineImpl::set_action(AntUnit& a, uint8_t action, uint8_t dir, i
     const bool carrying = a.is_holding();
     switch (action) {
         case AntUnit::kActionIdle: {                                // always restarts
-            const movement::MotionClip clip = (terr_a == movement::kTerrainWater)
-                ? movement::idle_water_clip() : movement::idle_clip(type, dir, carrying);
+            const movement::MotionClip clip = idle_motion_clip(a, dir, terr_a);
             a.dive_flag = false;
             loco_play(a, clip, dir);
             if (!is_walking_label(a.state) && !is_idle_label(a.state)) set_idle_label(a);   // a finished hit, flight or stun

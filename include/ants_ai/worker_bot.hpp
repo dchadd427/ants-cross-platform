@@ -14,7 +14,7 @@
 //                    min(8, trip / 90 + 2) ants to a pile (the hill's cap and the profile's). The economy is nearly insensitive to reaction time and command rate (a few
 //                    hundredths of a command per second are enough), so the levels differ in tactics, which the worker does not have; delay and rate are fairness limits only.
 //
-// Until the standard bot exists the kind "standard" is an alias of this bot (make_bot hands out a WorkerBot for both; kind() says "worker").
+// This bot stays what it was: the fixed yardstick that the standard bot (standard_bot.hpp, kind "standard") is measured against. It is not an alias of it any more (B4-1).
 
 #include <cstdint>
 

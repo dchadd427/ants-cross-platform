@@ -30,6 +30,28 @@ const char* level_name(Level level) noexcept;
 /// The words of level_name, in either case; false (and `out` unchanged) for anything else
 bool parse_level(std::string_view text, Level& out) noexcept;
 
+// ---- styles -------------------------------------------------------------------------------------------------------------------------------------------
+
+/// The STYLE of a standard bot (docs/BOTS.md, "Styles"): which tactics it prefers and how early it plays them, so that bots of one level do not all play alike. A bot draws its style at
+/// the start of a match from its own seat's generator (the same match seed and seat give the same style; a replay needs no bot anyway), or the spec pins it (`--bot 2:standard:hard:raider`).
+/// The style never changes what a level may do (the profile: look interval, reaction time, command budget; and the tactics that the level unlocks): it picks among them and says how early
+/// and how hard. What each one does is in tactics.cpp, plan_for(level, style, rng):
+///   Aggressive  one more ant for the contest of the middle of the map in the opening, one more defender, raids for two thirds of the loot, and the harassment squad: its Combat Ants go
+///               for the carriers of the best opponent that are within eight tiles of them (at Medium only with a clear advantage); at Hard also a second Combat Ant, the sabotage of
+///               the best opponent's gate with a stolen Fire Ant, and the strike when it is behind
+///   Economic    no contest of the middle, the fire walls of the thief hole before a thief shows, raids only for three times the loot
+///   Raider      Fire and Thief first in the opening (no Bomber), raids for half the loot, a shorter wait after a hill that could not be reached
+///   Defensive   the fire walls before a thief shows, one defender more, the ally's blows answered, no contest of the middle
+/// Hard bots are Aggressive or Raider only ("Hard bots should be really aggressive"); Easy keeps its plan (a style changes little there: only the numbers move).
+enum class Style : uint8_t { Random = 0, Aggressive = 1, Economic = 2, Raider = 3, Defensive = 4 };
+
+/// "random", "aggressive", "economic", "raider", "defensive"
+const char* style_name(Style style) noexcept;
+/// The words of style_name, in either case; false (and `out` unchanged) for anything else
+bool parse_style(std::string_view text, Style& out) noexcept;
+/// Whether a bot of the level may play the style: Random always, every style at Easy and Medium, Aggressive and Raider only at Hard
+bool style_allowed(Level level, Style style) noexcept;
+
 /// The most ants one command of a bot names: a chosen conservative cap (the remake's HUD lets a person send up to 32 = sim::kMaxCommandAnts with a drag or Ctrl+A;
 /// how many the original's selection holds has not been established). A bot never exceeds it, whatever its profile says.
 inline constexpr uint32_t kHudAntCap = 24;
@@ -52,22 +74,24 @@ Profile profile_for(Level level) noexcept;
 
 // ---- the specification of a bot seat -------------------------------------------------------------------------------------------------------------
 
-/// Which bot sits at which seat. `kind` is "idle" (stands still: the plumbing's test bot), "worker" (harvest only, B3) or "standard" (the bot of the three levels;
-/// until B4 exists it is an alias of the worker). `level` picks the Profile.
+/// Which bot sits at which seat. `kind` is "idle" (stands still: the plumbing's test bot), "worker" (harvest only: the fixed yardstick of the tournaments) or "standard" (the bot of the
+/// three levels, with its tactics and its style). `level` picks the Profile; `style` (only the standard bot has one) is pinned or drawn.
 struct BotSpec {
     uint8_t seat{0};
     std::string kind{"standard"};
     Level level{Level::Medium};
+    Style style{Style::Random};          // Random: the bot draws its own style at the start of the match (only the standard bot has a style)
 };
 
 /// True for the kinds that make_bot knows ("idle", "worker", "standard")
 bool known_bot_kind(std::string_view kind) noexcept;
 
-/// The text of --bot (after the option): `SEAT`, `SEAT:LEVEL` (easy, medium, hard), `SEAT:KIND` (idle, worker, standard) or `SEAT:KIND:LEVEL`, e.g.
-/// "2", "2:hard", "2:idle", "2:worker:easy". SEAT is one digit 0 to 3. The default is the standard bot at medium level. On failure `error` says why.
+/// The text of --bot (after the option): `SEAT`, `SEAT:LEVEL` (easy, medium, hard), `SEAT:KIND` (idle, worker, standard), `SEAT:KIND:LEVEL`, `SEAT:LEVEL:STYLE` or `SEAT:KIND:LEVEL:STYLE`
+/// (STYLE: aggressive, economic, raider, defensive, random), e.g. "2", "2:hard", "2:idle", "2:worker:easy", "2:hard:raider", "2:standard:medium:defensive". SEAT is one digit 0 to 3.
+/// The default is the standard bot at medium level with a random style. On failure `error` says why.
 bool parse_bot_spec(std::string_view text, BotSpec& out, std::string& error);
 
-/// What the seat is called: "Bot (Medium)" for the standard bot, "Bot (Idle)", "Bot (Worker)": printable ASCII, at most 32 characters. A person can never take
+/// What the seat is called: "Bot (Medium)" for the standard bot (whatever its style), "Bot (Idle)", "Bot (Worker)": printable ASCII, at most 32 characters. A person can never take
 /// a name that starts with "Bot (" (the lobby renames it), so the name tells a bot from a player.
 std::string bot_display_name(const BotSpec& spec);
 
@@ -78,6 +102,7 @@ struct SetupInfo {
     std::vector<BotSpec> bots;
     bool fog{false};
     bool allow_all_bots{false};          // only the headless arena plays a match without a person
+    std::vector<std::string> extra_kinds;   // kinds that a factory supplies besides the registry's (the bench bots of the arena: ArenaSpec::extra_kinds); never set by the game or a room
 };
 
 /// "" when a game with these bots may start, else the reason it may not: Fog of War is on (a bot would see through it), a bot sits at a seat that is not in
@@ -93,6 +118,9 @@ enum class Priority : uint8_t { Background = 0, Normal = 1, Urgent = 2 };
 struct Intent {
     sim::Command command;
     Priority priority{Priority::Normal};
+    /// A planned PICK-UP of a power-up: a plain click (GroupMove) of ONE ant on the tile of a power-up (Orders::pick_up). The controller lets a move onto a power-up tile through only
+    /// with this mark: a click on one takes it for the ant that arrives, so no other order of a bot (a rally, a guard post, a spread) may name such a tile by accident.
+    bool pickup{false};
 };
 
 /// The only way out of a bot: what a person could click, as data. The named methods cannot express Quit or Drop (push_unchecked exists for the tests of the
@@ -101,8 +129,11 @@ class Orders {
 public:
     /// A group move; more ants than one command may hold (kMaxCommandAnts) become several intents. An empty list is nothing.
     void move(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Normal);
-    /// A group attack on the ant that stands at `tile`
+    /// A group attack on the ant that stands at `tile`. The controller lets it through only when an ant of another team (not an ally) stands there and the tile is not part of a
+    /// hill: what a person's click on an enemy ant sends (the attack cursor shows over an ant of another colour, and an ant on a hill tile gets the plain move cursor).
     void attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Urgent);
+    /// A planned pick-up: ONE ant is clicked onto the tile of a power-up (a plain GroupMove, the click that takes it when the ant arrives). Nothing else may name a power-up tile.
+    void pick_up(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
     /// A special order (bomb, defuse, fire, extinguish, bridge, thief raid) of ONE ant: the HUD sends it for a single selected ant only
     void special(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
     void stop(const std::vector<uint32_t>& ants);
@@ -116,8 +147,8 @@ public:
     const std::vector<Intent>& intents() const noexcept { return intents_; }
     void clear() noexcept { intents_.clear(); }
 
-    /// For the tests of the controller's filter ONLY: puts any command into the list, however malformed. No bot uses it.
-    void push_unchecked(sim::Command command, Priority priority = Priority::Normal);
+    /// For the tests of the controller's filter ONLY: puts any command into the list, however malformed (and, with `pickup`, marked as a planned pick-up whatever it names). No bot uses it.
+    void push_unchecked(sim::Command command, Priority priority = Priority::Normal, bool pickup = false);
 
 private:
     void group(sim::CommandType type, const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority);
@@ -141,7 +172,8 @@ public:
         Sent,                            // released through the budget at `tick` (with the ants that were still alive)
         Expired,                         // it could not be paid in time and was dropped
         Pruned,                          // every ant of it died first: it never left
-        Superseded                       // a newer order that was due at the same time named all its ants (the later click wins): it never left
+        Superseded,                      // a newer order that was due at the same time named all its ants (the later click wins): it never left
+        Filtered                         // the controller's filter refused it when it was proposed (what a person could not click): it never left; `tick` is the tick of the look
     };
 
     virtual ~Bot() = default;
@@ -158,8 +190,8 @@ public:
     }
 };
 
-/// The bot of a spec; null for a kind that does not exist. "idle" is the IdleBot, "worker" the WorkerBot (B3); "standard" is an alias of the worker bot until the standard bot
-/// (B4) exists (kind() of what it returns says "worker").
+/// The bot of a spec; null for a kind that does not exist. "idle" is the IdleBot, "worker" the WorkerBot (B3), "standard" the StandardBot (B4-1) of the spec's level, playing the
+/// spec's style or one that it draws from its own seat's generator at start().
 std::unique_ptr<Bot> make_bot(const BotSpec& spec);
 
 }  // namespace ants::ai

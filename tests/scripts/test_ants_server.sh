@@ -6,7 +6,9 @@
 # dropped within seconds while a match in another room keeps its clock, the control interface answers, and the process neither grows nor stays busy; the server stops cleanly on
 # SIGTERM and writes the result file of a room that was closed. The last section is the server that HOLDS the seat of a player whose connection is lost (protocol 10, --reconnect):
 # a small TCP proxy (flaky_proxy.py) between a client and the server is cut, the room pauses and names the absent seat, nothing runs while it waits, and at the cap the seat is dropped
-# and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence and finds its link closed when it wakes up.
+# and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence and finds its link closed when it wakes up. The part ends with the RESTART RECORDS (docs/NETWORK_PORT.md): the server keeps
+# a record of a running match in a folder of its own (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of it and killed with SIGKILL, and started again over the same folder: the room
+# comes back with its code, paused, every seat held, and the record goes when the owner closes the room; the options of the records are refused or accepted in the options part.
 # The sections below are PARTS: they run one after the other (the default), or alone with `--part NAME` (repeatable), each with its own server on its own ports and its own
 # scratch folder, so that ./run_tests.sh and the CI can run them at the same time. `--list-parts` prints the names.
 PART_NAMES="options rooms secret demo reconnect"
@@ -55,7 +57,7 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ants_e2e.XXXXXX")"
 cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
-    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $CHAT_PIDS $RC_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
+    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $CHAT_PIDS $RC_PIDS $RR_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
     [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2> /dev/null
     rm -rf "$WORK"
 }
@@ -87,18 +89,18 @@ cd "$ROOT"
 # ---- part options: the pages' own texts and nginx.conf, and the command-line options of ants_server (a bad option is refused at once, a good one starts it) -------
 if part_enabled options; then
 # the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
-check "web/four.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/four.html")" -ge 3 ]; echo $?)"
+check "web/lobby.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/lobby.html")" -ge 3 ]; echo $?)"
 # bots fill the empty seats (protocol 11): the "New match" form offers the choice, remembers it, and every link of the room carries it as ?fill=easy|medium|hard, validated; the game page
 # turns exactly those three words into --fill-bots (and nothing else: an address cannot put another word on the command line)
-FOUR_PAGE="$ROOT/web/four.html"
+FOUR_PAGE="$ROOT/web/lobby.html"
 SHELL_PAGE="$ROOT/web/shell.html"
 FILL_FORM=1
 if grep -qF 'id="fill"' "$FOUR_PAGE" && grep -qF '<option value="easy">Easy bots' "$FOUR_PAGE" && grep -qF '<option value="medium">Medium bots' "$FOUR_PAGE" && grep -qF '<option value="hard">Hard bots' "$FOUR_PAGE" \
     && grep -qF '<option value="">Leave empty' "$FOUR_PAGE" && grep -qF "remember('ants-four-fill', level)" "$FOUR_PAGE" && grep -qF "recall('ants-four-fill')" "$FOUR_PAGE"; then FILL_FORM=0; fi
-check 'web/four.html offers "Empty seats at START" (Leave empty, Easy bots, Medium bots, Hard bots) in the New match form and remembers it' "$FILL_FORM"
+check 'web/lobby.html offers "Empty seats at START" (Leave empty, Easy bots, Medium bots, Hard bots) in the New match form and remembers it' "$FILL_FORM"
 FILL_LINKS=1
-if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE" && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF 'id="fill-caption">Bots gather food; they do not fight yet.' "$FOUR_PAGE"; then FILL_LINKS=0; fi
-check "web/four.html puts the choice into every game link and into its own address as &fill=<word>, reads the address through validFill, and says under the choice that the bots gather food and do not fight yet" "$FILL_LINKS"
+if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "validFill(params.get('fill'))" "$FOUR_PAGE" && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF 'id="fill-caption">Bots gather food, raid and fight back.' "$FOUR_PAGE"; then FILL_LINKS=0; fi
+check "web/lobby.html puts the choice into every game link and into its own address as &fill=<word>, reads the address through validFill, and says under the choice what the bots do (gather food, raid and fight back)" "$FILL_LINKS"
 FILL_SHELL=1
 if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillArg(q.get('fill'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
 check "web/shell.html gives the game --fill-bots from antsFillArg's answer and nothing else (the line that takes the address's word and the line that hands it to the game)" "$FILL_SHELL"
@@ -108,11 +110,11 @@ if command -v node > /dev/null 2>&1; then
     FILL_RUN="$(node "$ROOT/tests/scripts/web_fill_check.js" "$SHELL_PAGE" "$FOUR_PAGE" 2>&1)"
     FILL_RUN_RC=$?
     [ "$FILL_RUN_RC" -ne 0 ] && echo "$FILL_RUN" | sed 's/^/    /'
-    check "the pages' own code for ?fill= (web/shell.html antsFillArg, web/four.html validFill), run with node on a table of values: easy, medium, hard in any case give the lower case word, everything else gives nothing" "$FILL_RUN_RC"
+    check "the pages' own code for ?fill= (web/shell.html antsFillArg, web/lobby.html validFill), run with node on a table of values: easy, medium, hard in any case give the lower case word, everything else gives nothing" "$FILL_RUN_RC"
 else
-    echo "  SKIP: node is not installed: the validation code of ?fill= in web/shell.html and web/four.html was NOT run (tests/scripts/web_fill_check.js)"
+    echo "  SKIP: node is not installed: the validation code of ?fill= in web/shell.html and web/lobby.html was NOT run (tests/scripts/web_fill_check.js)"
 fi
-check "web/four.html tells what happens to a hidden or covered window (the match does not wait for it, a lagging notice after 3 s, dropped after 30 s without a sign of life, cannot come back) and no longer says that the match waits for it (it did not since v0.0.94)" "$([ "$(grep -c 'The match does not wait for it' "$ROOT/web/four.html")" -eq 1 ] && grep -q 'dropped from the match and cannot come back' "$ROOT/web/four.html" && ! grep -q 'and the match waits for it' "$ROOT/web/four.html"; echo $?)"
+check "web/lobby.html tells what happens to a hidden or covered window (the match does not wait for it, a lagging notice after 3 s, dropped after 30 s without a sign of life, cannot come back) and no longer says that the match waits for it (it did not since v0.0.94)" "$([ "$(grep -c 'The match does not wait for it' "$ROOT/web/lobby.html")" -eq 1 ] && grep -q 'dropped from the match and cannot come back' "$ROOT/web/lobby.html" && ! grep -q 'and the match waits for it' "$ROOT/web/lobby.html"; echo $?)"
 # AGENTS.md rule 6: the game files of the beta site (.wasm, .data, .html, .css, .js) are revalidated, not stored away and not downloaded again: exactly Cache-Control "no-cache, must-revalidate",
 # ETags on (no `etag off`), no `no-store` (a response that may not be stored cannot be revalidated: every reload fetched 9 MB) and no `expires -1` (nginx would add a second Cache-Control
 # line and an Expires date); the cross-origin headers stay in each of the three blocks. (A real answer from the built web image is checked by hand: curl -I twice, the second with If-None-Match: 304.)
@@ -174,6 +176,24 @@ check "the edges of the other side start it too" "$([ "$(exit_of --no-reconnect 
 check "the new options' edges start it: 10 and 0" "$([ "$(exit_of --reconnect --max-catch-up-seconds 10 --resume-countdown-seconds 0)" = "142" ]; echo $?)"
 check "the new options' edges start it: 3600 and 60" "$([ "$(exit_of --reconnect --max-catch-up-seconds 3600 --resume-countdown-seconds 60)" = "142" ]; echo $?)"
 check "--help names the reconnect options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--reconnect | --no-reconnect' && "$SERVER" --help 2>&1 | grep -q -- '--hold-vote-seconds 5-3600' && "$SERVER" --help 2>&1 | grep -q -- '--max-pause-seconds 60-86400' && "$SERVER" --help 2>&1 | grep -q -- '--max-catch-up-seconds 10-3600' && "$SERVER" --help 2>&1 | grep -q -- '--resume-countdown-seconds 0-60' && "$SERVER" --help 2>&1 | grep -q -- '--log-mb 1-256'; echo $?)"
+# the restart records (docs/NETWORK_PORT.md "Restart records"): the options and their edges
+check "--restart-vote-seconds below 30 is refused" "$([ "$(exit_of --restart-vote-seconds 29)" = "2" ]; echo $?)"
+check "--restart-vote-seconds above 3600 is refused" "$([ "$(exit_of --restart-vote-seconds 3601)" = "2" ]; echo $?)"
+check "--restart-vote-seconds that is no number is refused" "$([ "$(exit_of --restart-vote-seconds soon)" = "2" ]; echo $?)"
+check "--restart-vote-seconds without a value is refused" "$([ "$(exit_of --restart-vote-seconds)" = "2" ]; echo $?)"
+check "--restart-budget-mb 0 is refused" "$([ "$(exit_of --restart-budget-mb 0)" = "2" ]; echo $?)"
+check "--restart-budget-mb above 4096 is refused" "$([ "$(exit_of --restart-budget-mb 4097)" = "2" ]; echo $?)"
+check "--restart-budget-mb that is no number is refused" "$([ "$(exit_of --restart-budget-mb lots)" = "2" ]; echo $?)"
+check "--restart-dir with an empty folder name is refused" "$([ "$(exit_of --restart-dir '')" = "2" ]; echo $?)"
+check "--restart-dir without a value is refused" "$([ "$(exit_of --restart-dir)" = "2" ]; echo $?)"
+check "--restart-dir together with --no-restart-records is refused" "$([ "$(exit_of --restart-dir "$WORK/rd" --no-restart-records)" = "2" ]; echo $?)"
+echo "not a folder" > "$WORK/a_file"
+check "--restart-dir that names a file stops the server (status 1: the operator asked for that folder)" "$([ "$(exit_of --restart-dir "$WORK/a_file")" = "1" ]; echo $?)"
+check "--restart-dir that is a folder below a file stops it too" "$([ "$(exit_of --restart-dir "$WORK/a_file/below")" = "1" ]; echo $?)"
+check "the edges of the restart options start the server: 30 and 1" "$([ "$(exit_of --restart-vote-seconds 30 --restart-budget-mb 1 --restart-dir "$WORK/rd_a")" = "142" ]; echo $?)"
+check "... and 3600 and 4096" "$([ "$(exit_of --restart-vote-seconds 3600 --restart-budget-mb 4096 --no-restart-records)" = "142" ]; echo $?)"
+check "--restart-dir makes its folder, for its owner only (mode 700)" "$([ -d "$WORK/rd_a" ] && [ "$(stat -c %a "$WORK/rd_a" 2> /dev/null || stat -f %Lp "$WORK/rd_a")" = "700" ]; echo $?)"
+check "--help names the restart options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--restart-dir DIR | --no-restart-records' && "$SERVER" --help 2>&1 | grep -q -- '--restart-vote-seconds 30-3600' && "$SERVER" --help 2>&1 | grep -q -- '--restart-budget-mb 1-4096'; echo $?)"
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
@@ -337,9 +357,15 @@ code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CHAT" > /dev/n
 PROTOCOL="$("$SERVER" --version 2> /dev/null | sed -n 's/.*(network protocol \([0-9][0-9]*\)).*/\1/p')"      # the raw client below says Hello with the protocol of this very server (it said a literal 7 until protocol 8)
 check "the server says which network protocol it speaks (--version: $PROTOCOL)" "$([ -n "$PROTOCOL" ]; echo $?)"
 rss_kb() { ps -o rss= -p "$SERVER_PID" 2> /dev/null | tr -d ' '; }
-cpu_secs() { ps -o time= -p "$SERVER_PID" 2> /dev/null | python3 -c 'import sys; t = sys.stdin.read().strip().replace("-", ":"); s = 0.0
+cpu_secs() {      # the server's CPU time to the hundredth: Linux's `ps -o time=` has whole seconds only (a 3 s window read 0 or 1, and 1 failed), so /proc there; ps elsewhere (macOS shows hundredths)
+    if [ -r "/proc/$SERVER_PID/stat" ]; then
+        python3 -c 'import os, sys; f = open(sys.argv[1]).read().rsplit(")", 1)[1].split(); print((int(f[11]) + int(f[12])) / os.sysconf("SC_CLK_TCK"))' "/proc/$SERVER_PID/stat"
+        return
+    fi
+    ps -o time= -p "$SERVER_PID" 2> /dev/null | python3 -c 'import sys; t = sys.stdin.read().strip().replace("-", ":"); s = 0.0
 for part in t.split(":"): s = s * 60 + float(part)
-print(s)'; }
+print(s)'
+}
 field_of() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get(sys.argv[1], ""))' "$2" 2> /dev/null; }
 VICTIM="E2E-VICTIM-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$VICTIM\",\"seed\":11}" "$CTL/rooms"
@@ -752,7 +778,99 @@ PROXY_PID=""
 check "the result file of the room that held a seat keeps the counters (drops_by_cap 1, log) and no secret or key" "$([ -s "$WORK/rc_results/$RC_CODE.json" ] && grep -q '"drops_by_cap":1' "$WORK/rc_results/$RC_CODE.json" && grep -q '"log":{' "$WORK/rc_results/$RC_CODE.json" && ! grep -q "$SECRET" "$WORK/rc_results/$RC_CODE.json"; echo $?)"
 check "the server's log names the rooms' ends with what the pause came to, and never the secret" "$(grep -q "room $RC_CODE" "$WORK/rc_server.log" && grep -q 'by the cap' "$WORK/rc_server.log" && ! grep -q "$SECRET" "$WORK/rc_server.log"; echo $?)"
 
+# ---- restart records (docs/NETWORK_PORT.md "Restart records"): a match survives a restart of the server ---------------------------------------------------------------
+# The real program with real game clients. The server keeps a record of the running room (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of the match
+# (it exits at once and leaves the record), is started again over the same folder (the room is back, paused, every seat held: the clients' game cannot rejoin by itself yet, so they ended
+# with the lost-connection message), is killed with SIGKILL and started once more (the record that the restored room went on writing restores again), and when the owner closes the room
+# its record goes. The C++ test of the suite (S3.95, S3.96) does the same with two machines that DO find the room again; here the players are the real games.
+RR_PORT="$(free_port)"
+RR_CTL="$(free_port)"
+RR_CODE="E2E-KEEP-$RANDOM"
+RR_URL="http://127.0.0.1:$RR_CTL"
+RR_RESULTS="$WORK/rr_results"
+RR_DIR="$RR_RESULTS/restart"
+rr_field() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RR_URL/rooms/$1" | python3 -c 'import sys, json; v = json.load(sys.stdin)
+for part in sys.argv[1].split("."):
+    v = v.get(part) if isinstance(v, dict) else None
+print(json.dumps(v) if isinstance(v, (dict, list)) or v is None else str(v).lower() if isinstance(v, bool) else v)' "$2" 2> /dev/null; }
+rr_start() {
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RR_PORT" --ctl-port "$RR_CTL" --results-dir "$RR_RESULTS" --reconnect --resume-countdown-seconds 0 >> "$WORK/rr_server.log" 2>&1 &
+    SERVER_PID=$!
+    local up=1
+    for _ in $(seq 1 100); do
+        if curl -s -m 1 "$RR_URL/healthz" | grep -q '"ok"'; then up=0; break; fi
+        kill -0 "$SERVER_PID" 2> /dev/null || break
+        sleep 0.1
+    done
+    return $up
+}
+rr_start
+check "the server of the restart section is up" "$?"
+check "its log says where the records are kept and that a running match survives a restart" "$(grep -q "restart records in $RR_DIR" "$WORK/rr_server.log" && grep -q 'survives a restart' "$WORK/rr_server.log"; echo $?)"
+curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$RR_CODE\",\"seed\":9}" "$RR_URL/rooms"
+RR_PIDS=""
+"$GAME" --headless --no-lan --name Keeper1 --join "127.0.0.1:$RR_PORT" --room "$RR_CODE" --screenshot "$WORK/k1.png" --frames 4000000 > "$WORK/k1.log" 2>&1 &
+RR_PIDS="$!"
+"$GAME" --headless --no-lan --name Keeper2 --join "127.0.0.1:$RR_PORT" --room "$RR_CODE" --screenshot "$WORK/k2.png" --frames 4000000 > "$WORK/k2.log" 2>&1 &
+RR_PIDS="$RR_PIDS $!"
+RR_RUNNING=1
+for _ in $(seq 1 150); do
+    [ "$(rr_field "$RR_CODE" state)" = "running" ] && { RR_RUNNING=0; break; }
+    sleep 0.2
+done
+check "the two clients joined the room of the restart section and the match runs" "$RR_RUNNING"
+RR_T0="$(wait_ticks "$RR_CODE" "$RR_URL")"
+sleep 3
+RR_T1="$(rr_field "$RR_CODE" ticks)"
+check "the match plays before the stop (ticks $RR_T0, then $RR_T1)" "$([ "${RR_T0:-0}" -gt 0 ] && [ "${RR_T1:-0}" -gt "${RR_T0:-0}" ]; echo $?)"
+RR_FILES="$(ls "$RR_DIR" 2> /dev/null | grep -c '\.restart$')"
+check "exactly one restart record is on disk" "$([ "$RR_FILES" = "1" ]; echo $?)"
+RR_FILE="$(ls "$RR_DIR"/*.restart 2> /dev/null | head -1)"
+check "the record is for its owner only (mode 600), in a folder of mode 700" "$([ "$(stat -c %a "$RR_FILE" 2> /dev/null || stat -f %Lp "$RR_FILE")" = "600" ] && [ "$(stat -c %a "$RR_DIR" 2> /dev/null || stat -f %Lp "$RR_DIR")" = "700" ]; echo $?)"
+check "the status says that the record is kept, and that the room was not restored" "$([ "$(rr_field "$RR_CODE" record.kept)" = "true" ] && [ "$(rr_field "$RR_CODE" restored)" = "null" ] && [ "$(rr_field "$RR_CODE" record.bytes)" -gt 300 ]; echo $?)"
+RR_SEALED="$(rr_field "$RR_CODE" turns)"
+# SIGTERM in the middle of the match: the server exits at once (well inside the 15 s that the stack gives docker) and leaves the record
+RR_KILL_AT="$(python3 -c 'import time; print(time.time())')"
+kill -TERM "$SERVER_PID"
+wait "$SERVER_PID" 2> /dev/null
+RR_STOP_RC=$?
+RR_STOPPED_AFTER="$(python3 -c "import time; print(round(time.time() - $RR_KILL_AT, 2))")"
+SERVER_PID=""
+check "SIGTERM stops the server with status 0, $RR_STOPPED_AFTER s after the signal (well inside docker's grace)" "$([ "$RR_STOP_RC" = "0" ] && python3 -c "import sys; sys.exit(0 if $RR_STOPPED_AFTER < 3 else 1)"; echo $?)"
+check "its log says that the record was made durable and kept" "$(grep -q 'stopped: 1 restart record(s) made durable and kept' "$WORK/rr_server.log"; echo $?)"
+check "the record is still there" "$([ "$(ls "$RR_DIR" | grep -c '\.restart$')" = "1" ]; echo $?)"
+sleep 1
+check "the two games saw their connection lost and ended (they cannot rejoin by themselves yet: the next release)" "$(grep -q 'connection to the other players was lost' "$WORK/k1.log" && grep -q 'connection to the other players was lost' "$WORK/k2.log"; echo $?)"
+# started again over the same folder: the room is back, paused, both seats held
+rr_start
+check "the server started again over the same results folder is up" "$?"
+check "its log says that the room was restored, with its turns and its replay time and the seats that wait" "$(grep -qE "room $RR_CODE restored: [0-9]+ turns .*2 seat\(s\) waiting" "$WORK/rr_server.log"; echo $?)"
+check "the room has its code back: running, restored, paused, both seats absent" "$([ "$(rr_field "$RR_CODE" state)" = "running" ] && [ "$(rr_field "$RR_CODE" paused)" = "true" ] && [ "$(rr_field "$RR_CODE" restored.turns)" -ge "$RR_SEALED" ] && [ "$(rr_field "$RR_CODE" absent | python3 -c 'import sys, json; print(len(json.load(sys.stdin)))')" = "2" ]; echo $?)"
+check "... it has no turn that it did not have (the match is held until its players come back)" "$([ "$(rr_field "$RR_CODE" turns)" = "$(rr_field "$RR_CODE" restored.turns)" ]; echo $?)"
+check "the status names the players, the map and keeps the record" "$([ "$(rr_field "$RR_CODE" map)" = "TINY.LVL" ] && [ "$(rr_field "$RR_CODE" joined)" = "2" ] && [ "$(rr_field "$RR_CODE" record.kept)" = "true" ]; echo $?)"
+RR_RESTORED_TURNS="$(rr_field "$RR_CODE" restored.turns)"
+sleep 2
+check "nothing advances while the room waits (turns $RR_RESTORED_TURNS)" "$([ "$(rr_field "$RR_CODE" turns)" = "$RR_RESTORED_TURNS" ]; echo $?)"
+# SIGKILL and once more: the record that the restored room went on writing restores again
+kill -KILL "$SERVER_PID"
+wait "$SERVER_PID" 2> /dev/null
+SERVER_PID=""
+rr_start
+check "the server killed with SIGKILL and started again is up" "$?"
+check "the room is restored a second time from the same record, with the same turns" "$([ "$(rr_field "$RR_CODE" restored.turns)" = "$RR_RESTORED_TURNS" ] && [ "$(rr_field "$RR_CODE" paused)" = "true" ]; echo $?)"
+# the owner closes the room: its record goes
+check "closing the room (DELETE) answers 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RR_URL/rooms/$RR_CODE")" = "200" ]; echo $?)"
+check "... and its record is gone" "$([ "$(ls "$RR_DIR" | grep -c '\.restart$')" = "0" ]; echo $?)"
+check "the status of the closed room says that it is over and keeps no record" "$([ "$(rr_field "$RR_CODE" state)" = "failed" ] && [ "$(rr_field "$RR_CODE" record.kept)" = "false" ]; echo $?)"
+for p in $RR_PIDS; do kill "$p" 2> /dev/null; done
+kill -TERM "$SERVER_PID" 2> /dev/null
+wait "$SERVER_PID" 2> /dev/null
+SERVER_PID=""
+check "no key is in the server's log (no run of 32 hex digits in it: a key is 16 bytes), and neither is the secret" "$(! grep -qE '[0-9a-f]{32}' "$WORK/rr_server.log" && ! grep -q "$SECRET" "$WORK/rr_server.log"; echo $?)"
+check "the result file of the closed room has no key either" "$([ -s "$RR_RESULTS/$RR_CODE.json" ] && ! grep -qE '[0-9a-f]{32}' "$RR_RESULTS/$RR_CODE.json"; echo $?)"
+
 echo "  [reconnect e2e] the link cut: the room paused after $RC_PAUSED_AFTER s; the cap dropped the seat $RC_CAPPED_AFTER s after the cut (60 s of pause); a client stopped: the room paused $RC_STOP_PAUSED_AFTER s later"
+echo "  [restart e2e] SIGTERM $RR_STOPPED_AFTER s to exit with the record kept; the room came back with $RR_RESTORED_TURNS turns, held its two seats, and came back again after a SIGKILL"
 fi
 
 echo "server e2e${PART_LABEL}: $CHECKS checks, $FAILS failures"

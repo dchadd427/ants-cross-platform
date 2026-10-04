@@ -42,7 +42,7 @@ std::string lower_text(std::string s) {
     return s;
 }
 
-// The six maps of the original game, in the order of web/four.html (by size)
+// The six maps of the original game, in the order of web/lobby.html (by size)
 constexpr MenuMap kMaps[kMenuMapCount] = {
     {"tiny", "Tiny"}, {"small", "Small"}, {"medium", "Medium"}, {"gauntlet", "Gauntlet"}, {"treasure", "Treasure"}, {"islands", "Islands"},
 };
@@ -108,7 +108,7 @@ constexpr int32_t kHintY = 446;
 constexpr int32_t kHintH = 14;
 constexpr int32_t kTextX = 60;
 constexpr int32_t kTextW = 520;
-constexpr const char* kFillCaption = "Bots gather food; they do not fight yet.";     // (until the bots fight: B4b of docs/BOTS.md) under "Empty seats at START" here and on web/four.html
+constexpr const char* kFillCaption = "Bots gather food, raid and fight back.";     // what the standard bot does (docs/BOTS.md "The standard bot"), under "Empty seats at START" here and on web/four.html
 
 ButtonRect centred_button(int32_t y, int32_t h = kButtonH) { return ButtonRect{kButtonX, y, kButtonW, h}; }
 

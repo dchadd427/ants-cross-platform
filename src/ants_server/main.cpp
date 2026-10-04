@@ -3,6 +3,7 @@
 //   ants_server --maps DIR [--port 4001] [--ws-port 4002] [--ctl-port 4010] [--public] [--ws-any-interface] [--ctl-any-interface] [--results-dir DIR] [--secret-file PATH] [--max-rooms N]
 //               [--reconnect | --no-reconnect] [--hold-vote-seconds N] [--max-pause-seconds N] [--max-catch-up-seconds N]
 //               [--resume-countdown-seconds N] [--log-mb N]
+//               [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds N] [--restart-budget-mb N]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -37,7 +38,23 @@
 //   --resume-countdown-seconds N
 //                      after a pause of 3 s or more the match is held this long before it goes on (0 - 60, default 10, 0 = none; the control interface's "resume_countdown_seconds")
 //   --log-mb N         the limit of one room's turn log, which a returning player is given the match from, in MiB (1 - 256, default 16); the logs of all the rooms together may take 256 MiB
+//   --restart-dir DIR  where the rooms that hold seats keep their RESTART RECORDS (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"): from the start of its match to its end a room
+//                      writes every sealed turn to a file here (mode 600: it holds the keys of the seats) BEFORE the turn is sent to anybody, so that a server that is stopped, crashes or is
+//                      redeployed does not end the matches that run: the server that starts again finds the records, replays them (checked against stored state hashes), holds every seat
+//                      and the players come back with their keys. Default: the folder "restart" in --results-dir; without a results folder the server keeps none. A record of another network
+//                      protocol is not restored (the room is closed with that reason). Only rooms that hold seats (--reconnect, a room's "reconnect") keep one
+//   --no-restart-records
+//                      keep no restart records (a running match ends with the server, as it did before records), whatever --results-dir says
+//   --restart-vote-seconds N
+//                      after a restart the others may vote on going on without a seat that has not come back once it has been away N seconds (30 - 3600, default 90: a restart is nobody's
+//                      fault and every player has to notice, wait for the server, reconnect and catch up; a lost link's time is --hold-vote-seconds); the match's pause cap still applies
+//   --restart-budget-mb N
+//                      the disk that all the restart records together may take (1 - 4096, default 256); one record is at most 48 MiB (3 times the turn log's limit); a record that the disk or
+//                      the budget refuses is deleted and its room plays on without one (its status says why)
 //   --version, --help
+//
+// SIGTERM and SIGINT stop the server within a moment: the records of the running rooms are made durable (fsync) and left where they are (docker stop: give the container a grace period, the stack
+// files set 15 s), the other rooms are closed. A record is deleted when its room is over, never because the server stops.
 //
 // The control interface's secret comes from the environment (ANTS_SERVER_SECRET), never from the command line (a command line is visible to every user). Without
 // it the server makes a random secret the first time it starts and keeps it in the secret file (POSIX: for its owner only, mode 600; Windows: the file takes the
@@ -62,6 +79,7 @@
 #include "ants_net/ws.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_server/control.hpp"
+#include "ants_server/restart_record.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
 
@@ -85,12 +103,16 @@ struct Options {
     std::string demo_map;
     std::vector<std::string> demo_maps;
     bool demo_maps_given{false};
-    bool reconnect{false};
+    bool reconnect{ants::server::kReconnectByDefault};
     long hold_vote_s{30};
     long max_pause_s{1800};
     long max_catch_up_s{300};
     long resume_countdown_s{10};
     long log_mb{16};
+    std::string restart_dir;                   // --restart-dir (empty: the folder "restart" in the results folder, when there is one)
+    bool no_restart_records{false};
+    long restart_vote_s{90};
+    long restart_budget_mb{256};
 };
 
 void usage(FILE* to) {
@@ -100,6 +122,7 @@ void usage(FILE* to) {
                  "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...]]\n"
                  "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
                  "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
+                 "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -183,7 +206,16 @@ int main(int argc, char** argv) {
             o.reconnect = true;
         } else if (a == "--no-reconnect") {
             o.reconnect = false;
-        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--log-mb") {
+        } else if (a == "--restart-dir") {
+            o.restart_dir = value("--restart-dir");
+            if (o.restart_dir.empty()) {
+                std::fprintf(stderr, "--restart-dir takes a folder\n");
+                return 2;
+            }
+        } else if (a == "--no-restart-records") {
+            o.no_restart_records = true;
+        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
+                   a == "--restart-budget-mb") {
             const char* text = value(a.c_str());
             char* end = nullptr;
             const long n = std::strtol(text, &end, 10);
@@ -193,6 +225,8 @@ int main(int argc, char** argv) {
             else if (a == "--max-pause-seconds") { lo = 60; hi = 86400; target = &o.max_pause_s; }
             else if (a == "--max-catch-up-seconds") { lo = 10; hi = 3600; target = &o.max_catch_up_s; }
             else if (a == "--resume-countdown-seconds") { lo = 0; hi = 60; target = &o.resume_countdown_s; }
+            else if (a == "--restart-vote-seconds") { lo = 30; hi = 3600; target = &o.restart_vote_s; }
+            else if (a == "--restart-budget-mb") { lo = 1; hi = 4096; target = &o.restart_budget_mb; }
             if (end == text || *end != '\0' || n < lo || n > hi) {
                 std::fprintf(stderr, "%s takes a whole number from %ld to %ld\n", a.c_str(), lo, hi);
                 return 2;
@@ -229,6 +263,10 @@ int main(int argc, char** argv) {
     }
     if (o.maps_dir.empty()) {
         usage(stderr);
+        return 2;
+    }
+    if (o.no_restart_records && !o.restart_dir.empty()) {
+        std::fprintf(stderr, "--restart-dir and --no-restart-records exclude each other\n");
         return 2;
     }
     std::error_code ec;
@@ -352,6 +390,36 @@ int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
     log(std::string("ants_server ") + std::string(ants::VERSION_STRING) + " build " + std::string(ants::BUILD_ID) + " (network protocol " + std::to_string(ants::net::kProtocolVersion) + "), maps in " + o.maps_dir);
+    // Restart records (restart_record.hpp): in --restart-dir, else in the folder "restart" of the results folder, unless switched off. An explicit folder that cannot be used stops the server
+    // (the operator asked for it); the default one is given up with a line in the log.
+    {
+        ants::server::RestartConfig rc;
+        if (!o.no_restart_records) {
+            if (!o.restart_dir.empty()) rc.dir = o.restart_dir;
+            else if (!o.results_dir.empty()) rc.dir = (std::filesystem::path(o.results_dir) / "restart").string();
+        }
+        rc.identity.game_version = std::string(ants::VERSION_STRING);
+        rc.identity.protocol = ants::net::kProtocolVersion;
+        rc.identity.build_id = std::string(ants::BUILD_ID);
+        rc.budget_bytes = static_cast<uint64_t>(o.restart_budget_mb) * 1024u * 1024u;
+        rc.restart_vote_after_ms = static_cast<uint32_t>(o.restart_vote_s * 1000);
+        std::string why;
+        if (!rc.dir.empty() && !rooms.enable_restart_records(rc, why)) {
+            if (!o.restart_dir.empty()) {
+                std::fprintf(stderr, "%s\n", why.c_str());
+                return 1;
+            }
+            log("restart records are off: " + why);
+        }
+        if (rooms.restart_store() != nullptr) {
+            log("restart records in " + rc.dir + ": a running match of a room that holds seats survives a restart (budget " + std::to_string(o.restart_budget_mb) + " MiB, the others may vote on a seat that has not come back after " +
+                std::to_string(o.restart_vote_s) + " s)" + (o.reconnect ? std::string() : std::string("; no room holds seats unless its specification says so (--reconnect), so none is kept now")));
+        } else if (o.no_restart_records) {
+            log("restart records are off (--no-restart-records): a running match ends with the server");
+        } else if (rc.dir.empty()) {
+            log("restart records are off: no --results-dir or --restart-dir to keep them in: a running match ends with the server");
+        }
+    }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (--reconnect): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
             " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
@@ -369,6 +437,10 @@ int main(int argc, char** argv) {
         }                                          // made now: shown above, once
     }
 
+    if (rooms.restart_store() != nullptr) {                    // the matches that were running when the server stopped come back, paused until their players do (before the first connection is read)
+        rooms.restore_rooms(now_ms(), []() { return g_stop.load(); });         // (a stop that comes meanwhile ends it at once and leaves every record on disk)
+        for (const std::string& line : rooms.take_notices()) log(line);
+    }
     while (!g_stop) {
         const uint32_t now = now_ms();
         if (tcp) {
@@ -403,9 +475,17 @@ int main(int argc, char** argv) {
                 out << ants::ctl::to_json(ants::server::status_to_json(s)) << "\n";
             }
         }
+        for (const std::string& line : rooms.take_notices()) log(line);          // (a record that the disk refused, ...)
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     log("stopping");
-    for (const ants::server::RoomStatus& s : rooms.list(now_ms())) rooms.close_room(s.code, now_ms());
+    // The records of the running rooms are made durable and stay where they are (a record is deleted when its room is over, never because the server stops); the other rooms are closed, as before.
+    const auto stopping = std::chrono::steady_clock::now();
+    const size_t kept = rooms.shutdown(now_ms());
+    for (const std::string& line : rooms.take_notices()) log(line);
+    if (rooms.restart_store() != nullptr) {
+        const auto took = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - stopping).count();
+        log("stopped: " + std::to_string(kept) + " restart record(s) made durable and kept (" + std::to_string(took) + " ms)");
+    }
     return 0;
 }
