@@ -605,6 +605,9 @@ private:
     bool add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::string& why);   // seats one bot (the registry's, or the tests' factory's)
     void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
     void stop_bots();
+    const ai::BotSpec* bot_spec_of(uint8_t seat) const;                // the spec that this machine knows for a seat (--bot, a fill of this machine's START), null for the others
+    bool is_bot_seat(uint8_t seat) const;                              // a computer player holds the seat: a local game's specs, in a room the slots that the room calls bots
+    std::string declined_team_up_note(const sim::NewsEvent& event) const;   // the line that says why a bot declined the local player's invitation (the HUD's news note); "" for any other event
 
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
     bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same canvas: wide_page.hpp)

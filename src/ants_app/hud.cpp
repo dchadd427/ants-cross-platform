@@ -220,6 +220,10 @@ void HUD::poll_sim_events(sim::SimulationEngine& sim) {
         } else {
             status_line_.post(ev.message_text, ev.blink);
         }
+        if (news_note_) {
+            const std::string note = news_note_(ev);
+            if (!note.empty()) add_news_flash(ev.timestamp_ms, note);
+        }
     }
 }
 

@@ -1612,6 +1612,145 @@ void run_suite_7_input_controls() {
         }
     } TEST_END();
 
+    TEST_CASE("7.6e A bot that declines the player's invitation to team up says why: ONE line in the chat log right after the original's \"... rejected teaming up\" (only two teams left, the player has a teammate, the bot has one, the worker bot never teams up), nothing for a bot that accepts or for a person's answer, and never twice") {
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        const auto bot = [](uint8_t seat, const char* kind = "standard") {
+            ants::ai::BotSpec spec;
+            spec.seat = seat;
+            spec.kind = kind;
+            spec.level = ants::ai::Level::Medium;
+            return spec;
+        };
+        const std::string two_left = "Bots team up only while three or more teams play.";
+        const std::string you_have = "You already have a teammate.";
+        const std::string never = "This bot never teams up.";
+        const auto count_of = [](const std::string& text, const std::string& what) {
+            size_t n = 0;
+            for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
+            return n;
+        };
+        const auto transcript = [](Application& app) { return app.hud().chat_transcript(std::string()); };
+        // A local game of the setup screen's own START (as the web page's Play makes it): the dialog is dismissed and the simulation runs by hand, one tick for each call, the bots acting in post_tick
+        const auto start = [&](Application& app, const std::vector<ants::ai::BotSpec>& bots, const std::array<std::string, 4>& names = {}) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            cfg.default_map_path = tiny;
+            cfg.play_at_once = true;
+            cfg.bots = bots;
+            cfg.team_names = names;
+            if (!app.init(cfg) || app.state() != AppState::Playing) return false;
+            app.hud().dismiss_match_start_modal();
+            return true;
+        };
+        // Ticks until `done()` holds (at most `limit`); returns whether it did. The check is made after every tick: the status line and the chat log are looked at in the very tick of the news
+        const auto run_until = [](Application& app, const std::function<bool()>& done, int limit) {
+            for (int t = 0; t < limit; ++t) {
+                app.update_simulation(0.05f);
+                if (done()) return true;
+            }
+            return false;
+        };
+        const auto invite = [](Application& app, uint8_t from, uint8_t to) {          // the invitation as a command, whatever the HUD would have asked first
+            Command c;
+            c.type = CommandType::AllianceInvite;
+            c.issuer = from;
+            c.other_player = to;
+            return app.sim().apply_command(c).accepted();
+        };
+        const std::vector<std::string> all_notes = {two_left, you_have, never, "already has a teammate."};
+        const auto notes_in = [&](const std::string& log) {
+            size_t n = 0;
+            for (const std::string& note : all_notes) n += count_of(log, note);
+            return n;
+        };
+
+        {   // one bot: two teams play, the alliance would end the match at once. The player asks through the HUD (the pedestal's request), the bot says no, the game says why
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1)}));
+            app.hud().request_team_up(app.sim(), 1);
+            ASSERT_EQ(app.sim().get_world_state().pending_invite_from[1], 0);
+            ASSERT_TRUE(run_until(app, [&] { return count_of(transcript(app), two_left) > 0; }, 400));
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Bot (Medium) rejected teaming up"));    // the original's text, unchanged, is the status of this very tick
+            ASSERT_EQ(count_of(transcript(app), "News Flash: " + two_left), 1u);                           // ... and the line is a News Flash of the chat log
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            for (int t = 0; t < 300; ++t) app.update_simulation(0.05f);                                    // nothing says it again
+            ASSERT_EQ(count_of(transcript(app), two_left), 1u);
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            app.shutdown();
+        }
+        {   // the player already has a teammate (a command that the HUD would have asked about first: it breaks the team before it invites; here the team stands when the bot answers)
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}));
+            app.sim().form_alliance(0, 1);
+            ASSERT_TRUE(invite(app, 0, 2));
+            ASSERT_TRUE(run_until(app, [&] { return count_of(transcript(app), you_have) > 0; }, 400));
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Bot (Medium) rejected teaming up"));
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            for (int t = 0; t < 200; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            app.shutdown();
+        }
+        {   // the bot already has a teammate (two bots that are a team): the line names the bot as the game names it (-N / --team-name wins over "Bot (Medium)")
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}, {"", "", "Maple", ""}));
+            app.sim().form_alliance(2, 3);
+            app.hud().request_team_up(app.sim(), 2);
+            ASSERT_TRUE(run_until(app, [&] { return count_of(transcript(app), "Maple already has a teammate.") > 0; }, 400));
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Maple rejected teaming up"));
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            app.shutdown();
+        }
+        {   // the worker bot (the tournaments' yardstick) never teams up: its own line, although the standard rule would accept in this world of four teams
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1, "worker"), bot(2), bot(3)}));
+            app.hud().request_team_up(app.sim(), 1);
+            ASSERT_TRUE(run_until(app, [&] { return count_of(transcript(app), never) > 0; }, 400));
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Bot (Worker) rejected teaming up"));
+            ASSERT_EQ(notes_in(transcript(app)), 1u);
+            app.shutdown();
+        }
+        {   // a bot that accepts: the original's texts only (the team is made), no line of ours
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}));
+            app.hud().request_team_up(app.sim(), 1);
+            ASSERT_TRUE(run_until(app, [&] { return app.sim().get_world_state().player_alliances[0] == 1; }, 400));
+            for (int t = 0; t < 20; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(notes_in(transcript(app)), 0u);
+            ASSERT_EQ(count_of(transcript(app), "are a team now!"), 1u);
+            app.shutdown();
+        }
+        {   // a person's answer is the person's own business: seat 1 of a game with no bots says no, the status line carries the original's text and the chat log gets no line
+            Application app;
+            ASSERT_TRUE(start(app, {}));
+            ASSERT_TRUE(app.bots() == nullptr);
+            ASSERT_TRUE(invite(app, 0, 1));
+            Command deny;
+            deny.type = CommandType::AllianceDeny;
+            deny.issuer = 1;
+            deny.other_player = 0;
+            ASSERT_TRUE(app.sim().apply_command(deny).accepted());
+            app.update_simulation(0.05f);
+            ASSERT_EQ(app.hud().status_line().text(), std::string("Red rejected teaming up"));
+            for (int t = 0; t < 40; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(notes_in(transcript(app)), 0u);
+            app.shutdown();
+        }
+        {   // a bot seat answers a person's invitation to ANOTHER player's seat in no way: only the local player's own invitation is explained (a refusal that is told to somebody else is not this screen's news)
+            Application app;
+            ASSERT_TRUE(start(app, {bot(1), bot(2), bot(3)}));
+            app.sim().apply_command([] { Command c; c.type = CommandType::AllianceInvite; c.issuer = 2; c.other_player = 3; return c; }());
+            Command deny;                                                                                 // seat 3 (a bot seat, answered by hand) refuses seat 2: the news goes to seat 2, not to the local seat 0
+            deny.type = CommandType::AllianceDeny;
+            deny.issuer = 3;
+            deny.other_player = 2;
+            ASSERT_TRUE(app.sim().apply_command(deny).accepted());
+            for (int t = 0; t < 10; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(notes_in(transcript(app)), 0u);
+            app.shutdown();
+        }
+    } TEST_END();
+
     TEST_CASE("7.7 Cursor Simulated in Screen Middle On Game Start (No Unwanted Edge Panning)") {
         Application app;
         ApplicationConfig cfg;

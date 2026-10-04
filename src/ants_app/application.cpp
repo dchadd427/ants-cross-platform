@@ -9,6 +9,7 @@
 #include "ants_app/version.hpp"
 #include "ants_ai/bot.hpp"
 #include "ants_ai/bot_controller.hpp"
+#include "ants_ai/team_up.hpp"
 #include <iostream>
 #include <fstream>
 #include <cctype>
@@ -598,6 +599,7 @@ bool Application::init(const ApplicationConfig& config) {
     });
 
     hud_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
+    hud_.set_news_note([this](const sim::NewsEvent& event) { return declined_team_up_note(event); });     // (a computer player that declines to team up says why)
 
     hud_.set_on_spawn_click_marker([this](int32_t wx, int32_t wy) {
         if (renderer_) {
@@ -1230,6 +1232,34 @@ bool Application::add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::
 void Application::stop_bots() {
     bots_.reset();                                                    // (the controller first: it holds the sinks)
     bot_sinks_.clear();
+}
+
+const ai::BotSpec* Application::bot_spec_of(uint8_t seat) const {
+    for (const ai::BotSpec& b : config_.bots) {
+        if (b.seat == seat) return &b;
+    }
+    for (const ai::BotSpec& b : fill_specs_) {
+        if (b.seat == seat) return &b;
+    }
+    return nullptr;
+}
+
+// A computer player holds the seat: in a local game the seats of the specs, in a room the slots that the room itself calls bots (a guest knows no more than that)
+bool Application::is_bot_seat(uint8_t seat) const {
+    if (seat >= 4) return false;
+    if (network_active()) return net_->room().slots[seat].state == net::SlotState::Bot;
+    return bot_spec_of(seat) != nullptr;
+}
+
+// Why a computer player declined the local player's invitation to team up: the original's text, "... rejected teaming up", says that it did, never why, so the game adds ONE line to the chat log
+// after it (docs/BOTS.md, "Alliances"). The reason is the rule that decided (ai::team_up_answer, the function the standard bot answers by), asked of the world as it is now. Nothing for any other
+// event, for a person's answer (a person says it in words), and when the rule would accept (the world changed between the bot's decision and its answer, or a kind that we cannot know).
+std::string Application::declined_team_up_note(const sim::NewsEvent& event) const {
+    if (event.string_id != sim::strings::kTeamRejected || event.target_player != local_player_id_ || !is_bot_seat(event.subject)) return std::string();
+    const ai::BotSpec* spec = bot_spec_of(event.subject);
+    if (spec != nullptr && spec->kind == "worker") return ai::kWorkerNeverTeamsUpText;
+    const ai::BotView view = ai::BotView::build(sim_, event.subject);
+    return ai::team_up_decline_text(ai::team_up_answer(view, local_player_id_), sim_.get_player_name(event.subject));
 }
 
 void Application::quit() {

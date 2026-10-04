@@ -1078,6 +1078,69 @@ void run_bot_tests() {
         app.quit();
         app.return_to_map_select();
     } TEST_END();
+
+    TEST_CASE("AI6.12 A Room With A Bot Says Why Its Bot Declined: Bob's Invitation Is Accepted (Three Teams Play), The Host's Own Invitation To The Bot Is Declined And ONE Line Of The Chat Log Says That The Bot Has A Teammate (The Slot Of The Room Says Bot), Bob's Refusal Of The Host's Invitation Is A Person's And Adds No Line; Both Machines Stay Identical") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.bots = {bot_spec("2:hard")};
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start(); }, 8000));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_TRUE(app.net()->room().slots[2].state == net::SlotState::Bot);
+        ASSERT_TRUE(duo.until([&]() { return app.sim().current_tick() > 0 && bob.sim.current_tick() > 0; }, 8000));
+        duo.step(1000);
+        const std::string has_teammate = "Bot (Hard) already has a teammate.";
+        const auto count_of = [](const std::string& text, const std::string& what) {
+            size_t n = 0;
+            for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
+            return n;
+        };
+        const auto transcript = [&]() { return app.hud().chat_transcript(std::string()); };
+        // Bob (seat 1) asks the bot (seat 2): three teams play, the bot accepts
+        Command invite;
+        invite.type = CommandType::AllianceInvite;
+        invite.other_player = 2;
+        ASSERT_EQ(bob.net.submit(invite).status, sim::CommandResult::Status::Applied);
+        ASSERT_TRUE(duo.until([&]() { return app.sim().stats_manager().are_allies(1, 2) && bob.sim.stats_manager().are_allies(1, 2); }, 20000));
+        ASSERT_EQ(count_of(transcript(), "teammate."), 0u);                                       // nothing was declined yet
+        // the host asks Bob, and Bob (a person) says no: the original's text only
+        app.hud().request_team_up(app.sim(), 1);
+        ASSERT_TRUE(duo.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::Waiting; }, 5000));
+        Command deny;
+        deny.type = CommandType::AllianceDeny;
+        deny.other_player = 0;
+        ASSERT_EQ(bob.net.submit(deny).status, sim::CommandResult::Status::Applied);
+        ASSERT_TRUE(duo.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::None && app.hud().status_line().text() == "Bob rejected teaming up"; }, 5000));
+        duo.step(600);
+        ASSERT_EQ(count_of(transcript(), "teammate."), 0u);
+        ASSERT_EQ(count_of(transcript(), "three or more teams"), 0u);
+        // the host asks the bot, which has Bob as its teammate: it declines, and the line names it as the room does
+        app.hud().request_team_up(app.sim(), 2);
+        bool said_no = false;
+        ASSERT_TRUE(duo.until([&]() {
+            said_no = said_no || app.hud().status_line().text() == "Bot (Hard) rejected teaming up";
+            return count_of(transcript(), has_teammate) > 0;
+        }, 20000));
+        ASSERT_TRUE(said_no);                                                                      // (the original's text came first, and stays)
+        ASSERT_EQ(count_of(transcript(), "News Flash: " + has_teammate), 1u);
+        duo.step(3000);
+        ASSERT_EQ(count_of(transcript(), has_teammate), 1u);                                       // once
+        app.net()->freeze();
+        duo.step(3000);
+        ASSERT_EQ(app.sim().current_tick(), bob.sim.current_tick());
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        app.quit();
+        app.return_to_map_select();
+    } TEST_END();
 }
 
 void run_host_tests() {
