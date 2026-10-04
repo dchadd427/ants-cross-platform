@@ -203,12 +203,15 @@ class TheImageAndTheCi(PageCase):
 class TheDocuments(unittest.TestCase):
     def test_the_readme_and_the_notes_say_where_single_player_and_online_play_are(self):
         readme = read("README.md")
-        for needle in ("`/play.html?map=", "**Players 1 to 4**", "**Opponents**", "/four.html", "`--play`", "**Menu**"):
+        for needle in ("`/play.html?map=", "**Play vs the computer**", "**Play online**", "**Host a match**", "**Join a match**", "**START!**", "**Opponents**", "/four.html", "`--play`", "**Menu**",
+                       "`/stats`", "`web/front/`", "`tools/front_page_art/`"):
             self.assertIn(needle, readme, needle)
         notes = read("docs", "NETWORK_PORT.md")
-        for needle in ("The front page", "localArguments", "$arg_join", "`--play`"):
+        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**Play vs the computer**", "**Host a match**", "`ants-four-players`", "the block `STATS`", "`web/front/`"):
             self.assertIn(needle, notes, needle)
         self.assertNotIn("web/four.html", readme)
+        for stale in ("**Players 1 to 4**", "Players 1 to 4."):                            # (the form that the two cards replaced)
+            self.assertNotIn(stale, readme + notes, stale)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the front page's rules were NOT run (tests/scripts/web_lobby_check.js)")

@@ -7,7 +7,8 @@ Python 3; nothing else (the DevTools protocol is spoken with the client of web_h
 profile and port; nothing of yours is touched). What it checks:
 
   * the FRONT PAGE at "/" (a first visit: the two cards, Treasure, Medium opponents in all three bases, 2 players on the Host card; the header links, the footer's version and build, the picture's two buttons,
-    the name field);
+    the name field, the font; the line of numbers (not there, or well formed); 15 widths from 320 to 1600 px (no sideways scroll; Host and Join side by side from 900 to 1219 px only); the
+    contrast of all text at 1440 and 390 px);
   * the LEVEL BUTTONS: each opponent has a group of radio buttons (None, Easy, Medium, Hard) that the keyboard drives as a browser's radio buttons: the arrows move and check, Tab goes to the next group,
     the focused button shows its outline;
   * PLAY: START takes THIS tab to the game page on the chosen map (no new tab or window is opened), the game's own arguments are the chosen map, the setup screen's own
