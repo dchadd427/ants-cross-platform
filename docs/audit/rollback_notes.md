@@ -376,7 +376,7 @@ What the tests hold: **RP8.1** a lead that starts too low (one tick where the or
 | `L18_target_not_refreshed_by_the_tick` | the lead's target follows the owner's delay only, not the orders | KILLED by RP8.1, RP8.2, RP8.3, RP8.5 |
 | `N14_estimate_counts_the_turn` | the delay that the owner tells is the delay itself (a tick more than the lag) | KILLED by N3.31 |
 | `N16_default_does_not_learn` | the lead of a match does not learn from the orders | KILLED by N3.31 |
-| `N17_default_has_no_bias` | the lead of a match has no bias | KILLED by N3.31 |
+| `N17_default_has_a_bias` | the lead of a match has a bias of one (`lead_bias_ticks{0}` to `{1}`: the default is 0; the row said "has no bias" while the default was 1) | KILLED by RP8.6 (the defaults are pinned) and by N3.31 (the lead begins at the lag) |
 | `N18_default_window_of_one` | the lead of a match counts the last order only | SURVIVED the first run (every real order of N3.31 has the same lag); killed by RP8.6 (the defaults are pinned) |
 
 (Equivalent mutants that were not run: the `0u` of `n >= born ? n - born : 0u` is unreachable (an order cannot be sealed in a tick before the confirmed tick that it was given at: the turns that were sealed before were already run), the guard is there against an unsigned underflow; the `<=` of the freshness test against `<` differs for an order that is exactly 400 ticks old, one tick of twenty seconds.)
@@ -582,3 +582,21 @@ Every mutant of R1 - R6 was run again against the final tree (R2 - R5 had been r
 | `AP2_router_always_runs` | the router runs in a default match too | KILLED by PA7 |
 | `AP3_predicted_cues_without_a_prediction` | the predicted cues are asked of a prediction that is not there | KILLED by PA7 (a segmentation fault) |
 | `HP1_hud_not_told` / `HP2_hud_pointed_at_nothing` | the HUD keeps / loses its engine when the prediction is dropped | KILLED by PA8 |
+
+### The mutants that depend on the default, run on the tree where the prediction is off by default
+
+The default flip left the mutants that assumed an on default stale. Re-pointed and run (13, `tools/mutate.py`, all killed; the unmutated tree passed every baseline):
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `N17a_default_has_a_bias_RP8.6`, `N17b_default_has_a_bias_N3.31` | `lead_bias_ticks{0}` to `{1}` | KILLED by RP8.6 / N3.31 |
+| `H1_prediction_wanted_ignored` | `set_prediction_enabled(prediction_wanted_)` to `(true)`: every match predicts | KILLED by PA4 (its default match and its settings cases) |
+| `H2_no_prediction_option_ignored` | `--no-prediction` does not turn it off | KILLED by PA4 |
+| `H3_settings_key_ignored` / `H4_settings_beat_the_command_line` | the settings' key is not read / wins over the command line | KILLED by PA4 |
+| `D1a_netgame_default_on_N3.25`, `D1b_netgame_default_on_N3.32` | `NetGame::prediction_enabled_{false}` to `{true}` | KILLED by N3.25 / N3.32 |
+| `D2a_netgame_switch_never_on_N3.25`, `D2b_netgame_switch_never_on_N3.32` | `set_prediction_enabled` never enables | KILLED by N3.25 / N3.32 |
+| `N5_view_is_confirmed` | `view_engine()` is always the confirmed engine | KILLED by N3.25 |
+| `D3_app_config_default_on` | `ApplicationConfig::prediction{false}` to `{true}` | KILLED by PA4 |
+| `D4_app_wants_it_whatever_the_config_says` | `choose_prediction` starts from `true` | KILLED by PA4 |
+
+(`Application::prediction_wanted_{false}`, the member's own initial value, is overwritten by `choose_prediction()` at every `init`: a mutant of it is equivalent.)
