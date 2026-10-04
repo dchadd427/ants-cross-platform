@@ -580,7 +580,7 @@ private:
     void menu_connection_failed(const std::string& message);
     void abort_menu_connection();                         // Cancel, Back from the room, a failure: nothing of the connection stays
     void menu_connected();                                // the player is in the server's room
-    void menu_start_single(const std::vector<ai::BotSpec>& bots);
+    void menu_start_single(const MenuRequest& request);
     std::string menu_failure_text() const;                // what a failed join says, in the menu's words
     bool room_has_chosen_map() const;                     // hosting: the room that the server made is on the map that the player chose
     void show_opening_screens();                          // after the menu (or the loading screen of a game without one): the quick help when the option asks for it, else the setup screen

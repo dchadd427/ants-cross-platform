@@ -324,6 +324,9 @@ void MenuSettings::load(const ConfigStore& store) {
     host_players = store.get_int(kKeyHostPlayers, 4, 2, 5);                         // 2 <= value < 5
     host_fill = net::FillLevel::None;                                               // (anything that is not one of the four words is the default)
     net::parse_fill_level(trim_blanks(store.get_string(kKeyHostFill, std::string(), 16)), host_fill);
+    teams = LocalTeams{};                                                           // (anything that is not ffa or a pair of seats is free for all)
+    std::string why;
+    parse_local_teams(trim_blanks(store.get_string(kKeyTeams, std::string(), 8)), teams, why);
 }
 
 void MenuSettings::write(ConfigStore& store, MenuSetting setting) const {
@@ -345,6 +348,9 @@ void MenuSettings::write(ConfigStore& store, MenuSetting setting) const {
             break;
         case MenuSetting::HostFill:
             store.set_string(kKeyHostFill, net::fill_level_name(host_fill));
+            break;
+        case MenuSetting::Teams:
+            store.set_string(kKeyTeams, local_teams_text(teams));
             break;
     }
 }
@@ -397,6 +403,25 @@ std::vector<ai::BotSpec> StartMenu::bots() const {
         out.push_back(spec);
     }
     return out;
+}
+
+std::vector<LocalTeams> StartMenu::team_choices() const {
+    uint8_t filled = 0;
+    for (size_t s = 0; s < settings_.seats.size(); ++s) {
+        if (s != own_seat_ && settings_.seats[s] != SeatChoice::Empty) filled = static_cast<uint8_t>(filled | (1u << s));
+    }
+    return local_team_choices(own_seat_, filled);
+}
+
+LocalTeams StartMenu::teams() const {
+    const std::vector<LocalTeams> choices = team_choices();
+    return std::find(choices.begin(), choices.end(), settings_.teams) != choices.end() ? settings_.teams : LocalTeams{};
+}
+
+std::string StartMenu::teams_text(const LocalTeams& teams, uint8_t own_seat) {
+    if (!teams.set) return "Free for all";
+    const uint8_t other = teams.a == own_seat ? teams.b : teams.a;
+    return std::string("You + ") + sim::strings::colour_name(static_cast<uint8_t>(3u - other));
 }
 
 std::vector<size_t> StartMenu::other_seats() const {
@@ -597,6 +622,9 @@ std::vector<MenuElement> StartMenu::elements() const {
             MenuElement intro = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 90, kTextW, 22}, "You play the " + own + " ants. Who plays against you?", FontSize::Px18);
             intro.centered = true;
             out.push_back(intro);
+            // With two or more bots there is a choice of teams: a Teams row under the seats (the same row of a label and a cycler), and the panel is a little tighter (the seats 50 apart, not 56, the rule
+            // of the bots on one line, the buttons a little lower and smaller); with fewer bots it is exactly the panel that it always was
+            const bool teams_row = team_choices().size() > 1;
             int32_t y = 124;
             for (const size_t s : other_seats()) {
                 MenuElement portrait = control(MenuId::None, MenuKind::Portrait, ButtonRect{84, y, 40, kButtonH}, std::string(), FontSize::Px18);
@@ -607,15 +635,21 @@ std::vector<MenuElement> StartMenu::elements() const {
                 MenuElement cycler = control(static_cast<MenuId>(static_cast<uint8_t>(MenuId::Seat0) + s), MenuKind::Cycler, ButtonRect{280, y, 280, kButtonH}, std::string(), FontSize::Px24);
                 cycler.value = seat_choice_text(settings_.seats[s]);
                 out.push_back(cycler);
-                y += 56;
+                y += teams_row ? 50 : 56;
+            }
+            if (teams_row) {
+                out.push_back(control(MenuId::None, MenuKind::Text, ButtonRect{136, y + 8, 130, 24}, "Teams", FontSize::Px24));
+                MenuElement teams_cycler = control(MenuId::Teams, MenuKind::Cycler, ButtonRect{280, y, 280, 40}, std::string(), FontSize::Px24);
+                teams_cycler.value = teams_text(teams(), own_seat_);
+                out.push_back(teams_cycler);
             }
             {                                                           // what the seats mean, in both states: the original's game when nobody is seated, the bots' rule when somebody is
-                MenuElement rule = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 290, kTextW, 42}, any_bot() ? kBotsLine : kNoBotsLine, FontSize::Px18);
+                MenuElement rule = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, teams_row ? 318 : 290, kTextW, teams_row ? 22 : 42}, any_bot() ? kBotsLine : kNoBotsLine, FontSize::Px18);
                 rule.centered = true;
                 out.push_back(rule);
             }
-            out.push_back(control(MenuId::Continue, MenuKind::Button, centred_button(334), "Continue"));
-            out.push_back(control(MenuId::Back, MenuKind::Button, centred_button(388, 40), "Back"));
+            out.push_back(control(MenuId::Continue, MenuKind::Button, teams_row ? centred_button(342, 44) : centred_button(334), "Continue"));
+            out.push_back(control(MenuId::Back, MenuKind::Button, teams_row ? centred_button(390, 38) : centred_button(388, 40), "Back"));
             add_hint(out, "Up / Down: choose     Left / Right: change a seat     Enter: change a seat or continue     Esc: back");
             break;
         }
@@ -775,6 +809,19 @@ void StartMenu::cycle(MenuId id, int delta) {
         const int next = (static_cast<int>(settings_.seats[seat]) + delta + n) % n;
         settings_.seats[seat] = static_cast<SeatChoice>(next);
         notify(MenuSetting::Bots);
+        if (settings_.teams.set && teams() != settings_.teams) {      // the team that was chosen has a seat that is no bot any more: free for all again
+            settings_.teams = LocalTeams{};
+            notify(MenuSetting::Teams);
+        }
+    } else if (id == MenuId::Teams) {
+        const std::vector<LocalTeams> choices = team_choices();
+        const LocalTeams now = teams();
+        size_t at = 0;
+        for (size_t i = 0; i < choices.size(); ++i) {
+            if (choices[i] == now) at = i;
+        }
+        settings_.teams = choices[(at + (delta >= 0 ? 1 : choices.size() - 1)) % choices.size()];
+        notify(MenuSetting::Teams);
     } else if (id == MenuId::HostMap) {
         const int n = static_cast<int>(kMenuMapCount);
         settings_.host_map = (settings_.host_map + delta + n) % n;
@@ -866,12 +913,14 @@ void StartMenu::activate(MenuId id) {
         case MenuId::Seat1:
         case MenuId::Seat2:
         case MenuId::Seat3:
+        case MenuId::Teams:
         case MenuId::HostMap:
         case MenuId::HostPlayers:
         case MenuId::HostFill: cycle(id, 1); break;
         case MenuId::Continue:
             request(MenuRequest::Type::Single);
             request_.bots = bots();
+            request_.teams = teams();
             break;
         case MenuId::Name:
             set_selected(MenuId::Code);
@@ -1006,11 +1055,11 @@ void StartMenu::on_key(SDL_Keycode key, uint16_t modifiers, bool repeat) {
             break;
         case SDLK_LEFT:
             if (selected_ >= MenuId::Seat0 && selected_ <= MenuId::Seat3) cycle(selected_, -1);
-            else if (selected_ == MenuId::HostMap || selected_ == MenuId::HostPlayers || selected_ == MenuId::HostFill) cycle(selected_, -1);
+            else if (selected_ == MenuId::Teams || selected_ == MenuId::HostMap || selected_ == MenuId::HostPlayers || selected_ == MenuId::HostFill) cycle(selected_, -1);
             break;
         case SDLK_RIGHT:
             if (selected_ >= MenuId::Seat0 && selected_ <= MenuId::Seat3) cycle(selected_, 1);
-            else if (selected_ == MenuId::HostMap || selected_ == MenuId::HostPlayers || selected_ == MenuId::HostFill) cycle(selected_, 1);
+            else if (selected_ == MenuId::Teams || selected_ == MenuId::HostMap || selected_ == MenuId::HostPlayers || selected_ == MenuId::HostFill) cycle(selected_, 1);
             break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER:

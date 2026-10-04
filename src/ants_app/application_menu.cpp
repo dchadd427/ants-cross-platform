@@ -41,6 +41,7 @@ void Application::init_start_menu() {
     for (const ai::BotSpec& bot : config_.bots) {                    // --start-menu --bot 1:hard: the seats start as the command line says
         if (bot.seat < 4 && bot.kind == "standard") settings.seats[bot.seat] = seat_choice_of_level(bot.level);
     }
+    if (config_.teams.set) settings.teams = config_.teams;                                        // --start-menu --teams 0+1: the Teams choice starts as the command line says (it counts when the seats offer it)
     if (config_.fill_bots != net::FillLevel::None) settings.host_fill = config_.fill_bots;       // --start-menu --fill-bots hard: the Host panel starts as the command line says
     start_menu_.set_settings(settings);
 
@@ -128,7 +129,7 @@ void Application::process_menu_request(const MenuRequest& request) {
             quit();
             break;
         case MenuRequest::Type::Single:
-            menu_start_single(request.bots);
+            menu_start_single(request);
             break;
         case MenuRequest::Type::Join:
             set_fill_bots(net::FillLevel::None);                          // (a player who joins fills nothing: only the leader's START seats bots, and the room's choice is its host's)
@@ -342,9 +343,10 @@ std::string Application::menu_failure_text() const {
 // ---- the way into the original's screens and the way back ----------------------------------------------------------------------------------
 
 // Continue on the single-player panel: the match will have exactly the bots that `--bot SEAT:LEVEL` gives (same path: config_.bots, checked again at START with the fog option
-// that the setup screen has then); an empty list is the original's single-player game, unchanged
-void Application::menu_start_single(const std::vector<ai::BotSpec>& bots) {
-    config_.bots = bots;
+// that the setup screen has then) and the teams that `--teams` gives (config_.teams); an empty list is the original's single-player game, unchanged
+void Application::menu_start_single(const MenuRequest& request) {
+    config_.bots = request.bots;
+    config_.teams = request.teams;
     const uint8_t own = local_player_id_ < 4 ? local_player_id_ : uint8_t{0};
     local_roster_ = config_.bots.empty() ? uint8_t{0x0F} : bot_roster(own);
     if (const std::string why = bot_setup_problem(own, false); !why.empty()) {

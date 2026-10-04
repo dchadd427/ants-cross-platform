@@ -1088,6 +1088,86 @@ int main(int argc, char** argv) {
         }
     } TEST_END();
 
+    TEST_CASE("A2.3 Single player with teams: the Teams choice reaches the game as --teams does (three bots and You + Red: the same teams, roster, names and state after the dialog and 100 ticks as --bot 1:medium --bot 2:medium --bot 3:medium --teams 0+1), the engine's News Flash lines are in the chat log and no invitation dialog opened, the choice is written to the settings file and is in the panel of the next run, and two bots with no team chosen are free for all") {
+        TempDir temp;
+        Server server;
+        write_no_quick_help(temp.file("a.ini"));
+        write_no_quick_help(temp.file("b.ini"));
+        const auto allies = [](Application& app) {
+            std::string out;
+            for (uint8_t a : app.sim().get_world_state().player_alliances) out += std::to_string(a);
+            return out;
+        };
+        Played via_menu;
+        {
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("a.ini"))));
+            click(app, MenuId::Single);
+            for (const MenuId seat : {MenuId::Seat1, MenuId::Seat2, MenuId::Seat3}) {
+                click(app, seat);
+                click(app, seat);                                                            // medium
+            }
+            ASSERT_TRUE(app.start_menu().bots().size() == 3);
+            MenuElement row;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "Free for all");
+            click(app, MenuId::Teams);
+            ASSERT_EQ(app.start_menu().teams().a, 0);
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "You + Red");
+            ASSERT_HAS(read_file(temp.file("a.ini")), "teams=0+1");                          // written at once
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            ASSERT_EQ(app.state(), AppState::MapSelect);
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(allies(app), std::string("1032"));                                     // the player and Red, Blue and Black: before the first tick
+            ASSERT_TRUE(app.hud().alliance_dialog() == HUD::AllianceDialog::None);
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            via_menu = snapshot(app);
+            ASSERT_EQ(allies(app), std::string("1032"));                                     // 100 ticks on: the same
+            ASSERT_TRUE(app.hud().alliance_dialog() == HUD::AllianceDialog::None);
+            const std::string log = app.hud().chat_transcript(std::string());
+            size_t flashes = 0;
+            for (size_t at = log.find("are a team now!"); at != std::string::npos; at = log.find("are a team now!", at + 1)) ++flashes;
+            ASSERT_EQ(flashes, 2u);
+        }
+        Played by_flags;
+        {
+            std::vector<std::string> args = {"ants", "--headless", "--bot", "1:medium", "--bot", "2:medium", "--bot", "3:medium", "--teams", "0+1", "--settings", temp.file("b.ini")};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            ASSERT_FALSE(cfg.start_menu);
+            ASSERT_TRUE(cfg.teams.set && cfg.teams.a == 0 && cfg.teams.b == 1);
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(allies(app), std::string("1032"));
+            by_flags = snapshot(app);
+        }
+        ASSERT_TRUE(via_menu.bots && via_menu.bot_seats == 0x0E);
+        ASSERT_TRUE(same(via_menu, by_flags));                                               // the same game, hash and all
+        // the next run of the program finds the choice in its panel (the seats and the team come from the file)
+        {
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("a.ini"))));
+            ASSERT_TRUE(app.start_menu().teams() == LocalTeams({true, 0, 1}));
+            click(app, MenuId::Single);
+            MenuElement row;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "You + Red");
+            // two bots: the choice is for a seat that has none now, so it is no choice: free for all, and the game that follows has no team
+            click(app, MenuId::Seat1);
+            click(app, MenuId::Seat1);                                                       // Red: Medium, Hard, Empty
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "Free for all");
+            ASSERT_HAS(read_file(temp.file("a.ini")), "teams=ffa");
+            click(app, MenuId::Continue);
+            app.pump_network(0.01f);
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().roster_mask(), 0x0D);                                        // the player, Blue and Black
+            ASSERT_EQ(allies(app), std::string("4444"));
+        }
+    } TEST_END();
+
     TEST_CASE("A3.1 Join a demo room as the second player: Connecting, then the quick help (the option's default), then the guest's screen with the room as the server has it; the window's title carries the code; the third player fills the room and the server starts the match") {
         TempDir temp;
         Server server;
@@ -2025,6 +2105,42 @@ int main(int argc, char** argv) {
         ASSERT_EQ(app.sim().roster_mask(), 0x0D);                                            // blue (bit 2), green (bit 0) and black (bit 3) play; red has no ants
         ASSERT_EQ(app.sim().get_player_name(0), std::string("Bot (Easy)"));
         ASSERT_EQ(app.sim().get_player_name(3), std::string("Bot (Medium)"));
+    } TEST_END();
+
+    TEST_CASE("A10.5 --start-menu together with --teams (the way the tests and the screenshots show it): the Teams choice starts as the command line says when the seats offer it (three bots: You + Blue), a team of a seat that has no bot is no choice, and --teams without a mode does not skip the menu") {
+        TempDir temp;
+        write_no_quick_help(temp.file("s.ini"));
+        {
+            std::vector<std::string> args = {"ants", "--start-menu", "--headless", "--bot", "1", "--bot", "2", "--bot", "3", "--teams", "0+2", "--settings", temp.file("s.ini")};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            ASSERT_TRUE(cfg.start_menu && cfg.startup_error.empty() && cfg.teams.set);
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::StartMenu);
+            ASSERT_TRUE(app.start_menu().teams() == LocalTeams({true, 0, 2}));
+            click(app, MenuId::Single);
+            MenuElement row;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "You + Blue");
+            ASSERT_FALSE(std::ifstream(temp.file("s.ini")).good() && read_file(temp.file("s.ini")).find("teams=") != std::string::npos);     // nothing is written until the player changes it
+        }
+        {   // a team of a seat that has no bot (two bots, the team is with the third seat): free for all
+            std::vector<std::string> args = {"ants", "--start-menu", "--headless", "--bot", "1", "--bot", "2", "--teams", "0+3", "--settings", temp.file("s.ini")};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_TRUE(app.start_menu().teams() == LocalTeams{});
+            click(app, MenuId::Single);
+            MenuElement row;
+            ASSERT_TRUE(app.start_menu().find_element(MenuId::Teams, row) && row.value == "Free for all");
+        }
+        {   // --teams alone is no mode: the start menu shows (as it does for --name)
+            std::vector<std::string> args = {"ants", "--teams", "0+1"};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            ASSERT_TRUE(cfg.start_menu && cfg.teams.set);
+        }
     } TEST_END();
 
     TEST_CASE("A10.4 The window's own event loop reaches the menu (the tests above call the menu's handler directly): keys, typed text and the mouse queued in SDL's event queue change the panels in the next frame, and the window's close button ends the program from the menu") {
