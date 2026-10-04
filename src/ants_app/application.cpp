@@ -12,6 +12,7 @@
 #include "ants_ai/team_up.hpp"
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include <cctype>
 #include <ctime>
 #include <cstring>
@@ -515,6 +516,7 @@ bool Application::init(const ApplicationConfig& config) {
     choose_aspect();
     choose_zoom();
     choose_prediction();
+    make_rejoin_store();
 
     // 6. Create Desktop Window
     uint32_t win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -664,12 +666,24 @@ bool Application::init(const ApplicationConfig& config) {
     if (networked) {
         config_.start_in_map_select = true;
         net_ = std::make_unique<net::NetGame>(sim_);
+        hook_rejoin_store();
         net_->set_discovery(config_.lan_port);                                          // an open room announces itself to the local network (ants_net/lan.hpp)
         net_->set_game_version(std::string(VERSION_STRING));
         const bool host_role = config_.net_role == ApplicationConfig::NetRole::Host;
+        // A join that names a room of a server joins with the key of the seat that this machine had there, when the store has a fresh one (a game that was closed, a page that was reloaded): the
+        // newest entry of that server and room, or of the seat that --seat asks for. The key goes into the Hello only; the seat is the entry's, so that the key can be let go of by its seat.
+        net::SeatKey join_key{};
+        uint8_t join_seat = config_.net_seat;
+        if (!host_role && !config_.net_room.empty() && rejoin_store_) {
+            const std::string server = rejoin_server_text(config_.net_address, config_.net_port, config_.net_url);
+            if (const std::optional<RejoinEntry> kept = rejoin_store_->find(server, config_.net_room, config_.net_seat)) {
+                join_key = kept->key;
+                join_seat = kept->seat;
+            }
+        }
         const bool ok = host_role                   ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
-                        : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, config_.net_seat, config_.net_room, config_.net_token)
-                                                   : net_->join(config_.net_address, config_.net_port, player_name, config_.net_seat, config_.net_room, config_.net_token);
+                        : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, join_seat, config_.net_room, config_.net_token, join_key)
+                                                   : net_->join(config_.net_address, config_.net_port, player_name, join_seat, config_.net_room, config_.net_token, join_key);
         if (!ok && !host_role && !config_.net_url.empty()) {
 #if defined(__EMSCRIPTEN__)
             std::cerr << "[Application] Could not join " << config_.net_url << " (not a usable ws:// or wss:// address, or this browser has no WebSocket)" << std::endl;

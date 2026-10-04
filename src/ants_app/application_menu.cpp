@@ -2,6 +2,7 @@
 // make, the way into the original's screens, and the way back after a network game. The menu is part of a run only when ApplicationConfig::start_menu says so
 // (parse_arguments: a native game started without a mode on the command line); every other run has none of this code on its path.
 
+#include <filesystem>
 #include <iostream>
 #include <random>
 
@@ -389,6 +390,7 @@ void Application::leave_game() {
 
 // The tick, chat and HUD hooks of a NetGame that the application owns (a room or a match)
 void Application::attach_net() {
+    hook_rejoin_store();
     net_->set_prediction_enabled(prediction_wanted_);                              // the prediction of the player's own orders (net::Prediction): --prediction, the settings' key
     net_->set_on_prediction_dropped([this]() { hud_.set_sim_query(&sim_); });      // (its engine is gone: the HUD's special-target question goes back to the confirmed one at once)
     net_->set_fill_bots(config_.fill_bots);                                        // the bots that this machine's START seats in the empty seats (protocol 11; the menu's Host panel sets it)
@@ -400,6 +402,34 @@ void Application::attach_net() {
     });
     hud_.set_on_chat_send([this](const std::string& text, bool team) {
         if (network_active()) net_->chat(text, team);
+    });
+}
+
+// Where the keys of the seats are kept: the browser's local storage (the web build), a file beside the settings file (the folder of --settings, else the per-user application folder), and memory
+// alone for a run that has no settings file (a headless run: the tests'). rejoin_store.hpp
+void Application::make_rejoin_store() {
+#if defined(__EMSCRIPTEN__)
+    static BrowserStorage storage;
+    rejoin_store_ = std::make_unique<LocalStorageRejoinStore>(storage);
+#else
+    const std::string& settings = config_store_.location();
+    if (settings.empty()) {
+        rejoin_store_ = std::make_unique<MemoryRejoinStore>();
+        return;
+    }
+    rejoin_store_ = std::make_unique<FileRejoinStore>((std::filesystem::path(settings).parent_path() / "rejoin.txt").string());
+#endif
+}
+
+// The key of a seat is written when a server's room hands it out and let go of when it is of no more use (NetGame says when: the match ended, the seat was dropped, the player left ...). Nothing
+// here ever prints it.
+void Application::hook_rejoin_store() {
+    if (!net_ || !rejoin_store_) return;
+    net_->set_on_key([this](const net::RejoinKey& key) {
+        if (rejoin_store_ && !rejoin_store_->put(key)) std::cerr << "[Application] The key of your seat could not be kept: if this game is closed, it cannot take the seat back." << std::endl;
+    });
+    net_->set_on_forget_key([this](const net::RejoinKey& key) {
+        if (rejoin_store_) rejoin_store_->forget(key);
     });
 }
 

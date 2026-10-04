@@ -40,6 +40,7 @@
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/net_overlay.hpp"
+#include "ants_app/rejoin_store.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
 #include "ants_app/room_chat.hpp"
@@ -328,6 +329,10 @@ public:
     /// this machine, no room. While there is a box the status line shows the room's prompt only (the box shows the lines and the typed text; NetGame::set_chat_status_mirror is off).
     const SetupChatLayout* room_chat_box() const noexcept;
 
+    /// Where the keys of this player's seats are kept (rejoin_store.hpp): a file beside the settings file, the browser's local storage, or memory alone in a headless run without a settings file.
+    /// The application writes a key when a server's room hands it out and lets go of it when it is of no more use (NetGame::set_on_key / set_on_forget_key); a join that names a room, and the
+    /// start menu's "Rejoin your match", look a key up here. Public for the tests.
+    RejoinStore* rejoin_store() noexcept { return rejoin_store_.get(); }
     /// The network of a room or a match (nullptr unless started with --host / --join)
     net::NetGame* net() noexcept { return net_.get(); }
     /// True while a room or a network match exists
@@ -509,6 +514,7 @@ private:
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
+    std::unique_ptr<RejoinStore> rejoin_store_;           // the keys of the seats (before net_: its callbacks write here, and leave() writes last)
     std::unique_ptr<net::NetGame> net_;
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
@@ -586,6 +592,8 @@ private:
     void return_to_start_menu(const std::string& notice); // a network game is over (left, ended, lost): back to the menu, nothing of it stays
     void leave_game();                                    // Leave of a network game's screens: back to the menu when this run has one, else the program ends as always
     void attach_net();                                    // the tick, chat and HUD hooks of a NetGame that the application owns
+    void make_rejoin_store();                             // where the keys of the seats are kept (rejoin_store.hpp)
+    void hook_rejoin_store();                             // the NetGame's key callbacks write to it (before the join: a Hello that shows a key may be refused at once)
     void apply_player_name(const std::string& name);      // the name that the HUD, the chat, the results and the setup screen show for this player
     void set_window_title(const std::string& title);
 
