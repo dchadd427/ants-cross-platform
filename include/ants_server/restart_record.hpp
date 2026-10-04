@@ -29,8 +29,9 @@
 // milliseconds that all the rooms of the one-threaded server would wait for.
 //
 // READING. A file is read whole (it is bounded: RestartConfig::max_record_bytes) and checked frame by frame. Everything is validated before anything is built from it: the magic, every length against
-// the bytes that are left, every CRC, the order of the frames, the sequence of the turns, the checkpoints (a CHECK must name a turn that the file holds, in increasing order), every field of the head
-// (the strict decoders of the protocol read the start message, the commands, the names). A frame that is cut at the END of the file (a write that the death of the machine interrupted: a frame that
+// the bytes that are left, every CRC, the order of the frames, the sequence of the turns (at most kRestartMaxTurns, 25 hours of play, judged from a frame's header before any of its turns is decoded), the
+// checkpoints (a CHECK must name a turn that the file holds, in increasing order), every field of the head (the strict decoders of the protocol read the start message, the commands, the names). A
+// restore reads a record as Streaming: the turns are checked and counted, not kept, and the replay decodes them again one at a time (a hostile file of empty turns costs its own size and no more). A frame that is cut at the END of the file (a write that the death of the machine interrupted: a frame that
 // reaches the end of the file and does not fit it, one whose CRC is wrong and that is the last, or nothing but zero bytes) is a torn tail: it is dropped, and the record is the frames before it. Any
 // other fault, a bad CRC or length or order in the MIDDLE of the file, is corruption: the record is refused (the room is lost, as it was before records existed). A refused record is deleted.
 //
@@ -46,6 +47,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -64,6 +66,7 @@ inline constexpr size_t kRestartFrameOverhead = 1 + 4 + 4;                 // ty
 inline constexpr size_t kRestartMaxFramePayload = 1u << 20;                // nothing that the server writes is bigger (a turn is at most one message: 64 KB)
 inline constexpr size_t kRestartMaxHeadBytes = 8 * 1024;
 inline constexpr size_t kRestartMaxBatchTurns = 4096;                      // turns in one TURNS frame (a decoder's bound: the server writes one turn per frame)
+inline constexpr uint32_t kRestartMaxTurns = 1'800'000;                     // the turns of a whole record: 25 hours of play (a match ends by its own rules, run_ms is at most 24 h); a file with more is refused as corrupt, before its turns are decoded
 
 enum class RestartFrame : uint8_t { Head = 1, Turns = 2, Check = 3 };
 
@@ -129,18 +132,28 @@ struct RestartLoaded {
     std::string why;                                        // not Ok: one sentence
     std::string path;                                       // read_restart_record: where it came from
     RestartHead head;
-    std::vector<net::TurnMsg> turns;                        // numbered from 0, no hole
-    std::vector<RestartCheck> checks;                       // increasing; each names a turn that `turns` holds
+    uint32_t turn_count{0};                                 // the turns that the record holds (at most kRestartMaxTurns): turns.size() when they are kept
+    std::vector<net::TurnMsg> turns;                        // numbered from 0, no hole; not kept (empty) when the record was read as Streaming
+    std::vector<uint8_t> bytes;                             // Streaming: the file's bytes, which for_each_restart_turn decodes the turns from again, one at a time
+    std::vector<RestartCheck> checks;                       // increasing; each names a turn that the record holds
     uint64_t file_bytes{0};
     uint64_t good_bytes{0};                                 // the end of the last good frame: where a restored room goes on writing (what follows is a torn tail and is cut off)
     bool torn{false};                                       // bytes after good_bytes were dropped: a write that was cut short
     bool ok() const noexcept { return status == Status::Ok; }
 };
 
-/// Parses the bytes of a record (no file: the tests and the fuzzer). Never crashes, never allocates more than the input justifies, whatever the bytes are.
-RestartLoaded parse_restart_record(const uint8_t* data, size_t size);
+/// Whether the turns of a record that is read are kept in the result (Whole: the tests, small tools) or only checked and counted (Streaming: a restore, which decodes them again from the file's bytes
+/// one at a time, for_each_restart_turn, and so never holds more than one decoded turn: a hostile file of many empty turns costs its own size and no more)
+enum class RestartRead : uint8_t { Whole, Streaming };
+
+/// Parses the bytes of a record (no file: the tests and the fuzzer). Never crashes, whatever the bytes are; what it keeps is bounded by the input and by kRestartMaxTurns (the turns of a record
+/// that passes are at most that many: about 58 MB decoded); with `keep_turns` false they are checked and counted and not kept (turn_count, checks, good_bytes are all the same).
+RestartLoaded parse_restart_record(const uint8_t* data, size_t size, bool keep_turns = true);
 /// Reads the file at `path` (a regular file, not a symbolic link, at most `max_bytes` bytes) and parses it. `path` is kept in the result.
-RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes);
+RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes, RestartRead mode = RestartRead::Whole);
+/// Gives `fn` every turn of a record that was read, in order, until it says false: the kept turns, or (a Streaming record) the turns decoded again from the file's bytes, one at a time. True when `fn`
+/// was given every turn; false when it said stop, or when the bytes cannot be decoded (cannot be: they were checked when the record was read).
+bool for_each_restart_turn(const RestartLoaded& rec, const std::function<bool(const net::TurnMsg&)>& fn);
 
 /// What a server is told about its restart records
 struct RestartConfig {

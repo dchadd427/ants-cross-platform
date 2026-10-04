@@ -6513,7 +6513,7 @@ void run_persist_server_tests_3() {
         ASSERT_TRUE(w.until([&]() { return !w.status("K-1").paused; }, 90000));
         w.run(3000);
         collect();
-        // a second room whose record cannot be restored (another version): the failed room and its report
+        // a second room whose record cannot be restored (another network protocol): the failed room and its report
         w.stop_server(false);
         w.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1);
         w.start_server(500);
@@ -7013,6 +7013,199 @@ void run_persist_server_tests_6() {
 }
 
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The review of the restart records (docs/audit/persist_notes.md, "State at handoff"): S3.103 and on
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+void put_le32(uint8_t* p, uint32_t v) {
+    for (int i = 0; i < 4; ++i) p[i] = static_cast<uint8_t>((v >> (8 * i)) & 0xFFu);
+}
+
+// Frames of EMPTY turns, as an honest writer or a hostile one makes them: `turns` of them from number `first` on, `per_frame` to a frame (1: what the server writes, 4096: the most that a frame may hold)
+void append_empty_turns(std::vector<uint8_t>& out, uint32_t first, uint32_t turns, uint32_t per_frame) {
+    uint8_t frame[5 + 6 + 2 * 4096 + 4];
+    for (uint32_t done = 0; done < turns;) {
+        const uint32_t n = std::min(per_frame, turns - done);
+        const uint32_t length = 6 + 2 * n;
+        std::memset(frame, 0, sizeof frame);
+        frame[0] = 2;
+        put_le32(frame + 1, length);
+        put_le32(frame + 5, first + done);
+        frame[9] = static_cast<uint8_t>(n & 0xFFu);
+        frame[10] = static_cast<uint8_t>(n >> 8);
+        const size_t body = 5 + length;
+        put_le32(frame + body, restart_crc32(frame, body));
+        const size_t at = out.size();
+        out.resize(at + body + 4);
+        std::memcpy(out.data() + at, frame, body + 4);
+        done += n;
+    }
+}
+
+// A record of sample_head() and `turns` empty turns
+std::vector<uint8_t> empty_turns_record(uint32_t turns, uint32_t per_frame) {
+    const std::vector<uint8_t> head = encode_restart_head(sample_head("REC-1"));
+    std::vector<uint8_t> out = with_magic(head);
+    append_empty_turns(out, 0, turns, per_frame);
+    return out;
+}
+
+// A match played for `play_ms` and then lost with the server (a crash): the room's record is on disk, its machines do not come back
+void crash_with_record_of(PWorld& w, const std::string& code, uint32_t play_ms, uint8_t players = 2) {
+    std::vector<RClient*> m = play_room(w, held_spec(code, players), play_ms);
+    for (RClient* p : m) p->reconnects = false;
+    w.stop_server(false);
+}
+
+// A record whose head is made over by `edit` (the frames behind it are kept as they are)
+void rewrite_head(PWorld& w, const std::string& code, const std::function<void(RestartHead&)>& edit) {
+    const std::vector<uint8_t> bytes = read_all_bytes(w.record_path(code));
+    const auto frames = frames_of(bytes);
+    RestartLoaded rec = parse_restart_record(bytes.data(), bytes.size());
+    edit(rec.head);
+    std::vector<uint8_t> out = with_magic(encode_restart_head(rec.head));
+    const size_t at = out.size();
+    out.resize(at + (bytes.size() - frames[0].second));
+    std::copy(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end(), out.begin() + static_cast<std::ptrdiff_t>(at));
+    write_all_bytes(w.record_path(code), out);
+}
+
+}  // namespace
+
+void run_persist_review_tests() {
+    TEST_CASE("S3.103 A Hostile Record Costs What Its Bytes Cost (M1 Of The Review): A Record May Hold 1,800,000 Turns (25 Hours Of Play) And Not One More, In Both Modes; The Limit Is Judged From The Header Of A Frame, Before Any Of Its Turns Is Decoded; A Record Read As Streaming Keeps No Turns (Its Count, Checkpoints, Head And Good Bytes Are The Whole Record's) And Gives Its Turns Again One At A Time; The Biggest Hostile File (48 MiB Of Valid Empty Turns, One To A Frame) Is Refused As Corrupt At The Start And Deleted; A Head Whose Keep Time Or Run Limit Is Beyond 24 Hours Is No Room That This Server Would Make") {
+        {   // the limit: exactly kRestartMaxTurns empty turns are read (4096 to a frame), one more is corrupt; the same in both modes
+            const std::vector<uint8_t> at_limit = empty_turns_record(kRestartMaxTurns, 4096);
+            const RestartLoaded whole = parse_restart_record(at_limit.data(), at_limit.size());
+            ASSERT_TRUE(whole.ok() && whole.turn_count == kRestartMaxTurns && whole.turns.size() == kRestartMaxTurns && !whole.torn && whole.bytes.empty());
+            const RestartLoaded streamed = parse_restart_record(at_limit.data(), at_limit.size(), false);
+            ASSERT_TRUE(streamed.ok() && streamed.turn_count == kRestartMaxTurns && streamed.turns.empty() && streamed.good_bytes == whole.good_bytes && streamed.file_bytes == whole.file_bytes);
+            ASSERT_TRUE(same_head(streamed.head, whole.head));
+            for (const bool keep : {true, false}) {
+                const std::vector<uint8_t> over = empty_turns_record(kRestartMaxTurns + 1, 4096);
+                const RestartLoaded r = parse_restart_record(over.data(), over.size(), keep);
+                ASSERT_TRUE(!r.ok() && r.status == RestartLoaded::Status::Corrupt && r.why.find("more turns than a match can") != std::string::npos);
+                ASSERT_TRUE(r.turns.empty() && r.turn_count == 0 && r.checks.empty() && r.good_bytes == 0);       // (a refused record hands out nothing)
+            }
+        }
+        {   // the header decides: a frame that would take the record past the limit is refused for its count, whatever its body holds (here: nothing that decodes)
+            std::vector<uint8_t> bytes = empty_turns_record(kRestartMaxTurns - 1, 4096);
+            std::vector<uint8_t> payload(6, 0);
+            put_le32(payload.data(), kRestartMaxTurns - 1);
+            payload[4] = 2;                                                                                // two turns: one more than the limit allows; the body that would hold them is not there
+            const std::vector<uint8_t> frame = test_frame(2, payload);
+            bytes.insert(bytes.end(), frame.begin(), frame.end());
+            const RestartLoaded r = parse_restart_record(bytes.data(), bytes.size(), false);
+            ASSERT_TRUE(!r.ok() && r.status == RestartLoaded::Status::Corrupt && r.why.find("more turns than a match can") != std::string::npos);
+            payload[4] = 1;                                                                                // ... and one turn that is within the limit but has no body is "cut short", the old message
+            std::vector<uint8_t> within = empty_turns_record(kRestartMaxTurns - 1, 4096);
+            const std::vector<uint8_t> frame_one = test_frame(2, payload);
+            within.insert(within.end(), frame_one.begin(), frame_one.end());
+            const RestartLoaded cut = parse_restart_record(within.data(), within.size(), false);
+            ASSERT_TRUE(!cut.ok() && cut.why.find("cut short") != std::string::npos);
+        }
+        {   // a record read as Streaming keeps no turns and gives them again, one at a time, the same as the kept ones; an early stop stops
+            RestartConfig cfg = test_restart_config("persist-103a");
+            RestartStore store(cfg);
+            std::string why;
+            ASSERT_TRUE(store.prepare(why));
+            auto writer = store.create(sample_head("S-1"), why);
+            ASSERT_TRUE(writer != nullptr);
+            for (uint32_t n = 0; n < 100; ++n) {
+                ASSERT_TRUE(writer->append_turn(sample_turn(n)));
+                if ((n + 1) % net::kHashEveryTurns == 0) ASSERT_TRUE(writer->append_check(n, 0x1000u + n));
+            }
+            ASSERT_TRUE(writer->sync());
+            const std::string path = writer->path();
+            writer.reset();
+            {   // (a torn tail after the good frames: the walk stops at the last good byte)
+                std::vector<uint8_t> bytes = read_all_bytes(path);
+                const std::vector<uint8_t> next = test_frame(2, turns_payload(100, {sample_turn(100)}));
+                bytes.insert(bytes.end(), next.begin(), next.begin() + 9);
+                write_all_bytes(path, bytes);
+            }
+            const RestartLoaded kept = read_restart_record(path, cfg.max_record_bytes);
+            const RestartLoaded streamed = read_restart_record(path, cfg.max_record_bytes, RestartRead::Streaming);
+            ASSERT_TRUE(kept.ok() && streamed.ok() && kept.torn && streamed.torn);
+            ASSERT_TRUE(kept.turns.size() == 100 && kept.turn_count == 100 && kept.bytes.empty());
+            ASSERT_TRUE(streamed.turns.empty() && streamed.turn_count == 100 && streamed.bytes.size() == streamed.file_bytes);
+            ASSERT_TRUE(streamed.good_bytes == kept.good_bytes && streamed.checks.size() == 5 && same_checks(streamed.checks, kept.checks, 5) && same_head(streamed.head, kept.head) && streamed.path == path);
+            std::vector<net::TurnMsg> a;
+            std::vector<net::TurnMsg> b;
+            ASSERT_TRUE(for_each_restart_turn(kept, [&](const net::TurnMsg& t) { a.push_back(t); return true; }));
+            ASSERT_TRUE(for_each_restart_turn(streamed, [&](const net::TurnMsg& t) { b.push_back(t); return true; }));
+            ASSERT_TRUE(a.size() == 100 && b.size() == 100 && same_turns(a, b, 100) && same_turns(b, kept.turns, 100));
+            size_t seen = 0;
+            ASSERT_FALSE(for_each_restart_turn(streamed, [&](const net::TurnMsg&) { return ++seen < 7; }));        // the callback said stop at the seventh turn
+            ASSERT_EQ(seen, size_t{7});
+            ASSERT_FALSE(for_each_restart_turn(kept, [&](const net::TurnMsg&) { return false; }));
+            // a streamed record that is refused hands out no bytes
+            std::vector<uint8_t> broken = read_all_bytes(path);
+            broken[sizeof(kRestartMagic) + 7] ^= 0x20;                                                     // inside the head
+            write_all_bytes(path, broken);
+            const RestartLoaded bad = read_restart_record(path, cfg.max_record_bytes, RestartRead::Streaming);
+            ASSERT_TRUE(!bad.ok() && bad.bytes.empty() && bad.turns.empty() && bad.turn_count == 0);
+        }
+        {   // the biggest hostile file that a record may be (48 MiB: valid empty turns, one to a frame) is refused at the start: corrupt, named in the log, deleted, nothing left of it
+            PWorld w("persist-103b");
+            w.start_server(500);
+            w.stop_server(false);
+            const uint32_t turns = 2'900'000;                                                              // 17 bytes each: 47 MiB
+            const std::vector<uint8_t> hostile = empty_turns_record(turns, 1);
+            ASSERT_TRUE(hostile.size() < w.restart.max_record_bytes && hostile.size() > 40ull * 1024 * 1024);
+            const fs::path planted = fs::path(w.restart.dir) / "room-HOSTILE-00000001.restart";
+            write_all_bytes(planted, hostile);
+            const auto began = std::chrono::steady_clock::now();
+            w.start_server(500);
+            const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
+            ASSERT_EQ(w.report.items.size(), size_t{1});
+            ASSERT_TRUE(w.report.items[0].outcome == RestoreItem::Outcome::Unreadable && w.report.items[0].note.find("corrupt") != std::string::npos && w.report.items[0].note.find("more turns than a match can") != std::string::npos);
+            ASSERT_FALSE(fs::exists(planted));
+            bool named = false;
+            for (const std::string& n : w.notices) named = named || (n.find("room-HOSTILE-00000001.restart") != std::string::npos && n.find("more turns than a match can") != std::string::npos);
+            ASSERT_TRUE(named);
+            ASSERT_EQ(w.mgr->room_count(), size_t{0});
+            ASSERT_TRUE(seconds < 20.0);                                                                   // (it is refused when the 1,800,001st turn is read: a second at the most; the bound is loose, a loaded machine)
+            // the same file read as a file in both modes
+            write_all_bytes(planted, hostile);
+            for (const RestartRead mode : {RestartRead::Whole, RestartRead::Streaming}) {
+                const RestartLoaded r = read_restart_record(planted.string(), w.restart.max_record_bytes, mode);
+                ASSERT_TRUE(!r.ok() && r.status == RestartLoaded::Status::Corrupt && r.turns.empty() && r.bytes.empty());
+            }
+        }
+        {   // a head whose keep time or run limit is beyond what the control interface allows (24 hours) is no room that this server would make, in create_room and in a restore
+            ASSERT_EQ(kRestartMaxTurns, 1'800'000u);
+            World w;
+            RoomSpec ok_spec = spec_of("RG-1");
+            ok_spec.keep_ms = 24u * 3600u * 1000u;
+            ok_spec.run_ms = 24u * 3600u * 1000u;
+            ASSERT_TRUE(w.mgr.create_room(ok_spec, w.now).ok);                                              // (24 h exactly is fine)
+            RoomSpec long_keep = spec_of("RG-2");
+            long_keep.keep_ms = 24u * 3600u * 1000u + 1;
+            CreateResult r = w.mgr.create_room(long_keep, w.now);
+            ASSERT_TRUE(!r.ok && r.http_status == 400 && r.error.find("keep_seconds") != std::string::npos);
+            RoomSpec long_run = spec_of("RG-3");
+            long_run.run_ms = 24u * 3600u * 1000u + 1;
+            r = w.mgr.create_room(long_run, w.now);
+            ASSERT_TRUE(!r.ok && r.http_status == 400 && r.error.find("max_run_seconds") != std::string::npos);
+            long_run.run_ms = 0xFFFFFFFFu;
+            ASSERT_EQ(w.mgr.create_room(long_run, w.now).http_status, 400);
+            for (const bool keep_side : {true, false}) {
+                PWorld p("persist-103c");
+                p.start_server(500);
+                crash_with_record_of(p, "RH-1", 6000);
+                rewrite_head(p, "RH-1", [keep_side](RestartHead& h) { (keep_side ? h.keep_ms : h.run_ms) = 24u * 3600u * 1000u + 1; });
+                p.start_server(500);
+                ASSERT_TRUE(p.report.items.size() == 1 && p.report.items[0].outcome == RestoreItem::Outcome::Ended && p.report.items[0].note.find("would not make") != std::string::npos);
+                ASSERT_TRUE(p.status("RH-1").state == RoomState::Failed && p.record_files().empty());
+            }
+        }
+    } TEST_END();
+}
+
+
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The real program: ants_server as a child process of the test, stopped with SIGTERM or killed with SIGKILL in the middle of a match and started again over the same folder, and two
@@ -7444,6 +7637,7 @@ int main() {
     run_persist_server_tests_4();
     run_persist_server_tests_5();
     run_persist_server_tests_6();
+    run_persist_review_tests();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();
 #endif

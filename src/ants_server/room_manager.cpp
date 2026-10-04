@@ -45,6 +45,8 @@ namespace {
 std::string spec_range_error(const RoomSpec& spec) {
     if (spec.wait_ms < 1000 || spec.wait_ms > 24u * 3600u * 1000u) return "wait_seconds must be 1 to 86400";
     if (spec.load_ms < 1000 || spec.load_ms > 600u * 1000u) return "load_seconds must be 1 to 600";
+    if (spec.keep_ms > 24u * 3600u * 1000u) return "keep_seconds must be 0 to 86400";           // (as the control interface bounds them: a hostile record's head must not keep a failed room for ever or lift the limit of a match)
+    if (spec.run_ms > 24u * 3600u * 1000u) return "max_run_seconds must be at most 86400";
     if (spec.vote_after_ms < kMinVoteAfterMs || spec.vote_after_ms > kMaxVoteAfterMs) return "hold_vote_seconds must be 5 to 3600";
     if (spec.max_pause_ms < kMinMaxPauseMs || spec.max_pause_ms > kMaxMaxPauseMs) return "max_pause_seconds must be 60 to 86400";
     if (spec.max_catch_up_ms < kMinCatchUpMs || spec.max_catch_up_ms > kMaxCatchUpLimitMs) return "max_catch_up_seconds must be 10 to 3600";
@@ -352,14 +354,14 @@ RestoreReport RoomManager::restore_rooms(uint32_t now_ms) {
             restart_->note("restart record " + item.file + " was not restored: " + note);
             report.items.push_back(item);
         };
-        RestartLoaded rec = read_restart_record(path, cfg.max_record_bytes);
+        RestartLoaded rec = read_restart_record(path, cfg.max_record_bytes, RestartRead::Streaming);       // (checked and counted, the turns are not kept: the replay decodes them one at a time)
         if (!rec.ok()) {
             unreadable(std::string(read_status_name(rec.status)) + ": " + rec.why);
             continue;
         }
         const RestartHead& head = rec.head;
         item.code = head.code;
-        item.turns = static_cast<uint32_t>(rec.turns.size());
+        item.turns = rec.turn_count;
         if (rooms_.find(head.code) != rooms_.end()) {                       // (two records for one code cannot be: the name holds a hash of the code; a room made before the restore can)
             unreadable("a room with the code " + head.code + " exists already");
             continue;

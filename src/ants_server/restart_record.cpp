@@ -224,13 +224,46 @@ bool decode_restart_head(const uint8_t* payload, size_t size, RestartHead& out, 
 // Reading
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-RestartLoaded parse_restart_record(const uint8_t* data, size_t size) {
+namespace {
+
+// The turns of one TURNS frame (the caller has checked its first_turn and count): each is handed to `emit` as it is decoded, and `emit` says false to stop. Null when the frame is good (or `emit`
+// stopped: `stopped`), else what is wrong with it.
+template <class Emit>
+const char* decode_turns_frame(const uint8_t* payload, size_t length, uint32_t first, uint16_t count, Emit&& emit, bool& stopped) {
+    size_t off = 6;
+    for (uint32_t i = 0; i < count; ++i) {
+        if (length - off < 2) return "a turn is cut short";
+        const uint16_t commands = get_u16(payload + off);
+        off += 2;
+        if (commands > net::kMaxTurnCommands) return "a turn has more commands than a turn may";
+        net::TurnMsg turn;
+        turn.turn = first + i;
+        turn.commands.reserve(commands);
+        for (uint16_t c = 0; c < commands; ++c) {
+            sim::Command cmd;
+            size_t used = 0;
+            if (sim::decode(payload + off, length - off, cmd, &used) != sim::DecodeError::None || cmd.issuer >= sim::MAX_PLAYERS) return "a command of a turn is not one";
+            off += used;
+            turn.commands.push_back(std::move(cmd));
+        }
+        if (!emit(std::move(turn))) {
+            stopped = true;
+            return nullptr;
+        }
+    }
+    return off != length ? "a turns frame has bytes after its last turn" : nullptr;
+}
+
+}  // namespace
+
+RestartLoaded parse_restart_record(const uint8_t* data, size_t size, bool keep_turns) {
     RestartLoaded r;
     r.file_bytes = size;
     const auto refuse = [&](RestartLoaded::Status status, std::string why) {
         r.status = status;
         r.why = std::move(why);
         r.head = RestartHead{};
+        r.turn_count = 0;
         r.turns.clear();
         r.checks.clear();
         r.good_bytes = 0;
@@ -286,33 +319,23 @@ RestartLoaded parse_restart_record(const uint8_t* data, size_t size) {
             if (length < 6) return corrupt("a turns frame is too short");
             const uint32_t first = get_u32(payload);
             const uint16_t count = get_u16(payload + 4);
-            if (first != r.turns.size()) return corrupt("the turns are not numbered one after the other");
+            if (first != r.turn_count) return corrupt("the turns are not numbered one after the other");
             if (count == 0 || count > kRestartMaxBatchTurns) return corrupt("a turns frame holds an impossible number of turns");
-            size_t off = 6;
-            for (uint32_t i = 0; i < count; ++i) {
-                if (length - off < 2) return corrupt("a turn is cut short");
-                const uint16_t commands = get_u16(payload + off);
-                off += 2;
-                if (commands > net::kMaxTurnCommands) return corrupt("a turn has more commands than a turn may");
-                net::TurnMsg turn;
-                turn.turn = first + i;
-                turn.commands.reserve(commands);
-                for (uint16_t c = 0; c < commands; ++c) {
-                    sim::Command cmd;
-                    size_t used = 0;
-                    if (sim::decode(payload + off, length - off, cmd, &used) != sim::DecodeError::None || cmd.issuer >= sim::MAX_PLAYERS) return corrupt("a command of a turn is not one");
-                    off += used;
-                    turn.commands.push_back(std::move(cmd));
-                }
-                r.turns.push_back(std::move(turn));
+            if (uint64_t{first} + count > kRestartMaxTurns) return corrupt("the record holds more turns than a match can (" + std::to_string(kRestartMaxTurns) + " at the most)");     // (from the header: nothing of the frame is decoded)
+            bool stopped = false;
+            if (const char* bad = decode_turns_frame(payload, length, first, count, [&](net::TurnMsg&& turn) {
+                    if (keep_turns) r.turns.push_back(std::move(turn));
+                    return true;
+                }, stopped)) {
+                return corrupt(bad);
             }
-            if (off != length) return corrupt("a turns frame has bytes after its last turn");
+            r.turn_count = first + count;
         } else {                                                                  // a checkpoint
             if (length != 12) return corrupt("a checkpoint has the wrong size");
             RestartCheck c;
             c.turn = get_u32(payload);
             c.hash = static_cast<uint64_t>(get_u32(payload + 4)) | (static_cast<uint64_t>(get_u32(payload + 8)) << 32);
-            if ((uint64_t{c.turn} + 1) % net::kHashEveryTurns != 0 || c.turn >= r.turns.size() || static_cast<int64_t>(c.turn) <= last_check) return corrupt("a checkpoint names a turn that it cannot");
+            if ((uint64_t{c.turn} + 1) % net::kHashEveryTurns != 0 || c.turn >= r.turn_count || static_cast<int64_t>(c.turn) <= last_check) return corrupt("a checkpoint names a turn that it cannot");
             last_check = static_cast<int64_t>(c.turn);
             r.checks.push_back(c);
         }
@@ -324,7 +347,7 @@ RestartLoaded parse_restart_record(const uint8_t* data, size_t size) {
     return r;
 }
 
-RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes) {
+RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes, RestartRead mode) {
     RestartLoaded r;
     r.path = path;
     const auto fail = [&](RestartLoaded::Status status, std::string why) {
@@ -343,9 +366,36 @@ RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes) {
     std::vector<uint8_t> bytes(static_cast<size_t>(size));
     if (size > 0) in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
     if (!in && size > 0) return fail(RestartLoaded::Status::Unreadable, "the record cannot be read");
-    RestartLoaded loaded = parse_restart_record(bytes.data(), bytes.size());
+    RestartLoaded loaded = parse_restart_record(bytes.data(), bytes.size(), mode == RestartRead::Whole);
     loaded.path = path;
+    if (mode == RestartRead::Streaming && loaded.ok()) loaded.bytes = std::move(bytes);        // (the replay decodes the turns from these, one at a time)
     return loaded;
+}
+
+bool for_each_restart_turn(const RestartLoaded& rec, const std::function<bool(const net::TurnMsg&)>& fn) {
+    if (rec.bytes.empty()) {                                                      // the turns were kept
+        for (const net::TurnMsg& turn : rec.turns) {
+            if (!fn(turn)) return false;
+        }
+        return true;
+    }
+    size_t pos = sizeof(kRestartMagic);                                           // Streaming: the frames again, as parse_restart_record checked them
+    const size_t end_of_good = static_cast<size_t>(std::min<uint64_t>(rec.good_bytes, rec.bytes.size()));
+    while (pos < end_of_good) {
+        if (end_of_good - pos < kRestartFrameOverhead) return false;
+        const uint8_t* frame = rec.bytes.data() + pos;
+        const uint32_t length = get_u32(frame + 1);
+        const uint64_t end = uint64_t{pos} + 5 + length + 4;
+        if (end > end_of_good) return false;
+        if (frame[0] == static_cast<uint8_t>(RestartFrame::Turns)) {
+            if (length < 6) return false;
+            bool stopped = false;
+            const char* bad = decode_turns_frame(frame + 5, length, get_u32(frame + 5), get_u16(frame + 9), [&fn](net::TurnMsg&& turn) { return fn(turn); }, stopped);
+            if (bad != nullptr || stopped) return false;
+        }
+        pos = static_cast<size_t>(end);
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------

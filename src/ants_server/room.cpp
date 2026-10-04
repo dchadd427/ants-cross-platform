@@ -546,6 +546,7 @@ std::unique_ptr<Room> Room::refused(const RestartHead& head, const std::string& 
 }
 
 bool Room::restore(const RestartLoaded& rec, uint32_t now_ms, uint32_t restart_vote_after_ms, uint32_t replay_budget_ms, std::string& why) {
+    why.clear();
     const RestartHead& h = rec.head;
     if (state_ != RoomState::Waiting || session_ != nullptr || !spec_.reconnect || restart_store_ == nullptr || h.code != spec_.code || !rec.ok()) {
         why = "the room is not one that a record can be restored into";
@@ -593,27 +594,31 @@ bool Room::restore(const RestartLoaded& rec, uint32_t now_ms, uint32_t restart_v
     // hash must be the one that the old server had at that turn: a replay that is not the match that was played (the rules of this build are not those of the one that wrote the record) stops here
     net::LockstepRunner& runner = session_->runner();
     size_t next_check = 0;
-    for (const net::TurnMsg& turn : rec.turns) {
-        if (!session_->restore_turn(turn)) {
-            why = "the turn log cannot hold the match (its limit, or the server's memory for logs)";
-            return false;
-        }
-        if ((turn.turn + 1) % net::kHashEveryTurns != 0) continue;
-        runner.fast_forward(static_cast<uint32_t>(runner.queued()));
-        if (next_check < rec.checks.size() && rec.checks[next_check].turn == turn.turn) {
-            if (sim_->state_hash().total != rec.checks[next_check].hash) {
-                why = "the replay does not agree with the state hash that the record holds for turn " + std::to_string(turn.turn) + ": the rules of this build are not those that played the match";
+    if (!for_each_restart_turn(rec, [&](const net::TurnMsg& turn) {          // (one decoded turn at a time: a record read as Streaming holds none)
+            if (!session_->restore_turn(turn)) {
+                why = "the turn log cannot hold the match (its limit, or the server's memory for logs)";
                 return false;
             }
-            ++next_check;
-        }
-        if (real_ms() > replay_budget_ms) {
-            why = "the replay would take longer than the " + std::to_string(replay_budget_ms / 1000) + " s that a restore may";
-            return false;
-        }
+            if ((turn.turn + 1) % net::kHashEveryTurns != 0) return true;
+            runner.fast_forward(static_cast<uint32_t>(runner.queued()));
+            if (next_check < rec.checks.size() && rec.checks[next_check].turn == turn.turn) {
+                if (sim_->state_hash().total != rec.checks[next_check].hash) {
+                    why = "the replay does not agree with the state hash that the record holds for turn " + std::to_string(turn.turn) + ": the rules of this build are not those that played the match";
+                    return false;
+                }
+                ++next_check;
+            }
+            if (real_ms() > replay_budget_ms) {
+                why = "the replay would take longer than the " + std::to_string(replay_budget_ms / 1000) + " s that a restore may";
+                return false;
+            }
+            return true;
+        })) {
+        if (why.empty()) why = "the record's turns could not be read again";
+        return false;
     }
     runner.fast_forward(static_cast<uint32_t>(runner.queued()));
-    if (runner.next_turn_to_execute() != rec.turns.size() || runner.queued() != 0 || !runner.at_boundary() || next_check != rec.checks.size()) {
+    if (runner.next_turn_to_execute() != rec.turn_count || runner.queued() != 0 || !runner.at_boundary() || next_check != rec.checks.size()) {
         why = "the replay of the record did not run every turn of it";
         return false;
     }
@@ -627,13 +632,13 @@ bool Room::restore(const RestartLoaded& rec, uint32_t now_ms, uint32_t restart_v
     session_->start_restored(now_ms, humans, dropped);
     // The match began that long ago, as far as its limit and its age are concerned: its first turn waited for the dialog (protocol 12) and every turn is 50 ms of play. The pause that the restart is
     // does not count (Attendance::held_ms), as every pause does not.
-    const uint32_t ran_ms = net::kMatchStartDelayMs + static_cast<uint32_t>(rec.turns.size()) * net::kTurnMs;
+    const uint32_t ran_ms = net::kMatchStartDelayMs + rec.turn_count * net::kTurnMs;
     started_ms_ = now_ms - ran_ms;
     created_ms_ = started_ms_;
     retry_at_ms_ = now_ms;
     // the record goes on being written (a torn tail is cut off); when it cannot be opened the room is restored all the same, and says that a second restart would end it
     std::string open_why;
-    record_ = restart_store_->reopen(rec.path, rec.good_bytes, static_cast<uint32_t>(rec.turns.size()), open_why);
+    record_ = restart_store_->reopen(rec.path, rec.good_bytes, rec.turn_count, open_why);
     if (record_ == nullptr) {
         record_note_ = "the restart record could not be opened again: " + open_why;
         restart_store_->remove_file(rec.path);                   // (a record that is not written any more would bring the match back at the wrong tick)
@@ -646,7 +651,7 @@ bool Room::restore(const RestartLoaded& rec, uint32_t now_ms, uint32_t restart_v
     if (!start_bots(start.seed, why)) return false;              // (the bots start again at the restored tick: their tasks are soft, docs/BOTS.md; a bot that was running goes on from what it sees)
     state_ = RoomState::Running;
     restored_ = true;
-    restored_turns_ = static_cast<uint32_t>(rec.turns.size());
+    restored_turns_ = rec.turn_count;
     last_turns_ = session_->turns_sealed();
     last_ticks_ = static_cast<uint32_t>(sim_->current_tick());
     restore_ms_ = real_ms();
