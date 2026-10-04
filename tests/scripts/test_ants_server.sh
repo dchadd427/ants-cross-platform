@@ -776,7 +776,7 @@ check "the server's log names the rooms' ends with what the pause came to, and n
 # The real program with real game clients. The server keeps a record of the running room (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of the match
 # (it exits at once and leaves the record), is started again over the same folder (the room is back, paused, every seat held: the clients' game cannot rejoin by itself yet, so they ended
 # with the lost-connection message), is killed with SIGKILL and started once more (the record that the restored room went on writing restores again), and when the owner closes the room
-# its record goes. The C++ test of the suite (S3.89, S3.90) does the same with two machines that DO find the room again; here the players are the real games.
+# its record goes. The C++ test of the suite (S3.95, S3.96) does the same with two machines that DO find the room again; here the players are the real games.
 RR_PORT="$(free_port)"
 RR_CTL="$(free_port)"
 RR_CODE="E2E-KEEP-$RANDOM"

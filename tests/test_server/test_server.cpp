@@ -56,6 +56,21 @@
 #endif
 #include <cstring>
 #include "ants_test_paths.hpp"
+#ifdef ANTS_HAS_SERVER_BINARY
+namespace ants_test_paths {
+const char* server_dir();                                       // (a tiny source that CMake generates: tests/test_server/CMakeLists.txt)
+}
+// The program of the process tests: in the folder that CMake names (the Makefile and Ninja generators), or in the folder of a configuration inside it (Visual Studio, Xcode)
+inline std::string server_binary_path() {
+    const std::filesystem::path dir = ants_test_paths::server_dir();
+    for (const char* sub : {"", "Release", "RelWithDebInfo", "MinSizeRel", "Debug"}) {
+        const std::filesystem::path candidate = dir / sub / "ants_server";
+        if (std::filesystem::exists(candidate)) return candidate.string();
+    }
+    return (dir / "ants_server").string();
+}
+#define ANTS_SERVER_BINARY (server_binary_path())
+#endif
 
 using namespace ants;
 using namespace ants::server;
@@ -5231,7 +5246,7 @@ void run_bot_tests() {
 
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// Restart records (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"): S3.76 and on
+// Restart records (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"): S3.82 and on
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 namespace {
@@ -5312,7 +5327,7 @@ bool same_checks(const std::vector<RestartCheck>& a, const std::vector<RestartCh
 }  // namespace
 
 void run_persist_tests() {
-    TEST_CASE("S3.76 The Record: A Head And Its Turns And Checkpoints Read Back Exactly (Every Field, Every Command, The Keys); The File Is For Its Owner Only (Mode 600 In A Folder Of Mode 700), Has Its Own Name (Two Codes That Differ In Case Differ), Is Made All At Once (A Process That Dies At Its First Write Leaves No Record Under Its Name), A Torn Tail Is Cut Off When It Is Opened Again; The Budget Follows Every Byte; The CRC Is CRC-32") {
+    TEST_CASE("S3.82 The Record: A Head And Its Turns And Checkpoints Read Back Exactly (Every Field, Every Command, The Keys); The File Is For Its Owner Only (Mode 600 In A Folder Of Mode 700), Has Its Own Name (Two Codes That Differ In Case Differ), Is Made All At Once (A Process That Dies At Its First Write Leaves No Record Under Its Name), A Torn Tail Is Cut Off When It Is Opened Again; The Budget Follows Every Byte; The CRC Is CRC-32") {
         {   // CRC-32: the check value of the standard, and in pieces
             const uint8_t digits[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
             ASSERT_EQ(restart_crc32(digits, 9), 0xCBF43926u);
@@ -5521,7 +5536,7 @@ void run_persist_tests() {
 #endif
     } TEST_END();
 
-    TEST_CASE("S3.77 The Reader Is Safe With Anything: Every Prefix Of A Record Is Read As Far As It Is Whole (A Cut Inside The Head Is Refused, A Cut After It Is A Torn Tail); Every Flipped Bit In A Frame Is Either Refused Or Stops The Reading Early (Never Altered Turns); Garbage, Hostile Lengths, Repeated, Reordered And Misplaced Frames, A Second Head, A Checkpoint Of A Turn That Is Not There, Heads That Are Wrong In Each Field, A File That Is Too Big Or No File: All Refused With A Reason, None Crashes Or Allocates Without Bound (Runs Under AddressSanitizer)") {
+    TEST_CASE("S3.83 The Reader Is Safe With Anything: Every Prefix Of A Record Is Read As Far As It Is Whole (A Cut Inside The Head Is Refused, A Cut After It Is A Torn Tail); Every Flipped Bit In A Frame Is Either Refused Or Stops The Reading Early (Never Altered Turns); Garbage, Hostile Lengths, Repeated, Reordered And Misplaced Frames, A Second Head, A Checkpoint Of A Turn That Is Not There, Heads That Are Wrong In Each Field, A File That Is Too Big Or No File: All Refused With A Reason, None Crashes Or Allocates Without Bound (Runs Under AddressSanitizer)") {
         RestartConfig cfg = test_restart_config("rec-fuzz");
         RestartStore store(cfg);
         std::string why;
@@ -5808,7 +5823,7 @@ ctl::JsonValue status_json(PWorld& w, const std::string& code) {
 }  // namespace
 
 void run_persist_server_tests() {
-    TEST_CASE("S3.78 A Match Survives A Restart Of The Server (SIGTERM): The Record Holds Every Turn That Was Sealed And Has The Keys Of The Seats; After The Restart The Room Is Back With Its Code, Its Turns Replayed (The State Hash Is That Of An Independent Replay And The Stored Checkpoints Are The Machines' Own Hashes), Every Seat Held And The Match Paused; The Three Machines Come Back By Themselves, The Match Goes On And Ends Identical On Them And On The Referee, And The Record Is Gone") {
+    TEST_CASE("S3.84 A Match Survives A Restart Of The Server (SIGTERM): The Record Holds Every Turn That Was Sealed And Has The Keys Of The Seats; After The Restart The Room Is Back With Its Code, Its Turns Replayed (The State Hash Is That Of An Independent Replay And The Stored Checkpoints Are The Machines' Own Hashes), Every Seat Held And The Match Paused; The Three Machines Come Back By Themselves, The Match Goes On And Ends Identical On Them And On The Referee, And The Record Is Gone") {
         PWorld w("persist-78");
         w.start_server(500);
         const RoomSpec spec = held_spec("P-1", 3);
@@ -5883,7 +5898,7 @@ void run_persist_server_tests() {
         ASSERT_TRUE(w.mgr->take_ended(w.server_now()).size() == 1);
     } TEST_END();
 
-    TEST_CASE("S3.79 What Cannot Be Restored Is Said, And The Room Is A Failed Room With The Reason (Status, JSON, The Log's Report): Another Game Version, Another Protocol, A Map That Changed Or Is Gone, A Record That Is Older Than An Hour, A Replay That Does Not Agree With The Stored Hash (A Tampered Checkpoint, A Tampered Turn), A Room That This Server Would Not Make, A Replay That Takes Too Long, A Turn Log That Cannot Hold The Match, No Room For It; Each Record Is Deleted, A Match That Is Within Its Hour Is Restored, The Failed Room Keeps Its Code Until Its Keep Time Is Over And Says NoSuchRoom To A Hello")  {
+    TEST_CASE("S3.85 What Cannot Be Restored Is Said, And The Room Is A Failed Room With The Reason (Status, JSON, The Log's Report): Another Game Version, Another Protocol, A Map That Changed Or Is Gone, A Record That Is Older Than An Hour, A Replay That Does Not Agree With The Stored Hash (A Tampered Checkpoint, A Tampered Turn), A Room That This Server Would Not Make, A Replay That Takes Too Long, A Turn Log That Cannot Hold The Match, No Room For It; Each Record Is Deleted, A Match That Is Within Its Hour Is Restored, The Failed Room Keeps Its Code Until Its Keep Time Is Over And Says NoSuchRoom To A Hello")  {
         struct Refusal {
             const char* what;
             std::function<void(PWorld&)> before_restart;           // what changes between the crash and the new server
@@ -5996,10 +6011,30 @@ void run_persist_server_tests() {
             w.start_server(500);
             crash_with_record(w, "R-4", 12000);
             const RestartLoaded rec = w.read_record("R-4");
-            size_t first_order = 0;
-            while (first_order < rec.turns.size() && rec.turns[first_order].commands.empty()) ++first_order;
-            ASSERT_TRUE(first_order < 18);                                              // (the machines give their first order within a second)
-            change_frame(w, "R-4", 1 + first_order, [](std::vector<uint8_t>& p) { p[6 + 2 + 3] = static_cast<uint8_t>(p[6 + 2 + 3] + 7); });   // the first command of that turn: its tile_x (offset 3 in the command)
+            // the first turn that holds a group move (a machine gives an order every 0.7 s from the end of the start dialog on, and the room discards what it is sent before its first turn: protocol 12)
+            size_t move_turn = 0;
+            while (move_turn < rec.turns.size()) {
+                bool has_move = false;
+                for (const sim::Command& c : rec.turns[move_turn].commands) has_move = has_move || c.type == sim::CommandType::GroupMove;
+                if (has_move) break;
+                ++move_turn;
+            }
+            ASSERT_TRUE(move_turn < 60);
+            size_t frame_of_turn = 0;                                                   // (the record's frames: the head, one frame a turn, a checkpoint after every 20th turn)
+            {
+                const std::vector<uint8_t> bytes = record_bytes(w, "R-4");
+                const auto frames = frames_of(bytes);
+                size_t turns_seen = 0;
+                for (size_t i = 1; i < frames.size(); ++i) {
+                    if (bytes[frames[i].first] != 2) continue;
+                    if (turns_seen++ == move_turn) {
+                        frame_of_turn = i;
+                        break;
+                    }
+                }
+            }
+            ASSERT_TRUE(frame_of_turn != 0);
+            change_frame(w, "R-4", frame_of_turn, [](std::vector<uint8_t>& p) { p.resize(8); p[6] = 0; p[7] = 0; });   // that turn without its commands (first turn, count 1, then a command count of 0)
             w.start_server(500);
             ASSERT_TRUE(w.report.items.size() == 1 && w.report.items[0].outcome == RestoreItem::Outcome::Ended);
             ASSERT_TRUE(w.report.items[0].note.find("does not agree") != std::string::npos);
@@ -6053,7 +6088,7 @@ void run_persist_server_tests() {
 
 
 void run_persist_server_tests_2() {
-    TEST_CASE("S3.80 Files That Are No Records Are Refused Safely At The Start (An Empty File, Garbage, A Head That Is Cut Short, A Record Of Another Format, A Record With A Flipped Bit In The Middle, A Text, A File Bigger Than A Record May Be, A Link; A Folder With A Record's Name Is Not Looked At): Each Is Named In The Log With A Reason And Deleted, Nothing Crashes Or Waits, The Good Record Next To Them Is Restored, The Files That Are Not Records' Names Are Left Alone, And The Server Then Makes Rooms As Usual") {
+    TEST_CASE("S3.86 Files That Are No Records Are Refused Safely At The Start (An Empty File, Garbage, A Head That Is Cut Short, A Record Of Another Format, A Record With A Flipped Bit In The Middle, A Text, A File Bigger Than A Record May Be, A Link; A Folder With A Record's Name Is Not Looked At): Each Is Named In The Log With A Reason And Deleted, Nothing Crashes Or Waits, The Good Record Next To Them Is Restored, The Files That Are Not Records' Names Are Left Alone, And The Server Then Makes Rooms As Usual") {
         PWorld w("persist-80");
         w.start_server(500);
         {
@@ -6135,7 +6170,7 @@ void run_persist_server_tests_2() {
         ASSERT_TRUE(w.status("N-1").state == RoomState::Running && w.status("N-1").record_kept);
     } TEST_END();
 
-    TEST_CASE("S3.81 A Record Whose Last Frame Was Cut Short (A Write That The Death Of The Machine Interrupted) Is Read As Far As It Is Whole, The Torn Bytes Are Cut Off And The Room Goes On Writing After The Last Good Frame; A Record That Lacks The Last Seconds (The Machine Died And The Disk Never Had Them) Is Restored To That Tick, And The Machines That Were Ahead Of It Are Told BadRequest (They Must Start The Match From Nothing, Which They Can: Their Keys Are Good) And Do, And The Match Goes On To The End Identical") {
+    TEST_CASE("S3.87 A Record Whose Last Frame Was Cut Short (A Write That The Death Of The Machine Interrupted) Is Read As Far As It Is Whole, The Torn Bytes Are Cut Off And The Room Goes On Writing After The Last Good Frame; A Record That Lacks The Last Seconds (The Machine Died And The Disk Never Had Them) Is Restored To That Tick, And The Machines That Were Ahead Of It Are Told BadRequest (They Must Start The Match From Nothing, Which They Can: Their Keys Are Good) And Do, And The Match Goes On To The End Identical") {
         {
             PWorld w("persist-81a");
             w.start_server(500);
@@ -6204,7 +6239,7 @@ void run_persist_server_tests_2() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.82 The Record Always Holds What Any Machine Has Run (Written Before The Turn Is Sent): In A Match Of Three Players, At Every 10 ms Step Of 30 s Of Play The File Holds Exactly The Turns That The Room Has Sealed, And No Machine Has Received A Turn That The File Lacks (So A Process That Is Killed At Any Moment Loses Nothing That A Player Has Seen)") {
+    TEST_CASE("S3.88 The Record Always Holds What Any Machine Has Run (Written Before The Turn Is Sent): In A Match Of Three Players, At Every 10 ms Step Of 30 s Of Play The File Holds Exactly The Turns That The Room Has Sealed, And No Machine Has Received A Turn That The File Lacks (So A Process That Is Killed At Any Moment Loses Nothing That A Player Has Seen)") {
         PWorld w("persist-82");
         w.start_server(500);
         ASSERT_TRUE(w.mgr->create_room(held_spec("W-1", 3), w.server_now()).ok);
@@ -6251,7 +6286,7 @@ struct FileSizeLimit {
 #endif
 
 void run_persist_server_tests_3() {
-    TEST_CASE("S3.83 The Disk Has Limits And The Match Does Not Suffer From Them: A Record That Passes The Size Of A Record, One That The Server's Budget Cannot Hold (At Its Head, And As It Grows), A Write That The Disk Refuses (EFBIG), A Turn Log That Passed Its Limit: Each Ends The Record (The File Is Deleted: A Record That Stops In The Middle Of A Match Would Bring It Back At The Wrong Tick), The Room's Status Says Why, The Log Gets A Line, The Budget Is Whole Again And The Match Goes On To Its End On The Same State Everywhere")  {
+    TEST_CASE("S3.89 The Disk Has Limits And The Match Does Not Suffer From Them: A Record That Passes The Size Of A Record, One That The Server's Budget Cannot Hold (At Its Head, And As It Grows), A Write That The Disk Refuses (EFBIG), A Turn Log That Passed Its Limit: Each Ends The Record (The File Is Deleted: A Record That Stops In The Middle Of A Match Would Bring It Back At The Wrong Tick), The Room's Status Says Why, The Log Gets A Line, The Budget Is Whole Again And The Match Goes On To Its End On The Same State Everywhere")  {
         {   // the size of one record
             PWorld w("persist-83a");
             w.restart.max_record_bytes = 3000;
@@ -6345,7 +6380,7 @@ void run_persist_server_tests_3() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.84 A Record Lives As Long As Its Room Has A Match To Bring Back: A Waiting Room Has None; The Start Makes It And A Cancelled Start Deletes It (A Machine That Cannot Load The Map); A Running Room Has One Until The Owner Closes It (DELETE /rooms/<code>) Or The Match Ends; A Room That Holds No Seats Has None (The Status Says Why); A Server That Keeps No Records Says So; The Server's Stop Keeps The Records Of The Rooms That Have One And Closes The Others")  {
+    TEST_CASE("S3.90 A Record Lives As Long As Its Room Has A Match To Bring Back: A Waiting Room Has None; The Start Makes It And A Cancelled Start Deletes It (A Machine That Cannot Load The Map); A Running Room Has One Until The Owner Closes It (DELETE /rooms/<code>) Or The Match Ends; A Room That Holds No Seats Has None (The Status Says Why); A Server That Keeps No Records Says So; The Server's Stop Keeps The Records Of The Rooms That Have One And Closes The Others")  {
         {
             PWorld w("persist-84");
             w.start_server(500);
@@ -6431,7 +6466,7 @@ void run_persist_server_tests_3() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.85 No Key Is In Any Text The Server Makes: The Record Holds The Keys (As Bytes: The Test Looks For Them There First), And They Are In No Notice For The Log, No Status (Running, Restored, Refused, Finished), No JSON Of The Control Interface, No List, No Result Of An Ended Room, Through A Restart And To The Match's End") {
+    TEST_CASE("S3.91 No Key Is In Any Text The Server Makes: The Record Holds The Keys (As Bytes: The Test Looks For Them There First), And They Are In No Notice For The Log, No Status (Running, Restored, Refused, Finished), No JSON Of The Control Interface, No List, No Result Of An Ended Room, Through A Restart And To The Match's End") {
         PWorld w("persist-85");
         w.start_server(500);
         std::vector<RClient*> m = play_room(w, held_spec("K-1", 3), 6000);
@@ -6499,7 +6534,7 @@ void run_persist_server_tests_3() {
 
 
 void run_persist_server_tests_4() {
-    TEST_CASE("S3.86 After A Restart The Room Waits For Its Players As For A Lost Link, With The Restart's Longer Wait: Of Three Players Two Come Back And One Never Does: No Vote Is Open At 30 s, None At 85 s, The Vote Opens At 90 s About The Seat That Is Missing (Two Voters), One Vote Of Two Does Not Win It And The Second Does, The Seat Is Dropped And The Match Goes On (A Quit Ends It), Whatever The New Server's Clock Is (0.5 s, A Second Before Its 32-Bit Wrap, Half Way); A Seat That Had Been Dropped Before The Restart Is Told So By Its Key; A Room Whose Players Never Come Back Ends 'Everybody Left' At The Cap")  {
+    TEST_CASE("S3.92 After A Restart The Room Waits For Its Players As For A Lost Link, With The Restart's Longer Wait: Of Three Players Two Come Back And One Never Does: No Vote Is Open At 30 s, None At 85 s, The Vote Opens At 90 s About The Seat That Is Missing (Two Voters), One Vote Of Two Does Not Win It And The Second Does, The Seat Is Dropped And The Match Goes On (A Quit Ends It), Whatever The New Server's Clock Is (0.5 s, A Second Before Its 32-Bit Wrap, Half Way); A Seat That Had Been Dropped Before The Restart Is Told So By Its Key; A Room Whose Players Never Come Back Ends 'Everybody Left' At The Cap")  {
         const uint32_t clocks[] = {500u, 0xFFFFFC18u, 0x7FFFFFF0u};
         for (const uint32_t clock : clocks) {
             PWorld w("persist-86");
@@ -6590,7 +6625,7 @@ void run_persist_server_tests_4() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.87 The Bots Of A Room Sit Down Again At The Restored Tick And Play On: A Room Of One Person And A Bot Of Its Specification, And A Room Whose Leader's START Filled The Empty Seats; After The Restart The Status Lists The Bots (Fill Marked As Fill), The Controller Is There, The Bot Is Never Absent (Only The Person Is), And When The Person Is Back The Bots Give Orders Again (Commands Of Their Seats In Turns After The Restored One); A Quit Ends The Match With The Same State On The Person's Machine And The Referee") {
+    TEST_CASE("S3.93 The Bots Of A Room Sit Down Again At The Restored Tick And Play On: A Room Of One Person And A Bot Of Its Specification, And A Room Whose Leader's START Filled The Empty Seats; After The Restart The Status Lists The Bots (Fill Marked As Fill), The Controller Is There, The Bot Is Never Absent (Only The Person Is), And When The Person Is Back The Bots Give Orders Again (Commands Of Their Seats In Turns After The Restored One); A Quit Ends The Match With The Same State On The Person's Machine And The Referee") {
         const auto commands_of_seat = [](const RestartLoaded& rec, size_t from, uint8_t seat) {
             size_t n = 0;
             for (size_t i = from; i < rec.turns.size(); ++i) {
@@ -6685,7 +6720,7 @@ void run_persist_server_tests_4() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.88 A Match That Had Ended When The Server Stopped (Its Last Turn Was In The Record, The Room Had Not Finished Yet) Is Finished At The Restart With The Same Final State As The Match That Was Never Interrupted: The Result Rows, The Referee's Hash And The Report Of Its End Are There, Its Record Is Deleted, Nobody Is Waited For")  {
+    TEST_CASE("S3.94 A Match That Had Ended When The Server Stopped (Its Last Turn Was In The Record, The Room Had Not Finished Yet) Is Finished At The Restart With The Same Final State As The Match That Was Never Interrupted: The Result Rows, The Referee's Hash And The Report Of Its End Are There, Its Record Is Deleted, Nobody Is Waited For")  {
         PWorld w("persist-88");
         w.start_server(500);
         std::vector<RClient*> m = play_room(w, held_spec("O-1", 2), 6000);
@@ -6729,7 +6764,7 @@ void run_persist_server_tests_4() {
         ASSERT_TRUE(status_to_json(ended[0]).get("state_hash").str().size() == 16);
     } TEST_END();
 
-    TEST_CASE("S3.91 The Switch That Phase 2 Flips: Rooms Hold Seats By Default Exactly When kReconnectByDefault Says So (ServerLimits, A Room Specification Made By The Manager, A Room Made By The Control Interface Without A \"reconnect\" Key, A Demo Room), And Whatever The Default Is A Room's Own Key Wins; A Restored Room Holds Seats Whatever The Default Is Now (It Held Them When It Was Written)")  {
+    TEST_CASE("S3.97 The Switch That Phase 2 Flips: Rooms Hold Seats By Default Exactly When kReconnectByDefault Says So (ServerLimits, A Room Specification Made By The Manager, A Room Made By The Control Interface Without A \"reconnect\" Key, A Demo Room), And Whatever The Default Is A Room's Own Key Wins; A Restored Room Holds Seats Whatever The Default Is Now (It Held Them When It Was Written)")  {
         ASSERT_EQ(ServerLimits().reconnect, kReconnectByDefault);
         World dflt;
         ASSERT_EQ(dflt.mgr.default_spec().reconnect, kReconnectByDefault);
@@ -6783,7 +6818,7 @@ void run_persist_server_tests_4() {
 
 
 void run_persist_server_tests_5() {
-    TEST_CASE("S3.92 The Room's Wall-Clock Limit Counts The Play That Came Before The Restart (Not The Time The Match Waited For Its Players): A Room With A Limit Of 70 s Whose Match Had Been Played For 35 s When The Server Stopped Fails 35 s Of Play After The Players Are Back, Not 70") {
+    TEST_CASE("S3.98 The Room's Wall-Clock Limit Counts The Play That Came Before The Restart (Not The Time The Match Waited For Its Players): A Room With A Limit Of 70 s Whose Match Had Been Played For 35 s When The Server Stopped Fails 35 s Of Play After The Players Are Back, Not 70") {
         PWorld w("persist-92");
         w.start_server(500);
         RoomSpec spec = held_spec("L-1", 2);
@@ -6802,7 +6837,7 @@ void run_persist_server_tests_5() {
         ASSERT_TRUE(w.record_files().empty());
     } TEST_END();
 
-    TEST_CASE("S3.93 A Record Keeps No Address Of A Client: The Start Message That The Room Sent To Machines That Announce A Port Names Their Addresses (Host Migration's Business, A Game On The Local Network's); The Record's Start Message Has None, And Neither Has The Start That A Machine From Nothing Is Sent After A Restart")  {
+    TEST_CASE("S3.99 A Record Keeps No Address Of A Client: The Start Message That The Room Sent To Machines That Announce A Port Names Their Addresses (Host Migration's Business, A Game On The Local Network's); The Record's Start Message Has None, And Neither Has The Start That A Machine From Nothing Is Sent After A Restart")  {
         PWorld w("persist-93");
         w.announce_port = 4321;
         w.start_server(500);
@@ -6829,7 +6864,7 @@ void run_persist_server_tests_5() {
 
 
 void run_persist_server_tests_6() {
-    TEST_CASE("S3.94 What A Record Costs (Measured): Its Size For A Minute Of Play (An Idle Match, A Busy One Of Three Players And Of Four), The Cost Of Writing A Turn (One write() Of A Few Dozen Bytes) And Of The Flush Once A Second, And The Time It Takes To Bring A Match Back (Three Minutes Of Play Here; ANTS_PERSIST_MEASURE_LONG=1 Measures The Longest Plays Of TINY And Of TREASURE): The Numbers Are Printed, The Bounds Are Generous (A Record Of A Minute Under 120 KB, A Turn Under 1 ms, A Flush Under 250 ms, A Restore Of A Minute Of Play Under 5 s)")  {
+    TEST_CASE("S3.100 What A Record Costs (Measured): Its Size For A Minute Of Play (An Idle Match, A Busy One Of Three Players And Of Four), The Cost Of Writing A Turn (One write() Of A Few Dozen Bytes) And Of The Flush Once A Second, And The Time It Takes To Bring A Match Back (Three Minutes Of Play Here; ANTS_PERSIST_MEASURE_LONG=1 Measures The Longest Plays Of TINY And Of TREASURE): The Numbers Are Printed, The Bounds Are Generous (A Record Of A Minute Under 120 KB, A Turn Under 1 ms, A Flush Under 250 ms, A Restore Of A Minute Of Play Under 5 s)")  {
         const auto seconds_since = [](const std::chrono::steady_clock::time_point& t0) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(); };
         // the size of a minute of play
         {
@@ -6932,6 +6967,38 @@ void run_persist_server_tests_6() {
                 ASSERT_TRUE(total_seconds < 5.0 * r.minutes);
             }
         }
+    } TEST_END();
+
+    TEST_CASE("S3.102 A Restored Room Is A Match That Runs, As Far As /busy Counts (The Public Answer That A Deploy Waits On): After A Restart Of The Server Two Rooms Whose Players Have Not Come Back Count Two Matches And Their People (The Seats Are Held, A Restart Now Would Interrupt Them Again; A Bot Is No Person), And After A Restart That Cannot Bring Them Back (Another Game Version) They Count Nothing") {
+        PWorld w("persist-102");
+        w.start_server(500);
+        const auto busy = [&w]() { return w.mgr->busy(w.server_now()); };
+        RoomSpec one = held_spec("BZ-1", 2);
+        one.bots.push_back(ai::BotSpec{1, "standard", ai::Level::Easy});
+        ASSERT_TRUE(w.mgr->create_room(one, w.server_now()).ok);
+        RClient& pat = w.connect("Pat", "BZ-1");
+        std::vector<RClient*> two = play_room(w, held_spec("BZ-2", 2), 4000);
+        ASSERT_TRUE(w.until([&]() { return w.status("BZ-1").state == RoomState::Running; }, 20000));
+        ASSERT_TRUE(busy().matches == 2 && busy().players == 3);                              // Pat and two more people: the bot of BZ-1 is no person
+        pat.reconnects = false;
+        for (RClient* p : two) p->reconnects = false;
+        // ---- a restart: both rooms are back, paused, every seat of a person held and absent; they are matches that run, with their people ---------------------------------------------------------------
+        w.stop_server(false);
+        w.start_server(500);
+        ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 2);
+        for (const char* code : {"BZ-1", "BZ-2"}) {
+            const RoomStatus s = w.status(code);
+            ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.paused && !s.absent.empty());
+        }
+        ASSERT_EQ(busy().matches, 2u);
+        ASSERT_EQ(busy().players, 3u);                                                         // (nobody is connected: the held seats are the people that a restart now would interrupt again)
+        // ---- a restart that cannot bring them back (the game's version is another one): they are failed rooms, and a failed room counts nothing --------------------------------------------------
+        w.stop_server(false);
+        w.restart.identity.game_version = "v9.9.9";
+        w.start_server(500);
+        ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Ended) == 2);
+        ASSERT_TRUE(w.status("BZ-1").state == RoomState::Failed && w.status("BZ-2").state == RoomState::Failed);
+        ASSERT_TRUE(busy().matches == 0 && busy().players == 0);
     } TEST_END();
 }
 
@@ -7240,7 +7307,7 @@ std::string shell_output(const std::string& command, int& exit_status) {
     return out;
 }
 
-// The scenario of S3.95: a server that runs in a docker container that the operator made (a volume at /results, the game and control ports published on this machine, --reconnect), stopped with
+// The scenario of S3.101: a server that runs in a docker container that the operator made (a volume at /results, the game and control ports published on this machine, --reconnect), stopped with
 // `docker stop` and started again. The test never makes or removes a container: it only starts, stops and asks the one whose name it is given.
 void container_scenario(const std::string& name, uint16_t game_port, uint16_t ctl_port, const std::string& secret) {
     int rc = 0;
@@ -7318,15 +7385,15 @@ void container_scenario(const std::string& name, uint16_t game_port, uint16_t ct
 }  // namespace
 
 void run_persist_process_tests() {
-    TEST_CASE("S3.89 The Real Program, Told To Stop (SIGTERM) In The Middle Of A Match Of A Demo Room: It Exits At Once With Status 0 (Well Within The 15 s That The Stack Gives Docker), The Record Holds Every Turn That A Machine Has Been Sent, Is For Its Owner Only And Is Still There; The Program Started Again Over The Same Folder Logs The Restored Room, Both Machines (The Real Lobby And Session Over Real TCP) Find The Room By Its Code And Their Keys By Themselves, Nobody Is Told That It Is Ahead, The Match Goes On And Ends: The Referee's State Hash (From The Control Interface) Is The Machines'; The Record Is Gone, No Key Is In The Log") {
+    TEST_CASE("S3.95 The Real Program, Told To Stop (SIGTERM) In The Middle Of A Match Of A Demo Room: It Exits At Once With Status 0 (Well Within The 15 s That The Stack Gives Docker), The Record Holds Every Turn That A Machine Has Been Sent, Is For Its Owner Only And Is Still There; The Program Started Again Over The Same Folder Logs The Restored Room, Both Machines (The Real Lobby And Session Over Real TCP) Find The Room By Its Code And Their Keys By Themselves, Nobody Is Told That It Is Ahead, The Match Goes On And Ends: The Referee's State Hash (From The Control Interface) Is The Machines'; The Record Is Gone, No Key Is In The Log") {
         real_process_scenario("persist-89", SIGTERM, false);
     } TEST_END();
 
-    TEST_CASE("S3.90 The Real Program, Killed (SIGKILL: A Crash, The Container's Death) In The Middle Of A Match Of A Room That The Control Interface Made: The Record Holds Every Turn That A Machine Has Been Sent (A Turn Is Written Before It Is Sent: No Turn Is Lost That A Player Has Seen), The Program Started Again Restores The Room, Both Machines Find It By Themselves And Are Not Told That They Are Ahead, The Match Goes On And Ends In One State On The Machines And On The Referee")  {
+    TEST_CASE("S3.96 The Real Program, Killed (SIGKILL: A Crash, The Container's Death) In The Middle Of A Match Of A Room That The Control Interface Made: The Record Holds Every Turn That A Machine Has Been Sent (A Turn Is Written Before It Is Sent: No Turn Is Lost That A Player Has Seen), The Program Started Again Restores The Room, Both Machines Find It By Themselves And Are Not Told That They Are Ahead, The Match Goes On And Ends In One State On The Machines And On The Referee")  {
         real_process_scenario("persist-90", SIGKILL, true);
     } TEST_END();
 
-    TEST_CASE("S3.95 The Real Container (Opt-In: ANTS_PERSIST_CONTAINER Names A Container That The Operator Made From The Server's Image With A Volume At /results, --reconnect And The Ports ANTS_PERSIST_GAME_PORT / ANTS_PERSIST_CTL_PORT / ANTS_PERSIST_SECRET): A Match Of Two Machines, docker stop (SIGTERM, Exit Code 0 Within The Grace), docker start, The Record On The Volume Is For Its Owner Only, The Machines Find The Room By Themselves, The Match Ends In One State On The Machines And The Referee, The Record Is Gone, No Key Is In The Container's Log") {
+    TEST_CASE("S3.101 The Real Container (Opt-In: ANTS_PERSIST_CONTAINER Names A Container That The Operator Made From The Server's Image With A Volume At /results, --reconnect And The Ports ANTS_PERSIST_GAME_PORT / ANTS_PERSIST_CTL_PORT / ANTS_PERSIST_SECRET): A Match Of Two Machines, docker stop (SIGTERM, Exit Code 0 Within The Grace), docker start, The Record On The Volume Is For Its Owner Only, The Machines Find The Room By Themselves, The Match Ends In One State On The Machines And The Referee, The Record Is Gone, No Key Is In The Container's Log") {
         const char* name = std::getenv("ANTS_PERSIST_CONTAINER");
         const char* game = std::getenv("ANTS_PERSIST_GAME_PORT");
         const char* ctl_port = std::getenv("ANTS_PERSIST_CTL_PORT");

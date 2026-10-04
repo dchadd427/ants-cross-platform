@@ -9730,7 +9730,7 @@ StartMsg start_of_hold(const HoldMatch& m) {
 }
 
 void run_restart_tests() {
-    TEST_CASE("N2.95 Attendance After A Restart Of The Server: Every Seat Of A Person Is Absent (Excused) From The Moment The Match Is Restored, The Seats That Were Dropped Stay Dropped; The Vote Opens After The Restart's Wait (90 s), Not A Lost Link's 30 s, And Nobody Can Win It While Nobody Is There; An Excused Absence Adds Nothing To The Away Time And Is No Loss For The Flapping Rule; The Pause Counts Toward The Cap And The Countdown Follows It; The Same Decisions From Four Clocks") {
+    TEST_CASE("N2.96 Attendance After A Restart Of The Server: Every Seat Of A Person Is Absent (Excused) From The Moment The Match Is Restored, The Seats That Were Dropped Stay Dropped; The Vote Opens After The Restart's Wait (90 s), Not A Lost Link's 30 s, And Nobody Can Win It While Nobody Is There; An Excused Absence Adds Nothing To The Away Time And Is No Loss For The Flapping Rule; The Pause Counts Toward The Cap And The Countdown Follows It; The Same Decisions From Four Clocks") {
         const uint32_t origins[] = {0u, 123456u, 0x7FFFF000u, 0xFFFFF000u};              // (the clock wraps after 49.7 days: a restart's clock starts at 0, a long-lived server's is anywhere)
         for (const uint32_t t0 : origins) {
             Attendance::Config c;
@@ -9830,7 +9830,7 @@ void run_restart_tests() {
         ASSERT_EQ(kRestartVoteAfterMs, 90000u);                                            // the default: 90 s
     } TEST_END();
 
-    TEST_CASE("N2.96 A Host Restored From The Sealed Turns Of Its Predecessor: The Restored Engine Has The State Hash The Uninterrupted One Had At The Restored Tick And At Every Later Tick When The Same Turns Follow; The Log Holds The Same Bytes; Every Seat Is Absent And The Match Is Paused; The Three Machines (Still In Memory, Their Links Gone) Come Back Through The Door With Their Keys, Are Compared With The Referee At The Restored Tick And The Match Goes On To The Same State Everywhere") {
+    TEST_CASE("N2.97 A Host Restored From The Sealed Turns Of Its Predecessor: The Restored Engine Has The State Hash The Uninterrupted One Had At The Restored Tick And At Every Later Tick When The Same Turns Follow; The Log Holds The Same Bytes; Every Seat Is Absent And The Match Is Paused; The Three Machines (Still In Memory, Their Links Gone) Come Back Through The Door With Their Keys, Are Compared With The Referee At The Restored Tick And The Match Goes On To The Same State Everywhere") {
         HoldMatch m(3);
         std::vector<TurnMsg> turns;
         std::vector<std::pair<uint32_t, uint64_t>> checks;                              // the referee's own hash after every 20th turn, as the record would hold it
@@ -9942,7 +9942,7 @@ void run_restart_tests() {
         ASSERT_EQ(m.host->attendance().drops_by_cap() + m.host->attendance().drops_by_vote(), 0u);
     } TEST_END();
 
-    TEST_CASE("N2.97 The Hooks That The Record Is Written From: set_on_seal Runs For Every Turn, In Order, Once, After The Turn Is In The Log And BEFORE Any Client Has Been Sent It (A Process That Dies At Any Moment Leaves No Client With A Turn That The Record Lacks); It Runs For A Host That Does Not Hold Seats Too; set_on_referee_hash Runs For Turns 19, 39, ... With The Referee's Own State After That Turn, And Only For A Host Without A Seat") {
+    TEST_CASE("N2.98 The Hooks That The Record Is Written From: set_on_seal Runs For Every Turn, In Order, Once, After The Turn Is In The Log And BEFORE Any Client Has Been Sent It (A Process That Dies At Any Moment Leaves No Client With A Turn That The Record Lacks); It Runs For A Host That Does Not Hold Seats Too; set_on_referee_hash Runs For Turns 19, 39, ... With The Referee's Own State After That Turn, And Only For A Host Without A Seat") {
         {   // a host that holds seats: the log has the turn, the clients have not been sent it yet
             HoldMatch m(3);
             std::vector<uint32_t> seen;
@@ -9995,7 +9995,7 @@ void run_restart_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.98 What A Restored Host Refuses: A Session That Holds No Seats, A Turn That Is Not The Next, A Turn After start_restored, A Log That Cannot Hold The Match (Its Own Limit Or The Server's Budget); A Seat Without A Key Is Dropped At The Restart (Nobody Could Come Back To It) And Its Drop Is Sealed After The Pause; A Match Restored With No Turns (The Seconds Before Its First Turn) Waits For Its Players And Begins At Turn 0 Without Any Command Of The Pre-Start")  {
+    TEST_CASE("N2.99 What A Restored Host Refuses: A Session That Holds No Seats, A Turn That Is Not The Next, A Turn After start_restored, A Log That Cannot Hold The Match (Its Own Limit Or The Server's Budget); A Seat Without A Key Is Dropped At The Restart (Nobody Could Come Back To It) And Its Drop Is Sealed After The Pause; A Match Restored With No Turns (The Seconds Before Its First Turn) Waits For Its Players And Begins At Turn 0 Without Any Command Of The Pre-Start")  {
         {
             sim::SimulationEngine e;
             build_world(e, 1);
