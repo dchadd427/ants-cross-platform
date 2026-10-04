@@ -647,21 +647,6 @@ void NetGame::promote() {
 
 // ---- the way back --------------------------------------------------------------------------------------------------------------------------------
 
-namespace {
-
-// What the lobby says of a name: printable ASCII, at most kMaxNameChars (a Hello with anything else does not decode: the server would answer BadRequest)
-std::string printable_name(const std::string& name) {
-    std::string out;
-    for (const char c : name) {
-        if (out.size() >= kMaxNameChars) break;
-        const unsigned char u = static_cast<unsigned char>(c);
-        if (u >= 0x20 && u <= 0x7E) out.push_back(c);
-    }
-    return out;
-}
-
-}  // namespace
-
 std::function<void()> NetGame::wake_function() {
     return [this]() {                                                     // the application's step may end the session and with it the connection that calls this and its callbacks:
         const std::function<void()> wake = on_wake_;                      // so the function runs from a copy
@@ -671,7 +656,7 @@ std::function<void()> NetGame::wake_function() {
 
 HelloMsg NetGame::way_back_hello() const {
     HelloMsg h;
-    h.name = printable_name(target_.name);
+    h.name = target_.name;                                                // (the encoder of the Hello keeps printable ASCII and at most kMaxNameChars, as the lobby's does)
     h.room = target_.room;
     h.token = target_.token;
     h.want_seat = seat_;                                                  // (the key decides the seat: this is only what the server would be told by anybody)
