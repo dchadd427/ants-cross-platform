@@ -363,3 +363,104 @@ What the tests hold: **RP8.1** a lead that starts too low (one tick where the or
 | `N18_default_window_of_one` | the lead of a match counts the last order only | SURVIVED the first run (every real order of N3.30 has the same lag); killed by RP8.6 (the defaults are pinned) |
 
 (Equivalent mutants that were not run: the `0u` of `n >= born ? n - born : 0u` is unreachable (an order cannot be sealed in a tick before the confirmed tick that it was given at: the turns that were sealed before were already run), the guard is there against an unsigned underflow; the `<=` of the freshness test against `<` differs for an order that is exactly 400 ticks old, one tick of twenty seconds.)
+
+### Measured: the felt delay, native (the application over real sockets, a link of a chosen delay, virtual time)
+
+A scratch program (not in the repository) plays the real application as the guest of a room that a bare machine hosts; a relay between them holds every chunk of the TCP stream for the chosen time in each direction. Time is the program's own (a frame is 1000 / 60 ms of it, the network's clock, the relay's delays and the click moments are numbers, not the machine's clock), because the machine this was measured on ran at a load average of 28 on 10 cores, and what a real machine adds is the time that a frame takes (measured as thread CPU time per frame, which a load does not inflate). A click is a right button release on open ground with the player's ants selected, at a random moment between two frames, handled at the start of the next (as the window delivers input). The answer is the time from the click to the end of the first frame in which the SHOWN engine's ant has its walk pose (or its first step): the ants' first visible reaction. 30 clicks a cell; the same scratch program with a negative delay plays a game of one machine.
+
+| Round trip | the corner's `delay` off (network) | ants stand up, off | ants stand up, on (mean / median) | lead (ticks) | rebuilds / orders (own timing, lost) | thread CPU per frame, off / on |
+|---|---|---|---|---|---|---|
+| a game of one machine | - | **192 ms** (mean 191.9) | - | - | - | 6.4 ms |
+| 0 ms | 83 ms | 242 ms | **142 ms** / 143 | 2 | 30 / 30 (0 lost) | 6.6 / 6.5 ms |
+| 20 ms | 133 ms (83 in another run) | 274 ms (243 in another run) | **139 ms** / 143 | 2 | 29 / 30 (0 lost) | 6.2 / 6.4 ms |
+| 60 ms | 133 ms | 294 ms | **139 ms** / 143 | 3 | 29 / 30 (0 lost) | 5.8 / 5.8 ms |
+| 100 ms | 183 ms | 344 ms | **157 ms** / 155 (p90 182) | 4 | 30 / 30 (0 lost) | 5.3 / 5.2 ms |
+| 200 ms | 283 ms | 454 ms | **192 ms** / 193 | 6 | 28 / 30 (0 lost) | 5.8 / 5.8 ms |
+
+- **What the prediction gives at a round trip of 60 ms: 294 ms to 139 ms (155 ms sooner), and the order is in the shown engine in the click's own frame (9 ms on average: the wait for that frame) instead of 144 ms later.** The ants stand up sooner than in a game of one machine (192 ms) where the round trip is under about 100 ms, and as soon as in one at 200 ms. The reason is the bias (above): the correction that comes with the order's turn moves the ordered ants a tick on, and it only helps when it comes before the picture has shown their reaction anyway (a turn arrives about `lag - 1` ticks after the click, the ants stand up about three ticks after it: at a round trip of 200 ms the turn comes after, so the picture is what the unbiased lead gives, which is the game of one machine's).
+- The 83 / 133 ms and 243 / 274 ms at a round trip of 20 ms are both real: the delay is quantised by the 50 ms turns and the phase between the host's seals and the client's ticks is set by the run's start; the same cell differs by one turn between two runs. The prediction's numbers do not move with it (139 - 142 ms).
+- The corner's `delay` with the prediction on reads **33 ms** in this model (the model's click schedule probably has one fixed phase against the ticks; in the browser, where the phases are random, it reads 15 - 18 ms): the wait of a frame or two for the next tick, whatever the round trip.
+- The thread CPU time per frame (input, network, ticks and the picture on a software renderer) does not move with the prediction: the differences between off and on (-0.2 to +0.2 ms) are the run-to-run noise (5.2 - 6.6 ms in all). The prediction's own cost: **a rebuild takes 0.038 - 0.051 ms on average (0.05 - 0.075 ms at most)** in this quiet match, the predicted tick runs with the confirmed one (a run of ticks over 12 ms would be a strike; the longest on this loaded machine was 5.6 ms, a descheduling).
+- **Memory**: the second engine is 124 - 372 KiB on the shipped maps (R1's census); the process's peak resident size over two runs each, off and on, at a round trip of 60 ms: 64.9 and 62.6 MiB off, 64.5 and 63.0 MiB on: the difference is under the noise.
+
+### Measured: the felt delay and the frame cost in the web build (headless Chrome, a native game server behind a relay)
+
+The web image (`docker build -t ants-beta:rb .`) was served by a small script together with a relay of `/ws` to a native `ants_server` with the chosen delay in each direction; a headless Chrome with a throwaway profile opened two windows (both drawn: 60 frames a second) in a demo room for two players, and the first window's player gave twelve orders with the mouse (a rubber band over the hill and a right click on open ground: the game's own HUD, the page's real input path) and then a stream of them for twenty seconds, the second window's player giving some too. What is reported is what the game itself says through its `ants_probe` (the web build's read-only probe: 7 the corner's delay, 8 the network's delay, 9 the prediction's state, 10 and 11 its counts, 12 - 15 the frames' own work), not a guess from outside.
+
+| Round trip | corner's `delay` off (the network's) | corner's `delay` on (what the click feels) | the network's delay with it on | predicted orders / rebuilds | the game's frame function, mean / longest (off, on) |
+|---|---|---|---|---|---|
+| 0 ms | 84 ms | **15 ms** | 84 ms | 39 / 39 | 0.25 / 0.70 ms, 0.77 / 1.80 ms |
+| 60 ms | 149 ms | **18 ms** | 150 ms | 39 / 40 | 0.61 / 1.70 ms, 0.52 / 1.90 ms |
+| 200 ms | 282 ms | **16 ms** | 300 ms | 40 / 41 | 0.89 / 1.70 ms, 0.82 / 1.80 ms |
+
+(The medians of twelve orders; the first order or two read 25 - 33 ms before the lead has learned the lag.) **The game's frame function (input, network, ticks, the picture's draw calls; not the browser's own compositing) takes 0.25 - 0.9 ms a frame in wasm with the prediction on or off**: in each run the window with the prediction on (the second window, which plays with the defaults) and the one with it off took the same time within 6 % (0.266 / 0.251, 0.614 / 0.610, 0.886 / 0.890 ms), so the variation between runs is the machine's, not the prediction's; the longest frame function of any run was 1.9 ms, and the budget that ends the prediction is 12 ms. In the three runs with `?prediction=off` the game said so (state 0, nothing predicted), and in the others the prediction was on (state 1).
+
+The repository's own opt-in browser checks were run against the same web build: `tests/scripts/test_web_hidden.sh` (a really hidden tab, prediction on by default in both windows: **11 checks, 0 failed**, the state hashes of the two games equal), `tests/scripts/test_web_edge.sh` (**102 checks, 0 failed**), and the new `tests/scripts/test_web_prediction.sh` (**17 checks, 0 failed**: two matches in two windows, the defaults and `?prediction=off`: the prediction is on and predicts, then off and predicts nothing, the click is felt in 19 ms where the confirmed engine applies it in 169 ms at a round trip of 60 ms, the frame function costs 0.3 ms, and the state hashes of the window that predicts and the one that does not are equal at five ticks of a match). `tests/scripts/test_web_aspect.sh` has **7 failed of 535**: all are taps on the quick help's START button on the 16:9 picture (and the checks of the selector that need a match that was started that way); the same taps on the classic 4:3 picture pass. The check taps at the coordinates of the original's 640 x 480 page centred in the 960 x 540 canvas, and the 16:9 quick help that v0.2.0 brought has its START elsewhere (in the bottom right corner), so these look like stale coordinates of that script, not an effect of this branch; the web build of `origin/main` was not built for a comparison.
+
+### Measured: the correction rate and size (`test_prediction --measure`: ten minutes of match for every line, a rig that plays the server)
+
+Seat 0 is the player whose screen it is. The link is one jitter-buffer turn, a turn that takes one step to arrive, an order that takes one step to be sealed and a step of jitter (a round trip of about 60 - 100 ms); the prediction is the product's (learned lead, bias one). The other seats give random orders (moves, attacks, specials, Stop on two thirds of their ants, 24 ants walking in all) at 0.5 or 2 a second each; the player's own orders come once a second where the line says. A correction is a rebuild after which at least one ant stands elsewhere at the display tick than it did before.
+
+| Own orders / s | Players x foreign orders / s each | Rebuilds: own timing / foreign | Visible corrections a minute | Ants moved per visible correction | An ant's move, mean / largest |
+|---|---|---|---|---|---|
+| 1 | 1 (nobody else) | 571 / 0 (575 orders) | 10.5 | 1.1 | 31 px / 32 px |
+| 0 | 2 x 0.5 | 0 / 296 (298 orders) | 22.8 | 2.2 | 15 px / 32 px |
+| 0 | 2 x 2 | 0 / 1,158 (1,208) | 88.8 | 2.1 | 14 px / 32 px |
+| 0 | 4 x 0.5 (three others) | 0 / 915 (967) | 66.0 | 2.1 | 15 px / 32 px |
+| 0 | 4 x 2 | 0 / 3,048 (3,673) | 221.9 | 2.2 | 14 px / 33 px |
+| 1 | 2 x 0.5 | 581 / 259 | 32.7 | 1.9 | 18 px / 32 px |
+| 1 | 2 x 2 | 593 / 1,056 | 97.3 | 2.0 | 15 px / 36 px |
+| 1 | 3 x 0.5 | 529 / 589 | 53.8 | 1.9 | 16 px / 32 px |
+| 1 | 3 x 2 | 599 / 1,973 | 172.6 | 2.3 | 15 px / 33 px |
+| 1 | 4 x 0.5 | 601 / 780 | 71.4 | 2.0 | 16 px / 32 px |
+| 1 | 4 x 2 | 544 / 2,779 | 225.1 | 2.1 | 15 px / 36 px |
+
+- **A foreign order costs one rebuild and is seen as a hop of the ants it concerns in about two of three cases** (a hop is `lead` ticks of walking: 4 px a tick, 3 - 4 ticks: 14 - 18 px on average, a tile (32 px) at most; about two ants a time). At a person's pace (0.5 - 2 orders a second from each other player) that is 23 - 220 visible hops a minute for the whole screen (the more players the more).
+- **An own order costs one rebuild (the bias) and is seen as a hop in about one of six**: a tick of walking is 4 px and goes unseen while the ants are still standing up (they take two to five ticks for their first step); an order to an ant that is already walking turns it at its next tile boundary (a tile step is eight ticks), and a one-tick shift of the order straddles the boundary in about one of eight such cases: that ant then hops a whole tile (31 px on average of the hops that are seen, 1.1 ants a time).
+- Costs, wall time of a rebuild / of a predicted tick in this busy synthetic world (24 ants walking, several players ordering; the machine was lightly loaded: real time equalled CPU time): rebuild 0.36 - 0.87 ms on average (longest 1.6 - 9.3 ms: a descheduling), tick 0.008 - 0.06 ms on average. At the worst line (4 players, 2 orders a second each: 3,600 foreign rebuilds in ten minutes) the rebuilds are 0.4 % of the time.
+
+**The bias, measured** (own orders only, an order a second, the same orders and link; `lag jitter` is the lag changing by one or two ticks from order to order):
+
+| Bias | Lag jitter | Orders | Rebuilds | Visible corrections a minute | An ant's move |
+|---|---|---|---|---|---|
+| 0 | none | 599 | 0 | 0 | - |
+| 1 | none | 602 | 602 | 10.0 | 32 px |
+| 0 | 1 tick | 611 | 0 | 0 | - |
+| 1 | 1 tick | 638 | 636 | 11.6 | 32 px |
+| 0 | 2 ticks | 585 | 158 (124 own timing, 34 other: a late order, chased) | 3.5 | 32 px |
+| 1 | 2 ticks | 575 | 510 | 13.1 | 24 px (36 at most) |
+| 0, no Stop orders | none | 635 | 0 | 0 | - |
+| 1, no Stop orders | none | 617 | 617 | 10.4 | 32 px |
+| 0, no Stop orders | 2 ticks | 620 | 197 | 4.1 | 30 px |
+| 1, no Stop orders | 2 ticks | 554 | 500 | 16.2 | 25 px |
+
+Bias 0 is exact while the lag holds and, when the lag jitters by two ticks, chases about one order in four (a rebuild for each turn that passes it, and the ants hover); bias 1 pays one rebuild for every order and a visible hop in one of six, and gains the 50 ms of the table above. That trade is the owner's to make; `Prediction::Config::lead_bias_ticks` is the one number (RP8.6 pins its default, N3.30 expects `lag + 1`, RP8.1 and the rig's configuration name their own).
+
+### The chain from the click to the first changed pixel, and the delays that are avoidable
+
+What happens after a right click, in the native game (the web build has the same order: the page's events are queued and the game takes them at the start of its next frame, `requestAnimationFrame`'s):
+
+| Stage | Time | |
+|---|---|---|
+| The click marker (the first changed pixel) | in the frame that takes the release | `HUD::pointer_right_click` spawns it at the release, an HUD effect: no engine, no network, the same with the prediction on or off (the original executes the right button at its release, FUN_01027b51) |
+| The event waits for the frame that polls it | 0 - 16.7 ms, 8 on average | `Application::run_frame_with_delta`: `handle_events` is the first thing of a frame, before the network is read and the ticks run, so the order is in the predicted engine and in the packet to the host in the same frame, and the tick that is due in that frame runs it before the frame is drawn: **no extra frame of presentation, no input taken late within the frame** |
+| The order in the predicted engine | the same call, 0.04 ms | `NetGame::submit` |
+| The next tick runs it | 0 - 50 ms, 25 on average (0, 1 or 2 frames of three: the corner's `delay` reads 15 - 33 ms) | the predicted engine's ticks follow the confirmed engine's tick clock |
+| The ants' start-up | three ticks, 150 ms | the original's own animation: nothing that the application may change |
+| The frame is drawn and shown | up to a frame, and the display | present with vsync |
+
+What was found, and what was done about it:
+
+- **Done**: the lead of R2 was `round(delay / 50)`, one tick longer than the lag by accident; it is now measured on the orders themselves (median of five) with the tick of bias on purpose, because the correction that the bias makes is what gives the 50 ms (above), and the estimate until an order has taught the lag counts the lag. Without the prediction the ants stood up at 294 ms at a round trip of 60 ms; with it, 139 ms.
+- **Looked at and not changed, with the reason**:
+  - *A tick run at the click* (the predicted engine's next tick, run at once, would save the 25 ms of the wait for the clock): it puts one tick of the whole picture early and the next scheduled tick has nothing to run, so every order makes one tick interval of every ant 50 ms longer (a stutter in the pace of the whole picture per order), and a second order in the same interval would land a tick later than it does now. Not worth 25 ms.
+  - *Reading the events between frames* (a native loop that waits for an event instead of `SDL_Delay`, or polls late in the frame): the native loop is `poll, network, ticks, draw, present (vsync), delay`; on a 60 Hz display the present waits out the frame and there is no delay to cut, and on a faster display the `SDL_Delay` holds the game to the 60 frames a second that its limiter is for. Polling as late as possible before the present (a "late latch": sleeping until the vblank minus the frame's cost) would save about half a frame of input wait on average (about 8 ms of 140) at the price of a frame that misses the vblank whenever it costs more than estimated: not done (the existing notes on the input wait reach the same conclusion: "for 8 ms of 100 - 160").
+  - *The audio buffer* is 1024 samples at 44.1 kHz (23 ms) between the click's voice and the loudspeaker; it is the sound's latency and not a pixel's, and a smaller buffer risks underruns on busy machines: not changed.
+- **Not avoidable**: the 150 ms of the ants' start-up (the original's animation), the wait for the next tick (the lock-step's 50 ms), the scan-out.
+
+### Where this differs from the design, and why (R6)
+
+- **One tick of bias on purpose, measured, and the owner's to turn off.** The design said "lead = the measured own-command delay in ticks, adaptive". The delay is one tick longer than the lag; the lead is the learned lag plus a tick.
+- **The correction smoothing that the hops invite is not built.** A corrected ant moves at once by `lead` ticks of walking (a tile at most): drawing the correction as a short glide would hide the hop at the price of a drawn position that is not the engine's for a few frames; it belongs to the renderer and is the next candidate if the hops are found to be ugly in play.
+- **Ant ids are stable** by construction (nothing in the predicted engine hatches; Hatch waits for its turn) and the tests check it through the state hash, which counts every ant's id and every cell's occupant: every comparison with the oracle at a display tick (RP2.2, with hatching from every seat, and the property tests) would fail on one id that differed.
+- **The wasm budget fallback was measured, not forced**: the frame function takes 0.3 - 0.9 ms against a budget of 12 ms, so the fallback is never reached on the shipped maps; RP7.1 - RP7.3 and N3.29 force it natively (a budget of one nanosecond).

@@ -177,7 +177,7 @@ Ants-Mac/
 │   ├── test_ctl/           # JSON library and control HTTP server suites
 │   ├── test_server/        # Dedicated server suite (map store, rooms, the door, control calls)
 │   ├── test_app/           # Application integration, render, HUD, status, input, pointer and options suites
-│   ├── scripts/            # Shell suites: the start script's dry run, the dedicated server end to end (and flaky_proxy.py, a TCP proxy that can be cut); the python tests of the repository's tools and tiers (`test_*.py`: the changelog pages, the version tools, the generated version header, `run_tests.sh --fast`); the opt-in browser checks of the web build (`test_web_aspect.sh`, `test_web_edge.sh` (the pointer of a fullscreen page: the bars and the pointer lock), `test_web_hidden.sh` and their helpers)
+│   ├── scripts/            # Shell suites: the start script's dry run, the dedicated server end to end (and flaky_proxy.py, a TCP proxy that can be cut); the python tests of the repository's tools and tiers (`test_*.py`: the changelog pages, the version tools, the generated version header, `run_tests.sh --fast`); the opt-in browser checks of the web build (`test_web_aspect.sh`, `test_web_edge.sh` (the pointer of a fullscreen page: the bars and the pointer lock), `test_web_hidden.sh`, `test_web_prediction.sh` (the prediction of one's own orders, on and off, in two windows of a real browser) and their helpers)
 │   ├── data/               # Golden sample data (edge scrolling)
 │   ├── TEST_INFRA.md       # Design of the E2E suite (a model of the rules, see its status note)
 │   └── TEST_READY.md       # Status report of the E2E suite
