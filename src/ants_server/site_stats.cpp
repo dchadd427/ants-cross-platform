@@ -310,9 +310,7 @@ void SiteStats::open(const std::string& path) {
     const std::string aside = path_ + ".broken-" + std::to_string(clock_());
     std::error_code moved;
     fs::rename(path_, aside, moved);
-    online_ = Series();
-    local_ = Series();
-    since_ = date_of(clock_());
+    since_ = date_of(clock_());                                            // (the counters are new already: read_file keeps nothing of a file that it refuses)
     dirty_ = true;
     notices_.push_back("site statistics: " + path_ + " cannot be used (" + why + "); " + (moved ? "it could not be put aside (" + moved.message() + ")" : "put aside as " + aside) + ", the counters start at 0 from " + since_);
 }

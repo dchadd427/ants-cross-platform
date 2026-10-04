@@ -429,6 +429,22 @@ void run_site_stats_tests() {
             clock.now = kT0 - 5 * kH;                                                           // (all of them are in the future of this clock)
             ASSERT_TRUE(stats.online().total == 20 && stats.online().day == 0);
         }
+        {   // a save with nothing changed writes nothing (a file that somebody removed is not made again), and a clock that goes back never holds a save back
+            const std::string own = (fs::path(temp_dir_for("stats-due")) / SiteStats::kFileName).string();
+            StatsClock back;
+            SiteStats stats(back.fn());
+            stats.open(own);
+            ASSERT_TRUE(stats.save());
+            ASSERT_TRUE(fs::exists(own));
+            fs::remove(own);
+            ASSERT_TRUE(stats.save());
+            ASSERT_FALSE(fs::exists(own));
+            stats.count_online();
+            ASSERT_FALSE(stats.save_if_due());                                                  // (the file was written this second)
+            back.now -= 100;                                                                    // the clock was set back: the last write was in the future, the next is not held back for 100 s
+            ASSERT_TRUE(stats.save_if_due());
+            ASSERT_TRUE(fs::exists(own) && !stats.dirty());
+        }
     } TEST_END();
 
     TEST_CASE("S3.146 A file that is no usable file is put aside whole (as <name>.broken-<seconds>), never overwritten and never read halfway: the counters start at 0 from today, the log says so, and the next save writes a good file beside it") {
