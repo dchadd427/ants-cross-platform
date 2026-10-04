@@ -8780,6 +8780,7 @@ void run_restore_tests() {
             for (int i = 0; i < rooms; ++i) {                                                          // newest first: the order in which the rooms came back
                 const RestoreItem& item = done.items[static_cast<size_t>(i)];
                 ASSERT_MSG(item.code == code_of(rooms - 1 - i) && item.outcome == RestoreItem::Outcome::Restored && item.turns == original.turn_count, decided_in_order(done));
+                ASSERT_MSG(item.replay_ms == w.status(item.code).restore_ms && item.note.find("replayed in " + std::to_string(item.replay_ms) + " ms") != std::string::npos, item.code);       // (the room's own work, as the status and the log say it)
             }
             for (int i = 0; i < rooms; ++i) {
                 const RoomStatus s = w.status(code_of(i));
@@ -8906,7 +8907,7 @@ void run_restore_tests() {
                 // the match that was made meanwhile ran at its own pace: made, started, played, both machines there, while the record was queued
                 const RoomStatus live = w.status("LIVE-1");
                 ASSERT_MSG(live.state == RoomState::Running && !live.paused && !ann.lost && !bob.lost && ann.session != nullptr && bob.session != nullptr, what);
-                ASSERT_MSG(passes > 50, "the restore was spread over the passes of the server: " + what);
+                ASSERT_MSG(passes > 10, "the restore was spread over the passes of the server: " + what);                  // (a replay of a second is more than 100 passes of 5 ms; a machine that is several times faster is still more than 10)
                 if (slice == 0) ASSERT_MSG(passes >= turns / net::kHashEveryTurns && live.turns > 300, what);         // (a piece of work a pass: 3,600 passes, 36 s of the world's time, in which the match played its first 15 s and more)
                 if (world_ms > kPre + 3000) ASSERT_MSG(live.turns + 2 >= (world_ms - kPre - 3000) / net::kTurnMs && live.turns <= world_ms / net::kTurnMs, what);      // (a turn for every 50 ms of the world's time since the match began: nothing stalled it)
 #ifdef NDEBUG
@@ -8999,7 +9000,7 @@ void run_restore_tests() {
         ASSERT_EQ(for_b.sim.state_hash().total, w.status("OR-B").restored_hash);
     } TEST_END();
 
-    TEST_CASE("S3.118 What Waits For A Room Is Bounded And Does Not Pile Up: A Room Takes As Many Parked Connections As It Would Keep (The Fourth Hello For A Room Of Three Is Told Full) And The Door As Many As It Lets Wait For A Hello (max_pending: The Next One Is Told Full); A Parked Connection That Closes Is Dropped At Once; One That Sends More Than A Client Does While It Waits Is Dropped As A Flood; One That Has Waited For park_timeout_ms Is Dropped (The Limit Is A Minute); What The Peer Sends After Its Hello Is Kept And Reaches The Room: A Ping That Was Sent While The Hello Waited Is Answered When The Room Is Back") {
+    TEST_CASE("S3.118 What Waits For A Room Is Bounded And Does Not Pile Up: A Room Takes As Many Parked Connections As It Would Keep (The Fourth Hello For A Room Of Three Is Told Full) And The Door As Many As It Lets Wait For A Hello (max_pending: The Next Link Is Dropped Without An Answer, A Reject Being Final For A Client); A Parked Connection That Closes Is Dropped At Once; One That Sends More Than A Client Does While It Waits Is Dropped As A Flood; One That Has Waited For park_timeout_ms Is Dropped (The Limit Is A Minute); What The Peer Sends After Its Hello Is Kept And Reaches The Room: A Ping That Was Sent While The Hello Waited Is Answered When The Room Is Back") {
         {   // the bounds and the drops
             PWorld w("restore-118");
             w.limits.park_timeout_ms = 3000;                                                  // (a minute by default: asserted in S3.106)
@@ -9020,8 +9021,8 @@ void run_restore_tests() {
             std::vector<net::Connection*> b;
             for (int i = 0; i < 3; ++i) b.push_back(say_hello(w, "BD-2"));
             w.run(300);
-            ASSERT_EQ(w.mgr->parked_count(), size_t{5});                                      // the door's bound (5)
-            ASSERT_EQ(reject_on(b[2]), static_cast<int>(net::RejectReason::Full));
+            ASSERT_EQ(w.mgr->parked_count(), size_t{5});                                      // the door's bound (5): the next link is dropped without an answer (a Reject is final for a client: it tries again)
+            ASSERT_TRUE(!b[2]->is_open() && reject_on(b[2]) == 0);
             ASSERT_EQ(w.mgr->connections_refused(), refused_before + 2);
             for (int i = 0; i < 3; ++i) ASSERT_TRUE(a[static_cast<size_t>(i)]->is_open() && reject_on(a[static_cast<size_t>(i)]) == 0);
             // a connection that closes is dropped at once, and its place is free

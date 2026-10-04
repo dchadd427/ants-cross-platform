@@ -245,12 +245,17 @@ bool RoomManager::restoring_has(const std::string& code) const {
     return false;
 }
 
-// A Hello for a room whose record waits for its replay: the connection and the Hello wait (bounded: by the door's number of connections that wait, and by the room's own number of connections, which
-// is what the room would take of them), and go through the door when the room is restored
+// A Hello for a room whose record waits for its replay: the connection and the Hello wait (bounded: by the door's number of connections that wait: the next is dropped, and by the room's own number of
+// connections, which is what the room would take of them: the next is told Full), and go through the door when the room is restored
 void RoomManager::park(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, const Restoring& job, uint32_t now_ms) {
+    if (parked_.size() >= limits_.max_pending) {                  // the door's bound: the link is dropped without an answer (a Reject is final for a client, a dropped link is tried again: many rooms come back at once after a restart)
+        ++refused_;
+        if (connection->is_open()) connection->close();
+        return;
+    }
     size_t of_this_room = 0;
     for (const Parked& p : parked_) of_this_room += p.code == job.code ? 1u : 0u;
-    if (parked_.size() >= limits_.max_pending || of_this_room >= std::max<size_t>(1, job.head.max_connections)) {
+    if (of_this_room >= std::max<size_t>(1, job.head.max_connections)) {      // the room's own bound: what the room would keep (it answers Full beyond it, restored or not)
         reject(std::move(connection), net::RejectReason::Full, now_ms);
         return;
     }
