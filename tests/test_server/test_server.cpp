@@ -240,6 +240,7 @@ struct Client {
                 if (ok) {
                     sim.set_fog_of_war_enabled(s.fog);
                     sim.init(level, s.seed, s.roster);
+                    sim::apply_start_teams(sim, s.teams());                   // (the teams of the Start, before the first tick: what the application does)
                     map_w = level.width();
                     map_h = level.height();
                 }
@@ -645,6 +646,7 @@ void RClient::update(uint32_t now_ms, const std::string& maps, LinkSource& w) {
                 if (ok) {
                     sim.set_fog_of_war_enabled(s.fog);
                     sim.init(level, s.seed, s.roster);
+                    sim::apply_start_teams(sim, s.teams());                   // (the teams of the Start, before the first tick: what the application does)
                     if (tamper) tamper(sim);
                     map_w = level.width();
                     map_h = level.height();
@@ -4527,6 +4529,274 @@ void run_bot_tests() {
         fs::remove_all(dir, ignore);
     } TEST_END();
 
+    TEST_CASE("S3.123 Protocol 13, A Level For Each Seat Of The Leader's Fill: Each Empty Seat Gets The Bot Of Its Own Level (Named For It, The Lowest Seat First, Never More Than The Room's Players), A Seat That A Person Took Meanwhile Is Skipped And Its Level Is Ignored, A Level Only For Taken Seats Seats Nobody, With Fog Of War No Bot Is Seated And The Teams Still Count") {
+        using net::FillLevel;
+        const auto fill_of = [](FillLevel a, FillLevel b, FillLevel c, FillLevel d) { return std::array<FillLevel, 4>{a, b, c, d}; };
+        {   // seat 1 Easy and seat 3 Hard, seat 2 stays empty: each bot has the level, the name and the seat that was asked for
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PS-1", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "PS-1");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(fill_of(FillLevel::None, FillLevel::Easy, FillLevel::None, FillLevel::Hard)));
+            w.run(2000);
+            const RoomStatus s = w.status("PS-1");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.bots.size() == 2);
+            ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "easy" && s.bots[0].name == "Bot (Easy)" && s.bots[0].fill);
+            ASSERT_TRUE(s.bots[1].seat == 3 && s.bots[1].level == "hard" && s.bots[1].name == "Bot (Hard)" && s.bots[1].fill);
+            ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bot (Easy)" && s.names[2].empty() && s.names[3] == "Bot (Hard)");
+            ASSERT_EQ(ann.sim.roster_mask(), 0x0B);                                            // the roster of the Start: seats 0, 1 and 3
+            ASSERT_TRUE(ann.lobby->start_info().names[1] == "Bot (Easy)" && ann.lobby->start_info().names[3] == "Bot (Hard)");
+            ASSERT_EQ(s.teams, std::string("ffa"));
+        }
+        {   // three levels in three seats: Medium, Hard, Easy
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PS-2", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "PS-2");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(fill_of(FillLevel::None, FillLevel::Medium, FillLevel::Hard, FillLevel::Easy)));
+            w.run(2000);
+            const RoomStatus s = w.status("PS-2");
+            ASSERT_TRUE(s.state == RoomState::Running && s.bots.size() == 3);
+            ASSERT_TRUE(s.bots[0].level == "medium" && s.bots[1].level == "hard" && s.bots[2].level == "easy");
+            ASSERT_TRUE(s.names[1] == "Bot (Medium)" && s.names[2] == "Bot (Hard)" && s.names[3] == "Bot (Easy)");
+        }
+        {   // a seat that a person has taken: Bob sits in seat 2, so the level asked for seat 2 is ignored and the others are seated; the room is full with them
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PS-3", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "PS-3");
+            Client& bob = w.connect("Bob", "PS-3", 2);
+            w.run(500);
+            ASSERT_EQ(bob.lobby->my_seat(), 2);
+            ASSERT_TRUE(ann.lobby->request_start(fill_of(FillLevel::None, FillLevel::Easy, FillLevel::Hard, FillLevel::Medium)));
+            w.run(2000);
+            const RoomStatus s = w.status("PS-3");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 4 && s.bots.size() == 2);
+            ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "easy" && s.bots[1].seat == 3 && s.bots[1].level == "medium");      // (no Hard bot anywhere)
+            ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bot (Easy)" && s.names[2] == "Bob" && s.names[3] == "Bot (Medium)");
+        }
+        {   // the person's own seat holds a level too (the leader's screen does not show it): it is ignored
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PS-4", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "PS-4");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(fill_of(FillLevel::Hard, FillLevel::None, FillLevel::Easy, FillLevel::None)));
+            w.run(2000);
+            const RoomStatus s = w.status("PS-4");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 2 && s.bots.size() == 1);
+            ASSERT_TRUE(s.bots[0].seat == 2 && s.bots[0].level == "easy" && s.names[0] == "Ann" && s.names[1].empty());
+        }
+        {   // the cap is the room's players, as ever: a room for three with one person gets two bots, the lowest seats that were asked for; one with two people gets one
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PS-5", 3), w.now).ok);
+            Client& ann = w.connect("Ann", "PS-5");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(fill_of(FillLevel::None, FillLevel::Easy, FillLevel::Medium, FillLevel::Hard)));
+            w.run(2000);
+            const RoomStatus s = w.status("PS-5");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.bots.size() == 2);
+            ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "easy" && s.bots[1].seat == 2 && s.bots[1].level == "medium" && s.names[3].empty());      // (the Hard bot of seat 3 does not fit)
+            World v;
+            ASSERT_TRUE(v.mgr.create_room(spec_of("PS-6", 3), v.now).ok);
+            Client& cat = v.connect("Cat", "PS-6");
+            v.connect("Dan", "PS-6");
+            v.run(500);
+            ASSERT_TRUE(cat.lobby->request_start(fill_of(FillLevel::None, FillLevel::None, FillLevel::Hard, FillLevel::Easy)));
+            v.run(2000);
+            const RoomStatus t = v.status("PS-6");
+            ASSERT_TRUE(t.state == RoomState::Running && t.joined == 3 && t.bots.size() == 1);
+            ASSERT_TRUE(t.bots[0].seat == 2 && t.bots[0].level == "hard" && t.names[3].empty());
+        }
+        {   // a level only for seats that people hold seats nobody: one person alone cannot start (the request is ignored, no offence), two people start with nobody added
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("PS-7", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "PS-7");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(fill_of(FillLevel::Medium, FillLevel::None, FillLevel::None, FillLevel::None)));
+            w.run(1500);
+            RoomStatus s = w.status("PS-7");
+            ASSERT_TRUE(s.state == RoomState::Waiting && s.bots.empty() && s.joined == 1);
+            Client& bob = w.connect("Bob", "PS-7");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(fill_of(FillLevel::Medium, FillLevel::Hard, FillLevel::None, FillLevel::None)));
+            w.run(2000);
+            s = w.status("PS-7");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 2 && s.bots.empty() && s.names[1] == "Bob");
+            ASSERT_EQ(bob.sim.roster_mask(), 0x03);
+        }
+        {   // Fog of War: no bot is seated (the leader is told, as in protocol 11), and the teams of the same request still count for the people who play
+            World w;
+            RoomSpec spec = spec_of("PS-8", 4);
+            spec.fog = true;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            Client& ann = w.connect("Ann", "PS-8");
+            Client& bob = w.connect("Bob", "PS-8");
+            Client& cat = w.connect("Cat", "PS-8");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(fill_of(FillLevel::None, FillLevel::None, FillLevel::None, FillLevel::Hard), sim::StartTeams{true, 0, 1}));
+            w.run(2500);
+            const RoomStatus s = w.status("PS-8");
+            ASSERT_TRUE(s.state == RoomState::Running && s.bots.empty() && s.joined == 3);
+            ASSERT_EQ(said(ann.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeFillFog}));      // the leader alone is told about the bots, and nothing about the teams: they were made
+            ASSERT_TRUE(said(bob.room_chat).empty() && said(cat.room_chat).empty());
+            ASSERT_EQ(s.teams, std::string("0+1"));
+            ASSERT_EQ(std::string(1, static_cast<char>('0' + s.allies[0])) + static_cast<char>('0' + s.allies[1]) + static_cast<char>('0' + s.allies[2]), std::string("104"));       // seat 0 and 1 are a team, seat 2 plays alone
+            ASSERT_TRUE(ann.sim.alliance_of(0) == 1 && ann.sim.alliance_of(1) == 0 && ann.sim.alliance_of(2) == sim::ALLIANCE_NONE);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.124 Protocol 13, The Leader's Teams: A Match Starts With Them On Every Engine Before Its First Tick (The Referee's Own Included: The Status At Tick 0), The Machines' State Hashes Agree With The Referee's To The End; Teams That The Seats Cannot Make Start The Match Without Them And Tell Everybody In The Room Why (A Notice, Once, People Only); Only The Leader's Request Counts; Free For All Is What It Was") {
+        using net::FillLevel;
+        const auto allies_text = [](const std::array<uint8_t, 4>& a) {
+            std::string out;
+            for (const uint8_t v : a) out += std::to_string(static_cast<unsigned>(v));
+            return out;
+        };
+        const auto engine_allies = [](const sim::SimulationEngine& e) {
+            std::string out;
+            for (uint8_t seat = 0; seat < 4; ++seat) out += std::to_string(static_cast<unsigned>(e.alliance_of(seat)));
+            return out;
+        };
+        {   // one person and three bots, Green + Blue against Red + Black: the alliances stand at tick 0 on the referee and on the machine; no notice; the match is played to its end and the machine
+            // stands at the referee's state at the same tick (a machine that had not made the teams would have diverged at the first hash check, turn 19, and failed the room)
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("TM-1", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "TM-1");
+            ann.record_hashes = true;
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(net::StartRequestMsg::all(FillLevel::Medium).fill, sim::StartTeams{true, 0, 2}));
+            w.run(1500);
+            RoomStatus s = w.status("TM-1");
+            ASSERT_TRUE(s.state == RoomState::Running && s.ticks == 0 && s.turns == 0);          // (in the "Get ready" dialog: no turn is sealed, no tick has run)
+            ASSERT_EQ(s.teams, std::string("0+2"));
+            ASSERT_EQ(allies_text(s.allies), std::string("2301"));                               // the referee: 0 with 2, 1 with 3
+            ASSERT_EQ(engine_allies(ann.sim), std::string("2301"));                              // the machine
+            ASSERT_EQ(ann.sim.current_tick(), uint64_t{0});
+            ASSERT_TRUE(ann.lobby->start_info().teams() == sim::StartTeams({true, 0, 2}));      // what the Start said
+            ASSERT_TRUE(said(ann.room_chat).empty());                                            // nothing was refused: no notice
+            for (int guard = 0; guard < 4000 && w.status("TM-1").state == RoomState::Running; ++guard) w.run(250);
+            s = w.status("TM-1");
+            ASSERT_TRUE(s.state == RoomState::Finished);                                         // (a machine that diverged from the referee would have failed the room)
+            ASSERT_FALSE(ann.session->desynced());
+            w.run(Room::kGraceMs + 500);
+            ASSERT_TRUE(s.referee_hash != 0 && s.ticks > 1000 && ann.hash_at.count(s.ticks) == 1 && ann.hash_at[s.ticks] == s.referee_hash);
+            ASSERT_EQ(engine_allies(ann.sim), std::string("2301"));                              // the bots keep a team for the whole match
+        }
+        {   // three people, the pair Red + Blue (1 + 2): the third seat plays alone; both machines and the referee stand the same
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("TM-2", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "TM-2");
+            Client& bob = w.connect("Bob", "TM-2");
+            Client& cat = w.connect("Cat", "TM-2");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(std::array<FillLevel, 4>{}, sim::StartTeams{true, 1, 2}));        // no bots: the three people play
+            w.run(2500);
+            const RoomStatus s = w.status("TM-2");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.teams == "1+2");
+            ASSERT_EQ(allies_text(s.allies), std::string("4214"));
+            for (Client* c : {&ann, &bob, &cat}) {
+                ASSERT_EQ(engine_allies(c->sim), std::string("4214"));
+                ASSERT_TRUE(said(c->room_chat).empty());
+            }
+            w.run(12000);
+            ASSERT_TRUE(w.status("TM-2").state == RoomState::Running && !ann.session->desynced() && !bob.session->desynced() && !cat.session->desynced());
+        }
+        {   // teams that cannot be made: two people play and a team would be both of them (the original ends such a match at once): the match starts without teams, each person is told once
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("TM-3", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "TM-3");
+            Client& bob = w.connect("Bob", "TM-3");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(std::array<FillLevel, 4>{}, sim::StartTeams{true, 0, 1}));
+            w.run(2500);
+            const RoomStatus s = w.status("TM-3");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 2 && s.teams == "ffa" && allies_text(s.allies) == "4444");
+            const std::string notice = std::string("255||") + net::kNoticeNoTeams + "only two seats play: a team of them would end the match at once.";
+            ASSERT_EQ(said(ann.room_chat), (std::vector<std::string>{notice}));
+            ASSERT_EQ(said(bob.room_chat), (std::vector<std::string>{notice}));                  // everybody in the room, not the leader alone
+            ASSERT_TRUE(ann.room_chat[0].notice() && bob.room_chat[0].notice());
+            ASSERT_TRUE(ann.lobby->start_info().team_a == net::kNoTeam && ann.lobby->start_info().team_b == net::kNoTeam);
+            ASSERT_EQ(engine_allies(ann.sim), std::string("4444"));
+        }
+        {   // a seat of the pair that does not play: seats 0, 1 and 2 are here, the pair is 0 + 3; with a bot filled into seat 3 the same pair is made
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("TM-4", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "TM-4");
+            Client& bob = w.connect("Bob", "TM-4");
+            Client& cat = w.connect("Cat", "TM-4");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(std::array<FillLevel, 4>{}, sim::StartTeams{true, 0, 3}));
+            w.run(2500);
+            RoomStatus s = w.status("TM-4");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.teams == "ffa" && allies_text(s.allies) == "4444");
+            const std::string notice = std::string("255||") + net::kNoticeNoTeams + "seat 3 does not play in this match.";
+            for (Client* c : {&ann, &bob, &cat}) ASSERT_EQ(said(c->room_chat), (std::vector<std::string>{notice}));
+            World v;
+            ASSERT_TRUE(v.mgr.create_room(spec_of("TM-5", 4), v.now).ok);
+            Client& dan = v.connect("Dan", "TM-5");
+            Client& eve = v.connect("Eve", "TM-5");
+            Client& fay = v.connect("Fay", "TM-5");
+            v.run(500);
+            ASSERT_TRUE(dan.lobby->request_start(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::None, FillLevel::Easy}, sim::StartTeams{true, 0, 3}));
+            v.run(2500);
+            s = v.status("TM-5");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 4 && s.bots.size() == 1 && s.teams == "0+3" && allies_text(s.allies) == "3210");
+            for (Client* c : {&dan, &eve, &fay}) {
+                ASSERT_TRUE(said(c->room_chat).empty());
+                ASSERT_EQ(engine_allies(c->sim), std::string("3210"));
+            }
+        }
+        {   // only the leader's request counts: a guest's StartRequest with teams is ignored altogether; a room that fills up and starts by itself has no teams
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("TM-6", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "TM-6");
+            Client& bob = w.connect("Bob", "TM-6");
+            Client& cat = w.connect("Cat", "TM-6");
+            w.run(500);
+            net::StartRequestMsg guest;
+            guest.set_teams(sim::StartTeams{true, 1, 2});
+            bob.end->send(net::encode(guest));
+            w.run(1500);
+            RoomStatus s = w.status("TM-6");
+            ASSERT_TRUE(s.state == RoomState::Waiting && s.ignored_start_requests == 1 && s.teams.empty());
+            Client& dan = w.connect("Dan", "TM-6");                                              // the room is full now and starts by itself
+            w.run(2500);
+            s = w.status("TM-6");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 4 && s.teams == "ffa" && allies_text(s.allies) == "4444");
+            for (Client* c : {&ann, &bob, &cat, &dan}) ASSERT_TRUE(said(c->room_chat).empty());
+        }
+        {   // free for all, the request of protocol 11: no teams, no notice, the match is what it always was
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("TM-7", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "TM-7");
+            Client& bob = w.connect("Bob", "TM-7");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(FillLevel::None));
+            w.run(2500);
+            const RoomStatus s = w.status("TM-7");
+            ASSERT_TRUE(s.state == RoomState::Running && s.teams == "ffa" && allies_text(s.allies) == "4444");
+            ASSERT_TRUE(said(ann.room_chat).empty() && said(bob.room_chat).empty());
+        }
+        {   // a start that is cancelled (a machine cannot load the map) and tried again: the room tells again, as the second start happens
+            World w;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("TM-8", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "TM-8");
+            Client& bob = w.connect("Bob", "TM-8");
+            bob.fail_load = true;
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(std::array<FillLevel, 4>{}, sim::StartTeams{true, 0, 1}));
+            w.run(1500);
+            ASSERT_TRUE(w.status("TM-8").state == RoomState::Waiting);                           // cancelled
+            bob.fail_load = false;
+            w.run(2500);                                                                         // (the pause after a cancelled start)
+            ASSERT_TRUE(ann.lobby->request_start(std::array<FillLevel, 4>{}, sim::StartTeams{true, 0, 1}));
+            w.run(2500);
+            ASSERT_TRUE(w.status("TM-8").state == RoomState::Running);
+            size_t told = 0;
+            for (const std::string& line : said(ann.room_chat)) told += line.find("No teams: ") != std::string::npos ? 1u : 0u;
+            ASSERT_EQ(told, size_t{2});                                                          // once for each start that went through (the first one was cancelled after it was told)
+        }
+    } TEST_END();
+
     TEST_CASE("S3.65 The Control Interface Seats Bots In A Room's Specification (\"bots\": [{\"seat\": 2, \"bot\": \"medium\"}]): The Status JSON Lists Them Next To The Players, A Mistake Is A 400 That Names The Key, A Person Who Joins Gets Another Seat, The Room Starts By Itself When The Person Has Come (The Bots Count As Players) And Plays To Its End; The Referee's Final Hash Is In The JSON") {
         World w;
         const auto call = [&w](const char* method, const std::string& path, const std::string& body = std::string()) {
@@ -5900,6 +6170,7 @@ uint64_t replay_hash(const RestartLoaded& rec, size_t turns) {
     sim::SimulationEngine sim;
     sim.set_fog_of_war_enabled(rec.head.start.fog);
     sim.init(level, rec.head.start.seed, rec.head.start.roster);
+    sim::apply_start_teams(sim, rec.head.start.teams());
     for (size_t i = 0; i < turns && i < rec.turns.size(); ++i) {
         for (const sim::Command& c : rec.turns[i].commands) sim.apply_command(c);
         sim.tick();
@@ -6832,6 +7103,116 @@ void run_persist_server_tests_4() {
             ASSERT_TRUE(after.ok() && after.turns.size() > sealed + 200);
             ASSERT_TRUE(w.status("B-2").bot_controller && w.status("B-2").bot_decisions >= 20);          // two bots look again, each every 20 ticks
         }
+    } TEST_END();
+
+    TEST_CASE("S3.125 Protocol 13, A Restart Record Keeps What The Leader's START Chose: Its Start Message Has The Pair (A Record Of Protocol 12 Is Refused), Its Bots Their Own Levels; The Restored Referee Makes The Same Teams (A Replay That Did Not Would Be Refused At The First Checkpoint), Its Status Says So, The Machine That Comes Back With Its Turns Keeps Its Engine And A Machine That Comes Back From Nothing Is Given The Start With The Teams And Stands At The Referee's State") {
+        using net::FillLevel;
+        const auto allies_text = [](const std::array<uint8_t, 4>& a) {
+            std::string out;
+            for (const uint8_t v : a) out += std::to_string(static_cast<unsigned>(v));
+            return out;
+        };
+        const auto engine_allies = [](const sim::SimulationEngine& e) {
+            std::string out;
+            for (uint8_t seat = 0; seat < 4; ++seat) out += std::to_string(static_cast<unsigned>(e.alliance_of(seat)));
+            return out;
+        };
+        PWorld w("persist-125");
+        w.start_server(500);
+        ASSERT_TRUE(w.mgr->create_room(held_spec("T-1", 4), w.server_now()).ok);
+        RClient& leader = w.connect("Lea", "T-1");
+        w.run(1500);
+        net::StartRequestMsg request;                                                          // Medium at seat 1, Hard at seat 2, Easy at seat 3; Red + Blue (1 + 2) are a team, so are Green + Black
+        request.fill = {FillLevel::None, FillLevel::Medium, FillLevel::Hard, FillLevel::Easy};
+        request.set_teams(sim::StartTeams{true, 1, 2});
+        ASSERT_TRUE(leader.end->send(net::encode(request)));
+        ASSERT_TRUE(w.until([&]() { return w.status("T-1").state == RoomState::Running; }, 20000));
+        w.run(9000 + kPre);
+        RoomStatus s = w.status("T-1");
+        ASSERT_TRUE(s.teams == "1+2" && allies_text(s.allies) == "3210" && s.bots.size() == 3 && s.record_kept);
+        ASSERT_EQ(engine_allies(leader.sim), std::string("3210"));
+        const RestartLoaded before = w.read_record("T-1");
+        ASSERT_TRUE(before.ok() && before.head.start.team_a == 1 && before.head.start.team_b == 2 && before.head.fill_mask == 0x0E);      // the record's Start has the pair
+        ASSERT_TRUE(before.head.bots.size() == 3);
+        ASSERT_TRUE(before.head.bots[0].seat == 1 && before.head.bots[0].level == ai::Level::Medium && before.head.bots[1].seat == 2 && before.head.bots[1].level == ai::Level::Hard &&
+                    before.head.bots[2].seat == 3 && before.head.bots[2].level == ai::Level::Easy);                                   // ... and each bot its own level
+        ASSERT_TRUE(before.checks.size() >= 1);                                                // (the referee's hash at turn 19 is in it: what a replay has to meet)
+        const net::SeatKey key = leader.lobby->key();
+        const uint8_t seat = leader.lobby->my_seat();
+        w.stop_server(true);
+        w.start_server(500);
+        ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 1);                      // (a replay that had not made the teams would have been refused at turn 19: "the replay does not agree")
+        s = w.status("T-1");
+        ASSERT_TRUE(s.restored && s.teams == "1+2" && allies_text(s.allies) == "3210" && s.bots.size() == 3);
+        ASSERT_TRUE(s.bots[0].level == "medium" && s.bots[1].level == "hard" && s.bots[2].level == "easy" && s.bots[0].fill && s.bots[1].fill && s.bots[2].fill);
+        ASSERT_TRUE(w.until([&]() { return !w.status("T-1").paused; }, 60000));               // the leader came back with its turns: its engine was kept
+        w.run(5000);
+        s = w.status("T-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 1 && allies_text(s.allies) == "3210");
+        ASSERT_TRUE(leader.session->mode() == net::ClientSession::Mode::Normal && !leader.session->desynced() && !leader.lost);
+        ASSERT_EQ(engine_allies(leader.sim), std::string("3210"));
+        // a second restart; this time the leader's machine is a page that was reloaded: it starts from nothing, is sent the Start of the match with the teams and catches up to the referee
+        w.stop_server(true);
+        leader.reconnects = false;
+        w.start_server(500);
+        RClient& reloaded = w.connect("Lea", "T-1", seat, key);
+        ASSERT_TRUE(w.until([&]() { return reloaded.lobby != nullptr && reloaded.lobby->rejoined() && reloaded.session != nullptr; }, 30000));
+        ASSERT_TRUE(reloaded.lobby->start_info().team_a == 1 && reloaded.lobby->start_info().team_b == 2);      // the Start that a machine from nothing is sent has the teams
+        ASSERT_TRUE(w.until([&]() { return !w.status("T-1").paused && reloaded.session->mode() == net::ClientSession::Mode::Normal; }, 60000));
+        w.run(3000);
+        s = w.status("T-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.teams == "1+2" && allies_text(s.allies) == "3210");
+        ASSERT_EQ(engine_allies(reloaded.sim), std::string("3210"));                           // its own engine, made from the Start: the teams were made before it ran a tick
+        ASSERT_TRUE(!reloaded.session->desynced() && !reloaded.lost);
+        w.play_to_the_end("T-1");                                                              // the match is played to its end: the machine from nothing stands at the referee's final state
+        s = w.status("T-1");
+        ASSERT_TRUE(s.state == RoomState::Finished && s.referee_hash != 0);
+        ASSERT_TRUE(reloaded.sim.state_hash().total == s.referee_hash && !reloaded.session->desynced() && !reloaded.lost);
+        ASSERT_EQ(engine_allies(reloaded.sim), std::string("3210"));                           // (the bots kept their teams to the end)
+    } TEST_END();
+
+    TEST_CASE("S3.126 A Record Of Protocol 12 (Its Start Message Has No Team Bytes) Cannot Be Read By This Build: At The Restart It Is Not Restored (Nothing Of It Is Replayed), Its Match Ends, The File Is Deleted And The Log Says Why; The Same Record In This Build's Layout Is Restored") {
+        PWorld w("persist-126");
+        w.start_server(500);
+        const auto crash = [](PWorld& world, const char* code) {                               // a match that is played for a while, and a server that dies with its record
+            std::vector<RClient*> m = play_room(world, held_spec(code, 2), 8000);
+            for (RClient* p : m) p->reconnects = false;
+            world.stop_server(false);
+        };
+        crash(w, "OLD-1");
+        const std::vector<uint8_t> bytes = read_all_bytes(w.record_path("OLD-1"));
+        const auto frames = frames_of(bytes);
+        const RestartLoaded rec = parse_restart_record(bytes.data(), bytes.size());
+        ASSERT_TRUE(rec.ok() && rec.head.start.team_a == net::kNoTeam && rec.head.identity.protocol == net::kProtocolVersion);
+        const std::vector<uint8_t> start = net::encode(rec.head.start);                        // the Start inside the head, in this build's layout
+        std::vector<uint8_t> payload(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].first + 5), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second - 4));
+        const auto found = std::search(payload.begin(), payload.end(), start.begin(), start.end());
+        ASSERT_TRUE(found != payload.end());
+        const size_t at = static_cast<size_t>(found - payload.begin());
+        payload.erase(payload.begin() + static_cast<std::ptrdiff_t>(at + start.size() - 2), payload.begin() + static_cast<std::ptrdiff_t>(at + start.size()));      // protocol 12's Start: the same bytes without the two team bytes ...
+        const uint16_t old_length = static_cast<uint16_t>(start.size() - 2);
+        payload[at - 2] = static_cast<uint8_t>(old_length & 0xFFu);                            // ... and its length in front of it
+        payload[at - 1] = static_cast<uint8_t>(old_length >> 8);
+        const size_t protocol_at = 2u + 1u + payload[2];                                       // the identity: format (u16), game version (str8), then the protocol (u16)
+        payload[protocol_at] = 12;
+        payload[protocol_at + 1] = 0;
+        std::vector<uint8_t> old_record = with_magic(test_frame(1, payload));
+        old_record.insert(old_record.end(), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end());
+        write_all_bytes(w.record_path("OLD-1"), old_record);
+        w.start_server(500);
+        ASSERT_TRUE(w.report.items.size() == 1 && w.report.items[0].outcome == RestoreItem::Outcome::Unreadable);
+        ASSERT_TRUE(w.report.items[0].note.find("start message") != std::string::npos);        // (its Start has the layout of the release before: no decoder of this build takes it)
+        ASSERT_TRUE(w.record_files().empty());                                                 // the file is deleted: nothing of it can be used by this build
+        RoomStatus none;
+        ASSERT_FALSE(w.mgr->status("OLD-1", none, w.server_now()));                            // no room of it: a player who comes back is told that there is no such room
+        bool logged = false;
+        for (const std::string& n : w.notices) logged = logged || (n.find("was not restored") != std::string::npos && n.find("start message") != std::string::npos);
+        ASSERT_TRUE(logged);
+        PWorld control("persist-126b");                                                        // the same match, as this build writes it: restored
+        control.start_server(500);
+        crash(control, "NEW-1");
+        control.start_server(500);
+        ASSERT_TRUE(control.report.count(RestoreItem::Outcome::Restored) == 1 && control.status("NEW-1").restored);
     } TEST_END();
 
     TEST_CASE("S3.94 A Match That Had Ended When The Server Stopped (Its Last Turn Was In The Record, The Room Had Not Finished Yet) Is Finished At The Restart With The Same Final State As The Match That Was Never Interrupted: The Result Rows, The Referee's Hash And The Report Of Its End Are There, Its Record Is Deleted, Nobody Is Waited For")  {

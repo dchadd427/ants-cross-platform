@@ -450,6 +450,7 @@ struct Machine {
                 sim.set_fog_of_war_enabled(s.fog);
                 sim.init(level, s.seed, s.roster);
                 for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.set_player_name(p, s.names[p]);
+                sim::apply_start_teams(sim, s.teams());                   // (after the names, as the application does: the News Flash names the players)
                 map_w = level.width();
                 map_h = level.height();
                 ++loads;
