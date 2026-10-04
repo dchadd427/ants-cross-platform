@@ -1613,6 +1613,94 @@ void run_suite_7_input_controls() {
         }
     } TEST_END();
 
+    TEST_CASE("7.6h The site statistics' hook (the web page has the server count a game on this computer): told ONCE for each game, at its first tick (not at the start, not while the \"get ready\" dialog is up, not at the later ticks), again for the next match of the same application, the same for a game with bots and for the direct start; a hook that is cleared or was never set says nothing") {
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        const auto config = [&](bool direct, bool with_bot) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = !direct;
+            cfg.default_map_path = tiny;
+            cfg.play_at_once = !direct;
+            if (with_bot) {
+                ants::ai::BotSpec bot;
+                bot.seat = 1;
+                bot.level = ants::ai::Level::Medium;
+                cfg.bots.push_back(bot);
+            }
+            return cfg;
+        };
+        {   // the setup screen's own START (the page's Play): told on the step after the dialog's 100 steps, where the first tick runs, and never again in the match
+            int told = 0;
+            Application app;
+            app.set_on_local_match_started([&told]() { ++told; });
+            ASSERT_TRUE(app.init(config(false, false)));
+            ASSERT_TRUE(app.hud().is_match_start_modal_active());
+            ASSERT_EQ(told, 0);                                                       // the match began: nothing is told yet
+            int steps = 0;
+            while (app.sim().current_tick() == 0 && steps < 300) {
+                ASSERT_EQ(told, 0);                                                   // (the dialog is up: no tick, no word)
+                app.update_simulation(0.05f);
+                ++steps;
+            }
+            ASSERT_EQ(app.sim().current_tick(), 1u);
+            ASSERT_EQ(steps, 101);                                                    // the dialog's 100 steps and the one that runs the tick
+            ASSERT_EQ(told, 1);
+            for (int i = 0; i < 400; ++i) app.update_simulation(0.05f);
+            ASSERT_TRUE(app.sim().current_tick() > 300);
+            ASSERT_EQ(told, 1);                                                       // once, however long the match runs
+            // the next match of this application (the way back to the setup screen and START again): its own first tick is told, once
+            app.return_to_map_select();
+            ASSERT_TRUE(app.start_game(tiny));
+            ASSERT_EQ(told, 1);                                                       // (the start is not the word)
+            app.hud().dismiss_match_start_modal();
+            app.update_simulation(0.05f);
+            ASSERT_EQ(told, 2);
+            for (int i = 0; i < 50; ++i) app.update_simulation(0.05f);
+            ASSERT_EQ(told, 2);
+            app.shutdown();
+        }
+        {   // a game with a bot, and the direct start of --map (no dialog: the first step runs the first tick)
+            int told = 0;
+            Application bots;
+            bots.set_on_local_match_started([&told]() { ++told; });
+            ASSERT_TRUE(bots.init(config(false, true)));
+            ASSERT_TRUE(bots.bots() != nullptr);
+            bots.hud().dismiss_match_start_modal();
+            ASSERT_EQ(told, 0);
+            for (int i = 0; i < 40; ++i) bots.update_simulation(0.05f);
+            ASSERT_EQ(told, 1);
+            bots.shutdown();
+            Application direct;
+            direct.set_on_local_match_started([&told]() { ++told; });
+            ASSERT_TRUE(direct.init(config(true, false)));
+            ASSERT_EQ(told, 1);
+            ASSERT_FALSE(direct.hud().is_match_start_modal_active());
+            direct.update_simulation(0.05f);
+            ASSERT_EQ(told, 2);
+            for (int i = 0; i < 40; ++i) direct.update_simulation(0.05f);
+            ASSERT_EQ(told, 2);
+            direct.shutdown();
+        }
+        {   // a hook that is cleared before the first tick says nothing; one that is set after the match began (before its first tick) is told
+            int told = 0;
+            Application cleared;
+            cleared.set_on_local_match_started([&told]() { ++told; });
+            ASSERT_TRUE(cleared.init(config(false, false)));
+            cleared.set_on_local_match_started(nullptr);
+            cleared.hud().dismiss_match_start_modal();
+            for (int i = 0; i < 10; ++i) cleared.update_simulation(0.05f);
+            ASSERT_EQ(told, 0);
+            Application late;
+            ASSERT_TRUE(late.init(config(false, false)));
+            late.hud().dismiss_match_start_modal();
+            late.set_on_local_match_started([&told]() { ++told; });
+            for (int i = 0; i < 10; ++i) late.update_simulation(0.05f);
+            ASSERT_EQ(told, 1);
+            cleared.shutdown();
+            late.shutdown();
+        }
+    } TEST_END();
+
     TEST_CASE("7.6e A bot that declines the player's invitation to team up says why: ONE line in the chat log right after the original's \"... rejected teaming up\" (only two teams left, the player has a teammate, the bot has one, the worker bot never teams up), nothing for a bot that accepts or for a person's answer, and never twice") {
         const std::string tiny = "Original-Ants/Maps/TINY.LVL";
         const auto bot = [](uint8_t seat, const char* kind = "standard") {

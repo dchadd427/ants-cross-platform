@@ -1306,6 +1306,57 @@ void run_host_tests() {
         ASSERT_FALSE(app.network_active());
     } TEST_END();
 
+    TEST_CASE("N5.90 The site statistics' hook is for a game on this computer only: the same counter that hears a local game hears nothing of a match of the network, on the host that plays it or on a guest, however long it runs (the page counts the online games on the server's side)") {
+        {   // the control: a game on this computer is heard
+            int told = 0;
+            ApplicationConfig cfg = headless_config();
+            cfg.default_map_path = "Original-Ants/Maps/TINY.LVL";
+            cfg.play_at_once = true;
+            Application local;
+            local.set_on_local_match_started([&told]() { ++told; });
+            ASSERT_TRUE(local.init(cfg));
+            ASSERT_TRUE(local.state() == AppState::Playing && !local.network_active());
+            local.hud().dismiss_match_start_modal();
+            for (int i = 0; i < 10; ++i) local.update_simulation(0.05f);
+            ASSERT_EQ(told, 1);
+            local.shutdown();
+        }
+        {   // the host of a room, with a guest: START, the dialog, half a minute of play
+            int told = 0;
+            ApplicationConfig cfg = headless_config();
+            cfg.net_role = ApplicationConfig::NetRole::Host;
+            cfg.net_port = 0;
+            cfg.net_loopback_only = true;
+            cfg.player_name = "Alice";
+            Application app;
+            app.set_on_local_match_started([&told]() { ++told; });
+            ASSERT_TRUE(app.init(cfg));
+            Peer bob;
+            ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+            Duo duo{app, bob};
+            ASSERT_TRUE(duo.until([&]() { return app.net()->can_start(); }, 8000));
+            app.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+            duo.step(kDialogMs + 3000);
+            ASSERT_TRUE(app.net()->turns_executed() > 20 && app.sim().current_tick() > 20);       // the match ran
+            ASSERT_EQ(told, 0);
+            app.quit();
+        }
+        {   // a guest of a room (the application is seat 2 of three): the same
+            int told = 0;
+            Peer host;
+            Peer bob;
+            Application app;
+            app.set_on_local_match_started([&told]() { ++told; });
+            ASSERT_TRUE(start_three(host, bob, app, "Cat"));
+            Trio trio{app, host, bob};
+            trio.step(kDialogMs + 3000);
+            ASSERT_TRUE(app.net()->turns_executed() > 20 && app.sim().current_tick() > 20);
+            ASSERT_EQ(told, 0);
+            app.quit();
+        }
+    } TEST_END();
+
     TEST_CASE("N5.3b Host: before the host chooses anything its room is on the map that its setup screen highlights, TREASURE.LVL, and the guest's screen shows it (the host's own choice still wins, Down from the last map wraps to the first); a Maps folder without TREASURE.LVL gives the first map of its list") {
         {
             ApplicationConfig cfg = headless_config();
