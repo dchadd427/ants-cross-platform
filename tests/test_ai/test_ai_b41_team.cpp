@@ -292,7 +292,9 @@ void run_b41_team_tests() {
             for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
             for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 3, kFightHills[t].y + 6});
             sim.get_unit(ants_of(sim, 0)[0]).hp = 10;
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            LevelPlan hard = plan_for(Level::Hard);
+            hard.contest_opening_min_ants = 0;                                                                // (a world of four ants: the minimum of six has its own test, AI8.5)
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(hard), 4, 4);
             if (late) {
                 for (int i = 0; i < 1300; ++i) rig.tick();
                 for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
@@ -319,12 +321,73 @@ void run_b41_team_tests() {
                 for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 3, kFightHills[t].y + 6});
                 LevelPlan plan = plan_for(Level::Hard);
                 plan.contest_opening_ants = k;
+                plan.contest_opening_min_ants = 0;                                                            // (four ants: the minimum is off, so that the opening itself is what differs)
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(120);
                 runs.push_back(rig.proposed);
             }
             ASSERT_TRUE(runs[0] == runs[1]);
             ASSERT_TRUE(!runs[0].empty());
+        }
+    } TEST_END();
+
+    TEST_CASE("AI8.5 The Opening's Contest Needs Six Ants (TINY Starts With 3, SMALL With 4): A Team That Cannot Spare An Ant Harvests First, At Every Level And Seat (The First Orders Are Those Of A Bot Without The Contest), While The Same Plan Without The Minimum Sends Ants Across TINY; TREASURE (8 Ants) Keeps The Contest; In A Hand-Made World Five Ants Spare None And Six Spare The Level's Number") {
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) ASSERT_EQ(plan_for(level).contest_opening_min_ants, 6u);
+        const auto first_orders = [&](const char* map, uint8_t seat, Level level, uint32_t k, uint32_t min_ants) {
+            sim::SimulationEngine sim;
+            start_match(sim, map, 7, 0x0F);
+            LevelPlan plan = plan_for(level);
+            plan.contest_opening_ants = k;
+            plan.contest_opening_min_ants = min_ants;
+            Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(120);
+            return rig.proposed;
+        };
+        const auto starting_ants = [&](const char* map, uint8_t seat) {
+            sim::SimulationEngine sim;
+            start_match(sim, map, 7, 0x0F);
+            return ants_of(sim, seat).size();
+        };
+        ASSERT_EQ(starting_ants("TINY", 0), 3u);
+        ASSERT_EQ(starting_ants("SMALL", 0), 4u);
+        ASSERT_TRUE(starting_ants("TREASURE", 0) >= 6u);
+        for (const char* map : {"TINY", "SMALL"}) {
+            for (const Level level : {Level::Medium, Level::Hard}) {
+                bool crossing = false;
+                for (uint8_t seat = 0; seat < 4; ++seat) {
+                    const auto shipped = first_orders(map, seat, level, plan_for(level).contest_opening_ants, 6);        // the plan as it is shipped
+                    const auto without = first_orders(map, seat, level, 0, 6);                                           // no contest at all
+                    ASSERT_TRUE(!shipped.empty() && shipped == without);
+                    crossing = crossing || first_orders(map, seat, level, plan_for(level).contest_opening_ants, 0) != without;      // the contest of the plan with no minimum
+                }
+                if (std::string(map) == "TINY") ASSERT_TRUE(crossing);                                                   // (on TINY the contested pile is far: the unrestricted contest sends ants there)
+            }
+        }
+        {   // TREASURE: eight ants, the contest stays (AI8.4 pins who goes where)
+            const auto shipped = first_orders("TREASURE", 0, Level::Hard, 2, 6);
+            const auto without = first_orders("TREASURE", 0, Level::Hard, 0, 6);
+            ASSERT_TRUE(shipped != without);
+        }
+        // a hand-made world: the middle pile (27, 27) is contested by every enemy, a near pile of little value; five ants spare none (the same orders as with no contest), six spare two (Hard)
+        for (const size_t n : {size_t{5}, size_t{6}}) {
+            std::array<size_t, 2> in_middle{};
+            for (const int variant : {0, 1}) {                                                                   // 0: Hard's plan as it is, 1: Hard's plan without the contest
+                sim::SimulationEngine sim;
+                empty_field(sim, 97);
+                const int32_t middle = add_pile(sim, 27, 27, 40, 25);
+                add_pile(sim, 12, 12, 40, 10);
+                for (size_t i = 0; i < n; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{static_cast<int32_t>(8 + i), 9});
+                for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 3, kFightHills[t].y + 6});
+                LevelPlan plan = plan_for(Level::Hard);
+                if (variant == 1) plan.contest_opening_ants = 0;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(60);
+                for (const auto& e : rig.proposed) {
+                    if (e.second.type == CommandType::GroupMove && pile_of_tile(rig.map(), 2, tc(e.second.tile_x, e.second.tile_y)) == middle) in_middle[static_cast<size_t>(variant)] += e.second.ants.size();
+                }
+            }
+            if (n == 5) ASSERT_EQ(in_middle[0], in_middle[1]);                                                   // too few ants: the contest is off
+            else ASSERT_TRUE(in_middle[0] == 2u && in_middle[1] > 2u);                                           // six ants: two go first, the value order would send more
         }
     } TEST_END();
 }

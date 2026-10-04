@@ -1,16 +1,24 @@
 #pragma once
 
-// The standard bot (kind "standard", B4-1): the computer player that people meet. It is the economy of the worker bot (HarvestTask, unchanged) plus the tactics of its level:
+// The standard bot (kind "standard", B4-1): the computer player that people meet. It is the economy of the worker bot (HarvestTask) plus the tactics of its level and its style
+// (docs/BOTS.md, "The standard bot"; the numbers of every level are in tactics.cpp, plan_for):
 //
-//   every level   strikes back at an enemy that hits one of its ants (Easy with 1 ant, Medium 2, Hard 3: the nearest healthy ants that carry nothing), never attacks an ant that
-//                 stands on a power-up, never clicks a power-up tile by accident, and keeps three fire walls in front of its thief hole when a thief threatens (Easy: an enemy Thief
-//                 has been seen; Medium: one has been seen or an enemy that plays can reach a Thief power-up; Hard: as soon as an enemy plays, and the walls are renewed before they
-//                 burn out): it takes a Fire power-up for that when one can be reached, the only power-up that Easy takes
-//   Medium, Hard  also attack an enemy Thief on its way to the hill, take Combat and Thief power-ups, park a Combat Ant where its reflex covers the hill, and raid the hill of the
-//                 leading team with a Thief that has points to take, is not shut by walls or bombs and can be reached
-//   Hard          also hunts down a team that shows very few ants, and does not raid a hill that an enemy Combat Ant guards
-//   Medium, Hard  when clearly behind the leader (the score boxes) and a fight looks winnable, a strike force hunts the leader's carriers; they hatch an egg for a fight that is expected
-//                 (never for the economy), and no level sends its last ants into a fight
+//   every level   strikes back at an enemy that hits one of its ants (Easy with 1 ant, Medium 2, Hard 3: the nearest healthy ants that carry nothing), sends a hit carrier home, never
+//                 attacks an ant that stands on a power-up, never clicks a power-up tile by accident, never sends its last ants into a fight, puts out the enemy's fire walls and
+//                 defuses (or sets off) its bombs where they are in the way of its economy, and keeps three fire walls in front of its thief hole when a thief threatens (Easy: an
+//                 enemy Thief has been seen; Medium: one has been seen or an enemy that plays can reach a Thief power-up; Hard: as soon as an enemy plays, and the walls are renewed
+//                 before they burn out): it takes a Fire power-up for that when one can be reached, the only power-up that Easy takes
+//   Medium, Hard  take the Fire, Bomber and Thief power-ups of their own side of the map in the opening (the first moves go to power-ups, not to food), a Combat Ant once an enemy
+//                 plays (it is a worker that fights: it harvests and its reflex punches what comes near; there is no guard post), and raid the hill of the leading team with a Thief
+//                 that has points to take, is not shut by walls or bombs and can be reached (no level keeps away from a hill that an enemy Combat Ant stands near: measured, it is a worker
+//                 that fights, not a guard); a Thief that harvests is taken from its loop for a raid. Medium sends one ant, Hard two, to the contested middle of the map at the start
+//   Hard          also steals a second Thief (and a second Combat Ant once it is attacked) and guides every carrier at the hill's gate by hand (GateTask)
+//   styles        a bot draws one per match from its own seat's generator (or the spec pins it) and plays it on top of its level: Aggressive adds the harassment squad (at Hard also the
+//                 sabotage of the best opponent's gate with a stolen Fire Ant and the strike when behind), Economic the efficient order, Raider the Thief first, Defensive the walls early
+//
+// What the tournaments measured as a loss is OFF in every shipped plan, and stays in the code behind a flag for the next round: the Combat Ant on a guard post, the interception of
+// thieves, hatching, the strict contest order, the strike and the wipe-out focus (the strike is part of the Hard Aggressive style), the ambush at a thief hole, the sabotage with a
+// single Fire Ant, the harassment squad (but in the Aggressive style) (docs/BOTS.md, "Aggression").
 //
 // It is a virtual client like every bot (project rule 8): it reads the world through the BotView, sends commands that a person could click, and has no knowledge that a person of its
 // seat could not have. It answers an invitation to team up by the accept rule (accepts_invitation), never invites and never breaks an alliance. The worker bot stays what it was: the
@@ -133,6 +141,7 @@ private:
         p.contest_one_first = plan.contest_one_first;
         p.contest_reactive = plan.contest_reactive;
         p.contest_opening_ants = plan.contest_opening_ants;
+        p.contest_opening_min_ants = plan.contest_opening_min_ants;
         return p;
     }
 

@@ -452,15 +452,6 @@ public:
                 attack_ants_ += static_cast<uint32_t>(orders.intents()[i].command.ants.size());
             }
         }
-        // the openings of the other hills' thief holes (what a patient thief could use): looks at which an enemy hill with at least 30 points has a hole that is not shut
-        if (view.map() != nullptr && view.has_grid() && std::getenv("BOT_HOLES") != nullptr) {
-            for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
-                const TeamRow& row = view.rows()[t];
-                if (t == seat_ || !row.present || row.dropped || !view.map()->hill(t).present || row.score < 30) continue;
-                ++looks_[t];
-                if (!east_state(view.grid(), view.map()->hill(t)).shut()) ++open_[t];
-            }
-        }
     }
     void on_command(const sim::Command& command, Fate fate, uint64_t tick) override { inner_->on_command(command, fate, tick); }
 
@@ -470,8 +461,6 @@ private:
     uint8_t seat_{0};
     uint32_t attack_cmds_{0};
     uint32_t attack_ants_{0};
-    uint32_t looks_[sim::MAX_PLAYERS]{};
-    uint32_t open_[sim::MAX_PLAYERS]{};
 };
 
 }  // namespace ants::ai::bench

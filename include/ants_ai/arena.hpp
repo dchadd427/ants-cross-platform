@@ -85,7 +85,7 @@ struct ArenaSpec {
 struct ArenaSeatResult {
     BotSpec spec;                              // what was asked for
     std::string style;                         // the style that the standard bot played (the pinned one or the one it drew: "aggressive", ...); "" for the other kinds
-    std::string runs;                          // the kind of bot that actually played ("worker" for "worker" and for "standard", which is an alias of it until B4)
+    std::string runs;                          // the kind of bot that actually played: the bot's own kind() ("standard", "worker", "idle", or a bench bot of the tournaments)
     int32_t score{0};                          // the individual score at the end (what the results screen ranks by, before ties)
     int32_t shown_score{0};                    // the number of the score box (own plus ally's)
     uint32_t ants{0};                          // living ants at the end

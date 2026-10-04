@@ -34,12 +34,15 @@ bool parse_level(std::string_view text, Level& out) noexcept;
 
 /// The STYLE of a standard bot (docs/BOTS.md, "Styles"): which tactics it prefers and how early it plays them, so that bots of one level do not all play alike. A bot draws its style at
 /// the start of a match from its own seat's generator (the same match seed and seat give the same style; a replay needs no bot anyway), or the spec pins it (`--bot 2:standard:hard:raider`).
-/// The style never changes what a level may do (the profile: look interval, reaction time, command budget; and the tactics that the level unlocks): it picks among them.
-///   Aggressive  contests the middle of the map and takes a second Combat Ant, takes a second Thief by theft (Medium too), raids for small loot
-///   Economic    the efficient order: one Thief at most, raids only for large loot, no contest of the middle; walls up early
-///   Raider      Thief first of the equals in the opening, two Thieves (a theft at Medium too), raids for small loot and every hill that is not shut
-///   Defensive   walls up before a thief shows, interception of thieves, one defender more, the ally's blows answered
-/// Hard bots are Aggressive or Raider only ("Hard bots should be really aggressive"); Easy ignores the style but for small variations of its numbers.
+/// The style never changes what a level may do (the profile: look interval, reaction time, command budget; and the tactics that the level unlocks): it picks among them and says how early
+/// and how hard. What each one does is in tactics.cpp, plan_for(level, style, rng):
+///   Aggressive  one more ant for the contest of the middle of the map in the opening, one more defender, raids for two thirds of the loot, and the harassment squad: its Combat Ants go
+///               for the carriers of the best opponent that are within eight tiles of them (at Medium only with a clear advantage); at Hard also a second Combat Ant, the sabotage of
+///               the best opponent's gate with a stolen Fire Ant, and the strike when it is behind
+///   Economic    no contest of the middle, the fire walls of the thief hole before a thief shows, raids only for three times the loot
+///   Raider      Fire and Thief first in the opening (no Bomber), raids for half the loot, a shorter wait after a hill that could not be reached
+///   Defensive   the fire walls before a thief shows, one defender more, the ally's blows answered, no contest of the middle
+/// Hard bots are Aggressive or Raider only ("Hard bots should be really aggressive"); Easy keeps its plan (a style changes little there: only the numbers move).
 enum class Style : uint8_t { Random = 0, Aggressive = 1, Economic = 2, Raider = 3, Defensive = 4 };
 
 /// "random", "aggressive", "economic", "raider", "defensive"
@@ -71,8 +74,8 @@ Profile profile_for(Level level) noexcept;
 
 // ---- the specification of a bot seat -------------------------------------------------------------------------------------------------------------
 
-/// Which bot sits at which seat. `kind` is "idle" (stands still: the plumbing's test bot), "worker" (harvest only, B3) or "standard" (the bot of the three levels;
-/// until B4 exists it is an alias of the worker). `level` picks the Profile.
+/// Which bot sits at which seat. `kind` is "idle" (stands still: the plumbing's test bot), "worker" (harvest only: the fixed yardstick of the tournaments) or "standard" (the bot of the
+/// three levels, with its tactics and its style). `level` picks the Profile; `style` (only the standard bot has one) is pinned or drawn.
 struct BotSpec {
     uint8_t seat{0};
     std::string kind{"standard"};
@@ -186,8 +189,8 @@ public:
     }
 };
 
-/// The bot of a spec; null for a kind that does not exist. "idle" is the IdleBot, "worker" the WorkerBot (B3); "standard" is an alias of the worker bot until the standard bot
-/// (B4) exists (kind() of what it returns says "worker").
+/// The bot of a spec; null for a kind that does not exist. "idle" is the IdleBot, "worker" the WorkerBot (B3), "standard" the StandardBot (B4-1) of the spec's level, playing the
+/// spec's style or one that it draws from its own seat's generator at start().
 std::unique_ptr<Bot> make_bot(const BotSpec& spec);
 
 }  // namespace ants::ai

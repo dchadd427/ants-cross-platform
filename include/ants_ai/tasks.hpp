@@ -198,6 +198,9 @@ public:
         /// rest harvest by value per trip as before; 0: off
         uint32_t contest_opening_ants{0};
         uint64_t contest_opening_ticks{1200};
+        /// ... and only when the seat has at least this many ants at its first look: a team of three or four ants cannot spare one for a trip across the map (TINY, 3 ants: the contest
+        /// of the middle cost 4 percent of the score against workers and lost the duels, docs/BOTS.md, "Aggression"); 0: no minimum
+        uint32_t contest_opening_min_ants{0};
         /// Fire-aware piles (the standard bot; false for the worker): a pile with a fire wall within fire_radius tiles of its anchor is asked again with the map as it is now (the
         /// start analysis does not know the walls): a pile that the walls have cut off is no candidate (no ant is sent into fire), one that they only made longer is ranked by its
         /// real cost. The engine's own path finder goes round a wall that leaves a way.
@@ -291,6 +294,8 @@ private:
     std::map<uint32_t, Approach> reach_now_; // piles that were shut off at the start and can be walked to now (as of the last reask)
     std::vector<int32_t> now_field_;         // the hill's walking field now (as of the last reask: MapInfo::field_now, from every walkable tile of the queue row), for the ants that the start analysis took for shut in
     uint64_t next_reask_{0};
+    size_t start_ants_{0};                   // the ants of the seat at the first look that found any: the opening's minimum (Params::contest_opening_min_ants)
+    bool start_ants_known_{false};
     bool want_reask_{false};                 // an ant was seen that the start analysis took for shut in: look at the map again
     uint32_t rescues_{0};
     uint32_t failures_{0};

@@ -720,4 +720,90 @@ void run_b41_style_tests() {
         ASSERT_FALSE(plan_for(Level::Medium).steals);
         ASSERT_EQ(plan_for(Level::Medium).max_thief, 1u);
     } TEST_END();
+
+    TEST_CASE("AI11.12 The Squad's Memory Of Who Answers: A Team Whose Ants Answer The Squad Three At Once (Drawn In Their Attack Clip Within 8 Tiles Of A Member) Is Left Alone For A While; A Team That Hurts The Squad Again After Its Pause Is Left Alone Twice As Long (3,000 Ticks, Then 6,000)")
+    {
+        const auto attacks_in = [](const std::vector<std::pair<uint64_t, Command>>& proposed, uint64_t from, uint64_t to) {      // (the only enemy in these worlds is the target of every attack order)
+            size_t n = 0;
+            for (const auto& e : proposed) n += e.first >= from && e.first <= to && e.second.type == CommandType::GroupAttack ? 1u : 0u;
+            return n;
+        };
+        {   // three ants of team 1 are in their attack clip (on a decoy of the bot's, away from the carrier: they do not count against the squad's odds there), 6 tiles from the member
+            for (const bool rule : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 61);
+                sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30, 30});
+                const uint32_t decoy = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30, 35});
+                for (const TileCoord t : {TileCoord{38, 30}, TileCoord{37, 28}, TileCoord{39, 32}}) {              // three carriers, 8 tiles away: more than a blow throws one
+                    const uint32_t carrier = sim.spawn_unit(1, sim::AntType::Worker, t);
+                    sim.get_unit(carrier).pick_up_food(1, 25);
+                }
+                std::array<uint32_t, 3> answerers{};
+                for (size_t i = 0; i < 3; ++i) answerers[i] = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{static_cast<int32_t>(29 + i), 36});
+                LevelPlan plan = Pinned::plan(Level::Hard, Style::Aggressive);
+                ASSERT_EQ(plan.harass_strong_defence, 3u);
+                plan.harass_retreat_hp = 0;                                                                        // (the retreat of a hurt member is the next block's subject)
+                if (!rule) plan.harass_strong_defence = 0;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                for (int t = 0; t < 400; ++t) {
+                    for (const uint32_t a : answerers) keep_attacking(sim, 1, a, decoy);
+                    rig.tick();
+                }
+                size_t on_carrier = 0;                                                                             // the orders at the carriers (a blow throws one up to four tiles)
+                for (const auto& e : rig.proposed) on_carrier += e.second.type == CommandType::GroupAttack && e.second.tile_x >= 34 && e.second.tile_y >= 26 && e.second.tile_y <= 34 ? 1u : 0u;
+                const uint32_t pauses = rig.as<StandardBot>().harass().pauses();
+                if (rule) {
+                    ASSERT_TRUE(pauses >= 1u);
+                    ASSERT_TRUE(on_carrier <= 1u);                                                                 // (the order that was out before the team showed its ants)
+                } else {
+                    ASSERT_EQ(pauses, 0u);
+                    ASSERT_TRUE(on_carrier >= 3u);
+                }
+            }
+        }
+        {   // the pause of a team doubles every time it hurts the squad: 3,000 ticks, 6,000, ...
+            sim::SimulationEngine sim;
+            empty_field(sim, 61, 40000);
+            const uint32_t fighter = sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30, 30});
+            const uint32_t c1 = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{36, 30});
+            sim.get_unit(c1).pick_up_food(1, 25);
+            LevelPlan plan = Pinned::plan(Level::Hard, Style::Aggressive);
+            plan.harass_strong_defence = 0;
+            const uint64_t pause = plan.harass_pause_ticks;
+            ASSERT_EQ(pause, 3000u);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            const StandardBot& bot = rig.as<StandardBot>();
+            const auto hurt = [&]() -> uint64_t {                                                                  // the member is hurt with an enemy of team 1 next to it
+                sim.get_unit(c1).hp = 10;
+                sim.get_unit(fighter).hp = 6;
+                sim.get_unit(fighter).pos.x = sim.get_unit(c1).pos.x - 1;
+                sim.get_unit(fighter).pos.y = sim.get_unit(c1).pos.y;
+                rig.run(8);
+                sim.get_unit(fighter).hp = 10;
+                return sim.current_tick();
+            };
+            const auto run_near = [&](uint64_t ticks) {                                                            // the carrier of team 1 would walk home: the member is put next to it every 50 ticks, so that a target is always in reach
+                for (uint64_t done = 0; done < ticks; done += 50) {
+                    sim.get_unit(c1).hp = 10;
+                    sim.get_unit(fighter).pos.x = sim.get_unit(c1).pos.x - 1;
+                    sim.get_unit(fighter).pos.y = sim.get_unit(c1).pos.y;
+                    rig.run(std::min<uint64_t>(50, ticks - done));
+                }
+            };
+            run_near(60);
+            ASSERT_TRUE(bot.harass().attacks_ordered() >= 1u);
+            const uint64_t t1 = hurt();
+            ASSERT_EQ(bot.harass().pauses(), 1u);
+            run_near(pause - 100);
+            ASSERT_EQ(attacks_in(rig.proposed, t1 + 20, sim.current_tick()), 0u);                          // left alone for the whole pause
+            run_near(250);
+            ASSERT_TRUE(attacks_in(rig.proposed, t1 + pause - 30, sim.current_tick()) >= 1u);             // and hunted again after it (the pause began a few ticks before the member was seen hurt: t1)
+            const uint64_t t2 = hurt();
+            ASSERT_EQ(bot.harass().pauses(), 2u);
+            run_near(pause + 300);                                                                                 // longer than the first pause: still left alone
+            ASSERT_EQ(attacks_in(rig.proposed, t2 + 20, sim.current_tick()), 0u);
+            run_near(pause);                                                                                       // 2 x 3,000 ticks after the second blow: hunted again
+            ASSERT_TRUE(attacks_in(rig.proposed, t2 + 2 * pause - 30, sim.current_tick()) >= 1u);
+        }
+    } TEST_END();
 }

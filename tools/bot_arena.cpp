@@ -549,6 +549,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "cone") return flag(p.contest_one_first);
     if (key == "creact") return flag(p.contest_reactive);
     if (key == "copen") { p.contest_opening_ants = static_cast<uint32_t>(v); return true; }
+    if (key == "copenmin") { p.contest_opening_min_ants = static_cast<uint32_t>(v); return true; }
     if (key == "typedh") return flag(p.typed_harvest);
     if (key == "firew") return flag(p.fire_aware);
     if (key == "secure") return flag(p.secure_side);

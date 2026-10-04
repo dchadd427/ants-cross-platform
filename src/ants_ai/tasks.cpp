@@ -234,6 +234,11 @@ void HarvestTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const Profile& profile = c.profile;
+    if (!start_ants_known_ && !v.mine().empty()) {                                          // the opening's contest needs a team that can spare an ant (Params::contest_opening_min_ants)
+        start_ants_ = v.mine().size();
+        start_ants_known_ = true;
+    }
+    const uint32_t opening_ants = start_ants_ >= params_.contest_opening_min_ants ? params_.contest_opening_ants : 0u;
     const auto in_pool_type = [&](sim::AntType type, sim::AntType def) { return type == def || ((params_.extra_types >> static_cast<unsigned>(type)) & 1u) != 0; };
     // The longest an order of ours can take to leave: the reaction delay plus its jitter, then the time to live in the controller's queue. A record that was never answered
     // by a fate (it cannot happen unless a bot is driven without the controller) is dropped after that, so that no ant stays out of the pool for ever.
@@ -485,7 +490,7 @@ void HarvestTask::step(TaskContext& c) {
         k.bite = info->bite_index;
         k.units = bite->remaining;
         k.shut_at_start = shut;
-        if (params_.contest_aware || params_.contest_reactive || params_.contest_opening_ants > 0) {
+        if (params_.contest_aware || params_.contest_reactive || opening_ants > 0) {
             const uint8_t cls = tier_for(c, *info, ap.cost);
             const uint8_t safe = static_cast<uint8_t>(PileClass::Safe);
             const uint8_t multi = static_cast<uint8_t>(PileClass::Multi);
@@ -500,7 +505,7 @@ void HarvestTask::step(TaskContext& c) {
                 k.tier = enemy_there && (cls == multi || cls == static_cast<uint8_t>(PileClass::One)) ? multi : safe;
             } else if (now < params_.contest_opening_ticks && cls == multi) {
                 k.tier = multi;
-                k.cap = std::min<uint32_t>(k.cap, params_.contest_opening_ants);
+                k.cap = std::min<uint32_t>(k.cap, opening_ants);
             } else {
                 k.tier = safe;
             }
@@ -511,7 +516,7 @@ void HarvestTask::step(TaskContext& c) {
         unplaced_ = pool.size();
         return;
     }
-    if (params_.contest_aware || params_.contest_reactive || params_.contest_opening_ants > 0) {
+    if (params_.contest_aware || params_.contest_reactive || opening_ants > 0) {
         tiers_.clear();
         for (const Candidate& k : cands) tiers_[k.pile] = k.tier;
     }
