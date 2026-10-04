@@ -1734,7 +1734,7 @@ void test_app_settings() {
 }
 
 void test_app_ants() {
-    group("ants", "the ants of a real match are drawn at every zoom (after the first simulation ticks: before the first tick an ant has no clip, and only its hit point digits are drawn)");
+    group("ants", "the ants of a real match are drawn at every zoom (after the first simulation ticks; the frames before the first tick are test_prestart_view.cpp's)");
     for (const Aspect aspect : {Aspect::Classic4x3, Aspect::Wide16x9}) {
         const bool wide = aspect == Aspect::Wide16x9;
         const int32_t cw = wide ? kWideW : kClassicW;
@@ -1914,90 +1914,6 @@ void test_local_determinism(const assets::AssetArchive&) {
 // =====================================================================================================================================================
 // A match of the network: no zoom-out, and the view is the client's own
 // =====================================================================================================================================================
-
-/// The other machine of a test: a simulation and a NetGame, with the little that the application does for the room (load the map, report)
-struct Peer {
-    sim::SimulationEngine sim;
-    net::NetGame net{sim};
-    uint32_t now{1000};
-    Peer() { net.set_discovery(0); }
-    void update() {
-        net.update(now);
-        for (const auto& ev : net.take_events()) {
-            if (ev.type == net::NetGame::Event::Type::StartRequested) {
-                const net::StartMsg& st = net.start_info();
-                ants::assets::LevelData level;
-                uint64_t hash = 0;
-                const bool ok = level.load_lvl(maps_dir() + st.map_name) && net::hash_file(maps_dir() + st.map_name, hash) && hash == st.map_hash;
-                if (ok) {
-                    sim.set_fog_of_war_enabled(st.fog);
-                    sim.init(level, st.seed, st.roster);
-                }
-                net.report_loaded(ok);
-            }
-        }
-    }
-};
-
-/// The application and the peer, stepped together in 10 ms of game time
-struct Duo {
-    Application& app;
-    Peer& peer;
-    void step(uint32_t ms) {
-        for (uint32_t t = 0; t < ms; t += 10) {
-            app.pump_network(0.010f);
-            app.update_simulation(0.010f);
-            peer.now += 10;
-            peer.update();
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
-        }
-    }
-    bool until(const std::function<bool()>& cond, uint32_t max_ms) {
-        for (uint32_t t = 0; t < max_ms; t += 10) {
-            if (cond()) return true;
-            step(10);
-        }
-        for (int i = 0; i < 2000 && !cond(); ++i) {                       // real time for a late kernel, the game clock standing still
-            app.pump_network(0.0f);
-            peer.update();
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        return cond();
-    }
-};
-
-ApplicationConfig network_config(float zoom_level, bool zoom_given) {
-    ApplicationConfig cfg = base_config(Aspect::Wide16x9);
-    cfg.start_in_map_select = true;
-    cfg.zoom = zoom_level;
-    cfg.zoom_given = zoom_given;
-    return cfg;
-}
-
-std::vector<uint32_t> ants_of(const sim::SimulationEngine& s, uint8_t player) {
-    std::vector<uint32_t> out;
-    for (const auto& a : s.get_world_state().ants) {
-        if (a.player_id == player) out.push_back(a.id);
-    }
-    return out;
-}
-
-/// The application joins the room of a bare host and the host starts a match on TINY; both machines play. Returns false when anything of that does not happen.
-bool join_and_start(Application& app, Peer& host, const ApplicationConfig& base) {
-    if (!host.net.host(0, "Alice", true)) return false;
-    host.net.set_map("TINY.LVL");
-    ApplicationConfig cfg = base;
-    cfg.net_role = ApplicationConfig::NetRole::Join;
-    cfg.net_address = "127.0.0.1";
-    cfg.net_port = host.net.listen_port();
-    cfg.player_name = "Bob";
-    if (!app.init(cfg)) return false;
-    Duo duo{app, host};
-    if (!duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000)) return false;
-    uint64_t hash = 0;
-    if (!net::hash_file(maps_dir() + "TINY.LVL", hash) || !host.net.start_match(31337, hash)) return false;
-    return duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000);
-}
 
 void test_network_match() {
     group("net", "in a match of the network the zoom-out is not offered (host or guest), the zoom in is, and the view stays the client's own");

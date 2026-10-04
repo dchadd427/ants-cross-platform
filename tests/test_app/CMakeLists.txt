@@ -686,3 +686,38 @@ target_link_libraries(test_zoom_fingerprint PRIVATE ants_test_paths)
 
 add_test(NAME test_zoom_fingerprint COMMAND test_zoom_fingerprint)
 set_tests_properties(test_zoom_fingerprint PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Prestart view (a fix of v0.2.0): the ants behind the "Get ready to play!" dialog are drawn (every team's, local and network, classic and wide), the first tick leaves their pixels as they are, and
+# nothing moves before it
+add_executable(test_prestart_view
+    test_prestart_view.cpp
+)
+
+target_include_directories(test_prestart_view PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_prestart_view PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_prestart_view PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_prestart_view PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_prestart_view PRIVATE ants_test_paths)
+
+add_test(NAME test_prestart_view COMMAND test_prestart_view)
+set_tests_properties(test_prestart_view PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
