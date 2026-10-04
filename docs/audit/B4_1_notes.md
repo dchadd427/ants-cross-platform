@@ -358,4 +358,18 @@ The keys are those of `apply_tune` in `tools/bot_arena.cpp`; every one sets a fi
 ## Draft of the CHANGELOG entry (the coordinator moves `VERSION`, `CHANGELOG.md`, `STATUS.md` and the README's version line)
 
 ```
+## v0.3.0 - 2026-10-0X - Computer players that fight: the standard bot
 
+**For players:**
+- **Computer players gather food, raid and fight back.** At every level a bot answers a blow on one of its ants with one, two or three ants (Easy, Medium, Hard), sends a hit carrier home, keeps three fire walls in front of its thief hole when a thief threatens (they stop every raid), puts out your fire walls and defuses your bombs where they are in its way, and never sends its last ants into a fight. Medium and Hard bots also take the Fire, Bomber and Thief power-ups of their own side at the start, send ants to the contested middle of the map (when the map starts them with six ants or more), keep a Combat Ant that harvests and fights, and raid the leading team's hill with a Thief.
+- **Hard bots guide their carriers at the hill's gate by hand** ("guiding for eating": 4 to 23 percent more food alone on every map) and steal an unguarded Thief power-up for a second thief; Hard bots play the aggressive styles.
+- **Four styles.** Every bot draws one at the start of a match (aggressive, economic, raider, defensive; Hard only aggressive or raider; Easy keeps its plan) so that bots do not all play alike. An aggressive bot sends Combat Ants after the carriers of the best opponent that are near them and, at Hard, lights fire walls round that opponent's gate with a stolen Fire Ant. `--bot 2:hard:raider` pins one (a server room's specification too: `"bot": "hard:raider"`); a bot is still called "Bot (Hard)".
+- The line under "Empty seats at START" (the desktop Host panel, the web page and the README) says what the bots do now: "Bots gather food, raid and fight back."
+
+**Rules / network:** The rules, the network protocol (12) and every golden hash did not change: the bots use the commands that a person can click (an attack names an enemy ant that is not on a hill tile; a move onto a power-up tile is a deliberate pick-up by one ant).
+
+**Fixes:**
+- `docs/GAME_REVERSE_ENGINEERING.md`: the mud "humping" bullet, the cost of a forced hatch (`min(200, score)`, not free) and the emergence invulnerability were wrong.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.2.0...v0.3.0), [detailed notes](docs/audit/B4_1_notes.md).
+```
