@@ -331,6 +331,8 @@ def main():
             time.sleep(0.8)
             room = tab.ev("document.getElementById('room-code').textContent")
             check(tab.ev("!document.getElementById('room-panel').hidden") and room.startswith("demo-treasure-3p-"), "Host the match makes the room panel (%s)" % room)
+            check(tab.ev("document.body.classList.contains('in-room') && document.getElementById('cards').hidden && document.getElementById('how').hidden && getComputedStyle(document.querySelector('.tv')).display === 'none'"),
+                  "... in its room mode: the two cards and the header's picture give way to the room")
             before = pages()
             tab.ev("document.getElementById('play-tab').click(); 1")
             ok = wait_for(lambda: tab.ev("location.pathname") == "/" and "join=" in tab.ev("location.search"), 15)

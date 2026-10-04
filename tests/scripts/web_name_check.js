@@ -342,6 +342,7 @@ function runLobby(search, stored, options) {
     new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', code)(win, doc, history, nav, function () { return 0; }, function () { return 0; });
     env.storage = storage;
     env.win = win;
+    env.body = doc.body;
     env.$ = (id) => env.elements[id];
     env.type = (id, text) => { const el = env.elements[id]; el.value = text; el.fire('input', {}); };
     env.rows = () => env.$('seat-rows').children;
@@ -365,6 +366,7 @@ function randomName(n) { return NAMES_OF_THE_PAGE.indexOf(n) !== -1; }
     const env = runLobby('', {});
     check('the page has ONE name field, near the top, in the same box for Host and Join', !!env.$('player-name') && !env.$('join-name') && env.$('who') && !env.$('who').hidden);
     check('nothing is asked first: the two cards and "How it works" are there, the step\'s button is not', !env.$('cards').hidden && !env.$('how').hidden && env.$('who-go').hidden && env.$('who-title').hidden);
+    check('... and the page is not in its room mode', !env.body.classList.contains('in-room'));
     check('nothing remembered: the field is empty and its placeholder is Player', env.$('player-name').value === '' && env.$('player-name').getAttribute('placeholder') === 'Player' && env.$('player-name').getAttribute('maxlength') === '32');
 }
 {
@@ -392,6 +394,7 @@ for (const bad of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
     env.$('host').click();
     check('Create with a good name makes the room', env.roomStarted() && env.$('player-name').value === '  Alice  ');
     check('... and the room takes the place of the two cards and of "How it works"', env.$('cards').hidden && env.$('how').hidden && !env.$('room-panel').hidden);
+    check('... and the page is in its room mode (the header is a smaller one: the class in-room of the body)', env.body.classList.contains('in-room'));
     check('... and remembers the name (trimmed) under ants.name', env.storage.data['ants.name'] === 'Alice');
     check('before a seat starts every row shows a random name', env.rows().length >= 2 && env.rows().every((r, i) => randomName(r.children[0].textContent.split(' · ')[1])));
     env.rowButton(2, 'Play here').click();
@@ -516,6 +519,7 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobb
     const env = runLobby('?room=demo-small-2p-abc12', { 'ants.name': 'Maya' });
     check('a shared room link: the step is up, with the remembered name in the field and a Join button', !env.$('who-go').hidden && env.$('who-go').textContent === 'Join' && !env.$('who-title').hidden && /demo-small-2p-abc12/.test(env.$('who-title').textContent) && env.$('player-name').value === 'Maya');
     check('... nothing starts before the button: no room panel, no frame, the address is not rewritten', !env.roomStarted() && env.frames().length === 0 && env.replaced.length === 0 && env.opened.length === 0 && env.$('cards').hidden && env.$('how').hidden);
+    check('... the name step is the full page, not a room (the room class comes with the room)', !env.body.classList.contains('in-room'));
     env.type('player-name', 'Bot (x)');
     env.$('who-go').click();
     check('... a bad name does not start it and says why', !env.roomStarted() && env.$('name-msg').textContent.length > 8);
@@ -770,6 +774,7 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
     check('an address that names a map and no players hosts 4, as it always did (after the name step)', !room.$('who-go').hidden && room.$('who-go').textContent === 'Host');
     room.$('who-go').click();
     check('... the room of 4 on that map', room.roomStarted() && /demo-small-4p-/.test(room.$('room-code').textContent) && room.assigned.length === 0);
+    check('... and the page is in its room mode', room.body.classList.contains('in-room'));
     check('... the cards and "How it works" give way to the room', room.$('cards').hidden && room.$('how').hidden && !room.$('room-panel').hidden);
 }
 // ... the host's own seat in this tab: the address that Join makes, with the bots of the leader's START
