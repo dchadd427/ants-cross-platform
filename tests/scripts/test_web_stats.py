@@ -8,8 +8,8 @@ answers there is no line (no text of an error). The page looks at once and every
   - the block STATS of web/lobby.html is RUN (node, when it is installed) on tables, with a fake clock, a fake visibility and fake answers of the site (tests/scripts/web_stats_check.js), and
     the page as a whole in the fake browser of tests/scripts/web_name_check.js (what it asks, what it shows, when it looks);
   - what needs no browser is read from the files: the line is hidden in the markup until numbers come, the block has its markers and no markup or storage, the page asks only its own /stats
-    and /busy with no cache and no cookies, the dot is green only while a match is played, and on a phone the line takes the place of the slogan and shows the live part only (the header must
-    not grow: the START! button stays on the first screen of a 390 x 844 phone).
+    and /busy with no cache and no cookies, the dot is green only while a match is played, the two parts wrap as units with no dot at the end or the start of a line, and on a phone the line
+    takes the place of the slogan and shows the live part only (the header must not grow: the START! button stays on the first screen of a 390 x 844 phone).
 """
 import os
 import re
@@ -33,7 +33,7 @@ class TheMarkupAndTheStyle(unittest.TestCase):
         self.style = self.page[:self.page.index("</style>")]
 
     def test_the_line_is_in_the_header_under_the_banner_and_hidden_until_numbers_come(self):
-        line = '<p class="stats" id="stats" hidden><span id="stats-dot" class="live" aria-hidden="true"></span><span id="stats-live"></span><span id="stats-sep" aria-hidden="true" hidden>&middot;</span><span id="stats-played"></span></p>'
+        line = '<p class="stats" id="stats" hidden><span id="stats-dot" class="live" aria-hidden="true"></span><span class="parts"><span class="partsrow"><span id="stats-live"></span> <span id="stats-played"></span></span></span></p>'                      # (the space is for the text of the line: "online 1,284", not "online1,284"; a flex row draws none of it)
         self.assertIn(line, self.page)
         header = self.page[self.page.index('<header class="top">'):self.page.index("</header>")]
         self.assertLess(header.index('<h1 class="banner">'), header.index('id="stats"'))
@@ -71,8 +71,20 @@ class TheMarkupAndTheStyle(unittest.TestCase):
 
     def test_on_a_phone_the_line_takes_the_place_of_the_slogan_and_shows_the_live_part_only(self):
         phone = self.style[self.style.index("@media (max-width: 700px) {"):]
-        for needle in (".intro p:not(.lead):not(.stats), .links { display: none; }", "#stats-sep, #stats-played { display: none; }", ".stats:not([hidden]) + .lead { display: none; }", "flex-wrap: nowrap;"):
+        for needle in (".intro p:not(.lead):not(.stats), .links { display: none; }", "#stats-played { display: none; }", ".stats:not([hidden]) + .lead { display: none; }", ".stats .partsrow { flex-wrap: nowrap; }"):
             self.assertIn(needle, phone, needle)
+
+    def test_the_parts_wrap_as_units_and_the_dot_between_them_is_clipped_where_it_would_begin_a_line(self):
+        # the dot is a pseudo-element in the left space of the second part; the first part's space and the row's negative margin are the same size, an outer box with overflow hidden
+        # cuts that space off, so a part that begins a line shows no dot (a dot at the end of the first line, or at the start of the second, looked like a mistake on a tablet)
+        row = re.search(r"\.stats \.partsrow \{ display: flex; flex-wrap: wrap; gap: 2px 0; margin-left: -(\d+)px; \}", self.style)
+        space = re.search(r"\.stats \.partsrow > span \{ position: relative; padding-left: (\d+)px; \}", self.style)
+        self.assertTrue(row and space, "the row and its parts")
+        self.assertEqual(row.group(1), space.group(1))
+        self.assertIn(".stats .parts { min-width: 0; overflow: hidden; }", self.style)
+        self.assertRegex(self.style, r'#stats-played::before \{ content: "\\00b7"; position: absolute; left: \d+px; \}')
+        self.assertIn("#stats-played:empty { display: none; }", self.style)                  # (nothing but /busy: no totals, and no dot of theirs)
+        self.assertNotIn("stats-sep", self.page)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the line's rules were NOT run (tests/scripts/web_stats_check.js)")

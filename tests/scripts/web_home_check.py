@@ -24,6 +24,7 @@ Exit status 0: every check passed; 1: a check failed; 3: the check could not be 
 import argparse
 import json
 import os
+import re
 import sys
 import time
 
@@ -31,6 +32,38 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
 from web_aspect_check import Browser, NotReachable, Tab, read_png            # noqa: E402
 from web_hidden_check import find_browser                                    # noqa: E402
+
+
+# The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05)); text on the clay tile is measured against the tile's two ends and text in the footer against the ends of
+# its gradient, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
+CONTRAST_JS = """(function () {
+  function parse(c) { var m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null; var p = m[1].split(',').map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
+  function lin(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+  function lum(c) { return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b); }
+  function ratio(a, b) { var l1 = lum(a), l2 = lum(b); if (l1 < l2) { var t = l1; l1 = l2; l2 = t; } return (l1 + 0.05) / (l2 + 0.05); }
+  var CLAY = [{ r: 219, g: 75, b: 19 }, { r: 251, g: 51, b: 91 }], BAR = [{ r: 0x2b, g: 0x68, b: 0x5f }, { r: 0x2b, g: 0x6b, b: 0x4f }];
+  function bgOf(el) {
+    for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
+      if (e.classList && e.classList.contains('bar')) return BAR;
+      var c = parse(getComputedStyle(e).backgroundColor);
+      if (e.tagName === 'BODY' || e.tagName === 'HTML') return CLAY;
+      if (c && c.a > 0.99) return [c];
+    }
+    return CLAY;
+  }
+  var rows = [], walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    var n = walker.currentNode, t = n.textContent.replace(/\\s+/g, ' ').trim(), el = n.parentElement;
+    if (!t || !el || el.closest('[hidden]') || el.closest('script,style,noscript,option')) continue;
+    var cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0 || r.width === 0 || r.height === 0) continue;
+    var fg = parse(cs.color), worst = 99;
+    bgOf(el).forEach(function (bg) { worst = Math.min(worst, ratio(fg, bg)); });
+    rows.push([Math.round(worst * 100) / 100, t.slice(0, 40)]);
+  }
+  rows.sort(function (a, b) { return a[0] - b[0]; });
+  return JSON.stringify({ texts: rows.length, lowest: rows.slice(0, 3) });
+})()"""
 
 
 def wait_for(condition, timeout=10.0, step=0.1):
@@ -162,11 +195,35 @@ def main():
             check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"], "the footer names the version and the build (%r)" % info["footer"][:80])
             check(info["scrollW"] <= info["innerW"], "no horizontal scroll at 1440")
             check(bool(value("Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; })")), "the game's own font, Libre Franklin, is loaded from the site")
+            stats = json.loads(value("JSON.stringify({hidden: document.getElementById('stats').hidden, text: document.getElementById('stats').textContent.replace(/\\s+/g, ' ').trim()})"))
+            check(stats["hidden"] or re.match(r"^\d[\d,]* matches? being played \u00b7 \d[\d,]* players? online( \d[\d,]* games? played \(\d[\d,]* today\))?$", stats["text"]) is not None,
+                  "the line of numbers is either not there (a site with no /stats) or says what it counts (%r)" % (stats,))
+            def contrast(where):
+                """Every text of the page is at least 4.5:1 (the help is opened for it, and closed again)."""
+                found = json.loads(value("var how = document.getElementById('how'), was = how.open; how.open = true; var found = " + CONTRAST_JS + "; how.open = was; found"))
+                check(found["texts"] > 40 and found["lowest"][0][0] >= 4.5, "%s: the text contrast is at least 4.5:1 for all %d texts (lowest: %s)" % (where, found["texts"], found["lowest"]))
+
+            contrast("1440 px")
+            # many widths (the layout changes at 700, 899/900, 1100 and 1219/1220 px): no sideways scroll at any of them, and on the online card Host and Join side by side from 900 to 1219 px only
+            sizes = []
+            for width, beside in ((320, False), (360, False), (700, False), (701, False), (768, False), (899, False), (900, True), (1024, True), (1100, True), (1101, True), (1219, True),
+                                  (1220, False), (1280, False), (1366, False), (1600, False)):
+                tab.emulate(width, 900, 1)
+                time.sleep(0.3)
+                m = json.loads(value("""JSON.stringify({scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth,
+                    host: document.querySelector('.online .block').getBoundingClientRect().toJSON(), join: document.querySelector('.online .block + .block').getBoundingClientRect().toJSON()})"""))
+                sideways = m["scrollW"] > m["innerW"]
+                together = m["join"]["left"] >= m["host"]["right"] - 1 and abs(m["join"]["top"] - m["host"]["top"]) < 2
+                stacked = m["join"]["top"] >= m["host"]["bottom"] - 1
+                if sideways or together != beside or (not beside and not stacked):
+                    sizes.append((width, m["scrollW"], m["innerW"], "side by side" if together else "stacked"))
+            check(not sizes, "no sideways scroll from 320 to 1600 px, and Host and Join are side by side from 900 to 1219 px only (wrong: %s)" % (sizes,))
             tab.emulate(390, 844, 2, mobile=True)
             tab.open(web, wait=False)
             time.sleep(1.5)
             phone = json.loads(value("JSON.stringify({scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, left: document.getElementById('who').getBoundingClientRect().left})"))
             check(phone["scrollW"] <= phone["innerW"] and phone["left"] >= 15, "phone width (390): no horizontal scroll, 16 px gutters (%s)" % phone)
+            contrast("390 px")
             shot("home_front_phone")
             tab.emulate(1440, 900, 1)
 

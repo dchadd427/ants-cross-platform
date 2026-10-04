@@ -820,7 +820,7 @@ const answers = (table) => (url) => {
     return Promise.resolve({ status: 200, json: () => Promise.resolve(a) });
 };
 const GOOD_STATS = { now: { matches: 3, players: 7 }, online: { day: 5, total: 900 }, local: { day: 16, total: 384 }, since: '2026-10-04' };
-const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-dot').className, live: env.$('stats-live').textContent, sepHidden: env.$('stats-sep').hidden, played: env.$('stats-played').textContent, title: env.$('stats').getAttribute('title') });
+const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-dot').className, live: env.$('stats-live').textContent, played: env.$('stats-played').textContent, title: env.$('stats').getAttribute('title') });
 (async () => {
     {
         const env = runLobby('', {}, { firstVisit: true });
@@ -833,7 +833,7 @@ const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-d
         const env = runLobby('', {}, { firstVisit: true, fetch: answers({ '/stats': GOOD_STATS }) });
         check('before the answer the line is hidden (the markup says so)', /<p class="stats" id="stats" hidden>/.test(lobbyText) && env.$('stats').hidden === true);
         await settle();
-        same('/stats answers: the line is shown, the dot is green, the numbers are the owner\'s example', statsView(env), { hidden: false, dot: 'live on', live: '3 matches being played · 7 players online', sepHidden: false, played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
+        same('/stats answers: the line is shown, the dot is green, the numbers are the owner\'s example', statsView(env), { hidden: false, dot: 'live on', live: '3 matches being played · 7 players online', played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
         same('... one request, to the site\'s own /stats, with no cache and no cookies', env.fetches.map((f) => [f.url, f.init.cache, f.init.credentials]), [['/stats', 'no-store', 'omit']]);
         check('... and the page made no markup from the numbers', env.innerHTMLWrites.length === 0);
     }
@@ -841,7 +841,7 @@ const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-d
         const env = runLobby('', {}, { firstVisit: true, fetch: answers({ '/stats': 'page', '/busy': { matches: 0, players: 2 } }) });
         await settle();
         same('/stats is the game page (the site has no such route) and /busy answers: the live part, a grey dot, no totals', [env.fetches.map((f) => f.url), statsView(env)],
-             [['/stats', '/busy'], { hidden: false, dot: 'live', live: '0 matches being played · 2 players online', sepHidden: true, played: '', title: null }]);
+             [['/stats', '/busy'], { hidden: false, dot: 'live', live: '0 matches being played · 2 players online', played: '', title: null }]);
     }
     for (const [label, table] of [['/stats answers 404 and /busy 200', { '/stats': 404, '/busy': { matches: 1, players: 1 } }], ['/stats fails and /busy answers', { '/busy': { matches: 1, players: 1 } }]]) {
         const env = runLobby('', {}, { firstVisit: true, fetch: answers(table) });

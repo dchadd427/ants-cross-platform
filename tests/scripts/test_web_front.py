@@ -249,5 +249,63 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
             self.assertIn('.cell[data-seat="%s"] { order: %s; }' % (seat, place), self.style)
 
 
+class TheCardsAtManyWidths(unittest.TestCase):
+    """The browser checks (tests/scripts/web_home_check.py, part front) measure the page from 320 to 1600 px; what needs no browser is read here."""
+
+    def setUp(self):
+        self.page = read("web", "lobby.html")
+        self.style = self.page[:self.page.index("</style>")]
+
+    def test_the_two_cards_stand_side_by_side_from_1220_px_and_are_stacked_under_it(self):
+        self.assertRegex(self.style, r"\.cols \{ display: grid; grid-template-columns: minmax\(0, 1\.55fr\) minmax\(0, 1fr\);")
+        stacked = re.search(r"@media \(max-width: (\d+)px\) \{\s*\.cols \{ grid-template-columns: minmax\(0, 1fr\);", self.style)
+        self.assertIsNotNone(stacked)
+        self.assertEqual(stacked.group(1), "1219")                         # (the roster's four buttons need the solo card of a 1220 px window, 12 px to spare, measured)
+
+    def test_a_stacked_online_card_puts_host_and_join_side_by_side_from_900_px_up_to_where_the_cards_stand_side_by_side(self):
+        block = re.search(r"@media \(min-width: (\d+)px\) and \(max-width: (\d+)px\) \{\s*\.card\.online \{(.*?)\n        \}", self.style, re.S)
+        self.assertIsNotNone(block)
+        self.assertEqual((block.group(1), block.group(2)), ("900", "1219"))
+        rules = block.group(0)
+        self.assertIn(".card.online { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }", rules)
+        self.assertIn(".online .after { grid-column: 1 / -1; }", rules)                              # (the note under both)
+        divider = re.search(r"\.online \.block \+ \.block \{ margin-top: 0; padding: 0 0 0 \d+px; border-top: 0; border-left: (3px dotted rgba\(21, 16, 12, \.55\)); \}", rules)
+        self.assertIsNotNone(divider, "the dotted line between the blocks stands upright")
+        self.assertIn("border-top: " + divider.group(1), self.style)                                 # (it is the line that the blocks have one above the other)
+
+
+class TheColours(unittest.TestCase):
+    """The text of the page is at least 4.5:1 against its background, in every state of the buttons and banners (the browser check measures the whole page; this reads the colours)."""
+
+    def setUp(self):
+        page = read("web", "lobby.html")
+        self.style = page[:page.index("</style>")]
+
+    def token(self, name):
+        return re.search(r"--%s: (#[0-9a-f]{6});" % name, self.style).group(1)
+
+    @staticmethod
+    def luminance(colour):
+        def channel(v):
+            v /= 255.0
+            return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+        r, g, b = (int(colour[i:i + 2], 16) for i in (1, 3, 5))
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+    def ratio(self, one, other):
+        high, low = sorted((self.luminance(one), self.luminance(other)), reverse=True)
+        return (high + 0.05) / (low + 0.05)
+
+    def test_the_banners_buttons_and_hovered_buttons_keep_their_text_readable(self):
+        single = re.search(r"\.card\.single > \.banner \{ background: (#[0-9a-f]{6}); \}", self.style).group(1)
+        for what, text, background in (("gold title on a teal banner", self.token("gold"), self.token("teal")),
+                                       ("cream text on a teal button or banner", self.token("cream"), self.token("teal")),
+                                       ("cream text on a hovered button", self.token("cream"), self.token("teal-hi")),
+                                       ("cream text on the banner of the first card", self.token("cream"), single),
+                                       ("cream text in the black boxes", self.token("cream"), self.token("inset")),
+                                       ("the hint in an empty field", re.search(r"::placeholder \{ color: (#[0-9a-f]{6}); \}", self.style).group(1), self.token("inset"))):
+            self.assertGreaterEqual(self.ratio(text, background), 4.5, "%s: %s on %s" % (what, text, background))
+
+
 if __name__ == "__main__":
     unittest.main()
