@@ -98,6 +98,9 @@ RUN cp /usr/share/nginx/html/index.html /usr/share/nginx/html/play.html
 # Copy favicon assets
 COPY web/favicon.* /usr/share/nginx/html/
 
+# The pictures and the font of the front page (web/front/, served at /front/): the game's own art, made by tools/front_page_art/make_art.py, and its own font with its licence
+COPY web/front/ /usr/share/nginx/html/front/
+
 # The front page, the lobby (lobby.html): play on this computer alone or against bots, host a match on the game server or join one by its code (it embeds the game page for the seats that play on it),
 # with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
 COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
