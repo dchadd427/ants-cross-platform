@@ -358,10 +358,10 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--aspect " + why;
             }
-        } else if (std::strcmp(argv[i], "--zoom") == 0) {                        // --zoom 0.5 | 1 | 2: the zoom of the map view that a match starts with (view_zoom.hpp)
+        } else if (std::strcmp(argv[i], "--zoom") == 0) {                        // --zoom 0.05 .. 2: the zoom of the map view that a match starts with, the nearest level that its map offers (view_zoom.hpp)
             std::string why;
             if (i + 1 >= argc) {
-                if (cfg.startup_error.empty()) cfg.startup_error = "--zoom needs 0.5, 1 or 2";
+                if (cfg.startup_error.empty()) cfg.startup_error = "--zoom needs a number from 0.05 to 2";
             } else if (zoom::parse_level(argv[++i], cfg.zoom, why)) {
                 cfg.zoom_given = true;
             } else if (cfg.startup_error.empty()) {
@@ -864,8 +864,8 @@ void Application::choose_prediction() {
     }
 }
 
-// --zoom, else the settings' key `zoom` ("0.5", "1" or "2": the remake's own key, written when the player zooms), else 1. A settings file never stops the game: a value that is not a level
-// is reported and ignored.
+// --zoom, else the settings' key `zoom` (a number from 0.05 to 2: the remake's own key, written when the player zooms), else 1. A settings file never stops the game: a value that is not a zoom is
+// reported and ignored.
 void Application::choose_zoom() {
     zoom_wanted_ = zoom::kNormal;
     if (config_.zoom_given) {
@@ -879,25 +879,35 @@ void Application::choose_zoom() {
     }
 }
 
-// A match starts (the local game's START, the network's start, the first map of a game that starts at once): the camera takes the level that the player chose last when the kind of
-// match and this map offer it, else the level 1. A network match never starts zoomed out; the level that was chosen stays remembered for the next local game.
+// A match starts (the local game's START, the network's start, the first map of a game that starts at once): the camera takes the nearest level to the one that the player chose last (or gave with
+// --zoom) among those that this map offers in this view (1 when the setting is not a zoom). The level that was chosen stays remembered for the next match.
 void Application::apply_match_zoom() {
     if (!renderer_) return;
-    const LayoutRect view = layout_.view();
-    renderer_->camera().zoom = zoom::level_for_match(zoom_wanted_, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE,
-                                                     static_cast<int64_t>(current_level_.height()) * TILE_SIZE);
+    renderer_->camera().zoom = zoom::level_for_match(zoom_wanted_, zoom_fit(), zoom_limits());
 }
 
+// Every player of a match has the same levels (FAIRNESS, application.hpp): the zoom is the view's own. Only a renderer that cannot make the offscreen target is limited: it draws the zoom 1.
 zoom::Limits Application::zoom_limits() const noexcept {
     if (renderer_ && renderer_->world_target_failed()) return zoom::Limits::only_normal();      // (a zoom is drawn through the target: with none there is only the original's picture)
-    return network_active() ? zoom::Limits::no_zoom_out() : zoom::Limits::any();
+    return zoom::Limits::any();
 }
 
-// The camera's zoom, in a match, is always a level that zoom_limits() allows (and so a level that is drawn): at every frame, before anything of it is used. A network match never zoomed out (a test, or
-// anything else, that put the camera there is corrected at the next frame); and when the renderer cannot make the offscreen target the picture it draws is the zoom 1 whatever the camera says,
-// so the camera says 1 (the clicks, the minimap's frame and the edge scroll then agree with the picture), only that level is offered, and one line is written when the failure begins (not at
-// every frame). The level that the player chose stays remembered (it is not the player's choice that is wrong): the next match starts with it when the target works again. The correction goes
-// as set_zoom's does, anchored at the view's centre.
+zoom::Fit Application::zoom_fit() const noexcept {
+    zoom::Fit fit;
+    const LayoutRect view = layout_.view();
+    fit.view_w = view.w;
+    fit.view_h = view.h;
+    fit.map_w = static_cast<int64_t>(current_level_.width()) * TILE_SIZE;
+    fit.map_h = static_cast<int64_t>(current_level_.height()) * TILE_SIZE;
+    fit.max_world = renderer_ ? renderer_->max_world_extent() : 0;
+    return fit;
+}
+
+// The camera's zoom, in a match, is always inside what is allowed and drawn: at every frame, before anything of it is used. It is never below the map's limit (the view shows nothing outside the
+// map; the limit follows the view, which a new picture changes), and when the renderer cannot make the offscreen target the picture it draws is the zoom 1 whatever the camera says, so the camera
+// says 1 (the clicks, the minimap's frame and the edge scroll then agree with the picture), only that level is offered, and one line is written when the failure begins (not at every frame). The
+// level that the player chose stays remembered (it is not the player's choice that is wrong): the next match starts with it when the target works again. The correction goes as set_zoom's does,
+// anchored at the view's centre.
 void Application::enforce_zoom_limits() {
     if (!renderer_) return;
     const bool failed = renderer_->world_target_failed();
@@ -911,42 +921,38 @@ void Application::enforce_zoom_limits() {
     if (state_ != AppState::Playing) return;                               // (the map view is drawn in a match only: the setup screens, a room's included, leave the camera as it is; the next match start chooses its level, apply_match_zoom)
     ViewportCamera& camera = renderer_->camera();
     const zoom::Limits limits = zoom_limits();
-    const float held = std::clamp(camera.zoom, limits.min_zoom, limits.max_zoom);
+    const float bottom = std::max(zoom::floor_zoom(zoom_fit()), limits.min_zoom);
+    const float top = std::min(limits.max_zoom, zoom::kIn);
+    const float held = std::clamp(camera.zoom, std::min(bottom, top), top);
     if (held == camera.zoom) return;
     const LayoutRect view = layout_.view();
     camera.set_zoom(held, view.w / 2, view.h / 2, current_level_.width(), current_level_.height());
 }
 
 std::vector<float> Application::zoom_levels() const {
-    std::vector<float> levels;
-    if (!renderer_) return levels;
-    const LayoutRect view = layout_.view();
-    for (const float level : zoom::kLevels) {
-        if (zoom::offered(level, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE, static_cast<int64_t>(current_level_.height()) * TILE_SIZE)) levels.push_back(level);
-    }
-    return levels;
+    if (!renderer_) return {};
+    return zoom::levels(zoom_fit(), zoom_limits());
 }
 
-// The zoom API (application.hpp): to one of the offered levels, keeping the world point under the screen pixel (anchor_x, anchor_y) of the picture under it as far as the map's edges allow
+// The zoom API (application.hpp): to the nearest of the offered levels, keeping the world point under the screen pixel (anchor_x, anchor_y) of the picture under it as far as the map's edges allow
 bool Application::set_zoom(float level, int32_t anchor_x, int32_t anchor_y) {
     if (!renderer_ || state_ != AppState::Playing) return false;
+    if (!std::isfinite(level) || level <= 0.0f) return false;
     ViewportCamera& camera = renderer_->camera();
-    if (level == camera.zoom) return false;
+    const float target = zoom::nearest(level, zoom::levels(zoom_fit(), zoom_limits()));
+    if (target == camera.zoom) return false;
     const LayoutRect view = layout_.view();
-    if (!zoom::offered(level, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE, static_cast<int64_t>(current_level_.height()) * TILE_SIZE)) return false;
     const int32_t dx = std::clamp(anchor_x - view.x, 0, std::max(0, view.w - 1));
     const int32_t dy = std::clamp(anchor_y - view.y, 0, std::max(0, view.h - 1));
-    camera.set_zoom(level, dx, dy, current_level_.width(), current_level_.height());
-    zoom_wanted_ = level;                                                 // remembered: the next match starts with it
-    config_store_.set_string("zoom", zoom::level_name(level));
+    camera.set_zoom(target, dx, dy, current_level_.width(), current_level_.height());
+    zoom_wanted_ = target;                                                // remembered: the next match starts with it
+    config_store_.set_string("zoom", zoom::level_name(target));
     return true;
 }
 
 bool Application::step_zoom(int direction, int32_t anchor_x, int32_t anchor_y) {
     if (!renderer_) return false;
-    const LayoutRect view = layout_.view();
-    const float next = zoom::step(renderer_->camera().zoom, direction, zoom_limits(), view.w, view.h, static_cast<int64_t>(current_level_.width()) * TILE_SIZE,
-                                  static_cast<int64_t>(current_level_.height()) * TILE_SIZE);
+    const float next = zoom::step(renderer_->camera().zoom, direction, zoom_fit(), zoom_limits());
     return set_zoom(next, anchor_x, anchor_y);
 }
 
@@ -1063,7 +1069,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 
     if (renderer_) {
         renderer_->set_level(current_level_);
-        apply_match_zoom();                                                   // (a match of the network starts at 1: the zoom-out is not offered there)
+        apply_match_zoom();                                                   // (the remembered level, or the nearest that this map offers)
         show_start_view();
     }
     uint8_t labelled = roster;                                                // the teams that get a score label
@@ -1329,7 +1335,7 @@ void Application::run_frame_with_delta(float delta_time) {
 
     handle_events();
 
-    enforce_zoom_limits();                      // the camera's zoom is one that is allowed and drawn (a network match: never below 1; no offscreen target: 1)
+    enforce_zoom_limits();                      // the camera's zoom is one that is allowed and drawn (never below the map's limit; no offscreen target: 1)
 
     handle_camera_panning(delta_time);
 

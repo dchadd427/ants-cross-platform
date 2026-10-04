@@ -259,6 +259,16 @@ const MaskRect kWMaskPlate{790, 526, 960, 540};
 // table, beside their labels, so "Red:" and "Blue:" were hashed, and SDL's alpha blit rounds differently on x86-64 and on ARM: the masks of tests/test_app/test_view_fingerprint.cpp's kWMaskMatch, corrected by the CI)
 const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942, 462}, {799, 482, 942, 498}, {630, 2, 722, 20}, {111, 522, 211, 540}, {375, 522, 467, 540}, {630, 522, 722, 540}};
 
+/// A level that the map does not offer on this screen (the 16:9 view over TINY has 0.768 as its smallest: 0.5 is below it) cannot be a picture of the game: the match starts at the nearest level
+/// that it does offer, which is a fractional one (no picture is pinned at those, the software renderer's scaling of a fraction is not the same on every SDL: test_zoom_view checks them by
+/// geometry). The row is skipped, and the start at the nearest level is what is checked.
+bool skip_unoffered(Application& app, float z, const std::string& name) {
+    const std::vector<float> list = app.zoom_levels();
+    if (std::find(list.begin(), list.end(), z) != list.end()) return false;
+    check(app.zoom() == zoom::nearest(z, list) && app.zoom() > z, name + ": a level that the map does not offer starts at the nearest one");
+    return true;
+}
+
 void app_scenarios() {
     for (const Shape& s : kShapes) {
         const bool wide = s.cw == kWideW;
@@ -278,6 +288,7 @@ void app_scenarios() {
                     continue;
                 }
                 app.hud().dismiss_match_start_modal();
+                if (skip_unoffered(app, z, name)) continue;
                 app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_LEAVE; return we; }());     // (no game cursor in the picture)
                 app.render_frame();
                 Picture p;
@@ -316,6 +327,7 @@ void app_ants_scenarios() {
                     continue;
                 }
                 app.hud().dismiss_match_start_modal();
+                if (skip_unoffered(app, z, name)) continue;
                 check(app.zoom() == z, name + ": the match is at the zoom that was asked for");
                 const LayoutRect view = app.layout().view();
                 app.render_frame();
@@ -612,7 +624,6 @@ const Golden kGoldens[] = {
     {"zoom.app.ants.wide.GAUNTLET.z0.5", 0x86eb3b0f2d57563c, 518400},
     {"zoom.app.ants.wide.GAUNTLET.z1", 0x1fe1af1bc5d13ae7, 518400},
     {"zoom.app.ants.wide.GAUNTLET.z2", 0x037a90b9cd9d5067, 518400},
-    {"zoom.app.ants.wide.TINY.z0.5", 0x6b02b92ef6ff8bc4, 518400},
     {"zoom.app.ants.wide.TINY.z1", 0x85a3d695f1432492, 518400},
     {"zoom.app.ants.wide.TINY.z2", 0x32217ff583631ba9, 518400},
     {"zoom.app.classic.GAUNTLET.z0.5", 0xfddd91bb8441a40f, 307200},
@@ -621,7 +632,6 @@ const Golden kGoldens[] = {
     {"zoom.app.classic.TINY.z2", 0x87a3ee948b0fc0f5, 307200},
     {"zoom.app.wide.GAUNTLET.z0.5", 0x68abadbf0c489c48, 518400},
     {"zoom.app.wide.GAUNTLET.z2", 0x76c6a986c4a3548b, 518400},
-    {"zoom.app.wide.TINY.z0.5", 0x39f848fb1cd975c6, 518400},
     {"zoom.app.wide.TINY.z2", 0x3cbc4ec63a606f98, 518400},
     {"zoom.camera.classic.z0.5", 0x3a4dad0e646af9cc, 45},
     {"zoom.camera.classic.z2", 0x898a58705f5b9fc1, 45},

@@ -5217,7 +5217,25 @@ void run_room_chat_box_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N5.69 A Match Started From A Room With Bots (The Leader's Fill, A Server's Room) Starts At The Zoom 1 And Offers No Zoom-Out Although 0.5 Is Remembered - The Server's Bots Are Not A Local Game - And Leaves The Level Remembered: The Local Game After It Starts At 0.5 And Has The Zoom-Out Back") {
+    // The zoom levels are the player's own view: a match of the network offers the levels of a local game on the same map and screen (the series 2^(k/4) from 2 down to the map's limit,
+    // max(view_w / map_w, view_h / map_h): TINY (992 x 992) over the 16:9 view of 762 x 500 ends at 762 / 992 = 0.768), and the wheel zooms through them in the match. Nothing of it is sent.
+    const auto tiny_wide_levels_ok = [](const std::vector<float>& levels) {
+        if (levels.size() != 7) return false;
+        const float want[6] = {2.0f, 1.6817928f, 1.4142135f, 1.1892071f, 1.0f, 0.8408964f};
+        for (int i = 0; i < 6; ++i) {
+            if (std::fabs(levels[static_cast<size_t>(i)] - want[i]) > 1e-6f) return false;
+        }
+        return levels[6] >= 762.0f / 992.0f && levels[6] < 762.0f / 992.0f + 1e-5f;                  // the limit is the last level
+    };
+    const auto nearest_to = [](float z, const std::vector<float>& list) {
+        float best = list.front();
+        for (const float l : list) {
+            if (std::fabs(std::log(z / l)) < std::fabs(std::log(z / best))) best = l;
+        }
+        return best;
+    };
+
+    TEST_CASE("N5.69 A Match Started From A Room With Bots (The Leader's Fill, A Server's Room) Has The Zoom Levels Of A Local Game On The Same Map And Screen: It Starts At The Nearest One To The Remembered 0.5 (Which Stays Remembered), The Wheel Zooms Out And In Through Them In The Match, And The Local Game After It Starts At The Level That Was Chosen") {
         BoxRoom d;
         ASSERT_TRUE(open_leader(d, "ZM-FILL", Aspect::Wide16x9, net::FillLevel::Medium, false, true, 0.5f, true));
         Application& app = d.app;
@@ -5225,35 +5243,51 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(start_room_match(d, "ZM-FILL"));
         ASSERT_TRUE(app.network_active());
         const LayoutRect view = app.layout().view();
-        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);                    // started at 1 (the zoom-out is not offered here), 0.5 stays remembered
-        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::no_zoom_out() && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}));
+        const std::vector<float> levels = app.zoom_levels();
+        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::any() && tiny_wide_levels_ok(levels));      // (no limit of the kind of match)
+        ASSERT_TRUE(app.zoom() == levels.back() && app.remembered_zoom() == 0.5f);           // 0.5 is below this map's limit: the match starts at the limit, 0.5 stays remembered
         app.note_pointer(view.x + 300, view.y + 200);
         notch(app, -1);
-        ASSERT_EQ(app.zoom(), 1.0f);                                                         // the wheel toward does not zoom out
+        ASSERT_EQ(app.zoom(), levels.back());                                                // the wheel toward cannot go beyond the map's limit
         app.handle_mouse_wheel(wheel_event(0, -0.6f));
         app.handle_mouse_wheel(wheel_event(0, -0.6f));
-        ASSERT_EQ(app.zoom(), 1.0f);                                                         // nor does a trackpad's creep
-        ASSERT_TRUE(!app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));
+        ASSERT_EQ(app.zoom(), levels.back());                                                // nor can a trackpad's creep
+        ASSERT_TRUE(!app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));        // (0.5 is no level here: the nearest is where the view is)
+        ASSERT_EQ(app.remembered_zoom(), 0.5f);                                              // none of that changed what is remembered
+        notch(app, +1);                                                                      // one notch in: the next level
+        ASSERT_EQ(app.zoom(), levels[5]);
+        ASSERT_EQ(app.remembered_zoom(), levels[5]);                                         // a level that is chosen in the match is remembered
+        app.handle_mouse_wheel(wheel_event(0, 0.6f));
+        ASSERT_EQ(app.zoom(), levels[5]);                                                    // a trackpad's creep adds up: 0.6 is no notch ...
+        app.handle_mouse_wheel(wheel_event(0, 0.6f));
+        ASSERT_EQ(app.zoom(), levels[4]);                                                    // ... and 1.2 is one
+        notch(app, +2);
+        ASSERT_EQ(app.zoom(), levels[2]);
         middle_click(app, view.x + 300, view.y + 200);
-        ASSERT_EQ(app.zoom(), 1.0f);
-        ASSERT_TRUE(queue_motion(view.x + 300, view.y + 200) && queue_wheel(-1, -1.0f) && queue_button(SDL_BUTTON_MIDDLE, true, view.x + 300, view.y + 200) && queue_button(SDL_BUTTON_MIDDLE, false, view.x + 300, view.y + 200));
+        ASSERT_EQ(app.zoom(), 1.0f);                                                         // the middle button: back to 1
+        notch(app, -2);
+        ASSERT_EQ(app.zoom(), levels.back());                                                // two notches out from 1: the limit again
+        ASSERT_TRUE(queue_motion(view.x + 300, view.y + 200) && queue_wheel(1, 1.0f));
         app.run_frame_with_delta(0.016f);                                                    // (through the window's own event loop, in the match)
+        ASSERT_EQ(app.zoom(), levels[5]);
+        ASSERT_TRUE(queue_motion(view.x + 300, view.y + 200) && queue_button(SDL_BUTTON_MIDDLE, true, view.x + 300, view.y + 200) && queue_button(SDL_BUTTON_MIDDLE, false, view.x + 300, view.y + 200));
+        app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.zoom(), 1.0f);
-        ASSERT_EQ(app.remembered_zoom(), 0.5f);                                              // none of it changed what is remembered
-        d.hall.step(kDialogMs + 3000);                                                       // the match goes on, at the zoom 1, with the server's bots (its first turn is sealed kDialogMs after it began)
+        ASSERT_EQ(app.remembered_zoom(), 1.0f);
+        d.hall.step(kDialogMs + 3000);                                                       // the match goes on at a zoom of the player's own, with the server's bots (its first turn is sealed kDialogMs after it began)
         ASSERT_TRUE(!app.net()->desynced() && d.server.status("ZM-FILL").ticks > 40);
-        // the match is left: the local setup screen follows, and a local game starts at the remembered level and has the zoom-out
+        app.note_pointer(view.x + 300, view.y + 200);                                        // (a queued button release in a headless run reads as a release outside the window)
+        notch(app, -1);                                                                      // the level that the match ends at: what the next game starts with
+        ASSERT_EQ(app.zoom(), levels[5]);
         app.return_to_map_select();
         ASSERT_TRUE(!app.network_active() && app.zoom_limits() == zoom::Limits::any());
         ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
         app.hud().dismiss_match_start_modal();
-        ASSERT_TRUE(app.zoom() == 0.5f && app.remembered_zoom() == 0.5f);
-        ASSERT_TRUE(app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}));
+        ASSERT_TRUE(app.zoom() == levels[5] && app.remembered_zoom() == levels[5]);
+        ASSERT_TRUE(app.zoom_levels() == levels);                                            // (the same levels as the match of the network had)
         app.note_pointer(view.x + 300, view.y + 200);
-        notch(app, +1);
-        ASSERT_EQ(app.zoom(), 1.0f);
         notch(app, -1);
-        ASSERT_EQ(app.zoom(), 0.5f);                                                         // (the zoom-out works in the local game after the network's)
+        ASSERT_EQ(app.zoom(), levels.back());
         app.quit();
     } TEST_END();
 
@@ -5265,6 +5299,8 @@ void run_room_chat_box_tests() {
         const LayoutRect view = app.layout().view();
         const int32_t px = view.x + 300;
         const int32_t py = view.y + 200;
+        const float in1 = zoom::series(1);                                                   // one level in from 1 (1.19) and one out (0.84): the levels are not 2 and 0.5 any more
+        const float out1 = zoom::series(-1);
         ASSERT_TRUE(queue_motion(px, py));
         app.run_frame_with_delta(0.016f);
         ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input().empty());
@@ -5273,19 +5309,19 @@ void run_room_chat_box_tests() {
         ASSERT_EQ(app.hud().get_chat_input(), std::string("hel"));
         ASSERT_TRUE(queue_wheel(1, 1.0f));                                                   // zoom in, in the middle of the line
         app.run_frame_with_delta(0.016f);
-        ASSERT_TRUE(app.zoom() == 2.0f && app.hud().get_chat_input() == "hel");
+        ASSERT_TRUE(app.zoom() == in1 && app.hud().get_chat_input() == "hel");
         ASSERT_TRUE(queue_text("lo"));
         app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.hud().get_chat_input(), std::string("hello"));
         ASSERT_TRUE(queue_text(" +-="));                                                     // the characters that a zoom key would have: they are text, the zoom stays
         app.run_frame_with_delta(0.016f);
-        ASSERT_TRUE(app.zoom() == 2.0f && app.hud().get_chat_input() == "hello +-=");
+        ASSERT_TRUE(app.zoom() == in1 && app.hud().get_chat_input() == "hello +-=");
         ASSERT_TRUE(queue_button(SDL_BUTTON_MIDDLE, true, px, py) && queue_button(SDL_BUTTON_MIDDLE, false, px, py));       // the middle button: back to 1, the line stays
         app.run_frame_with_delta(0.016f);
         ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input() == "hello +-=");
-        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(-1, -1.0f));                         // toward: no zoom-out in this match (a queued button release in a headless run reads as a release outside the window: the motion puts the pointer back)
+        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(-1, -1.0f));                         // toward: zoomed out one level (a queued button release in a headless run reads as a release outside the window: the motion puts the pointer back)
         app.run_frame_with_delta(0.016f);
-        ASSERT_TRUE(app.zoom() == 1.0f && app.hud().get_chat_input() == "hello +-=");
+        ASSERT_TRUE(app.zoom() == out1 && app.hud().get_chat_input() == "hello +-=");
         ASSERT_TRUE(queue_text(" team"));
         app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.hud().get_chat_input(), std::string("hello +-= team"));
@@ -5294,9 +5330,9 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(app.hud().get_chat_input().empty() && log_has(app.hud().get_chat_log(), "hello +-= team"));
         ASSERT_TRUE(d.hall.until([&]() { return !d.peer.chats.empty(); }, 8000));
         ASSERT_EQ(d.peer.chats.back().text, std::string("hello +-= team"));
-        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(1, 1.0f));                           // zoomed again, a second line while zoomed, and the match goes on
+        ASSERT_TRUE(queue_motion(px, py) && queue_wheel(2, 2.0f));                           // zoomed in two levels (0.84 -> 1 -> 1.19), a second line while zoomed, and the match goes on
         app.run_frame_with_delta(0.016f);
-        ASSERT_EQ(app.zoom(), 2.0f);
+        ASSERT_EQ(app.zoom(), in1);
         ASSERT_TRUE(queue_text("second"));
         app.run_frame_with_delta(0.016f);
         ASSERT_TRUE(queue_key(SDLK_RETURN));
@@ -5304,14 +5340,14 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(d.hall.until([&]() { return d.peer.chats.size() == 2; }, 8000));
         ASSERT_EQ(d.peer.chats.back().text, std::string("second"));
         d.hall.step(2000);
-        ASSERT_TRUE(!app.net()->desynced() && app.zoom() == 2.0f && app.remembered_zoom() == 2.0f);
-        app.return_to_map_select();                                                          // the level chosen in the match (the zoom in) is what a local game starts with
+        ASSERT_TRUE(!app.net()->desynced() && app.zoom() == in1 && app.remembered_zoom() == in1);
+        app.return_to_map_select();                                                          // the level chosen in the match is what a local game starts with
         ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
-        ASSERT_EQ(app.zoom(), 2.0f);
+        ASSERT_EQ(app.zoom(), in1);
         app.quit();
     } TEST_END();
 
-    TEST_CASE("N5.71 The Same For The Host Of A Room On The Local Network Whose START Seats Bots Itself (This Machine Runs Them): The Match Is A Match Of The Network - It Starts At The Zoom 1 And Offers No Zoom-Out Although 0.5 Is Remembered, Bots Or Not - And The Local Game After It Starts At 0.5") {
+    TEST_CASE("N5.71 The Same For The Host Of A Room On The Local Network Whose START Seats Bots Itself (This Machine Runs Them): The Match Is A Match Of The Network With The Zoom Levels Of A Local Game On Its Map - It Starts At The Nearest One To The Remembered 0.5, The Wheel Zooms Out And In, Bots Or Not - And The Local Game After It Has The Same Levels") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;
         cfg.net_port = 0;
@@ -5338,19 +5374,27 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(app.network_active());                                                   // ... and it is still a match of the network
         app.hud().dismiss_match_start_modal();
         const LayoutRect view = app.layout().view();
-        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);
-        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::no_zoom_out() && app.zoom_levels() == std::vector<float>({1.0f, 2.0f}));
+        const std::vector<float> levels = app.zoom_levels();
+        ASSERT_TRUE(app.zoom_limits() == zoom::Limits::any() && levels.size() >= 5 && levels.front() == 2.0f);      // (no limit of the kind of match)
+        ASSERT_TRUE(std::count(levels.begin(), levels.end(), 1.0f) == 1 && std::is_sorted(levels.rbegin(), levels.rend()));
+        const float start = nearest_to(0.5f, levels);
+        ASSERT_TRUE(app.zoom() == start && app.remembered_zoom() == 0.5f);
+        const int32_t map_px = static_cast<int32_t>(app.sim().grid().width()) * 32;          // the last level is the map's limit: the view's smaller-relative side just fills it
+        const float limit = std::max(static_cast<float>(view.w) / static_cast<float>(map_px), static_cast<float>(view.h) / static_cast<float>(static_cast<int32_t>(app.sim().grid().height()) * 32));
+        ASSERT_TRUE(levels.back() >= limit && levels.back() < limit + 1e-5f);
         app.note_pointer(view.x + 300, view.y + 200);
-        notch(app, -1);
-        ASSERT_TRUE(app.zoom() == 1.0f && !app.set_zoom(0.5f, view.x + 300, view.y + 200) && !app.step_zoom(-1, view.x + 300, view.y + 200));
-        middle_click(app, view.x + 300, view.y + 200);
-        ASSERT_TRUE(app.zoom() == 1.0f && app.remembered_zoom() == 0.5f);
+        notch(app, +1);
+        ASSERT_TRUE(app.zoom() > start && app.remembered_zoom() == app.zoom());              // zooming in works, and it is what is remembered then
+        notch(app, -3);
+        ASSERT_TRUE(app.zoom() < start || app.zoom() == levels.back());                      // zooming out works (or the view is at the map's limit)
+        const float chosen = app.zoom();
         duo.step(3000 + kDialogMs);                                                          // (the host seals the first turn kDialogMs after the match began; the bots look from the first tick on)
         ASSERT_TRUE(!app.net()->desynced() && !bob.net.desynced() && app.bots()->stats(2).decisions > 0);
+        ASSERT_TRUE(app.zoom() == chosen);
         app.return_to_map_select();
         ASSERT_TRUE(!app.network_active() && app.bots() == nullptr && app.zoom_limits() == zoom::Limits::any());
-        ASSERT_TRUE(app.start_game(maps_dir() + "TINY.LVL"));
-        ASSERT_TRUE(app.zoom() == 0.5f && app.zoom_levels() == std::vector<float>({0.5f, 1.0f, 2.0f}));
+        ASSERT_TRUE(app.start_game(maps_dir() + "GAUNTLET.LVL"));                            // a local game on a map of 1920 x 1920 (this level list is a different one: the match's map may be another)
+        ASSERT_TRUE(app.zoom() == nearest_to(chosen, app.zoom_levels()) && app.zoom_levels().front() == 2.0f);
         app.quit();
     } TEST_END();
 

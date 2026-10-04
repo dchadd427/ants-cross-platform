@@ -330,6 +330,21 @@ inline int32_t world_under(int64_t origin2, float z, int32_t offset) { return st
 inline int32_t edge_under(int64_t origin2, float z, int32_t offset) { return static_cast<int32_t>(floor_div(origin2 + static_cast<int64_t>(offset) * hpp_of(z) + 1, 2)); }
 inline int64_t origin2_of(double v) { return static_cast<int64_t>(std::llround(v * 2.0)); }
 
+/// The same for ANY zoom (the levels in between too), from the camera's own origin, in long doubles: the world pixel under the screen offset is the floor of origin + offset / z (the point under
+/// the pixel's left edge), the edge of the screen pixel at `offset` rounded up is its ceiling
+inline int32_t world_under_f(double origin, float z, int32_t offset) { return static_cast<int32_t>(std::floor(static_cast<long double>(origin) + static_cast<long double>(offset) / static_cast<long double>(z))); }
+inline int32_t edge_under_f(double origin, float z, int32_t offset) { return static_cast<int32_t>(std::ceil(static_cast<long double>(origin) + static_cast<long double>(offset) / static_cast<long double>(z))); }
+/// the world pixels that `len` screen pixels show at the zoom z (rounded up)
+inline int32_t seen_f(int32_t len, float z) { return static_cast<int32_t>(std::ceil(static_cast<long double>(len) / static_cast<long double>(z))); }
+/// the levels that a view (wide: 762 x 500, else 442 x 440) over a square map of `tiles` x `tiles` tiles has: what a local game offers (view_zoom.hpp)
+inline std::vector<float> zooms_for(bool wide, uint32_t tiles = 60) {
+    zoom::Fit fit;
+    fit.view_w = wide ? 762 : 442;
+    fit.view_h = wide ? 500 : 440;
+    fit.map_w = fit.map_h = static_cast<int64_t>(tiles) * 32;
+    return zoom::levels(fit, zoom::Limits::any());
+}
+
 /// Takes the commands of the HUD and does not carry them out
 class RecordingSink : public sim::CommandSink {
 public:
@@ -482,7 +497,7 @@ struct AppRig {
     std::pair<int32_t, int32_t> world_at(int32_t x, int32_t y) {
         const LayoutRect view = app.layout().view();
         const float z = app.zoom();
-        return {world_under(ox2(), z, x - view.x), world_under(oy2(), z, y - view.y)};
+        return {world_under_f(app.renderer().camera().x, z, x - view.x), world_under_f(app.renderer().camera().y, z, y - view.y)};
     }
     Application app;
     bool ok{false};
@@ -600,10 +615,10 @@ inline std::vector<uint32_t> ants_of(const sim::SimulationEngine& s, uint8_t pla
     return out;
 }
 
-/// The application joins the room of a bare host and the host starts a match on TINY; both machines play. Returns false when anything of that does not happen.
-inline bool join_and_start(Application& app, Peer& host, const ApplicationConfig& base) {
+/// The application joins the room of a bare host and the host starts a match on TINY (or the map that is named); both machines play. Returns false when anything of that does not happen.
+inline bool join_and_start(Application& app, Peer& host, const ApplicationConfig& base, const std::string& map = "TINY") {
     if (!host.net.host(0, "Alice", true)) return false;
-    host.net.set_map("TINY.LVL");
+    host.net.set_map(map + ".LVL");
     ApplicationConfig cfg = base;
     cfg.net_role = ApplicationConfig::NetRole::Join;
     cfg.net_address = "127.0.0.1";
@@ -613,7 +628,7 @@ inline bool join_and_start(Application& app, Peer& host, const ApplicationConfig
     Duo duo{app, host};
     if (!duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000)) return false;
     uint64_t hash = 0;
-    if (!net::hash_file(maps_dir() + "TINY.LVL", hash) || !host.net.start_match(31337, hash)) return false;
+    if (!net::hash_file(maps_dir() + map + ".LVL", hash) || !host.net.start_match(31337, hash)) return false;
     return duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000);
 }
 

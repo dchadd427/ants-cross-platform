@@ -27,8 +27,10 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
   * the wheel and the pinch (milestone M4, the mouse-wheel zoom): over the game's canvas the page cancels the wheel (the page does not scroll) and the ctrl + wheel of a trackpad's
     pinch (the browser's page zoom) and Safari's gesture events (turned into wheel events for the game); over the title, the selector and the guide the browser behaves as
     usual (the page scrolls, nothing is cancelled); the middle button's press and click (mousedown, auxclick) are cancelled over the canvas only (an unprevented press over a page
-    that scrolls starts the browser's autoscroll on Windows) and a left press is not; and the game really zooms: in a running match a wheel rolled away shows every world pixel as a 2 x 2 square (0.5 and 1 and 2
-    are pictures that differ, the frame around the map view does not), the middle button goes back to 1, and a wheel over the minimap does not zoom (screenshots in --shots);
+    that scrolls starts the browser's autoscroll on Windows) and a left press is not; and the game really zooms, one level a notch (the series 2^(k/4) of view_zoom.hpp, read from the game's
+    own number through ants_probe): in a running match four notches away from 1 reach 2 and show every world pixel as a 2 x 2 square, eight toward reach 0.5, two toward from 1 reach 0.71, the
+    series goes on to the map's limit and stops there (0.5, 0.71 and 1 and 2 are pictures that differ, the frame around the map view does not), the middle button goes back to 1, and a
+    wheel over the minimap does not zoom (screenshots in --shots);
   * the download of the game's data (index.data): the retry rule, a download that the browser fails once (injected with the DevTools Fetch domain) is retried and the game starts, a
     download that fails for good shows the message with a Reload button; the loading of the game itself: index.js or index.wasm that fail, a game that never starts (the watchdog), a
     body that is a web page / too small / an error status / cut short / a byte short (each is a failed try, the game starts on the next good one), the package that is handed to the
@@ -579,7 +581,7 @@ def main():
     ap.add_argument("--pointer", action="store_true", help="also the exactness of the game's pointer at six layouts (the full run does it too; --pointer-only does nothing else)")
     ap.add_argument("--pointer-only", action="store_true", help="only the exactness of the game's pointer (the game's START button's edges, found with the mouse, at six layouts)")
     ap.add_argument("--wheel", action="store_true", help="also the wheel and the pinch: cancelled over the canvas only, and the game zooms (the full run does it too; --wheel-only does nothing else)")
-    ap.add_argument("--wheel-only", action="store_true", help="only the wheel and the pinch of the page (cancelled over the canvas only; the game zooms to 0.5, 1 and 2; the middle button)")
+    ap.add_argument("--wheel-only", action="store_true", help="only the wheel and the pinch of the page (cancelled over the canvas only; the game zooms a level a notch: 2, 0.71, 0.5, the map's limit; the middle button)")
     ap.add_argument("--load-only", action="store_true", help="only the page's logic and the faults of the loading of the game (index.js, index.wasm, a game that never starts, a body that is not the data)")
     ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of web/lobby.html (the front page, at /) with 2 and with 4 games on the page (needs the game server behind /ws)")
     ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
@@ -971,9 +973,10 @@ def main():
 
         def wheel_checks():
             """The wheel and a trackpad's pinch over the game zoom the GAME (the mouse-wheel zoom): over the canvas the page cancels them (no scroll, no page zoom), elsewhere it does not
-            (the title, the selector and the guide scroll the page as usual), and in a running match the game really zooms. The game's zoom is seen in the picture: at the zoom 2 every
-            world pixel of the map view is a 2 x 2 square (in a window whose box is exactly the canvas's 960 x 540), the frame around the view never changes."""
-            print("[web aspect] the wheel and the pinch: cancelled over the canvas only, and they zoom the game (0.5, 1, 2); the middle button goes back to 1")
+            (the title, the selector and the guide scroll the page as usual), and in a running match the game really zooms, one level of the series a notch. The game says its level
+            (ants_probe(6), times 100) and it is seen in the picture: at the zoom 2 every world pixel of the map view is a 2 x 2 square (in a window whose box is exactly the canvas's
+            960 x 540), the frame around the view never changes."""
+            print("[web aspect] the wheel and the pinch: cancelled over the canvas only, and they zoom the game a level a notch (2, 0.71, 0.5, the map's limit); the middle button goes back to 1")
 
             def wheel(x, y, dy, modifiers=0):
                 tab.call("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": dy, "modifiers": modifiers})
@@ -1175,7 +1178,34 @@ def main():
             check(tab.ev("window.scrollY") > 0 and len(seen) >= 1 and all(not e["dp"] for e in seen), "the page with ?fill=: a wheel over the guide scrolls the page as usual (scroll %s, %s)" % (tab.ev("window.scrollY"), seen))
             settle_scroll()
 
-            # ---- the game: it zooms
+            # ---- the game: it zooms, one level a notch. The levels are the series 2^(k/4) (view_zoom.hpp): four notches from 1 reach 2, two notches out of 1 reach 0.71, eight out of 2 reach 0.5,
+            # and the last level is the map's limit. The game says its own level (ants_probe(6): the zoom times 100), so the check does not rest on a picture alone. The match is the setup
+            # screen's default map, TREASURE: every level down to 0.5 in both pictures, then 0.42 and the limit (0.397 in 16:9; 0.35, 0.30, 0.25 and the limit 0.230 in 4:3).
+            BELOW_HALF = {"16:9": [42, 40], "4:3": [42, 35, 30, 25, 23]}                  # (times 100, from the level below 0.5 to the map's limit)
+
+            def zoom_now(expected, wait=3.0):
+                """The game's zoom times 100, read until it is `expected` or the time is up (the game takes the wheel at its next frame)"""
+                deadline = time.time() + wait
+                seen = tab.ev("Module._ants_probe(6)")
+                while seen != expected and time.time() < deadline:
+                    time.sleep(0.1)
+                    seen = tab.ev("Module._ants_probe(6)")
+                return seen
+
+            def walk(label, px, py, path):
+                """The wheel, a notch at a time, through the levels of `path` (the game's zoom times 100: the first is where the game is, every next one is one notch away; a notch toward the user
+                zooms out, a notch away zooms in). The game must say the next level after every notch. The pause is longer than the wheel accumulator's 500 ms, so that the 0.2 left over from a
+                delta of 120 (1.2 notches) is forgotten and a notch is exactly one level."""
+                for before, after in zip(path, path[1:]):
+                    wheel(px, py, 120 if after < before else -120)
+                    seen = zoom_now(after)
+                    if seen != after:
+                        check(False, "%s: a notch %s from %d %% gives %d %% (the game says %s %%)" % (label, "toward" if after < before else "away", before, after, seen))
+                        return False
+                    time.sleep(0.65)
+                check(True, "%s: %d notches, one level each (%s %%)" % (label, len(path) - 1, ", ".join(str(v) for v in path)))
+                return True
+
             for aspect, cw, ch_, view, label in (("16:9", 960, 540, (16, 21, 762, 500), "16:9"), ("4:3", 640, 480, (16, 21, 442, 440), "classic 4:3")):
                 tab.emulate(976, 900, 1)
                 tab.open(web + "?aspect=" + aspect, settle=1.5)
@@ -1204,8 +1234,14 @@ def main():
                 def differs(a, b):
                     return differ_fraction(view_rows(a)[0], view_rows(b)[0], view_rows(a)[1])
 
+                def middle_button():
+                    tab.mouse("mousePressed", px, py, button="middle", clickCount=1)
+                    tab.mouse("mouseReleased", px, py, button="middle", clickCount=1)
+                    time.sleep(0.8)
+
+                check(zoom_now(100, wait=0.5) == 100, "%s: a match starts at the zoom 1 (the game says %s %%)" % (label, tab.ev("Module._ants_probe(6)")))
                 take("1")
-                wheel(px, py, -120)
+                walk("%s: four notches away from 1 reach 2" % label, px, py, [100, 119, 141, 168, 200])
                 time.sleep(0.8)
                 take("2")
                 d21 = differs("1", "2")
@@ -1218,35 +1254,49 @@ def main():
                     s1, nch = strip("1")
                     s2, _ = strip("2")
                     check(s1 == s2, "%s: the frame around the map view (its left strip) is the same picture at the zoom 1 and 2" % label)
-                wheel(px, py, 120)
-                time.sleep(0.5)
-                wheel(px, py, 120)
+                walk("%s: eight notches toward from 2 reach 0.5" % label, px, py, [200, 168, 141, 119, 100, 84, 71, 59, 50])
                 time.sleep(0.8)
                 take("05")
                 d51, d52 = differs("1", "05"), differs("2", "05")
-                check(d51 > 0.2 and d52 > 0.2, "%s: two notches toward zoom out to 0.5: a third picture of the map view (%.0f %% of its pixels differ from the zoom 1, %.0f %% from the zoom 2)" % (label, d51 * 100, d52 * 100))
+                check(d51 > 0.2 and d52 > 0.2, "%s: the zoom 0.5 is a third picture of the map view (%.0f %% of its pixels differ from the zoom 1, %.0f %% from the zoom 2)" % (label, d51 * 100, d52 * 100))
                 if exact:
                     s5, nch = strip("05")
                     check(s5 == s1, "%s: the frame around the map view is the same picture at the zoom 0.5" % label)
                     rows5, _ = view_rows("05")
                     check(block_fraction(rows5, nch) < 0.85, "%s: the zoom 0.5 is not a picture of 2 x 2 squares (%.0f %%)" % (label, block_fraction(rows5, nch) * 100))
-                wheel(px, py, -120)
-                time.sleep(0.5)
-                wheel(px, py, -120)
+                # the end of the range: the series goes on below 0.5 and the last level is the map's limit; a notch more changes nothing
+                to_limit = [50] + BELOW_HALF[aspect]
+                walk("%s: on from 0.5 to the map's limit (%d %%)" % (label, to_limit[-1]), px, py, to_limit)
+                wheel(px, py, 120)
+                time.sleep(0.8)
+                check(tab.ev("Module._ants_probe(6)") == to_limit[-1], "%s: a notch toward at the map's limit changes nothing (the game says %s %%)" % (label, tab.ev("Module._ants_probe(6)")))
+                walk("%s: back from the limit to 2, a level a notch" % label, px, py, list(reversed(to_limit)) + [59, 71, 84, 100, 119, 141, 168, 200])
                 time.sleep(0.8)
                 take("2b")
                 if exact:
                     rows2b, nch = view_rows("2b")
-                    check(block_fraction(rows2b, nch) > 0.95, "%s: two notches away from 0.5 are at 2 again (%.0f %% blocks)" % (label, block_fraction(rows2b, nch) * 100))
-                tab.mouse("mousePressed", px, py, button="middle", clickCount=1)
-                tab.mouse("mouseReleased", px, py, button="middle", clickCount=1)
-                time.sleep(0.8)
+                    check(block_fraction(rows2b, nch) > 0.95, "%s: the notches back from the limit are at 2 again (%.0f %% blocks)" % (label, block_fraction(rows2b, nch) * 100))
+                middle_button()
+                check(zoom_now(100, wait=1.0) == 100, "%s: the middle button goes back to the zoom 1 (the game says %s %%)" % (label, tab.ev("Module._ants_probe(6)")))
                 take("1b")
                 if exact:
                     rows1b, nch = view_rows("1b")
                     check(block_fraction(rows1b, nch) < 0.85, "%s: the middle button goes back to the zoom 1 (%.0f %% blocks)" % (label, block_fraction(rows1b, nch) * 100))
                 else:
                     check(differs("2b", "1b") > 0.2, "%s: the middle button goes back to the zoom 1: the map view changes" % label)
+                # a level between the exact ones (0.71, two notches out of 1) is smoothed: a picture of its own, not squares
+                walk("%s: two notches toward from 1 reach 0.71" % label, px, py, [100, 84, 71])
+                time.sleep(0.8)
+                take("071")
+                d71 = (differs("1", "071"), differs("2", "071"), differs("05", "071"))
+                check(min(d71) > 0.2, "%s: the zoom 0.71 is a picture of its own (%.0f %% of its pixels differ from the zoom 1, %.0f %% from 2, %.0f %% from 0.5)" % ((label,) + tuple(v * 100 for v in d71)))
+                if exact:
+                    s71, nch = strip("071")
+                    check(s71 == s1, "%s: the frame around the map view is the same picture at the zoom 0.71" % label)
+                    rows71, _ = view_rows("071")
+                    check(block_fraction(rows71, nch) < 0.85, "%s: the zoom 0.71 is not a picture of 2 x 2 squares (%.0f %%)" % (label, block_fraction(rows71, nch) * 100))
+                middle_button()
+                check(zoom_now(100, wait=1.0) == 100, "%s: the middle button goes back to the zoom 1 from 0.71 (the game says %s %%)" % (label, tab.ev("Module._ants_probe(6)")))
                 # a wheel over the minimap does not zoom (and does not scroll the page either)
                 mx, my = screen_of_canvas(g, (480 if aspect == "4:3" else 800) + 40, 60, cw, ch_)
                 tab.mouse("mouseMoved", mx, my, button="none")
@@ -1256,6 +1306,7 @@ def main():
                 time.sleep(0.8)
                 take("m1")
                 check(tab.ev("window.scrollY") == 0, "%s: a wheel over the minimap does not scroll the page" % label)
+                check(tab.ev("Module._ants_probe(6)") == 100, "%s: a wheel over the minimap does not zoom the map view (the game says %s %%)" % (label, tab.ev("Module._ants_probe(6)")))
                 if exact:
                     rows_m, nch = view_rows("m1")
                     check(block_fraction(rows_m, nch) < 0.85, "%s: a wheel over the minimap does not zoom the map view (%.0f %% blocks)" % (label, block_fraction(rows_m, nch) * 100))

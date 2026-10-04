@@ -132,7 +132,7 @@ inline std::vector<size_t> frame_part_draw_order(size_t part_count) {
  *
  * `x`, `y` (and their whole parts `world_x`, `world_y`) are the WORLD point at the view's top left corner. The view is a rectangle of the screen (`view_x`, `view_y`, `viewport_w`,
  * `viewport_h`) and the world it shows is `viewport / zoom` world pixels (view_zoom.hpp; the zoom is 1 unless the player used the wheel): a world pixel is `zoom` screen pixels.
- * At the zoom 1 everything here is what it always was; the origin lies on a grid of one screen pixel at the zoom (half a world pixel at 2, two at 0.5).
+ * At the zoom 1 everything here is what it always was; the origin lies on a grid of one screen pixel at the zoom (half a world pixel at 2, two at 0.5, 0.71 at 1.41).
  */
 struct ViewportCamera {
     float x{0.0f}; // Top-left world X in float pixels
@@ -147,7 +147,8 @@ struct ViewportCamera {
     /// fixed on that axis; false (the default) puts it at the view's top left corner. The original's own view is smaller than its smallest map, so nothing of it ever shows there and the
     /// classic camera keeps the old rule (the fingerprints of the classic picture pin it); Renderer::set_layout sets this for every layout that is not the original's.
     bool centre_small_maps{false};
-    /// The zoom of the view: screen pixels per world pixel, one of zoom::kLevels (0.5, 1, 2). Everything that converts between the screen and the world reads it.
+    /// The zoom of the view: screen pixels per world pixel, one of the levels that view_zoom.hpp offers (from the map's limit up to 2; 1 is the original's picture). Everything that converts
+    /// between the screen and the world reads it.
     float zoom{zoom::kNormal};
 
     /// The view of a layout (ScreenLayout::view()): its origin on the screen and its size
@@ -195,7 +196,7 @@ struct ViewportCamera {
         clamp_to_bounds(map_w, map_h);
     }
     /// Changes the zoom to `level`, keeping the world point under the screen pixel that is (anchor_dx, anchor_dy) from the view's corner under it as far as the map's edges allow
-    /// (view_zoom.hpp zoomed). The level must be one of zoom::kLevels; nothing else changes it.
+    /// (view_zoom.hpp zoomed). The level must be a zoom (from zoom::kSmallest to zoom::kIn); the Application chooses it among the levels that the view over the map offers.
     void set_zoom(float level, int32_t anchor_dx, int32_t anchor_dy, uint32_t map_w, uint32_t map_h);
     void center_on(int32_t world_px, int32_t world_py, uint32_t map_w = 60, uint32_t map_h = 60);
     void clamp_to_bounds(uint32_t map_w, uint32_t map_h);
@@ -389,14 +390,22 @@ public:
     /// The part of the map view that a map of map_w x map_h tiles covers with the camera where it is (view and map intersected, in picture pixels): the clip of the world. The whole view for
     /// a map that is as big as the view or bigger.
     LayoutRect map_view_rect(uint32_t map_w, uint32_t map_h) const;
-    /// THE ZOOM (milestone M4, view_zoom.hpp). The camera's `zoom` is 1 (the original's picture: the world is drawn straight into the view, exactly as it always was), 0.5 or 2. At another zoom
-    /// the world is drawn at ONE TEXEL PER WORLD PIXEL into an offscreen target that covers the world that the view shows (`visible_w()` x `visible_h()`, one texel more for the half-pixel
-    /// origin of the zoom 2), and that target is copied into the view at `zoom` screen pixels per texel: with the nearest filter at 2 (every world pixel a crisp 2 x 2 square), with the
-    /// linear filter at 0.5 (smoothed). Everything that is in screen space is drawn afterwards, on the canvas, at its own size: the hit point digits (Ctrl+L), the tile grid overlay,
-    /// and (by the HUD and the application) the frame, the cursor and the rubber band.
+    /// THE ZOOM (view_zoom.hpp). The camera's `zoom` is 1 (the original's picture: the world is drawn straight into the view, exactly as it always was) or another level, from 2 down to the
+    /// map's limit. At another zoom the world is drawn at ONE TEXEL PER WORLD PIXEL into an offscreen target that covers the world that the view shows (and a texel more on each side for the
+    /// filter), halved as often as the zoom needs (a zoom below 0.5: every halving is the exact average of 2 x 2 texels), and the last level is scaled into the lattice of whole screen pixels
+    /// at the zoom (view_zoom.hpp Pass): exactly at 2 (nearest: every world pixel a crisp 2 x 2 square), 1 and 0.5 (the 2 x 2 average) and at every power of two, with the linear filter and
+    /// the fractional position of the lattice in between (a renderer that places a rectangle at a fraction of a pixel; SDL's software renderer truncates it). Everything that is in screen space is
+    /// drawn afterwards, on the canvas, at its own size: the hit point digits (Ctrl+L), the tile grid overlay, and (by the HUD and the application) the frame, the cursor and the rubber band.
     bool zoomed() const noexcept { return camera_.zoom != zoom::kNormal; }
     /// A test hook: draw the world through the offscreen target at the zoom 1 too (the result must be the picture that the direct path draws, pixel for pixel)
     void set_force_world_target(bool force) noexcept { force_world_target_ = force; }
+    /// Do the levels between 1 and 2 use the linear filter (the default, zoom::kSmoothUpscale) or the nearest? 2 is always nearest, 1 always the exact copy; the zoom-out is always linear.
+    void set_smooth_upscale(bool smooth) noexcept { smooth_upscale_ = smooth; }
+    /// The most world pixels on one axis that the offscreen target can hold (the device's texture size less the margins of the pass), 0 when the renderer does not say: the limit of the zoom-out
+    /// of a map that is bigger than a texture (view_zoom.hpp Fit::max_world)
+    int32_t max_world_extent() const noexcept;
+    /// A test hook: the device's texture size (texels on a side) as the pass sees it; 0 (the default) is what SDL says, which SDL's software renderer leaves unlimited (max_world_extent() is 0)
+    void set_texture_side_for_test(int32_t side) noexcept { texture_side_override_ = side; }
     /// A test hook: the offscreen target cannot be made (what the fall-back to the zoom 1 picture is for); and a count of the world passes that went through the target (the zoom 1
     /// never does, unless it is forced: a test that compares the two paths can see that the pass really took the one it asks for)
     void set_fail_world_target(bool fail) noexcept { fail_world_target_ = fail; }
@@ -414,6 +423,10 @@ public:
     /// target that a zoom needs (the zoom 0.5's), and clears the failure when that works. Nothing at all when there is no failure.
     void retry_world_target();
     static constexpr int32_t kWorldTargetRetryFrames = 120;
+    /// What the pass keeps free of a texture's size (alignment and filter margins): max_world_extent() is the device's texture size less this
+    static constexpr int32_t kPassMargin = 64;
+    /// The lattice texture is the view and this many pixels more each way (the scaled picture and the fraction of its place)
+    static constexpr int32_t kLatticeMargin = 12;
 
     void set_level(const ants::assets::LevelData& level);
 
@@ -658,12 +671,18 @@ private:
     void restore_clip();
 
     // The world pass (see zoomed()). While `in_world_target_` the renderer draws into the target: the camera is a camera of zoom 1 whose view is the target (so every position of the world
-    // code is a texel), the picture is the whole target, there is no origin, and world_view() is the target. begin_world_target() sets this up, end_world_target() puts everything back and
-    // copies the target into the view.
+    // code is a texel), the picture is the whole target, there is no origin, and world_view() is the target. begin_world_target() sets this up (the plan: view_zoom.hpp Pass), end_world_target()
+    // puts everything back, halves the target as often as the plan says and puts the last level into the view in whole screen pixels.
     LayoutRect world_view() const noexcept { return in_world_target_ ? target_view_ : layout_.view(); }
-    bool begin_world_target();
+    bool begin_world_target(int64_t map_w_px, int64_t map_h_px);
     void end_world_target();
-    bool ensure_world_target(int32_t tw, int32_t th, bool report);   // the target of this size (made if there is none or it is another size); false, with world_target_error_ set (and reported when `report`), when it cannot be made
+    struct PassTexture {
+        SDL_Texture* texture{nullptr};
+        int32_t w{0};
+        int32_t h{0};
+    };
+    bool ensure_texture(PassTexture& t, int32_t tw, int32_t th, bool report);   // a target texture of this size (made if there is none or it is another size); false, with world_target_error_ set (and reported when `report`), when it cannot be made
+    void destroy_texture(PassTexture& t) noexcept;
     void note_world_target_error(const char* what);     // the error of a failure: reported (once per failure) and kept in world_target_error_
     std::string world_target_error_;
     int32_t world_target_retry_frames_{0};
@@ -671,23 +690,19 @@ private:
     bool force_world_target_{false};
     bool fail_world_target_{false};
     bool fail_world_target_creation_{false};
+    bool smooth_upscale_{zoom::kSmoothUpscale};
+    int32_t texture_side_override_{0};        // the test hook of set_texture_side_for_test()
+    bool software_{false};                    // SDL's software renderer: it truncates the fractional rectangle of a copy (and cuts a scaled copy that a clip cuts with a rounding of its source)
     uint64_t world_target_passes_{0};
     LayoutRect target_view_{};
-    SDL_Texture* world_target_{nullptr};
-    int32_t world_target_w_{0};
-    int32_t world_target_h_{0};
-    SDL_Texture* scaled_target_{nullptr};     // the enlarged picture of a zoom whose copy is not exactly the view (a half-pixel origin): see end_world_target
-    int32_t scaled_target_w_{0};
-    int32_t scaled_target_h_{0};
+    std::vector<PassTexture> pass_levels_;    // [0] the world at one texel per world pixel, [k] the same halved k times
+    PassTexture lattice_;                     // the last level scaled into whole screen pixels (the view and a few pixels more), the view is cut out of it
+    zoom::Pass plan_;                         // the plan of the pass in progress
     struct TargetPass {
         ViewportCamera camera;                 // the camera that was replaced by the pass's own
         LayoutRect picture{};
         bool picture_inset{false};
         LayoutPoint origin{};
-        int32_t cx{0};                         // the world pixel of the target's first texel
-        int32_t cy{0};
-        int32_t shift_x{0};                    // screen pixels that the copy starts left of / above the view (the half-pixel origin of the zoom 2)
-        int32_t shift_y{0};
     } pass_;
     /// The hit point digits of the pass: at a zoom they are drawn after the copy, on the canvas, at one size (a world position and the text)
     struct DeferredDigits {
