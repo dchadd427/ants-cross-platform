@@ -26,7 +26,7 @@ services:
     # the records stay in /results/restart of the volume below and the server that starts again brings the matches back (docs/NETWORK_PORT.md "Restart records"; only rooms that hold
     # seats keep a record: --reconnect, below). 15 s is the default 10 s and room for a slow volume (256 rooms at 30 ms for a flush are 7.7 s). Keep the volume: it holds the records.
     stop_grace_period: 15s
-    # The page web/four.html (Play online) needs demo rooms, which are off by default: uncomment to allow them. The maps folder must hold the demo map and every map of
+    # The page web/lobby.html (the front page) needs demo rooms, which are off by default: uncomment to allow them. The maps folder must hold the demo map and every map of
     # --demo-maps (the page offers the six maps of the original); the number of rooms is 1 to 255 (0, or 256 and more, stop the server at startup); a demo room waits
     # ten minutes for its players; whoever reaches a game port can fill the rooms.
     # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "12", "--demo-map", "TREASURE.LVL", "--demo-maps", "TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL"]

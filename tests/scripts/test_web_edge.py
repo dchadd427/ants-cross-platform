@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""The pointer of a FULLSCREEN game page: the black bars, and the pointer lock (run by ./run_tests.sh --fast and by the CI). The owner: on a 16:10 screen the 16:9 picture has bars above and
-below, and a pointer that went over a bar no longer scrolled the map (the browser sends the game nothing there and says that the pointer LEFT the canvas); and on a Mac a pointer at the
-screen's edge makes the Dock and the menu bar appear, which a web page can only prevent by locking the pointer.
+"""The pointer of a FULLSCREEN game page: the black bars, and the pointer lock, and the margin of a WINDOWED one (run by ./run_tests.sh --fast and by the CI). The owner: on a 16:10 screen the
+16:9 picture has bars above and below, and a pointer that went over a bar no longer scrolled the map (the browser sends the game nothing there and says that the pointer LEFT the canvas); and on
+a Mac a pointer at the screen's edge makes the Dock and the menu bar appear, which a web page can only prevent by locking the pointer. In a window the same loss: "go off the screen with the
+mouse and it not screw up the scrolling": a pointer within 96 CSS pixels (about an inch) beyond the game's box still scrolls the map at the box's edge.
 
   - the page's own code is RUN (node, when it is installed): the pixel that the game reads for a pointer over a bar and the position that makes the game read it, the cursor of a locked
     pointer (its start, the motion by the mouse's distance, the edges, the corners, the slow mouse), the choice "Fullscreen mouse: Locked / Free" and its storage key (`ants.pointerlock`,
-    only "off" turns the lock off) with fakes for the page (tests/scripts/web_edge_check.js);
+    only "off" turns the lock off) with fakes for the page, and the margin of a windowed page (the band around the box, the corners, 97 px beyond, the page's own controls: tests/scripts/web_edge_check.js);
   - what needs no browser is read from the files: the control and its markup, the listeners that the bars and the lock need, the cursor rule of the fullscreen stage, the guide's text, and
     the game's `ants_probe` that the browser check reads.
 The same things in a real browser: tests/scripts/web_edge_check.py (opt-in, against a running page).
@@ -96,8 +97,8 @@ class TheListeners(PageCase):
         self.assertIn("ANTS_PAGE.moveLocked(", self.page)
         self.assertIn("ANTS_PAGE.lockStart(", self.page)
 
-    def test_a_windowed_page_is_left_alone(self):
-        """Every listener of the bars and the lock starts with a test of fullscreen or of the lock itself: a windowed page does exactly what it did."""
+    def test_a_windowed_page_is_left_alone_by_the_bars_and_the_lock(self):
+        """Every listener of the bars and the lock starts with a test of fullscreen or of the lock itself (the margin's own listeners, which come after them, are checked below)."""
         for name in ("pointermove", "mouseleave"):
             body = re.search(r"window\.addEventListener\('" + name + r"', function \(e\) \{\n(.*?)\n        \}, true\);", self.page, re.S)
             self.assertIsNotNone(body, name)
@@ -105,6 +106,85 @@ class TheListeners(PageCase):
         wheel = re.search(r"stageElement\.addEventListener\('wheel', function \(e\) \{ (.*?) \}, \{ passive: false \}\);", self.page)
         self.assertIsNotNone(wheel)
         self.assertIn("isFullscreen()", wheel.group(1))
+
+
+class TheWindowedMargin(PageCase):
+    """The margin of a windowed page: a pointer outside the game's box but within 96 CSS pixels of it still counts as at the picture's edge (a browser check says whether it works; here the
+    pieces that it stands on cannot silently disappear)."""
+
+    def setUp(self):
+        self.page = read(SHELL)
+
+    def listener(self, name, nth):
+        found = re.findall(r"window\.addEventListener\('" + name + r"', function \(e\) \{[^\n]*\n(.*?)\n        \}, true\);", self.page, re.S)
+        self.assertEqual(len(found), 2, name + ": the bars' listener and the margin's")
+        return found[nth]
+
+    def test_the_margin_is_one_inch_in_one_constant(self):
+        self.assertEqual(len(re.findall(r"var ANTS_EDGE_MARGIN = 96;", self.page)), 1)
+        self.assertGreaterEqual(len(re.findall(r"\bANTS_EDGE_MARGIN\b", self.page)), 4)           # (the constant, the motion, the leave, the comment)
+        self.assertIn("ANTS_PAGE.marginPixel(rect.left, rect.top, rect.width, rect.height, x, y, ANTS_EDGE_MARGIN)", self.page)
+        self.assertIn("ANTS_PAGE.marginPixel(rect.left, rect.top, rect.width, rect.height, e.clientX, e.clientY, ANTS_EDGE_MARGIN)", self.page)
+
+    def test_the_two_rules_are_exported_and_the_controls_are_named(self):
+        self.assertIn("marginPixel: marginPixel, overControl: overControl", self.page)
+        controls = re.search(r"var CONTROLS = '([^']*)';", self.page)
+        self.assertIsNotNone(controls)
+        for tag in ("a", "button", "input", "select", "textarea", "summary", "label", '[role="radio"]'):
+            self.assertIn(tag, [part.strip() for part in controls.group(1).split(",")], tag)
+        self.assertEqual(len(re.findall(r"ANTS_PAGE\.overControl\(", self.page)), 2)               # (the motion's target and the leave's relatedTarget)
+
+    def test_the_motion_is_handed_over_and_a_leave_beyond_the_margin_or_over_a_control_is_too(self):
+        move = self.listener("pointermove", 1)
+        for needle in ("handingOver", "ANTS_EMBED", "e.pointerType === 'touch'", "isLocked()", "isFullscreen()", "windowedPointer(", "primeFocusOverTheGame(e)"):
+            self.assertIn(needle, move)
+        function = re.search(r"function windowedPointer\(x, y, target, buttons\) \{\n(.*?)\n        \}\n", self.page, re.S)
+        self.assertIsNotNone(function)
+        self.assertIn("handToGame('mousemove', pixel, buttons);", function.group(1))
+        self.assertIn("edgeForwarded = true;", function.group(1))
+        self.assertIn("handLeaveToGame();", function.group(1))                                   # beyond the margin, over a control: the pointer is gone
+
+    def test_the_canvas_leave_towards_the_margin_is_not_passed_on_but_a_leave_out_of_the_window_is(self):
+        leave = self.listener("mouseleave", 1)
+        for needle in ("handingOver", "ANTS_EMBED", "e.target !== canvas", "!e.relatedTarget", "isLocked()", "isFullscreen()", "e.stopPropagation()"):
+            self.assertIn(needle, leave)
+        self.assertIn("ANTS_PAGE.overControl(e.relatedTarget)", leave)
+        self.assertIn("document.documentElement.addEventListener('mouseleave'", self.page)       # out of the browser window: gone
+        self.found(self.page, r"documentElement\.addEventListener\('mouseleave', function \(\) \{[^\n]*\n[^\n]*\n\s*if \(!ANTS_EMBED && !isFullscreen\(\) && edgeForwarded\) handLeaveToGame\(\);")
+
+    def test_a_scroll_or_a_resize_under_a_pointer_that_did_not_move_is_looked_at_again(self):
+        self.assertIn("window.addEventListener('scroll', windowedAgain, { passive: true });", self.page)
+        self.assertIn("window.addEventListener('resize', windowedAgain);", self.page)
+        again = re.search(r"function windowedAgain\(\) \{[^\n]*\n(.*?)\n        \}\n", self.page, re.S)
+        self.assertIsNotNone(again)
+        self.assertIn("document.elementFromPoint(", again.group(1))
+
+    def test_the_first_motion_over_the_game_is_preceded_by_a_leave_so_that_the_first_real_leave_is_delivered(self):
+        function = re.search(r"function primeFocusOverTheGame\(e\) \{\n(.*?)\n        \}\n", self.page, re.S)
+        self.assertIsNotNone(function)
+        self.assertIn("if (focusPrimed || !isReadyToPlay) return;", function.group(1))
+        self.assertIn("focusPrimed = true;", function.group(1))
+        self.assertIn("new MouseEvent('mouseleave'", function.group(1))
+
+    def test_a_click_the_wheel_and_the_menu_in_the_margin_are_left_to_the_page(self):
+        """Nothing in the margin's code cancels an event (the page keeps its clicks, its wheel and its menu): no preventDefault in the margin's section."""
+        start = self.page.index("THE MARGIN OF A WINDOWED PAGE (the owner: \"go off the screen with the mouse and it not screw up the scrolling\"; agreed")
+        end = self.page.index("// THE POINTER LOCK. On the Mac")
+        section = self.page[start:end]
+        self.not_found(section, r"preventDefault\(\)")
+        for name in ("wheel", "contextmenu", "mousedown", "click"):
+            self.assertNotIn("'" + name + "'", section, name)
+
+    def test_the_guide_tells_the_player(self):
+        self.assertIn("In a window the map keeps scrolling while the pointer is just past the edge of the game (about an inch)", self.page)
+
+    def test_the_readme_and_the_notes_say_what_the_margin_is(self):
+        notes = read(os.path.join(REPO, "docs", "NETWORK_PORT.md"))
+        self.assertIn("The margin of a windowed page", notes)
+        self.assertIn("ANTS_EDGE_MARGIN", notes)
+        self.assertIn("test_web_edge.sh --only margin", notes)
+        readme = read(os.path.join(REPO, "README.md"))
+        self.assertIn("up to 96 CSS pixels (about an inch) beyond the box", readme)
 
 
 class TheBrowserCheckAndTheGame(PageCase):

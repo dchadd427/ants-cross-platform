@@ -1091,10 +1091,10 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(why.find("blank") != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("M5.2 Room codes of a hosted match: demo-<map>-<n>p-<six characters> from the page's alphabet (read from web/four.html), at most 23 characters, a valid room code for every map and size, different every time") {
+    TEST_CASE("M5.2 Room codes of a hosted match: demo-<map>-<n>p-<six characters> from the page's alphabet (read from web/lobby.html), at most 23 characters, a valid room code for every map and size, different every time") {
         std::string page_alphabet;
         {
-            std::ifstream page(std::string(ANTS_SOURCE_DIR) + "/web/four.html");           // (by the source folder, not the working directory: it is read wherever the test is run from)
+            std::ifstream page(std::string(ANTS_SOURCE_DIR) + "/web/lobby.html");           // (by the source folder, not the working directory: it is read wherever the test is run from)
             ASSERT_TRUE(page.good());                                                      // a page that cannot be read, or in which the variable is renamed, FAILS the test (it used to skip it)
             std::stringstream text;
             text << page.rdbuf();
@@ -1104,7 +1104,7 @@ int main(int argc, char* argv[]) {
             page_alphabet = html.substr(at + 13, html.find('\'', at + 13) - (at + 13));
         }
         ASSERT_FALSE(page_alphabet.empty());
-        ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));                          // the same alphabet as web/four.html (the page is in the repository)
+        ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));                          // the same alphabet as web/lobby.html (the page is in the repository)
         ASSERT_EQ(std::string(kRoomCodeAlphabet).size(), static_cast<size_t>(31));
         ASSERT_EQ(kRoomCodeRandomChars, static_cast<size_t>(6));
         const char* keys[] = {"tiny", "small", "medium", "gauntlet", "treasure", "islands"};
@@ -1431,7 +1431,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(menu_for({}).start_menu);                                               // a native game started with nothing on the command line
         // the options that choose a mode: each skips the menu (today's start exactly)
         const std::vector<std::vector<std::string>> skipping = {
-            {"--map", "Original-Ants/Maps/TINY.LVL"}, {"--map-select"}, {"--host"}, {"--host", "4002"}, {"--join", "127.0.0.1:4001"}, {"--join-url", "ws://x/ws"}, {"--room", "abc"},
+            {"--map", "Original-Ants/Maps/TINY.LVL"}, {"--map-select"}, {"--play"}, {"--host"}, {"--host", "4002"}, {"--join", "127.0.0.1:4001"}, {"--join-url", "ws://x/ws"}, {"--room", "abc"},
             {"--token", "t"}, {"--seat", "1"}, {"--bot", "1:easy"}, {"--headless"}, {"--screenshot", "x.png"}, {"--player", "1"}, {"-pnum:1"}, {"-pnum=2"}, {"--select-ant", "3"},
             {"--select-base", "1"}, {"--open-options"}, {"--scorecard"}};
         for (const auto& args : skipping) {
@@ -1466,6 +1466,35 @@ int main(int argc, char* argv[]) {
         }
         // a hand-made config has no menu (the game as it was)
         ASSERT_FALSE(ApplicationConfig{}.start_menu);
+#endif
+    } TEST_END();
+
+    TEST_CASE("M9.3 Command line: --play is the setup screen's own START at its first visit: no flag, no play_at_once; with it (either order of --map) the game keeps the setup screen's way, the map and the bots are the ones named, nothing else changes") {
+        const auto parse = [](std::vector<std::string> args) {
+            std::vector<std::string> full = {"ants"};
+            full.insert(full.end(), args.begin(), args.end());
+            std::vector<char*> arg_ptrs;
+            for (std::string& a : full) arg_ptrs.push_back(a.data());
+            arg_ptrs.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(full.size()), arg_ptrs.data());
+        };
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        ASSERT_FALSE(parse({}).play_at_once);
+        ASSERT_FALSE(parse({"--map", tiny}).play_at_once);                                  // (the direct start of the tests and the screenshots: no flag)
+        ASSERT_FALSE(parse({"--map", tiny}).start_in_map_select);                           // ... and it still starts the match at once, without the screens
+        ApplicationConfig c = parse({"--play"});
+        ASSERT_TRUE(c.play_at_once && c.start_in_map_select && c.default_map_path.empty() && c.startup_error.empty());
+        for (const auto& args : std::vector<std::vector<std::string>>{{"--map", tiny, "--play"}, {"--play", "--map", tiny}}) {
+            c = parse(args);
+            ASSERT_TRUE(c.play_at_once);
+            ASSERT_TRUE(c.start_in_map_select);                                             // (--map would have turned it off: the order of the two does not matter)
+            ASSERT_EQ(c.default_map_path, tiny);
+            ASSERT_TRUE(c.startup_error.empty());
+        }
+        c = parse({"--map", tiny, "--play", "--bot", "1:medium", "--bot", "2:medium", "--bot", "3:medium", "--name", "Bob"});
+        ASSERT_TRUE(c.play_at_once && c.bots.size() == 3 && c.player_name == "Bob" && c.net_role == ApplicationConfig::NetRole::None);
+#if !defined(__EMSCRIPTEN__)
+        ASSERT_FALSE(c.start_menu);                                                          // --play is a mode: no start menu in front of it
 #endif
     } TEST_END();
 

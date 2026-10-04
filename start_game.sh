@@ -4,7 +4,7 @@
 #   ./start_game.sh                 four games on this machine, one player each, in a 2 x 2 grid, playing one networked match together:
 #                                   window 0 hosts (green), windows 1 - 3 join (red, blue, black), every player has a random name.
 #                                   The windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the
-#                                   same as the games on web/four.html): black top left, green top right, red bottom left, blue bottom right
+#                                   same as the games on web/lobby.html): black top left, green top right, red bottom left, blue bottom right
 #   ./start_game.sh --players N     N windows (1 - 4); 2 windows sit side by side (green left, red right), 3 are green, red, blue in the first three
 #                                   cells of the grid (black, green, red, blue keep their order without holes), 1 is the plain single game
 #   ./start_game.sh --single        the same as --players 1 (one plain game: the desktop start menu comes first, then the original's screens as always; add --map-select
@@ -150,7 +150,7 @@ GRID="2x2"
 [ "$PLAYERS" -eq 2 ] && GRID="2x1"
 
 # The cell of window n (= seat n) in the grid; --cell counts row by row, 0 = top left (1 top right, 2 bottom left, 3 bottom right of the 2 x 2 grid).
-# Four windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the same as the games of web/four.html):
+# Four windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the same as the games of web/lobby.html):
 #   black (seat 3) top left, green (seat 0) top right, red (seat 1) bottom left, blue (seat 2) bottom right.
 # (Other maps put the hills elsewhere; the layout is the same for every map.)
 # Fewer windows keep that order of the colours (black, green, red, blue) without holes, as on the page: two are green left, red right (2 x 1),

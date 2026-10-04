@@ -42,7 +42,7 @@ std::string lower_text(std::string s) {
     return s;
 }
 
-// The six maps of the original game, in the order of web/four.html (by size)
+// The six maps of the original game, in the order of web/lobby.html (by size)
 constexpr MenuMap kMaps[kMenuMapCount] = {
     {"tiny", "Tiny"}, {"small", "Small"}, {"medium", "Medium"}, {"gauntlet", "Gauntlet"}, {"treasure", "Treasure"}, {"islands", "Islands"},
 };

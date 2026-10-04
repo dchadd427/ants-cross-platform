@@ -816,6 +816,25 @@ void run_bot_tests() {
         ASSERT_TRUE(normal.bots() == nullptr);
     } TEST_END();
 
+    TEST_CASE("AI6.11 --play Does Nothing In A Room: A Host With The Flag And A Map Stays On The Room's Setup Screen (No Match Starts, No Bot Runs); The Flag Is For A Game Of One Machine") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.play_at_once = true;
+        cfg.default_map_path = "Original-Ants/Maps/TINY.LVL";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active() && app.net()->is_host());
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.match_running());
+        app.pump_network(0.01f);
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.match_running());
+        ASSERT_TRUE(app.bots() == nullptr);
+    } TEST_END();
+
     TEST_CASE("AI6.6 Room With A Bot: The Host's Setup Screen Shows The Bot, Fog Is Refused, START Runs The Bot On The Host's Machine, The Guest Stays Bit-Identical Without Any Bot Code") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;

@@ -22,6 +22,13 @@ whose fullscreen is REAL (headless Chrome enters it): the 16:9 picture is 1440 x
     the pointer is the normal one; leaving fullscreen lets the lock go; a click on the game takes the lock again where the browser let it go, the cursor staying where the click is;
     a browser that REFUSES the lock still gets the bars' rules; the setting Free (and the control under the game: its markup, its click, the remembered key `ants.pointerlock`) asks
     for no lock and no Esc; the page's own fullscreen asks for none either.
+  * the MARGIN of the WINDOWED page (the owner: "go off the screen with the mouse and it not screw up the scrolling"; agreed: the map keeps scrolling while the pointer is just past the
+    game's edge, about an inch, and stops when it goes farther): in a 1800 x 1000 window the pointer 1, 40, 90 and 96 CSS px beyond the left, right, top and bottom edges and 90 px beyond each
+    corner is the game's pointer at the picture's edge pixel and the map scrolls; 97 and 120 px beyond it is gone and the view stays; over the picture's and the mouse's selectors under the
+    game and over the links above it (a control of the page) it is gone at once, from the margin and from the middle of the picture; a click, a right click, a wheel and a ctrl + wheel in the
+    margin reach the page (the canvas gets none of them, the wheel scrolls the page, the page's menu opens, the game does not zoom or open anything); the pointer that leaves the browser window
+    is gone; back on the picture the scrolling stops and the edges work as before; a page that scrolls under a pointer that did not move looks again; a tap in the margin does nothing; the
+    first leave of a page's life (which SDL 2.28.4 drops) is delivered.
 What headless Chrome cannot show, and the owner's Mac must: the Dock and the menu bar that appear at the screen's edge (a real screen, not a headless one), that Esc is the game's and
 HOLDING it leaves fullscreen (the browser's own interface does that, not the page), the browser's bubble ("Press Esc to show your cursor"), Safari and Firefox (no Keyboard Lock API:
 Esc gives the pointer back first), a real mouse's own acceleration and its fractional movement on a Retina screen.
@@ -59,7 +66,7 @@ class Game:
 
     def __init__(self, tab, web):
         self.tab = tab
-        self.web = web if web.endswith("/") else web + "/"
+        self.web = (web if web.endswith("/") else web + "/") + "play.html"            # the game page at its own path ("/" is the front page, the lobby)
         self.pointer = [0.0, 0.0]                                            # where the DevTools pointer is (CSS pixels): locked motion is the difference between two of its positions
 
     def probe(self, what):
@@ -138,7 +145,7 @@ def main():
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
-    ap.add_argument("--only", default="", help="run only the parts whose name contains this text (bars, windowed, pillar, pseudo, lock, release, setting, slow)")
+    ap.add_argument("--only", default="", help="run only the parts whose name contains this text (bars, windowed, margin, pillar, pseudo, lock, release, setting, slow)")
     args = ap.parse_args()
     aspect.READY_TIMEOUT = args.ready_timeout
 
@@ -293,6 +300,27 @@ def main():
             tab.mouse("mouseReleased", 720, box[1] + box[3] / 2, button="middle", clickCount=1)
             time.sleep(0.5)
 
+        def spot(selector):
+            """The middle of the first element that matches `selector`, in CSS pixels of the window (the page's own controls: a button, a link)."""
+            return json.loads(tab.ev("JSON.stringify((function(){var b=document.querySelector(%s).getBoundingClientRect();return [b.x+b.width/2,b.y+b.height/2];})())" % json.dumps(selector)))
+
+        def header_control_spot(box):
+            return spot("header a.nav-btn")                                                    # (the first link of the page's header, above the box)
+
+        def expect_gone(label, box, x, y, seconds=0.8):
+            """The view is in the middle of the map; the pointer goes from the middle of the picture to (x, y): the game takes it as gone and the view stays (+- 4 px)."""
+            s0 = game.park(box)
+            game.move(x, y)
+            time.sleep(0.15)
+            mid = game.state()
+            time.sleep(seconds)
+            s1 = game.state()
+            moved_x, moved_y = s1["vx"] - s0["vx"], s1["vy"] - s0["vy"]
+            check(mid["out"] == 1 and abs(moved_x) <= 4 and abs(moved_y) <= 4,
+                  "%s: the pointer at (%d, %d) is gone for the game (%s) and the view stays (%+d, %+d px)" % (label, x, y, "gone" if mid["out"] else "STILL HERE", moved_x, moved_y))
+            game.move(box[0] + box[2] / 2, box[1] + box[3] / 2)
+            time.sleep(0.5)
+
         if wanted("bars"):
             print("[web edge] a 1440 x 900 screen in the browser's own fullscreen (the lock off): the picture 1440 x 810, bars of 45 px above and below")
             game.open(storage={"ants.pointerlock": "off"})
@@ -336,7 +364,7 @@ def main():
                       "fullscreen left with the pointer over a bar: the game's pointer is gone (%s) and the view that was scrolling stops at %d (%d later)" % (s_out["out"], s_out["vy"], s_end["vy"]))
 
         if wanted("windowed"):
-            print("[web edge] the WINDOWED page is unchanged: a pointer that leaves the game's box is gone for the game, and the scrolling stops")
+            print("[web edge] the WINDOWED page: the pointer on the box's edge scrolls, over the page's own header (a control) it is gone, fullscreen left with the pointer over a bar")
             game.open(storage={"ants.pointerlock": "off"})
             if started("windowed"):
                 g = game.geometry()
@@ -352,12 +380,13 @@ def main():
                 time.sleep(0.8)
                 s1 = game.state()
                 check(s1["out"] == 0 and s1["vy"] < s0["vy"] - 80, "windowed: the pointer on the box's top edge scrolls the map up (%d -> %d)" % (s0["vy"], s1["vy"]))
-                game.move(box[0] + box[2] / 2, box[1] - 30)                                       # above the box: the page's own header
+                hx, hy = header_control_spot(box)                                                # a button of the page's own header, above the box (inside the margin, but a control)
+                game.move(hx, hy)
                 time.sleep(0.3)
                 s2 = game.state()
                 time.sleep(0.8)
                 s3 = game.state()
-                check(s2["out"] == 1 and abs(s3["vy"] - s2["vy"]) <= 2, "windowed: the pointer above the box is gone for the game and the view stops (gone %s, view %d -> %d)" % (s2["out"], s2["vy"], s3["vy"]))
+                check(s2["out"] == 1 and abs(s3["vy"] - s2["vy"]) <= 2, "windowed: the pointer over a button of the page's header, above the box, is gone for the game and the view stops (gone %s, view %d -> %d)" % (s2["out"], s2["vy"], s3["vy"]))
                 game.move(box[0] + box[2] / 2, box[1] + box[3] / 2)
                 time.sleep(0.4)
                 check(game.state()["out"] == 0, "windowed: back over the picture the game has its pointer again")
@@ -376,6 +405,226 @@ def main():
                 g3 = game.geometry()
                 check(not g3["fullscreen"] and s4["out"] == 0 and s5["out"] == 1 and abs(s6["vy"] - s5["vy"]) <= 2,
                       "fullscreen left with the pointer over a bar: the game had it at the edge (%s), now it is gone (%s) and the view stays (%d -> %d)" % ("here" if s4["out"] == 0 else "gone", "gone" if s5["out"] else "here", s5["vy"], s6["vy"]))
+
+        if wanted("windowed margin"):
+            print("[web edge] the WINDOWED page's margin (1800 x 1000 window): about an inch (96 CSS px) beyond the game's box still counts as the picture's edge")
+            MARGIN = 96
+            game.open(width=1800, height=1000, storage={})
+            if started("margin"):
+                g = game.geometry()
+                box = g["box"]
+                left, top, right, bottom = box[0], box[1], box[0] + box[2], box[1] + box[3]
+                cx, cy = box[0] + box[2] / 2, box[1] + box[3] / 2
+                check(not g["fullscreen"] and abs(box[2] / PICTURE_W - 4 / 3) < 0.01 and left > 2 * MARGIN and g["inner"][0] - right > 2 * MARGIN and g["inner"][1] - bottom > MARGIN + 20,
+                      "the window shows the box %.0f x %.0f at (%.0f, %.0f) with room for the whole margin to its left, right and below" % (box[2], box[3], left, top))
+                shot("edge_margin")
+                for d in (1, 40, 90, MARGIN):
+                    expect_scroll("margin, %d px beyond the left edge" % d, box, left - d, cy, 0, 270, -1, 0)
+                for d in (1, 40, 90, MARGIN):
+                    expect_scroll("margin, %d px beyond the right edge" % d, box, right + d, cy, PICTURE_W - 1, 270, 1, 0)
+                for d in (1, 40, 90, MARGIN):
+                    expect_scroll("margin, %d px beyond the bottom edge" % d, box, cx, bottom + d, 480, PICTURE_H - 1, 0, 1)
+                expect_scroll("margin, the bottom left corner (90 px beyond on both axes)", box, left - 90, bottom + 90, 0, PICTURE_H - 1, -1, 1)
+                expect_scroll("margin, the bottom right corner (90 px beyond on both axes)", box, right + 90, bottom + 90, PICTURE_W - 1, PICTURE_H - 1, 1, 1)
+                for d in (MARGIN + 1, 120):
+                    expect_gone("margin, %d px beyond the left edge" % d, box, left - d, cy)
+                    expect_gone("margin, %d px beyond the right edge" % d, box, right + d, cy)
+                    expect_gone("margin, %d px beyond the bottom edge" % d, box, cx, bottom + d)
+                expect_gone("margin, a corner is a square: 97 px beyond on both axes", box, left - 97, bottom + 97)
+                expect_gone("margin, beside the box but 120 px below its bottom edge (one axis is far enough)", box, left - 40, bottom + 120)
+
+                # the page's own controls: a pointer over one is on the page, whatever its distance from the box (all of these are inside the margin)
+                for what, selector in (("the picture's selector 16:9", "#aspect-16-9"), ("the picture's selector Classic 4:3", "#aspect-4-3"), ("the mouse setting Locked", "#lock-on"),
+                                       ("the mouse setting Free", "#lock-off"), ("a link of the header above the game", "header a.nav-btn"), ("the Fullscreen button of the header", "#fullscreen-btn")):
+                    x, y = spot(selector)
+                    dx = max(left - x, x - right, 0)
+                    dy = max(top - y, y - bottom, 0)
+                    check(dx <= MARGIN and dy <= MARGIN and (dx > 0 or dy > 0), "%s is outside the box and inside the margin (%.0f px, %.0f px beyond): the control's rule is what is tested" % (what, dx, dy))
+                    s0 = game.park(box)
+                    game.move(x, y)
+                    time.sleep(0.15)
+                    mid = game.state()
+                    time.sleep(0.6)
+                    s1 = game.state()
+                    check(mid["out"] == 1 and abs(s1["vx"] - s0["vx"]) <= 4 and abs(s1["vy"] - s0["vy"]) <= 4,
+                          "%s: the pointer that goes there from the middle of the picture is gone for the game (%s) and the view stays (%+d, %+d px)" % (what, "gone" if mid["out"] else "STILL HERE", s1["vx"] - s0["vx"], s1["vy"] - s0["vy"]))
+                    s0 = game.park(box)
+                    game.move(left - 40, cy)
+                    time.sleep(0.3)
+                    scrolling = game.state()
+                    game.move(x, y)
+                    time.sleep(0.15)
+                    mid = game.state()
+                    time.sleep(0.6)
+                    s1 = game.state()
+                    check(scrolling["out"] == 0 and scrolling["vx"] < s0["vx"] - 20 and mid["out"] == 1 and abs(s1["vx"] - mid["vx"]) <= 4,
+                          "%s: the pointer that goes there from the margin, where the map scrolls (view %d -> %d), is gone at once (%s) and the scrolling stops (%d -> %d)" % (what, s0["vx"], scrolling["vx"], "gone" if mid["out"] else "STILL HERE", mid["vx"], s1["vx"]))
+                    game.move(cx, cy)
+                    time.sleep(0.4)
+                # ... and off the control, back into the plain margin, the map scrolls again
+                x, y = spot("#lock-on")
+                s0 = game.park(box)
+                game.move(x, y)
+                time.sleep(0.2)
+                game.move(cx, bottom + 4)
+                time.sleep(0.9)
+                s1 = game.state()
+                check(s1["out"] == 0 and s1["vy"] > s0["vy"] + 80, "off a control and into the margin below the box: the pointer is the game's again and the map scrolls down (%d -> %d)" % (s0["vy"], s1["vy"]))
+                game.move(cx, cy)
+                time.sleep(0.4)
+
+                # the order of the browser's events differs: Chrome sends the canvas's leave BEFORE the pointer's motion over the margin, Safari and Firefox the motion first. A leave towards the margin that
+                # comes after the motion must not end the pointer's stay (SDL would be told that the pointer went away AFTER it was handed the edge position); one towards a control must
+                game.park(box)
+                game.move(cx, bottom + 40)                                                        # (down: the map has room below the middle of it; the left and right edges are reached in a quarter of a second)
+                time.sleep(0.15)
+                before = game.state()
+                tab.ev("document.getElementById('canvas').dispatchEvent(new MouseEvent('mouseleave', {bubbles: false, relatedTarget: document.body, clientX: %d, clientY: %d})); 1" % (cx, bottom + 40))
+                time.sleep(0.4)
+                after = game.state()
+                check(before["out"] == 0 and after["out"] == 0 and after["vy"] > before["vy"] + 40,
+                      "the canvas's leave towards the margin that comes AFTER the motion (Safari's and Firefox's order) is not passed on: the pointer stays (%s -> %s) and the view goes on scrolling (%d -> %d)" % (before["out"], after["out"], before["vy"], after["vy"]))
+                lx, ly = spot("#lock-on")
+                tab.ev("document.getElementById('canvas').dispatchEvent(new MouseEvent('mouseleave', {bubbles: false, relatedTarget: document.getElementById('lock-on'), clientX: %d, clientY: %d})); 1" % (lx, ly))
+                time.sleep(0.3)
+                check(game.state()["out"] == 1, "... a leave towards a control is passed on: the pointer is gone")
+                game.move(cx, cy)
+                time.sleep(0.4)
+
+                # a click, a right click, a wheel and a ctrl + wheel in the margin belong to the page
+                tab.ev("""window.__log = []; ['mousedown', 'mouseup', 'click', 'wheel', 'contextmenu'].forEach(function (n) {
+                    window.addEventListener(n, function (e) { window.__log.push([n, e.target.id || e.target.tagName, e.defaultPrevented, e.ctrlKey]); }, false); }); 1""")
+                game.park(box)
+                x, y = left - 40, cy
+                game.move(x, y)
+                time.sleep(0.25)
+                tab.click(x, y)
+                tab.call("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "right", "clickCount": 1, "buttons": 2})
+                tab.call("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "right", "clickCount": 1})
+                tab.call("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": -120, "modifiers": 2})        # (headless Chrome has no page zoom: this one scrolls up, which the top of the page ignores)
+                tab.call("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": 120})
+                time.sleep(0.9)
+                log = json.loads(tab.ev("JSON.stringify(window.__log)"))
+                after = game.state()
+                scrollable = g["scroll"][2] > g["scroll"][3]
+                scrolled = tab.ev("window.scrollY")
+                wheels = [e for e in log if e[0] == "wheel"]
+                check(not [e for e in log if e[1] == "canvas"] and any(e[0] == "mousedown" and e[1] in ("BODY", "HTML") for e in log),
+                      "a click and a right click in the margin reach the page and not the canvas (the game's window system listens on the canvas: %s)" % [e[:2] for e in log if e[0] in ("mousedown", "click", "contextmenu")])
+                check(len(wheels) == 2 and all(e[1] in ("BODY", "HTML") and not e[2] for e in wheels) and any(e[3] for e in wheels),
+                      "a wheel and a ctrl + wheel in the margin are the page's: not cancelled by the page's code (%s)" % wheels)
+                check(not scrollable or scrolled > 0, "the wheel in the margin scrolls the page (the page is %d px tall in a window of %d: scrollY %s)" % (g["scroll"][2], g["scroll"][3], scrolled))
+                contexts = [e for e in log if e[0] == "contextmenu"]
+                check(contexts and not any(e[2] for e in contexts), "the browser's own menu opens in the margin (not cancelled: %s)" % contexts)
+                check(after["zoom"] == 100 and after["modal"] == 0, "the game did not zoom or open anything (zoom %s%%, dialog %s)" % (after["zoom"], after["modal"]))
+                tab.ev("window.scrollTo(0, 0); 1")
+                time.sleep(0.5)
+
+                # the pointer leaves the browser window while the map scrolls
+                game.park(box)
+                game.move(left - 40, cy)
+                time.sleep(0.3)
+                scrolling = game.state()
+                tab.ev("document.documentElement.dispatchEvent(new MouseEvent('mouseleave', {bubbles: false, relatedTarget: null, clientX: -3, clientY: %d})); 1" % int(cy))
+                time.sleep(0.2)
+                gone = game.state()
+                time.sleep(0.7)
+                later = game.state()
+                check(scrolling["out"] == 0 and gone["out"] == 1 and abs(later["vx"] - gone["vx"]) <= 4,
+                      "the pointer leaves the browser window from the margin (the page's leave): the game's pointer is gone (%s -> %s) and the view that was scrolling stops at %d (%d later)" % (scrolling["out"], gone["out"], gone["vx"], later["vx"]))
+                game.move(cx, cy)
+                time.sleep(0.4)
+
+                # back on the picture: the scrolling stops, the pointer is the browser's own again, and every edge works as before
+                game.park(box)
+                game.move(left - 40, cy)
+                time.sleep(0.3)
+                game.move(cx, cy)
+                time.sleep(0.3)
+                a = game.state()
+                time.sleep(0.6)
+                b = game.state()
+                check(a["out"] == 0 and b["out"] == 0 and abs(b["vx"] - a["vx"]) <= 2 and abs(b["px"] - 480) <= 1 and abs(b["py"] - 270) <= 1,
+                      "back on the picture the scrolling stops (the view stays at (%d, %d)) and the game's pointer is the browser's own (%d, %d)" % (b["vx"], b["vy"], b["px"], b["py"]))
+                expect_scroll("after all of that the picture's own left edge column still scrolls", box, left + 2, cy, 1, 270, -1, 0)
+                expect_scroll("... and its own bottom edge row", box, cx, bottom - 2, 480, PICTURE_H - 2, 0, 1)
+
+                # the page scrolls under a pointer that did not move: it is looked at again
+                game.park(box)
+                game.move(cx, bottom + 60)
+                time.sleep(0.4)
+                before = game.state()
+                tab.ev("window.scrollTo(0, 100); 1")
+                time.sleep(0.5)
+                after = game.state()
+                time.sleep(0.5)
+                end = game.state()
+                tab.ev("window.scrollTo(0, 0); 1")
+                check(not scrollable or (before["out"] == 0 and after["out"] == 1 and abs(end["vy"] - after["vy"]) <= 4),
+                      "the page scrolls 100 px under a pointer that did not move (it was 60 px below the box, now 160): the pointer is gone for the game (%s -> %s) and the view stops (%d -> %d)" % (before["out"], after["out"], after["vy"], end["vy"]))
+                game.move(cx, cy)
+                time.sleep(0.4)
+
+                # a touch is left alone: neither a tap nor a finger that is dragged in the margin (the page scrolls under it) is a pointer at the picture's edge (the touch's own pointer events say
+                # pointerType "touch"; a tap has none of motion, a drag has)
+                tab.call("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5})
+                game.park(box)
+                s0 = game.state()
+                tab.tap(left - 40, cy)
+                time.sleep(0.9)
+                s1 = game.state()
+                check(s1["out"] == s0["out"] and s1["px"] == s0["px"] and s1["py"] == s0["py"] and abs(s1["vx"] - s0["vx"]) <= 4 and abs(s1["vy"] - s0["vy"]) <= 4,
+                      "a tap in the margin is not a pointer at the picture's edge: the game's pointer stays (%d, %d, gone %d -> %d, %d, gone %d) and the view too" % (s0["px"], s0["py"], s0["out"], s1["px"], s1["py"], s1["out"]))
+                tab.ev("window.__touchMoves = 0; window.addEventListener('pointermove', function (e) { if (e.pointerType === 'touch') window.__touchMoves++; }, true); 1")
+                x, y = left - 40, cy
+                tab.call("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y}]})
+                for step in range(1, 6):
+                    tab.call("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x - 3 * step, "y": y}]})
+                    time.sleep(0.06)
+                time.sleep(0.6)
+                s2 = game.state()
+                tab.call("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+                moves = tab.ev("window.__touchMoves")
+                tab.call("Emulation.setTouchEmulationEnabled", {"enabled": False})
+                check(moves >= 1, "(control) the finger dragged in the margin did make touch pointer events of motion (%d), which the margin must not hand to the game" % moves)
+                check(s2["out"] == s0["out"] and s2["px"] == s0["px"] and s2["py"] == s0["py"] and abs(s2["vx"] - s0["vx"]) <= 4 and abs(s2["vy"] - s0["vy"]) <= 4,
+                      "a finger dragged in the margin is not a pointer at the picture's edge: the game's pointer stays (%d, %d, gone %d -> %d, %d, gone %d) and the view too (%d -> %d)" % (s0["px"], s0["py"], s0["out"], s2["px"], s2["py"], s2["out"], s0["vx"], s2["vx"]))
+
+            # the top edge: the page's header is only 66 px tall, so the room above the box is made for the test (a taller header: nothing above the box is a control but the buttons at the very top)
+            game.open(width=1800, height=1000, storage={})
+            tab.ev("var h = document.querySelector('header'); h.style.minHeight = '300px'; h.style.alignItems = 'flex-start'; 1")
+            time.sleep(1.0)
+            if started("margin, top"):
+                g = game.geometry()
+                box = g["box"]
+                left, top, right, bottom = box[0], box[1], box[0] + box[2], box[1] + box[3]
+                cx, cy = box[0] + box[2] / 2, box[1] + box[3] / 2
+                check(top > 2 * MARGIN, "with the taller header the box stands at (%.0f, %.0f), %.0f x %.0f: room for the whole margin above it" % (left, top, box[2], box[3]))
+                # the FIRST excursion of this page's life: the pointer goes from the picture's bottom row onto a control. SDL (2.28.4) drops the first leave of a page's life; the page primes SDL's focus with the
+                # first motion over the game, so this one is delivered as the others are
+                game.move(cx, cy)
+                time.sleep(0.4)
+                s_start = game.state()
+                game.move(cx, bottom - 2)
+                time.sleep(0.5)
+                scrolling = game.state()
+                x, y = spot("#lock-on")
+                game.move(x, y)
+                time.sleep(0.2)
+                gone = game.state()
+                time.sleep(0.7)
+                later = game.state()
+                check(scrolling["out"] == 0 and scrolling["vy"] > s_start["vy"] + 20 and gone["out"] == 1 and abs(later["vy"] - gone["vy"]) <= 4,
+                      "the first leave of a page's life (the picture's bottom row, then a control) is delivered: gone %s -> %s, the view that was scrolling (%d -> %d) stops at %d (%d later)" % (scrolling["out"], gone["out"], s_start["vy"], scrolling["vy"], gone["vy"], later["vy"]))
+                game.move(cx, cy)
+                time.sleep(0.4)
+                for d in (1, 40, 90, MARGIN):
+                    expect_scroll("margin, %d px beyond the top edge" % d, box, cx, top - d, 480, 0, 0, -1)
+                for d in (MARGIN + 1, 120):
+                    expect_gone("margin, %d px beyond the top edge" % d, box, cx, top - d)
+                expect_scroll("margin, the top left corner (90 px beyond on both axes)", box, left - 90, top - 90, 0, 0, -1, -1)
+                expect_scroll("margin, the top right corner (90 px beyond on both axes)", box, right + 90, top - 90, PICTURE_W - 1, 0, 1, -1)
+                expect_gone("margin, a corner is a square: 97 px beyond on both axes (top left)", box, left - 97, top - 97)
 
         if wanted("pillar"):
             print("[web edge] a wide screen (2560 x 1080, 21:9) and the classic 4:3 picture on a 1440 x 900 screen: bars at the sides")

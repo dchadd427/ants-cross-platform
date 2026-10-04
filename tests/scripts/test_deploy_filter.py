@@ -25,7 +25,7 @@ import deploy_filter as df     # noqa: E402
 
 DEPLOYS = [
     "VERSION", "CMakeLists.txt", "cmake/ants_stamp_build_id.cmake", "cmake/ants_test_paths.cpp.in", "include/ants_sim/sim_engine.hpp", "src/ants_sim/sim_engine.cpp",
-    "src/ants_app/application.cpp", "web/shell.html", "web/four.html", "web/favicon.png", "docker/nginx.conf", "docker/resolve_build_id.sh",
+    "src/ants_app/application.cpp", "web/shell.html", "web/lobby.html", "web/favicon.png", "docker/nginx.conf", "docker/resolve_build_id.sh",
     "Dockerfile", "Dockerfile.server", ".dockerignore", "docker-compose.stack.yml",
     "CHANGELOG.md", "docs/CHANGELOG_ARCHIVE.md", "tools/changelog_to_html.py",
     "Original-Ants/ants.chd", "Original-Ants/Maps/TINY.LVL", "Original-Ants/INTRO.mp3", "asset_catalog/index.html", "asset_catalog/sprites/s1.png",
