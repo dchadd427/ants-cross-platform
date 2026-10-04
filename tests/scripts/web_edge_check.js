@@ -1,8 +1,10 @@
-// Runs the game page's OWN code for the pointer of a FULLSCREEN page (web/shell.html), without a browser:
+// Runs the game page's OWN code for the pointer of a FULLSCREEN page and of a WINDOWED one (web/shell.html), without a browser:
 //   * ANTS_PAGE.edgePixel / clientFor: the pixel of the canvas that the game must read for a pointer over a bar (the nearest pixel of the picture), and the client position that the
 //     game's window system (Emscripten's SDL) reads as exactly that pixel;
 //   * ANTS_PAGE.lockStart / moveLocked: the game's cursor while the browser holds the pointer for the game (the pointer lock): it moves by the distance of the mouse's motion and is held to
 //     the picture, so every edge and corner scrolls the map and a click goes where the cursor is;
+//   * ANTS_PAGE.marginPixel / overControl: the pixel that the game must read for a pointer of a WINDOWED page that is just outside the game's box (within the margin: a band of 96 CSS pixels
+//     around the box, corners included), and whether a pointer is over one of the page's own controls (a button, a link, a field: never at the game's edge);
 //   * ANTS_PAGE.lockSetting and the block of the control "Fullscreen mouse: Locked / Free" (everything between ANTS_LOCK_BEGIN and ANTS_LOCK_END): the choice that the browser remembers
 //     under `ants.pointerlock`, which only "off" turns off.
 // tests/scripts/test_web_edge.py runs this with node (the quick tier); tests/scripts/web_edge_check.py is the opt-in check of the same things in a real browser.
@@ -147,6 +149,79 @@ try {
             }
         }
         expect('edgePixel with clientFor: always a pixel of the picture, the pointer\'s own over it (' + sample + ')', wrong, 0);
+    }
+
+    // ---- marginPixel: the pointer of a WINDOWED page just outside the box (within `margin` CSS pixels on each axis: a band around the box, its corners squares)
+    const wbox = { left: 260, top: 66, width: 1280, height: 720 };      // the game's box in a window of 1800 x 1000: right edge 1540, bottom edge 786
+    const MARGIN = 96;                                                  // (the page's own constant, ANTS_EDGE_MARGIN, is 96: a test of the page's text pins it)
+    const marginAt = (cx, cy, b, m) => { b = b || wbox; return P.marginPixel(b.left, b.top, b.width, b.height, cx, cy, m === undefined ? MARGIN : m); };
+    expect('margin: a pointer on the box is the browser\'s own (nothing is handed over)', [marginAt(700, 400), marginAt(260, 66), marginAt(1539.9, 785.9)], [null, null, null]);
+    expect('margin, left: 1 px beyond the edge is the edge pixel of its row', marginAt(259, 400), { x: 0, y: 334 });
+    expect('margin, left: 40 px', marginAt(220, 400), { x: 0, y: 334 });
+    expect('margin, left: 90 px', marginAt(170, 400), { x: 0, y: 334 });
+    expect('margin, left: the whole band (96 px) still counts', marginAt(164, 400), { x: 0, y: 334 });
+    expect('margin, left: 97 px is beyond it', marginAt(163, 400), null);
+    expect('margin, left: 120 px is beyond it', marginAt(140, 400), null);
+    expect('margin, right: the first pixel outside (the edge is exclusive) is the last column', marginAt(1540, 400), { x: 1279, y: 334 });
+    expect('margin, right: 40 and 90 px', [marginAt(1580, 400), marginAt(1630, 400)], [{ x: 1279, y: 334 }, { x: 1279, y: 334 }]);
+    expect('margin, right: 96 px counts, 97 and 120 do not', [marginAt(1636, 400), marginAt(1637, 400), marginAt(1660, 400)], [{ x: 1279, y: 334 }, null, null]);
+    expect('margin, top: 1, 40 and 90 px are the first row of their column', [marginAt(900, 65), marginAt(900, 26), marginAt(900, -24)], [{ x: 640, y: 0 }, { x: 640, y: 0 }, { x: 640, y: 0 }]);
+    expect('margin, top: 96 px counts, 97 and 120 do not', [marginAt(900, -30), marginAt(900, -31), marginAt(900, -54)], [{ x: 640, y: 0 }, null, null]);
+    expect('margin, bottom: the first pixel outside is the last row', marginAt(900, 786), { x: 640, y: 719 });
+    expect('margin, bottom: 40 and 90 px', [marginAt(900, 826), marginAt(900, 876)], [{ x: 640, y: 719 }, { x: 640, y: 719 }]);
+    expect('margin, bottom: 96 px counts, 97 and 120 do not', [marginAt(900, 882), marginAt(900, 883), marginAt(900, 906)], [{ x: 640, y: 719 }, null, null]);
+    expect('margin, the corners: 90 px on both axes is the corner pixel', [marginAt(170, -24), marginAt(1630, -24), marginAt(170, 876), marginAt(1630, 876)],
+           [{ x: 0, y: 0 }, { x: 1279, y: 0 }, { x: 0, y: 719 }, { x: 1279, y: 719 }]);
+    expect('margin, a corner is a square: 96 px on both axes counts, 97 on one axis does not', [marginAt(164, -30), marginAt(163, -30), marginAt(164, -31)], [{ x: 0, y: 0 }, null, null]);
+    expect('margin, beside the box but farther than the margin on the other axis: null', [marginAt(170, -60), marginAt(1630, 900)], [null, null]);
+    expect('margin: a position that is not a number is nothing', [marginAt(NaN, 400), marginAt(170, Infinity), marginAt(undefined, 400), marginAt('x', 400)], [null, null, null, null]);
+    expect('margin: no margin, a negative one or one that is not a number is nothing', [marginAt(259, 400, wbox, 0), marginAt(259, 400, wbox, -5), marginAt(259, 400, wbox, NaN), marginAt(259, 400, wbox, null)], [null, null, null, null]);
+    expect('margin: a box that has no size is nothing', [P.marginPixel(260, 66, 0, 720, 259, 400, MARGIN), P.marginPixel(260, 66, 1280, 0, 259, 400, MARGIN), P.marginPixel(260, 66, NaN, 720, 259, 400, MARGIN)], [null, null, null]);
+    expect('margin: the pixel is the one the game reads, for a box at a fractional place (the page puts it 1/64 short of a whole pixel)', P.marginPixel(99.984375, 45.984375, 1280.1875, 720.1875, 90, 300, MARGIN), { x: 0, y: 255 });
+    expect('margin: a box of a size that is not whole: the last column is floor(size) - 1', P.marginPixel(100, 45, 1280.1875, 720.1875, 1450, 300, MARGIN), { x: 1279, y: 255 });
+    {
+        // an independent copy of the rule against a sweep: outside the rectangle and within the band on both axes, else nothing; the pixel is always a pixel of the picture
+        let wrong = 0;
+        let sample = '';
+        for (const b of [wbox, { left: 0, top: 0, width: 960, height: 540 }, { left: 99.984375, top: 45.984375, width: 1280.1875, height: 720.1875 }, { left: 16, top: 170, width: 358, height: 201.375 }]) {
+            for (const m of [1, 20, 96, 200]) {
+                for (let cx = b.left - m - 12; cx < b.left + b.width + m + 12; cx += 9.5) {
+                    for (let cy = b.top - m - 12; cy < b.top + b.height + m + 12; cy += 8.25) {
+                        const got = P.marginPixel(b.left, b.top, b.width, b.height, cx, cy, m);
+                        const onBox = cx >= b.left && cx < b.left + b.width && cy >= b.top && cy < b.top + b.height;
+                        const dx = cx < b.left ? b.left - cx : cx >= b.left + b.width ? cx - (b.left + b.width) : 0;
+                        const dy = cy < b.top ? b.top - cy : cy >= b.top + b.height ? cy - (b.top + b.height) : 0;
+                        const want = !onBox && dx <= m && dy <= m;
+                        const fine = want ? (got !== null && got.x >= 0 && got.x <= Math.floor(b.width) - 1 && got.y >= 0 && got.y <= Math.floor(b.height) - 1 &&
+                            (cx < b.left ? got.x === 0 : cx >= b.left + b.width ? got.x === Math.floor(b.width) - 1 : true) && (cy < b.top ? got.y === 0 : cy >= b.top + b.height ? got.y === Math.floor(b.height) - 1 : true)) : got === null;
+                        if (!fine) { wrong++; if (!sample) sample = JSON.stringify([b, m, cx, cy, got]); }
+                    }
+                }
+            }
+        }
+        expect('margin: a sweep of four boxes and four margins agrees with an independent copy of the rule (' + sample + ')', wrong, 0);
+    }
+
+    // ---- overControl: the page's own controls (a pointer over one is on the page, never at the game's edge)
+    {
+        const matches = (el, part) => {
+            const attr = /^\[(\w+)="([^"]*)"\]$/.exec(part);
+            return attr ? el.attrs[attr[1]] === attr[2] : el.tag === part;
+        };
+        const closestOf = (el) => function (selectorText) {
+            const parts = selectorText.split(',').map((x) => x.trim());
+            for (let n = el; n; n = n.parent) if (parts.some((part) => matches(n, part))) return n;
+            return null;
+        };
+        const make = (tag, attrs, parent) => { const el = { tag, attrs: attrs || {}, parent: parent || null }; el.closest = closestOf(el); return el; };
+        const body = make('body');
+        for (const tag of ['a', 'button', 'input', 'select', 'textarea', 'summary', 'label']) expect('control: <' + tag + '> is a control', P.overControl(make(tag, {}, body)), true);
+        expect('control: a radio of the page is a control (the picture\'s and the mouse\'s selectors)', P.overControl(make('div', { role: 'radio' }, body)), true);
+        expect('control: a role="button" is a control', P.overControl(make('div', { role: 'button' }, body)), true);
+        expect('control: what is inside a control counts (the icon of a button, the text of a link)', [P.overControl(make('span', {}, make('button', {}, body))), P.overControl(make('svg', {}, make('a', {}, body)))], [true, true]);
+        for (const tag of ['div', 'span', 'h1', 'p', 'canvas', 'header', 'footer', 'section', 'details', 'ul']) expect('control: <' + tag + '> is not one', P.overControl(make(tag, {}, body)), false);
+        expect('control: the page itself, nothing at all, and an object that cannot answer are not controls', [P.overControl(body), P.overControl(null), P.overControl(undefined), P.overControl({}), P.overControl({ closest: 3 })], [false, false, false, false, false]);
+        expect('control: a role that is not one of the two is not a control', P.overControl(make('div', { role: 'dialog' }, body)), false);
     }
 
     // ---- the pointer lock's cursor: the middle of the picture, moved by the mouse, held to the picture
