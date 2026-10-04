@@ -45,6 +45,7 @@ import base64
 import json
 import math
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -354,6 +355,20 @@ def screen_of_canvas(g, lx, ly, canvas_w, canvas_h):
     """Where a point of the game's canvas (canvas_w x canvas_h logical pixels) is on the page, from the box's rectangle."""
     bx = g["box"]
     return bx[0] + lx / canvas_w * bx[2], bx[1] + ly / canvas_h * bx[3]
+
+
+def quick_help_start(shape):
+    """Where a person clicks the quick help's START! button, in the canvas's own pixels (the middle of its rectangle), for the picture of this shape: (640, 480) is the original's own page,
+    (960, 540) the wide page, whose START! is the same button in the bottom right corner (its place moved by the canvas's size less the page's). The rectangle is read from the layout's own
+    source (the classic one, src/ants_app/page_layout.cpp), so that a change of the layout moves the check with it. The check used to tap the place that the original's page has in the middle of
+    the wide canvas, which the wide pages of v0.2.0 (every screen composed for 16:9) leave empty: the game was right, the tap was in the clay."""
+    source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src", "ants_app", "page_layout.cpp")
+    with open(source, encoding="utf-8") as f:
+        found = re.search(r"kQuickHelpClassic\{LayoutRect\{[^}]*\}, LayoutRect\{[^}]*\}, LayoutRect\{(\d+), (\d+), (\d+), (\d+)\}", f.read())
+    if found is None:
+        raise RuntimeError("the quick help's rectangle is not in src/ants_app/page_layout.cpp any more: the check cannot find START")
+    x, y, w, h = (int(v) for v in found.groups())
+    return x + (shape[0] - 640) + w / 2, y + (shape[1] - 480) + h / 2
 
 
 # The retry rule of the data download (ANTS_PAGE.downloadWithRetries) with a fake download that fails a given number of times
@@ -1326,7 +1341,8 @@ def main():
             tab.open(web + query, settle=2.5)
             g = tab.geometry()
             before = tab.shot()
-            sx, sy = screen_of_canvas(g, (shape[0] - 640) / 2 + 576, (shape[1] - 480) / 2 + 450, shape[0], shape[1])
+            qx, qy = quick_help_start(shape)
+            sx, sy = screen_of_canvas(g, qx, qy, shape[0], shape[1])
             tab.tap(sx, sy)
             time.sleep(1.8)
             after = tab.shot()
@@ -1427,7 +1443,8 @@ def main():
         tab.emulate(1280, 720, 1)
         tab.open(web + "?aspect=16:9", settle=2.0)
         g = tab.geometry()
-        quick_start = screen_of_canvas(g, 160 + 576, 30 + 450, 960, 540)
+        qx, qy = quick_help_start((960, 540))
+        quick_start = screen_of_canvas(g, qx, qy, 960, 540)
         tab.click(quick_start[0], quick_start[1])                          # the quick help's START: the setup screen
         time.sleep(2.0)
         check(tab.ev("Module._ants_match_running()") == 0, "on the setup screen no match is running")
@@ -1536,11 +1553,12 @@ def main():
         g = tab.geometry()
         bx = g["box"]
         cursor_error(tab, (bx[0] + bx[2] * 0.25, bx[1] + bx[3] * 0.25), (bx[0] + bx[2] * 0.75, bx[1] + bx[3] * 0.7), "1280x720")
-        # a click on a button: the quick help's START (the first page of the game) is at (576, 450) of the original's 640 x 480 page, which sits at (160, 30) of the 960 x 540 canvas
+        # a click on a button: the quick help's START (the first page of the game), where the layout puts it on the 960 x 540 canvas (quick_help_start)
         tab.open(web, settle=2.5)
         g = tab.geometry()
         before = tab.shot()
-        sx, sy = screen_of_canvas(g, 160 + 576, 30 + 450, 960, 540)
+        qx, qy = quick_help_start((960, 540))
+        sx, sy = screen_of_canvas(g, qx, qy, 960, 540)
         tab.click(sx, sy)
         time.sleep(1.5)
         after = tab.shot()

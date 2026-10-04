@@ -65,6 +65,33 @@ class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
         self.assertIn("localStorage.setItem('ants.aspect', '4:3')", browser)                  # (the old key is set on purpose: it must not give 4:3)
 
 
+class TheQuickHelpStartThatTheBrowserCheckTaps(unittest.TestCase):
+    """tests/scripts/web_aspect_check.py clicks the quick help's START! button where a person does. It used to tap the place that the original's 640 x 480 page has in the middle of the 16:9 canvas,
+    which the wide pages of v0.2.0 left empty (the page was right: START! is in the bottom right corner of the wide page); it now reads the button's rectangle from the layout's own source and
+    moves it as the wide page does. Here it is compared with what the game's own tests pin."""
+
+    def pinned(self, test_file):
+        with open(os.path.join(REPO, "tests", "test_app", test_file), encoding="utf-8") as f:
+            found = re.search(r"quick_help_start_button\(\)\.up_rect\(\) == ButtonRect\(\{(\d+), (\d+), (\d+), (\d+)\}\)", f.read())
+        self.assertIsNotNone(found, test_file + " no longer pins the quick help's START! rectangle")
+        x, y, w, h = (int(v) for v in found.groups())
+        return x + w / 2, y + h / 2
+
+    def test_it_is_the_middle_of_the_button_that_the_game_pins_for_each_picture(self):
+        import sys
+        sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
+        import web_aspect_check
+        self.assertEqual(web_aspect_check.quick_help_start((960, 540)), self.pinned("test_wide_pages.cpp"))        # the wide page: (849, 497, 98, 27)
+        self.assertEqual(web_aspect_check.quick_help_start((640, 480)), self.pinned("test_app_integration.cpp"))   # the original's own page: (529, 437, 98, 27)
+
+    def test_the_browser_checks_do_not_tap_the_places_of_the_original_s_page_on_the_wide_canvas(self):
+        for name in ("web_aspect_check.py", "web_edge_check.py"):
+            with open(os.path.join(REPO, "tests", "scripts", name), encoding="utf-8") as f:
+                text = f.read()
+            self.assertNotIn("160 + 576", text, name)
+            self.assertNotIn("(shape[0] - 640) / 2 + 576", text, name)
+
+
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the pages' own code for the picture's shape was NOT run (tests/scripts/web_aspect_key_check.js)")
 class ThePagesOwnCode(unittest.TestCase):
     def test_a_table_of_addresses_and_stored_values_and_the_selectors(self):
