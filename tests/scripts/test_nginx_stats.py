@@ -123,6 +123,15 @@ class TheLocations(unittest.TestCase):
                 self.assertNotRegex(block, r"\b%s\b" % forbidden, name + " " + forbidden)       # (the server's own Cache-Control: no-store is the answer's header)
             self.assertIn("proxy_hide_header X-Content-Type-Options;", block, name)          # (the server-level nosniff line applies once)
 
+    def test_the_documents_say_what_the_blocks_do(self):
+        notes = read("docs", "NETWORK_PORT.md")
+        for needle in ("`GET /stats`", "`POST /stats/local`", '{"now":{"matches":N,"players":M},"online":{"day":D,"total":T},"local":{"day":d,"total":t},"since":"YYYY-MM-DD"}', "site-stats.json",
+                       "at most 120 reports count in any 60 seconds", "six a minute per address with a burst of 2", "two a second per address with a burst of 10", "a body over 1 KiB is 413"):
+            self.assertIn(needle, notes)
+        readme = read("README.md")
+        for needle in ("`GET /stats`", "`POST /stats/local`", "site-stats.json", "at most 120 count a minute"):
+            self.assertIn(needle, readme)
+
     def test_they_are_the_addresses_that_the_server_answers(self):
         main = read("src", "ants_server", "main.cpp")
         self.assertIn('ws->add_status("/stats"', main)
