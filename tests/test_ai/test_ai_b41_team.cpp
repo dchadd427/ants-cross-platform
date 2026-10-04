@@ -513,6 +513,8 @@ void run_b41_team_tests() {
             {0x0F, 0x00, true, true, TeamUpAnswer::BotHasTeammate},            // both: the bot's own team is the reason
             {0x03, 0x00, true, false, TeamUpAnswer::BotHasTeammate},           // the bot has an ally and two teams are live: the bot's own team, not the count
             {0x03, 0x00, false, true, TeamUpAnswer::InviterHasTeammate},       // the inviter has an ally and two teams are live: the inviter, not the count
+            {0x07, 0x04, false, false, TeamUpAnswer::TwoTeamsLeft},            // team 2 dropped out (its ants die at once, nobody sees them): two live teams (0 and 1)
+            {0x06, 0x00, false, false, TeamUpAnswer::TwoTeamsLeft},            // the bot's own team has no ant in sight: it is not live either (1 and 2 are)
         };
         for (const Case& k : cases) {
             sim::SimulationEngine sim;

@@ -1663,7 +1663,7 @@ void run_suite_7_input_controls() {
         const auto notes_in = [&](const std::string& log) {
             size_t n = 0;
             for (const std::string& note : all_notes) n += count_of(log, note);
-            return n;
+            return n + count_of(log, "News Flash: \n");                                                   // (a flash with no text is a line of the log too: it counts as a note that must not be there)
         };
 
         {   // one bot: two teams play, the alliance would end the match at once. The player asks through the HUD (the pedestal's request), the bot says no, the game says why
@@ -1721,10 +1721,12 @@ void run_suite_7_input_controls() {
             ASSERT_EQ(count_of(transcript(app), "are a team now!"), 1u);
             app.shutdown();
         }
-        {   // a person's answer is the person's own business: seat 1 of a game with no bots says no, the status line carries the original's text and the chat log gets no line
+        {   // a person's answer is the person's own business: seat 1 of a game with no bots says no, the status line carries the original's text and the chat log gets no line (although the rule would
+            // have a reason for a bot: seat 1 has a teammate, so a bot there would have said "... already has a teammate.")
             Application app;
             ASSERT_TRUE(start(app, {}));
             ASSERT_TRUE(app.bots() == nullptr);
+            app.sim().form_alliance(1, 2);
             ASSERT_TRUE(invite(app, 0, 1));
             Command deny;
             deny.type = CommandType::AllianceDeny;

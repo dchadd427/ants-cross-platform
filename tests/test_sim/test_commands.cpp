@@ -3,6 +3,7 @@
 // apply the same commands at the same ticks in canonical order stay bit-identical, which state_hash() proves every tick.
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/command.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
@@ -373,6 +374,43 @@ void run_validation_tests() {
         ASSERT_EQ(w.sim.apply_command(make_command(CommandType::AllianceBreak, 1)).status, Status::Applied);
         ASSERT_EQ(w.sim.get_ally_id(0), ALLIANCE_NONE);
         ASSERT_EQ(w.sim.get_ally_id(1), ALLIANCE_NONE);
+    } TEST_END();
+
+    TEST_CASE("N1.9c The News Of The Alliance Protocol Say Which Seat They Are About (NewsEvent::subject, presentation only): the seat that answered an invitation (accepted, rejected) or withdrew it, for the one who is told; 255 for every other news") {
+        World w;
+        build_world(w, 1);
+        // the (target, subject) pairs of the events with that text since the last look; everything else that was posted is dropped
+        const auto news_of = [&](uint16_t string_id) {
+            std::vector<std::pair<int, int>> out;
+            for (const NewsEvent& n : w.sim.poll_news_events()) {
+                if (n.string_id == string_id) out.emplace_back(n.target_player, n.subject);
+            }
+            return out;
+        };
+        using Pairs = std::vector<std::pair<int, int>>;
+        w.sim.poll_news_events();
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::AllianceInvite, 2, 3)).status, Status::Applied);
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::AllianceDeny, 3, 2)).status, Status::Applied);
+        ASSERT_TRUE(news_of(strings::kTeamRejected) == (Pairs{{2, 3}}));                       // told to the proposer (2), about the seat that said no (3)
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::AllianceInvite, 0, 1)).status, Status::Applied);
+        w.sim.poll_news_events();
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::AllianceAccept, 1, 0)).status, Status::Applied);
+        ASSERT_TRUE(news_of(strings::kTeamAccepted) == (Pairs{{0, 1}}));                       // told to the proposer (0), about the seat that said yes (1)
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::AllianceInvite, 2, 3)).status, Status::Applied);
+        w.sim.poll_news_events();
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::AllianceWithdraw, 2, 3)).status, Status::Applied);
+        ASSERT_TRUE(news_of(strings::kTeamWithdrawn) == (Pairs{{3, 2}}));                      // told to the invited seat (3), about the proposer that withdrew (2)
+        // any other news names no seat
+        w.sim.poll_news_events();
+        ASSERT_EQ(w.sim.apply_command(make_command(CommandType::AllianceInvite, 1, 2)).status, Status::Applied);
+        size_t others = 0;
+        for (const NewsEvent& n : w.sim.poll_news_events()) {
+            if (n.string_id != strings::kTeamRejected && n.string_id != strings::kTeamAccepted && n.string_id != strings::kTeamWithdrawn) {
+                ASSERT_EQ(n.subject, 255);
+                ++others;
+            }
+        }
+        ASSERT_TRUE(others > 0);                                                              // (the invitation's own news was looked at: it is not one of the three)
     } TEST_END();
 }
 

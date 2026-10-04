@@ -1159,10 +1159,8 @@
                 return out;
             }
 
-            // A game on THIS computer (the front page's Play opens play.html?map=<key>[&bots=<levels>][&teams=0+N]&name=<name>): the game's arguments come only from this whitelist, never from the address text.
-            // map: one of the six shipped maps, by key; bots: ONE level word (easy|medium|hard: all of seats 1-3, the player is seat 0) or THREE words for seats 1, 2, 3 joined by commas (none|easy|medium|hard each),
-            // in any case, all or nothing: a text that is neither is no bots at all; teams: ffa (nothing) or 0+N (the + may arrive as a blank) with N a seat that has a bot, then the game makes the teams itself
-            // (--teams); name: printable ASCII, 32 characters (the address's, else the remembered ants.name).
+            // A game on THIS computer (the front page's Play: play.html?map=<key>[&bots=<levels>][&teams=0+N]&name=<name>): its arguments come only from this whitelist, never from the address text. map: one of the six
+            // by key; bots: one level word (all of seats 1-3) or three words for seats 1, 2, 3 (none|easy|medium|hard), any case, all or nothing; teams: ffa or 0+N (the + may come as a blank) with a bot at seat N; name: printable ASCII, 32 characters.
             // `--play` starts the map as the setup screen's START does (Get ready dialog, start sound, music) once the loading screen and quick help are done. No map, bots or name: no arguments (the setup screen).
             var LOCAL_MAPS = { tiny: 'TINY.LVL', small: 'SMALL.LVL', medium: 'MEDIUM.LVL', gauntlet: 'GAUNTLET.LVL', treasure: 'TREASURE.LVL', islands: 'ISLANDS.LVL' };
             // The levels of seats 1, 2, 3 ('' for none) that a ?bots= text says, or null when it says none: only the tested lower case words come back, never the text of the address

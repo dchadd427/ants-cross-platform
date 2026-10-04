@@ -671,6 +671,13 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
     const u = env.assigned[0] || '';
     check('... then the game of this computer on that map with the Hard bots and the name', env.assigned.length === 1 && env.param(u, 'map') === 'small' && env.param(u, 'bots') === 'hard' && env.param(u, 'name') === 'Maya', u);
 }
+{   // an address names one level for all three bases and no teams: that game is played so, and what the form remembered for the Teams is not touched (the form's own Play writes it)
+    const env = runLobby('?map=small&players=1&fill=hard', { 'ants.name': 'Maya', 'ants-solo-seats': 'easy,medium,hard', 'ants-solo-teams': '0+1' }, { firstVisit: true });
+    env.$('who-go').click();
+    const u = env.assigned[0] || '';
+    check('an address with &fill=hard: Hard in all three bases, no teams', env.param(u, 'bots') === 'hard' && env.param(u, 'teams') === null, u);
+    same('... the levels that were played are remembered, the team that the form remembered is left as it was', [env.storage.data['ants-solo-seats'], env.storage.data['ants-solo-teams']], ['hard,hard,hard', '0+1']);
+}
 {
     const env = runLobby('?map=treasure&players=1&play=here', {}, { firstVisit: true });
     check('the test mode ?play=here asks nobody: ?map=...&players=1 plays at once', env.assigned.length === 1 && env.$('who-go').hidden);

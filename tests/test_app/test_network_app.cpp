@@ -701,6 +701,8 @@ void run_bot_tests() {
             ASSERT_TRUE(missing.startup_error.find("--teams needs ffa or two seats like 0+1") == 0);
             ApplicationConfig first = parsed({"ants", "--headless", "--teams", "9", "--teams", "0+1"});        // the first problem is the one that is told
             ASSERT_TRUE(first.startup_error.find("--teams 9:") == 0);
+            ApplicationConfig two = parsed({"ants", "--headless", "--teams", "9", "--teams", "8"});           // (and a second bad value does not replace it)
+            ASSERT_TRUE(two.startup_error.find("--teams 9:") == 0);
         }
         {   // a room cannot choose teams yet (whatever the order of the options); ffa is the default of a room too
             for (const std::vector<std::string>& line : {std::vector<std::string>{"ants", "--teams", "0+1", "--host"}, std::vector<std::string>{"ants", "--host", "--teams", "0+1"},

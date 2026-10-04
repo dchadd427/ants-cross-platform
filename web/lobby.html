@@ -479,10 +479,8 @@
             for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
             return 'ffa';
         }
-        // The query of a game on this computer: ?map=<key>[&bots=<levels>][&teams=0%2BN]&name=<name>&aspect=<shape>. A key that is no map's is Treasure (the default of everything). `levels` is one word
-        // (all three bases: the first versions' addresses) or three, for seats 1, 2, 3; a word that is none of the three levels is none; no bot at all leaves &bots= out, three of one level are written as that
-        // one word, else the three words with none. The teams are written when they are one of the choices for those levels (a + would be read as a blank: it is %2B); an empty name is Player, the name
-        // goes in URL-encoded (a name is never put into an address any other way), the shape is 16:9 or 4:3.
+        // The query of a game on this computer: ?map=<key>[&bots=<levels>][&teams=0%2BN]&name=<name>&aspect=<shape>. A key that is no map's is Treasure, an empty name is Player (the name is URL-encoded, never put into an
+        // address any other way), the shape is 16:9 or 4:3. `levels`: one word (all three bases) or three (seats 1-3), a word that is no level is none; the teams only when they are a choice for those levels.
         function localGameQuery(mapKey, levels, name, shape, teams) {
             var map = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
             var seats = Array.isArray(levels) ? [validFill(levels[0]), validFill(levels[1]), validFill(levels[2])] : [validFill(levels), validFill(levels), validFill(levels)];
@@ -777,9 +775,8 @@
         var last = recall('ants-four-map');
         if (last && mapByKey(last)) mapSelect.value = last;
         // The players: 1 plays on this computer, 2 to 4 is a match on the game server. A browser that never chose starts with 1 player (the owner: single player is on this page, by setting the players to 1).
-        // Each mode has its own choice of bots, remembered on its own: the OPPONENTS of a game on this computer, one level per seat (ants-solo-seats: "easy,medium,none"; a first visit has Medium for all
-        // three; the key of the first versions, ants-solo-bots, is read when the new one is absent and is never written) with the TEAMS (ants-solo-teams: ffa or 0+N), and the bots that fill the EMPTY SEATS
-        // of a room at START (ants-four-fill, as ever: leave empty, easy, medium or hard).
+        // Each mode remembers its own bots: the OPPONENTS of a game on this computer, one level per seat (ants-solo-seats "easy,medium,none"; the old ants-solo-bots is read when it is absent, never written) with the
+        // TEAMS (ants-solo-teams: ffa or 0+N), and the EMPTY SEATS of a room at START (ants-four-fill: leave empty, easy, medium or hard).
         var playersSelect = $('players');
         playersSelect.value = String(playersChoice(recall('ants-four-players'), 1));
         var fillSelect = $('fill');

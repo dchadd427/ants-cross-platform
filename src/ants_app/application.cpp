@@ -578,11 +578,9 @@ bool Application::init(const ApplicationConfig& config) {
         if (bots_) {                                                  // the same seats play again, with new bots
             stop_bots();
             sim_.init(current_level_, config_.random_seed + 1, local_roster_);
-            form_start_teams();                                       // (and the same teams)
             start_local_bots(config_.random_seed + 1);
         } else {
             sim_.init(current_level_, config_.random_seed + 1);
-            form_start_teams();
         }
         match_over_handled_ = false;
         hud_.reset();
@@ -1222,11 +1220,10 @@ bool Application::start_local_bots(uint32_t match_seed) {
     return all;
 }
 
-// --teams: the pairs of the plan become teams with the original's own commands, as the players would make them (a bot never invites): the first seat of a pair invites and the second accepts,
-// applied straight to the simulation before its first tick. So the engine's own News Flash "... are a team now!" is in the chat log, no invitation dialog ever opens (nothing waits for an answer)
-// and the standard bot, which never breaks a team, keeps it for the match. What cannot be made is said, and the game starts without teams.
+// --teams: each pair of the plan becomes a team with the original's own commands, applied straight to the simulation before its first tick: the first seat invites, the second accepts (so the News Flash
+// "... are a team now!" is in the chat log and no dialog opens). What cannot be made is said, and the game starts without teams.
 void Application::form_start_teams() {
-    if (!config_.teams.set || network_active()) return;
+    if (!config_.teams.set) return;                                    // (a room never gets here: the parser refuses --teams for one)
     const LocalTeamsPlan plan = plan_local_teams(config_.teams, sim_.roster_mask());
     if (!plan.why.empty()) {
         show_setup_notice("--teams " + local_teams_text(config_.teams) + ": " + plan.why + " The game starts without teams.");
@@ -1276,9 +1273,6 @@ const ai::BotSpec* Application::bot_spec_of(uint8_t seat) const {
     for (const ai::BotSpec& b : config_.bots) {
         if (b.seat == seat) return &b;
     }
-    for (const ai::BotSpec& b : fill_specs_) {
-        if (b.seat == seat) return &b;
-    }
     return nullptr;
 }
 
@@ -1289,11 +1283,10 @@ bool Application::is_bot_seat(uint8_t seat) const {
     return bot_spec_of(seat) != nullptr;
 }
 
-// Why a computer player declined the local player's invitation to team up: the original's text, "... rejected teaming up", says that it did, never why, so the game adds ONE line to the chat log
-// after it (docs/BOTS.md, "Alliances"). The reason is the rule that decided (ai::team_up_answer, the function the standard bot answers by), asked of the world as it is now. Nothing for any other
-// event, for a person's answer (a person says it in words), and when the rule would accept (the world changed between the bot's decision and its answer, or a kind that we cannot know).
+// Why a bot declined the local player's invitation: the original's "... rejected teaming up" says that it did, never why, so ONE chat-log line follows it (docs/BOTS.md, "Alliances"), from the rule
+// the bot answers by (ai::team_up_answer) asked of the world as it is now. Nothing for any other event, a person's answer, or a rule that would accept now.
 std::string Application::declined_team_up_note(const sim::NewsEvent& event) const {
-    if (event.string_id != sim::strings::kTeamRejected || event.target_player != local_player_id_ || !is_bot_seat(event.subject)) return std::string();
+    if (event.string_id != sim::strings::kTeamRejected || !is_bot_seat(event.subject)) return std::string();      // (the HUD hands over only the local player's events)
     const ai::BotSpec* spec = bot_spec_of(event.subject);
     if (spec != nullptr && spec->kind == "worker") return ai::kWorkerNeverTeamsUpText;
     const ai::BotView view = ai::BotView::build(sim_, event.subject);
