@@ -544,9 +544,17 @@ STATS2="http://127.0.0.1:$WS2/stats"
 STATS_AFTER="$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); print(d["since"], d["online"]["total"], d["local"]["total"])' <(curl -s -m 3 "$STATS2") 2> /dev/null)"
 check "it reads the counters back: the same totals, the same date ($STATS_BEFORE)" "$([ "$STATS_AFTER" = "$STATS_BEFORE" ]; echo $?)"
 check "... the games are still in the last 24 hours, and its log says what it read" "$(stats_check "$(stat_of online total "$STATS2")" "$(stat_of online total "$STATS2")" 120 120 "$STATS2" && grep -q 'site statistics: read .* online and 120 single-player games since' "$WORK/server2.log"; echo $?)"
+file_local_total() { python3 -c 'import sys, json; print(json.load(open(sys.argv[1]))["local"]["total"])' "$STATS_FILE" 2> /dev/null; }
 check "a report after the restart counts (121)" "$([ "$(code_of -X POST "http://127.0.0.1:$WS2/stats/local")" = "204" ] && [ "$(stat_of local total "$STATS2")" = "121" ]; echo $?)"
+FILE_SAVED=1
+for _ in $(seq 1 30); do
+    [ "$(file_local_total)" = "121" ] && { FILE_SAVED=0; break; }
+    sleep 0.1
+done
+check "the file has it within three seconds while the server runs (a change is written when it is due: the first write after a start is at once)" "$FILE_SAVED"
+check "a second report right after it (inside the ten seconds that the next write waits) counts (122) and is not in the file yet" "$([ "$(code_of -X POST "http://127.0.0.1:$WS2/stats/local")" = "204" ] && [ "$(stat_of local total "$STATS2")" = "122" ] && sleep 0.3 && [ "$(file_local_total)" = "121" ]; echo $?)"
 stop_server
-check "the second server stops cleanly and saved the 121" "$(python3 -c 'import sys, json; sys.exit(0 if json.load(open(sys.argv[1]))["local"]["total"] == 121 else 1)' "$STATS_FILE"; echo $?)"
+check "the second server stops cleanly and the stop saved the 122" "$([ "$(file_local_total)" = "122" ]; echo $?)"
 printf 'this is no statistics' > "$STATS_FILE"
 start_stats_server "$WORK/server3.log"
 check "a start over a file that is no statistics is up" "$?"
