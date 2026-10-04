@@ -192,6 +192,26 @@ void run_b41_team_tests() {
                 else ASSERT_TRUE(position(id[2]) < position(id[3]));
             }
         }
+        {   // two teams on TREASURE: the piles on the other team's side, which it reaches far sooner than the own hill (below 70 percent of the own cost), are hopeless; the rest are not
+            sim::SimulationEngine sim;
+            start_match(sim, "TREASURE", 7, 0x03);
+            LevelPlan plan = plan_for(Level::Medium);
+            plan.contest_aware = true;
+            plan.gate = false;
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(30);
+            const HarvestTask& h = rig.as<StandardBot>().harvest();
+            size_t hopeless = 0;
+            for (const PileInfo& p : rig.map().piles()) {
+                const int own = p.approach[0].cost;
+                const int theirs = p.approach[1].cost;
+                if (own < 0 || theirs < 0) continue;
+                const bool far_sooner = static_cast<int64_t>(theirs) * 100 < static_cast<int64_t>(own) * 70;
+                ASSERT_EQ(h.tier_of(p.index) == static_cast<int>(PileClass::Hopeless), far_sooner);
+                hopeless += far_sooner ? 1u : 0u;
+            }
+            ASSERT_TRUE(hopeless >= 1u);
+        }
         // an alliance that forms while the match runs moves the side of the new ally to the end (the classes are made again at every look)
         {
             sim::SimulationEngine sim;

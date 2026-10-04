@@ -148,6 +148,29 @@ void run_b41_fight_tests() {
                 ASSERT_EQ(rig.proposed_count(CommandType::Hatch), 2u);
                 ASSERT_EQ(sim.get_player_eggs(0), 3u);
             }
+            // (b2) two ants lost at once: one egg at a time, the second click waits until the first newborn is out
+            {
+                sim::SimulationEngine sim;
+                const auto mine = build(sim, 1000, 5);
+                Rig rig(sim, 0, level, std::make_unique<StandardBot>(fight_plan(level)), 4, 4);
+                rig.run(10);
+                sim.get_unit(mine[0]).hp = 0;
+                sim.get_unit(mine[1]).hp = 0;
+                rig.run(120);
+                ASSERT_EQ(rig.proposed_count(CommandType::Hatch), 1u);
+                rig.run(600);
+                ASSERT_EQ(rig.proposed_count(CommandType::Hatch), 2u);
+            }
+            // (c0) the margin of an ally is not asked of a bot that has none: 400 points are enough (250 asked; with an ally 650)
+            {
+                sim::SimulationEngine sim;
+                const auto mine = build(sim, 400, 5);
+                Rig rig(sim, 0, level, std::make_unique<StandardBot>(fight_plan(level)), 4, 4);
+                rig.run(10);
+                sim.get_unit(mine[0]).hp = 0;
+                rig.run(200);
+                ASSERT_EQ(rig.proposed_count(CommandType::Hatch), 1u);
+            }
             // (c) the conditions: 249 points are not enough, no egg, the last 600 ticks
             for (const int variant : {0, 1, 2}) {
                 sim::SimulationEngine sim;
@@ -348,6 +371,26 @@ void run_b41_fight_tests() {
                     ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
                 }
             }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI9.4b The Wipe-Out Focus Is Careful: Two Combat Ants Among The Six That Showed (16 Against The Force's 24: Not Three Times Stronger) And Four Left Of Eight (More Than Three) Are Not Hunted") {
+        for (const int variant : {3, 4}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 131);
+            for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Combat, TileCoord{14 + i, 10});
+            for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 9});
+            std::vector<uint32_t> enemies;
+            const int shown = variant == 3 ? 6 : 8;
+            for (int i = 0; i < shown; ++i) enemies.push_back(sim.spawn_unit(1, variant == 3 && i < 2 ? sim::AntType::Combat : sim::AntType::Worker, TileCoord{44 + i % 3, 8 + i / 3}));
+            sim.set_player_score(0, 400);
+            sim.set_player_score(1, 400);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(fight_plan(Level::Hard, false, false, true)), 4, 4);
+            rig.run(12);
+            for (int i = variant == 3 ? 2 : 4; i < shown; ++i) sim.get_unit(enemies[static_cast<size_t>(i)]).hp = 0;
+            rig.run(40);
+            ASSERT_FALSE(rig.as<StandardBot>().strike().wiping());
+            ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
         }
     } TEST_END();
 
