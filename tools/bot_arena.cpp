@@ -463,7 +463,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid old allon steals), for the tournaments\n"
+        "  --tune K=V,...     ablations of the standard bot's plan (keys: defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid agg old allon steals harass harassw harassres harasshp harassodds harassretreat harasspause harasscrowd harassidlew harassnear hatchsq hatchextra harassleader harassfar harassidle harassstick harassdist harassstation harassrange harassrel), for the tournaments\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -514,12 +514,21 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
             parts[i] = "worker";
         }
     }
+    ai::Style pinned = ai::Style::Random;
+    if (aggressor && parts.size() == 4) {                                              // "KIND:LEVEL:STYLE" of a tuned standard bot: the registry's parser would refuse a style for 'worker'
+        if (!ai::parse_style(parts[3], pinned)) { err = "unknown bot style '" + parts[3] + "'"; return false; }
+        parts.pop_back();
+    }
     if (aggressor) {
         spec.clear();
         for (size_t i = 0; i < parts.size(); ++i) spec += (i == 0 ? "" : ":") + parts[i];
     }
     if (!ai::parse_bot_spec(spec, out, err)) return false;
     if (aggressor) out.kind = bench_kind;
+    if (pinned != ai::Style::Random) {
+        if (!ai::style_allowed(out.level, pinned)) { err = std::string("a ") + ai::level_name(out.level) + " bot cannot play the " + ai::style_name(pinned) + " style"; return false; }
+        out.style = pinned;
+    }
     return true;
 }
 
@@ -551,6 +560,40 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "renew") { p.renew_lead_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "combat") { p.takes_combat = v > 0; p.max_combat = static_cast<uint32_t>(v); return true; }
     if (key == "steals") return flag(p.steals);
+    if (key == "fiststrict") return flag(p.fists_strict);
+    if (key == "ambush") return flag(p.ambush);
+    if (key == "ambushticks") { p.ambush_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "ambushpause") { p.ambush_pause = static_cast<uint32_t>(v); return true; }
+    if (key == "ambushdist") { p.ambush_distance = static_cast<int32_t>(v); return true; }
+    if (key == "ambushn") { p.ambush_thieves = static_cast<uint32_t>(v); return true; }
+    if (key == "raidmin") { p.raid_min_loot = static_cast<uint32_t>(v); return true; }
+    if (key == "raidblack") { p.raid_black_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "sabotage") return flag(p.sabotage);
+    if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "sabkeeper") return flag(p.sabotage_spare_keeper);
+    if (key == "sabscore") { p.sabotage_min_score = static_cast<uint32_t>(v); return true; }
+    if (key == "sabafter") { p.sabotage_after = static_cast<uint32_t>(v); return true; }
+    if (key == "harass") return flag(p.harass);
+    if (key == "hatchsq") return flag(p.hatch_for_squad);
+    if (key == "hatchextra") { p.hatch_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "harassw") { p.harass_workers = static_cast<uint32_t>(v); return true; }
+    if (key == "harassres") { p.harass_reserve = static_cast<uint32_t>(v); return true; }
+    if (key == "harasshp") { p.harass_min_hp = static_cast<uint32_t>(v); return true; }
+    if (key == "harassodds") { p.harass_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "harassretreat") { p.harass_retreat_hp = static_cast<uint32_t>(v); return true; }
+    if (key == "harasspause") { p.harass_pause_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "harasscrowd") { p.harass_crowd_cost = static_cast<uint32_t>(v); return true; }
+    if (key == "harassidlew") { p.harass_idle_weight = static_cast<uint32_t>(v); return true; }
+    if (key == "harassnear") { p.harass_near = static_cast<int32_t>(v); return true; }
+    if (key == "harassleader") { p.harass_leader_bonus = static_cast<uint32_t>(v); return true; }
+    if (key == "harassidle") { p.harass_idle_bonus = static_cast<uint32_t>(v); return true; }
+    if (key == "harassstick") { p.harass_stick = static_cast<uint32_t>(v); return true; }
+    if (key == "harassdist") { p.harass_dist_cost = static_cast<uint32_t>(v); return true; }
+    if (key == "harassfar") { p.harass_far_bonus = static_cast<uint32_t>(v); return true; }
+    if (key == "harassstation") return flag(p.harass_station);
+    if (key == "harassrange") { p.harass_range = static_cast<int32_t>(v); return true; }
+    if (key == "harassrel") { p.harass_idle_release = static_cast<uint32_t>(v); return true; }
+    if (key == "combatx") { p.combat_extra = static_cast<uint32_t>(v); return true; }
     if (key == "thief") { p.takes_thief = v > 0; p.max_thief = static_cast<uint32_t>(v); return true; }
     if (key == "intercept") return flag(p.intercepts);
     if (key == "combat_early") { p.combat_when_attacked = v == 0; return true; }
@@ -572,6 +615,13 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "gategap") { p.gate_gap_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "idle") { p.bench_idle_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "avoid") return flag(p.avoids_guarded_hills);
+    if (key == "agg") {                                                               // the aggressive plan (Hard's from the start): the squad, Combat Ants in the opening, no guard post at home
+        if (v == 0) return true;
+        p.harass = true;
+        p.combat_when_attacked = false;
+        p.guards = false;
+        return true;
+    }
     if (key == "old") {                                                               // the conflict tactics as they were shipped before the win-rate measurements: all off, one Thief
         if (v == 0) return true;
         p.contest_aware = false;
@@ -593,28 +643,60 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         if (p.takes_thief && p.max_thief < 2) p.max_thief = 2;
         return true;
     }
-    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid old allon steals)";
+    err = "unknown tuning key '" + key + "' (defenders leash linger aid contest clow chigh rankrem cone creact copen typedh firew chv secure securek counters bhit walls renew combat combat_early combat_idle thief intercept guard raid strike strikef strikeres strikeodds strikew wipe hatch idle allyhelp gate gatepred gatelat gatestaged gategap avoid agg old allon steals harass harassw harassres harasshp harassodds harassretreat harasspause harasscrowd harassidlew harassnear hatchsq hatchextra harassleader harassfar harassidle harassstick harassdist harassstation harassrange harassrel)";
     return false;
 }
 
+// BOT_DIAG=1: the standard bots print what their tasks did when the match is over (experiments only)
+std::unique_ptr<ai::Bot> diag_wrap(std::unique_ptr<ai::StandardBot> bot, const ai::BotSpec& spec) {
+    if (std::getenv("BOT_DIAG") == nullptr) return bot;
+    return std::make_unique<ai::bench::DiagBot>(std::move(bot), spec.kind + ":" + ai::level_name(spec.level) + (spec.style != ai::Style::Random ? std::string(":") + ai::style_name(spec.style) : std::string()));
+}
+
+std::unique_ptr<ai::Bot> count_wrap(std::unique_ptr<ai::Bot> bot, const ai::BotSpec& spec) {
+    if (std::getenv("BOT_DIAG") == nullptr) return bot;
+    return std::make_unique<ai::bench::CountBot>(std::move(bot), spec.kind + ":" + ai::level_name(spec.level));
+}
+
 // The bots of the registry, and the arena's bench bots
-std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
-    if (spec.kind.rfind("standard+", 0) == 0) {                                      // the tuning of this seat only, over the global one
-        ai::LevelPlan plan = ai::plan_for(spec.level);
-        for (const auto& t : g_tune) {
-            std::string err;
-            apply_tune(plan, t.first, t.second, err);
-        }
-        for (const std::string& kv : split(spec.kind.substr(9), ',')) {
-            const size_t eq = kv.find('=');
-            uint64_t num = 0;
-            std::string err;
-            if (eq == std::string::npos || !parse_uint(kv.substr(eq + 1), num) || !apply_tune(plan, kv.substr(0, eq), static_cast<int64_t>(num), err)) return nullptr;
-        }
-        return std::make_unique<ai::StandardBot>(plan);
+// The tuning keys of a seat: the global --tune first, then the seat's own `standard+K=V,K=V`; false for a key or a value that does not parse
+bool tuning_of(const ai::BotSpec& spec, std::vector<std::pair<std::string, int64_t>>& out) {
+    out = g_tune;
+    if (spec.kind.rfind("standard+", 0) != 0) return true;
+    for (const std::string& kv : split(spec.kind.substr(9), ',')) {
+        const size_t eq = kv.find('=');
+        uint64_t num = 0;
+        if (eq == std::string::npos || !parse_uint(kv.substr(eq + 1), num)) return false;
+        out.emplace_back(kv.substr(0, eq), static_cast<int64_t>(num));
     }
-    if (spec.kind == "aggressor") return std::make_unique<ai::bench::AggressorBot>();
-    if (spec.kind.size() == 5 && spec.kind.rfind("aggr", 0) == 0 && spec.kind[4] >= '1' && spec.kind[4] <= '9') return std::make_unique<ai::bench::AggressorBot>(1, static_cast<size_t>(spec.kind[4] - '0'));
+    return true;
+}
+
+void apply_tuning(ai::LevelPlan& plan, const std::vector<std::pair<std::string, int64_t>>& keys) {
+    for (const auto& t : keys) {
+        std::string err;
+        apply_tune(plan, t.first, t.second, err);
+    }
+}
+
+std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
+    if (spec.kind.rfind("standard+", 0) == 0) {                                      // a tuned standard bot: the tuning of this seat over the global one
+        std::vector<std::pair<std::string, int64_t>> keys;
+        if (!tuning_of(spec, keys)) return nullptr;
+        for (const auto& t : keys) {                                                 // (a key that does not exist refuses the match)
+            ai::LevelPlan probe;
+            std::string err;
+            if (!apply_tune(probe, t.first, t.second, err)) return nullptr;
+        }
+        if (spec.style == ai::Style::Random) {                                       // no style named: the level's neutral plan, no variations (the ablations of the tournaments)
+            ai::LevelPlan plan = ai::plan_for(spec.level);
+            apply_tuning(plan, keys);
+            return diag_wrap(std::make_unique<ai::StandardBot>(plan), spec);
+        }
+        return diag_wrap(std::make_unique<ai::StandardBot>(spec.level, spec.style, [keys](ai::LevelPlan& p) { apply_tuning(p, keys); }), spec);
+    }
+    if (spec.kind == "aggressor") return count_wrap(std::make_unique<ai::bench::AggressorBot>(), spec);
+    if (spec.kind.size() == 5 && spec.kind.rfind("aggr", 0) == 0 && spec.kind[4] >= '1' && spec.kind[4] <= '9') return count_wrap(std::make_unique<ai::bench::AggressorBot>(1, static_cast<size_t>(spec.kind[4] - '0')), spec);
     if (spec.kind == "aggressor2") return std::make_unique<ai::bench::AggressorBot>(2);
     if (spec.kind == "rusher") {                                                      // the centre-rusher of the bench: the economy of the standard bot with the contest order and no tactics
         ai::LevelPlan plan = ai::plan_for(spec.level);
@@ -631,14 +713,14 @@ std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
     }
     if (spec.kind == "saboteur") return std::make_unique<ai::bench::SaboteurBot>();
     if (spec.kind == "standard" && !g_tune.empty()) {
-        ai::LevelPlan plan = ai::plan_for(spec.level);
-        for (const auto& t : g_tune) {
-            std::string err;
-            apply_tune(plan, t.first, t.second, err);
-        }
-        return std::make_unique<ai::StandardBot>(plan);
+        std::vector<std::pair<std::string, int64_t>> keys = g_tune;
+        return diag_wrap(std::make_unique<ai::StandardBot>(spec.level, spec.style, [keys](ai::LevelPlan& p) { apply_tuning(p, keys); }), spec);
     }
-    return ai::make_bot(spec);
+    std::unique_ptr<ai::Bot> made = ai::make_bot(spec);
+    if (made != nullptr && spec.kind == "standard" && std::getenv("BOT_DIAG") != nullptr) {                  // (the experiments count what a registry bot does too)
+        return diag_wrap(std::unique_ptr<ai::StandardBot>(static_cast<ai::StandardBot*>(made.release())), spec);
+    }
+    return made;
 }
 
 bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err) {
@@ -804,7 +886,7 @@ std::vector<LoadedMap> load_maps(const Options& o) {
 // Arrangements: every distinct way to put the given bots on the given seats
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-std::string spec_text(const ai::BotSpec& s) { return s.kind + ":" + ai::level_name(s.level); }
+std::string spec_text(const ai::BotSpec& s) { return s.kind + ":" + ai::level_name(s.level) + (s.style != ai::Style::Random ? std::string(":") + ai::style_name(s.style) : std::string()); }
 
 // The arrangements in a fixed order: the given one first, then the others in lexicographic order of their texts. Equal bots (same kind and level) are not told apart, so four equal
 // bots have one arrangement.
@@ -1104,6 +1186,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("seat", uint64_t{s.spec.seat});
             j.field("bot", spec_text(s.spec));
             j.field("runs", s.runs);
+            j.field("style", s.style);
             j.field_signed("score", s.score);
             j.field_signed("shown_score", s.shown_score);
             j.field("ants", uint64_t{s.ants});

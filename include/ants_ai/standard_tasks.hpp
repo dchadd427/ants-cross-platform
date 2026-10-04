@@ -254,17 +254,15 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
 /// The Thief ants of the bot (an own ant of type Thief, which this task claims) raid, again and again: a special order on an enemy hill makes the thief walk to its raid tile, plays
 /// 75 ticks of the raid clip (which nothing can interrupt) and takes min(the victim's score, 50) points, which the thief walks home with and banks (the engine does all of that by
 /// itself after the order). The target is the hill of the LEADING team (by the score boxes) of those that
-///   have points to take   their box shows at least min_loot points (an ally's hill never)
+///   have points to take   their box shows at least LevelPlan::raid_min_loot points (an ally's hill never)
 ///   are not shut          the three tiles in front of the thief hole are not all fire walls, bombs or solid (east_state: a thief cannot raid such a hill)
 ///   can be reached        the thief can walk to one of those tiles from where it stands
 ///   leave time            the round trip (there, 80 ticks of raid, back, 30 to bank) ends before the clock does
 ///   are not guarded       (Hard) no enemy Combat Ant stands near the raid tile of the hill: its reflex would hit the thief before it gets there
-/// A hill that the thief did not get to (it stands where it stood after the order left) is left alone for black_ticks. The thief is ordered again as soon as it is idle and empty-handed.
+/// A hill that the thief did not get to (it stands where it stood after the order left) is left alone for LevelPlan::raid_black_ticks. The thief is ordered again as soon as it is idle and empty-handed.
 class RaidTask final : public Task {
 public:
     struct Params {
-        uint32_t min_loot{30};               // a hill whose score box shows less is not worth the trip
-        uint32_t black_ticks{600};           // a hill that could not be reached is left alone this long
         uint32_t guard_radius{7};            // an enemy Combat Ant this close to a raid tile guards the hill
     };
     RaidTask(TaskId id, Tactics& tactics) : RaidTask(id, tactics, Params{}) {}
@@ -276,6 +274,8 @@ public:
     // ---- for the tests and the reports ----
     uint32_t raids_ordered() const noexcept { return raids_ordered_; }
     uint32_t failures() const noexcept { return failures_; }
+    uint32_t ambushes() const noexcept { return ambushes_; }
+    size_t waiting() const noexcept { return waiting_.size(); }
     int last_target() const noexcept { return last_target_; }
     bool black(uint8_t team, uint64_t tick) const noexcept;
     const Params& params() const noexcept { return params_; }
@@ -289,8 +289,18 @@ private:
         sim::TileCoord origin{};
     };
     bool launch(TaskContext& context, const AntView& thief);
+    bool ambush(TaskContext& context, const AntView& thief);
+    struct Waiting {
+        uint8_t team{0};
+        uint64_t since{0};
+        sim::TileCoord spot{};
+        uint64_t last_move{0};
+    };
     Tactics& tactics_;
     Params params_;
+    std::map<uint32_t, Waiting> waiting_;
+    uint64_t ambush_pause_until_{0};
+    uint32_t ambushes_{0};
     std::map<uint32_t, Raid> raids_;
     std::map<uint8_t, uint64_t> black_;
     uint32_t raids_ordered_{0};
@@ -347,6 +357,91 @@ private:
     uint32_t attacks_ordered_{0};
     uint32_t strikes_started_{0};
     uint32_t calls_off_{0};
+};
+
+// ---- rank 4: sabotage ---------------------------------------------------------------------------------------------------------------------------------------
+
+/// "if somebody stole your fire power-up, they could fire your whole basin and then you cannot eat" (the owner): the Fire Ant of the bot, when its own work (the walls in front of the own thief
+/// hole, the enemy walls and bombs in the way of the own economy) is done, lights fire walls on the tiles around the gate of the BEST OPPONENT: the row two tiles above the queue row and the
+/// tiles at its ends (bx - 1 .. bx + 3, by - 2; bx - 1, by - 1; bx + 3, by - 1; bx - 1, by), which seal the queue row from every side but the mound. Nobody can reach the gate until the victim puts one of
+/// them out (its own Fire Ant, if it has one) or they burn out (3,600 ticks). The ant is claimed only while it has a tile to light that its cursor would accept, one order at a time (every tile
+/// is ordered again after 150 ticks at the earliest), and is given back to the economy when the ring stands. It claims no ant of a higher rank and no ant that holds food.
+class SabotageTask final : public Task {
+public:
+    SabotageTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
+    const char* name() const noexcept override { return "sabotage"; }
+    void step(TaskContext& context) override;
+    void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
+
+    // ---- for the tests and the reports ----
+    uint32_t walls_ordered() const noexcept { return walls_ordered_; }
+    size_t working() const noexcept { return working_ ? 1u : 0u; }
+    int target() const noexcept { return target_; }
+    /// The tiles around the gate of `hill` that seal the queue row (see above)
+    static std::array<sim::TileCoord, 8> ring_of(const HillInfo& hill) noexcept;
+
+private:
+    static constexpr uint64_t kPending = ~uint64_t{0};
+    Tactics& tactics_;
+    uint32_t ant_{0};
+    bool working_{false};
+    int target_{-1};
+    sim::TileCoord job_tile_{-1, -1};
+    uint64_t job_decided_{0};
+    uint64_t job_sent_{kPending};
+    std::map<int64_t, uint64_t> ordered_;            // tile -> the tick of the last order
+    uint32_t walls_ordered_{0};
+};
+
+// ---- rank 4: harassment ---------------------------------------------------------------------------------------------------------------------------------------
+
+/// The harassment squad ("Hard bots should be really aggressive", the owner): the Combat Ants of the bot (and, with harass_workers, workers that the economy can spare) hunt the carriers
+/// of the other teams. A blow clears the walk of a carrier and it stands with its food until its owner sends it on, so a squad that stays with its target keeps a team's income down:
+/// in the bench ONE Combat Ant of an aggressor costs a Medium bot half of its score and a Hard bot a quarter (docs/BOTS.md, "Aggression"). Targets are carriers that an attack order can
+/// reach (attackable()), the best opponent's first (by the score boxes: the margin to the best other is what a match is won by), the ones far from their hill and from help, near the
+/// squad; a target is not taken when the enemy's strength near it is above the squad's (odds). Orders: one attack order per blow per ant (a group of ants on one target is one command);
+/// a member that shows "can't go" after an attack is not sent at that ant again for a while; a member that is hurt (harass_min_hp), holds food or is taken by a fight leaves the squad.
+/// Without a target the Combat Ants wait in the middle between the enemy hills (their reflex punches what passes within three tiles), the workers go back to the economy.
+class HarassTask final : public Task {
+public:
+    HarassTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
+    const char* name() const noexcept override { return "harass"; }
+    void step(TaskContext& context) override;
+    void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
+
+    // ---- for the tests and the reports ----
+    size_t squad() const noexcept { return squad_.size(); }
+    bool hunting() const noexcept { return hunting_; }
+    uint32_t attacks_ordered() const noexcept { return attacks_ordered_; }
+    uint32_t refused_odds() const noexcept { return refused_odds_; }
+    uint32_t shunned() const noexcept { return shunned_count_; }
+    uint32_t recruited() const noexcept { return recruited_; }
+    uint32_t pauses() const noexcept { return pauses_; }
+
+private:
+    static constexpr uint64_t kPending = ~uint64_t{0};
+    struct Member {
+        uint64_t decided{0};
+        uint64_t sent{kPending};
+        uint32_t target{0};
+        bool ordered{false};
+        bool station_sent{false};
+        uint64_t out_since{0};               // since when no target has been within range of the member (0: one is)
+        sim::TileCoord tile{};               // where it stood at the previous look
+    };
+    void disband(TaskContext& context);
+    uint32_t enemy_weight(const AntView& enemy, uint64_t now) const;
+    Tactics& tactics_;
+    std::map<uint32_t, Member> squad_;
+    std::map<uint32_t, uint64_t> shunned_;
+    std::array<uint64_t, sim::MAX_PLAYERS> pause_until_{};     // a team whose ants hurt the squad: left alone until then
+    uint32_t pauses_{0};
+    bool hunting_{false};
+    uint64_t last_target_{0};
+    uint32_t attacks_ordered_{0};
+    uint32_t refused_odds_{0};
+    uint32_t shunned_count_{0};
+    uint32_t recruited_{0};
 };
 
 // ---- the hatch -----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -422,6 +517,7 @@ public:
     /// The order in which the queue-row tiles (0, 1, 2) are used as slots, -1 for none
     std::array<int, 3> slot_order() const noexcept { return {slot_order_[0], slot_order_[1], slot_order_[2]}; }
     const Params& params() const noexcept { return params_; }
+    void set_params(const Params& params) { params_ = params; }
 
 private:
     struct Cmd {

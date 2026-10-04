@@ -17,6 +17,7 @@
 // frozen yardstick that this bot is measured against.
 
 #include <cstdint>
+#include <functional>
 
 #include "ants_ai/bot.hpp"
 #include "ants_ai/standard_tasks.hpp"
@@ -27,10 +28,19 @@ namespace ants::ai {
 
 class StandardBot final : public Bot {
 public:
-    explicit StandardBot(Level level) : StandardBot(plan_for(level)) {}
-    /// A bot with a plan of its own (the tournaments' ablations and the tests): the registry's bot of a level is StandardBot(plan_for(level))
-    explicit StandardBot(const LevelPlan& plan)
-        : tactics_(tactics_of(plan)),
+    /// The bot of a level and a style (Style::Random: it draws one from its own seat's generator at start(), among the styles that the level allows): the registry's bot
+    explicit StandardBot(Level level, Style style = Style::Random) : StandardBot(plan_for(level), level, style, true) {}
+    /// A bot with a plan of its own (the tournaments' ablations and the tests): no style, the plan is used as it is
+    explicit StandardBot(const LevelPlan& plan) : StandardBot(plan, plan.level, Style::Random, false) {}
+    /// The tournaments' ablations on top of a style: `tune` is applied to the plan after the style and the variations have been made at start() (the arena only)
+    StandardBot(Level level, Style style, std::function<void(LevelPlan&)> tune) : StandardBot(plan_for(level), level, style, true) { tune_ = std::move(tune); }
+
+private:
+    StandardBot(const LevelPlan& plan, Level level, Style style, bool styled)
+        : level_(level),
+          requested_style_(style),
+          styled_(styled),
+          tactics_(tactics_of(plan)),
           harvest_(kHarvest, harvest_params(plan)),
           fight_(kFight, tactics_),
           aid_(kAid, tactics_),
@@ -41,7 +51,11 @@ public:
           guard_(kGuard, tactics_),
           strike_(kStrike, tactics_),
           hatch_(kHatch, tactics_),
-          gate_(kGate, gate_params(plan)) {}
+          gate_(kGate, gate_params(plan)),
+          harass_(kHarass, tactics_),
+          sabotage_(kSabotage, tactics_) {}
+
+public:
     const char* kind() const noexcept override { return "standard"; }
     void start(const BotContext& context) override;
     void think(const BotView& view, Orders& orders) override;
@@ -59,7 +73,11 @@ public:
     const StrikeTask& strike() const noexcept { return strike_; }
     const HatchTask& hatch() const noexcept { return hatch_; }
     const GateTask& gate() const noexcept { return gate_; }
+    const HarassTask& harass() const noexcept { return harass_; }
+    const SabotageTask& sabotage() const noexcept { return sabotage_; }
     const Tactics& tactics() const noexcept { return tactics_; }
+    /// The style that the bot plays (known once start() has run; Random for a bot with a plan of its own)
+    Style style() const noexcept { return style_; }
     const AntLedger& ledger() const noexcept { return ledger_; }
     uint32_t denials() const noexcept { return denials_; }
     uint32_t accepts() const noexcept { return accepts_; }
@@ -81,6 +99,8 @@ public:
     static constexpr TaskId kBombs = 9;
     static constexpr TaskId kHatch = 10;
     static constexpr TaskId kGate = 11;
+    static constexpr TaskId kHarass = 12;
+    static constexpr TaskId kSabotage = 13;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -116,6 +136,11 @@ private:
         return p;
     }
 
+    Level level_{Level::Medium};
+    Style requested_style_{Style::Random};
+    Style style_{Style::Random};
+    bool styled_{false};
+    std::function<void(LevelPlan&)> tune_;
     uint8_t seat_{0};
     Profile profile_{};
     const MapInfo* map_{nullptr};
@@ -132,6 +157,8 @@ private:
     StrikeTask strike_;
     HatchTask hatch_;
     GateTask gate_;
+    HarassTask harass_;
+    SabotageTask sabotage_;
     uint32_t denials_{0};
     uint32_t accepts_{0};
     uint64_t deny_after_{0};

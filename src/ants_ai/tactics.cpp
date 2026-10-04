@@ -40,7 +40,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;
-            p.guards = true;
+            p.guards = false;                    // the Combat Ant is a worker that fights: it harvests, its reflex punches what comes near, a fight takes it first (measured: docs/BOTS.md, "Aggression")
+            p.combat_harvests = true;
+            p.combat_when_attacked = false;      // taken in the opening, with the other power-ups of the side
             p.raids = true;
             p.max_combat = 1;
             p.max_thief = 1;
@@ -60,16 +62,107 @@ LevelPlan plan_for(Level level) noexcept {
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;
-            p.guards = true;
+            p.guards = false;                    // the Combat Ant is a worker that fights: it harvests, its reflex punches what comes near, a fight takes it first (measured: docs/BOTS.md, "Aggression")
+            p.combat_harvests = true;
+            p.combat_when_attacked = false;      // taken in the opening, with the other power-ups of the side
             p.raids = true;
-            p.max_combat = 2;
+            p.max_combat = 1;
+            p.combat_extra = 1;                  // the second Combat Ant (a theft) once the bot is attacked
             p.max_thief = 2;                     // the double-thief opening: the own side's Thief and, when an enemy plays and its Thief power-up is not guarded, another one
             p.steals = true;
             p.strike_force = 4;
             p.hatch_extra = 2;
             p.gate = true;                       // guiding for eating: +5 to +21 percent alone on every shipped map (docs/BOTS.md)
-            p.avoids_guarded_hills = true;
+            p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOTS.md "Aggression")
+            p.raid_min_loot = 15;                // a raid for 15 points is a swing of 30 and a trip of a few hundred ticks: it pays (raidmin 10 / 30 / 60: 96.5 / 94.1 / 93.1 percent against Medium, Medium, Easy)
             break;
+    }
+    return p;
+}
+
+namespace {
+
+// v changed by up to +- pct percent (an integer number of percent, drawn from the generator); never below 1 for a positive v
+uint32_t jitter(uint32_t v, uint32_t pct, BotRng& rng) noexcept {
+    if (v == 0 || pct == 0) return v;
+    const int64_t d = static_cast<int64_t>(rng.below(2u * pct + 1u)) - static_cast<int64_t>(pct);
+    return static_cast<uint32_t>(std::max<int64_t>(1, static_cast<int64_t>(v) * (100 + d) / 100));
+}
+
+}  // namespace
+
+Style draw_style(Level level, BotRng& rng) noexcept {
+    static const Style all[4] = {Style::Aggressive, Style::Economic, Style::Raider, Style::Defensive};
+    if (level == Level::Hard) return rng.below(2) == 0 ? Style::Aggressive : Style::Raider;       // "Hard bots should be really aggressive"
+    return all[rng.below(4)];
+}
+
+LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
+    LevelPlan p = plan_for(level);
+    if (style == Style::Random) style = draw_style(level, rng);
+    p.style = style;
+    // a level that is not Easy plays its style (Easy keeps its plan: a style changes little there, only the numbers move); Hard plays Aggressive or Raider (draw_style, style_allowed). A style
+    // picks among what the level unlocks and says how early and how hard: it never unlocks a tactic (theft is Hard's, the gate is Hard's) and never touches the profile
+    if (level != Level::Easy) {
+        const bool hard = level == Level::Hard;
+        switch (style) {
+            case Style::Aggressive:
+                p.contest_opening_ants += 1;
+                p.raid_min_loot = p.raid_min_loot * 2 / 3;
+                p.defenders += 1;
+                p.harass = true;                                                             // the visible part: Combat Ants go for the carriers of the best opponent that are near them (a militia: it harvests when nothing is near)
+                p.harass_idle_release = 20;
+                if (hard) {
+                    p.max_combat = 2;                                                        // (the second Combat Ant is a theft: Hard's)
+                    p.combat_extra = 0;
+                    p.harass_range = 14;
+                    p.sabotage = true;                                                       // "they could fire your whole basin and then you cannot eat": a stolen Fire Ant walls in the gate of the best opponent
+                    p.fire_extra = 1;
+                    p.strikes = true;                                                        // behind the leader, a force goes for its carriers
+                } else {                                                                     // Medium: a milder one, a short reach and careful odds
+                    p.harass_range = 8;
+                    p.harass_odds_percent = 150;
+                }
+                break;
+            case Style::Economic:
+                p.contest_opening_ants = 0;
+                p.wall_trigger = WallTrigger::Early;
+                p.raid_min_loot = p.raid_min_loot * 3;                                       // (it defends like the others: the Combat Ant that harvests costs nothing and is its defence)
+                break;
+            case Style::Raider:
+                p.opening_order = {sim::AntType::Fire, sim::AntType::Thief, sim::AntType::Bomber, sim::AntType::Combat, sim::AntType::Swimmer};
+                p.secure_kinds = static_cast<uint8_t>((1u << static_cast<unsigned>(sim::AntType::Fire)) | (1u << static_cast<unsigned>(sim::AntType::Thief)));
+                p.raid_min_loot = p.raid_min_loot / 2;
+                p.raid_black_ticks = 300;
+                p.avoids_guarded_hills = false;
+                break;
+            case Style::Defensive:
+                p.wall_trigger = WallTrigger::Early;                                         // (no interception of thieves: it measured 15 percent of the wins against the mix, docs/BOTS.md "Styles")
+                p.defenders += 1;
+                p.ally_help = true;
+                p.contest_opening_ants = 0;
+                break;
+            case Style::Random:
+                break;
+        }
+    }
+    // the bot's own variations: thresholds and timings move by 10 to 25 percent, the equal power-ups of the opening come in an order of their own
+    const uint32_t big = level == Level::Easy ? 10u : 25u;
+    const uint32_t small = level == Level::Easy ? 10u : 15u;
+    p.raid_min_loot = jitter(p.raid_min_loot, big, rng);
+    p.raid_black_ticks = jitter(p.raid_black_ticks, big, rng);
+    p.wall_latch_ticks = jitter(p.wall_latch_ticks, small, rng);
+    p.renew_lead_ticks = jitter(p.renew_lead_ticks, big, rng);
+    p.fight_linger_ticks = jitter(p.fight_linger_ticks, big, rng);
+    p.leash_tiles = static_cast<int32_t>(jitter(static_cast<uint32_t>(p.leash_tiles), small, rng));
+    p.contest_low = jitter(p.contest_low, 10u, rng);
+    p.contest_high = jitter(p.contest_high, 10u, rng);
+    p.strike_margin = jitter(p.strike_margin, big, rng);
+    p.hatch_window = jitter(p.hatch_window, big, rng);
+    if (rng.below(2) == 1) {                                               // Thief, Combat and Swimmer are worth the same to a person: which comes first is a matter of taste
+        for (size_t i = 0; i + 2 < p.opening_order.size(); ++i) {
+            if (p.opening_order[i] == sim::AntType::Thief && p.opening_order[i + 1] == sim::AntType::Combat) std::swap(p.opening_order[i], p.opening_order[i + 1]);
+        }
     }
     return p;
 }
@@ -95,6 +188,8 @@ EastTile classify_east(const sim::Grid& grid, sim::TileCoord t) noexcept {
 }
 
 }  // namespace
+
+EastTile classify_tile(const sim::Grid& grid, sim::TileCoord tile) noexcept { return classify_east(grid, tile); }
 
 EastState east_state(const sim::Grid& grid, const HillInfo& hill) noexcept {
     EastState st;
@@ -152,12 +247,13 @@ void Memory::update(const BotView& v, const MapInfo& map) {
         l.hp = a.hp;
         l.tile = a.tile;
         l.carried = a.holding || a.carried_points > 0;
+        l.type = a.type;
         const auto it = own_.find(a.id);
-        if (it != own_.end() && a.hp < it->second.hp) hits_.push_back(Hit{a.id, a.tile, it->second.hp, a.hp, it->second.carried});
+        if (it != own_.end() && a.hp < it->second.hp) hits_.push_back(Hit{a.type, a.id, a.tile, it->second.hp, a.hp, it->second.carried});
         now_own[a.id] = l;
     }
     for (const auto& e : own_) {
-        if (now_own.count(e.first) == 0) hits_.push_back(Hit{e.first, e.second.tile, e.second.hp, 0, e.second.carried});     // gone: it was killed (or drowned)
+        if (now_own.count(e.first) == 0) hits_.push_back(Hit{e.second.type, e.first, e.second.tile, e.second.hp, 0, e.second.carried});     // gone: it was killed (or drowned)
     }
     own_ = std::move(now_own);
     if (!hits_.empty()) {
@@ -165,6 +261,13 @@ void Memory::update(const BotView& v, const MapInfo& map) {
         hit_log_.emplace_back(v.tick(), static_cast<uint32_t>(hits_.size()));
         for (const Hit& h : hits_) {
             if (h.hp_now == 0) last_loss_ = v.tick();
+            if (h.type == sim::AntType::Thief) continue;
+            for (const AntView& e : v.others()) {                                        // a blow: an ant of another team that is no Thief stands next to the victim
+                if (e.type != sim::AntType::Thief && e.tile.chebyshev_dist(h.tile) <= 2) {
+                    last_attacked_ = v.tick();
+                    break;
+                }
+            }
         }
     }
     while (!hit_log_.empty() && v.tick() > hit_log_.front().first + 2400u) hit_log_.erase(hit_log_.begin());

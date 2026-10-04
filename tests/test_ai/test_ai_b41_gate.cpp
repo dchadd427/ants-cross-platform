@@ -120,7 +120,7 @@ void run_b41_gate_tests() {
         for (const Level level : {Level::Easy, Level::Medium}) {
             GateScene scene;
             scene.build(8);
-            Rig rig(scene.sim, 0, level, std::make_unique<StandardBot>(level), 4, 8);
+            Rig rig(scene.sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 8);
             rig.run(2400);
             ASSERT_EQ(rig.as<StandardBot>().gate().entrance_clicks(), 0u);
             ASSERT_EQ(rig.as<StandardBot>().gate().takeovers(), 0u);

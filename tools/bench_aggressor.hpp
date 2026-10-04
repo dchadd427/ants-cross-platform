@@ -13,13 +13,17 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "ants_ai/bot.hpp"
 #include "ants_ai/bot_view.hpp"
 #include "ants_ai/map_info.hpp"
+#include "ants_ai/standard_bot.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
 
@@ -384,6 +388,90 @@ private:
     uint8_t invitee_;
     uint64_t at_tick_;
     bool sent_{false};
+};
+
+// The COUNTING wrapper of the experiments (arena-only; BOT_DIAG=1): counts what a bot proposes by kind of command and prints the numbers when the bot is destroyed
+class CountBot final : public Bot {
+public:
+    CountBot(std::unique_ptr<Bot> inner, std::string label) : inner_(std::move(inner)), label_(std::move(label)) {}
+    ~CountBot() override {
+        std::fprintf(stderr, "COUNT seat %u %s: attack %u move %u special %u other %u (intents)\n", static_cast<unsigned>(seat_), label_.c_str(), attack_, move_, special_, other_);
+    }
+    const char* kind() const noexcept override { return inner_->kind(); }
+    void start(const BotContext& context) override {
+        seat_ = context.seat;
+        inner_->start(context);
+    }
+    void think(const BotView& view, Orders& orders) override {
+        const size_t before = orders.intents().size();
+        inner_->think(view, orders);
+        for (size_t i = before; i < orders.intents().size(); ++i) {
+            switch (orders.intents()[i].command.type) {
+                case sim::CommandType::GroupAttack: attack_ += static_cast<uint32_t>(orders.intents()[i].command.ants.size()); break;
+                case sim::CommandType::GroupMove: move_ += static_cast<uint32_t>(orders.intents()[i].command.ants.size()); break;
+                case sim::CommandType::GroupSpecial: ++special_; break;
+                default: ++other_; break;
+            }
+        }
+    }
+    void on_command(const sim::Command& command, Fate fate, uint64_t tick) override { inner_->on_command(command, fate, tick); }
+
+private:
+    std::unique_ptr<Bot> inner_;
+    std::string label_;
+    uint8_t seat_{0};
+    uint32_t attack_{0};
+    uint32_t move_{0};
+    uint32_t special_{0};
+    uint32_t other_{0};
+};
+
+// The DIAGNOSTIC wrapper of the experiments (arena-only; set BOT_DIAG=1): runs a standard bot and prints, when the match is over and the bot is destroyed, what its tasks did and how many attack
+// orders it proposed (one line of key=value pairs, for tools/exp.py)
+class DiagBot final : public Bot {
+public:
+    DiagBot(std::unique_ptr<StandardBot> inner, std::string label) : inner_(std::move(inner)), label_(std::move(label)) {}
+    ~DiagBot() override {
+        const StandardBot& b = *inner_;
+        std::fprintf(stderr,
+                     "DIAG label=%s seat=%u style=%s attack_cmds=%u attack_ants=%u harass=%u fight=%u raids=%u walls=%u sabwalls=%u strikes=%u hatches=%u pickups=%u gate=%u squad_end=%zu recruited=%u\n",
+                     label_.c_str(), static_cast<unsigned>(seat_), style_name(b.style()), attack_cmds_, attack_ants_, b.harass().attacks_ordered(), b.fight().attacks_ordered(), b.raids().raids_ordered(), b.walls().walls_ordered(),
+                     b.sabotage().walls_ordered(), b.strike().strikes_started(), b.hatch().hatches_ordered(), b.powerups().taken(), b.gate().entrance_clicks(), b.harass().squad(), b.harass().recruited());
+    }
+    const char* kind() const noexcept override { return inner_->kind(); }
+    void start(const BotContext& context) override {
+        seat_ = context.seat;
+        inner_->start(context);
+    }
+    void think(const BotView& view, Orders& orders) override {
+        const size_t before = orders.intents().size();
+        inner_->think(view, orders);
+        for (size_t i = before; i < orders.intents().size(); ++i) {
+            if (orders.intents()[i].command.type == sim::CommandType::GroupAttack) {
+                ++attack_cmds_;
+                attack_ants_ += static_cast<uint32_t>(orders.intents()[i].command.ants.size());
+            }
+        }
+        // the openings of the other hills' thief holes (what a patient thief could use): looks at which an enemy hill with at least 30 points has a hole that is not shut
+        if (view.map() != nullptr && view.has_grid() && std::getenv("BOT_HOLES") != nullptr) {
+            for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+                const TeamRow& row = view.rows()[t];
+                if (t == seat_ || !row.present || row.dropped || !view.map()->hill(t).present || row.score < 30) continue;
+                ++looks_[t];
+                if (!east_state(view.grid(), view.map()->hill(t)).shut()) ++open_[t];
+            }
+        }
+    }
+    void on_command(const sim::Command& command, Fate fate, uint64_t tick) override { inner_->on_command(command, fate, tick); }
+
+private:
+    std::unique_ptr<StandardBot> inner_;
+    std::string label_;
+    uint8_t seat_{0};
+    uint32_t attack_cmds_{0};
+    uint32_t attack_ants_{0};
+    uint32_t looks_[sim::MAX_PLAYERS]{};
+    uint32_t open_[sim::MAX_PLAYERS]{};
 };
 
 }  // namespace ants::ai::bench

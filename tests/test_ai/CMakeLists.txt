@@ -13,6 +13,8 @@ add_executable(test_ai
     test_ai_b41_team.cpp
     test_ai_b41_fight.cpp
     test_ai_b41_gate.cpp
+    test_ai_b41_style.cpp
+    test_ai_b41_offence.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

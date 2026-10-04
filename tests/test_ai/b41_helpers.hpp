@@ -183,4 +183,37 @@ struct WallWorld {
     void let_enemy_play() { sim.apply_command(command_of(CommandType::GroupMove, 1, {enemy_worker}, 30, 20)); }
 };
 
+
+// A pile of `units` units of `value` points with the five stages of a cracker box
+inline int32_t add_pile(sim::SimulationEngine& sim, int32_t col, int32_t row, uint16_t units, uint16_t value) {
+    const uint16_t q = static_cast<uint16_t>(std::max<int>(1, units / 4));
+    return place_pile(sim, col, row, units, value, {{units, 369}, {static_cast<uint16_t>(q * 3), 370}, {static_cast<uint16_t>(q * 2), 371}, {q, 372}, {0, kPileGone}});
+}
+
+// The pile (by the table's index) that a tile belongs to, as the analysis of the map sees the cells; -1 when none
+inline int pile_of_tile(const MapInfo& map, size_t piles, sim::TileCoord tile) {
+    for (size_t i = 0; i < piles; ++i) {
+        const PileInfo* info = map.pile(static_cast<uint32_t>(i));
+        if (info == nullptr) continue;
+        for (const sim::TileCoord& c : info->cells) {
+            if (c == tile) return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+// The piles that the harvest orders of a rig name, in the order they were proposed (a move onto a power-up tile is a pick-up, not a harvest order)
+inline std::vector<int> harvest_targets(const Rig& rig, const sim::SimulationEngine& sim, uint8_t seat, size_t piles) {
+    std::vector<int> out;
+    for (const auto& e : rig.proposed) {
+        if (e.second.type != CommandType::GroupMove || e.second.issuer != seat) {
+            if (e.second.type != CommandType::GroupMove) continue;
+        }
+        const int pile = pile_of_tile(rig.map(), piles, tc(e.second.tile_x, e.second.tile_y));
+        if (pile < 0 || sim.grid().has_powerup_at(tc(e.second.tile_x, e.second.tile_y))) continue;
+        if (std::find(out.begin(), out.end(), pile) == out.end()) out.push_back(pile);
+    }
+    return out;
+}
+
 }  // namespace b41

@@ -4251,6 +4251,19 @@ void run_bot_tests() {
         v = json_of(r);
         ASSERT_TRUE(v.get("bots").size() == 3 && v.get("bots").at(0).get("seat").as_int_or(9) == 1 && v.get("bots").at(0).get("bot").str() == "worker:easy" &&
                     v.get("bots").at(1).get("bot").str() == "idle:medium" && v.get("bots").at(2).get("bot").str() == "hard");     // (listed by seat)
+        ASSERT_TRUE(v.get("bots").at(2).get("style").str() == "random" && v.get("bots").at(0).get("style").str() == "random");  // (a bot without a pinned style draws its own at the start of the match)
+        // a pinned style (docs/BOTS.md, "Styles"): the text is what --bot takes, the style is listed, the name of the seat is still "Bot (Level)"; a style that the level may not play is refused
+        r = call("POST", "/rooms", R"({"map":"TINY.LVL","players":4,"code":"CB-3S","bots":[{"seat":3,"bot":"hard:raider"},{"seat":1,"bot":"standard:medium:defensive"}]})");
+        ASSERT_EQ(r.status, 201);
+        v = json_of(r);
+        ASSERT_TRUE(v.get("bots").size() == 2 && v.get("bots").at(0).get("seat").as_int_or(9) == 1 && v.get("bots").at(0).get("bot").str() == "medium:defensive" && v.get("bots").at(0).get("style").str() == "defensive" &&
+                    v.get("bots").at(0).get("level").str() == "medium" && v.get("bots").at(0).get("name").str() == "Bot (Medium)" && v.get("bots").at(1).get("bot").str() == "hard:raider" &&
+                    v.get("bots").at(1).get("style").str() == "raider" && v.get("bots").at(1).get("name").str() == "Bot (Hard)");
+        for (const char* body : {R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"hard:economic"}]})", R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"worker:easy:raider"}]})", R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"medium:wild"}]})"}) {
+            r = call("POST", "/rooms", body);
+            ASSERT_EQ(r.status, 400);
+            ASSERT_TRUE(json_of(r).get("error").str().find("style") != std::string::npos);
+        }
         // a person joins CB-1 (a room for two with a bot at seat 0): it gets seat 1, and the room is full: it starts by itself
         Client& ann = w.connect("Ann", "CB-1", 0);                                         // (it asks for seat 0, which the bot has: the first free seat)
         ann.record_hashes = true;
@@ -4275,7 +4288,7 @@ void run_bot_tests() {
         ASSERT_TRUE(row_of(s, 0) != nullptr && row_of(s, 0)->score > 300);
         // the list shows bots too
         r = call("GET", "/rooms");
-        ASSERT_TRUE(r.status == 200 && json_of(r).get("rooms").size() == 3);
+        ASSERT_TRUE(r.status == 200 && json_of(r).get("rooms").size() == 4);               // (CB-1, CB-2, CB-3 and the room with the pinned styles)
     } TEST_END();
 
     TEST_CASE("S3.66 A Room's Own Bots: The Early Start With Them (One Person And The Bot Of A Room For Three Start At The Leader's Request, No Fill Needed), And A Fill On Top Of Them Seats Only The Seats That Are Still Empty") {

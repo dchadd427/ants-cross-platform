@@ -14,6 +14,14 @@ void StandardBot::start(const BotContext& context) {
     seat_ = context.seat;
     profile_ = context.profile;
     map_ = context.map;
+    if (styled_) {                                              // the style (the pinned one, or one drawn from the seat's own generator) and the bot's own variations
+        BotRng rng(mix64(context.rng_seed ^ 0x57A1E57A1Eull));
+        style_ = requested_style_ != Style::Random ? requested_style_ : draw_style(level_, rng);
+        tactics_.plan = plan_for(level_, style_, rng);
+        if (tune_) tune_(tactics_.plan);
+        harvest_.set_params(harvest_params(tactics_.plan));
+        gate_.set_params(gate_params(tactics_.plan));
+    }
     ledger_.set_rank(kHarvest, kRankHarvest);
     ledger_.set_rank(kFight, kRankFight);
     ledger_.set_rank(kWalls, kRankWalls);
@@ -22,6 +30,8 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kBombs, kRankWalls);
     ledger_.set_rank(kGuard, kRankGuard);
     ledger_.set_rank(kStrike, kRankWalls);
+    ledger_.set_rank(kHarass, kRankWalls);
+    ledger_.set_rank(kSabotage, kRankPowerUps);                   // (below the walls of the own thief hole: the Fire Ant is theirs first)
 }
 
 void StandardBot::think(const BotView& view, Orders& orders) {
@@ -67,13 +77,18 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         if (t != seat_ && row.present && !row.dropped && !(view.ally() < sim::MAX_PLAYERS && t == view.ally()) && tactics_.memory.plays(t)) enemy_plays = true;
     }
     if (enemy_plays && view.ticks_left() > 2400) {
+        if (plan.sabotage && plan.fire_extra > 0) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = static_cast<uint8_t>(std::max<size_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Fire)], 1u + plan.fire_extra));
         if (plan.takes_thief) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = static_cast<uint8_t>(plan.max_thief);
         // Combat Ants pay when the enemy fights (an own ant was hit lately, an enemy Combat Ant or Thief has been seen): against a passive economy they are an ant that does not harvest
         const Memory& m = tactics_.memory;
         // (or when the economy has workers that stand idle with nothing to harvest: they cost nothing)
-        const bool fists = (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0 || (plan.strikes && tactics_.standing.behind);
+        const bool fists = plan.fists_strict ? (m.last_attacked() != 0 && now <= m.last_attacked() + 2400u)
+                                             : (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0 || (plan.strikes && tactics_.standing.behind);
         const bool free_ants = plan.combat_when_idle && tactics_.surplus > 0;
-        if (plan.takes_combat && (fists || free_ants || !plan.combat_when_attacked)) tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(plan.max_combat);
+        const bool attacked = m.last_attacked() != 0 && now <= m.last_attacked() + 2400u;
+        if (plan.takes_combat && (fists || free_ants || !plan.combat_when_attacked)) {
+            tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(plan.max_combat + (attacked ? plan.combat_extra : 0u));
+        }
         // behind the leader, a strike needs its Combat Ants: as many as the force is
         if (plan.takes_combat && plan.strikes && !plan.strike_workers && tactics_.standing.behind) {
             tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(std::max<uint32_t>(plan.max_combat, plan.strike_force));
@@ -88,6 +103,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.raids) raids_.step(context);
     if (plan.guards) guard_.step(context);
     if (plan.strikes || plan.wipe_focus) strike_.step(context);
+    if (plan.harass) harass_.step(context);
+    if (plan.sabotage) sabotage_.step(context);
     if (plan.hatches) hatch_.step(context);
     if (plan.gate) gate_.step(context);
     else aid_.step(context);                                                          // (the gate task owns every carrier, a hit one included)
@@ -122,6 +139,8 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     raids_.on_command(command, fate, tick);
     guard_.on_command(command, fate, tick);
     strike_.on_command(command, fate, tick);
+    harass_.on_command(command, fate, tick);
+    sabotage_.on_command(command, fate, tick);
     gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);

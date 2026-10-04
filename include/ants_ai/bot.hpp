@@ -30,6 +30,25 @@ const char* level_name(Level level) noexcept;
 /// The words of level_name, in either case; false (and `out` unchanged) for anything else
 bool parse_level(std::string_view text, Level& out) noexcept;
 
+// ---- styles -------------------------------------------------------------------------------------------------------------------------------------------
+
+/// The STYLE of a standard bot (docs/BOTS.md, "Styles"): which tactics it prefers and how early it plays them, so that bots of one level do not all play alike. A bot draws its style at
+/// the start of a match from its own seat's generator (the same match seed and seat give the same style; a replay needs no bot anyway), or the spec pins it (`--bot 2:standard:hard:raider`).
+/// The style never changes what a level may do (the profile: look interval, reaction time, command budget; and the tactics that the level unlocks): it picks among them.
+///   Aggressive  contests the middle of the map and takes a second Combat Ant, takes a second Thief by theft (Medium too), raids for small loot
+///   Economic    the efficient order: one Thief at most, raids only for large loot, no contest of the middle; walls up early
+///   Raider      Thief first of the equals in the opening, two Thieves (a theft at Medium too), raids for small loot and every hill that is not shut
+///   Defensive   walls up before a thief shows, interception of thieves, one defender more, the ally's blows answered
+/// Hard bots are Aggressive or Raider only ("Hard bots should be really aggressive"); Easy ignores the style but for small variations of its numbers.
+enum class Style : uint8_t { Random = 0, Aggressive = 1, Economic = 2, Raider = 3, Defensive = 4 };
+
+/// "random", "aggressive", "economic", "raider", "defensive"
+const char* style_name(Style style) noexcept;
+/// The words of style_name, in either case; false (and `out` unchanged) for anything else
+bool parse_style(std::string_view text, Style& out) noexcept;
+/// Whether a bot of the level may play the style: Random always, every style at Easy and Medium, Aggressive and Raider only at Hard
+bool style_allowed(Level level, Style style) noexcept;
+
 /// The most ants one command of a bot names: a chosen conservative cap (the remake's HUD lets a person send up to 32 = sim::kMaxCommandAnts with a drag or Ctrl+A;
 /// how many the original's selection holds has not been established). A bot never exceeds it, whatever its profile says.
 inline constexpr uint32_t kHudAntCap = 24;
@@ -58,16 +77,18 @@ struct BotSpec {
     uint8_t seat{0};
     std::string kind{"standard"};
     Level level{Level::Medium};
+    Style style{Style::Random};          // Random: the bot draws its own style at the start of the match (only the standard bot has a style)
 };
 
 /// True for the kinds that make_bot knows ("idle", "worker", "standard")
 bool known_bot_kind(std::string_view kind) noexcept;
 
-/// The text of --bot (after the option): `SEAT`, `SEAT:LEVEL` (easy, medium, hard), `SEAT:KIND` (idle, worker, standard) or `SEAT:KIND:LEVEL`, e.g.
-/// "2", "2:hard", "2:idle", "2:worker:easy". SEAT is one digit 0 to 3. The default is the standard bot at medium level. On failure `error` says why.
+/// The text of --bot (after the option): `SEAT`, `SEAT:LEVEL` (easy, medium, hard), `SEAT:KIND` (idle, worker, standard), `SEAT:KIND:LEVEL`, `SEAT:LEVEL:STYLE` or `SEAT:KIND:LEVEL:STYLE`
+/// (STYLE: aggressive, economic, raider, defensive, random), e.g. "2", "2:hard", "2:idle", "2:worker:easy", "2:hard:raider", "2:standard:medium:defensive". SEAT is one digit 0 to 3.
+/// The default is the standard bot at medium level with a random style. On failure `error` says why.
 bool parse_bot_spec(std::string_view text, BotSpec& out, std::string& error);
 
-/// What the seat is called: "Bot (Medium)" for the standard bot, "Bot (Idle)", "Bot (Worker)": printable ASCII, at most 32 characters. A person can never take
+/// What the seat is called: "Bot (Medium)" for the standard bot (whatever its style), "Bot (Idle)", "Bot (Worker)": printable ASCII, at most 32 characters. A person can never take
 /// a name that starts with "Bot (" (the lobby renames it), so the name tells a bot from a player.
 std::string bot_display_name(const BotSpec& spec);
 

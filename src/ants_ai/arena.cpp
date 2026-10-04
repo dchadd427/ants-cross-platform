@@ -1,4 +1,5 @@
 #include "ants_ai/arena.hpp"
+#include "ants_ai/standard_bot.hpp"
 
 #include <algorithm>
 #include <array>
@@ -220,6 +221,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         r.spec = b;
         const Bot* bot = controller.bot(b.seat);
         r.runs = bot != nullptr ? bot->kind() : "";
+        if (const StandardBot* sb = dynamic_cast<const StandardBot*>(bot)) r.style = style_name(sb->style());
         read_seat_result(sim, b.seat, r);
         r.banked = ledger.banked(b.seat);
         r.raided = ledger.raided(b.seat);

@@ -35,38 +35,6 @@ void world_of(sim::SimulationEngine& sim, uint8_t alive_mask, uint32_t seed = 91
     }
 }
 
-// A pile of `units` units of `value` points with the five stages of a cracker box
-int32_t add_pile(sim::SimulationEngine& sim, int32_t col, int32_t row, uint16_t units, uint16_t value) {
-    const uint16_t q = static_cast<uint16_t>(std::max<int>(1, units / 4));
-    return place_pile(sim, col, row, units, value, {{units, 369}, {static_cast<uint16_t>(q * 3), 370}, {static_cast<uint16_t>(q * 2), 371}, {q, 372}, {0, kPileGone}});
-}
-
-// The pile (by the table's index) that a tile belongs to, as the analysis of the map sees the cells; -1 when none
-int pile_of_tile(const MapInfo& map, size_t piles, sim::TileCoord tile) {
-    for (size_t i = 0; i < piles; ++i) {
-        const PileInfo* info = map.pile(static_cast<uint32_t>(i));
-        if (info == nullptr) continue;
-        for (const sim::TileCoord& c : info->cells) {
-            if (c == tile) return static_cast<int>(i);
-        }
-    }
-    return -1;
-}
-
-// The piles that the harvest orders of a rig name, in the order they were proposed (a move onto a power-up tile is a pick-up, not a harvest order)
-std::vector<int> harvest_targets(const Rig& rig, const sim::SimulationEngine& sim, uint8_t seat, size_t piles) {
-    std::vector<int> out;
-    for (const auto& e : rig.proposed) {
-        if (e.second.type != CommandType::GroupMove || e.second.issuer != seat) {
-            if (e.second.type != CommandType::GroupMove) continue;
-        }
-        const int pile = pile_of_tile(rig.map(), piles, tc(e.second.tile_x, e.second.tile_y));
-        if (pile < 0 || sim.grid().has_powerup_at(tc(e.second.tile_x, e.second.tile_y))) continue;
-        if (std::find(out.begin(), out.end(), pile) == out.end()) out.push_back(pile);
-    }
-    return out;
-}
-
 }  // namespace
 
 void run_b41_team_tests() {
@@ -95,7 +63,7 @@ void run_b41_team_tests() {
                 if (k.dropped_mask & 4u) sim.drop_player(2);
                 if (k.bot_has_ally) sim.form_alliance(0, 2);
                 if (k.inviter_has_ally) sim.form_alliance(1, 3);
-                Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+                Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
                 rig.run(2);
                 sim.apply_command(alliance_command(CommandType::AllianceInvite, 1, 0));
                 rig.run(260);
@@ -133,7 +101,7 @@ void run_b41_team_tests() {
         {
             sim::SimulationEngine sim;
             world_of(sim, 0x0F);
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(Level::Hard), 4, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
             rig.run(2);
             sim.apply_command(alliance_command(CommandType::AllianceInvite, 1, 0));
             rig.run(3000);
@@ -304,7 +272,7 @@ void run_b41_team_tests() {
             for (const uint8_t seat : {uint8_t{0}, uint8_t{1}, uint8_t{3}}) {                                 // (at seat 2 the centre is the nearest pile: the plain order goes there anyway)
                 sim::SimulationEngine sim;
                 start_match(sim, "TREASURE", 7, 0x0F);
-                Rig rig(sim, seat, level, std::make_unique<StandardBot>(level), 4, 4);
+                Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
                 rig.run(60);
                 if (seat == 0) ASSERT_EQ(ants_at_centre(rig, sim, 60), want);                                  // (from the other hills the plain order sends ants to the centre too, once the nearer piles are full)
                 else ASSERT_TRUE(ants_at_centre(rig, sim, 60) >= want);
@@ -324,7 +292,7 @@ void run_b41_team_tests() {
             for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});
             for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 3, kFightHills[t].y + 6});
             sim.get_unit(ants_of(sim, 0)[0]).hp = 10;
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(Level::Hard), 4, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
             if (late) {
                 for (int i = 0; i < 1300; ++i) rig.tick();
                 for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 9});

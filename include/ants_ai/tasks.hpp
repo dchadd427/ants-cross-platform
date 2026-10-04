@@ -239,6 +239,8 @@ public:
     /// Ants that stood idle and empty and could not be sent anywhere at the last look (no pile left that they can reach in time)
     size_t unplaced() const noexcept { return unplaced_; }
     const Params& params() const noexcept { return params_; }
+    /// New parameters between two looks (the bot's style and the adaptive plan change what the economy does): everything the task remembers stays
+    void set_params(const Params& params) { params_ = params; }
 
 private:
     static constexpr uint64_t kPending = ~uint64_t{0};

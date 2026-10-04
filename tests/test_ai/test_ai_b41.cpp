@@ -25,6 +25,7 @@
 //   AI7.20  the counter to enemy fire walls: put out near the hill or a pile, never the own three, waiting without a Fire Ant, a pile that a ring cuts off
 //   AI7.21  BotView::bombs() and fire_walls() are the engine's grid at every look
 //   AI7.22  Thief and Combat pick-ups follow the enemy (an enemy that plays, an enemy Combat Ant in sight), the raids, the guard post
+//   AI7.25  a Thief that harvests is taken for a raid as soon as a hill has loot and a hole that is open: its loop (walk to the pile, bite, walk home) is the engine's and it is never idle
 //   AI7.24  the double-thief opening at Hard: with idle neighbours the Hard bot has two Thief ants (its own side's and an unguarded one), Medium one, Easy none
 //   AI7.23  the defence against the double-thief opening: the own side's Thief power-up is taken before the neighbour's second thief gets there (Medium, Hard), not at Easy
 #include "ai_test.hpp"
@@ -386,7 +387,7 @@ void run_b41_tests() {
             sim.get_unit(carrier).pick_up_food(1, 25);
             sim.get_unit(weak).hp = 3;
             const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 27});
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
             const size_t want = level == Level::Easy ? 1u : level == Level::Medium ? 2u : 3u;
             bool hit = false;
             for (int t = 0; t < 700; ++t) {
@@ -428,7 +429,7 @@ void run_b41_tests() {
                 sim.spawn_unit(0, sim::AntType::Worker, TileCoord{24, 18});
                 sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 18});
                 const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, on_powerup ? TileCoord{22, 21} : TileCoord{23, 21});
-                Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+                Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
                 rig.run(3);
                 sim.apply_command(command_of(CommandType::GroupAttack, 1, {enemy}, 22, 20));           // one blow from where it stands (a standing ant can hit what is next to it)
                 rig.run(60);
@@ -463,7 +464,7 @@ void run_b41_tests() {
         sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 28});
         sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 32});
         const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 30});            // shut in: no path leads to its tile
-        Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+        Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
         rig.run(10);
         sim.get_unit(victim).hp = 9;                                                                 // "hit" (the enemy cannot reach anybody: the test makes the blow)
         rig.run(300);
@@ -728,7 +729,7 @@ void run_b41_tests() {
             for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 10});
             const uint32_t keeper = sim.spawn_unit(0, sim::AntType::Fire, TileCoord{12, 7});
             sim.spawn_unit(1, sim::AntType::Thief, TileCoord{55, 55});                                  // a thief in sight, far away: the threat lasts
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
             size_t open_after_first = 0;
             size_t fewest = 3;
             bool built = false;
@@ -760,7 +761,7 @@ void run_b41_tests() {
             for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 10});
             sim.spawn_unit(0, sim::AntType::Fire, TileCoord{12, 7});
             sim.spawn_unit(1, sim::AntType::Thief, TileCoord{55, 55});
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(Level::Hard), 4, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
             rig.run(600);
             for (const auto& e : rig.proposed) ASSERT_FALSE(e.second.tile_x == 8 && e.second.tile_y == 6);
             ASSERT_EQ(walls_east(sim, kFightHills[0]), 2u);                                              // the other two
@@ -932,7 +933,7 @@ void run_b41_tests() {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             sim::SimulationEngine sim;
             const uint32_t thief = build(sim, 14400, 300, 500, 100);
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
             rig.run(30);
             if (level == Level::Easy) {
                 ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
@@ -954,7 +955,7 @@ void run_b41_tests() {
             empty_field(probe, 31);
             const MapInfo map(probe);
             for (const TileCoord& t : east_tiles(map.hill(2))) sim.set_fire_at(t, 3500);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(30);
             ASSERT_EQ(rig.as<StandardBot>().raids().last_target(), 1);
             ASSERT_EQ(first_raid_target(rig), 1);
@@ -968,7 +969,7 @@ void run_b41_tests() {
             for (uint8_t t = 1; t < 4; ++t) {
                 for (const TileCoord& e : east_tiles(map.hill(t))) sim.set_fire_at(e, 3500);
             }
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(60);
             ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);                                 // nothing to take through three walls: the thief stays
             ASSERT_EQ(rig.proposed_count(CommandType::GroupSpecial), 0u);
@@ -981,7 +982,7 @@ void run_b41_tests() {
             empty_field(probe, 31);
             const MapInfo map(probe);
             for (const TileCoord& t : east_tiles(map.hill(2))) sim.grid_mut().place_bomb(static_cast<uint32_t>(t.x), static_cast<uint32_t>(t.y), 2);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(30);
             ASSERT_EQ(rig.as<StandardBot>().raids().last_target(), 1);
         }
@@ -990,7 +991,7 @@ void run_b41_tests() {
             sim::SimulationEngine sim;
             build(sim, 14400, 300, 500, 100);
             sim.form_alliance(0, 2);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(30);
             ASSERT_EQ(rig.as<StandardBot>().raids().last_target(), 1);
         }
@@ -998,12 +999,12 @@ void run_b41_tests() {
         {
             sim::SimulationEngine sim;
             build(sim, 14400, 20, 20, 20);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(60);
             ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
             sim::SimulationEngine sim2;
             build(sim2, 14400, 20, 40, 20);
-            Rig rig2(sim2, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig2(sim2, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig2.run(30);
             ASSERT_EQ(rig2.as<StandardBot>().raids().last_target(), 2);
         }
@@ -1011,7 +1012,7 @@ void run_b41_tests() {
         {
             sim::SimulationEngine sim;
             build(sim, 700, 300, 500, 100);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(30);
             ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
         }
@@ -1024,28 +1025,34 @@ void run_b41_tests() {
                     if (dx != 0 || dy != 0) sim.set_terrain(20 + dx, 20 + dy, sim::TERRAIN_OBSTACLE);
                 }
             }
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(60);
             ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
         }
-        // (g) a Combat Ant of the leader next to its raid tile: Hard goes to the next hill, Medium does not mind
+        // (g) a Combat Ant of the leader next to its raid tile: the plan that avoids guarded hills goes to the next hill (no shipped plan does: the Combat Ant of the enemy is a worker that fights, not
+        //     a guard, and the tournaments measured 94.1 against 95.8 percent for avoiding it, docs/BOTS.md "Aggression")
         for (const Level level : {Level::Medium, Level::Hard}) {
-            sim::SimulationEngine sim;
-            build(sim, 14400, 300, 500, 100);
-            sim::SimulationEngine probe;
-            empty_field(probe, 31);
-            const MapInfo map(probe);
-            const TileCoord raid = map.hill(2).raid;
-            sim.spawn_unit(2, sim::AntType::Combat, TileCoord{raid.x + 2, raid.y});
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
-            rig.run(30);
-            ASSERT_EQ(rig.as<StandardBot>().raids().last_target(), level == Level::Hard ? 1 : 2);
+            for (const bool avoids : {false, true}) {
+                sim::SimulationEngine sim;
+                build(sim, 14400, 300, 500, 100);
+                sim::SimulationEngine probe;
+                empty_field(probe, 31);
+                const MapInfo map(probe);
+                const TileCoord raid = map.hill(2).raid;
+                sim.spawn_unit(2, sim::AntType::Combat, TileCoord{raid.x + 2, raid.y});
+                LevelPlan plan = plan_for(level);
+                plan.avoids_guarded_hills = avoids;
+                Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(30);
+                ASSERT_EQ(rig.as<StandardBot>().raids().last_target(), avoids ? 1 : 2);
+            }
+            ASSERT_FALSE(plan_for(level).avoids_guarded_hills);
         }
         // (h) a whole raid in the engine: only team 1 has points; the thief walks there, raids, walks home and banks the 50 that it took
         {
             sim::SimulationEngine sim;
             build(sim, 14400, 300, 0, 0);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(1300);
             ASSERT_TRUE(sim.get_player_score(0) >= 50);
             ASSERT_TRUE(sim.get_player_score(1) <= 250);
@@ -1066,12 +1073,20 @@ void run_b41_tests() {
         for (const TileCoord& e : east_tiles(hill)) ASSERT_TRUE(post0.chebyshev_dist(e) <= 3);
         for (const TileCoord& q : hill.starts) ASSERT_TRUE(post1.chebyshev_dist(q) <= 3);
         ASSERT_TRUE(post0 != post1 && post1 != post2 && post0 != post2);
+        // (the shipped plans do not park Combat Ants at home any more: a Combat Ant that harvests and fights what comes near is worth more, docs/BOTS.md "Aggression"; the guard is tested as the
+        // feature that it is, with a plan that switches it on)
+        const auto guard_plan = [](Level level) {
+            LevelPlan p = plan_for(level);
+            p.guards = level != Level::Easy;
+            p.combat_harvests = false;
+            return p;
+        };
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             sim::SimulationEngine sim;
             empty_field(sim, 41);
             const uint32_t a = sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30, 30});
             const uint32_t b = sim.spawn_unit(0, sim::AntType::Combat, TileCoord{34, 30});
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(guard_plan(level)), 4, 4);
             rig.run(900);
             if (level == Level::Easy) {
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupMove), 0u);                                 // no guard at Easy: the Combat Ants stand where they were
@@ -1094,7 +1109,7 @@ void run_b41_tests() {
             empty_field(sim, 41);
             sim.grid_mut().place_powerup(post0.x, post0.y, 4);
             const uint32_t a = sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30, 30});
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(guard_plan(Level::Medium)), 4, 4);
             rig.run(900);
             ASSERT_EQ(rig.proposed_count(CommandType::GroupMove), 1u);
             for (const auto& e : rig.proposed) ASSERT_FALSE(e.second.tile_x == post0.x && e.second.tile_y == post0.y);
@@ -1200,7 +1215,7 @@ void run_b41_tests() {
         for (const Case& k : cases) {
             sim::SimulationEngine sim;
             start_match(sim, "TREASURE", 5, 0x0F);
-            Rig rig(sim, 0, k.level, std::make_unique<StandardBot>(k.level), 4, 4);
+            Rig rig(sim, 0, k.level, std::make_unique<StandardBot>(plan_for(k.level)), 4, 4);
             if (k.thief_in_sight) sim.spawn_unit(1, sim::AntType::Thief, rig.map().hill(1).queue);
             rig.run(1100);
             ASSERT_EQ(count_type(sim, 0, sim::AntType::Fire), k.fire ? 1u : 0u);
@@ -1235,7 +1250,7 @@ void run_b41_tests() {
             sim.grid_mut().clear_powerup(57, 24);
             sim.grid_mut().clear_powerup(48, 25);
             sim.grid_mut().clear_powerup(35, 14);
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
             if (level == Level::Easy) sim.spawn_unit(1, sim::AntType::Thief, rig.map().hill(1).queue);       // (Easy would take a Fire for the walls: still not a stolen one)
             rig.run(1100);
             ASSERT_EQ(rig.as<StandardBot>().powerups().started(), 0u);
@@ -1269,7 +1284,7 @@ void run_b41_tests() {
         {
             sim::SimulationEngine sim;
             const auto ids = build(sim, 1, bomb_tile, true, 10);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(500);
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_FALSE(sim.grid().has_bomb_at(bomb_tile));
@@ -1291,7 +1306,7 @@ void run_b41_tests() {
         {
             sim::SimulationEngine sim;
             const auto ids = build(sim, 1, bomb_tile, false, 10);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(500);
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_FALSE(sim.grid().has_bomb_at(bomb_tile));
@@ -1334,20 +1349,20 @@ void run_b41_tests() {
         {
             sim::SimulationEngine own;
             build(own, 0, bomb_tile, true, 10);
-            Rig r1(own, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig r1(own, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             r1.run(200);
             ASSERT_TRUE(own.grid().has_bomb_at(bomb_tile));
             ASSERT_EQ(r1.proposed_count(CommandType::GroupSpecial), 0u);
             sim::SimulationEngine allied;
             build(allied, 1, bomb_tile, true, 10);
             allied.form_alliance(0, 1);
-            Rig r2(allied, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig r2(allied, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             r2.run(200);
             ASSERT_TRUE(allied.grid().has_bomb_at(bomb_tile));
             ASSERT_EQ(r2.proposed_count(CommandType::GroupSpecial), 0u);
             sim::SimulationEngine far;
             build(far, 1, TileCoord{40, 40}, true, 10);
-            Rig r3(far, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig r3(far, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             r3.run(200);
             ASSERT_TRUE(far.grid().has_bomb_at(TileCoord{40, 40}));
             ASSERT_EQ(r3.proposed_count(CommandType::GroupSpecial), 0u);
@@ -1362,7 +1377,7 @@ void run_b41_tests() {
                     if (dx != 0 || dy != 0) sim.set_terrain(bomb_tile.x + dx, bomb_tile.y + dy, sim::TERRAIN_OBSTACLE);
                 }
             }
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(250);
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_EQ(bot.bombs().failures(), 1u);
@@ -1387,7 +1402,7 @@ void run_b41_tests() {
             sim::SimulationEngine sim;
             const uint32_t keeper = build(sim, true);
             for (const TileCoord& t : theirs) sim.set_fire_at(t, 3500);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(1500);
             const StandardBot& bot = rig.as<StandardBot>();
             for (const TileCoord& t : theirs) ASSERT_FALSE(sim.grid().has_fire_at(t));
@@ -1408,7 +1423,7 @@ void run_b41_tests() {
             sim::SimulationEngine sim;
             build(sim, false);
             for (const TileCoord& t : theirs) sim.set_fire_at(t, 3500);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
             rig.run(800);
             for (const TileCoord& t : theirs) ASSERT_TRUE(sim.grid().has_fire_at(t));
             ASSERT_EQ(rig.proposed_count(CommandType::GroupSpecial), 0u);
@@ -1426,7 +1441,7 @@ void run_b41_tests() {
             const std::array<TileCoord, 3> own = east_tiles(map.hill(0));
             for (const TileCoord& t : own) sim.set_fire_at(t, 3500);
             sim.set_fire_at(tc(40, 40), 3500);
-            Rig rig(sim, 0, Level::Easy, std::make_unique<StandardBot>(Level::Easy), 4, 4);
+            Rig rig(sim, 0, Level::Easy, std::make_unique<StandardBot>(plan_for(Level::Easy)), 4, 4);
             rig.run(900);
             for (const TileCoord& t : own) ASSERT_TRUE(sim.grid().has_fire_at(t));
             ASSERT_TRUE(sim.grid().has_fire_at(tc(40, 40)));
@@ -1465,7 +1480,7 @@ void run_b41_tests() {
             }
             for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12 + i, 10});
             if (fire_ant) sim.spawn_unit(0, sim::AntType::Fire, TileCoord{14, 14});
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(Level::Medium), 4, 4);                // (the analysis of the start sees the pile open, as in a match)
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);                // (the analysis of the start sees the pile open, as in a match)
             for (const auto& r : ring) sim.set_fire_at(tc(r.first, r.second), fire_ant ? 3500u : 500u);
             rig.run(450);
             uint64_t first_special = ~uint64_t{0};
@@ -1570,47 +1585,42 @@ void run_b41_tests() {
         ASSERT_EQ(late.powerups().size(), 1u);
     } TEST_END();
 
-    TEST_CASE("AI7.22 Thief And Combat: Medium And Hard Take The Thief Power-Up Of Their Side In The Opening (Easy Never) And Their Thief Goes Raiding The Team That Has Points; They Take Combat Power-Ups (Medium One, Hard Up To Two) Only Once An Enemy Combat Ant Is In Sight, And The Combat Ant Walks To Its Guard Post")
+    TEST_CASE("AI7.22 Thief And Combat: Medium And Hard Take The Thief Power-Up Of Their Side In The Opening (Easy Never) And Their Thief Goes Raiding The Team That Has Points; They Take The Combat Power-Up Of Their Side In The Opening As Soon As An Enemy Plays (One Combat Ant): It Is A Worker That Fights, It Harvests Like One And Is Not Parked At The Hill")
     {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
-            for (const bool enemy_combat : {false, true}) {
-                sim::SimulationEngine sim;
-                start_match(sim, "TREASURE", 5, 0x0F);
-                sim.set_player_score(1, 100);                                                               // something to raid (30 at least), not enough to make the bot feel behind (300)
-                Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
-                if (enemy_combat) sim.spawn_unit(3, sim::AntType::Combat, rig.map().hill(3).queue);           // an enemy Combat Ant in sight (not at the hill that is raided: Hard would not go there)
-                const std::vector<uint32_t> theirs = ants_of(sim, 1);
-                sim.apply_command(command_of(CommandType::GroupMove, 1, {theirs[0]}, 30, 27));                 // an enemy that moves, in both runs: that alone fetches no Combat Ant
-                rig.run(2200);
-                const StandardBot& bot = rig.as<StandardBot>();
-                const size_t thieves = count_type(sim, 0, sim::AntType::Thief);
-                const size_t fighters = count_type(sim, 0, sim::AntType::Combat);
-                if (level == Level::Easy) {
-                    ASSERT_EQ(thieves, 0u);
-                    ASSERT_EQ(fighters, 0u);
-                    ASSERT_EQ(bot.raids().raids_ordered(), 0u);
-                    ASSERT_EQ(bot.guard().guards(), 0u);
-                    continue;
-                }
-                ASSERT_EQ(thieves, 1u);                                                                      // the Thief of the own side
-                ASSERT_FALSE(sim.grid().has_powerup_at(tc(35, 14)));
-                ASSERT_TRUE(sim.grid().has_powerup_at(tc(25, 14)));                                          // (another side's is left)
-                ASSERT_TRUE(bot.raids().raids_ordered() >= 1);                                               // it raids the team that has points
-                ASSERT_EQ(bot.raids().last_target(), 1);
-                if (!enemy_combat) {
-                    ASSERT_EQ(fighters, 0u);                                                                 // nobody fights: no Combat Ant is fetched
-                    ASSERT_EQ(bot.guard().guards(), 0u);
-                    ASSERT_TRUE(sim.grid().has_powerup_at(tc(37, 2)));
-                    continue;
-                }
-                ASSERT_TRUE(fighters >= 1 && fighters <= (level == Level::Medium ? 1u : 2u));
-                ASSERT_FALSE(sim.grid().has_powerup_at(tc(37, 2)));
-                ASSERT_EQ(bot.guard().guards(), fighters);
-                const uint32_t guard = first_of_type(sim, 0, sim::AntType::Combat);
-                const TileCoord post = GuardTask::post_of(rig.map().hill(0), 0);
-                const TileCoord at{sim.get_unit(guard).pos.x, sim.get_unit(guard).pos.y};
-                ASSERT_TRUE(at.chebyshev_dist(post) <= 2);
+            sim::SimulationEngine sim;
+            start_match(sim, "TREASURE", 5, 0x0F);
+            sim.set_player_score(1, 100);                                                               // something to raid (30 at least)
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+            const std::vector<uint32_t> theirs = ants_of(sim, 1);
+            sim.apply_command(command_of(CommandType::GroupMove, 1, {theirs[0]}, 30, 27));                 // an enemy that moves: an enemy plays
+            rig.run(2200);
+            const StandardBot& bot = rig.as<StandardBot>();
+            const size_t thieves = count_type(sim, 0, sim::AntType::Thief);
+            const size_t fighters = count_type(sim, 0, sim::AntType::Combat);
+            ASSERT_EQ(bot.guard().guards(), 0u);                                                         // no level parks a Combat Ant at home
+            if (level == Level::Easy) {
+                ASSERT_EQ(thieves, 0u);
+                ASSERT_EQ(fighters, 0u);
+                ASSERT_EQ(bot.raids().raids_ordered(), 0u);
+                ASSERT_TRUE(sim.grid().has_powerup_at(tc(37, 2)));
+                continue;
             }
+            ASSERT_EQ(thieves, 1u);                                                                      // the Thief of the own side
+            ASSERT_FALSE(sim.grid().has_powerup_at(tc(35, 14)));
+            ASSERT_TRUE(sim.grid().has_powerup_at(tc(25, 14)));                                          // (another side's is left)
+            ASSERT_TRUE(bot.raids().raids_ordered() >= 1);                                               // it raids the team that has points
+            ASSERT_EQ(bot.raids().last_target(), 1);
+            ASSERT_EQ(fighters, 1u);                                                                     // the Combat power-up of the own side, in the opening, and no other
+            ASSERT_FALSE(sim.grid().has_powerup_at(tc(37, 2)));
+            ASSERT_TRUE(sim.grid().has_powerup_at(tc(24, 2)));
+            const uint32_t fighter = first_of_type(sim, 0, sim::AntType::Combat);
+            size_t harvest_orders = 0;                                                                   // it was sent to piles after it became a Combat Ant
+            for (const auto& e : rig.proposed) {
+                if (e.second.type != CommandType::GroupMove || (e.second.tile_x == 37 && e.second.tile_y == 2)) continue;
+                for (const uint32_t id : e.second.ants) harvest_orders += id == fighter ? 1u : 0u;
+            }
+            ASSERT_TRUE(harvest_orders >= 1);
         }
     } TEST_END();
 
@@ -1669,12 +1679,47 @@ void run_b41_tests() {
             }
             const uint32_t walker = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{58, 58});
             sim.apply_command(command_of(CommandType::GroupMove, 1, {walker}, 50, 58));                     // and an enemy plays (the idle bot's ants never move), far from every power-up
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(level), 4, 4);
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
             rig.run(900);
             const size_t thieves = count_type(sim, 0, sim::AntType::Thief);
             const size_t others_gone = (sim.grid().has_powerup_at(tc(25, 14)) ? 0u : 1u) + (sim.grid().has_powerup_at(tc(26, 47)) ? 0u : 1u) + (sim.grid().has_powerup_at(tc(34, 47)) ? 0u : 1u);
             ASSERT_EQ(thieves, level == Level::Hard ? 2u : level == Level::Medium ? 1u : 0u);
             ASSERT_EQ(others_gone, level == Level::Hard ? 1u : 0u);
+        }
+        // one Thief wanted at Hard (a plan that does not want two): the own side's, never the nearer one of a neighbour (the own side comes first, theft is for the second one only)
+        for (const uint32_t seed : {5u, 6u, 9u}) {
+            sim::SimulationEngine sim;
+            start_match(sim, "TREASURE", seed, 0x0F);
+            for (uint8_t t = 1; t < 4; ++t) {
+                for (const uint32_t id : ants_of(sim, t)) sim.get_unit(id).hp = 0;
+            }
+            const uint32_t walker = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{58, 58});
+            sim.apply_command(command_of(CommandType::GroupMove, 1, {walker}, 50, 58));
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.max_thief = 1;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(900);
+            ASSERT_EQ(count_type(sim, 0, sim::AntType::Thief), 1u);
+            ASSERT_FALSE(sim.grid().has_powerup_at(tc(35, 14)));                                           // the Thief of the own side is gone ...
+            ASSERT_TRUE(sim.grid().has_powerup_at(tc(25, 14)));                                            // ... and the neighbour's, which lies nearer to some of the ants, is not
+        }
+        {   // a hand-made world where the neighbour's Thief power-up lies NEARER to the ants than the own side's: Hard (one Thief wanted) still walks to the own side's
+            sim::SimulationEngine sim;
+            empty_field(sim, 83);
+            sim.grid_mut().place_powerup(33, 10, 3);                                                       // between the hills of teams 0 and 1, nearer to team 1 by the walk
+            sim.grid_mut().place_powerup(14, 12, 3);                                                       // on the own side
+            for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{28 + i % 2, 8 + i / 2});
+            const uint32_t walker = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{58, 58});
+            sim.apply_command(command_of(CommandType::GroupMove, 1, {walker}, 50, 58));
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.max_thief = 1;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            ASSERT_EQ(power_up_side(rig.map(), tc(33, 10), 0x0F), 1);
+            ASSERT_EQ(power_up_side(rig.map(), tc(14, 12), 0x0F), 0);
+            rig.run(600);
+            ASSERT_EQ(count_type(sim, 0, sim::AntType::Thief), 1u);
+            ASSERT_FALSE(sim.grid().has_powerup_at(tc(14, 12)));                                           // the own side's, though it is the farther
+            ASSERT_TRUE(sim.grid().has_powerup_at(tc(33, 10)));
         }
         // two Medium neighbours: each takes its own side's Thief power-up at the start, so there is nothing left to steal (the Hard bot keeps its one)
         {
@@ -1698,6 +1743,39 @@ void run_b41_tests() {
             const ArenaResult r = play_match(spec);
             ASSERT_TRUE(r.error.empty());
             ASSERT_EQ(ours, 1u);
+        }
+    } TEST_END();
+    TEST_CASE("AI7.25 A Thief That Harvests Is Taken For A Raid: Its Loop (Walk To The Pile, Bite, Walk Home, Deliver, Walk Back) Is The Engine's, So It Is Never Idle, And A Raid That Waited For An Idle Thief Would Hardly Ever Start; As Soon As A Hill Has Loot And An Open Hole The Thief That Walks Empty-Handed Is Sent (One That Carries Food Delivers It First)")
+    {
+        for (const Level level : {Level::Medium, Level::Hard}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 51);
+            place_pile(sim, 12, 10, 600, 25, {{600, 369}, {450, 370}, {300, 371}, {150, 372}, {0, kPileGone}});         // a pile near the hill: the thief's loop is a few hundred ticks
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{8, 8});
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+            rig.run(260);                                                                              // nothing to raid yet (every box shows 0): the thief harvests
+            ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
+            bool walked = false;
+            bool carried = false;
+            for (int t = 0; t < 120; ++t) {                                                            // its loop: it walks and it carries, and it is never idle
+                rig.tick();
+                const sim::AntSnapshot* a = snapshot_of(sim, thief);
+                ASSERT_TRUE(a != nullptr);
+                walked = walked || a->state == sim::UnitState::Walking;
+                carried = carried || a->is_holding;
+            }
+            ASSERT_TRUE(walked && carried);
+            sim.set_player_score(1, 300);                                                              // a hill with loot and an open hole
+            const size_t before = rig.proposed.size();
+            rig.run(260);
+            ASSERT_TRUE(rig.as<StandardBot>().raids().raids_ordered() >= 1);
+            ASSERT_EQ(rig.as<StandardBot>().raids().last_target(), 1);
+            bool ordered = false;
+            for (size_t i = before; i < rig.proposed.size(); ++i) {
+                const Command& c = rig.proposed[i].second;
+                if (c.type == CommandType::GroupSpecial && c.ants.size() == 1 && c.ants[0] == thief && c.tile_x == rig.map().hill(1).entrance.x && c.tile_y == rig.map().hill(1).entrance.y) ordered = true;
+            }
+            ASSERT_TRUE(ordered);
         }
     } TEST_END();
 }

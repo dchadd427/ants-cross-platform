@@ -214,3 +214,5 @@ void run_b41_tests();
 void run_b41_team_tests();
 void run_b41_fight_tests();
 void run_b41_gate_tests();
+void run_b41_style_tests();
+void run_b41_offence_tests();
