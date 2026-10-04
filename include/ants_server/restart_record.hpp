@@ -40,6 +40,9 @@
 // of this build are not those that played the match). A room that holds no seats (reconnect off) has no record, a room that has not started (waiting) has none either, and a room whose turn log passed
 // its limit (RoomSpec::max_log_bytes) or whose record the disk refused stops keeping one (and says so in its status).
 //
+// ONE SERVER TO A FOLDER. RestartStore::prepare takes a lock on the folder (the file `.lock`) for the life of the store: a second server over the same folder would write the first one's records, so it
+// is refused (an explicit --restart-dir stops it with status 1, the default folder is given up with a line in the log); the lock goes with the process, however it ends.
+//
 // LIMITS. A record is at most RestartConfig::max_record_bytes (48 MiB: 3 times the turn log's own limit); all the records together are at most RestartConfig::budget_bytes (256 MiB); a write that
 // fails (a full disk, a quota, an error) ends the record at once: the file is deleted (a record that stops in the middle of a match would bring it back to the wrong tick), the room goes on playing and
 // its status says why it has no record.
@@ -223,7 +226,9 @@ public:
 
     bool enabled() const noexcept { return !cfg_.dir.empty(); }
     const RestartConfig& config() const noexcept { return cfg_; }
-    /// Makes the folder (POSIX: mode 700 when it is made here) and removes the temporary files that a crashed start of a record left. False, with the reason, when the folder cannot be used.
+    /// Makes the folder (POSIX: mode 700 when it is made here), takes the folder's lock for the life of this store (one server to a folder: the file `.lock`, held with flock (Windows: opened with no
+    /// sharing); a lock that another process or another store of this process holds fails this), and only then removes the
+    /// temporary files that a crashed start of a record left. False, with the reason, when the folder cannot be used. Calling it again on a store that holds the lock is fine.
     bool prepare(std::string& why);
     /// Where the record of the room with this code is
     std::string path_for(const std::string& code) const;
@@ -250,11 +255,15 @@ public:
 
 private:
     friend class RestartWriter;
+    bool take_lock(std::string& why);
+    void release_lock() noexcept;
     net::LogBudget budget_;
     RestartConfig cfg_;
     std::vector<std::string> notes_;
     size_t open_{0};
     uint32_t failed_{0};
+    int lock_fd_{-1};                                       // the folder's lock (a Windows HANDLE is kept in lock_handle_)
+    void* lock_handle_{nullptr};
 };
 
 }  // namespace ants::server

@@ -2461,6 +2461,13 @@ size_t entries_in(const fs::path& dir) {
     return n;
 }
 
+// The entries of a restart folder besides its lock file (the file `.lock` is the folder's own since M5 of the review: a store that has prepared the folder holds it)
+size_t entries_but_lock(const fs::path& dir) {
+    size_t n = 0;
+    for (const auto& e : fs::directory_iterator(dir)) n += e.path().filename() == ".lock" ? 0u : 1u;
+    return n;
+}
+
 }  // namespace
 
 // The control secret: from the environment, or made once and kept in a file (secret.hpp)
@@ -5366,7 +5373,7 @@ void run_persist_tests() {
         ASSERT_EQ(w->path(), store.path_for("REC-1"));
         ASSERT_EQ(store.open_records(), size_t{1});
         ASSERT_TRUE(store.records().size() == 1 && store.records()[0] == w->path());
-        ASSERT_EQ(entries_in(cfg.dir), size_t{1});                                      // (no temporary file is left behind)
+        ASSERT_EQ(entries_but_lock(cfg.dir), size_t{1});                                // (no temporary file is left behind)
         ASSERT_EQ(w->turns(), 0u);
         {
             const RestartLoaded only_head = read_restart_record(w->path(), cfg.max_record_bytes);       // a record with a head and nothing else is a record
@@ -5452,7 +5459,7 @@ void run_persist_tests() {
             ASSERT_TRUE(second != nullptr);
             const RestartLoaded r = read_restart_record(second->path(), cfg.max_record_bytes);
             ASSERT_TRUE(r.ok() && r.turns.empty() && r.head.start.seed == 99);
-            ASSERT_EQ(entries_in(cfg.dir), size_t{1});
+            ASSERT_EQ(entries_but_lock(cfg.dir), size_t{1});
         }
         {   // a writer that is told to discard its record deletes the file and gives its bytes back, and writes no more
             store.remove_file(store.path_for("REC-1"));
@@ -5529,7 +5536,7 @@ void run_persist_tests() {
             ASSERT_TRUE(WIFSIGNALED(wait_status) && WTERMSIG(wait_status) == SIGXFSZ);
             ASSERT_TRUE(prepared.records().empty());                                    // no record under any name that a start would read
             ASSERT_TRUE(prepared.prepare(why));                                         // the temporary file of the dead process is removed
-            ASSERT_EQ(entries_in(c.dir), size_t{0});
+            ASSERT_EQ(entries_but_lock(c.dir), size_t{0});
             auto after = prepared.create(head, why);
             ASSERT_TRUE(after != nullptr);
         }
@@ -7237,6 +7244,78 @@ void run_persist_review_tests() {
             }
         }
     } TEST_END();
+
+    TEST_CASE("S3.104 One Server To A Folder (M5 Of The Review): The Folder Is Locked For The Life Of The Store That Prepared It (The File .lock, flock): A Second Store On The Same Folder, In This Process Or In Another, Cannot Prepare It And Says Another Server Has It; The Temporary File Of The First One's Record Is Not Removed By The Second (The Cleanup Comes After The Lock); The Same Store May Prepare Again; The Lock Goes When The Store Does (Or The Process Dies); A Second Room Manager Keeps No Records And Says Why") {
+        RestartConfig cfg = test_restart_config("persist-104");
+        std::string why;
+        const fs::path tmp = fs::path(cfg.dir) / "room-LIVE-0000abcd.restart.0123456789abcdef.tmp";
+        {
+            RestartStore first(cfg);
+            ASSERT_TRUE(first.prepare(why) && why.empty());
+            ASSERT_TRUE(first.prepare(why));                                                    // (the same store again: it holds the lock already)
+            ASSERT_TRUE(fs::exists(fs::path(cfg.dir) / ".lock"));
+            ASSERT_TRUE(first.records().empty());                                               // (the lock file is no record)
+            write_all_bytes(tmp, {1, 2, 3});                                                    // the first server is making a record: its temporary file
+            RestartStore second(cfg);
+            ASSERT_FALSE(second.prepare(why));
+            ASSERT_TRUE(why.find("another server") != std::string::npos && why.find("lock") != std::string::npos);
+            ASSERT_TRUE(fs::exists(tmp));                                                       // the refused store did not touch what is the first one's
+            ASSERT_FALSE(second.prepare(why));                                                  // (and it stays refused)
+            auto w1 = first.create(sample_head("LK-1"), why);                                    // the first one goes on as it did
+            ASSERT_TRUE(w1 != nullptr && w1->append_turn(sample_turn(0)));
+            ASSERT_TRUE(fs::exists(tmp));
+            RoomManager keeper{MapStore(maps_dir())};                                           // a second room manager over the same folder keeps no records, and says why
+            ASSERT_FALSE(keeper.enable_restart_records(cfg, why));
+            ASSERT_TRUE(keeper.restart_store() == nullptr && why.find("another server") != std::string::npos);
+            ASSERT_TRUE(keeper.create_room(held_spec("LK-2", 2), 1000).ok);
+            RoomStatus s;
+            ASSERT_TRUE(keeper.status("LK-2", s, 1000) && !s.record_kept && s.record_note == "this server keeps no restart records");
+        }
+        {   // the first store is gone: the folder is free, and the stale temporary file is cleaned up now that the lock is held
+            RestartStore later(cfg);
+            ASSERT_TRUE(later.prepare(why));
+            ASSERT_FALSE(fs::exists(tmp));
+            RestartStore blocked(cfg);
+            ASSERT_FALSE(blocked.prepare(why));                                                 // ... and is taken again
+        }
+        {   // another folder is another lock; a folder with a lock file that nobody holds (a server that died) is free
+            RestartConfig other = test_restart_config("persist-104b");
+            RestartStore x(other);
+            ASSERT_TRUE(x.prepare(why));
+            RestartStore y(cfg);
+            ASSERT_TRUE(y.prepare(why));
+            ASSERT_TRUE(fs::exists(fs::path(cfg.dir) / ".lock") && fs::exists(fs::path(other.dir) / ".lock"));
+        }
+#ifndef _WIN32
+        {   // a lock that another PROCESS holds: the same refusal, and the lock goes when that process dies (SIGKILL: no destructor runs)
+            RestartConfig shared = test_restart_config("persist-104c");
+            int up[2];
+            ASSERT_EQ(::pipe(up), 0);
+            const pid_t pid = ::fork();
+            ASSERT_TRUE(pid >= 0);
+            if (pid == 0) {
+                ::close(up[0]);
+                RestartStore holder(shared);
+                std::string child_why;
+                const char ok = holder.prepare(child_why) ? 'y' : 'n';
+                (void)!::write(up[1], &ok, 1);
+                ::pause();
+                ::_exit(0);
+            }
+            ::close(up[1]);
+            char told = 0;
+            ASSERT_TRUE(::read(up[0], &told, 1) == 1 && told == 'y');
+            RestartStore rival(shared);
+            const bool refused = !rival.prepare(why) && why.find("another server") != std::string::npos;
+            ::kill(pid, SIGKILL);
+            int wait_status = 0;
+            ASSERT_EQ(::waitpid(pid, &wait_status, 0), pid);
+            ::close(up[0]);
+            ASSERT_TRUE(refused);
+            ASSERT_TRUE(rival.prepare(why));                                                    // the process is dead: its lock is gone, the folder is free
+        }
+#endif
+    } TEST_END();
 }
 
 
@@ -7446,7 +7525,9 @@ void real_process_scenario(const char* tag, int stop_signal, bool control_room) 
     ASSERT_TRUE(w.until([&]() { return a.session != nullptr && b.session != nullptr && a.session->runner().next_turn_expected() >= 130 && b.session->runner().next_turn_expected() >= 130; }, 40000));
     // the record is there, for its owner only, and the control interface says so
     std::vector<fs::path> files;
-    for (const auto& e : fs::directory_iterator(restart_dir)) files.push_back(e.path());
+    for (const auto& e : fs::directory_iterator(restart_dir)) {
+        if (e.path().extension() == kRestartExtension) files.push_back(e.path());              // (the folder also holds the lock file of the server that runs)
+    }
     ASSERT_EQ(files.size(), size_t{1});
     {
         struct stat st;
@@ -7475,7 +7556,9 @@ void real_process_scenario(const char* tag, int stop_signal, bool control_room) 
         ASSERT_TRUE(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL);
     }
     files.clear();
-    for (const auto& e : fs::directory_iterator(restart_dir)) files.push_back(e.path());
+    for (const auto& e : fs::directory_iterator(restart_dir)) {
+        if (e.path().extension() == kRestartExtension) files.push_back(e.path());              // (the folder also holds the lock file of the server that runs)
+    }
     ASSERT_EQ(files.size(), size_t{1});                                                 // the record is still there
     const RestartLoaded rec = read_restart_record(files[0].string(), 1ull << 30);
     ASSERT_TRUE(rec.ok());
@@ -7514,7 +7597,7 @@ void real_process_scenario(const char* tag, int stop_signal, bool control_room) 
     ASSERT_TRUE(a.sim.is_match_over() && b.sim.is_match_over() && a.sim.state_hash() == b.sim.state_hash());
     ASSERT_EQ(j.get("state_hash").str(), hex_u64(a.sim.state_hash().total));              // the referee that was restored and the two machines that lived through the restart
     ASSERT_FALSE(a.session->desynced() || b.session->desynced());
-    ASSERT_TRUE(fs::is_empty(restart_dir));                                             // the match is over: its record is gone
+    ASSERT_EQ(entries_but_lock(restart_dir), size_t{0});                                // the match is over: its record is gone
     // ---- the log: what happened, and no key anywhere in it ---------------------------------------------------------------------------------------------------------------------------
     const std::string log_text = text_of_file(log_file);
     ASSERT_TRUE(log_text.find("room " + code + " restored: " + std::to_string(record_turns) + " turns") != std::string::npos);
@@ -7645,6 +7728,81 @@ void run_persist_process_tests() {
         }
     } TEST_END();
 }
+
+namespace {
+
+// Waits until the log of a server process holds `text` (the server logs the state of its restart folder after its listeners are open: a port that accepts says nothing about it)
+bool log_has(const std::string& log_file, const std::string& text, uint32_t timeout_ms) {
+    const uint32_t end = wall_ms() + timeout_ms;
+    while (static_cast<int32_t>(wall_ms() - end) < 0) {
+        if (text_of_file(log_file).find(text) != std::string::npos) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    return text_of_file(log_file).find(text) != std::string::npos;
+}
+
+}  // namespace
+
+void run_persist_review_process_tests() {
+    TEST_CASE("S3.105 The Real Program Over A Folder That Another Server Holds (M5 Of The Review): The Second Server With The Same --restart-dir Exits With Status 1 And Says Why; The Second Server With The Same Results Folder (The Default Restart Folder) Runs, Logs That Restart Records Are Off, And Keeps None; Neither Touches The Temporary File Of The First One's Record; When The First Is Killed (SIGKILL) The Lock Is Gone With It And A Third Server Takes The Folder") {
+        const fs::path root = temp_dir_for("persist-105");
+        const fs::path results = root / "results";
+        const fs::path restart_dir = results / "restart";
+        const std::string secret = "test-secret-0123456789abcdef0123456789abcdef";
+        const auto args = [&](uint16_t port, const std::vector<std::string>& more) {
+            std::vector<std::string> a = {"--maps", maps_dir(), "--port", std::to_string(port)};
+            a.insert(a.end(), more.begin(), more.end());
+            return a;
+        };
+        // ---- the first server has the folder (the default one of its results folder) ---------------------------------------------------------------------------------------------------------------
+        const std::string log_a = (root / "a.log").string();
+        ServerProcess a;
+        ASSERT_TRUE(a.start(args(free_tcp_port(), {"--results-dir", results.string(), "--reconnect"}), secret, log_a));
+        ASSERT_TRUE(log_has(log_a, "restart records in ", 15000));
+        ASSERT_TRUE(fs::exists(restart_dir / ".lock"));
+        const fs::path temp_of_a = restart_dir / "room-A-0000abcd.restart.0123456789abcdef.tmp";       // a record that the first server is making, as far as anybody else can tell
+        write_all_bytes(temp_of_a, {1, 2, 3});
+        // ---- a second server that is told to keep its records in that folder: it cannot, and the operator asked for it: status 1 ---------------------------------------------------------------------------
+        {
+            const std::string log_b = (root / "b.log").string();
+            ServerProcess b;
+            ASSERT_TRUE(b.start(args(free_tcp_port(), {"--restart-dir", restart_dir.string()}), secret, log_b));
+            int status = 0;
+            ASSERT_TRUE(b.wait_exit(15000, status) >= 0);
+            ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 1);
+            ASSERT_TRUE(text_of_file(log_b).find("another server is using the restart folder") != std::string::npos);
+        }
+        // ---- a second server over the same results folder: its default restart folder is taken: it runs without records and says so ------------------------------------------------------------
+        {
+            const std::string log_c = (root / "c.log").string();
+            ServerProcess c;
+            const uint16_t port_c = free_tcp_port();
+            ASSERT_TRUE(c.start(args(port_c, {"--results-dir", results.string(), "--reconnect"}), secret, log_c));
+            ASSERT_TRUE(log_has(log_c, "restart records are off: another server is using the restart folder", 15000));
+            ASSERT_TRUE(port_accepts(port_c, 15000));                                                  // (it runs: the game goes on without records)
+            ASSERT_TRUE(text_of_file(log_c).find("restart records in ") == std::string::npos);
+            c.signal_it(SIGTERM);
+            int status = 0;
+            ASSERT_TRUE(c.wait_exit(10000, status) >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+        }
+        ASSERT_TRUE(fs::exists(temp_of_a));                                                           // neither of them removed what is the first server's
+        // ---- the first server dies without a word (SIGKILL): the lock goes with the process, and a third server has the folder -----------------------------------------------------------------------
+        a.signal_it(SIGKILL);
+        int killed = 0;
+        ASSERT_TRUE(a.wait_exit(10000, killed) >= 0 && WIFSIGNALED(killed));
+        {
+            const std::string log_d = (root / "d.log").string();
+            ServerProcess d;
+            ASSERT_TRUE(d.start(args(free_tcp_port(), {"--restart-dir", restart_dir.string(), "--reconnect"}), secret, log_d));
+            ASSERT_TRUE(log_has(log_d, "restart records in ", 15000));
+            ASSERT_TRUE(text_of_file(log_d).find("another server") == std::string::npos);
+            ASSERT_FALSE(fs::exists(temp_of_a));                                                      // (the lock is held now: the leftover of the dead server is cleaned up)
+            d.signal_it(SIGTERM);
+            int status = 0;
+            ASSERT_TRUE(d.wait_exit(10000, status) >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+        }
+    } TEST_END();
+}
 #endif
 
 
@@ -7674,6 +7832,7 @@ int main() {
     run_persist_review_tests();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();
+    run_persist_review_process_tests();
 #endif
     std::cout << "=======================================================\n";
     std::cout << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n";

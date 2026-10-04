@@ -18,6 +18,7 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -588,6 +589,38 @@ void native_remove(const std::string& path) {
     fs::remove(path, ec);
 }
 
+// The folder's lock: the file is made if it is not there and kept locked until the descriptor (the handle) is closed, which the end of the process does too. `busy` says that another holder has it (an error
+// of the lock itself is something else). POSIX: flock, which locks the open file and not the process, so another store of this process is refused as well; Windows: opened with no sharing.
+bool native_lock_file(const std::string& path, NativeFile& f, bool& busy, std::string& why) {
+    busy = false;
+#ifdef _WIN32
+    HANDLE h = CreateFileW(fs::path(path).wstring().c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        const DWORD code = GetLastError();
+        busy = code == ERROR_SHARING_VIOLATION || code == ERROR_LOCK_VIOLATION;
+        why = windows_error("cannot lock the folder");
+        return false;
+    }
+    f.handle = h;
+    return true;
+#else
+    const int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+    if (fd < 0) {
+        why = "cannot make the lock file (" + errno_text(errno) + ")";
+        return false;
+    }
+    if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        const int code = errno;
+        ::close(fd);
+        busy = code == EWOULDBLOCK || code == EAGAIN;
+        why = "cannot lock the folder (" + errno_text(code) + ")";
+        return false;
+    }
+    f.fd = fd;
+    return true;
+#endif
+}
+
 std::string hex_digits(const uint8_t* bytes, size_t n) {
     static const char kHex[] = "0123456789abcdef";
     std::string text;
@@ -609,6 +642,7 @@ uint32_t fnv1a32(const std::string& s) {
 
 constexpr const char* kRecordPrefix = "room-";
 constexpr const char* kTempSuffix = ".tmp";
+constexpr const char* kLockName = ".lock";
 
 bool has_suffix(const std::string& s, const std::string& suffix) { return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0; }
 
@@ -727,7 +761,36 @@ bool RestartWriter::sync() {
 
 RestartStore::RestartStore(RestartConfig config) : budget_(config.budget_bytes), cfg_(std::move(config)) {}
 
-RestartStore::~RestartStore() = default;
+RestartStore::~RestartStore() {
+    release_lock();
+}
+
+void RestartStore::release_lock() noexcept {
+    NativeFile f;
+    f.fd = lock_fd_;
+    f.handle = lock_handle_;
+    native_close(f);
+    lock_fd_ = -1;
+    lock_handle_ = nullptr;
+}
+
+// The folder is this server's alone, for as long as the store lives
+bool RestartStore::take_lock(std::string& why) {
+    NativeFile held;
+    held.fd = lock_fd_;
+    held.handle = lock_handle_;
+    if (held.is_open()) return true;                         // (a second prepare of the same store)
+    NativeFile f;
+    bool busy = false;
+    std::string reason;
+    if (!native_lock_file((fs::path(cfg_.dir) / kLockName).string(), f, busy, reason)) {
+        why = busy ? "another server is using the restart folder '" + cfg_.dir + "' (its lock is held): two servers would write each other's records" : "the restart folder '" + cfg_.dir + "' cannot be used: " + reason;
+        return false;
+    }
+    lock_fd_ = f.fd;
+    lock_handle_ = f.handle;
+    return true;
+}
 
 std::vector<std::string> RestartStore::take_notes() {
     std::vector<std::string> out;
@@ -759,7 +822,8 @@ bool RestartStore::prepare(std::string& why) {
         why = "'" + cfg_.dir + "' is not a folder";
         return false;
     }
-    // the temporary files of a record whose making was cut short: ours (the name says so), and nothing can be using them: no other server has this folder
+    if (!take_lock(why)) return false;
+    // the temporary files of a record whose making was cut short: ours (the name says so), and nothing can be using them: the lock says that no other server has this folder
     for (fs::directory_iterator it(cfg_.dir, ec), end; !ec && it != end; it.increment(ec)) {
         const std::string name = it->path().filename().string();
         if (name.compare(0, std::strlen(kRecordPrefix), kRecordPrefix) == 0 && has_suffix(name, kTempSuffix)) native_remove(it->path().string());
