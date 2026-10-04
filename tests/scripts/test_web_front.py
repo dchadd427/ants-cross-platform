@@ -8,6 +8,8 @@ sprites and screenshots by tools/front_page_art/make_art.py (a developer's tool,
   - the font is a byte copy of the game's own, with the licence beside it (SIL OFL), and THIRD_PARTY_NOTICES.md names the copy
   - the Dockerfile, the local web build and the CI's check of the image carry the folder (a page whose pictures are not in the image would be bare on the real site)
   - the tool's files say that they are a developer's tool
+  - the page uses the art: every picture it names is in the folder (and the folder holds nothing it does not use), each <img> has the size of its file, the Map Info lines are the ones in the level
+    files, nothing is loaded from another site, the pictures that are not seen at once are lazy, the font is preloaded and the level buttons are radio buttons that the keyboard reaches
 """
 import os
 import re
@@ -29,6 +31,7 @@ PICTURES = {
     "qh_quickhelp.png": (257, 453), "qh_power.png": (362, 455),
 }
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
+MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 BUDGET = 1000 * 1000        # bytes: the whole folder (the pictures are 0.67 MB, the font 0.14 MB); a picture that grows past this is a decision, not an accident
 
 
@@ -118,6 +121,73 @@ class TheTool(unittest.TestCase):
         text = read("tools", "front_page_art", "artlib.py")
         self.assertIn('CATALOG = ROOT / "asset_catalog"', text)
         self.assertNotIn("/home/", text)                                           # no path of anybody's machine
+
+
+class ThePageUsesTheArt(unittest.TestCase):
+    def setUp(self):
+        self.page = read("web", "lobby.html")
+
+    def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
+        named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
+        previews = set("preview_%s.png" % key for key in MAP_KEYS)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"}
+        self.assertEqual(named - in_folder, set(), "named but not in web/front/")
+        self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
+        self.assertIn("'front/preview_' + m.key + '.png'", self.page)
+
+    def test_every_img_has_the_size_of_its_file(self):
+        tags = re.findall(r"<img [^>]*>", self.page)
+        self.assertGreaterEqual(len(tags), 12)
+        for tag in tags:
+            source = re.search(r'src="front/([^"]+)"', tag).group(1)
+            width = int(re.search(r'width="(\d+)"', tag).group(1))
+            height = int(re.search(r'height="(\d+)"', tag).group(1))
+            self.assertEqual(png_size(os.path.join(FRONT, source)), (width, height), source)
+            self.assertIn("alt=", tag, source)
+
+    def test_nothing_is_loaded_from_another_site(self):
+        self.assertNotRegex(self.page, r"<script[^>]*\bsrc=")
+        self.assertNotRegex(self.page, r'<link[^>]*href="(?:https?:)?//')
+        self.assertNotRegex(self.page, r"url\(\s*[\"']?(?:https?:)?//")
+        self.assertNotIn("@import", self.page)
+        self.assertNotRegex(self.page, r"<(?:img|iframe|video|audio|source)[^>]*src=\"(?:https?:)?//")
+        for url in set(re.findall(r'href="(https?://[^"]+)"', self.page)):                  # (the links that leave the page are the repository's)
+            self.assertTrue(url.startswith("https://github.com/dchadd427/ants-cross-platform"), url)
+
+    def test_the_map_info_lines_are_the_ones_of_the_level_files(self):
+        block = re.search(r"var MAP_INFO = \{(.*?)\};", self.page, re.S).group(1)
+        info = {m[0]: m[1] or m[2] for m in re.findall(r"(\w+): (?:'([^']*)'|\"([^\"]*)\")", block)}
+        self.assertEqual(sorted(info), sorted(MAP_KEYS))
+        for key in MAP_KEYS:
+            with open(os.path.join(REPO, "Original-Ants", "Maps", key.upper() + ".LVL"), "rb") as f:
+                head = f.read(40)
+            version, mode, minutes = struct.unpack("<IIH", head[:10])
+            description = head[10:40].split(b"\0")[0].decode("latin-1")
+            self.assertEqual(info[key], "%s (%d min)" % (description, minutes), key)               # what the setup screen shows in its Map Info box
+
+    def test_the_six_maps_are_the_page_s_list_in_its_order_with_a_preview_each(self):
+        keys = re.findall(r"\{ key: '([a-z]+)', name: '[A-Za-z]+' \}", re.search(r"var MAPS = \[(.*?)\];", self.page, re.S).group(1))
+        self.assertEqual(keys, list(MAP_KEYS))
+        for key in keys:
+            self.assertIn("preview_%s.png" % key, os.listdir(FRONT))
+
+    def test_the_pictures_that_are_not_seen_at_once_load_lazily_and_the_ones_that_are_do_not(self):
+        lazy = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in re.findall(r"<img [^>]*loading=\"lazy\"[^>]*>", self.page))
+        self.assertEqual(lazy, {"match_view.png", "qh_quickhelp.png", "qh_power.png"})            # the header's picture (not shown on a phone) and the two help sheets (behind "How it works")
+
+    def test_the_font_is_declared_and_preloaded_from_the_one_file(self):
+        self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', self.page)
+        self.assertRegex(self.page, r'@font-face \{ font-family: "Libre Franklin"; src: url\("front/LibreFranklin-Medium\.ttf"\) format\("truetype"\);')
+
+    def test_the_level_buttons_are_radio_buttons_that_the_keyboard_reaches_and_shows(self):
+        style = self.page[:self.page.index("</style>")]
+        rule = re.search(r"\.pair input \{([^}]*)\}", style).group(1)
+        self.assertIn("opacity: 0", rule)                                                           # hidden by being see-through: it keeps the focus, the arrows and Tab
+        for forbidden in ("display: none", "visibility: hidden", "pointer-events"):
+            self.assertNotIn(forbidden, rule)
+        self.assertNotRegex(self.page, r'<input type="radio"[^>]*(?:tabindex|hidden|disabled)')
+        self.assertIn(".pair input:focus-visible + label { outline: 3px solid var(--gold);", style)  # the focused button shows it
+        self.assertIn(".pair input:checked + label {", style)
 
 
 if __name__ == "__main__":

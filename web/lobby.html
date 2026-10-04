@@ -5,87 +5,208 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ants (1998)@@SITE_TITLE@@</title>
     <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
     <style>
+        /* The look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black inset boxes. The pictures and the font (the game's own
+           Libre Franklin, SIL OFL) are in web/front/, made by tools/front_page_art/make_art.py; nothing is loaded from another site. */
+        @font-face { font-family: "Libre Franklin"; src: url("front/LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
         :root {
-            --bg-color: #121513;
-            --panel-bg: #1c231e;
-            --panel-border: #384d3e;
-            --accent-green: #48b870;
-            --accent-gold: #e6b830;
-            --accent-red: #e0584a;
-            --text-main: #d0e0d4;
-            --text-dim: #849688;
+            --clay: #db4b13;        /* the orange of every menu screen */
+            --ink: #0c0805;
+            --teal: #2b6357;        /* the menu buttons */
+            --teal-hi: #347c66;     /* the hovered button */
+            --teal-lo: #17382f;
+            --edge: #050a08;
+            --cream: #f4ece2;
+            --inset: #070b0f;       /* the black boxes of the setup screen */
+            --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b;
+            --shadow: #9d0d17;      /* the red shadow under every picture */
+            --gold: #f2c340;
+            --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { background: var(--clay); }
         body {
-            background: var(--bg-color);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            padding: 10px 12px 16px;
-            min-height: 100vh;
+            background: var(--clay) url("front/clay.png");
+            color: var(--ink);
+            font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif;
+            font-synthesis: none;
+            -webkit-text-size-adjust: 100%;
         }
-        header {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px 16px;
-            max-width: 1320px;
-            margin: 0 auto 10px;
+        a { color: inherit; }
+        img { display: block; max-width: 100%; height: auto; }
+        code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+        [hidden] { display: none !important; }
+        .sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+        /* the thin green frame around the whole screen, with its red shadow, as on every screen of the game */
+        .screen { position: relative; min-height: 100vh; display: flex; flex-direction: column; }
+        .screen::after {
+            content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 20;
+            box-shadow: inset 0 0 0 5px #2b5f43, inset 0 0 0 7px var(--frame-lo), inset 0 0 0 10px rgba(157, 13, 23, .9);
         }
-        .title-group { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
-        h1 {
-            font-size: 1.4rem;
-            color: var(--accent-gold);
-            text-shadow: 0 0 10px rgba(230, 184, 48, 0.4);
-            letter-spacing: 1px;
-            text-transform: uppercase;
+        .wrap { width: 100%; max-width: 1280px; margin: 0 auto; padding: 22px 30px 0; flex: 1; }
+
+        /* ---- the bevelled teal button of the game's menus ---- */
+        .btn, .banner {
+            background: var(--teal); color: var(--cream);
+            border: 2px solid var(--edge); border-radius: 2px;
+            box-shadow: inset 0 1px 0 #f4f4ff, inset 3px 0 0 #3d9a7d, inset 0 -4px 0 var(--teal-lo), 3px 4px 0 var(--shadow);
         }
-        .brand { color: var(--text-dim); font-size: 0.85rem; }
-        .sub { max-width: 1320px; margin: 0 auto 10px; color: var(--text-dim); font-size: 0.85rem; }
-        .sub code { color: var(--text-main); }
-        .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-        .actions .short { display: none; }
         .btn {
-            background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            color: var(--text-main);
-            padding: 8px 12px;
-            min-height: 38px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            min-height: 44px; padding: 8px 18px; font: inherit; font-size: 16px; line-height: 1.1; text-decoration: none; cursor: pointer;
         }
-        .btn:hover { border-color: var(--accent-green); color: #fff; }
-        .btn { gap: 6px; }
-        .actions .btn { min-height: 40px; }
-        .aspect-pick { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 0.85rem; }
+        .btn:hover { background: var(--teal-hi); }
+        .btn:active { transform: translate(2px, 3px); box-shadow: inset 0 1px 0 #f4f4ff, inset 3px 0 0 #3d9a7d, inset 0 -4px 0 var(--teal-lo), 1px 1px 0 var(--shadow); }
+        .btn:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, .startbtn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+        .btn.sm, .btn.small { min-height: 38px; padding: 6px 14px; font-size: 15px; }
+        .btn.big { min-height: 54px; font-size: 20px; padding: 10px 26px; }
+        .banner { display: block; text-align: center; font-size: 30px; line-height: 1.1; padding: 10px 18px; margin-bottom: 14px; font-weight: 500; }
+
+        /* ---- header: logo, welcome box, a look at a real match ---- */
+        .top { display: grid; grid-template-columns: 290px minmax(0, 1fr) 300px; gap: 34px; align-items: center; }
+        .logo img { width: 290px; }
+        .intro .lead { font-size: 22px; line-height: 1.2; margin-bottom: 4px; }
+        .top .banner { color: var(--gold); text-shadow: 0 2px 0 #0b2a22, 0 0 1px #0b2a22; }
+        .intro p { font-size: 16px; max-width: 60ch; }
+        .links { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-top: 16px; align-items: center; }
+        .tv { margin: 0; border: 3px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
+        .tv img { width: 100%; aspect-ratio: 761 / 497; object-fit: cover; }
+
+        /* ---- the two-state buttons of the game (Fog of War On / Off): radio buttons for the picture's shape, the players of a match and the level of each opponent ---- */
+        .pair { position: relative; display: inline-flex; gap: 6px; }
+        .pair input { position: absolute; left: 0; top: 0; opacity: 0; width: 1px; height: 1px; margin: 0; }
+        .pair label {
+            display: inline-flex; align-items: center; justify-content: center; min-width: 42px; min-height: 36px; padding: 7px 12px; cursor: pointer; font-size: 15px; line-height: 1.1;
+            background: var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 3px;
+            box-shadow: inset 0 1px 0 #f4f4ff, inset 2px 0 0 #3d9a7d, inset 0 -3px 0 var(--teal-lo), 2px 3px 0 var(--shadow);
+        }
+        .pair label:hover { background: var(--teal-hi); }
+        .pair input:checked + label { background: #102b25; color: #f6dc86; transform: translate(1px, 2px); box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16, 1px 1px 0 var(--shadow); }
+        .pair input:focus-visible + label { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+        /* ---- form pieces: the black inset boxes of the setup screen ---- */
+        .lab { display: block; font-size: 16px; margin: 0 0 6px; color: var(--ink); }
+        .sel { position: relative; }
+        select, input[type=text] {
+            appearance: none; -webkit-appearance: none; width: 100%; min-height: 44px; padding: 8px 14px; font: inherit; font-size: 16px; color: var(--cream);
+            background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px;
+            box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow);
+        }
+        select {
+            padding-right: 44px; cursor: pointer;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Crect x='1' y='1' width='20' height='20' rx='2' fill='%232b6357' stroke='%23050a08' stroke-width='2'/%3E%3Cpath d='M6 9l5 5 5-5' fill='none' stroke='%23f4ece2' stroke-width='2.4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 8px center;
+        }
+        input[type=text]::placeholder { color: #7f9c92; }
+        input[readonly] { cursor: text; }
+        option { background: #0b1612; color: var(--cream); }
+        .hint, .note { font-size: 14px; line-height: 1.35; }
+        .msg { margin-top: 8px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
+        .msg:empty { display: none; }
+
+        /* ---- your name, the picture's shape; the two cards; how it works: one grid ---- */
+        .page { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who pic" "cols cols" "room room" "how how"; column-gap: 24px; }
+        .myname { grid-area: who; display: grid; grid-template-columns: auto minmax(0, 280px) auto minmax(0, 1fr); align-items: center; margin: 26px 0 26px; }
+        .myname .lab { margin: 0 20px 0 0; font-size: 18px; }
+        .myname .btn { margin-left: 12px; }
+        .myname .hint { min-width: 0; margin-left: 20px; }
+        .who-title, .myname .msg { grid-column: 1 / -1; }
+        .who-title { margin-bottom: 8px; font-size: 20px; font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
+        .myname .msg { margin-top: 8px; }
+        .mob { display: none; }
+        .picture { grid-area: pic; align-self: center; display: inline-flex; align-items: center; gap: 10px; font-size: 16px; }
+        .page > #cards { grid-area: cols; }
+        .page > #room-panel { grid-area: room; }
+        .page > #how { grid-area: how; }
+
+        .cols { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 40px; align-items: stretch; }
+        .card { position: relative; padding: 58px 3px 16px; }
+        .card > .banner { position: absolute; top: 0; left: 0; right: 0; margin: 0; font-size: 24px; padding: 9px 14px; }
+        .card.single > .banner { background: #2b7a63; }
+        .card + .card::before { content: ""; position: absolute; left: -21px; top: 8px; bottom: 8px; width: 3px; background: repeating-linear-gradient(to bottom, rgba(21, 16, 12, .55) 0 6px, transparent 6px 12px); }
+
+        .single-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 30px; align-items: start; }
+        .preview { margin: 16px 0 0; max-width: 340px; }
+        .preview .box { border: 3px solid var(--edge); background: var(--inset); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 3px 5px 0 5px var(--shadow); }
+        .preview .box img { width: 100%; aspect-ratio: 1; }
+        .preview figcaption { margin-top: 14px; font-size: 14px; }
+        .hand { display: block; height: 20px; width: auto; image-rendering: pixelated; }
+        .infobox { display: block; margin-top: 6px; padding: 8px 12px; font-size: 14.5px; line-height: 1.25; color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+
+        .roster { list-style: none; margin-top: 2px; margin-bottom: 20px; background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+        .roster li { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 8px; border-top: 1px solid #16352c; color: var(--cream); }
+        .roster li:first-child { border-top: 0; }
+        .roster img { image-rendering: pixelated; width: 23px; height: 40px; margin: 0 auto; }
+        .roster .nm { font-size: 16px; line-height: 1.15; }
+        .roster .nm small { display: block; font-size: 13px; color: #8fb3a6; }
+        /* a level for each opponent: a fieldset with its name (the legend, to the left) and the four buttons (to the right) */
+        .lvlset { border: 0; min-width: 0; display: flow-root; }
+        .lvlset legend { float: left; padding: 0 6px 0 0; font-size: 16px; line-height: 38px; }
+        .lvls { display: flow-root; }
+        .lvls .pair { display: flex; justify-content: flex-end; gap: 4px; }
+        .roster .pair label { flex: none; min-height: 34px; padding: 5px 7px; font-size: 14px; box-shadow: inset 0 1px 0 #f4f4ff, inset 2px 0 0 #3d9a7d, inset 0 -3px 0 var(--teal-lo), 1px 2px 0 #02100c; }
+        .roster .pair input:checked + label { box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16; }
+        .teamrow { margin-bottom: 24px; }
+        .playrow { display: flex; align-items: center; gap: 14px 20px; flex-wrap: wrap; }
+        .startbtn { width: 294px; height: 81px; max-width: 100%; border: 0; padding: 0; cursor: pointer; background: url("front/btn_start1.png") center / 100% 100% no-repeat; image-rendering: pixelated; }
+        .startbtn:hover { background-image: url("front/btn_start2.png"); }
+        .startbtn:active { background-image: url("front/btn_start3.png"); }
+        .note { max-width: 34ch; }
+
+        .online .block + .block { margin-top: 16px; padding-top: 16px; border-top: 3px dotted rgba(21, 16, 12, .55); }
+        .online h3 { font-weight: 500; font-size: 20px; line-height: 1.2; margin-bottom: 12px; }
+        .online .row { display: grid; gap: 12px; margin-bottom: 14px; }
+        .joinrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; }
+        .online .hint { margin-top: 6px; }
+        .labline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; margin-bottom: 6px; }
+        .labline .lab { margin: 0; }
+        .online .labline .hint { margin: 0; }
+        .online .hint:empty { display: none; }
+        .online .after { margin-top: 18px; max-width: none; }
+        #join-hint.bad { padding: 6px 10px; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
+
+        /* ---- how it works ---- */
+        .how { margin: 36px 0 26px; }
+        .how summary { list-style: none; cursor: pointer; display: inline-flex; }
+        .how summary::-webkit-details-marker { display: none; }
+        .how summary .btn { pointer-events: none; }
+        .how summary .btn::before { content: "\25B8"; font-size: 14px; }
+        .how[open] summary .btn::before { content: "\25BE"; }
+        .how-body { margin-top: 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 28px; align-items: start; }
+        .how-body .steps { background: var(--inset); color: var(--cream); padding: 20px 24px; border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); font-size: 15px; }
+        .steps h4 { font-weight: 500; font-size: 17px; color: var(--gold); margin: 14px 0 4px; }
+        .steps h4:first-child { margin-top: 0; }
+        .steps p + p { margin-top: 6px; }
+        .steps b { font-weight: 500; color: #fff; }
+        .sheet { margin: 0; border: 3px solid var(--edge); box-shadow: 0 0 0 3px var(--frame), 3px 5px 0 3px var(--shadow); }
+        .sheet img { image-rendering: pixelated; }
+
+        /* ---- the room of a match that this page made or opened ---- */
+        .room { margin: 6px 0 22px; }
+        .room-top { display: flex; align-items: stretch; gap: 16px; margin-bottom: 14px; }
+        .room-top .banner { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 22px; overflow-wrap: anywhere; }
+        .room-top .btn { flex: 0 0 auto; }
+        #room-code { color: var(--gold); }
+        .roomrow { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 12px; }
+        .roomrow .lab { margin: 0; }
+        .roomrow input[type=text] { flex: 1 1 260px; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+        .room .hint { margin: 0 0 10px; max-width: 110ch; }
+        .seats { margin: 4px 0 16px; }
+        .seatrow { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 12px; border-top: 1px solid #16352c; color: var(--cream); }
+        .seatrow:first-child { border-top: 0; }
+        .seatrow .who { min-width: 150px; font-size: 16px; }
+        .seatrow .state { color: #8fb3a6; font-size: 14px; min-width: 90px; }
+
+        /* ---- the state of the games as they report it, and the games themselves ---- */
         #sync {
-            position: sticky;
-            top: 0;
-            z-index: 5;
-            max-width: 1320px;
-            margin: 0 auto 10px;
-            padding: 8px 12px;
-            border: 1px solid var(--panel-border);
-            border-radius: 6px;
-            background: var(--panel-bg);
-            font-size: 0.9rem;
-            color: var(--text-dim);
+            position: sticky; top: 0; z-index: 5; width: calc(100% - 48px); max-width: 1272px; margin: 0 auto 18px; padding: 9px 14px; font-size: 14.5px; color: var(--cream);
+            background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow);
         }
-        #sync.ok { color: var(--accent-green); border-color: var(--accent-green); }
-        #sync.bad { color: #fff; background: #5a2420; border-color: var(--accent-red); }
-        #grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-            max-width: 1320px;
-            margin: 0 auto;
-        }
-        @media (max-width: 760px) { #grid { grid-template-columns: minmax(0, 1fr); } }
+        #sync.ok { color: #9ff0c4; }
+        #sync.bad { color: #fff; background: #5a1418; border-color: var(--bad-edge); }
+        #grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 22px; width: 100%; max-width: 1320px; margin: 0 auto; padding: 0 24px; }
         /* The games lie by colour, whatever order the seats were started in, the way the four hills lie on the Small and Treasure maps: Black top left, Green top right,
            Red bottom left, Blue bottom right. Each cell takes its place in the reading order of the grid from its seat number (data-seat, set when the seat starts
            playing here); the grid fills row by row in that order, so fewer games keep the order Black, Green, Red, Blue without holes, and the one column of a narrow
@@ -94,236 +215,282 @@
         .cell[data-seat="0"] { order: 1; }      /* Green */
         .cell[data-seat="1"] { order: 2; }      /* Red */
         .cell[data-seat="2"] { order: 3; }      /* Blue */
-        .cell {
-            border: 2px solid var(--panel-border);
-            border-radius: 6px;
-            overflow: hidden;
-            background: #000;
-        }
-        .cell.focus { border-color: var(--accent-gold); }
-        .label {
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
-            padding: 4px 8px;
-            font-size: 0.78rem;
-            background: var(--panel-bg);
-            color: var(--text-dim);
-        }
-        .label .seat { color: var(--text-main); font-weight: 600; }
+        .cell { border: 2px solid var(--edge); background: #000; box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
+        .cell.focus { box-shadow: 0 0 0 3px var(--gold), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
+        .label { display: flex; justify-content: space-between; gap: 8px; padding: 4px 10px; font-size: 13px; background: var(--inset); color: #8fb3a6; }
+        .label .seat { color: var(--cream); }
         .frame { position: relative; aspect-ratio: 16 / 9; }          /* the shape of the picture: 16:9 by default, 4:3 with ?aspect=4:3 (data-aspect of the body) */
         body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }
         /* Where two frames fit side by side at the picture's OWN size (960 x 540 CSS pixels for 16:9, 640 x 480 for 4:3: one canvas pixel for each pixel of the screen, two at a
            device ratio of 2) the frames have exactly that size and the quick help and every text are sharp. A column is the frame and the 2 px border of its cell on both sides
-           (964 and 644), and the window needs the two columns, the gap (10), the page's padding (24) and a scrollbar (15): 1980 and 1340 px. In a narrower window the frames fill
+           (964 and 644), and the window needs the two columns, the gap (22), the page's padding (48) and a scrollbar (15): 2030 and 1380 px. In a narrower window the frames fill
            their column as they always did (a size that is not a whole multiple of the picture's cannot be sharp: half of it, 480 x 270, is too small to read). */
-        @media (min-width: 1980px) {
+        @media (min-width: 2030px) {
             body:not([data-aspect="4:3"]) #grid { grid-template-columns: repeat(2, 964px); justify-content: center; max-width: none; }
         }
-        @media (min-width: 1340px) {
+        @media (min-width: 1380px) {
             body[data-aspect="4:3"] #grid { grid-template-columns: repeat(2, 644px); justify-content: center; max-width: none; }
         }
         iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
-        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--text-dim); }
-        .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border: 1px solid #888; }
-        footer { max-width: 1320px; margin: 12px auto 0; color: var(--text-dim); font-size: 0.8rem; line-height: 1.5; }
-        footer a { color: var(--accent-green); text-decoration: none; display: inline-block; padding: 2px 4px; }
-        footer a:hover { text-decoration: underline; }
-        footer p { margin-top: 8px; }
-        /* Phone width: the links are a grid of two columns, the picture's selector has the row below them */
-        @media (max-width: 640px) {
-            body { padding-left: 16px; padding-right: 16px; }
-            #create { flex: 1 1 100%; justify-content: center; }
-            #room-code { overflow-wrap: anywhere; }
-            header { flex-direction: column; align-items: stretch; }
-            .title-group { justify-content: space-between; width: 100%; }
-            .actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; }
-            .actions .btn { justify-content: center; padding: 6px 2px; font-size: 0.78rem; }
-            .actions .long { display: none; }
-            .actions .short { display: inline; }
-            .actions .aspect-pick { grid-column: 1 / -1; justify-content: flex-end; }
+        .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: #849688; border: 1px solid #000; }
+        .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border-color: #888; }
+        .frames-note { width: 100%; max-width: 1320px; margin: 18px auto 0; padding: 0 30px; font-size: 13.5px; line-height: 1.4; }
+
+        /* ---- footer: the emerald bar of the match screen ---- */
+        .bar { margin: 24px 0 0; padding: 16px 30px 18px; color: var(--cream); font-size: 14px; background: linear-gradient(180deg, #2b685f, #2b6b4f); border-top: 3px solid var(--frame-hi); box-shadow: inset 0 3px 0 var(--frame-lo); }
+        .bar-in { max-width: 1280px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
+        .bar .ver { font-variant-numeric: tabular-nums; background: var(--edge); padding: 3px 12px; border-radius: 2px; color: #fff; }
+        .bar strong { font-weight: 500; color: var(--gold); margin-right: 10px; }
+        .bar .grow { flex: 1 1 280px; }
+        .bar a { text-decoration: none; padding: 2px 4px; }
+        .bar a:hover { text-decoration: underline; }
+        .bar nav { display: flex; gap: 6px 18px; flex-wrap: wrap; }
+
+        /* ---- narrower windows ---- */
+        @media (max-width: 1100px) {
+            .top { grid-template-columns: 240px minmax(0, 1fr); }
+            .logo img { width: 240px; }
+            .tv { display: none; }
+            .page { grid-template-areas: "who who" "pic pic" "cols cols" "room room" "how how"; }
+            .picture { margin: -8px 0 28px; }
+            .how-body { grid-template-columns: minmax(0, 1fr); }
         }
-    
-        #who, #setup, #join, #room-panel {
-            max-width: 1320px;
-            margin: 0 auto 10px;
-            padding: 12px;
-            border: 1px solid var(--panel-border);
-            border-radius: 6px;
-            background: var(--panel-bg);
+        @media (max-width: 1219px) {
+            .cols { grid-template-columns: minmax(0, 1fr); gap: 50px; }
+            .card + .card::before { display: none; }
         }
-        #who h2, #setup h2, #join h2, #room-panel h2 { font-size: 0.95rem; color: var(--accent-gold); margin-bottom: 8px; letter-spacing: 0.5px; }
-        /* New match and Join a match stand side by side where there is room (the panels of a room, and the name step, fill the width) */
-        .cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 10px; max-width: 1320px; margin: 0 auto 10px; align-items: start; }
-        .cols > section { margin: 0; max-width: none; }
-        @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
-        .paneltop { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; margin-bottom: 8px; }
-        .paneltop h2 { margin-bottom: 0 !important; }
-        .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
-        .row label { color: var(--text-dim); font-size: 0.85rem; }
-        .fillchoice { display: flex; flex-direction: column; gap: 3px; }
-        .fillline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-        .linelabel { color: var(--text-dim); font-size: 0.85rem; }
-        .seatpick { display: flex; align-items: center; gap: 6px; }
-        select, input[type=text] {
-            background: var(--bg-color); color: var(--text-main); border: 1px solid var(--panel-border);
-            border-radius: 6px; padding: 8px 10px; min-height: 38px; font-size: 0.9rem;
+        @media (max-width: 760px) {
+            #grid { grid-template-columns: minmax(0, 1fr); }
         }
-        input[type=text] { min-width: 0; flex: 1 1 260px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; }
-        .btn.primary { border-color: var(--accent-green); color: #fff; }
-        .btn.go { background: #2b7040; border-color: var(--accent-green); color: #fff; font-weight: 600; font-size: 0.95rem; min-height: 42px; padding: 8px 22px; }
-        .btn.go:hover { background: #348a4e; }
-        .hint { color: var(--text-dim); font-size: 0.8rem; line-height: 1.45; }
-        .seatrow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 4px 0; border-top: 1px solid var(--panel-border); }
-        .seatrow .who { min-width: 150px; font-size: 0.9rem; }
-        .seatrow .state { color: var(--text-dim); font-size: 0.8rem; min-width: 90px; }
-        .btn.small { padding: 4px 10px; min-height: 30px; font-size: 0.78rem; }
-        .msg { color: var(--accent-red); font-size: 0.82rem; margin-top: 2px; }
-        .msg:empty { display: none; }
-        [hidden] { display: none !important; }
-</style>
+        @media (max-width: 700px) {
+            .wrap { padding: 18px 18px 0; }
+            .top { grid-template-columns: minmax(0, 1fr); gap: 10px; justify-items: center; text-align: center; }
+            .logo img { width: 150px; }
+            .banner { font-size: 22px; padding: 7px 14px; margin-bottom: 6px; }
+            .intro .lead { font-size: 18px; margin: 0; }
+            .intro p:not(.lead), .links { display: none; }
+            .page { grid-template-columns: minmax(0, 1fr); grid-template-areas: "who" "cols" "room" "pic" "how"; }
+            .myname { grid-template-columns: auto minmax(0, 1fr) auto; margin: 16px 0 16px; }
+            .myname .lab { margin-right: 14px; }
+            .myname .hint { grid-column: 1 / -1; margin: 5px 0 0; font-size: 13.5px; line-height: 1.3; }
+            .lab { margin-bottom: 4px; }
+            .desk { display: none; }
+            .mob { display: inline; }
+            .picture { margin: 30px 0 0; }
+            .card { padding: 54px 3px 22px; }
+            .card > .banner { font-size: 22px; padding: 7px 12px; }
+            .roster li { grid-template-columns: 26px minmax(0, 1fr); gap: 6px; padding: 3px 6px; }
+            .lvlset legend { padding-right: 4px; }
+            .roster { margin-bottom: 14px; }
+            .teamrow { margin-bottom: 16px; }
+            .single-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+            .single-grid .left { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 0 18px; align-items: start; }
+            .single-grid .left > .lab, .single-grid .left > .sel { grid-column: 1; }
+            .preview { grid-column: 2; grid-row: 1 / span 3; margin: 0; }
+            .preview figcaption { display: none; }
+            .single-grid .right { margin-top: 10px; }
+            .joinrow { grid-template-columns: minmax(0, 1fr); }
+            .online .btn { width: 100%; }
+            .playrow { gap: 14px; }
+            .startbtn { width: 196px; height: 54px; }
+            .how-body .sheet { max-width: 100%; justify-self: center; }
+            .how-body .sheet img { width: auto; max-width: 100%; image-rendering: auto; }
+            .room-top { flex-direction: column; }
+            .frames-note { padding: 0 18px; }
+            .bar { padding: 16px 18px 20px; }
+            .bar nav { gap: 4px 10px; }
+        }
+    </style>
 </head>
 <body>
-    <header>
-        <div class="title-group">
-            <h1>Ants (1998)</h1>
-            <span class="brand">beta.playants.org</span>
+<div class="screen">
+<div class="wrap">
+
+    <header class="top">
+        <div class="logo"><img src="front/logo.png" alt="ants!" width="581" height="218"></div>
+        <div class="intro">
+            <h1 class="banner">Welcome to Ants!</h1>
+            <p class="lead">Four colonies, one picnic.</p>
+            <p id="subtitle">The 1998 ant war game, rebuilt for your browser: gather food, raid your neighbours, guard your hill.</p>
+            <nav class="links" aria-label="More about the game">
+                <a class="btn sm" href="/asset_catalog/" target="_blank" rel="noopener noreferrer" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
+                <a class="btn sm" href="/changelog.html" target="_blank" rel="noopener noreferrer" title="What changed in each version">Changelog</a>
+                <a class="btn sm" href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" title="View Source Code on GitHub">GitHub</a>
+                <a class="btn sm" href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" title="Give Feedback or Report Issues">Feedback</a>
+            </nav>
         </div>
-        <div class="actions">
-            <a class="btn" href="/asset_catalog/" target="_blank" rel="noopener noreferrer" title="View 1998 Sprites, Animations &amp; Audio SFX">&#127912; <span class="long">Sprites and sounds</span><span class="short">Sprites</span></a>
-            <a class="btn" href="/changelog.html" target="_blank" rel="noopener noreferrer" title="What changed in each version">&#128203; <span class="long">Changelog</span><span class="short">Log</span></a>
-            <a class="btn" href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" title="View Source Code on GitHub"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg><span class="long">GitHub</span><span class="short">Code</span></a>
-            <a class="btn" href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" title="Give Feedback or Report Issues">&#128172; <span class="long">Feedback</span><span class="short">Issues</span></a>
-            <label class="aspect-pick" for="aspect-select">Picture
-                <select id="aspect-select" aria-label="Shape of the picture">
-                    <option value="16:9">16:9</option>
-                    <option value="4:3">Classic 4:3</option>
-                </select>
-            </label>
-        </div>
+        <figure class="tv"><img src="front/match_view.png" alt="A match on the Treasure map: green ants at their hill beside the pond, black ants across the path" width="761" height="497" loading="lazy" decoding="async"></figure>
     </header>
-    <p class="sub" id="subtitle">Play on this computer, host a match on the game server and share its code or links, or join a match with its code.</p>
 
-    <section id="who">
-        <h2 id="who-title" hidden>Join the match</h2>
-        <div class="row">
-            <label for="player-name">Your name</label>
-            <input type="text" id="player-name" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Your name" aria-describedby="who-hint name-msg" style="flex: 0 1 240px">
-            <button id="who-go" type="button" class="btn primary" hidden>Join</button>
+    <main class="page">
+        <section id="who" class="myname" aria-label="Your name">
+            <h2 id="who-title" class="who-title" hidden>Join the match</h2>
+            <label class="lab" for="player-name">Your name</label>
+            <input type="text" id="player-name" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="who-hint name-msg">
+            <button id="who-go" type="button" class="btn" hidden>Join</button>
+            <p class="hint" id="who-hint"><span id="who-general"><span class="desk">The name your ants play under. Leave it empty for a random name when you host and Player otherwise. This browser remembers it.</span><span class="mob">Your ants play under this name. Empty: a random one when you host, Player otherwise.</span></span><span id="who-step-hint" hidden></span></p>
+            <p class="msg" id="name-msg" role="alert"></p>
+        </section>
+        <div class="picture" role="group" aria-labelledby="picture-label">
+            <span id="picture-label">Picture</span>
+            <span class="pair">
+                <input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9">16:9</label>
+                <input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3">Classic 4:3</label>
+            </span>
         </div>
-        <div class="hint" id="who-hint">The name your ants play under. Leave it empty for a random name when you host and Player otherwise. This browser remembers it.</div>
-        <div class="msg" id="name-msg" role="alert"></div>
-    </section>
 
-    <div class="cols">
-    <section id="setup" hidden>
-        <h2>New match</h2>
-        <div class="row">
-            <label for="map">Map</label>
-            <select id="map"></select>
-            <label for="players">Players</label>
-            <select id="players">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-            </select>
-            <div class="fillchoice">
-                <div class="fillline" id="solo-line" role="group" aria-labelledby="opponents-label" hidden>
-                    <span class="linelabel" id="opponents-label">Opponents</span>
-                    <label class="seatpick" for="opponent-1">Red
-                        <select id="opponent-1">
-                            <option value="">None</option>
-                            <option value="easy">Easy</option>
-                            <option value="medium">Medium</option>
-                            <option value="hard">Hard</option>
-                        </select>
-                    </label>
-                    <label class="seatpick" for="opponent-2">Blue
-                        <select id="opponent-2">
-                            <option value="">None</option>
-                            <option value="easy">Easy</option>
-                            <option value="medium">Medium</option>
-                            <option value="hard">Hard</option>
-                        </select>
-                    </label>
-                    <label class="seatpick" for="opponent-3">Black
-                        <select id="opponent-3">
-                            <option value="">None</option>
-                            <option value="easy">Easy</option>
-                            <option value="medium">Medium</option>
-                            <option value="hard">Hard</option>
-                        </select>
-                    </label>
+        <div class="cols" id="cards" hidden>
+
+            <section class="card single" aria-labelledby="h-single">
+                <h2 class="banner" id="h-single">Play vs the computer</h2>
+                <div class="single-grid">
+                    <div class="left">
+                        <label class="lab" for="map-solo"><img class="hand" src="front/lbl_pickamap.png" alt="Pick a map" width="145" height="20"></label>
+                        <div class="sel"><select id="map-solo"></select></div>
+                        <figure class="preview">
+                            <div class="box"><img id="map-preview" src="front/preview_treasure.png" alt="The Treasure map, seen from above" width="300" height="300"></div>
+                            <figcaption><img class="hand" src="front/lbl_mapinfo.png" alt="Map info" width="99" height="22"><span class="infobox" id="map-info">One person's trash... (12 min)</span></figcaption>
+                        </figure>
+                    </div>
+                    <div class="right">
+                        <span class="lab" id="opponents-label">Opponents</span>
+                        <ul class="roster" aria-labelledby="opponents-label">
+                            <li><img src="front/ant_green.png" alt="" width="23" height="40"><span class="nm">You<small>Green</small></span></li>
+                            <li><img src="front/ant_red.png" alt="" width="23" height="40">
+                                <fieldset class="lvlset"><legend>Red</legend><div class="lvls"><span class="pair">
+                                    <input type="radio" name="opponent-1" id="opponent-1-none" value=""><label for="opponent-1-none">None</label>
+                                    <input type="radio" name="opponent-1" id="opponent-1-easy" value="easy"><label for="opponent-1-easy">Easy</label>
+                                    <input type="radio" name="opponent-1" id="opponent-1-medium" value="medium" checked><label for="opponent-1-medium">Medium</label>
+                                    <input type="radio" name="opponent-1" id="opponent-1-hard" value="hard"><label for="opponent-1-hard">Hard</label>
+                                </span></div></fieldset></li>
+                            <li><img src="front/ant_blue.png" alt="" width="23" height="40">
+                                <fieldset class="lvlset"><legend>Blue</legend><div class="lvls"><span class="pair">
+                                    <input type="radio" name="opponent-2" id="opponent-2-none" value=""><label for="opponent-2-none">None</label>
+                                    <input type="radio" name="opponent-2" id="opponent-2-easy" value="easy"><label for="opponent-2-easy">Easy</label>
+                                    <input type="radio" name="opponent-2" id="opponent-2-medium" value="medium" checked><label for="opponent-2-medium">Medium</label>
+                                    <input type="radio" name="opponent-2" id="opponent-2-hard" value="hard"><label for="opponent-2-hard">Hard</label>
+                                </span></div></fieldset></li>
+                            <li><img src="front/ant_black.png" alt="" width="23" height="40">
+                                <fieldset class="lvlset"><legend>Black</legend><div class="lvls"><span class="pair">
+                                    <input type="radio" name="opponent-3" id="opponent-3-none" value=""><label for="opponent-3-none">None</label>
+                                    <input type="radio" name="opponent-3" id="opponent-3-easy" value="easy"><label for="opponent-3-easy">Easy</label>
+                                    <input type="radio" name="opponent-3" id="opponent-3-medium" value="medium" checked><label for="opponent-3-medium">Medium</label>
+                                    <input type="radio" name="opponent-3" id="opponent-3-hard" value="hard"><label for="opponent-3-hard">Hard</label>
+                                </span></div></fieldset></li>
+                        </ul>
+                        <div class="teamrow" id="teams-line" hidden>
+                            <label class="lab" for="teams">Teams</label>
+                            <div class="sel"><select id="teams"></select></div>
+                        </div>
+                        <div class="playrow">
+                            <button id="play" class="startbtn" type="button" aria-label="Start the game"></button>
+                            <p class="note">Runs in this tab. Bots gather food, raid and fight back.</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="fillline" id="teams-line" hidden>
-                    <label for="teams">Teams</label>
-                    <select id="teams"></select>
+            </section>
+
+            <section class="card online" aria-labelledby="h-online">
+                <h2 class="banner" id="h-online">Play online</h2>
+                <div class="block">
+                    <h3>Host a match</h3>
+                    <div class="row">
+                        <div><label class="lab" for="map-host"><img class="hand" src="front/lbl_pickamap.png" alt="Pick a map" width="145" height="20"></label><div class="sel"><select id="map-host"></select></div></div>
+                        <div><span class="lab" id="players-label">Players</span>
+                            <span class="pair" role="group" aria-labelledby="players-label">
+                                <input type="radio" name="players" id="players-2" value="2" checked><label for="players-2">2</label>
+                                <input type="radio" name="players" id="players-3" value="3"><label for="players-3">3</label>
+                                <input type="radio" name="players" id="players-4" value="4"><label for="players-4">4</label>
+                            </span></div>
+                        <div><div class="labline"><label class="lab" for="fill">Empty seats at START</label><span class="hint" id="fill-caption">Bots gather food, raid and fight back.</span></div><div class="sel"><select id="fill">
+                            <option value="">Leave empty</option>
+                            <option value="easy">Easy bots</option>
+                            <option value="medium">Medium bots</option>
+                            <option value="hard">Hard bots</option>
+                        </select></div></div>
+                    </div>
+                    <button id="host" type="button" class="btn">Host the match</button>
                 </div>
-                <div class="fillline" id="fill-line">
-                    <label for="fill">Empty seats at START</label>
-                    <select id="fill">
-                        <option value="">Leave empty</option>
-                        <option value="easy">Easy bots</option>
-                        <option value="medium">Medium bots</option>
-                        <option value="hard">Hard bots</option>
-                    </select>
+                <div class="block">
+                    <h3>Join a match</h3>
+                    <div class="joinrow">
+                        <div><label class="lab" for="join-code">Room code</label><input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+                        <button id="join-go" type="button" class="btn">Join</button>
+                    </div>
+                    <p class="hint" id="join-hint"></p>
                 </div>
-                <div class="hint" id="fill-caption">Bots gather food, raid and fight back.</div>
+                <p class="note after">Share the room code: the match starts when every seat is taken.</p>
+            </section>
+
+        </div>
+
+        <section id="room-panel" class="room" hidden>
+            <div class="room-top">
+                <h2 class="banner">Room <code id="room-code">...</code> &middot; <span id="room-map"></span></h2>
+                <button id="new-room" type="button" class="btn small">New match</button>
             </div>
-            <button id="create" type="button" class="btn go">Create the match</button>
-        </div>
-        <div class="hint" id="setup-hint-solo" hidden>You play on this computer, in this tab: no game server, no room. <strong>Opponents</strong> are computer players, one level for each of the other three bases (Red, Blue, Black); a base set to <strong>None</strong> stays empty, and with all three None you play alone, as in the original. With two or more bots you can choose your <strong>Teams</strong>: you and one bot play as a team, and the other two bots too when both play. Bots team up with you only while three or more teams play. The Menu button over the game brings you back here.</div>
-        <div class="hint" id="setup-hint">The page makes a code for the match; the room is made on the server when the first player connects, and waits up to ten minutes for the others. The match starts by itself when all its seats are taken, and a running match takes nobody new. The first player in the room can start early with START (it is the room's leader): with at least 2 players in, and with <strong>Easy, Medium or Hard bots</strong> chosen above even alone, when every empty seat gets a bot of that level (bots do not play with Fog of War, and the leader's START is the only thing that seats them). Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</div>
-    </section>
+            <div class="roomrow"><label class="lab" for="any-link">Link for anybody (they get the first free seat)</label></div>
+            <div class="roomrow">
+                <input type="text" id="any-link" readonly>
+                <button id="copy-any" type="button" class="btn small">Copy</button>
+            </div>
+            <div class="roomrow">
+                <button id="play-tab" type="button" class="btn">Play in this tab</button>
+                <button id="all-here" type="button" class="btn">All seats on this page</button>
+                <button id="all-windows" type="button" class="btn">All seats in separate windows</button>
+            </div>
+            <p class="hint">Play in this tab takes the first free seat for you, in this tab, as Join does (you are the first to connect, so you lead the room). The Back button of your browser brings this room back. The other two buttons play every seat yourself, in frames of this page or in windows of their own.</p>
+            <div id="seat-rows" class="roster seats"></div>
+            <p class="hint" id="popup-hint" hidden>The browser blocked some of the windows: allow pop-ups for this site, or use the buttons of the seats.</p>
+            <p class="hint">The first player to connect leads the room (not necessarily the green seat): its setup screen has the START button, and pressing it starts the match with the players who are in, once at least 2 are. Everybody else waits for the match to start.</p>
+            <p class="hint" id="fill-hint" hidden></p>
+            <p class="hint">In the waiting room, press <strong>T</strong> (or click the line at the bottom left of the setup screen) to say something to everybody in the room: Enter sends it, Esc closes the line; while it is open the screen's own keys (S, Q, X, Enter) do nothing.</p>
+            <p class="hint">A window that is hidden or covered is not drawn (the browser stops drawing it), but its game goes on playing: it follows the messages of the game server. The match does not wait for it and nobody is told that it lags. Bring it to the front to see the game again. A computer that sleeps, or a phone that locks its screen, stops every page it has: the others play on, they are told after 3 seconds that the seat is lagging, and after 30 seconds without a sign of life it is dropped from the match and cannot come back; a tab that the browser freezes loses its connection when it wakes up, and its seat is lost.</p>
+        </section>
 
-    <section id="join" hidden>
-        <h2>Join a match</h2>
-        <div class="row">
-            <label for="join-code">Room code</label>
-            <input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Room code">
-            <button id="join-go" type="button" class="btn primary">Join</button>
-        </div>
-        <div class="hint" id="join-hint">The code of a match that somebody else made here (they see it above their seats). It takes you into the game in this window and gives you the first free seat; the match starts by itself when all its seats are filled, or earlier: the first player in the room can start it with START once at least 2 players are in.</div>
-    </section>
+        <details class="how" id="how" hidden>
+            <summary><span class="btn">How it works</span></summary>
+            <div class="how-body">
+                <div class="steps">
+                    <h4>Play vs the computer</h4>
+                    <p>Runs on this computer, in this tab: no server, no room. Each rival base (Red, Blue, Black) gets a level, or <b>None</b> to stay empty; with all three on None you play alone, as in 1998.</p>
+                    <p>With two or more bots you can pick <b>Teams</b>: you and one bot play as a team, and the other two bots too when both play. Bots team up with you only while three or more teams play. The Menu button over the game brings you back here.</p>
+                    <h4>Host a match</h4>
+                    <p>You get a code to share. The room opens when the first player connects and waits ten minutes for the others; the match starts by itself when every seat is taken, and a running match takes nobody new. The first player in the room can start it early with START: with 2 or more players in, or alone if <b>Empty seats at START</b> get bots (not with Fog of War). Afterwards you choose, seat by seat, whether you play it on this page, in a window of its own, or send its link to somebody else.</p>
+                    <h4>Join a match</h4>
+                    <p>Paste the code a friend gives you: you take the first free seat in this window. The first player in the room can start the match early with START once at least 2 players are in.</p>
+                    <h4>On the map</h4>
+                    <p>Gather food for your hill, pick up power-ups and keep your ants alive. The original's own help sheets are shown with this text.</p>
+                </div>
+                <figure class="sheet"><img src="front/qh_quickhelp.png" alt="The original's quick help: how to win, how to move your ants, game play" width="257" height="453" loading="lazy" decoding="async"></figure>
+                <figure class="sheet"><img src="front/qh_power.png" alt="The original's game instructions: power-ups and the five special ants" width="362" height="455" loading="lazy" decoding="async"></figure>
+            </div>
+        </details>
+    </main>
+
+</div>
+
+<div id="sync" hidden>Waiting for the games to connect and start...</div>
+
+<div id="grid"></div>
+
+<p id="frames-note" class="frames-note" hidden>Every window runs the whole simulation; the server only orders the commands and acts as the referee. Each game tells this page its tick and state hash every 100 ticks (5 seconds):
+when the seats that report agree, the machines are in step (a seat that plays on another computer cannot report to this page). Click a window of this page to play it (the others stop
+their music and their sound: only the window you are in is heard). The match is the original's clock: when it ends each window shows its results screen.</p>
+
+<footer class="bar">
+    <div class="bar-in">
+        <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span></span>
+        <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
+        <nav aria-label="Footer links">
+            <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
+            <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a>
+        </nav>
     </div>
-
-    <section id="room-panel" hidden>
-        <div class="paneltop">
-            <h2>Room <code id="room-code">...</code> &middot; <span id="room-map"></span></h2>
-            <button id="new-room" type="button" class="btn small">New match</button>
-        </div>
-        <div class="row">
-            <label for="any-link">Link for anybody (they get the first free seat)</label>
-        </div>
-        <div class="row">
-            <input type="text" id="any-link" readonly aria-label="Link for anybody">
-            <button id="copy-any" type="button" class="btn small">Copy</button>
-        </div>
-        <div class="row">
-            <button id="play-tab" type="button" class="btn go">Play in this tab</button>
-            <button id="all-here" type="button" class="btn">All seats on this page</button>
-            <button id="all-windows" type="button" class="btn">All seats in separate windows</button>
-        </div>
-        <div class="hint">Play in this tab takes the first free seat for you, in this tab, as Join does (you are the first to connect, so you lead the room). The Back button of your browser brings this room back. The other two buttons play every seat yourself, in frames of this page or in windows of their own.</div>
-        <div id="seat-rows"></div>
-        <div class="hint" id="popup-hint" hidden>The browser blocked some of the windows: allow pop-ups for this site, or use the buttons of the seats.</div>
-        <div class="hint">The first player to connect leads the room (not necessarily the green seat): its setup screen has the START button, and pressing it starts the match with the players who are in, once at least 2 are. Everybody else waits for the match to start.</div>
-        <div class="hint" id="fill-hint" hidden></div>
-        <div class="hint">In the waiting room, press <strong>T</strong> (or click the line at the bottom left of the setup screen) to say something to everybody in the room: Enter sends it, Esc closes the line; while it is open the screen's own keys (S, Q, X, Enter) do nothing.</div>
-        <div class="hint">A window that is hidden or covered is not drawn (the browser stops drawing it), but its game goes on playing: it follows the messages of the game server. The match does not wait for it and nobody is told that it lags. Bring it to the front to see the game again. A computer that sleeps, or a phone that locks its screen, stops every page it has: the others play on, they are told after 3 seconds that the seat is lagging, and after 30 seconds without a sign of life it is dropped from the match and cannot come back; a tab that the browser freezes loses its connection when it wakes up, and its seat is lost.</div>
-    </section>
-
-    <div id="sync" hidden>Waiting for the games to connect and start...</div>
-
-    <div id="grid"></div>
-
-    <footer>
-        @@SITE_FOOTER@@<span id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span>&#8197;&bull;&#8197;</span>Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2 &bull;&#8197;<a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>&#8197;&bull;&#8197;<a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>&#8197;&bull;&#8197;<a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
-        <p id="frames-note" hidden>Every window runs the whole simulation; the server only orders the commands and acts as the referee. Each game tells this page its tick and state hash every 100 ticks (5 seconds):
-        when the seats that report agree, the machines are in step (a seat that plays on another computer cannot report to this page). Click a window of this page to play it (the others stop
-        their music and their sound: only the window you are in is heard). The match is the original's clock: when it ends each window shows its results screen.</p>
-    </footer>
+</footer>
+</div>
 
     <script>
     (function () {
@@ -337,9 +504,14 @@
             { key: 'tiny', name: 'Tiny' }, { key: 'small', name: 'Small' }, { key: 'medium', name: 'Medium' },
             { key: 'gauntlet', name: 'Gauntlet' }, { key: 'treasure', name: 'Treasure' }, { key: 'islands', name: 'Islands' }
         ];
-        // The map that the form offers until a choice is remembered (a remembered choice and ?map= win). The list keeps its order, by size, so the form would open on its first entry, Tiny: the
+        // The map that the two cards offer until a choice is remembered (a remembered choice and ?map= win). The list keeps its order, by size, so a card would open on its first entry, Tiny: the
         // order does not choose the default. Treasure is the map that is played most (the owner's request: Treasure is the default of everything).
         var DEFAULT_MAP_KEY = 'treasure';
+        // The Map Info line of each map, as the setup screen of the game shows it: the description and the minutes of the level file (tests/scripts/test_web_front.py reads them from Original-Ants/Maps)
+        var MAP_INFO = {
+            tiny: 'Tiny map with no PowerUps (6 min)', small: 'Small map for fast game (8 min)', medium: 'Intermediate map (10 min)',
+            gauntlet: 'Race for your life! (10 min)', treasure: "One person's trash... (12 min)", islands: 'Island hopping, expert map (12 min)'
+        };
         var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
         var names = NAMES.slice().sort(function () { return 0.5 - Math.random(); });
         // SEATNAMES_BEGIN (tests/scripts/web_name_check.js runs this block)
@@ -444,15 +616,17 @@
         var FILL_NAMES = { easy: 'Easy bots', medium: 'Medium bots', hard: 'Hard bots' };
 
         // LOBBY_BEGIN (tests/scripts/web_lobby_check.js runs this block on a table)
-        // What the New match form means. Players 1 is a game on THIS computer: no game server and no room, the game page at its own path (LOCAL_PAGE) with its local parameters (web/shell.html:
-        // ANTS_PAGE.localArguments reads them through a whitelist). 2 to 4 is a match on the game server: a room that this page makes (demo-<map>-<n>p-<random>), as it always did.
+        // What the two cards mean. "Play vs the computer" (players 1) is a game on THIS computer: no game server and no room, the game page at its own path (LOCAL_PAGE) with its local parameters
+        // (web/shell.html: ANTS_PAGE.localArguments reads them through a whitelist). "Play online" (2 to 4 players) is a match on the game server: a room that this page makes (demo-<map>-<n>p-<random>).
         var LOCAL_PAGE = 'play.html';
-        // 1 .. 4 from a text (the form's value, a remembered value, the address's &players=), else `fallback`
+        // 1 .. 4 from a text (a remembered value, the address's &players=), else `fallback`
         function playersChoice(text, fallback) { return text === '1' || text === '2' || text === '3' || text === '4' ? Number(text) : fallback; }
+        // The players of the Host card: 2 .. 4. A 1 that an earlier page remembered (it was the choice of a game on this computer, which has its own card now) is 2.
+        function hostPlayers(text, fallback) { var n = playersChoice(text, 0); return n === 1 ? 2 : n >= 2 ? n : fallback; }
         // The opponents of a game on this computer, from what the browser remembered by the first versions (the key ants-solo-bots holds 'none' or one level for all three bases): nothing remembered is
         // Medium (a first visit); anything that is no level is none (the original's single player, alone). That key is read and never written any more: see soloSeats.
         function soloBots(stored) { return stored === null || stored === undefined ? 'medium' : validFill(stored); }
-        // The three other seats, in the order of the form and of the game's --bot: seat 1 Red, 2 Blue, 3 Black (the player is seat 0, green)
+        // The three other seats, in the order of the card and of the game's --bot: seat 1 Red, 2 Blue, 3 Black (the player is seat 0, green)
         var SOLO_SEATS = ['Red', 'Blue', 'Black'];
         // The level of each of those seats ('' is none) from what the browser remembered: the key ants-solo-seats holds three words, none or a level each ("easy,medium,none"); without it (or with a text
         // that is not three such words) the old key gives its one level to all three seats, and a first visit is Medium for all three.
@@ -505,7 +679,7 @@
             if (asked === '16:9' || asked === '4:3') { aspect = asked; aspectFromAddress = true; }
             else if (remembered === '16:9' || remembered === '4:3') aspect = remembered;
             document.body.setAttribute('data-aspect', aspect);
-            $('aspect-select').value = aspect;
+            $(aspect === '4:3' ? 'aspect-4-3' : 'aspect-16-9').checked = true;
         })();
         // SHAPE_END
 
@@ -711,8 +885,8 @@
             seatCount = n >= 2 && n <= SEATS.length ? n : SEATS.length;
             var seats = SEATS.slice(0, seatCount);
             resetMatch();
-            $('setup').hidden = true;
-            $('join').hidden = true;
+            $('cards').hidden = true;                // the room takes the place of the two cards and of "How it works"
+            $('how').hidden = true;
             $('room-panel').hidden = false;
             $('room-code').textContent = room;
             $('room-map').textContent = (mapName ? mapName + ' map' : 'a room made some other way') + ', ' + seatCount + ' players';
@@ -763,30 +937,48 @@
         // ?map=<name>   host a match on that map at once (&players=2|3|4, default 4; &fill=easy|medium|hard seats bots in the empty seats at the leader's START; &play=here plays every seat on this page, as the page used to do);
         //               with &players=1 a game on this computer (&fill= is then the level of all three opponents)
         // ?fill=...     with ?room=: the same choice for a room that was made elsewhere (its links carry it)
-        // nothing       the setup: choose the map and the players, or join with a code
+        // nothing       the two cards: play against the computer on this page's own card, or host or join a match online
         var params = new URLSearchParams(window.location.search);
-        var mapSelect = $('map');
+        var mapSolo = $('map-solo');
+        var mapHost = $('map-host');
+        var mapSelects = [mapSolo, mapHost];
         MAPS.forEach(function (m) {
-            var o = document.createElement('option');
-            o.value = m.key; o.textContent = m.name;
-            mapSelect.appendChild(o);
+            mapSelects.forEach(function (select) {
+                var o = document.createElement('option');
+                o.value = m.key; o.textContent = m.name;
+                select.appendChild(o);
+            });
         });
-        mapSelect.value = DEFAULT_MAP_KEY;
+        mapSelects.forEach(function (select) { select.value = DEFAULT_MAP_KEY; });
         var last = recall('ants-four-map');
-        if (last && mapByKey(last)) mapSelect.value = last;
-        // The players: 1 plays on this computer, 2 to 4 is a match on the game server. A browser that never chose starts with 1 player (the owner: single player is on this page, by setting the players to 1).
-        // Each mode remembers its own bots: the OPPONENTS of a game on this computer, one level per seat (ants-solo-seats "easy,medium,none"; the old ants-solo-bots is read when it is absent, never written) with the
-        // TEAMS (ants-solo-teams: ffa or 0+N), and the EMPTY SEATS of a room at START (ants-four-fill: leave empty, easy, medium or hard).
-        var playersSelect = $('players');
-        playersSelect.value = String(playersChoice(recall('ants-four-players'), 1));
+        if (last && mapByKey(last)) mapSelects.forEach(function (select) { select.value = last; });
+        // The picture and the Map Info line of the map on the card that plays against the computer (the setup screen's own preview of each map)
+        function showMap() {
+            var m = mapByKey(mapSolo.value) || mapByKey(DEFAULT_MAP_KEY);
+            $('map-preview').src = 'front/preview_' + m.key + '.png';
+            $('map-preview').setAttribute('alt', 'The ' + m.name + ' map, seen from above');
+            $('map-info').textContent = MAP_INFO[m.key];
+        }
+        mapSolo.addEventListener('change', showMap);
+        showMap();
+        // Each card remembers its own choices: the PLAYERS of a match on the game server (ants-four-players, 2 to 4: a 1 from an earlier page is 2) and the EMPTY SEATS at START (ants-four-fill: leave empty,
+        // easy, medium or hard); the OPPONENTS of a game on this computer, one level per seat (ants-solo-seats "easy,medium,none"; the old ants-solo-bots is read when it is absent, never written) with the
+        // TEAMS (ants-solo-teams: ffa or 0+N). The map is one choice for both (ants-four-map).
+        var playerRadios = [2, 3, 4].map(function (n) { return $('players-' + n); });
+        function hostPlayersValue() { for (var i = 0; i < playerRadios.length; i++) if (playerRadios[i].checked) return i + 2; return 2; }
+        $('players-' + hostPlayers(recall('ants-four-players'), 2)).checked = true;
         var fillSelect = $('fill');
         fillSelect.value = validFill(recall('ants-four-fill'));
-        var seatSelects = [$('opponent-1'), $('opponent-2'), $('opponent-3')];
+        // A group of four buttons for each of the other three bases (the radio buttons opponent-N-none, -easy, -medium and -hard of seat N): the one that is checked is that seat's level
+        var LEVEL_IDS = ['none', 'easy', 'medium', 'hard'];
+        function seatRadios(i) { return LEVEL_IDS.map(function (id) { return $('opponent-' + (i + 1) + '-' + id); }); }
+        function seatLevel(i) { var radios = seatRadios(i); for (var k = 0; k < radios.length; k++) if (radios[k].checked) return validFill(radios[k].value); return ''; }
+        function setSeatLevel(i, level) { $('opponent-' + (i + 1) + '-' + (validFill(level) || 'none')).checked = true; }
+        (function () { var levels = soloSeats(recall('ants-solo-seats'), recall('ants-solo-bots')); levels.forEach(function (level, i) { setSeatLevel(i, level); }); })();
+        function soloLevels() { return [0, 1, 2].map(seatLevel); }
         var teamsSelect = $('teams');
-        (function () { var levels = soloSeats(recall('ants-solo-seats'), recall('ants-solo-bots')); seatSelects.forEach(function (select, i) { select.value = levels[i]; }); })();
-        function soloLevels() { return seatSelects.map(function (select) { return validFill(select.value); }); }
         var soloTeamWanted = recall('ants-solo-teams');       // the team that was remembered or chosen last (free for all while the bots do not allow it)
-        function showTeams() {                      // the Teams select has the choices that the bots allow; the team stays while it is still one of them, else it is free for all
+        function showTeams() {                      // the Teams select has the choices that the bots allow, and is there for two or more bots; the team stays while it is still one of them, else it is free for all
             var levels = soloLevels();
             var choices = soloTeamChoices(levels);
             soloTeamWanted = soloTeam(soloTeamWanted, levels);
@@ -797,35 +989,23 @@
                 teamsSelect.appendChild(o);
             });
             teamsSelect.value = soloTeamWanted;
-            $('teams-line').hidden = !soloMode() || choices.length < 2;
+            $('teams-line').hidden = choices.length < 2;
         }
-        function soloMode() { return Number(playersSelect.value) === 1; }
-        function showMode() {                       // what the form says for the players that it has: the button, the row of bots, the hint
-            var solo = soloMode();
-            $('solo-line').hidden = !solo;
-            $('fill-line').hidden = solo;
-            showTeams();
-            $('create').textContent = solo ? 'Play' : 'Create the match';
-            $('setup-hint-solo').hidden = !solo;
-            $('setup-hint').hidden = solo;
-        }
-        playersSelect.addEventListener('change', showMode);
-        seatSelects.forEach(function (select) { select.addEventListener('change', showTeams); });
+        [0, 1, 2].forEach(function (i) { seatRadios(i).forEach(function (radio) { radio.addEventListener('change', showTeams); }); });
         teamsSelect.addEventListener('change', function () { soloTeamWanted = soloTeam(teamsSelect.value, soloLevels()); });
-        showMode();
+        showTeams();
         // A game on this computer: this tab goes to the game page (never a new tab) with the map, the opponents, the teams, the typed name and the picture's shape (the game page's own parameters)
         function startLocal(mapKey, levels, team) {
             var checked = nameCheck(nameInput.value);
             window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, checked.ok ? checked.name : '', aspect, team), window.location.href).href);
         }
-        // The code carries the choice (the server reads it: demo-<map>-<n>p-<random>). `solo` is the form's own choice for a game on this computer ({levels, team}); an address that asks for one
+        // The code carries the choice (the server reads it: demo-<map>-<n>p-<random>). `solo` is the card's own choice for a game on this computer ({levels, team}); an address that asks for one
         // (&players=1&fill=) gives one level to all three bases and no teams.
         function create(mapKey, play, n, fillLevel, solo) {
             var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
             var players = playersChoice(String(n), 4);
             var level = validFill(fillLevel);
             remember('ants-four-map', m.key);
-            remember('ants-four-players', String(players));
             if (players === 1) {
                 var levels = solo ? solo.levels : [level, level, level];
                 var team = solo ? soloTeam(solo.team, levels) : 'ffa';
@@ -834,6 +1014,7 @@
                 startLocal(m.key, levels, team);
                 return;
             }
+            remember('ants-four-players', String(players));
             remember('ants-four-fill', level);
             startRoom('demo-' + m.key + '-' + players + 'p-' + randomCode(), m.name, play, players, level);
         }
@@ -860,14 +1041,13 @@
             } else if (wantedMap && mapByKey(wantedMap.toLowerCase())) {
                 create(wantedMap.toLowerCase(), params.get('play') === 'here' ? 'here' : '', wantedPlayers, wantedFill);
             } else {
-                $('setup').hidden = false;
-                $('join').hidden = false;
+                $('cards').hidden = false;
+                $('how').hidden = false;
             }
         }
         // A match that an address asks for is the page of somebody who was sent a link: they are asked for a name first, every time, even when this browser remembers one (the owner: "when joining a link
         // from somebody else, it should ask you first what you want your name to be"), and nothing starts before. The test mode ?play=here starts every seat at once and asks nobody.
         if ((asksRoom || asksMap) && params.get('play') !== 'here') {
-            var generalHint = $('who-hint').textContent;
             var asksSolo = asksMap && wantedPlayers === 1;
             $('who-title').textContent = asksRoom ? 'Join the match ' + wanted : asksSolo ? 'Play a game on this computer' : 'Host a match';
             $('who-go').textContent = asksRoom ? 'Join' : asksSolo ? 'Play' : 'Host';
@@ -876,18 +1056,23 @@
                 show: function () {
                     $('who-title').hidden = false;
                     $('who-go').hidden = false;
-                    $('who-hint').textContent = (asksRoom ? 'The name your ants play under in this match: the seat that you play from this page takes it.' : asksSolo ? 'The name your ants play under in the game on this computer.' : 'The name your ants play under in the match that you host from this page.') +
+                    $('who-general').hidden = true;
+                    $('who-step-hint').textContent = (asksRoom ? 'The name your ants play under in this match: the seat that you play from this page takes it.' : asksSolo ? 'The name your ants play under in the game on this computer.' : 'The name your ants play under in the match that you host from this page.') +
                         ' Leave it empty for a random name. This browser remembers it.';
+                    $('who-step-hint').hidden = false;
                 },
-                hide: function () { $('who-title').hidden = true; $('who-go').hidden = true; $('who-hint').textContent = generalHint; }
+                hide: function () { $('who-title').hidden = true; $('who-go').hidden = true; $('who-step-hint').hidden = true; $('who-general').hidden = false; }
             }, { recall: recall, remember: remember }, fromAddress);
         } else {
             fromAddress();
         }
-        $('create').addEventListener('click', function () {
+        $('play').addEventListener('click', function () {
             if (!readName().ok) return;               // a bad name starts nothing (the field says why)
-            var n = Number(playersSelect.value);
-            create(mapSelect.value, '', n, n === 1 ? '' : fillSelect.value, n === 1 ? { levels: soloLevels(), team: soloTeamWanted } : null);
+            create(mapSolo.value, '', 1, '', { levels: soloLevels(), team: soloTeamWanted });
+        });
+        $('host').addEventListener('click', function () {
+            if (!readName().ok) return;
+            create(mapHost.value, '', hostPlayersValue(), fillSelect.value, null);
         });
 
         // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat, under the name of the field above (the game
@@ -897,7 +1082,7 @@
             var hint = $('join-hint');
             if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {
                 hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like demo-small-x7k2.';
-                hint.style.color = 'var(--accent-red)';
+                hint.classList.add('bad');
                 return;
             }
             var checked = readName();
@@ -916,24 +1101,29 @@
         });
         $('join-go').addEventListener('click', joinNow);
         $('join-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });
+        var joinHint = $('join-hint').textContent;
+        $('join-code').addEventListener('input', function () { $('join-hint').textContent = joinHint; $('join-hint').classList.remove('bad'); });
 
         // SELECTOR_BEGIN
-        $('aspect-select').addEventListener('change', function () {
-            // the choice is remembered (the game page's selector reads it too; nothing else writes it) and this page reloads with it: the games of a room start again with the new picture
-            var value = $('aspect-select').value === '4:3' ? '4:3' : '16:9';
-            if (value === aspect) { remember(ASPECT_KEY, value); return; }
-            if (room && !window.confirm('Changing the picture restarts the games on this page: the seats leave the match they are in. Continue?')) { $('aspect-select').value = aspect; return; }
-            remember(ASPECT_KEY, value);
-            try {
-                var url = new URL(window.location.href);
-                url.searchParams.set('aspect', value);
-                window.location.assign(url.href);
-            } catch (e) { $('aspect-select').value = aspect; }
+        ['aspect-16-9', 'aspect-4-3'].forEach(function (id) {
+            $(id).addEventListener('change', function () {
+                // the choice is remembered (the game page's selector reads it too; nothing else writes it) and this page reloads with it: the games of a room start again with the new picture
+                var value = $('aspect-4-3').checked ? '4:3' : '16:9';
+                var before = $(aspect === '4:3' ? 'aspect-4-3' : 'aspect-16-9');
+                if (value === aspect) { remember(ASPECT_KEY, value); return; }
+                if (room && !window.confirm('Changing the picture restarts the games on this page: the seats leave the match they are in. Continue?')) { before.checked = true; return; }
+                remember(ASPECT_KEY, value);
+                try {
+                    var url = new URL(window.location.href);
+                    url.searchParams.set('aspect', value);
+                    window.location.assign(url.href);
+                } catch (e) { before.checked = true; }
+            });
         });
         // SELECTOR_END
 
         $('new-room').addEventListener('click', function () {
-            // the setup again (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
+            // the front page again, with its two cards (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
             window.location.assign(window.location.origin + window.location.pathname.replace(/^\/+/, '/'));
         });
 

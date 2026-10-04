@@ -171,8 +171,10 @@ class SiteLabelInThePages(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("<title>Ants (1998) — beta.playants.org (staging)</title>", pages["index"])
         self.assertIn("<title>Ants (1998) (staging)</title>", pages["lobby"])
+        self.assertIn('<footer>\n        <strong id="site-label">staging</strong>&#8197;&bull;&#8197;', pages["index"])
+        # the front page's footer is the emerald bar: the label stands in front of the version (and the build), in the same box
+        self.assertRegex(pages["lobby"], r'<footer class="bar">\s*<div class="bar-in">\s*<span><strong id="site-label">staging</strong>&#8197;&bull;&#8197;<span class="ver" id="game-version-line">')
         for page in pages.values():
-            self.assertIn('<footer>\n        <strong id="site-label">staging</strong>&#8197;&bull;&#8197;', page)
             self.assertNotIn("@@SITE_", page)
 
     def test_no_label_leaves_the_pages_as_they_are_in_the_repository(self):

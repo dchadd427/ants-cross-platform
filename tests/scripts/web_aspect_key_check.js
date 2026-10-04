@@ -1,9 +1,9 @@
 // Runs the pages' OWN code that decides the shape of the picture and remembers the player's choice, on a table of addresses and of what a browser had remembered
-// (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/four.html: its helpers, the block of the shape and the selector's listener).
+// (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/lobby.html, the front page: its helpers, the block of the shape and the listeners of the picture's two buttons).
 // 16:9 is the default everywhere: only the choice of the selector (the key `ants.aspect.v2`) or ?aspect=4:3 in the address gives the classic picture. A Classic 4:3 that the first
 // versions of the pages remembered under `ants.aspect` is NOT read any more (every browser starts 16:9 once), and the selectors write the new key and nothing else.
 // tests/scripts/test_web_aspect_default.py runs this with node (the quick tier); tests/scripts/web_aspect_check.py is the opt-in check in a real browser.
-// usage: node web_aspect_key_check.js web/shell.html web/four.html     (exit 0: every row holds; every differing row is printed)
+// usage: node web_aspect_key_check.js web/shell.html web/lobby.html     (exit 0: every row holds; every differing row is printed)
 'use strict';
 const fs = require('fs');
 
@@ -65,6 +65,22 @@ function element(attributes) {
     return el;
 }
 
+// a group of radio buttons as a browser has them: checking one unchecks the others of the group (the page's own `checked = true` and the person's pick both go through this)
+function radioGroup(values) {
+    const group = {};
+    const state = {};
+    for (const value of values) {
+        const el = element();
+        state[value] = false;
+        Object.defineProperty(el, 'checked', { get() { return state[value]; }, set(on) { if (on) for (const other of values) state[other] = false; state[value] = !!on; } });
+        group[value] = el;
+    }
+    return group;
+}
+// the person picks a shape: the button is checked (the others are unchecked) and its change event comes
+function pick(r, shape) { r.radios[shape].checked = true; r.radios[shape].listeners.change(); }
+const shown = (r) => ['16:9', '4:3'].filter((shape) => r.radios[shape].checked).join('+');
+
 // web/shell.html: returns what the page decides and the buttons of its selector
 function runShell(path, search, stored, options) {
     const text = fs.readFileSync(path, 'utf8');
@@ -90,26 +106,26 @@ function runShell(path, search, stored, options) {
     return result;
 }
 
-// web/four.html
-function runFour(path, search, stored, options) {
+// web/lobby.html
+function runLobby(path, search, stored, options) {
     const text = fs.readFileSync(path, 'utf8');
     const helpers = between(text, 'HELPERS_BEGIN', 'HELPERS_END', path);
     const shape = between(text, 'SHAPE_BEGIN', 'SHAPE_END', path);
     const selector = between(text, 'SELECTOR_BEGIN', 'SELECTOR_END', path);
     const storage = makeStorage(stored);
     const win = makeWindow(search, storage, !(options && options.decline));
-    const select = element();
+    const radios = radioGroup(['16:9', '4:3']);
     const body = element();
     const doc = {
         body,
-        getElementById(id) { if (id === 'aspect-select') return select; throw new Error('the page asked for #' + id); },
+        getElementById(id) { if (id === 'aspect-16-9') return radios['16:9']; if (id === 'aspect-4-3') return radios['4:3']; throw new Error('the page asked for #' + id); },
     };
     const inRoom = options && options.room ? "'demo-room'" : "''";
     const code = 'var room = ' + inRoom + ';\n' + helpers + shape + selector + '\nreturn { aspect: aspect, fromAddress: aspectFromAddress, key: ASPECT_KEY };';
     const result = new Function('window', 'document', code)(win, doc);
     result.storage = storage;
     result.win = win;
-    result.select = select;
+    result.radios = radios;
     result.body = body;
     return result;
 }
@@ -144,8 +160,8 @@ function expect(label, got, want) {
     }
 }
 
-const [shellPath, fourPath] = [process.argv[2], process.argv[3]];
-if (!shellPath || !fourPath) { console.log('usage: web_aspect_key_check.js shell.html four.html'); process.exit(2); }
+const [shellPath, lobbyPath] = [process.argv[2], process.argv[3]];
+if (!shellPath || !lobbyPath) { console.log('usage: web_aspect_key_check.js shell.html lobby.html'); process.exit(2); }
 
 try {
     // ---- the game page ----
@@ -159,7 +175,7 @@ try {
         expect('shell.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('shell.html, the key', r.key, NEW_KEY);
     }
-    // a frame of four.html (?embed=1) takes the address only: what the browser remembered does not reach it
+    // a frame of the lobby's game (?embed=1) takes the address only: what the browser remembered does not reach it
     for (const [label, search, stored, aspect, source] of [
         ['a frame, 4:3 remembered', '?embed=1', { [NEW_KEY]: '4:3' }, '16:9', 'default'],
         ['a frame, the old 4:3 remembered', '?embed=1', { [OLD_KEY]: '4:3' }, '16:9', 'default'],
@@ -200,41 +216,48 @@ try {
         expect('shell.html selector without storage: the page reloads with ?aspect=4:3', r.win.assigned.length === 1 && /[?&]aspect=4:3(&|$)/.test(r.win.assigned[0]), true);
     }
 
-    // ---- the Play online page ----
+    // ---- the front page ----
     for (const [label, search, stored, aspect, source] of table) {
-        const r = runFour(fourPath, search, stored);
-        expect('four.html, ' + label + ' (the shape)', r.aspect, aspect);
-        expect('four.html, ' + label + ' (the body)', r.body.attributes['data-aspect'], aspect);
-        expect('four.html, ' + label + ' (the selector)', r.select.value, aspect);
-        expect('four.html, ' + label + ' (the address names it)', r.fromAddress, source === 'address');
-        expect('four.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
-        expect('four.html, the key', r.key, NEW_KEY);
+        const r = runLobby(lobbyPath, search, stored);
+        expect('lobby.html, ' + label + ' (the shape)', r.aspect, aspect);
+        expect('lobby.html, ' + label + ' (the body)', r.body.attributes['data-aspect'], aspect);
+        expect('lobby.html, ' + label + ' (the button that is checked)', shown(r), aspect);
+        expect('lobby.html, ' + label + ' (the address names it)', r.fromAddress, source === 'address');
+        expect('lobby.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
+        expect('lobby.html, the key', r.key, NEW_KEY);
     }
     {
-        const r = runFour(fourPath, '', { [OLD_KEY]: '4:3' });
-        r.select.value = '4:3';
-        r.select.listeners.change();                                                 // the player picks Classic 4:3
-        expect('four.html selector, 4:3 picked: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '4:3']]));
-        expect('four.html selector, 4:3 picked: the old key is untouched', r.storage.data[OLD_KEY], '4:3');
-        expect('four.html selector, 4:3 picked: the page reloads with ?aspect=4:3', r.win.assigned.length === 1 && /[?&]aspect=(4:3|4%3A3)(&|$)/.test(r.win.assigned[0]), true);
-        const again = runFour(fourPath, '', r.storage.data);
-        expect('four.html selector, the next visit', again.aspect, '4:3');
+        const r = runLobby(lobbyPath, '', { [OLD_KEY]: '4:3' });
+        pick(r, '4:3');                                                              // the player picks Classic 4:3
+        expect('lobby.html selector, 4:3 picked: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '4:3']]));
+        expect('lobby.html selector, 4:3 picked: the old key is untouched', r.storage.data[OLD_KEY], '4:3');
+        expect('lobby.html selector, 4:3 picked: the page reloads with ?aspect=4:3', r.win.assigned.length === 1 && /[?&]aspect=(4:3|4%3A3)(&|$)/.test(r.win.assigned[0]), true);
+        const again = runLobby(lobbyPath, '', r.storage.data);
+        expect('lobby.html selector, the next visit', again.aspect + ' ' + shown(again), '4:3 4:3');
     }
     {
-        const r = runFour(fourPath, '', {});
-        r.select.value = '16:9';
-        r.select.listeners.change();                                                 // the same picture: remembered, nothing to restart
-        expect('four.html selector, 16:9 picked: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
-        expect('four.html selector, 16:9 picked: no reload', r.win.assigned.length, 0);
+        const r = runLobby(lobbyPath, '', {});
+        r.radios['16:9'].listeners.change();                                         // the same picture again (a change event that names the shape that is already there): remembered, nothing to restart
+        expect('lobby.html selector, 16:9 again: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
+        expect('lobby.html selector, 16:9 again: no reload', r.win.assigned.length, 0);
     }
     {
-        const r = runFour(fourPath, '', {}, { room: true, decline: true });          // in a room it asks first; No: nothing is written, the select goes back
-        r.select.value = '4:3';
-        r.select.listeners.change();
-        expect('four.html selector in a room: it asks', r.win.asked.length, 1);
-        expect('four.html selector in a room, answered No: nothing is written', JSON.stringify(r.storage.writes), '[]');
-        expect('four.html selector in a room, answered No: no reload', r.win.assigned.length, 0);
-        expect('four.html selector in a room, answered No: the select shows 16:9 again', r.select.value, '16:9');
+        const r = runLobby(lobbyPath, '', {}, { room: true, decline: true });        // in a room it asks first; No: nothing is written, the buttons go back
+        pick(r, '4:3');
+        expect('lobby.html selector in a room: it asks', r.win.asked.length, 1);
+        expect('lobby.html selector in a room, answered No: nothing is written', JSON.stringify(r.storage.writes), '[]');
+        expect('lobby.html selector in a room, answered No: no reload', r.win.assigned.length, 0);
+        expect('lobby.html selector in a room, answered No: 16:9 is checked again', shown(r), '16:9');
+    }
+    {
+        const r = runLobby(lobbyPath, '', {}, { room: true });                       // in a room, answered Yes: remembered and reloaded
+        pick(r, '4:3');
+        expect('lobby.html selector in a room, answered Yes: remembered and reloaded', JSON.stringify(r.storage.writes) + ' ' + r.win.assigned.length, JSON.stringify([[NEW_KEY, '4:3']]) + ' 1');
+    }
+    {
+        const r = runLobby(lobbyPath, '', { [NEW_KEY]: '4:3' });                     // 4:3 is there: picking 16:9 gives the default picture back
+        pick(r, '16:9');
+        expect('lobby.html selector, 16:9 picked over 4:3: remembered, the page reloads with ?aspect=16:9', JSON.stringify(r.storage.writes) + ' ' + /[?&]aspect=(16:9|16%3A9)(&|$)/.test(r.win.assigned[0] || ''), JSON.stringify([[NEW_KEY, '16:9']]) + ' true');
     }
 } catch (e) {
     console.log('FAIL ' + e.message);
