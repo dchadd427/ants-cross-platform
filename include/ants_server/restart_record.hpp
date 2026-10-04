@@ -201,15 +201,14 @@ struct RestartConfig {
     uint64_t max_record_bytes{48ull * 1024 * 1024};         // one record may
     uint32_t restart_vote_after_ms{net::kRestartVoteAfterMs};   // after a restart the others may vote on a seat that has not come back once it has been away this long (never less than the room's own time)
     uint32_t max_age_ms{60u * 60u * 1000u};                 // a record whose last write is older than this is not restored: its players have given up
-    uint32_t replay_budget_ms{20u * 1000u};                 // the replay of one room may take this long, in real time; beyond it its record is refused as too slow
-    uint32_t restore_budget_ms{30u * 1000u};                // the restore at the start of the server may take this long in all, in real time: a room that it does not reach (or does not finish) is deferred, its
-                                                            // record stays on disk and the room is restored when its first player comes (RoomManager::restore_rooms)
-    std::function<uint32_t()> clock_ms;                     // the clock that these budgets are measured with, in real milliseconds (empty: restart_steady_ms): the tests give one of their own
+    uint32_t replay_budget_ms{20u * 1000u};                 // the replay of one room may take this long in all, in real time (the SUM of the work of its slices, not the time that other rooms took between them): beyond it its record is refused as too slow
+    uint32_t restore_slice_ms{5};                           // every pass of the server (RoomManager::update) spends at most this long, in real time, on replaying the records that wait (the room may run up to 20 turns' work past it)
+    std::function<uint32_t()> clock_ms;                     // the clock that the cap and the slice are measured with, in real milliseconds (empty: restart_steady_ms): the tests give one of their own
     uint32_t refused_keep_ms{24u * 60u * 60u * 1000u};      // a record that was read and refused is kept this long in the folder `refused` (the owner may want it back); the folder is held under budget_bytes
     uint32_t sync_every_ms{1000};                           // a room's record is made durable this often while it is written
 };
 
-/// Real milliseconds from a steady clock (they mean something only as differences, and wrap after 49 days): the clock of the restore's budgets unless RestartConfig::clock_ms is set
+/// Real milliseconds from a steady clock (they mean something only as differences, and wrap after 49 days): the clock of the restore's cap and slices unless RestartConfig::clock_ms is set
 uint32_t restart_steady_ms() noexcept;
 
 class RestartStore;
@@ -274,8 +273,6 @@ public:
     bool prepare(std::string& why);
     /// Where the record of the room with this code is
     std::string path_for(const std::string& code) const;
-    /// The room code that the name of a record's file carries (the name that path_for makes), false for any other name: the restore defers a record by its name, without reading it
-    bool code_of_path(const std::string& path, std::string& code) const;
     /// The paths of the records in the folder, sorted by name (files that are made like a record's name; temporary files are not records)
     std::vector<std::string> records() const;
     /// Makes the record of a room (the head is written all at once, see the head of this file) and opens it for appending. Null, with the reason, when the budget or the size limit does not allow it or the

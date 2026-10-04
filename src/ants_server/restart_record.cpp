@@ -975,18 +975,6 @@ std::string RestartStore::path_for(const std::string& code) const {
     return (fs::path(cfg_.dir) / (std::string(kRecordPrefix) + code + "-" + hex_digits(digest, 4) + kRestartExtension)).string();
 }
 
-bool RestartStore::code_of_path(const std::string& path, std::string& code) const {
-    const std::string name = fs::path(path).filename().string();
-    const size_t prefix = std::strlen(kRecordPrefix);
-    const std::string extension = kRestartExtension;
-    const size_t digest = 1 + 8;                                       // "-" and the 8 hex digits of the hash of the code
-    if (name.size() <= prefix + digest + extension.size() || name.compare(0, prefix, kRecordPrefix) != 0 || !has_suffix(name, extension)) return false;
-    const std::string candidate = name.substr(prefix, name.size() - prefix - digest - extension.size());
-    if (!net::valid_room_code(candidate) || fs::path(path_for(candidate)).filename().string() != name) return false;       // (a name that is not exactly what path_for makes of the code is nobody's record)
-    code = candidate;
-    return true;
-}
-
 bool RestartStore::prepare(std::string& why) {
     if (!enabled()) return true;
     std::error_code ec;

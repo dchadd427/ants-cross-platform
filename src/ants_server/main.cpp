@@ -437,8 +437,8 @@ int main(int argc, char** argv) {
         }                                          // made now: shown above, once
     }
 
-    if (rooms.restart_store() != nullptr) {                    // the matches that were running when the server stopped come back, paused until their players do (before the first connection is read)
-        rooms.restore_rooms(now_ms(), []() { return g_stop.load(); });         // (a stop that comes meanwhile ends it at once and leaves every record on disk)
+    if (rooms.restart_store() != nullptr) {                    // the matches that were running when the server stopped come back, paused until their players do: the records are judged here, their replays run
+        rooms.restore_rooms(now_ms(), []() { return g_stop.load(); });         // in slices from rooms.update() below, so that the server serves meanwhile (a stop that comes meanwhile leaves every record on disk)
         for (const std::string& line : rooms.take_notices()) log(line);
     }
     while (!g_stop) {

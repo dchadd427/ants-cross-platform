@@ -233,16 +233,8 @@ public:
     /// match, the record's turns cannot be read, or the SUMMED work of the slices passed RestartConfig::replay_budget_ms (too slow): the room is thrown away. The room's clocks are not touched.
     enum class ReplayStep : uint8_t { More, Replayed, Refused };
     ReplayStep replay_step(uint32_t slice_ms, const std::function<uint32_t()>& clock, std::string& why);
-    /// What replay() asks its caller at every 20th turn: go on, stop (the server was told to stop: everything stays as it is), or defer (the time of the whole restore is used up: this room is restored later)
-    enum class ReplayCheck : uint8_t { Go, Stop, Defer };
-    struct ReplayLimits {
-        uint32_t budget_ms{20u * 1000u};                    // this room's replay may take this long by `clock` (the room's own cap): beyond it the record is refused as too slow
-        std::function<uint32_t()> clock;                    // real milliseconds (empty: restart_steady_ms)
-        std::function<ReplayCheck()> check;                 // empty: always Go
-    };
-    enum class ReplayResult : uint8_t { Replayed, Refused, Stopped, Deferred };
-    /// The synchronous replay of the first server that restores (the whole record inside the caller, asked every 20 turns): begin_replay() and the turns in one go. Replayed, Refused, or what `limits.check` said
-    ReplayResult replay(const RestartLoaded& record, uint32_t restart_vote_after_ms, const ReplayLimits& limits, std::string& why);
+    /// begin_replay() and then every slice in one go (no slice): Replayed or Refused
+    ReplayStep replay(const RestartLoaded& record, uint32_t restart_vote_after_ms, std::string& why, const std::function<uint32_t()>& clock = nullptr);
     /// The turns that the replay has read so far, and the real time that its slices have taken (the sum of the work, not the time that other rooms' work took between them)
     uint32_t replay_progress() const noexcept { return replay_reader_ != nullptr ? replay_reader_->turns_read() : replay_read_; }
     uint32_t replay_work_ms() const noexcept { return replay_work_ms_; }

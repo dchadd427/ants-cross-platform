@@ -4,8 +4,8 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
+#include <deque>
 #include <random>
-#include <set>
 
 #include "ants_net/clock.hpp"
 #include "ants_net/protocol.hpp"
@@ -36,7 +36,7 @@ std::string RoomManager::new_code() {
     for (int attempt = 0; attempt < 64; ++attempt) {
         std::string code;
         for (int i = 0; i < 8; ++i) code.push_back(kAlphabet[rng() % (sizeof(kAlphabet) - 1)]);
-        if (rooms_.find(code) == rooms_.end() && deferred_.count(code) == 0) return code;
+        if (rooms_.find(code) == rooms_.end() && !restoring_has(code)) return code;
     }
     return "R" + std::to_string(++code_counter_);
 }
@@ -68,10 +68,10 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
         r.error = why;
         return r;
     };
-    if (rooms_.size() + deferred_.size() >= limits_.max_rooms) return fail(503, "the server has no room for another room");
+    if (rooms_.size() + restoring_.size() >= limits_.max_rooms) return fail(503, "the server has no room for another room");
     if (spec.players < 2 || spec.players > sim::MAX_PLAYERS) return fail(400, "players must be 2 to 4");
     if (!spec.code.empty() && (!net::valid_room_code(spec.code))) return fail(400, "the room code may hold letters, digits, '_' and '-' only (up to 32 characters)");
-    if (!spec.code.empty() && (rooms_.find(spec.code) != rooms_.end() || deferred_.count(spec.code) != 0)) return fail(409, "a room with this code exists");     // (a record that waits for its first player is a room)
+    if (!spec.code.empty() && (rooms_.find(spec.code) != rooms_.end() || restoring_has(spec.code))) return fail(409, "a room with this code exists");     // (a record that waits for its replay is a room)
     if (const std::string range = spec_range_error(spec); !range.empty()) return fail(400, range);
     // The bots of the room (docs/BOTS.md B6): distinct seats, a kind that exists, at least one seat left for a person, and never together with Fog of War (a bot would see through it)
     if (!spec.bots.empty()) {
@@ -171,7 +171,7 @@ bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
     if (code.size() <= prefix.size() || code.compare(0, prefix.size(), prefix) != 0 || !net::valid_room_code(code)) return false;
     size_t demos = 0;
     for (const auto& kv : rooms_) demos += kv.first.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
-    for (const auto& kv : deferred_) demos += kv.first.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
+    for (const Restoring& r : restoring_) demos += r.code.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
     if (demos >= limits_.demo_rooms) return false;
     RoomSpec spec = default_spec();                                 // (demo rooms follow the server's reconnect setting and its limits)
     spec.code = code;
@@ -207,6 +207,132 @@ void RoomManager::add_connection(std::unique_ptr<net::Connection> connection, co
     pending_.push_back(Pending{std::move(connection), address, now_ms});
 }
 
+// The connection of a Hello that waits for its room to be restored. The manager pumps it (poll) to see it close, so what the peer sends after its Hello is read here and kept, a few messages at the
+// most (a client that waits for its Welcome sends nothing: a peer that sends more is a flood), and handed to the room, before anything newer, when the connection is given to it.
+class ParkedLink final : public net::Connection {
+public:
+    static constexpr size_t kMaxEarly = 8;
+    explicit ParkedLink(std::unique_ptr<net::Connection> inner) : inner_(std::move(inner)) {}
+    /// Reads what the peer has sent. False when it has sent more than a parked connection may hold.
+    bool pump() {
+        std::vector<uint8_t> message;
+        while (early_.size() <= kMaxEarly && inner_->poll(message)) early_.push_back(std::move(message));
+        return early_.size() <= kMaxEarly;
+    }
+    bool peer_gone() const { return !inner_->is_open(); }
+    bool send(const std::vector<uint8_t>& message) override { return inner_->send(message); }
+    bool poll(std::vector<uint8_t>& message) override {
+        if (!early_.empty()) {
+            message = std::move(early_.front());
+            early_.pop_front();
+            return true;
+        }
+        return inner_->poll(message);
+    }
+    State state() const override { return inner_->state(); }
+    void close() override { inner_->close(); }
+    uint32_t last_message_age_ms() const override { return inner_->last_message_age_ms(); }
+
+private:
+    std::unique_ptr<net::Connection> inner_;
+    std::deque<std::vector<uint8_t>> early_;
+};
+
+bool RoomManager::restoring_has(const std::string& code) const {
+    for (const Restoring& r : restoring_) {
+        if (r.code == code) return true;
+    }
+    return false;
+}
+
+// A Hello for a room whose record waits for its replay: the connection and the Hello wait (bounded: by the door's number of connections that wait, and by the room's own number of connections, which
+// is what the room would take of them), and go through the door when the room is restored
+void RoomManager::park(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, const Restoring& job, uint32_t now_ms) {
+    size_t of_this_room = 0;
+    for (const Parked& p : parked_) of_this_room += p.code == job.code ? 1u : 0u;
+    if (parked_.size() >= limits_.max_pending || of_this_room >= std::max<size_t>(1, job.head.max_connections)) {
+        reject(std::move(connection), net::RejectReason::Full, now_ms);
+        return;
+    }
+    auto link = std::make_unique<ParkedLink>(std::move(connection));
+    Parked p;
+    p.link = link.get();
+    p.connection = std::move(link);
+    p.address = address;
+    p.message = message;
+    p.hello = hello;
+    p.code = job.code;
+    p.since_ms = now_ms;
+    parked_.push_back(std::move(p));
+}
+
+// The room of these Hellos is a room now (restored, or a failed room with the reason): each Hello goes through the door as any other does (the rejoin, MatchRunning, NoSuchRoom as the room's state says)
+void RoomManager::release_parked(const std::string& code, uint32_t now_ms) {
+    std::vector<Parked> mine;
+    for (size_t i = 0; i < parked_.size();) {
+        if (parked_[i].code == code) {
+            mine.push_back(std::move(parked_[i]));
+            parked_.erase(parked_.begin() + static_cast<std::ptrdiff_t>(i));
+        } else {
+            ++i;
+        }
+    }
+    for (Parked& p : mine) route_hello(std::move(p.connection), p.address, p.message, p.hello, now_ms);
+}
+
+void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms) {
+    net::RejectReason reason = net::RejectReason::BadRequest;
+    bool good = true;
+    Room* room = nullptr;
+    bool rejoin = false;                                           // a player who comes back to a match that runs (a Hello with the key of a seat)
+    auto it = hello.room.empty() ? rooms_.end() : rooms_.find(hello.room);
+    const bool ended = it != rooms_.end() && (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed);
+    if (ended && is_demo_code(hello.room) && limits_.demo_rooms > 0) {
+        // A demo room that is over is forgotten at once when somebody comes back to its code (a late friend, a reload, a rematch with the same
+        // link): its end is reported, and the Hello makes a new room below
+        if (!it->second->end_reported()) {
+            it->second->mark_end_reported();
+            unreported_.push_back(it->second->status(now_ms));
+        }
+        rooms_.erase(it);
+        it = rooms_.end();
+    }
+    if (it == rooms_.end() && !hello.room.empty()) {              // a record that waits for its replay: the room is not there yet, and the Hello waits for it
+        for (const Restoring& r : restoring_) {
+            if (r.code != hello.room) continue;
+            park(std::move(connection), address, message, hello, r, now_ms);
+            return;
+        }
+    }
+    if (it == rooms_.end() && !hello.room.empty() && make_demo_room(hello.room, now_ms)) it = rooms_.find(hello.room);
+    if (it == rooms_.end()) {
+        good = false;
+        reason = net::RejectReason::NoSuchRoom;
+    } else if (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed) {
+        good = false;
+        reason = net::RejectReason::NoSuchRoom;                    // the room is over: "the match has already started" would be wrong
+    } else if (!it->second->accepting()) {
+        if (!net::key_is_zero(hello.key) && it->second->can_rejoin()) {
+            room = it->second.get();                              // the session of the match decides (a key that fits no seat is told MatchRunning there, as here)
+            rejoin = true;
+        } else {
+            good = false;
+            reason = net::RejectReason::MatchRunning;
+        }
+    } else {
+        room = it->second.get();
+    }
+    if (good && rejoin) {
+        if (!room->rejoin(connection, hello, now_ms)) {            // the session has answered (a Reject) and closed it: it stays a moment so that the answer arrives
+            ++refused_;
+            lingering_.push_back(Lingering{std::move(connection), now_ms});
+        }
+        return;
+    }
+    if (good && room->add_connection(connection, address, message, now_ms)) return;        // the room owns it now
+    reject(std::move(connection), good ? net::RejectReason::Full : reason, now_ms);
+}
+
 void RoomManager::update(uint32_t now_ms) {
     // 0. a record whose delete failed is tried again every 10 s (its room is over: a restart before it is deleted would bring the room back)
     if (restart_ != nullptr) {
@@ -225,9 +351,7 @@ void RoomManager::update(uint32_t now_ms) {
     for (size_t i = 0; i < pending_.size();) {
         Pending& p = pending_[i];
         std::vector<uint8_t> msg;
-        bool done = false;
         if (p.connection->poll(msg)) {
-            done = true;
             net::HelloMsg hello;
             net::RejectReason reason = net::RejectReason::BadRequest;
             bool good = false;
@@ -236,57 +360,14 @@ void RoomManager::update(uint32_t now_ms) {
                 else if (!net::decode(msg, hello)) reason = net::RejectReason::BadRequest;
                 else good = true;
             }
-            Room* room = nullptr;
-            bool rejoin = false;                                       // a player who comes back to a match that runs (a Hello with the key of a seat)
-            if (good) {
-                auto it = hello.room.empty() ? rooms_.end() : rooms_.find(hello.room);
-                const bool ended = it != rooms_.end() && (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed);
-                if (ended && is_demo_code(hello.room) && limits_.demo_rooms > 0) {
-                    // A demo room that is over is forgotten at once when somebody comes back to its code (a late friend, a reload, a rematch with the same
-                    // link): its end is reported, and the Hello makes a new room below
-                    if (!it->second->end_reported()) {
-                        it->second->mark_end_reported();
-                        unreported_.push_back(it->second->status(now_ms));
-                    }
-                    rooms_.erase(it);
-                    it = rooms_.end();
-                }
-                if (it == rooms_.end() && !hello.room.empty() && restore_deferred(hello.room, now_ms)) it = rooms_.find(hello.room);      // (a record that the restore did not reach: its first Hello brings the room back)
-                if (it == rooms_.end() && !hello.room.empty() && make_demo_room(hello.room, now_ms)) it = rooms_.find(hello.room);
-                if (it == rooms_.end()) {
-                    good = false;
-                    reason = net::RejectReason::NoSuchRoom;
-                } else if (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed) {
-                    good = false;
-                    reason = net::RejectReason::NoSuchRoom;                // the room is over: "the match has already started" would be wrong
-                } else if (!it->second->accepting()) {
-                    if (!net::key_is_zero(hello.key) && it->second->can_rejoin()) {
-                        room = it->second.get();                      // the session of the match decides (a key that fits no seat is told MatchRunning there, as here)
-                        rejoin = true;
-                    } else {
-                        good = false;
-                        reason = net::RejectReason::MatchRunning;
-                    }
-                } else {
-                    room = it->second.get();
-                }
-            }
             std::unique_ptr<net::Connection> connection = std::move(p.connection);
             const std::string address = p.address;
             pending_.erase(pending_.begin() + static_cast<std::ptrdiff_t>(i));
-            if (good && rejoin) {
-                if (!room->rejoin(connection, hello, now_ms)) {        // the session has answered (a Reject) and closed it: it stays a moment so that the answer arrives
-                    ++refused_;
-                    lingering_.push_back(Lingering{std::move(connection), now_ms});
-                }
-                continue;
-            }
-            if (good && room->add_connection(connection, address, msg, now_ms)) continue;        // the room owns it now
-            reject(std::move(connection), good ? net::RejectReason::Full : reason, now_ms);
+            if (good) route_hello(std::move(connection), address, msg, hello, now_ms);
+            else reject(std::move(connection), reason, now_ms);
             continue;
         }
-        if (!p.connection->is_open() || now_ms - p.since_ms >= limits_.hello_timeout_ms) done = true;
-        if (done) {
+        if (!p.connection->is_open() || now_ms - p.since_ms >= limits_.hello_timeout_ms) {
             ++refused_;
             if (p.connection->is_open()) p.connection->close();
             pending_.erase(pending_.begin() + static_cast<std::ptrdiff_t>(i));
@@ -294,6 +375,21 @@ void RoomManager::update(uint32_t now_ms) {
             ++i;
         }
     }
+    // 1b. Hellos that wait for their room to be restored: a connection that closes (or sends more than a client that waits for its answer does) is dropped, and so is one that has waited too long (a
+    // client gives up on a Hello after 10 s and makes a new one: the parked connections of a room that restores for a long time are the clients' retries)
+    for (size_t i = 0; i < parked_.size();) {
+        Parked& p = parked_[i];
+        const bool flood = !p.link->pump();
+        if (flood || p.link->peer_gone() || now_ms - p.since_ms >= limits_.park_timeout_ms) {
+            ++refused_;
+            if (p.link->is_open()) p.link->close();
+            parked_.erase(parked_.begin() + static_cast<std::ptrdiff_t>(i));
+        } else {
+            ++i;
+        }
+    }
+    // 1c. the records that wait for their replay: a slice of work (a room that is restored takes the Hellos that waited for it)
+    restore_step(now_ms);
     // 2. rejected connections wait a moment so that their answer is delivered, then they go
     for (size_t i = 0; i < lingering_.size();) {
         if (now_ms - lingering_[i].since_ms >= limits_.reject_linger_ms || !lingering_[i].connection->is_open()) lingering_.erase(lingering_.begin() + static_cast<std::ptrdiff_t>(i));
@@ -356,31 +452,53 @@ const char* read_status_name(RestartLoaded::Status status) {
 
 }  // namespace
 
-RoomManager::Verdict RoomManager::judge_and_replay(const std::string& path, uint32_t now_ms, const std::function<uint32_t()>& clock, const std::function<Room::ReplayCheck()>& check,
-                                                   const std::set<std::string>& waiting, RestoreItem& item, Replayed& out) {
+// "" when the match's map is on this server, is the file that the match was played on, loads, and can be played by the seats of the match; else the refusal
+std::string RoomManager::map_refusal(const RestartHead& head, MapEntry& entry, assets::LevelData& level) const {
+    std::string why;
+    if (!store_.find(head.map, entry, &why)) return "ended by a restart of the server: the map " + head.map + " is not on this server (" + why + ")";
+    if (entry.hash != head.map_hash) return "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
+    if (!level.load_from_file(entry.path)) return "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
+    if (!level.validate(head.start.roster).playable) return "ended by a restart of the server: the map cannot be played by the seats of the match";
+    return std::string();
+}
+
+// A record that cannot be restored: the room is there as a failed room with the reason (its code is taken until its keep time is over) when the server has a place for it (a job of the queue has its own
+// place: it takes it from the queue), and the record is put by for a day (it was read: the owner may want it back)
+void RoomManager::refuse_record(const std::string& path, const RestartHead& head, RestoreItem item, const std::string& refusal, bool has_place, uint32_t now_ms) {
+    item.code = head.code;
+    item.outcome = RestoreItem::Outcome::Ended;
+    item.note = refusal;
+    restart_->refuse_file(path);
+    if (has_place) rooms_.emplace(head.code, Room::refused(head, refusal, item.turns, now_ms));
+    restart_->note("room " + head.code + " was not restored: " + refusal);
+    report_.items.push_back(std::move(item));
+}
+
+// One record, read (and checked all through) and judged: it is deleted when it cannot be read, made a failed room with the reason when its match cannot go on, and otherwise queued for its replay
+// (the cheap part of a restore: what is judged here is the head and the file; the engine is not made, no turn is run, and the record's bytes are not kept)
+void RoomManager::judge_record(const std::string& path, uint32_t now_ms) {
     const RestartConfig& cfg = restart_->config();
-    const uint32_t entered = clock();
-    item = RestoreItem{};
+    RestoreItem item;
     item.file = fs::path(path).filename().string();
-    // One record: read (and checked all through), judged, and either made a room again (replayed: it begins when the caller says) or made a failed room with the reason. Its file is deleted unless the room
-    // that it became goes on writing it, or the record was only put off (Stopped, Deferred).
-    RestartLoaded rec = read_restart_record(path, cfg.max_record_bytes, RestartRead::Streaming);       // (checked and counted, the turns are not kept: the replay decodes them one at a time)
+    RestartLoaded rec = read_restart_record(path, cfg.max_record_bytes, RestartRead::Streaming);       // (checked and counted: the turns are decoded again, one at a time, when the replay runs)
     if (!rec.ok()) {
         item.outcome = RestoreItem::Outcome::Unreadable;
         item.note = std::string(read_status_name(rec.status)) + ": " + rec.why;
         restart_->remove_file(path);
         restart_->note("restart record " + item.file + " was not restored: " + item.note);
-        return Verdict::Unreadable;
+        report_.items.push_back(std::move(item));
+        return;
     }
     const RestartHead& head = rec.head;
     item.code = head.code;
     item.turns = rec.turn_count;
-    if (rooms_.find(head.code) != rooms_.end() || waiting.count(head.code) != 0 || deferred_.count(head.code) != 0) {   // (two records for one code cannot be: the name holds a hash of the code; a room made before the restore can)
+    if (rooms_.find(head.code) != rooms_.end() || restoring_has(head.code)) {   // (two records for one code cannot be: the name holds a hash of the code; a room made before the restore can)
         item.outcome = RestoreItem::Outcome::Unreadable;
         item.note = "a room with the code " + head.code + " exists already";
         restart_->refuse_file(path);
         restart_->note("restart record " + item.file + " was not restored: " + item.note);
-        return Verdict::Unreadable;
+        report_.items.push_back(std::move(item));
+        return;
     }
     // The things that make a match impossible to go on with. What each says is what the status shows for the room, and the log.
     std::string refusal;
@@ -388,11 +506,8 @@ RoomManager::Verdict RoomManager::judge_and_replay(const std::string& path, uint
         refusal = "ended by a restart of the server: the match was started with network protocol " + std::to_string(head.identity.protocol) + " (" + head.identity.game_version + "), this server speaks protocol " +
                   std::to_string(cfg.identity.protocol) + " (" + cfg.identity.game_version + "), and a match cannot go on across a change of the rules";
     }
-    RoomSpec spec = room_spec_of(head);
-    MapEntry entry;
-    assets::LevelData level;
     if (refusal.empty()) {
-        const std::string range = spec_range_error(spec);
+        const std::string range = spec_range_error(room_spec_of(head));
         if (!range.empty()) refusal = "ended by a restart of the server: the record holds a room that this server would not make (" + range + ")";
     }
     if (refusal.empty()) {
@@ -401,83 +516,27 @@ RoomManager::Verdict RoomManager::judge_and_replay(const std::string& path, uint
         const uint64_t age_ms = ec || age.count() < 0 ? 0u : static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(age).count());
         if (age_ms > cfg.max_age_ms) refusal = "ended by a restart of the server: the record was last written " + seconds_text(age_ms) + " ago and its players have given up";
     }
-    if (refusal.empty() && rooms_.size() + waiting.size() + deferred_.size() >= limits_.max_rooms) refusal = "ended by a restart of the server: this server has no room for another room";
+    if (refusal.empty() && rooms_.size() + restoring_.size() >= limits_.max_rooms) refusal = "ended by a restart of the server: this server has no room for another room";
     if (refusal.empty()) {
-        std::string why;
-        if (!store_.find(head.map, entry, &why)) refusal = "ended by a restart of the server: the map " + head.map + " is not on this server (" + why + ")";
-        else if (entry.hash != head.map_hash) refusal = "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
-        else if (!level.load_from_file(entry.path)) refusal = "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
-        else if (!level.validate(head.start.roster).playable) refusal = "ended by a restart of the server: the map cannot be played by the seats of the match";
+        MapEntry entry;
+        assets::LevelData level;
+        refusal = map_refusal(head, entry, level);
     }
-    if (refusal.empty()) {
-        out.room = std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), head.start.seed, now_ms, &log_budget_);
-        out.room->set_restart_store(restart_.get());
-        std::string why;
-        Room::ReplayLimits limits;
-        limits.budget_ms = cfg.replay_budget_ms;
-        limits.clock = clock;
-        limits.check = check;
-        Room::ReplayResult result = Room::ReplayResult::Refused;
-        try {
-            result = out.room->replay(rec, cfg.restart_vote_after_ms, limits, why);
-        } catch (const std::exception& e) {
-            why = std::string("the replay failed (") + e.what() + ")";
-        }
-        if (result == Room::ReplayResult::Replayed) {
-            out.head = head;
-            out.item = item;
-            out.path = path;
-            return Verdict::Replayed;
-        }
-        out.room.reset();                                               // (it holds a half-built match: it goes, with its log)
-        if (result == Room::ReplayResult::Stopped) return Verdict::Stopped;
-        if (result == Room::ReplayResult::Deferred) return Verdict::Deferred;
-        refusal = "ended by a restart of the server: " + why;
-    }
-    // not restored: the room is there as a failed room with the reason, and the record is put by for a day (it was read: the owner may want it back)
-    item.outcome = RestoreItem::Outcome::Ended;
-    item.note = refusal;
-    restart_->refuse_file(path);
-    if (rooms_.size() + waiting.size() + deferred_.size() < limits_.max_rooms) rooms_.emplace(head.code, Room::refused(head, refusal, item.turns, now_ms + (clock() - entered)));       // (the rooms that were replayed have their places)
-    restart_->note("room " + head.code + " was not restored: " + refusal);
-    return Verdict::Ended;
-}
-
-// A room that was replayed begins: its clocks start now, the report and the log say what came back
-void RoomManager::begin_replayed(Replayed& replayed, uint32_t now_ms, RestoreReport& report) {
-    const RestartConfig& cfg = restart_->config();
-    RestoreItem& item = replayed.item;
-    const RestartHead& head = replayed.head;
-    std::string why;
-    if (!replayed.room->begin_restored(now_ms, why)) {                  // (cannot be: the bots sat down in the replay)
-        const std::string refusal = "ended by a restart of the server: " + why;
-        replayed.room.reset();
-        item.outcome = RestoreItem::Outcome::Ended;
-        item.note = refusal;
-        restart_->refuse_file(replayed.path);
-        if (rooms_.size() < limits_.max_rooms) rooms_.emplace(head.code, Room::refused(head, refusal, item.turns, now_ms));
-        restart_->note("room " + head.code + " was not restored: " + refusal);
-        report.items.push_back(item);
+    if (!refusal.empty()) {
+        refuse_record(path, head, std::move(item), refusal, rooms_.size() + restoring_.size() < limits_.max_rooms, now_ms);
         return;
     }
-    const RoomStatus st = replayed.room->status(now_ms);
-    item.outcome = RestoreItem::Outcome::Restored;
-    item.replay_ms = st.restore_ms;
-    item.note = "restored: " + std::to_string(item.turns) + " turns (" + seconds_text(uint64_t{item.turns} * net::kTurnMs) + " of play) replayed in " + std::to_string(st.restore_ms) + " ms, state hash " + hex16(st.restored_hash) + ", " +
-                std::to_string(st.absent.size()) + " seat(s) waiting for their players" + (st.state == RoomState::Finished ? "; the match had ended" : std::string()) +
-                (head.identity.game_version != cfg.identity.game_version || head.identity.build_id != cfg.identity.build_id ? "; the record was written by " + head.identity.game_version + " build " + head.identity.build_id : std::string());
-    restart_->note("room " + head.code + " " + item.note);
-    rooms_.emplace(head.code, std::move(replayed.room));
-    report.items.push_back(item);
+    Restoring job;
+    job.code = head.code;
+    job.path = path;
+    job.head = head;
+    job.item = std::move(item);
+    restoring_.push_back(std::move(job));                               // (its code is taken: create_room says 409, a Hello for it waits)
 }
 
 RestoreReport RoomManager::restore_rooms(uint32_t now_ms, const std::function<bool()>& should_stop) {
-    RestoreReport report;
-    if (restart_ == nullptr || !restart_->enabled()) return report;
-    const RestartConfig& cfg = restart_->config();
-    const std::function<uint32_t()> clock = cfg.clock_ms ? cfg.clock_ms : std::function<uint32_t()>(restart_steady_ms);
-    const uint32_t began = clock();
-    const auto out_of_time = [&]() { return clock() - began >= cfg.restore_budget_ms; };
+    report_ = RestoreReport{};
+    if (restart_ == nullptr || !restart_->enabled()) return report_;
     // the newest first: the match that was played a moment ago before one that had been waiting (ties by name, so that the order is the same on every run)
     std::vector<std::pair<fs::file_time_type, std::string>> found;
     for (const std::string& path : restart_->records()) {
@@ -486,76 +545,116 @@ RestoreReport RoomManager::restore_rooms(uint32_t now_ms, const std::function<bo
         found.emplace_back(ec ? fs::file_time_type::min() : written, path);
     }
     std::sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
-    std::vector<Replayed> ready;                                        // replayed, not begun: they all begin together at the end, with a clock that starts then
-    std::set<std::string> waiting;
-    const auto check = [&]() {
-        if (should_stop && should_stop()) return Room::ReplayCheck::Stop;
-        return out_of_time() ? Room::ReplayCheck::Defer : Room::ReplayCheck::Go;
-    };
     size_t at = 0;
     for (; at < found.size(); ++at) {
         if (should_stop && should_stop()) {
-            report.stopped = true;
+            report_.stopped = true;
             break;
         }
-        if (out_of_time()) break;                                       // the rest is deferred
-        RestoreItem item;
-        Replayed replayed;
-        const Verdict verdict = judge_and_replay(found[at].second, now_ms + (clock() - began), clock, check, waiting, item, replayed);
-        if (verdict == Verdict::Replayed) {
-            waiting.insert(replayed.head.code);
-            ready.push_back(std::move(replayed));
-        } else if (verdict == Verdict::Stopped) {
-            report.stopped = true;
-            break;
-        } else if (verdict == Verdict::Deferred) {
-            break;                                                      // this record and the rest are put off
-        } else {
-            report.items.push_back(item);
-        }
+        judge_record(found[at].second, now_ms);
     }
-    if (report.stopped) {                                               // everything stays as it is: the rooms that were replayed are thrown away (no record was opened again), nothing is deleted
-        report.left_on_disk = (found.size() - at) + ready.size();
-        restart_->note("the restore was stopped by the server's stop: " + std::to_string(report.left_on_disk) + " restart record(s) are left on disk as they were");
-        return report;
+    if (report_.stopped) {                                              // everything that waits stays as it is: nothing is deleted, no room is made
+        report_.left_on_disk = (found.size() - at) + restoring_.size();
+        restoring_.clear();
+        restart_->note("the restore was stopped by the server's stop: " + std::to_string(report_.left_on_disk) + " restart record(s) are left on disk as they were");
+        return report_;
     }
-    for (size_t i = at; i < found.size(); ++i) {                        // what the budget did not reach waits for its first player
-        RestoreItem item;
-        item.file = fs::path(found[i].second).filename().string();
-        std::string code;
-        if (!restart_->code_of_path(found[i].second, code) || rooms_.count(code) != 0 || waiting.count(code) != 0 || deferred_.count(code) != 0) {
-            restart_->note("restart record " + item.file + " was not reached by the restore's " + seconds_text(cfg.restore_budget_ms) + " and its name does not say a room: it is left on disk");
-            continue;
-        }
-        deferred_[code] = found[i].second;
-        item.code = code;
-        item.outcome = RestoreItem::Outcome::Deferred;
-        item.note = "deferred: the restore's " + seconds_text(cfg.restore_budget_ms) + " are used up; the room is restored when its first player comes";
-        restart_->note("room " + code + " " + item.note);
-        report.items.push_back(item);
+    report_.queued = restoring_.size();
+    if (!restoring_.empty()) {
+        restart_->note("restore: " + std::to_string(restoring_.size()) + " restart record(s) wait for their replay, which runs in slices of " + std::to_string(restart_->config().restore_slice_ms) +
+                       " ms while the server serves; a Hello for such a room waits for it");
     }
-    const uint32_t fresh = now_ms + (clock() - began);                  // the rooms begin NOW: the time that the replays took is not part of any room's pause
-    for (Replayed& replayed : ready) begin_replayed(replayed, fresh, report);
-    return report;
+    return report_;
 }
 
-bool RoomManager::restore_deferred(const std::string& code, uint32_t& now_ms) {
-    const auto found = deferred_.find(code);
-    if (found == deferred_.end() || restart_ == nullptr) return false;
-    const std::string path = found->second;
-    deferred_.erase(found);
+// The queue's next job: a room for which a Hello waits (a player is waiting), else the newest record (the queue's order). A room whose replay has begun and whose player's Hello is no longer there
+// waits its turn like any other: the order is the one rule.
+size_t RoomManager::next_to_restore() const {
+    for (size_t i = 0; i < restoring_.size(); ++i) {
+        for (const Parked& p : parked_) {
+            if (p.code == restoring_[i].code) return i;
+        }
+    }
+    return 0;
+}
+
+// A job that cannot go on: the record is refused with the reason, the room is a failed room, the half-built one goes
+RoomManager::JobEnd RoomManager::end_job(Restoring& job, const std::string& refusal, uint32_t now_ms) {
+    job.room.reset();
+    job.rec.reset();
+    refuse_record(job.path, job.head, job.item, refusal, true, now_ms);
+    return JobEnd::Ended;
+}
+
+// One piece of work on a job, of at most `slice_ms` (a room may run up to 20 turns past it): its first piece reads the record again and makes the room, the others replay turns. The job's end (the room
+// is restored, or refused with the reason) is decided here; the caller takes it out of the queue.
+RoomManager::JobEnd RoomManager::advance(Restoring& job, uint32_t slice_ms, const std::function<uint32_t()>& clock, uint32_t now_ms) {
+    const RestartConfig& cfg = restart_->config();
+    std::string why;
+    try {
+        if (job.room == nullptr) {
+            job.rec = std::make_unique<RestartLoaded>(read_restart_record(job.path, cfg.max_record_bytes, RestartRead::Streaming));
+            if (!job.rec->ok() || job.rec->head.code != job.code || job.rec->turn_count != job.item.turns) {      // (it was good when it was judged: somebody has changed the file since)
+                RestoreItem item = job.item;
+                item.outcome = RestoreItem::Outcome::Unreadable;
+                const bool readable = job.rec->ok();                    // (a record that cannot be read is deleted, as at the start; one that can be and is not the one that was judged is put by, like any refused record)
+                item.note = readable ? "the record has changed since it was judged" : std::string(read_status_name(job.rec->status)) + ": " + job.rec->why;
+                job.rec.reset();
+                if (readable) restart_->refuse_file(job.path);
+                else restart_->remove_file(job.path);
+                restart_->note("restart record " + item.file + " was not restored: " + item.note);
+                report_.items.push_back(std::move(item));
+                return JobEnd::Unreadable;
+            }
+            MapEntry entry;
+            assets::LevelData level;
+            const std::string refusal = map_refusal(job.rec->head, entry, level);
+            if (!refusal.empty()) return end_job(job, refusal, now_ms);
+            job.room = std::make_unique<Room>(room_spec_of(job.rec->head), std::move(entry), std::move(level), job.rec->head.start.seed, now_ms, &log_budget_);
+            job.room->set_restart_store(restart_.get());
+            if (job.room->begin_replay(*job.rec, cfg.restart_vote_after_ms, why) != Room::ReplayBegin::Ready) return end_job(job, "ended by a restart of the server: " + why, now_ms);
+            return JobEnd::More;
+        }
+        const Room::ReplayStep step = job.room->replay_step(slice_ms, clock, why);
+        if (step == Room::ReplayStep::More) return JobEnd::More;
+        if (step == Room::ReplayStep::Refused) return end_job(job, "ended by a restart of the server: " + why, now_ms);
+    } catch (const std::exception& e) {
+        return end_job(job, std::string("ended by a restart of the server: the replay failed (") + e.what() + ")", now_ms);
+    }
+    // The replay is the match. The room begins now: its clocks (the wall-clock limit, the vote's wait, the pause cap) start at this pass, not when the restore began and not when other rooms were replayed.
+    job.rec.reset();                                                    // (the room has what it needs of the record: its bytes go)
+    if (!job.room->begin_restored(now_ms, why)) return end_job(job, "ended by a restart of the server: " + why, now_ms);       // (cannot be: the bots sat down in the replay)
+    const RoomStatus st = job.room->status(now_ms);
+    RestoreItem item = job.item;
+    item.outcome = RestoreItem::Outcome::Restored;
+    item.replay_ms = st.restore_ms;
+    item.note = "restored: " + std::to_string(item.turns) + " turns (" + seconds_text(uint64_t{item.turns} * net::kTurnMs) + " of play) replayed in " + std::to_string(st.restore_ms) + " ms, state hash " + hex16(st.restored_hash) + ", " +
+                std::to_string(st.absent.size()) + " seat(s) waiting for their players" + (st.state == RoomState::Finished ? "; the match had ended" : std::string()) +
+                (job.head.identity.game_version != cfg.identity.game_version || job.head.identity.build_id != cfg.identity.build_id ? "; the record was written by " + job.head.identity.game_version + " build " + job.head.identity.build_id : std::string());
+    restart_->note("room " + job.code + " " + item.note);
+    rooms_.emplace(job.code, std::move(job.room));
+    report_.items.push_back(std::move(item));
+    return JobEnd::Restored;
+}
+
+// Every pass of the server spends at most RestartConfig::restore_slice_ms on the records that wait (a pass does at least one piece of work: the restore always goes on). A job that ends leaves the queue,
+// and the Hellos that waited for its room go through the door.
+void RoomManager::restore_step(uint32_t now_ms) {
+    if (restoring_.empty() || restart_ == nullptr) return;
     const RestartConfig& cfg = restart_->config();
     const std::function<uint32_t()> clock = cfg.clock_ms ? cfg.clock_ms : std::function<uint32_t()>(restart_steady_ms);
     const uint32_t began = clock();
-    RestoreItem item;
-    Replayed replayed;
-    if (judge_and_replay(path, now_ms, clock, nullptr, std::set<std::string>(), item, replayed) == Verdict::Replayed) {
-        const uint32_t fresh = now_ms + (clock() - began);
-        RestoreReport scratch;
-        begin_replayed(replayed, fresh, scratch);
-        now_ms = fresh;                                                 // (the rest of this pass goes on from the time that the replay took)
+    for (;;) {
+        const size_t at = next_to_restore();
+        const uint32_t spent = clock() - began;
+        const JobEnd end = advance(restoring_[at], spent >= cfg.restore_slice_ms ? 0u : cfg.restore_slice_ms - spent, clock, now_ms);
+        if (end != JobEnd::More) {
+            const std::string code = restoring_[at].code;
+            restoring_.erase(restoring_.begin() + static_cast<std::ptrdiff_t>(at));
+            release_parked(code, now_ms);
+        }
+        if (restoring_.empty() || clock() - began >= cfg.restore_slice_ms) break;
     }
-    return rooms_.find(code) != rooms_.end();
 }
 
 size_t RoomManager::shutdown(uint32_t now_ms) {
@@ -572,6 +671,11 @@ size_t RoomManager::shutdown(uint32_t now_ms) {
         }
         room.close("closed by the owner", now_ms);                // (a room without a record ends with the server, as it always did)
     }
+    if (restart_ != nullptr && !restoring_.empty()) {             // the records that still wait for their replay (or are half replayed) are left on disk as they were: no room of theirs is begun, nothing is written
+        restart_->note("the restore was stopped by the server's stop: " + std::to_string(restoring_.size()) + " restart record(s) are left on disk as they were");
+        restoring_.clear();
+    }
+    parked_.clear();                                              // (the Hellos that waited for them: their connections close with the server)
     if (restart_ != nullptr) restart_->retry_stale();             // (a record whose delete failed: one more try before the server goes)
     return kept;
 }
@@ -602,6 +706,13 @@ BusyCounts RoomManager::busy(uint32_t now_ms) const {
         const RoomBusy b = entry.second->busy(now_ms);                       // (a room that is over counts nothing; a restored room that nobody has come back to, after a few minutes, counts nothing either)
         counts.players += b.players;
         if (b.match) ++counts.matches;
+    }
+    for (const Restoring& r : restoring_) {                                  // a record that waits for its replay is a match that a restart brought back and that is not back yet: it counts as a restored room
+        uint8_t bots = 0;                                                    // does for its first minutes, with its persons as people (a restart now would end it again; the persons who dropped out before the
+        for (const ai::BotSpec& b : r.head.bots) bots = static_cast<uint8_t>(bots | (1u << b.seat));     // restart are not known before the replay: they count, an upper bound)
+        const uint8_t persons = static_cast<uint8_t>(r.head.start.roster & ~bots);
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) counts.players += (persons & (1u << seat)) != 0 ? 1u : 0u;
+        ++counts.matches;
     }
     return counts;
 }

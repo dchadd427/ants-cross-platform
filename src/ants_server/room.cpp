@@ -680,46 +680,12 @@ bool Room::finish_replay(const RestartLoaded& rec, size_t next_check, std::strin
     return true;
 }
 
-Room::ReplayResult Room::replay(const RestartLoaded& rec, uint32_t restart_vote_after_ms, const ReplayLimits& limits, std::string& why) {
-    const auto clock = [&limits]() { return limits.clock ? limits.clock() : restart_steady_ms(); };
-    const uint32_t began = clock();
-    if (begin_replay(rec, restart_vote_after_ms, why) != ReplayBegin::Ready) return ReplayResult::Refused;
-    end_replay();                                                // (this loop reads the turns itself, with for_each_restart_turn, and asks the caller at every 20th)
-    net::LockstepRunner& runner = session_->runner();
-    size_t next_check = 0;
-    ReplayCheck verdict = ReplayCheck::Go;
-    if (!for_each_restart_turn(rec, [&](const net::TurnMsg& turn) {
-            if (!session_->restore_turn(turn)) {
-                why = "the turn log cannot hold the match (its limit, or the server's memory for logs)";
-                return false;
-            }
-            if ((turn.turn + 1) % net::kHashEveryTurns != 0) return true;
-            runner.fast_forward(static_cast<uint32_t>(runner.queued()));
-            if (next_check < rec.checks.size() && rec.checks[next_check].turn == turn.turn) {
-                if (sim_->state_hash().total != rec.checks[next_check].hash) {
-                    why = "the replay does not agree with the state hash that the record holds for turn " + std::to_string(turn.turn) + ": the rules of this build are not those that played the match";
-                    return false;
-                }
-                ++next_check;
-            }
-            if (limits.check) {
-                verdict = limits.check();
-                if (verdict != ReplayCheck::Go) return false;
-            }
-            if (clock() - began > limits.budget_ms) {
-                why = "the replay would take longer than the " + std::to_string(limits.budget_ms / 1000) + " s that a restore may";
-                return false;
-            }
-            return true;
-        })) {
-        if (verdict == ReplayCheck::Stop) return ReplayResult::Stopped;
-        if (verdict == ReplayCheck::Defer) return ReplayResult::Deferred;
-        if (why.empty()) why = "the record's turns could not be read again";
-        return ReplayResult::Refused;
+Room::ReplayStep Room::replay(const RestartLoaded& rec, uint32_t restart_vote_after_ms, std::string& why, const std::function<uint32_t()>& clock) {
+    if (begin_replay(rec, restart_vote_after_ms, why) != ReplayBegin::Ready) return ReplayStep::Refused;
+    for (;;) {
+        const ReplayStep step = replay_step(std::numeric_limits<uint32_t>::max(), clock, why);
+        if (step != ReplayStep::More) return step;
     }
-    if (!finish_replay(rec, next_check, why)) return ReplayResult::Refused;
-    restore_ms_ = clock() - began;
-    return ReplayResult::Replayed;
 }
 
 bool Room::begin_restored(uint32_t now_ms, std::string& why) {
