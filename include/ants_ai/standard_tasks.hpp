@@ -259,11 +259,13 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
 ///   can be reached        the thief can walk to one of those tiles from where it stands
 ///   leave time            the round trip (there, 80 ticks of raid, back, 30 to bank) ends before the clock does
 ///   are not guarded       (Hard) no enemy Combat Ant stands near the raid tile of the hill: its reflex would hit the thief before it gets there
-/// A hill that the thief did not get to (it stands where it stood after the order left) is left alone for LevelPlan::raid_black_ticks. The thief is ordered again as soon as it is idle and empty-handed.
+/// A hill that the thief did not get to (it stands where it stood after the order left) is left alone for LevelPlan::raid_black_ticks, and one whose raid click the controller refused (Fate::Filtered:
+/// a power-up lies on the entrance) for Params::filtered_ticks. The thief is ordered again as soon as it is idle and empty-handed.
 class RaidTask final : public Task {
 public:
     struct Params {
         uint32_t guard_radius{7};            // an enemy Combat Ant this close to a raid tile guards the hill
+        uint32_t filtered_ticks{900};        // a hill whose raid click the controller refused (a power-up on the tile) is left alone this long
     };
     RaidTask(TaskId id, Tactics& tactics) : RaidTask(id, tactics, Params{}) {}
     RaidTask(TaskId id, Tactics& tactics, const Params& params) : Task(id), tactics_(tactics), params_(params) {}
@@ -485,6 +487,7 @@ private:
 ///              be (the enter clip is 22 ticks and the depositor needs 9 more to leave the entrance, counted from the look that first showed the clip); never while a bite runs
 ///   exit       the tile that the empty ants leave the hill by is seen from the looks (the queue-row tile an ant steps on right after the mound): it and the lane behind it stay free
 ///   fails      a clicked ant that is neither on the mound nor nearer after 30 ticks, or that takes longer than its walk and 40 ticks, was refused: it is taken over again
+/// A click that the controller refused (Fate::Filtered: a power-up on the tile) blocks that tile for Params::blocked_ticks; with the entrance blocked the gate does not guide (the engine's flow stays).
 /// Without an entry in the plan (Easy and Medium, and every level until the tournaments say so) the engine's flow stays. It claims no ant in the ledger (carriers are nobody's task); the
 /// economy's own rescue of idle carriers and the carrier aid are off while it runs.
 class GateTask final : public Task {
@@ -498,6 +501,7 @@ public:
         uint32_t exit_ticks{9};
         uint32_t latency_ticks{9};           // an order decided now is applied this many ticks later (the profile's delay less its jitter, and the sink)
         uint32_t bite_wait_max{25};          // the entrance click waits at most this many looks for a bite that runs (a fresh carrier's own order claims the entrance until the takeover lands)
+        uint32_t blocked_ticks{900};         // a tile that the controller refused a click onto (a power-up on it) is not chosen again this long
         bool predictive{true};
         int32_t doorstep_dx0{-4};
         int32_t doorstep_dx1{6};
@@ -518,6 +522,8 @@ public:
     uint32_t user() const noexcept { return user_; }
     /// (review experiment) the gate could guide at the last look: the hill has room at its doorstep
     bool usable() const noexcept { return usable_; }
+    /// Whether the controller refused a click of this task onto the tile lately (Fate::Filtered): it is not chosen again before blocked_ticks are over
+    bool blocked(sim::TileCoord t, uint64_t tick) const noexcept;
     const std::deque<int>& exits() const noexcept { return exits_; }
     /// The order in which the queue-row tiles (0, 1, 2) are used as slots, -1 for none
     std::array<int, 3> slot_order() const noexcept { return {slot_order_[0], slot_order_[1], slot_order_[2]}; }
@@ -555,6 +561,7 @@ private:
     std::deque<int> exits_;                       // the queue-row tile (0..2) used by the last empty ants that left the hill
     std::map<uint32_t, int> prev_zone_;           // ant -> 0 outside / 1 in the mound (previous look)
     std::map<uint32_t, Cmd> cmd_;
+    std::map<int64_t, uint64_t> blocked_;         // tile (y * 4096 + x) -> the tick until which no click is put onto it (a refused click)
     std::map<uint32_t, uint64_t> clip_seen_;
     int64_t pending_free_at_{0};
     uint32_t bite_waited_{0};
@@ -609,6 +616,8 @@ public:
     explicit CarrierAidTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
     const char* name() const noexcept override { return "carrier-aid"; }
     void step(TaskContext& context) override;
+    /// A click onto the entrance that the controller refused (Fate::Filtered: a power-up lies on it) stops the aid for 900 ticks
+    void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
     uint32_t sent_home() const noexcept { return sent_home_; }
     size_t watching() const noexcept { return aid_.size(); }
 
@@ -620,6 +629,8 @@ private:
     };
     Tactics& tactics_;
     std::map<uint32_t, Aid> aid_;
+    sim::TileCoord home_{-1, -1};         // where the last order sent a carrier (the hill entrance)
+    uint64_t blocked_until_{0};           // a refused click onto it: no aid until this tick
     uint32_t sent_home_{0};
 };
 

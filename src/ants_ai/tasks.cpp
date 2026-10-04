@@ -161,11 +161,16 @@ void HarvestTask::sync_ledger(AntLedger& ledger) const {
 
 void HarvestTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
     if (command.type != sim::CommandType::GroupMove) return;
+    if (fate == Bot::Fate::Filtered && rescue_tile_.x >= 0 && command.tile_x == rescue_tile_.x && command.tile_y == rescue_tile_.y) rescue_blocked_until_ = tick + params_.blacklist_ticks;     // the entrance cannot be clicked
     for (const uint32_t ant : command.ants) {
         const auto it = recs_.find(ant);
         if (it == recs_.end() || it->second.sent != kPending) continue;
-        if (fate == Bot::Fate::Sent) it->second.sent = tick;          // the clock of this order starts when it LEFT, not when it was decided
-        else recs_.erase(it);                                         // it never left (expired, its ant died, a newer order took the ant): the ant is idle and empty, so it is in the pool again
+        if (fate == Bot::Fate::Sent) {
+            it->second.sent = tick;                                   // the clock of this order starts when it LEFT, not when it was decided
+        } else {
+            if (fate == Bot::Fate::Filtered) black_[it->second.pile] = tick + params_.blacklist_ticks;   // the click itself is refused: the pile is left alone for a while, or it is proposed again at every look
+            recs_.erase(it);                                          // it never left (expired, its ant died, a newer order took the ant, refused): the ant is idle and empty, so it is in the pool again
+        }
     }
 }
 
@@ -386,8 +391,9 @@ void HarvestTask::step(TaskContext& c) {
         // With many carriers idle at once the gate is the bottleneck: one idle carrier more or less costs nothing, and a rescue sends an ant through the crowd of the queue (it
         // stirs it: 12 to 24 workers on one hill scored up to 10 percent less with rescues than without)
         const bool saturated = idle_carriers.size() >= params_.rescue_max_carriers;
+        const bool refused = now < rescue_blocked_until_;                                   // the controller refused a click onto the entrance lately: it is not tried again before the time is up
         for (const AntView* a : idle_carriers) {
-            if (saturated) break;
+            if (saturated || refused) break;
             const uint64_t since = stuck_now[a->id];
             // far from the hill, with nobody queueing at the gate, an idle carrier cannot be waiting for its turn
             const bool far_alone = far_from_hill(hill, a->tile, params_.ring_tiles) && queued == 0;
@@ -406,6 +412,7 @@ void HarvestTask::step(TaskContext& c) {
         }
         if (!home.empty()) {
             c.orders.move(home, hill.entrance, Priority::Normal);
+            rescue_tile_ = hill.entrance;
             rescues_ += static_cast<uint32_t>(home.size());
         }
     }

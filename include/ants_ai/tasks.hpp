@@ -150,7 +150,8 @@ private:
 ///               one that failed here (an ant that is shut in, or whose nook has a blocked door, fails on every pile it is sent to): the ant is kept away from that pile for
 ///               blacklist_ticks and the pile stays as it was. The PILE's otherwise, when two ants that fail nowhere else failed on it, or when no ant of the task makes
 ///               progress anywhere (a seat that gets nowhere cannot tell, and a wall that came up after the analysis of the map is learned this way): it is blacklisted for
-///               blacklist_ticks for every ant.
+///               blacklist_ticks for every ant. A click that the controller refused (Bot::Fate::Filtered: a power-up on the tile) blacklists the pile the same way, and a refused rescue click
+///               (a power-up on the hill's entrance) stops the rescue for blacklist_ticks.
 /// The classes of a pile for the contest-aware order (HarvestTask::Params::contest_aware), in the order they are served
 enum class PileClass : uint8_t { Multi = 0, One = 1, Safe = 2, Shared = 3, Hopeless = 4 };
 
@@ -290,6 +291,8 @@ private:
     std::map<uint32_t, Watch> watch_;        // ordered ants that walk or wait for a path: the watchdog's memory
     std::map<uint32_t, uint64_t> stuck_;     // ant id -> the tick it was first seen idle with food
     std::map<uint32_t, uint64_t> rescued_;   // ant id -> the tick it was last sent home by hand
+    sim::TileCoord rescue_tile_{-1, -1};     // where the last rescue sent its carriers (the hill entrance): a click onto it that the controller refused (Fate::Filtered) stops the rescue ...
+    uint64_t rescue_blocked_until_{0};       // ... until this tick (blacklist_ticks later): a hill whose entrance holds a power-up cannot be clicked at all
     std::map<uint32_t, int> tiers_;          // pile index -> its class at the last look (contest-aware option)
     std::map<uint32_t, Approach> reach_now_; // piles that were shut off at the start and can be walked to now (as of the last reask)
     std::vector<int32_t> now_field_;         // the hill's walking field now (as of the last reask: MapInfo::field_now, from every walkable tile of the queue row), for the ants that the start analysis took for shut in

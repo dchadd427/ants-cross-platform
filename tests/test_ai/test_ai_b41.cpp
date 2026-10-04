@@ -28,6 +28,9 @@
 //   AI7.25  a Thief that harvests is taken for a raid as soon as a hill has loot and a hole that is open: its loop (walk to the pile, bite, walk home) is the engine's and it is never idle
 //   AI7.24  the double-thief opening at Hard: with idle neighbours the Hard bot has two Thief ants (its own side's and an unguarded one), Medium one, Easy none
 //   AI7.23  the defence against the double-thief opening: the own side's Thief power-up is taken before the neighbour's second thief gets there (Medium, Hard), not at Easy
+//   AI7.26  a raid that never got going blacklists the hill
+//   AI7.27  a refused click (Fate::Filtered) blacklists the pile for 900 ticks; the economy's rescue and the aid of a hit carrier do not repeat a refused click onto the entrance; a pile under a power-up is never proposed
+//   AI7.28  a refused raid click blacklists the raided team for 900 ticks
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -1821,6 +1824,189 @@ void run_b41_tests() {
             ASSERT_TRUE(alive(sim, thief));
             if (learn) ASSERT_EQ(raids.raids_ordered(), 1u);                                                      // the wall burned out after 120 ticks and the hill was left alone
             else ASSERT_TRUE(raids.raids_ordered() >= 2u);                                                        // without the memory the thief goes again at once
+        }
+    } TEST_END();
+
+    TEST_CASE("AI7.27 A Refused Harvest Click Blacklists The Pile For 900 Ticks (Not Before, Not After): The Ant Is In The Pool Again At Once And Is Sent To The Other Pile While The Nearer One Is Left Alone; The Same Fate Without The Refusal (Expired) Leaves The Pile In Play; The Economy's Rescue Of A Far Carrier And The Aid Of A Hit Carrier Do The Same For A Refused Click Onto The Entrance; A Pile Whose Click Tile Holds A Power-Up Is Never Proposed, So The Controller Refuses Nothing And The Other Pile Is Worked") {
+        {   // by hand: a task, a still world (nothing is applied), the fate that the controller would send
+            sim::SimulationEngine sim;
+            build_world(sim, 2, 1);                                                               // one worker for team 0
+            const int32_t near_pile = add_pile(sim, 14, 12, 40, 25);
+            const int32_t far_pile = add_pile(sim, 30, 14, 40, 25);
+            const MapInfo map(sim);
+            const Profile profile = profile_for(Level::Hard);
+            for (const bool refused : {true, false}) {
+                AntLedger ledger;
+                ledger.set_rank(1, 1);
+                HarvestTask harvest(1);
+                const auto look = [&](uint64_t advance, Bot::Fate fate) {
+                    tick_all(sim, advance);
+                    const BotView view = BotView::build(sim, 0, &map);
+                    Orders orders;
+                    TaskContext ctx{view, orders, ledger, profile, map, 0};
+                    harvest.step(ctx);
+                    std::vector<int> piles;
+                    for (const Intent& in : orders.intents()) {
+                        piles.push_back(pile_of_tile(map, 2, tc(in.command.tile_x, in.command.tile_y)));
+                        harvest.on_command(in.command, fate, view.tick());                       // what the controller tells (and nothing is applied: the ant stands where it stood)
+                    }
+                    return piles;
+                };
+                const uint64_t t0 = sim.current_tick();
+                const std::vector<int> first = look(0, refused ? Bot::Fate::Filtered : Bot::Fate::Expired);
+                ASSERT_TRUE(first.size() == 1 && first[0] == near_pile);                          // the nearer pile is the best one
+                ASSERT_EQ(harvest.working(), 0u);                                                 // the ant is in the pool again in both cases
+                ASSERT_EQ(harvest.blacklisted(static_cast<uint32_t>(near_pile), t0), refused);
+                ASSERT_EQ(harvest.blacklisted(static_cast<uint32_t>(near_pile), t0 + 899), refused);
+                ASSERT_FALSE(harvest.blacklisted(static_cast<uint32_t>(near_pile), t0 + 900));
+                ASSERT_FALSE(harvest.blacklisted(static_cast<uint32_t>(far_pile), t0));
+                for (uint64_t at = t0 + 20; at <= t0 + 900; at += 20) {                           // a look every 20 ticks, every order "never left" so that the ant stays in the pool
+                    const std::vector<int> next = look(20, Bot::Fate::Expired);
+                    ASSERT_TRUE(next.size() == 1);
+                    ASSERT_EQ(next[0], refused && at < t0 + 900 ? far_pile : near_pile);          // 899 ticks: the other pile; the look at 900: the nearer one again
+                }
+            }
+        }
+        {   // the economy's rescue sends a carrier that stands far from the hill to the entrance; when that click is refused (a power-up on the entrance) it is not tried again for 900 ticks
+            for (const int mode : {0, 1, 2}) {                                                    // 0: the click onto the entrance is refused, 1: the order only expired, 2: a click elsewhere is refused
+                const bool refused = mode == 0;
+                sim::SimulationEngine sim;
+                build_world(sim, 2, 0);                                                           // no ants of the teams
+                const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30, 30});
+                sim.get_unit(carrier).pick_up_food(1, 25);
+                const MapInfo map(sim);
+                const Profile profile = profile_for(Level::Hard);
+                const TileCoord entrance = map.hill(0).entrance;
+                AntLedger ledger;
+                ledger.set_rank(1, 1);
+                HarvestTask harvest(1);
+                std::vector<uint64_t> rescued_at;                                                 // the looks that sent the carrier to the entrance
+                uint64_t t0 = 0;
+                for (uint64_t look = 0; look <= 1100; look += 20) {
+                    const BotView view = BotView::build(sim, 0, &map);
+                    Orders orders;
+                    TaskContext ctx{view, orders, ledger, profile, map, 0};
+                    harvest.step(ctx);
+                    for (const Intent& in : orders.intents()) {
+                        if (in.command.tile_x != entrance.x || in.command.tile_y != entrance.y) continue;
+                        rescued_at.push_back(view.tick());
+                        if (rescued_at.size() == 1) t0 = view.tick();
+                        harvest.on_command(in.command, refused ? Bot::Fate::Filtered : Bot::Fate::Expired, view.tick());     // nothing is applied: the carrier stands where it stood
+                    }
+                    if (mode == 2) harvest.on_command(command_of(CommandType::GroupMove, 0, {carrier}, 30, 31), Bot::Fate::Filtered, view.tick());      // (a refusal that has nothing to do with the entrance)
+                    tick_all(sim, 20);
+                }
+                ASSERT_TRUE(rescued_at.size() >= 2);
+                ASSERT_TRUE(rescued_at[0] >= 40 && rescued_at[0] <= 100);                                            // a carrier far from the hill with nobody queueing is helped after 40 ticks
+                if (refused) {
+                    ASSERT_TRUE(rescued_at[1] >= t0 + 900 && rescued_at[1] <= t0 + 900 + 20);                        // the refused click is not repeated before the 900 ticks are over
+                } else {
+                    ASSERT_TRUE(rescued_at[1] <= t0 + 220);                                                          // an order that merely expired, or a click elsewhere that was refused, changes nothing: the rescue's own cool-down (200 ticks)
+                }
+            }
+        }
+        {   // the aid of a hit carrier does the same: told that the click onto the entrance was refused it does not try again (without the refusal it tries again every 40 ticks, up to four times for a blow)
+            for (const int mode : {0, 1, 2}) {                                                    // 0: the click onto the entrance is refused, 1: it is sent, 2: it is sent and a click elsewhere is refused
+                const bool refused = mode == 0;
+                sim::SimulationEngine sim;
+                empty_field(sim, 8);
+                const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 9});
+                sim.get_unit(carrier).pick_up_food(1, 25);
+                const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{9, 11});
+                LevelPlan plan = plan_for(Level::Medium);
+                plan.carrier_aid = true;
+                plan.defenders = 0;
+                const MapInfo map(sim);
+                const Profile profile = profile_for(Level::Medium);
+                StandardBot bot(plan);
+                bot.start(BotContext{0, profile, 1, &map});
+                const TileCoord entrance = map.hill(0).entrance;
+                size_t tries = 0;
+                for (int t = 0; t < 800; ++t) {
+                    tick_all(sim, 1);
+                    if (t < 60) keep_attacking(sim, 1, enemy, carrier);                          // a few blows: the carrier loses its walk and stands with its food (nothing the bot orders is applied)
+                    if (t % 4 != 0) continue;
+                    const BotView view = BotView::build(sim, 0, &map);
+                    Orders orders;
+                    bot.think(view, orders);
+                    for (const Intent& in : orders.intents()) {
+                        const bool home = in.command.type == CommandType::GroupMove && in.command.tile_x == entrance.x && in.command.tile_y == entrance.y;
+                        tries += home ? 1u : 0u;
+                        bot.on_command(in.command, home && refused ? Bot::Fate::Filtered : Bot::Fate::Sent, view.tick());
+                    }
+                    if (mode == 2) bot.on_command(command_of(CommandType::GroupMove, 0, {carrier}, 30, 31), Bot::Fate::Filtered, view.tick());      // (a refusal that has nothing to do with the entrance)
+                }
+                ASSERT_TRUE(sim.get_unit(carrier).hp < 10);                                       // it was hit
+                ASSERT_TRUE(refused ? tries == 1u : tries >= 3u);
+            }
+        }
+        {   // through the controller: a pile whose click tile holds a power-up is skipped (the click would be refused), the other pile is worked, nothing is filtered
+            sim::SimulationEngine sim;
+            build_world(sim, 2, 3);
+            const int32_t near_pile = add_pile(sim, 14, 12, 40, 25);
+            add_pile(sim, 30, 14, 40, 25);
+            const TileCoord click = MapInfo(sim).pile(static_cast<uint32_t>(near_pile))->approach[0].click;
+            sim.grid_mut().place_powerup(click.x, click.y, 3);
+            RecordingSink sink(sim, true);
+            BotController ctl(sim, 1);
+            BotSpec spec;
+            spec.seat = 0;
+            spec.kind = "worker";
+            spec.level = Level::Hard;
+            std::string why;
+            ASSERT_TRUE(ctl.add(spec, sink, why));
+            for (int t = 0; t < 2400; ++t) {
+                sim.tick();
+                sim.clear_news_events();
+                sim.clear_audio_events();
+                ctl.on_tick(sim);
+            }
+            ASSERT_EQ(ctl.stats(0).filtered, 0u);
+            ASSERT_TRUE(ctl.stats(0).released > 0 && sim.get_player_score(0) > 0);                // the far pile is worked
+            for (const auto& e : sink.log) ASSERT_FALSE(e.second.tile_x == click.x && e.second.tile_y == click.y);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI7.28 A Refused Raid Click Blacklists The Raided Team For 900 Ticks (Not Before, Not After): The Thief Is Not Ordered At That Hill At The Next Looks, Only After The 900; Told That The Order Merely Expired It Is Ordered At The Next Look") {
+        for (const bool refused : {true, false}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 77);
+            sim.set_player_score(1, 200);                                                         // team 1 (hill at (50, 4)) has points to take, the others have none
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 10});
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.gate = false;
+            const MapInfo map(sim);
+            const Profile profile = profile_for(Level::Hard);
+            StandardBot bot(plan);
+            bot.start(BotContext{0, profile, 1, &map});
+            bool stranger = false;
+            const auto look = [&](uint64_t advance, Bot::Fate fate) {
+                tick_all(sim, advance);
+                const BotView view = BotView::build(sim, 0, &map);
+                Orders orders;
+                bot.think(view, orders);
+                size_t raids = 0;
+                for (const Intent& in : orders.intents()) {
+                    if (in.command.type != CommandType::GroupSpecial) continue;                  // (the Thief is the only ant that gets a special order here)
+                    stranger = stranger || in.command.ants.size() != 1 || in.command.ants[0] != thief;
+                    ++raids;
+                    bot.on_command(in.command, fate, view.tick());
+                }
+                return raids;
+            };
+            const uint64_t t0 = sim.current_tick() + 1;
+            ASSERT_EQ(look(1, refused ? Bot::Fate::Filtered : Bot::Fate::Expired), 1u);          // the raid is decided at the first look and never left
+            const RaidTask& raids = bot.raids();
+            ASSERT_EQ(raids.black(1, t0), refused);
+            ASSERT_EQ(raids.black(1, t0 + 899), refused);
+            ASSERT_FALSE(raids.black(1, t0 + 900));
+            for (uint64_t at = t0 + 20; at <= t0 + 900; at += 20) {
+                const size_t again = look(20, Bot::Fate::Expired);
+                ASSERT_EQ(again, refused && at < t0 + 900 ? 0u : 1u);                             // the hill is left alone for 899 ticks, then the thief goes again
+                if (!refused) break;                                                              // (told Expired the thief is ordered at the very next look: nothing to wait for)
+            }
+            ASSERT_FALSE(stranger);
+            ASSERT_TRUE(alive(sim, thief));
         }
     } TEST_END();
 }

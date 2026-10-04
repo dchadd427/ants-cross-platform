@@ -21,7 +21,8 @@
 //                   attack on the tile of an ally, alliance commands name another seat that is in the match and has not dropped out, a break needs an ally,
 //                   an answer needs the invitation it answers, a withdrawal needs the offer it takes back; an ATTACK needs an ant of another team on its tile
 //                   (the attack cursor shows over an enemy ant, and an ant on a hill tile gets the plain move cursor); a click on a power-up tile takes the power-up
-//                   for the ant that arrives, so a move onto one passes only as a planned pick-up (Orders::pick_up: one ant), and no special order or attack names one
+//                   for the ant that arrives, so a move onto one passes only as a planned pick-up (Orders::pick_up: one ant), and no special order or attack names one;
+//                   a refused intent is counted (SeatStats::filtered) and the bot is told at once (Fate::Filtered: it never left), so that a task can stop proposing it
 //   issuer          every released command carries the seat of the bot, whatever the bot wrote
 //   anti-thrash     no second order to the same ant within Profile::reissue_cooldown ticks, unless it is Urgent (every order snaps the ant to its tile
 //                   centre and replaces its queued path request)
@@ -61,7 +62,7 @@ public:
         uint32_t expired{0};             // dropped because they could not be paid within the time to live
         uint32_t pruned{0};              // commands that lost ants that died (a command with no ant left is not released at all)
         uint32_t superseded{0};          // commands that were due and lost every ant to a newer due order for the same ants: never released
-        uint32_t filtered{0};            // refused when proposed: Quit, Drop, None, an empty or oversized ant list, a special order of other than one ant, ...
+        uint32_t filtered{0};            // refused when proposed (the bot is told, Fate::Filtered): Quit, Drop, None, an empty or oversized ant list, a special order of other than one ant, ...
         uint32_t rejected{0};            // released, and the sink answered RejectedIssuer / RejectedMalformed / RejectedNotAllowed
     };
 

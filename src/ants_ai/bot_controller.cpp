@@ -195,6 +195,7 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
     for (const Intent& in : orders.intents()) {
         if (!allowed(sim, s, in)) {
             ++s.stats.filtered;
+            s.bot->on_command(in.command, Bot::Fate::Filtered, tick);                       // the bot is told, or a task would propose the same refused click at every look
             continue;
         }
         if (!release_drawn) {

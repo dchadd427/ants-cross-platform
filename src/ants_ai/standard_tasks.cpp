@@ -877,8 +877,12 @@ void RaidTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t 
     if (command.type != sim::CommandType::GroupSpecial || command.ants.size() != 1) return;
     const auto it = raids_.find(command.ants[0]);
     if (it == raids_.end() || it->second.sent != kPending) return;
-    if (fate == Bot::Fate::Sent) it->second.sent = tick;
-    else raids_.erase(it);                                              // it never left: the thief is ordered again at the next look
+    if (fate == Bot::Fate::Sent) {
+        it->second.sent = tick;
+        return;
+    }
+    if (fate == Bot::Fate::Filtered) black_[it->second.team] = tick + params_.filtered_ticks;     // the click is refused: that hill is left alone for a while, or it is ordered at every look
+    raids_.erase(it);                                                   // it never left: the thief is ordered again at the next look
 }
 
 bool RaidTask::launch(TaskContext& c, const AntView& thief) {
@@ -1724,13 +1728,24 @@ int GateTask::cost_of(const Geometry& g, sim::TileCoord t) const noexcept {
     return i < g.cost->size() ? (*g.cost)[i] : -1;
 }
 
+bool GateTask::blocked(sim::TileCoord t, uint64_t tick) const noexcept {
+    const auto it = blocked_.find(static_cast<int64_t>(t.y) * 4096 + t.x);
+    return it != blocked_.end() && it->second > tick;
+}
+
 void GateTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
-    if (fate != Bot::Fate::Sent || command.type != sim::CommandType::GroupMove) return;
+    if ((fate != Bot::Fate::Sent && fate != Bot::Fate::Filtered) || command.type != sim::CommandType::GroupMove) return;
     for (const uint32_t id : command.ants) {
         const auto it = cmd_.find(id);
         if (it == cmd_.end()) continue;
         Cmd& cm = it->second;
         if (cm.tile.x != command.tile_x || cm.tile.y != command.tile_y) continue;      // (an order of another task that this one did not give)
+        if (fate == Bot::Fate::Filtered) {                                              // refused: no click onto that tile for a while, and the ant is taken over again at the next look
+            blocked_[static_cast<int64_t>(cm.tile.y) * 4096 + cm.tile.x] = tick + params_.blocked_ticks;
+            if (id == user_) user_ = 0;
+            cmd_.erase(it);
+            continue;
+        }
         cm.release = tick;
         if (id == user_) user_release_ = tick;
     }
@@ -1824,22 +1839,23 @@ void GateTask::step(TaskContext& c) {
     if (g.cost->empty()) return;
     // the staging tiles must be ones that an ant can stand on (a rock or water on the queue row or four rows north of the ramp: another tile, or no gate guiding at that hill)
     const sim::Grid& grid = v.grid();
+    for (auto it = blocked_.begin(); it != blocked_.end();) it = it->second <= now ? blocked_.erase(it) : std::next(it);
     int slots_walkable = 0;
     for (int i = 0; i < 3; ++i) {
-        g.slot_ok[static_cast<size_t>(i)] = MapInfo::walkable(grid, c.seat, queue_tile(g, i), v.walk_context()) && v.powerup_at(queue_tile(g, i)) == nullptr;
+        g.slot_ok[static_cast<size_t>(i)] = MapInfo::walkable(grid, c.seat, queue_tile(g, i), v.walk_context()) && v.powerup_at(queue_tile(g, i)) == nullptr && !blocked(queue_tile(g, i), now);
         slots_walkable += g.slot_ok[static_cast<size_t>(i)] ? 1 : 0;
     }
     bool buffer_found = false;
     for (int32_t dy = 0; dy <= 3 && !buffer_found; ++dy) {
         for (const int32_t dx : {0, -1, 1}) {
             const sim::TileCoord t{g.hill.x + 1 + dx, g.hill.y - params_.buffer_rows - (dy % 2 == 0 ? dy / 2 : -(dy + 1) / 2)};
-            if (!grid.in_bounds(t) || !MapInfo::walkable(grid, c.seat, t, v.walk_context()) || v.powerup_at(t) != nullptr || cost_of(g, t) < 0) continue;
+            if (!grid.in_bounds(t) || !MapInfo::walkable(grid, c.seat, t, v.walk_context()) || v.powerup_at(t) != nullptr || cost_of(g, t) < 0 || blocked(t, now)) continue;
             g.buffer = t;
             buffer_found = true;
             break;
         }
     }
-    if (slots_walkable < 2 || !buffer_found) return;                                   // no room at the doorstep: the engine's flow stays
+    if (slots_walkable < 2 || !buffer_found || blocked(g.entrance, now)) return;       // no room at the doorstep, or no click onto the entrance is accepted: the engine's flow stays
     usable_ = true;
     track_exits(c, g);
 
@@ -2168,6 +2184,10 @@ void GuardTask::step(TaskContext& c) {
 
 // ---- CarrierAidTask ---------------------------------------------------------------------------------------------------------------------------------------
 
+void CarrierAidTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
+    if (fate == Bot::Fate::Filtered && command.type == sim::CommandType::GroupMove && home_.x >= 0 && command.tile_x == home_.x && command.tile_y == home_.y) blocked_until_ = tick + 900u;
+}
+
 void CarrierAidTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
@@ -2185,7 +2205,7 @@ void CarrierAidTask::step(TaskContext& c) {
             continue;
         }
         // the blow's stun lasts about 12 ticks; an ant that is idle after it has lost its walk
-        if (a->idle() && now >= it->second.hit + 8 && now >= it->second.last_order + 40 && !v.has_pending_path(a->id)) {
+        if (now >= blocked_until_ && a->idle() && now >= it->second.hit + 8 && now >= it->second.last_order + 40 && !v.has_pending_path(a->id)) {
             home.push_back(a->id);
             it->second.last_order = now;
             ++it->second.tries;
@@ -2194,6 +2214,7 @@ void CarrierAidTask::step(TaskContext& c) {
     }
     if (!home.empty()) {
         c.orders.move(home, hill.entrance, Priority::Normal);
+        home_ = hill.entrance;
         sent_home_ += static_cast<uint32_t>(home.size());
     }
 }

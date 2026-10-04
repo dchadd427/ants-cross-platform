@@ -172,7 +172,8 @@ public:
         Sent,                            // released through the budget at `tick` (with the ants that were still alive)
         Expired,                         // it could not be paid in time and was dropped
         Pruned,                          // every ant of it died first: it never left
-        Superseded                       // a newer order that was due at the same time named all its ants (the later click wins): it never left
+        Superseded,                      // a newer order that was due at the same time named all its ants (the later click wins): it never left
+        Filtered                         // the controller's filter refused it when it was proposed (what a person could not click): it never left; `tick` is the tick of the look
     };
 
     virtual ~Bot() = default;

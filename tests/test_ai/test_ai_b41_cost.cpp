@@ -4,6 +4,7 @@
 //   AI13.1  the cost of a look: the worker's and the standard bot's, at every level, on every shipped map after 3,000 ticks of a match
 //   AI13.2  whole matches of four standard bots (A5): the budget in every window of releases, nothing filtered or rejected, bit-reproducible, replayed without any bot
 //   AI13.3  unknown worlds: random terrain, lakes, rocks, piles that nobody can reach and power-ups anywhere, four standard bots of random levels: nothing refused, bit-reproducible
+//   AI13.4  a raid click that the filter refuses (a power-up on the enemy hill's entrance) is tried once per 900 ticks, not at every look
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -262,5 +263,34 @@ void run_b41_cost_tests() {
             ASSERT_EQ(first, second);                                                                          // the same world and seeds: the same match, bit for bit
         }
         ASSERT_TRUE(acting >= 48);                                                                             // (most of the 64 seats gave at least one order)
+    } TEST_END();
+
+    TEST_CASE("AI13.4 A Refused Raid Click Is Not Repeated At Every Look: A Power-Up Lies On The Entrance Of The Enemy Hill (A Click Onto It Would Take The Power-Up, So The Filter Refuses It); In Three Minutes A Hard Standard Bot With A Thief Is Refused Once Per 900 Ticks, Not At Every Look (Every 4 Ticks: About 900 Times)")
+    {
+        sim::SimulationEngine sim;
+        empty_field(sim, 77);                                                                              // team 1's hill is at (50, 4): its entrance is (51, 5)
+        sim.set_player_score(1, 200);                                                                      // it has points to take
+        sim.grid_mut().place_powerup(51, 5, 3);
+        sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 10});
+        RecordingSink sink(sim, true);
+        BotController ctl(sim, 5);
+        LevelPlan plan = plan_for(Level::Hard);
+        plan.gate = false;
+        BotSpec spec;
+        spec.seat = 0;
+        spec.level = Level::Hard;
+        std::string why;
+        ASSERT_TRUE(ctl.add(spec, std::make_unique<StandardBot>(plan), sink, why));
+        for (int t = 0; t < 3600; ++t) {
+            sim.tick();
+            sim.clear_news_events();
+            sim.clear_audio_events();
+            ctl.on_tick(sim);
+        }
+        const BotController::SeatStats& st = ctl.stats(0);
+        ASSERT_TRUE(st.filtered >= 3);                                                                     // the raid was tried again after every 900 ticks ...
+        ASSERT_TRUE(st.filtered <= 3600 / 900 + 1);                                                        // ... and only then
+        ASSERT_EQ(st.rejected, 0u);
+        for (const auto& e : sink.log) ASSERT_FALSE(e.second.type == CommandType::GroupSpecial && e.second.tile_x == 51 && e.second.tile_y == 5);      // nothing refused ever left
     } TEST_END();
 }

@@ -6,6 +6,7 @@
 //   AI10.2  the task's rules: the plans (Hard only), the economy's own rescue is off, the refused click is recovered from, more carriers than the doorstep holds are parked and released
 //   AI10.3  the surroundings: a rock on the queue row or on the buffer tile is never ordered onto, and the gate still works
 //   AI10.4  a hill that the gate cannot guide (in the top rows: no buffer tile) keeps the economy's rescue; both are off only while the gate guides
+//   AI10.5  a click that the controller refused (Fate::Filtered) blocks its tile for 900 ticks: a queue-row slot, the buffer tile, the entrance (no gate until it is over)
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -236,6 +237,89 @@ void run_b41_gate_tests() {
             const Run r = play(scene, gate_plan(false), 1200, 0);
             ASSERT_TRUE(r.rescues >= 1);
             ASSERT_TRUE(r.score >= 25);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI10.5 A Refused Click Blocks Its Tile For 900 Ticks (Not Before, Not After): A Queue-Row Slot And The Buffer Tile Are Not Named Again While The Ant Is Taken Over At The Next Look; The Entrance Cannot Be Clicked, So The Gate Does Not Guide (The Engine's Flow And The Economy's Rescue Stay) Until The 900 Are Over")
+    {
+        for (const int which : {0, 1, 2}) {                                                                // a slot of the queue row, the buffer tile, the entrance
+            GateScene scene;
+            scene.build(0);
+            const TileCoord hill = scene.hill;
+            for (int i = 0; i < 8; ++i) {                                                                   // eight carriers, idle with their food, outside the doorstep: one clicks, two take a slot, five the buffer
+                const uint32_t id = scene.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22 + i, 16});
+                scene.sim.get_unit(id).pick_up_food(1, 25);
+            }
+            const MapInfo map(scene.sim);
+            const Profile profile = profile_for(Level::Hard);
+            const auto is_target = [&](const Command& c) {
+                if (c.type != CommandType::GroupMove) return false;
+                if (which == 0) return c.tile_y == hill.y - 1 && c.tile_x >= hill.x && c.tile_x <= hill.x + 2;
+                if (which == 1) return c.tile_x == hill.x + 1 && c.tile_y == hill.y - 4;
+                return c.tile_x == hill.x + 1 && c.tile_y == hill.y + 1;
+            };
+            GateTask gate(1);
+            AntLedger ledger;
+            TileCoord refused{-1, -1};
+            uint32_t refused_ant = 0;
+            uint64_t t0 = 0;
+            std::vector<uint64_t> named_again;                // the looks after the refusal at which the refused tile was named
+            std::vector<uint64_t> ant_ordered;                // ... and those at which the ant whose click was refused was ordered somewhere
+            std::vector<uint64_t> moves;                      // every look after the refusal that put a move into the orders
+            std::vector<std::pair<uint64_t, bool>> usable;    // (look, the gate could guide)
+            const auto look = [&](uint64_t advance) {
+                tick_all(scene.sim, advance);
+                const BotView view = BotView::build(scene.sim, 0, &map);
+                Orders orders;
+                TaskContext ctx{view, orders, ledger, profile, map, 0};
+                gate.step(ctx);
+                const uint64_t now = view.tick();
+                if (refused.x >= 0) usable.emplace_back(now, gate.usable());
+                bool moved = false;
+                for (const Intent& in : orders.intents()) {
+                    const Command& cmd = in.command;
+                    if (cmd.type != CommandType::GroupMove) {
+                        gate.on_command(cmd, Bot::Fate::Sent, now);
+                        continue;
+                    }
+                    moved = true;
+                    if (refused.x < 0 && is_target(cmd)) {                                                  // the first click of the kind is the one that the filter refuses
+                        refused = TileCoord{cmd.tile_x, cmd.tile_y};
+                        refused_ant = cmd.ants[0];
+                        t0 = now;
+                    } else if (refused.x >= 0) {
+                        if (std::find(cmd.ants.begin(), cmd.ants.end(), refused_ant) != cmd.ants.end()) ant_ordered.push_back(now);
+                    }
+                    if (refused.x >= 0 && cmd.tile_x == refused.x && cmd.tile_y == refused.y) {
+                        if (now > t0) named_again.push_back(now);
+                        gate.on_command(cmd, Bot::Fate::Filtered, now);                                      // what the controller tells when the filter refuses the click
+                    } else {
+                        gate.on_command(cmd, Bot::Fate::Sent, now);                                          // (nothing is applied: the carriers stand where they stood)
+                    }
+                }
+                if (moved && refused.x >= 0 && now > t0) moves.push_back(now);
+            };
+            look(1);
+            ASSERT_TRUE(refused.x >= 0);                                                                    // the gate named a tile of the kind at its first look ...
+            ASSERT_EQ(t0, 1u);
+            ASSERT_TRUE(gate.usable());
+            ASSERT_TRUE(gate.blocked(refused, t0) && gate.blocked(refused, t0 + 899));                      // ... and the refusal blocks it for 900 ticks, to the tick
+            ASSERT_FALSE(gate.blocked(refused, t0 + 900));
+            for (uint64_t at = t0 + 20; at <= t0 + 1000; at += 20) look(20);
+            ASSERT_TRUE(refused_ant != 0);
+            // while the tile is blocked it is never named: the first look that names it again is the first after the 900 ticks
+            ASSERT_FALSE(named_again.empty());
+            ASSERT_TRUE(named_again.front() >= t0 + 900);                                                   // not before ...
+            ASSERT_TRUE(named_again.front() <= t0 + 900 + 60);                                              // ... and not much after: the carriers are taken over again every 24 ticks or so
+            if (which != 2) {
+                for (const auto& u : usable) ASSERT_TRUE(u.second);                                         // a slot or the buffer: the gate guides all the time
+                ASSERT_TRUE(!ant_ordered.empty() && ant_ordered.front() <= t0 + 40);                        // the ant whose click was refused is taken over again at once, and sent elsewhere
+            } else {
+                for (const auto& u : usable) {
+                    if (u.first <= t0 + 900) ASSERT_EQ(u.second, u.first >= t0 + 900);                      // the entrance refuses the click: no gate (the economy's rescue is on) until it is over
+                }
+                for (const uint64_t m : moves) ASSERT_TRUE(m >= t0 + 900);                                  // and no order of the gate at all meanwhile
+            }
         }
     } TEST_END();
 }
