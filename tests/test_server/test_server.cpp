@@ -4555,7 +4555,7 @@ void run_bot_tests() {
         fs::remove_all(dir, ignore);
     } TEST_END();
 
-    TEST_CASE("S3.123 Protocol 13, A Level For Each Seat Of The Leader's Fill: Each Empty Seat Gets The Bot Of Its Own Level (Named For It, The Lowest Seat First, Never More Than The Room's Players), A Seat That A Person Took Meanwhile Is Skipped And Its Level Is Ignored, A Level Only For Taken Seats Seats Nobody, With Fog Of War No Bot Is Seated And The Teams Still Count") {
+    TEST_CASE("S3.125 Protocol 13, A Level For Each Seat Of The Leader's Fill: Each Empty Seat Gets The Bot Of Its Own Level (Named For It, The Lowest Seat First, Never More Than The Room's Players), A Seat That A Person Took Meanwhile Is Skipped And Its Level Is Ignored, A Level Only For Taken Seats Seats Nobody, With Fog Of War No Bot Is Seated And The Teams Still Count") {
         using net::FillLevel;
         const auto fill_of = [](FillLevel a, FillLevel b, FillLevel c, FillLevel d) { return std::array<FillLevel, 4>{a, b, c, d}; };
         {   // seat 1 Easy and seat 3 Hard, seat 2 stays empty: each bot has the level, the name and the seat that was asked for
@@ -4670,7 +4670,7 @@ void run_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.124 Protocol 13, The Leader's Teams: A Match Starts With Them On Every Engine Before Its First Tick (The Referee's Own Included: The Status At Tick 0), The Machines' State Hashes Agree With The Referee's To The End; Teams That The Seats Cannot Make Start The Match Without Them And Tell Everybody In The Room Why (A Notice, Once, People Only); Only The Leader's Request Counts; Free For All Is What It Was") {
+    TEST_CASE("S3.126 Protocol 13, The Leader's Teams: A Match Starts With Them On Every Engine Before Its First Tick (The Referee's Own Included: The Status At Tick 0), The Machines' State Hashes Agree With The Referee's To The End; Teams That The Seats Cannot Make Start The Match Without Them And Tell Everybody In The Room Why (A Notice, Once, People Only); Only The Leader's Request Counts; Free For All Is What It Was") {
         using net::FillLevel;
         const auto allies_text = [](const std::array<uint8_t, 4>& a) {
             std::string out;
@@ -4771,7 +4771,7 @@ void run_bot_tests() {
                 ASSERT_EQ(engine_allies(c->sim), std::string("3210"));
             }
         }
-        {   // only the leader's request counts: a guest's StartRequest with teams is ignored altogether; a room that names no teams of its own and fills up starts by itself with none (S3.127: a room whose code names them has them)
+        {   // only the leader's request counts: a guest's StartRequest with teams is ignored altogether; a room that names no teams of its own and fills up starts by itself with none (S3.129: a room whose code names them has them)
             World w;
             ASSERT_TRUE(w.mgr.create_room(spec_of("TM-6", 4), w.now).ok);
             Client& ann = w.connect("Ann", "TM-6");
@@ -4823,7 +4823,7 @@ void run_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.127 Protocol 13, The Room's Own Teams (Its Code Names Them: demo-tiny-4p-t01-<random>): A Room That Fills With People Starts By Itself WITH The Teams On Every Engine And The Referee's Own, Before The First Tick; So Does An Early START Whose Request Names No Teams; The Room's Teams Win Over A Leader's Request (Even When The Room's Cannot Be Made: It Starts Without Teams And Says Why, Once, To Everybody); A Word That The Room's Seats Cannot Make (A Seat That Does Not Play, A Room Of Two) Says So At The Start; The Code's Reading, Edge By Edge") {
+    TEST_CASE("S3.129 Protocol 13, The Room's Own Teams (Its Code Names Them: demo-tiny-4p-t01-<random>): A Room That Fills With People Starts By Itself WITH The Teams On Every Engine And The Referee's Own, Before The First Tick; So Does An Early START Whose Request Names No Teams; The Room's Teams Win Over A Leader's Request (Even When The Room's Cannot Be Made: It Starts Without Teams And Says Why, Once, To Everybody); A Word That The Room's Seats Cannot Make (A Seat That Does Not Play, A Room Of Two) Says So At The Start; The Code's Reading, Edge By Edge") {
         using net::FillLevel;
         const auto allies_text = [](const std::array<uint8_t, 4>& a) {
             std::string out;
@@ -4943,7 +4943,7 @@ void run_bot_tests() {
                 ASSERT_EQ(engine_allies(c->sim), std::string("1044"));
                 ASSERT_TRUE(said(c->room_chat).empty());
             }
-            // ... and the same request in a room whose code names none is what it always was (S3.124): the leader's pair
+            // ... and the same request in a room whose code names none is what it always was (S3.126): the leader's pair
             World v(limits);
             const std::string plain = "demo-tiny-4p-iiiiii";
             Client& dan = v.connect("Dan", plain);
@@ -7360,7 +7360,7 @@ void run_persist_server_tests_4() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.125 Protocol 13, A Restart Record Keeps What The Leader's START Chose: Its Start Message Has The Pair, Its Bots Their Own Levels; The Restored Referee Makes The Same Teams (A Replay That Did Not Would Be Refused At The First Checkpoint), Its Status Says So, The Machine That Comes Back With Its Turns Keeps Its Engine And A Machine That Comes Back From Nothing Is Given The Start With The Teams And Stands At The Referee's State") {
+    TEST_CASE("S3.127 Protocol 13, A Restart Record Keeps What The Leader's START Chose: Its Start Message Has The Pair, Its Bots Their Own Levels; The Restored Referee Makes The Same Teams (A Replay That Did Not Would Be Refused At The First Checkpoint), Its Status Says So, The Machine That Comes Back With Its Turns Keeps Its Engine And A Machine That Comes Back From Nothing Is Given The Start With The Teams And Stands At The Referee's State") {
         using net::FillLevel;
         const auto allies_text = [](const std::array<uint8_t, 4>& a) {
             std::string out;
@@ -7426,7 +7426,7 @@ void run_persist_server_tests_4() {
         ASSERT_EQ(engine_allies(reloaded.sim), std::string("3210"));                           // (the bots kept their teams to the end)
     } TEST_END();
 
-    TEST_CASE("S3.126 A Record Of Protocol 12 (Its Start Message Has No Team Bytes) Is Read As A Start Without Teams And Refused For Its Protocol, Like A Record Of Any Other Protocol: At The Restart It Is Not Restored (Nothing Of It Is Replayed), Its Room Is A Failed Room That Names The Protocols, The File Is Kept Whole For A Day (Not Deleted As Corrupt) And The Log Says So; An Old Layout That No Release Wrote (Protocol 11, 13 Or 14 With It) Stays Unreadable; The Same Record In This Build's Layout Is Restored") {
+    TEST_CASE("S3.128 A Record Of Protocol 12 (Its Start Message Has No Team Bytes) Is Read As A Start Without Teams And Refused For Its Protocol, Like A Record Of Any Other Protocol: At The Restart It Is Not Restored (Nothing Of It Is Replayed), Its Room Is A Failed Room That Names The Protocols, The File Is Kept Whole For A Day (Not Deleted As Corrupt) And The Log Says So; An Old Layout That No Release Wrote (Protocol 11, 13 Or 14 With It) Stays Unreadable; The Same Record In This Build's Layout Is Restored") {
         PWorld w("persist-126");
         w.start_server(500);
         const auto crash = [](PWorld& world, const char* code) {                               // a match that is played for a while, and a server that dies with its record
