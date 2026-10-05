@@ -1,8 +1,8 @@
 # Continuous integration: every pull request, every push to main and to staging, and every manual run is built and tested on Windows (MSVC), macOS (Apple clang) and Linux (GCC),
 # and the web image (Emscripten, the beta site's Docker build) and the game server's image are built once. main is protected: it takes a change only through a pull request whose five
 # checks pass, and these five checks are the jobs "Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)" and "Web (Emscripten, Docker image)": rename or split
-# none of them without changing the branch protection in the same release (tests/scripts/test_ci_workflow.py keeps the names). What runs where is listed in README.md ("Continuous
-# integration"); the tiers of tests and the release procedure: docs/WORKFLOW.md.
+# none of them without changing the branch protection in the same release (tests/scripts/test_ci_workflow.py keeps the names). What runs where is listed in docs/TESTING.md ("Continuous
+# Integration"); the tiers of tests and the release procedure: docs/WORKFLOW.md.
 #
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
 # application), then the self-tests of the two tools (map_sweep, bot_arena), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
