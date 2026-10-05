@@ -53,8 +53,8 @@ class TheMarkupAndTheStyle(unittest.TestCase):
     def test_it_is_the_pages_teal_button_with_its_focus_and_a_note_of_one_line(self):
         self.assertRegex(self.style, r"a:focus-visible, \.btn:focus-visible,")             # (the outline of every button of the page: the Rejoin button is one)
         self.assertIn(".rejoin-note { max-width: 100%; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }", self.style)
-        self.assertIn(".note { max-width: 34ch; }", self.style)                            # (the cards' note wraps at 34 characters: this one is not a .note, so that it does not, and the two notes of the cards stay two)
-        self.assertEqual(len(re.findall(r'<p class="note[ "]', self.page)), 2)
+        self.assertIn(".note { max-width: 34ch; }", self.style)                            # (the card's note wraps at 34 characters: this one is not a .note, so that it does not, and the one note of the card stays one)
+        self.assertEqual(len(re.findall(r'<p class="note[ "]', self.page)), 1)
         self.assertIn(".rejoin .btn { max-width: 100%; text-align: center; overflow-wrap: anywhere; }", self.style)       # (a room code of 32 characters has no place to break)
 
     def test_on_a_phone_the_button_takes_the_width(self):

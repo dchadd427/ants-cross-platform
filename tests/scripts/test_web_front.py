@@ -139,7 +139,7 @@ class ThePageUsesTheArt(unittest.TestCase):
 
     def test_every_img_has_the_size_of_its_file(self):
         tags = re.findall(r"<img [^>]*>", self.page)
-        self.assertGreaterEqual(len(tags), 12)
+        self.assertGreaterEqual(len(tags), 11)                                               # (the logo, the picture of a match, the two labels of the map, its preview, the four ants and the two help sheets)
         for tag in tags:
             source = re.search(r'src="front/([^"]+)"', tag).group(1)
             width = int(re.search(r'width="(\d+)"', tag).group(1))
@@ -256,22 +256,35 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.page = read("web", "lobby.html")
         self.style = self.page[:self.page.index("</style>")]
 
-    def test_the_two_cards_stand_side_by_side_from_1220_px_and_are_stacked_under_it(self):
-        self.assertRegex(self.style, r"\.cols \{ display: grid; grid-template-columns: minmax\(0, 1\.55fr\) minmax\(0, 1fr\);")
-        stacked = re.search(r"@media \(max-width: (\d+)px\) \{\s*\.cols \{ grid-template-columns: minmax\(0, 1fr\);", self.style)
-        self.assertIsNotNone(stacked)
-        self.assertEqual(stacked.group(1), "1219")                         # (the roster's four buttons need the solo card of a 1220 px window, 12 px to spare, measured)
+    def test_the_card_has_two_columns_from_1100_px_and_one_under_it(self):
+        self.assertRegex(self.style, r"\.match-grid \{ display: grid; grid-template-columns: minmax\(0, 340px\) minmax\(0, 1fr\);")      # (the map and its picture, and the seats with the rest)
+        one = re.search(r"@media \(max-width: (\d+)px\) \{\s*\.match-grid \{ grid-template-columns: minmax\(0, 1fr\);", self.style)
+        self.assertIsNotNone(one)
+        self.assertEqual(one.group(1), "1099")
+        block = one.group(0) + self.style[self.style.index(one.group(0)) + len(one.group(0)):][:700]
+        self.assertIn(".match-grid .left { display: grid; grid-template-columns: minmax(0, 1fr) 190px;", block)      # (one column: the map's choice and its picture side by side)
+        self.assertIn(".preview { grid-column: 2; grid-row: 1 / span 3; margin: 0; }", block)
+        self.assertRegex(self.style, r"\.cols \{ max-width: 1060px; \}")                                  # (a card of 1060 px at most: its rows are not stretched over a wide window)
 
-    def test_a_stacked_online_card_puts_host_and_join_side_by_side_from_900_px_up_to_where_the_cards_stand_side_by_side(self):
-        block = re.search(r"@media \(min-width: (\d+)px\) and \(max-width: (\d+)px\) \{\s*\.card\.online \{(.*?)\n        \}", self.style, re.S)
-        self.assertIsNotNone(block)
-        self.assertEqual((block.group(1), block.group(2)), ("900", "1219"))
-        rules = block.group(0)
-        self.assertIn(".card.online { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }", rules)
-        self.assertIn(".online .after { grid-column: 1 / -1; }", rules)                              # (the note under both)
-        divider = re.search(r"\.online \.block \+ \.block \{ margin-top: 0; padding: 0 0 0 \d+px; border-top: 0; border-left: (3px dotted rgba\(21, 16, 12, \.55\)); \}", rules)
-        self.assertIsNotNone(divider, "the dotted line between the blocks stands upright")
-        self.assertIn("border-top: " + divider.group(1), self.style)                                 # (it is the line that the blocks have one above the other)
+    def test_a_seat_is_one_line_from_701_px_and_two_lines_on_a_phone_with_five_buttons_that_fit_320_px(self):
+        self.assertIn('.seats4 li { grid-template-columns: 30px 140px minmax(0, 1fr) auto; grid-template-areas: "ant who pick sit";', self.style)       # (the ant, the colour, the five buttons, Sit here)
+        phone = re.search(r"@media \(max-width: 700px\) \{(.*?)\n        \}", self.style, re.S).group(1)
+        self.assertIn('.seats4 li { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "ant who sit" "pick pick pick";', phone)      # (the colour and Sit here, then the buttons under the whole row)
+        self.assertIn(".roster.seats4 .pair label { flex: 0 0 auto; min-width: 0; padding: 5px 4px; font-size: 13px; }", phone)
+        narrow = re.search(r"@media \(max-width: 480px\) \{(.*?)\n        \}", self.style, re.S).group(1)
+        self.assertIn(".roster.seats4 .pair label { flex: 1 1 auto; }", narrow)                                    # (a phone: the five buttons share the row)
+        narrowest = re.search(r"@media \(max-width: 360px\) \{(.*?)\n        \}", self.style, re.S).group(1)
+        self.assertIn(".roster.seats4 .pair label { padding: 5px 2px; font-size: 12.5px; }", narrowest)             # (320 px: all five still on one line; web_home_check.py measures it in a browser)
+        self.assertLess(self.style.index("@media (max-width: 700px)"), self.style.index("@media (max-width: 480px)"))     # (the narrower rules come later: they win)
+        self.assertLess(self.style.index("@media (max-width: 480px)"), self.style.index("@media (max-width: 360px)"))
+
+    def test_the_invitations_and_the_line_to_join_wrap_on_a_phone_and_never_scroll_sideways(self):
+        phone = re.search(r"@media \(max-width: 700px\) \{(.*?)\n        \}", self.style, re.S).group(1)
+        self.assertIn(".invite .who { flex: 1 0 100%; }", phone)
+        self.assertIn(".invite input[type=text] { flex: 1 0 100%; }", phone)
+        self.assertIn(".havecode input[type=text] { flex: 1 0 100%; max-width: none; }", phone)
+        self.assertIn(".invite input[type=text] { flex: 1 1 200px; min-width: 0;", self.style)                      # (a field can shrink under its row: a long link never makes the page wider)
+        self.assertIn(".invite { display: flex; flex-wrap: wrap;", self.style)
 
 
 class TheColours(unittest.TestCase):
@@ -297,11 +310,11 @@ class TheColours(unittest.TestCase):
         return (high + 0.05) / (low + 0.05)
 
     def test_the_banners_buttons_and_hovered_buttons_keep_their_text_readable(self):
-        single = re.search(r"\.card\.single > \.banner \{ background: (#[0-9a-f]{6}); \}", self.style).group(1)
+        single = re.search(r"\.card\.match > \.banner \{ background: (#[0-9a-f]{6}); \}", self.style).group(1)
         for what, text, background in (("gold title on a teal banner", self.token("gold"), self.token("teal")),
                                        ("cream text on a teal button or banner", self.token("cream"), self.token("teal")),
                                        ("cream text on a hovered button", self.token("cream"), self.token("teal-hi")),
-                                       ("cream text on the banner of the first card", self.token("cream"), single),
+                                       ("cream text on the banner of the card", self.token("cream"), single),
                                        ("cream text in the black boxes", self.token("cream"), self.token("inset")),
                                        ("the hint in an empty field", re.search(r"::placeholder \{ color: (#[0-9a-f]{6}); \}", self.style).group(1), self.token("inset"))):
             self.assertGreaterEqual(self.ratio(text, background), 4.5, "%s: %s on %s" % (what, text, background))

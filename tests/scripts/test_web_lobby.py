@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""The front page (run by ./run_tests.sh --fast and by the CI). The owner: "when you click the play online button it opens in a new tab can we just make that the default. you can play single on
-the play online tab by setting to 1 player consolidate them". The Play online page (web/lobby.html, once web/four.html) is the front page at "/" and has single player in it; the game page
-(web/shell.html) has a Menu button that goes back to it in the same tab and reads the local parameters of a game on this computer through a whitelist.
+"""The front page (run by ./run_tests.sh --fast and by the CI). The owner, looking at the front page on a phone: "I don't see a way to change colors or send an invite to another person should all be
+right there. We don't need separate AI and online. Only do online." The page (web/lobby.html, once web/four.html) is the front page at "/" and has ONE card, "New match", for every game: four seats
+(exactly one is You, every other is a Friend, a bot of a level or Nobody), the teams, an invitation for each Friend and START!, which takes this tab into a match on the game server; the game page
+(web/shell.html) has a Menu button that goes back to it in the same tab and passes the card's &seat=, &fill= and &start= to the game.
 
-  - the pages' own rules are RUN (node, when it is installed): what the two cards mean (a game against the computer is a game on this computer: its address; the level of each of the three bases and
-    the team that a browser remembered; a first visit has Medium; the Host card's players 2 - 4), the game page's whitelist (the six maps by key, the levels, the teams, a cleaned name: never the
-    text of the address) and the two pages agreeing (tests/scripts/web_lobby_check.js);
-  - what needs no browser is read from the files: the cards' markup (the buttons of the players and of each opponent's level, the Teams, START, Host the match), the header links and the footer of the front page, that nothing opens a new tab
-    but the links that leave the game, the Menu link of the game page, one name for the catalog link on both pages, the Dockerfile that copies the lobby and the game page's second path, the CI's
-    page check, and the documents.
+  - the pages' own rules are RUN (node, when it is installed): what the card means (who plays, the plan, the room's code and the addresses of START and of an invitation, what is remembered and what a
+    first visit takes from the earlier pages' keys), the game page's whitelist (the six maps by key, the levels, the teams, a cleaned name: never the text of the address) and the two pages agreeing
+    (tests/scripts/web_lobby_check.js);
+  - what needs no browser is read from the files: the card's markup (the four rows with their buttons, the Teams, the invitations, START, "Have a code?"), the header links and the footer of the front
+    page, that nothing opens a new tab but the links that leave the game, the Menu link of the game page, one name for the catalog link on both pages, the Dockerfile that copies the lobby and the game
+    page's second path, the CI's page check, and the documents.
 The routes of nginx are run in tests/scripts/test_nginx_routes.py; the whole flow in a real browser is tests/scripts/web_home_check.py (opt-in).
 """
 import os
@@ -47,61 +48,70 @@ class TheFrontPageMarkup(PageCase):
         for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
 
-    def test_the_host_card_offers_players_2_to_4_as_buttons_a_level_for_each_empty_seat_the_teams_and_its_own_button(self):
-        self.assertNotIn('<select id="players">', self.page)                                   # (the Players select of 1 - 4 is gone: 1 player is the first card, 2 - 4 the second)
-        self.assertEqual(re.findall(r'<input type="radio" name="players" id="players-(\d)" value="(\d)"( checked)?>', self.page), [("2", "2", " checked"), ("3", "3", ""), ("4", "4", "")])
-        # the empty seats at START (protocol 13): the old single select is gone; one group of four buttons for each seat after the leader's, in the order of the room's seats (1 Red, 2 Blue, 3 Black), none checked first
-        self.assertNotIn('<select id="fill">', self.page)
-        self.found(self.page, r'<span class="lab" id="fill-label">Empty seats at START</span>')
-        host = self.page[self.page.index('<ul class="roster hostseats" id="host-roster"'):]
-        host = host[:host.index("</ul>")]
-        groups = re.findall(r'<li id="host-seat-row-(\d)"><img src="front/ant_(\w+)\.png" alt="" width="23" height="40">\s*<fieldset class="lvlset"><legend>(\w+)</legend><div class="lvls"><span class="pair">(.*?)</span></div></fieldset></li>', host, re.S)
-        self.assertEqual([(n, img, name) for n, img, name, _ in groups], [("1", "red", "Red"), ("2", "blue", "Blue"), ("3", "black", "Black")])
-        for n, _, name, body in groups:
-            buttons = re.findall(r'<input type="radio" name="host-seat-%s" id="host-seat-%s-(\w+)" value="(\w*)"( checked)?><label for="host-seat-%s-\1">(\w+)</label>' % (n, n, n), body)
-            self.assertEqual([(word, value, text) for word, value, _, text in buttons], [("none", "", "None"), ("easy", "easy", "Easy"), ("medium", "medium", "Medium"), ("hard", "hard", "Hard")], name)
-            self.assertEqual([word for word, _, checked, _ in buttons if checked], ["none"], name + ": a first visit leaves the seat empty")
-        # the room's Teams: a line that the script shows for three or four players, and a select that the script fills (the choices depend on the players)
-        self.found(self.page, r'<div class="teamrow" id="host-teams-line" hidden>\s*<label class="lab" for="host-teams">Teams</label>\s*<div class="sel"><select id="host-teams"></select></div>\s*</div>')
-        self.found(self.page, r'\.roster li\[hidden\] \{ display: none; \}')                          # (a seat that the room does not have is hidden although the rows of a roster are grids)
-        self.found(self.page, r'<button id="host" type="button" class="btn">Host the match</button>')
-
-    def test_the_first_card_has_a_group_of_four_buttons_for_each_base_the_teams_and_start(self):
-        # one fieldset for each of the other three bases, in the order of the game's --bot seats (1 Red, 2 Blue, 3 Black), named by its legend, with the radio buttons None, Easy, Medium, Hard
-        self.assertNotIn('id="opponents"', self.page)
-        first_card = self.page[:self.page.index('<section class="card online"')]                # (the Host card has its own groups: host-seat-N)
-        groups = re.findall(r'<fieldset class="lvlset"><legend>(\w+)</legend><div class="lvls"><span class="pair">(.*?)</span></div></fieldset>', first_card, re.S)
-        self.assertEqual([name for name, _ in groups], ["Red", "Blue", "Black"])
-        for seat, (name, body) in enumerate(groups, 1):
-            buttons = re.findall(r'<input type="radio" name="opponent-%d" id="opponent-%d-(\w+)" value="(\w*)"( checked)?><label for="opponent-%d-\1">(\w+)</label>' % (seat, seat, seat), body)
-            self.assertEqual([(word, value, text) for word, value, _, text in buttons], [("none", "", "None"), ("easy", "easy", "Easy"), ("medium", "medium", "Medium"), ("hard", "hard", "Hard")], name)
-            self.assertEqual([word for word, _, checked, _ in buttons if checked], ["medium"], name + ": a first visit is Medium")
-        # the Teams: a line that the script shows for two or more bots, and a select that the script fills (the choices depend on the bots)
+    def test_the_card_has_four_seats_with_a_group_of_five_buttons_and_sit_here_the_teams_the_invitations_and_start(self):
+        self.assertEqual(len(re.findall(r'<section class="card', self.page)), 1)                  # one card: the two of the earlier pages (play against the computer, play online) are gone
+        self.assertEqual(len(re.findall(r'<select ', self.page)), 2)                               # the map and the teams
+        for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match', 'Opponents</span>'):
+            self.assertTrue(gone not in self.page, "the page still has " + gone)
+        self.found(self.page, r'<h2 class="banner" id="h-match">New match</h2>')
+        self.found(self.page, r'<div class="sel"><select id="map-pick"></select></div>')
+        # four seats in the order of the room's (0 Green, 1 Red, 2 Blue, 3 Black), each with its ant, its colour, the marker and the name of You (hidden until the script says), Sit here and one group of five buttons
+        seats = self.page[self.page.index('<ul class="roster seats4" id="seats"'):]
+        seats = seats[:seats.index("</ul>")]
+        rows = re.findall(r'<li id="seat-row-(\d)" data-seat="(\d)"><img src="front/ant_(\w+)\.png" alt="" width="23" height="40">\s*<span class="nm"><span class="colour">(\w+)</span><span class="you" id="seat-you-(\d)" hidden> &middot; You</span><small class="seat-name" id="seat-name-(\d)" hidden></small></span>\s*'
+                          r'<fieldset class="seatset" id="seat-set-(\d)"><legend class="sr">(\w+)</legend><span class="pair">(.*?)</span></fieldset>\s*<button type="button" class="btn sm sit" id="sit-(\d)" aria-label="Sit here as (\w+)">Sit here</button></li>', seats, re.S)
+        self.assertEqual([(r[0], r[2], r[3]) for r in rows], [("0", "green", "Green"), ("1", "red", "Red"), ("2", "blue", "Blue"), ("3", "black", "Black")])
+        for n, same, _, name, you, nm, fieldset, legend, body, sit, sit_name in rows:
+            self.assertEqual({n, same, you, nm, sit, fieldset}, {n}, name)                              # (every id of a row is the row's own seat; the buttons come before Sit here, as they stand on a wide page: Tab goes the way the eye does)
+            self.assertEqual({name, sit_name, legend}, {name}, name)
+            buttons = re.findall(r'<input type="radio" name="seat-%s" id="seat-%s-(\w+)" value="(\w+)"( checked)?><label for="seat-%s-\1">(\w+)</label>' % (n, n, n), body)
+            self.assertEqual([(word, value, text) for word, value, _, text in buttons], [("friend", "friend", "Friend"), ("easy", "easy", "Easy"), ("medium", "medium", "Medium"), ("hard", "hard", "Hard"), ("nobody", "nobody", "Nobody")], name)
+            self.assertEqual([word for word, _, checked, _ in buttons if checked], ["medium"], name + ": the markup starts as a first visit does, with a Medium bot (the script shows the seat of You instead)")
+        # what the five words mean, said once under the rows
+        self.found(self.page, r'<p class="hint" id="seats-hint">Friend: a seat for a person you invite\. Easy, Medium, Hard: a bot of that level\. Nobody: the seat stays out\.</p>')
+        # the Teams: a line that the script shows when there is a choice, and a select that it fills (the choices depend on the seats that play)
         self.found(self.page, r'<div class="teamrow" id="teams-line" hidden>\s*<label class="lab" for="teams">Teams</label>\s*<div class="sel"><select id="teams"></select></div>\s*</div>')
-        self.found(self.page, r'<button id="play" class="startbtn" type="button" aria-label="Start the game"></button>')       # (the original's own START! picture; the name is for a screen reader)
+        self.found(self.page, r'\.roster li\[hidden\] \{ display: none; \}')                          # (a row is a grid: hidden still hides it)
+        # the invitations: a box that the script shows for the Friend seats and fills with a row for each (no markup is made of text), a note about changed links
+        self.found(self.page, r'<div class="invites" id="invites" hidden>\s*<span class="lab" id="invites-label">Invite your friends: a link for each seat</span>\s*<div id="invite-list" role="group" aria-labelledby="invites-label"></div>\s*<p class="hint" id="links-note" role="status" hidden>')
+        # START: the original's own picture button (named for a screen reader, off with fewer than two players), the line under it
+        self.found(self.page, r'<button id="play" class="startbtn" type="button" aria-label="Start the match" aria-describedby="start-note"></button>')
+        self.found(self.page, r'<p class="note" id="start-note" aria-live="polite"></p>')
+        self.found(self.page, r'\.startbtn:disabled \{[^}]*cursor: not-allowed')
+        self.found(self.page, r'\.startbtn:not\(:disabled\):hover \{ background-image: url\("front/btn_start2\.png"\); \}')           # (a button that is off does not answer the pointer)
 
-    def test_the_two_cards_have_one_line_of_help_each_and_the_rest_is_behind_how_it_works(self):
-        self.found(self.page, r'<h2 class="banner" id="h-single">Play vs the computer</h2>')
-        self.found(self.page, r'<h2 class="banner" id="h-online">Play online</h2>')
-        self.assertEqual(len(re.findall(r'<p class="note[ "]', self.page)), 2)
-        self.assertIn('<p class="note">Runs in this tab. Bots gather food, raid and fight back.</p>', self.page)
-        self.assertIn('<p class="note after">Share the room code: the match starts when every seat is taken.</p>', self.page)
+    def test_the_card_has_a_line_to_join_a_match_that_somebody_else_made_with_the_old_ids(self):
+        self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
+        self.assertLess(self.page.index('id="start-note"'), self.page.index('class="havecode"'))          # under the card's match, inside the card
+        card = self.page[self.page.index('<section class="card match"'):]
+        self.assertIn('class="havecode"', card[:card.index("</section>")])
+
+    def test_the_card_has_one_line_of_help_and_the_rest_is_behind_how_it_works(self):
+        self.assertEqual(len(re.findall(r'<p class="note[ "]', self.page)), 1)                      # the line under START (the others are hints: the seats', the invitations', the code's)
         self.found(self.page, r'<details class="how" id="how" hidden>\s*<summary><span class="btn">How it works</span></summary>')
+        steps = self.page[self.page.index('<div class="steps">'):]
+        steps = steps[:steps.index("</div>")]
+        self.assertEqual(re.findall(r"<h4>(.*?)</h4>", steps), ["New match", "Have a code?", "On the map"])
+        for word in ("<b>You</b>", "<b>Sit here</b>", "<b>Friend</b>", "<b>Easy</b>", "<b>Nobody</b>", "<b>Teams</b>", "<b>START!</b>", "<b>Invite your friends</b>", "<b>Copy link</b>", "<b>Share</b>", "<b>Join</b>"):
+            self.assertIn(word, steps, word)
+        self.assertNotIn("Play vs the computer", steps)
         self.assertNotIn("setup-hint", self.page)                                              # (the long hints of the old form are in "How it works" and the room panel)
 
-    def test_a_first_visit_is_treasure_two_players_on_the_host_card_medium_in_all_three_bases(self):
+    def test_a_first_visit_is_treasure_you_at_green_a_medium_bot_in_the_other_seats_and_the_choices_are_the_cards_own(self):
         self.assertIn("var DEFAULT_MAP_KEY = 'treasure';", self.page)
-        self.assertIn("$('players-' + hostPlayers(recall('ants-four-players'), 2)).checked = true;", self.page)            # (the Host card's players: 2 - 4, an old stored 1 is 2)
-        self.assertIn("function soloBots(stored) { return stored === null || stored === undefined ? 'medium' : validFill(stored); }", self.page)
-        self.assertIn("var levels = soloSeats(recall('ants-solo-seats'), recall('ants-solo-bots'));", self.page)               # (the new key, else the old one: one level for all three)
-        self.assertIn("hostSeats(recall('ants-four-fill')).forEach(function (level, i) { $('host-seat-' + (i + 1) + '-' + (level || 'none')).checked = true; });", self.page)     # (the rooms' choice: none in every seat until chosen; an old single word is every seat)
-        self.assertIn("var hostTeamWanted = recall('ants-four-teams');", self.page)
+        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: 'ffa' }); }", self.page)
+        self.assertIn("var CARD_KEY = 'ants-match';", self.page)
+        self.assertIn("var card = cardParse(recall(CARD_KEY)) || cardFromOld({", self.page)                  # (a state of the card's own wins; the earlier pages' keys are for a first visit)
+        self.assertIn("remember(CARD_KEY, cardText(card));", self.page)
+        self.assertEqual(len(re.findall(r"\bremember\(CARD_KEY", self.page)), 1)                         # (the one place that writes it: a choice was made)
 
-    def test_the_old_key_of_the_opponents_is_read_and_never_written(self):
-        self.assertEqual(len(re.findall(r"recall\('ants-solo-bots'\)", self.page)), 1)
-        self.assertNotIn("remember('ants-solo-bots'", self.page)
-        for needle in ("remember('ants-solo-seats', soloSeatsText(levels));", "if (solo) remember('ants-solo-teams', team);", "var soloTeamWanted = recall('ants-solo-teams');"):
-            self.assertIn(needle, self.page, needle)
+    def test_the_old_keys_are_read_for_a_first_visit_and_never_written(self):
+        for key in ("ants-solo-seats", "ants-solo-bots", "ants-solo-teams", "ants-four-map", "ants-four-players", "ants-four-fill", "ants-four-teams"):
+            self.assertEqual(len(re.findall(r"recall\('%s'\)" % key, self.page)), 1, key)             # read once, for the first visit
+        self.assertNotRegex(self.page, r"remember\('ants-(solo|four)")                                  # ... and written by nothing: the card has its own key
+        self.assertNotIn("hostSeatsText", self.page)
+        written = set(re.findall(r"\bremember\(([A-Za-z_']+)", self.page))
+        self.assertEqual(written, {"key", "NAME_KEY", "ASPECT_KEY", "CARD_KEY"})                           # (the definition, the name, the picture's shape and the card: no other key is written)
 
     def test_the_header_links_the_footer_the_name_the_aspect_choice_and_the_room_buttons_are_there(self):
         for needle in ('href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"', 'href="https://github.com/dchadd427/ants-cross-platform/issues"'):
@@ -128,8 +138,10 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(len(re.findall(r"window\.open\(", self.page)), 1, "the one window.open is the explicit 'Open a window' of a seat")
         self.assertIn("function openWindow(seat)", self.page)
 
-    def test_play_goes_to_this_tab_and_the_host_s_own_seat_too(self):
-        self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(", self.page)
+    def test_start_goes_to_this_tab_and_so_do_the_old_addresses_and_the_room_panel(self):
+        self.assertIn("window.location.assign(new URL('./' + query, window.location.href).href);", self.page)           # START of the card: the game page with the room, in this tab
+        self.assertIn("var query = cardQuery(card, code, card.you, youName(), aspect);", self.page)
+        self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(", self.page)                  # an old address that asks for a game on this computer
         self.assertIn("var LOCAL_PAGE = 'play.html';", self.page)
         self.assertIn("window.location.assign(joinUrl(room, checked.name, fill, teamsInCode ? '' : roomTeams));", self.page)       # (the teams that the room's code names travel in the code)
         self.assertIn("window.location.assign(joinUrl(code, checked.name, '', ''));", self.page)
@@ -214,16 +226,16 @@ class TheImageAndTheCi(PageCase):
 
 
 class TheDocuments(unittest.TestCase):
-    def test_the_readme_and_the_notes_say_where_single_player_and_online_play_are(self):
+    def test_the_readme_and_the_notes_say_where_the_one_card_is_and_what_it_does(self):
         readme = read("README.md")
-        for needle in ("`/play.html?map=", "**Play vs the computer**", "**Play online**", "**Host a match**", "**Join a match**", "**START!**", "**Opponents**", "/four.html", "`--play`", "**Menu**",
+        for needle in ("`/play.html?map=", "**one card for every game, New match**", "**You**", "**Sit here**", "**Friend**", "**Nobody**", "**Teams**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "/four.html", "`--start-when`", "**Menu**",
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`"):
             self.assertIn(needle, readme, needle)
         notes = read("docs", "NETWORK_PORT.md")
-        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**Play vs the computer**", "**Host a match**", "`ants-four-players`", "the block `STATS`", "`web/front/`"):
+        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The card**", "**Invitations**", "**The leader's game starts the match**", "`ants-match`", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
             self.assertIn(needle, notes, needle)
         self.assertNotIn("web/four.html", readme)
-        for stale in ("**Players 1 to 4**", "Players 1 to 4."):                            # (the form that the two cards replaced)
+        for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card"):         # (the pages that the card replaced)
             self.assertNotIn(stale, readme + notes, stale)
 
 

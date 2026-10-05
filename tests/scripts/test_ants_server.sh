@@ -93,27 +93,30 @@ cd "$ROOT"
 if part_enabled options; then
 # the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
 check "web/lobby.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/lobby.html")" -ge 3 ]; echo $?)"
-# bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the Host card offers a group of four buttons for each seat after the leader's and the Teams, remembers
-# them, and every link of the room carries them as ?fill=<plan>&teams=A+B, validated; the game page turns exactly those texts into --fill-bots and --teams (and nothing else: an address cannot put another
-# word on the command line)
+# bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the front page's one card offers four seats with a group of five buttons each (Friend, Easy, Medium,
+# Hard, Nobody), Sit here and the Teams, remembers them, and every link of the room carries the plan as ?fill=<plan> (and &start=<people>), validated; the game page turns exactly those texts into --fill-bots,
+# --teams and --start-when (and nothing else: an address cannot put another word on the command line)
 FOUR_PAGE="$ROOT/web/lobby.html"
 SHELL_PAGE="$ROOT/web/shell.html"
 FILL_FORM=1
-if grep -qF 'id="host-seat-1-easy"' "$FOUR_PAGE" && grep -qF 'id="host-seat-2-medium"' "$FOUR_PAGE" && grep -qF 'id="host-seat-3-hard"' "$FOUR_PAGE" && grep -qF 'id="host-seat-3-none"' "$FOUR_PAGE" && grep -qF 'id="host-teams"' "$FOUR_PAGE" \
-    && grep -qF "remember('ants-four-fill', hostSeatsText(seats))" "$FOUR_PAGE" && grep -qF "remember('ants-four-teams', roomTeam)" "$FOUR_PAGE" && grep -qF "recall('ants-four-fill')" "$FOUR_PAGE" && grep -qF "recall('ants-four-teams')" "$FOUR_PAGE"; then FILL_FORM=0; fi
-check 'web/lobby.html offers "Empty seats at START" (None, Easy, Medium, Hard for the Red, Blue and Black seats) and the Teams on the Host card and remembers them' "$FILL_FORM"
+if grep -qF 'id="seat-0-friend"' "$FOUR_PAGE" && grep -qF 'id="seat-1-easy"' "$FOUR_PAGE" && grep -qF 'id="seat-2-medium"' "$FOUR_PAGE" && grep -qF 'id="seat-3-hard"' "$FOUR_PAGE" && grep -qF 'id="seat-3-nobody"' "$FOUR_PAGE" && grep -qF 'id="sit-3"' "$FOUR_PAGE" && grep -qF 'id="teams"' "$FOUR_PAGE" \
+    && grep -qF "remember(CARD_KEY, cardText(card));" "$FOUR_PAGE" && grep -qF "var card = cardParse(recall(CARD_KEY)) || cardFromOld({" "$FOUR_PAGE"; then FILL_FORM=0; fi
+check 'web/lobby.html offers four seats with Friend, Easy, Medium, Hard and Nobody for each, Sit here and the Teams on its one card, and remembers them' "$FILL_FORM"
 FILL_LINKS=1
 if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "if (roomTeams && !teamsInCode) q += '&teams=' + encodeURIComponent(roomTeams)" "$FOUR_PAGE" && grep -qF "validFillPlan(params.get('fill'))" "$FOUR_PAGE" && grep -qF "validRoomTeams(params.get('teams'))" "$FOUR_PAGE" \
-    && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF "(roomTeams && !teamsInCode ? '&teams=' + encodeURIComponent(roomTeams) : '')" "$FOUR_PAGE" && grep -qF 'id="fill-caption">Bots gather food, raid and fight back.' "$FOUR_PAGE"; then FILL_LINKS=0; fi
-check "web/lobby.html puts the bots into every game link and into its own address as &fill=<plan> (and &teams=A+B for a room whose code names no teams), reads the address through validFillPlan and validRoomTeams, and says under the choice what the bots do (gather food, raid and fight back)" "$FILL_LINKS"
-# the room's teams are a word of its code (protocol 13): the Host card puts the word into the code it makes, the page reads the words of a code as the server does, and the links carry &teams= only for a room whose code names none
+    && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF "(roomTeams && !teamsInCode ? '&teams=' + encodeURIComponent(roomTeams) : '')" "$FOUR_PAGE" && grep -qF "(plan ? '&fill=' + plan : '')" "$FOUR_PAGE" \
+    && grep -qF "'&start=' + cardPeople(state)" "$FOUR_PAGE" && grep -qF "Starts at once, in this tab. Bots gather food, raid and fight back." "$FOUR_PAGE"; then FILL_LINKS=0; fi
+check "web/lobby.html puts the plan into every game link of a room and into its own address as &fill=<plan> (and &teams=A+B for a room whose code names no teams), the card's START and invitations carry &fill=<plan>&start=<people>, the address is read through validFillPlan and validRoomTeams, and the line under START says what the bots do (gather food, raid and fight back)" "$FILL_LINKS"
+# the room's teams are a word of its code (protocol 13): the card puts the word into the code it makes, the page reads the words of a code as the server does, and the links carry &teams= only for a room whose code names none
 TEAM_WORD=1
 if grep -qF "var word = roomTeamWord(roomTeam);" "$FOUR_PAGE" && grep -qF "'p-' + (word ? word + '-' : '') + randomCode()" "$FOUR_PAGE" && grep -qF "var named = codeTeams(code);" "$FOUR_PAGE" && grep -qF "roomTeams = teamsInCode ? named : (named ? '' : validRoomTeams(teams));" "$FOUR_PAGE" \
-    && grep -qF "joinUrl(room, checked.name, fill, teamsInCode ? '' : roomTeams)" "$FOUR_PAGE" && grep -qF "hostTeam(wantedTeams, d.players)" "$FOUR_PAGE"; then TEAM_WORD=0; fi
-check "web/lobby.html makes the Teams choice a word of the room's code (demo-<map>-<n>p-t01-<random>), reads the words of a code (codeTeams), lets the code's teams win over the address's, and narrows an address's &teams= to the player count that the code names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_WORD"
+    && grep -qF "joinUrl(room, checked.name, fill, teamsInCode ? '' : roomTeams)" "$FOUR_PAGE" && grep -qF "hostTeam(wantedTeams, d.players)" "$FOUR_PAGE" \
+    && grep -qF "var word = roomTeamWord(state.teams);" "$FOUR_PAGE" && grep -qF "return 'demo-' + state.map + '-4p-' + (word ? word + '-' : '') + random;" "$FOUR_PAGE"; then TEAM_WORD=0; fi
+check "web/lobby.html makes the Teams choice a word of the room's code (demo-<map>-<n>p-t01-<random>; the card's room is always demo-<map>-4p-...), reads the words of a code (codeTeams), lets the code's teams win over the address's, and narrows an address's &teams= to the player count that the code names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_WORD"
 FILL_SHELL=1
-if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillPlanArg(q.get('fill'));" "$SHELL_PAGE" && grep -qF "out.args.push('--teams', teams)" "$SHELL_PAGE" && grep -qF "var teams = antsTeamsArg(q.get('teams'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
-check "web/shell.html gives the game --fill-bots and --teams from antsFillPlanArg's and antsTeamsArg's answers and nothing else (the lines that take the address's text and the lines that hand it to the game)" "$FILL_SHELL"
+if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillPlanArg(q.get('fill'));" "$SHELL_PAGE" && grep -qF "out.args.push('--teams', teams)" "$SHELL_PAGE" && grep -qF "var teams = antsTeamsArg(q.get('teams'));" "$SHELL_PAGE" \
+    && grep -qF "out.args.push('--start-when', start)" "$SHELL_PAGE" && grep -qF "var start = antsStartArg(q.get('start'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
+check "web/shell.html gives the game --fill-bots, --teams and --start-when from antsFillPlanArg's, antsTeamsArg's and antsStartArg's answers and nothing else (the lines that take the address's text and the lines that hand it to the game)" "$FILL_SHELL"
 # The validation itself is RUN, not read: the functions are cut out of the pages and given a table of addresses' values (the three words in any case, four words for the seats, a team of two seats; empty,
 # other words, spaces, line ends, look-alikes, an argument smuggled behind a word, a very long text, values that are no text): shell.html's antsFillArg, antsFillPlanArg and antsTeamsArg and lobby.html's
 # validFill and validFillPlan must answer the lower case text or nothing
@@ -121,7 +124,7 @@ if command -v node > /dev/null 2>&1; then
     FILL_RUN="$(node "$ROOT/tests/scripts/web_fill_check.js" "$SHELL_PAGE" "$FOUR_PAGE" 2>&1)"
     FILL_RUN_RC=$?
     [ "$FILL_RUN_RC" -ne 0 ] && echo "$FILL_RUN" | sed 's/^/    /'
-    check "the pages' own code for ?fill= and ?teams= (web/shell.html antsFillArg, antsFillPlanArg and antsTeamsArg, web/lobby.html validFill and validFillPlan), run with node on tables of values: the levels in any case and the lists of four give the lower case text, a team of two seats gives A+B, everything else gives nothing" "$FILL_RUN_RC"
+    check "the pages' own code for ?fill=, ?teams= and ?start= (web/shell.html antsFillArg, antsFillPlanArg, antsTeamsArg and antsStartArg, web/lobby.html validFill and validFillPlan), run with node on tables of values: the levels in any case and the lists of four give the lower case text, a team of two seats gives A+B, one digit 1 - 4 gives the people to wait for, everything else gives nothing" "$FILL_RUN_RC"
 else
     echo "  SKIP: node is not installed: the validation code of ?fill= and ?teams= in web/shell.html and web/lobby.html was NOT run (tests/scripts/web_fill_check.js)"
 fi
@@ -374,6 +377,32 @@ check "the room did not fail (the referee and the leader made the same team: no 
 for p in $PLAN_PIDS; do kill "$p" 2> /dev/null; done
 for p in $PLAN_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$PLAN" > /dev/null
+
+# the front page's one card, START with bots only: the game page gives the leader the colour that was picked (--seat 2, Blue), the plan of the card (easy,medium,none,none: a bot at Green and one at Red; none
+# for You, a Friend and Nobody) and --start-when 1. A room for four started by its leader alone seats the bots at the seats 0 and 1 (a bot at Green too), the leader holds seat 2, seat 3 stays empty
+CARD="E2E-CARD-$RANDOM"
+curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$CARD\",\"seed\":19}" "$CTL/rooms"
+"$GAME" --headless --no-lan --name Blue --join "127.0.0.1:$GAME_PORT" --room "$CARD" --seat 2 --fill-bots easy,medium,none,none --start-when 1 --screenshot "$WORK/c1.png" --frames 4000000 > "$WORK/c1.log" 2>&1 &
+CARD_PIDS="$!"
+CARD_UP=1
+for _ in $(seq 1 150); do
+    STATUS="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CARD")"
+    if echo "$STATUS" | grep -q '"state":"running"'; then CARD_UP=0; break; fi
+    sleep 0.2
+done
+check "alone at Blue with --seat 2 --fill-bots easy,medium,none,none --start-when 1 the leader starts a room for four at once: the match runs" "$CARD_UP"
+CARD_OK="$(echo "$STATUS" | python3 -c '
+import sys, json
+r = json.load(sys.stdin)
+bots = r.get("bots", [])
+ok = [b["seat"] for b in bots] == [0, 1] and [b["bot"] for b in bots] == ["easy", "medium"] and [b["name"] for b in bots] == ["Bot (Easy)", "Bot (Medium)"] and all(b["fill"] for b in bots)
+ok = ok and r.get("joined") == 3 and {p["seat"]: p["name"] for p in r["players"]} == {0: "Bot (Easy)", 1: "Bot (Medium)", 2: "Blue"}
+print(0 if ok else 1)' 2> /dev/null)"
+check "the leader holds the seat that it asked for (Blue), the bots of the plan are at Green (easy) and Red (medium) by their own names, and seat 3 stays empty" "${CARD_OK:-1}"
+check "the room did not fail and the client reported no error" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CARD" | grep -q '"state":"running"' && ! grep -qiE 'out of sync|failed|error' "$WORK/c1.log"; echo $?)"
+for p in $CARD_PIDS; do kill "$p" 2> /dev/null; done
+for p in $CARD_PIDS; do wait "$p" 2> /dev/null; done
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CARD" > /dev/null
 
 CHAT="E2E-CHAT-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$CHAT\",\"seed\":17}" "$CTL/rooms"
