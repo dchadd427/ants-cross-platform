@@ -56,12 +56,13 @@ class Webhook:
         self.server.server_close()
 
 
-def closed_port():
+def refusing_port(test):
+    """A port where a connection is refused: a socket that is bound and never listens holds it for the test (a port that was closed and given back could be
+    taken meanwhile by a test that runs beside this one: one did, and answered the POST with 501)."""
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+    test.addCleanup(s.close)
+    return s.getsockname()[1]
 
 
 @unittest.skipUnless(shutil.which("curl") and shutil.which("bash"), "curl and bash are needed")
@@ -111,7 +112,7 @@ class DeployWebhook(unittest.TestCase):
         self.assertNoSecret(result, hook.url())
 
     def test_an_address_that_is_not_there_fails_without_naming_it(self):
-        url = "http://127.0.0.1:%d%s" % (closed_port(), SECRET_PATH)
+        url = "http://127.0.0.1:%d%s" % (refusing_port(self), SECRET_PATH)
         result = self.call(url, "production")
         self.assertEqual(result.returncode, 1)
         self.assertIn("FAILED (curl exit status 7", result.stdout)
