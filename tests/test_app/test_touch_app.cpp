@@ -2404,6 +2404,8 @@ void test_slop() {
 
 int main(int argc, char* argv[]) {
     (void)argc; (void)argv;
+    SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);                      // (the environment survives SDL_Quit, which the end of an application calls; a hint does not): nothing is shown or heard
+    SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     test_setup_of_sdl();
     test_tap_is_the_click();
     test_drag_is_the_band();

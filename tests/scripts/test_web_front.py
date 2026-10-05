@@ -29,7 +29,6 @@ TOOL = os.path.join(REPO, "tools", "front_page_art")
 # the pictures of the folder and their sizes (width, height): web/lobby.html gives the same sizes to the <img> that shows each of them
 PICTURES = {
     "logo.png": (581, 218), "match_view.png": (761, 497), "clay.png": (96, 96),
-    "btn_start1.png": (98, 27), "btn_start2.png": (98, 27), "btn_start3.png": (97, 24),
     "lbl_pickamap.png": (145, 20), "lbl_mapinfo.png": (99, 22),
     "ant_green.png": (23, 40), "ant_red.png": (23, 40), "ant_blue.png": (23, 40), "ant_black.png": (23, 40),
     "preview_tiny.png": (300, 300), "preview_small.png": (300, 300), "preview_medium.png": (300, 300),
@@ -176,7 +175,7 @@ class TheTool(unittest.TestCase):
 
     def test_it_makes_every_picture_of_the_folder_and_nothing_else(self):
         text = read("tools", "front_page_art", "make_art.py")
-        patterns = re.findall(r'"([\w%.]+\.png)"', text)                           # "clay.png", "btn_start%d.png", "ant_%s.png", "preview_%s.png" ...
+        patterns = re.findall(r'"([\w%.]+\.png)"', text)                           # "clay.png", "ant_%s.png", "preview_%s.png" ...
         expressions = [re.compile(pattern.replace(".", r"\.").replace("%d", r"\d").replace("%s", r"[a-z]+")) for pattern in patterns]
         for name in PICTURES:
             self.assertTrue(any(e.fullmatch(name) for e in expressions), name + " is not made by make_art.py")

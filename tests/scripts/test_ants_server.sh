@@ -36,6 +36,10 @@ PART_LABEL=""
 [ -n "$PARTS" ] && PART_LABEL=" [${PARTS# }]"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD="${BUILD_DIR:-build}"
+# A sanitized build is far slower than a normal one: ANTS_E2E_TIME_SCALE (1 to 999; ./run_tests.sh --asan sets it) gives the restore section that many times the time and records that many times
+# shorter; a wait that ends early still ends at once.
+TIME_SCALE="${ANTS_E2E_TIME_SCALE:-1}"
+case "$TIME_SCALE" in [1-9]|[1-9][0-9]|[1-9][0-9][0-9]) ;; *) TIME_SCALE=1 ;; esac
 SERVER="$ROOT/$BUILD/src/ants_server/ants_server"
 GAME="$ROOT/$BUILD/src/ants_app/ants"
 FAILS=0
@@ -1113,7 +1117,8 @@ check "the result file of the closed room has no key either" "$([ -s "$RR_RESULT
 # seconds (about ten here), and a server that did it before its first answer would be silent that long. This one answers GET /busy within 2 s of its launch, counting the matches that wait, and takes
 # the Hello of a new room's player at once, while it restores (the clock of the measure starts at the launch, not when the control interface answers).
 RR_CLONES=1000
-python3 - "$RR_DIR" "$RR_CLONES" 5000 "$WORK/rr_source.restart" <<'PY'
+RR_TURNS=$((5000 / TIME_SCALE))
+python3 - "$RR_DIR" "$RR_CLONES" "$RR_TURNS" "$WORK/rr_source.restart" <<'PY'
 import os, struct, sys, zlib
 folder, count, total, source = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
 data = open(source, 'rb').read()
@@ -1158,11 +1163,11 @@ RR_PROTOCOL="$("$SERVER" --version 2> /dev/null | sed -n 's/.*(network protocol 
 RR_ASK_PY="$WORK/restore_answers.py"
 cat > "$RR_ASK_PY" <<'PY'
 import json, socket, struct, sys, time, urllib.request
-ws, game, ctl, secret, room, protocol, launched = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5], int(sys.argv[6]), float(sys.argv[7])
+ws, game, ctl, secret, room, protocol, launched, scale = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5], int(sys.argv[6]), float(sys.argv[7]), float(sys.argv[8])
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))       # (the server is on this machine: no proxy)
 def get(url, headers=None, data=None, method=None):
     request = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
-    with opener.open(request, timeout=1.0) as r:
+    with opener.open(request, timeout=1.0 * scale) as r:
         return r.status, json.loads(r.read().decode())
 def answered(url):                                                          # (asked again until it answers: the time that it took is counted from the launch)
     while time.time() - launched < 40.0:
@@ -1189,10 +1194,10 @@ hello = bytes([1]) + struct.pack('<H', protocol) + str8('Newcomer') + struct.pac
 hello_seconds, welcome_seconds, welcome = 99.0, 99.0, False
 if made:
     asked = time.time()
-    sock = socket.create_connection(('127.0.0.1', game), timeout=2.0)
+    sock = socket.create_connection(('127.0.0.1', game), timeout=2.0 * scale)
     sock.sendall(frame(hello))
     received = b''
-    while time.time() - asked < 3.0 and len(received) < 5:
+    while time.time() - asked < 3.0 * scale and len(received) < 5:
         try:
             received += sock.recv(4096)
         except Exception:
@@ -1203,18 +1208,19 @@ print('%.3f %.3f %.3f %s %d' % (busy_seconds, welcome_seconds, hello_seconds, 'y
 PY
 RR_T0="$(python3 -c 'import time; print(time.time())')"
 rr_launch --ws-port "$RR_WS" --max-rooms 1200
-RR_ANSWERS="$(python3 "$RR_ASK_PY" "$RR_WS" "$RR_PORT" "$RR_CTL" "$SECRET" "$RR_NEWROOM" "$RR_PROTOCOL" "$RR_T0")"
+RR_ANSWERS="$(python3 "$RR_ASK_PY" "$RR_WS" "$RR_PORT" "$RR_CTL" "$SECRET" "$RR_NEWROOM" "$RR_PROTOCOL" "$RR_T0" "$TIME_SCALE")"
 read -r RR_BUSY_S RR_WELCOME_S RR_HELLO_S RR_WELCOME RR_BUSY_MATCHES <<< "$RR_ANSWERS"
-check "while $RR_CLONES records wait for their replay GET /busy answers within 2 s of the server's launch (it did in $RR_BUSY_S s) and counts them (${RR_BUSY_MATCHES:-?} matches)" "$(python3 -c "print(0 if float('${RR_BUSY_S:-99}') < 2.0 and int('${RR_BUSY_MATCHES:--1}') >= 100 else 1)")"
-check "a room that is made then takes its player at once (the Welcome came $RR_HELLO_S s after the Hello and $RR_WELCOME_S s after the launch, while the records are replayed)" "$(python3 -c "print(0 if '${RR_WELCOME:-no}' == 'yes' and float('${RR_HELLO_S:-99}') < 1.0 and float('${RR_WELCOME_S:-99}') < 4.0 else 1)")"
+check "while $RR_CLONES records wait for their replay GET /busy answers within $((2 * TIME_SCALE)) s of the server's launch (it did in $RR_BUSY_S s) and counts them (${RR_BUSY_MATCHES:-?} matches)" "$(python3 -c "print(0 if float('${RR_BUSY_S:-99}') < 2.0 * $TIME_SCALE and int('${RR_BUSY_MATCHES:--1}') >= 100 else 1)")"
+check "a room that is made then takes its player at once (the Welcome came $RR_HELLO_S s after the Hello and $RR_WELCOME_S s after the launch, while the records are replayed)" "$(python3 -c "print(0 if '${RR_WELCOME:-no}' == 'yes' and float('${RR_HELLO_S:-99}') < 1.0 * $TIME_SCALE and float('${RR_WELCOME_S:-99}') < 4.0 * $TIME_SCALE else 1)")"
 rr_running_rooms() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RR_URL/rooms" | python3 -c 'import sys, json; print(sum(1 for r in json.load(sys.stdin).get("rooms", []) if r.get("state") == "running"))' 2> /dev/null; }
 RR_BACK=1
-for _ in $(seq 1 900); do
+for _ in $(seq 1 $((900 * TIME_SCALE))); do
     [ "$(rr_running_rooms)" -ge "$RR_CLONES" ] 2> /dev/null && { RR_BACK=0; break; }
+    kill -0 "$SERVER_PID" 2> /dev/null || break                                # (a server that died is not waited for)
     sleep 0.2
 done
 RR_RESTORE_S="$(python3 -c "import time; print(round(time.time() - $RR_T0, 1))")"
-check "all $RR_CLONES records are rooms again (running, restored) within three minutes" "$RR_BACK"
+check "all $RR_CLONES records are rooms again (running, restored) within $((3 * TIME_SCALE)) minutes" "$RR_BACK"
 check "the log says that the records wait for their replay and that their rooms were restored" "$(grep -q "restore: $RR_CLONES restart record(s) wait for their replay" "$WORK/rr_server.log" && [ "$(grep -c ' restored: ' "$WORK/rr_server.log")" -ge "$RR_CLONES" ]; echo $?)"
 kill -TERM "$SERVER_PID" 2> /dev/null
 wait "$SERVER_PID" 2> /dev/null

@@ -8,8 +8,9 @@ A developer's tool (it needs Pillow: pip install pillow); not part of any build 
     python3 tools/front_page_art/make_art.py --ants build/src/ants_app/ants --match    also the match picture of the header (a live match: see below)
 
 What it makes (web/front/, or the folder of --out):
-  clay.png, lbl_pickamap.png, lbl_mapinfo.png, btn_start1-3.png, qh_quickhelp.png, qh_power.png  the sprites of the game's menu screens (the clay, the hand-lettered labels, the START! button in its
-                                                                                                three states, the two help sheets of the original), cut out of ants.chd's sprites as they are
+  clay.png, lbl_pickamap.png, lbl_mapinfo.png, qh_quickhelp.png, qh_power.png  the sprites of the game's menu screens (the clay, the hand-lettered labels, the two help sheets of the original), cut out of
+                                                                               ants.chd's sprites as they are. The front page's START! button is not one of them: the original's picture is
+                                                                               98 x 27 pixels and broke up when it was shown larger, so web/lobby.html draws a button of its own in the same teal
   ant_green/red/blue/black.png     the front standing ant of the roster, tinted for each team
   logo.png                         the "ants!" lettering of the title screen without its clay (make_logo.py)
   preview_<map>.png                the setup screen's own map preview of each of the six maps, 300 x 300: the game is run headless on its setup screen with only that map in its Maps folder
@@ -49,8 +50,6 @@ def close_gap(image, top, resume, gap):
 def sprite_pictures():
     pictures = {"clay.png": sprite(2).convert("RGB"),                      # the tile that every menu screen's background repeats
                 "lbl_pickamap.png": key_clay(sprite(274)), "lbl_mapinfo.png": key_clay(sprite(277))}
-    for state, number in ((1, 289), (2, 290), (3, 291)):                   # START!: up, under the mouse, pressed
-        pictures["btn_start%d.png" % state] = key_clay(sprite(number))
     for team in TEAMS:
         pictures["ant_%s.png" % team] = recolor_ant(sprite(1481), team)
     pictures["qh_quickhelp.png"] = close_gap(sprite(232), 27, 41, 6)       # the original's quick help; the line under its title that names the old publisher (rows 27 - 40) is cut out

@@ -8,6 +8,7 @@ builds nothing), so these tests run the real script on made-up suites and check 
   - a failing suite makes the script exit 1 and says which, and the suites after it still run
   - the summary prints the time of every suite, the slowest ones and the totals; the final marker lines are unchanged (agents wait for them)
   - the tier options select as before (--sim, --app, --assets, --e2e) and --fast filters them
+  - --asan gives the suites the time scale of a sanitized build (ANTS_E2E_TIME_SCALE=4, a value that is set stays); a run without it sets none
   - the real table: what --fast contains (and does not), listed without running anything
   - the parallel run (the default; --jobs N, --serial): suites that are independent run at the same time and only then, each suite's output stays together and is printed
     in the order of the table, the result of every suite is the same as in a serial run, exclusive / lock / weight in the table are kept, every suite has a temporary
@@ -51,6 +52,10 @@ suite "F3" app   1 "-" "Quick suite after the failure" "PASS TWO"       'touch "
 suite "F4" app   0 "-" "Slow suite"                  "SLOW"             'touch "$MARK_DIR/f4"'
 '''
 
+SCALE_STUB_TABLE = r'''
+suite "A1" sim   1 "-" "What a suite sees of the time scale" "SEES" 'sh -c "echo time scale: \${ANTS_E2E_TIME_SCALE:-unset}" > "$MARK_DIR/scale.log"'
+'''
+
 
 class StubRunner(unittest.TestCase):
     """Runs the real script on a table of made-up suites (ANTS_RUN_TESTS_TABLE); MARK_DIR is a folder in which the suites leave their marks."""
@@ -78,6 +83,7 @@ class StubRunner(unittest.TestCase):
         env["TMPDIR"] = self.base_tmp
         env.pop("ANTS_RUN_TESTS_TABLE", None)
         env.pop("ANTS_RUN_TESTS_HISTORY", None)
+        env.pop("ANTS_E2E_TIME_SCALE", None)
         if table_text is not None:
             env["ANTS_RUN_TESTS_TABLE"] = self.table(table_text)
         env.update(extra)
@@ -195,6 +201,28 @@ class RunnerTiers(StubRunner):
         self.assertEqual(result.returncode, 0)
         self.assertIn("--fast", result.stdout)
         self.assertIn("docs/WORKFLOW.md", result.stdout)
+
+
+class SanitizedRun(StubRunner):
+    """--asan runs the same suites, with the time scale that a sanitized build needs (the restore section of tests/scripts/test_ants_server.sh reads it)."""
+
+    def scale_seen_by_the_suite(self, args, **extra):
+        mark = os.path.join(self.marks, "scale.log")
+        if os.path.exists(mark):
+            os.remove(mark)                                                    # (the mark of an earlier call would prove nothing)
+        result = self.run_script(args, SCALE_STUB_TABLE, **extra)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        return self.read_marks("scale.log").strip()
+
+    def test_a_sanitized_run_gives_the_suites_a_time_scale_of_four(self):
+        self.assertEqual(self.scale_seen_by_the_suite(["--asan"]), "time scale: 4")
+
+    def test_a_scale_that_is_set_stays(self):
+        self.assertEqual(self.scale_seen_by_the_suite(["--asan"], ANTS_E2E_TIME_SCALE="7"), "time scale: 7")
+
+    def test_a_run_without_the_sanitizers_sets_none(self):
+        self.assertEqual(self.scale_seen_by_the_suite([]), "time scale: unset")
+        self.assertEqual(self.scale_seen_by_the_suite(["--fast"]), "time scale: unset")
 
 
 # Each of these suites waits (up to two seconds) for the mark that the other one leaves: they can only pass when they run at the same time
