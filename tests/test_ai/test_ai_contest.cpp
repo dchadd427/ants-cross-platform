@@ -186,7 +186,7 @@ void run_contest_tests() {
             }
         }
         {   // (d) a duel that cannot end in a kill ends with the first blow, as it did (workers against a fresh ant: the engine lets one blow land per hit clip and a worker's blow leaves an ant with one hit
-            //     point, which walks home); a fight in which a kill is in reach (a Combat Ant among the defenders, an enemy of 8 hit points: four punches) waits out the hit clips of its target
+            //     point, which walks home); a fight in which a kill is in reach (a Combat Ant among the defenders, an enemy of 4 hit points: two punches) waits out the hit clips of its target
             for (const bool combat : {false, true}) {
                 sim::SimulationEngine sim;
                 empty_field(sim, 75);
@@ -194,7 +194,7 @@ void run_contest_tests() {
                 for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{27 + i % 2, 31 + i / 2});
                 if (combat) sim.spawn_unit(0, sim::AntType::Combat, TileCoord{28, 29});
                 const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{34, 30});
-                sim.get_unit(enemy).hp = combat ? 8 : 10;
+                sim.get_unit(enemy).hp = combat ? 4 : 10;
                 LevelPlan p = plan;
                 p.skirmish = false;
                 p.hunt = false;
@@ -280,20 +280,26 @@ void run_contest_tests() {
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
             }
         }
-        {   // (d) the kills are made, with the orders of the hunt (the Combat Ant alone while the number of hit points is even, one worker once when it is odd): ants of 4, 5 and 6 hit points die
-            for (const uint16_t hp : {uint16_t{4}, uint16_t{5}, uint16_t{6}}) {
-                sim::SimulationEngine hunt;
-                const auto h = world(hunt, hp, 1, 1);
-                Rig rig(hunt, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
-                uint64_t guard = 0;
-                while (alive(hunt, h.first) && guard++ < 600) rig.run(1);
-                ASSERT_TRUE(!alive(hunt, h.first));
-                ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 1u);
+        {   // (d) the kills are made, with the orders of the hunt (the Combat Ant alone while the number of hit points is even, one worker once when it is odd): ants of 2, 3 and 4 hit points die with the
+            //     plan as it ships (two blows); ants of 5 and 6 are nobody's hunt then, and die when the plan takes three blows
+            for (const uint16_t hp : {uint16_t{2}, uint16_t{3}, uint16_t{4}, uint16_t{5}, uint16_t{6}}) {
+                for (const bool three_blows : {false, true}) {
+                    if (hp < 5 && three_blows) continue;
+                    sim::SimulationEngine hunt;
+                    const auto h = world(hunt, hp, 1, 1);
+                    LevelPlan plan = plan_for(Level::Hard);
+                    if (three_blows) plan.hunt_blows = 3;
+                    Rig rig(hunt, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                    uint64_t guard = 0;
+                    while (alive(hunt, h.first) && guard++ < 600) rig.run(1);
+                    ASSERT_EQ(!alive(hunt, h.first), hp < 5 || three_blows);
+                    ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), hp < 5 || three_blows ? 1u : 0u);
+                }
             }
         }
     } TEST_END();
 
-    TEST_CASE("AI14.5 The Choice, The Scope And The Release Of A Hunt: Of Two Killable Enemies The One That Dies Soonest (The More Wounded) Is Hunted First; A Hunt Is Kept Until The Target Is Dead (A Fresh Enemy That Steps In Is Not Attacked) And The Ants Are Free Afterwards; Not Against A Stronger Force Near The Target, Never With The Last Ants Or Ants That Carry; Per Level: The Blows That The Kill Takes (A Combat Ant Punches For 2, An Odd Number Of Hit Points Needs An Opener, Workers Alone Only Kill 2 Hit Points And Only Three Of Them) Against What The Level Hunts (2, 3, 4); Easy Hunts What Stands Next To Its Ants, Medium Also What Is Within The Leash Of Its Hill Or At A Pile It Works, Hard Also The Carriers Of The Leader")
+    TEST_CASE("AI14.5 The Choice, The Scope And The Release Of A Hunt: Of Two Killable Enemies The One That Dies Soonest (The More Wounded) Is Hunted First; A Hunt Is Kept Until The Target Is Dead (A Fresh Enemy That Steps In Is Not Attacked) And The Ants Are Free Afterwards; Not Against A Stronger Force Near The Target, Never With The Last Ants Or Ants That Carry; Per Level: The Blows That The Kill Takes (A Combat Ant Punches For 2, An Odd Number Of Hit Points Needs An Opener, Workers Alone Only Kill 2 Hit Points And Only Three Of Them) Against What A Plan Hunts (The Shipped Plans: Two Blows At Every Level); Easy Hunts What Stands Next To Its Ants, Medium Also What Is Within The Leash Of Its Hill Or At A Pile It Works, Hard Also The Carriers Of The Leader")
     {
         const auto world = [&](sim::SimulationEngine& sim, size_t workers, size_t combats, uint32_t seed = 82) {
             empty_field(sim, seed);
@@ -315,7 +321,9 @@ void run_contest_tests() {
                 const auto own = world(sim, 2, 1);
                 enemy_at(sim, 29, 30, 6);
                 const uint32_t hurt = enemy_at(sim, 31, 31, 3, 2);
-                Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+                LevelPlan plan = plan_for(level);
+                plan.hunt_blows = 3;                                                                                                   // (the 6 hit points are a kill of three blows: both are candidates)
+                Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(40);
                 const auto attacks = attacks_of(rig);
                 ASSERT_TRUE(!attacks.empty());
@@ -405,7 +413,8 @@ void run_contest_tests() {
                 }
             }
         }
-        {   // (e) per level: the blows that the kill takes against what the level hunts (Easy 2, Medium 3, Hard 4) and its force (Easy 2 ants, Medium and Hard 3): a Combat Ant punches for 2 (an even
+        {   // (e) the blows that the kill takes against what a plan hunts (the thresholds that were tried, 2, 3 and 4 blows, set by hand: the shipped plans hunt two blows at every level, (e2)) and the force
+            //     of the level (Easy 2 ants, Medium and Hard 3): a Combat Ant punches for 2 (an even
             //     number of hit points takes h / 2 punches, an odd one an opener and (h - 1) / 2 punches, and no opener means no plan), workers alone only kill an ant of 2 hit points, three of them
             struct Row { uint16_t hp; size_t workers; size_t combats; bool easy; bool medium; bool hard; };
             const Row rows[] = {{4, 1, 1, true, true, true}, {5, 1, 1, false, true, true}, {6, 1, 1, false, true, true}, {7, 1, 1, false, false, true}, {8, 1, 1, false, false, true},
@@ -418,9 +427,25 @@ void run_contest_tests() {
                     sim::SimulationEngine sim;
                     world(sim, row.workers, row.combats);
                     enemy_at(sim, 30, 30, row.hp);
-                    Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+                    LevelPlan plan = plan_for(level);
+                    plan.hunt_blows = li == 0 ? 2u : li == 1 ? 3u : 4u;
+                    Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
                     rig.run(60);
                     ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack) >= 1, want[li]);
+                }
+            }
+        }
+        {   // (e2) the shipped plans: two blows at every level, so a Combat Ant and a worker hunt an enemy of 4 hit points and nothing above it (5 or more hit points are three blows or more: a hunt that mostly
+            //      chases an ant that walks on, docs/BOTS.md), at Easy too
+            for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
+                ASSERT_EQ(plan_for(level).hunt_blows, 2u);
+                for (const uint16_t hp : {uint16_t{4}, uint16_t{5}, uint16_t{6}, uint16_t{8}}) {
+                    sim::SimulationEngine sim;
+                    world(sim, 1, 1);
+                    enemy_at(sim, 30, 30, hp);
+                    Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+                    rig.run(60);
+                    ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack) >= 1, hp == 4);
                 }
             }
         }
@@ -448,7 +473,7 @@ void run_contest_tests() {
                 sim.get_unit(carrier).hp = 4;
                 sim.set_player_score(1, 3000);
                 LevelPlan plan = plan_for(level);
-                plan.catchup = false;                                                                                                  // (no food on this field: 3000 points behind would be tier 3 and open the skirmish: AI14.9)
+                plan.catchup = false;                                                                                                  // (no food on this field: 3000 points behind is tier 3, where the odds of a hunt are lowest: AI14.9)
                 Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(60);
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack) >= 1, level == Level::Hard);
@@ -790,7 +815,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI14.9 Behind The Leader And The Endgame (The Owner: \"The Losing Player Should Be A Little More Aggressive\"): The Pressure Is The Deficit In Percent Of What Can Still Be Earned, Its Tiers Come Later The Weaker The Level (Hard 40, 80 And 130 Percent, Medium 1.5 Times, Easy 2.5 Times); The Old Margin Of 150 Points Never Fires In A Close Match, The Pressure Does; A Bot Behind Strikes At Tier 1 With Its Combat Ants, Workers Join At Tier 2, Ahead It Does Not; Easy Raids From Tier 2; In The Last Minute The Leader Guards (No Offence, One Defender More) And The Bot Behind Is All-In (Tier 3, The Strike Does Not Stop)")
+    TEST_CASE("AI14.9 Behind The Leader And The Endgame (The Owner: \"The Losing Player Should Be A Little More Aggressive\"): The Pressure Is The Deficit In Percent Of What Can Still Be Earned, Its Tiers Come Later The Weaker The Level (Hard 40, 80 And 130 Percent, Medium 1.5 Times, Easy 2.5 Times); The Old Margin Of 150 Points Never Fires In A Close Match, The Pressure Does; A Bot Behind Strikes At Tier 1 With Its Combat Ants, Workers Join Only Where The Plan Lets Them (Never In The Shipped Plans), Ahead It Does Not; Easy Raids From Tier 2; In The Last Minute The Leader Guards (No Offence, One Defender More) And The Bot Behind Is All-In (Tier 3, The Strike Does Not Stop)")
     {
         // a field with plenty of food (10,000 points: the time is what limits what can be earned), the scores and the time of the case
         const auto build = [&](sim::SimulationEngine& sim, int32_t mine, int32_t leader, uint32_t ticks, uint64_t at, uint32_t seed = 110) {
@@ -862,20 +887,25 @@ void run_contest_tests() {
                 ASSERT_EQ(rig.as<StandardBot>().strike().strikes_started() >= 1u, k.want);
             }
         }
-        {   // (d) workers join at tier 2 (the deficit of 1000 at tick 7200 is tier 2 at Hard): a bot with no Combat Ant strikes with its workers; at tier 1 (600) it does not
-            for (const int32_t deficit : {600, 1000}) {
+        {   // (d) workers join the strike only where the plan lets them (catchup_workers_tier): with 2 a bot with no Combat Ant strikes with its workers at tier 2 (the deficit of 1000 at tick 7200 at Hard)
+            //     and not at tier 1 (600); the shipped plans never do (a worker kills nothing above two hit points: docs/BOTS.md), not even at tier 3 (2500)
+            for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) ASSERT_EQ(plan_for(level).catchup_workers_tier, 4u);
+            struct Case { int32_t deficit; bool workers_from_2; bool want; };
+            const Case cases[] = {{600, true, false}, {1000, true, true}, {1000, false, false}, {2500, false, false}};
+            for (const Case& k : cases) {
                 sim::SimulationEngine sim;
-                build(sim, 100, 100 + deficit, 14400, 0);
+                build(sim, 100, 100 + k.deficit, 14400, 0);
                 for (int i = 0; i < 7; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{44 + i % 3, 14 + i / 3});
                 for (int i = 0; i < 2; ++i) carrier_at(sim, 1, TileCoord{46 + i, 8});
                 tick_all(sim, 7200);
                 sim.set_player_score(0, 100);
-                sim.set_player_score(1, 100 + deficit);
+                sim.set_player_score(1, 100 + k.deficit);
                 LevelPlan plan = plan_for(Level::Hard);
                 plan.skirmish = false;
+                if (k.workers_from_2) plan.catchup_workers_tier = 2;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(120);
-                ASSERT_EQ(rig.as<StandardBot>().strike().strikes_started() >= 1u, deficit == 1000);
+                ASSERT_EQ(rig.as<StandardBot>().strike().strikes_started() >= 1u, k.want);
             }
         }
         {   // (e) Easy raids from tier 2 (a Thief of its own, the leader 2,500 points ahead at tick 7200: tier 2 at Easy) and not at tier 0

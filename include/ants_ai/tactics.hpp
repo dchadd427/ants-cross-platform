@@ -61,7 +61,7 @@ struct LevelPlan {
     uint32_t race_ticks{1200};           // the first minute of the match
     uint32_t race_army_weight{8};
     uint32_t race_army_percent{150};
-    uint32_t contest_opening_ticks{1200};  // (experiment) the opening lasts this long
+    uint32_t contest_opening_ticks{1200};  // the opening of v0.5.0 (race off) lasts this long
     uint32_t contest_opening_min_ants{6};  // ... only with at least this many ants at the start (TINY has 3, SMALL 4: there the contest of the middle costs and loses; MEDIUM, GAUNTLET and TREASURE have 6 or more)
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating", the owner's playbook): 55 to 65 ticks per deposit instead of 93 to 116
@@ -177,8 +177,10 @@ struct LevelPlan {
     // hunting the kill (v0.6, the owner: "I saw lots of opportunities where it could have killed an ant, the ant was 4 HP and it just didn't kill it"): at every look the free ants go for a visible enemy
     // ant that they can kill before help arrives, whether or not it hit anybody first
     bool hunt{false};                    // (every level, scaled) a kill that is available is attacked at once, kept until it is done and the ants are released afterwards (FightTask)
-    uint32_t hunt_blows{3};              // a kill is available when the real blows (kill_plan: one lands per hit clip of about 22 ticks, a Combat Ant's punch takes 2 hit points, an ant that is left with one
-                                         // walks home) can take the target's hit points in this many blows; Easy 2, Medium 3, Hard 4
+    uint32_t hunt_blows{2};              // a kill is available when the real blows (kill_plan: one lands per hit clip of about 22 ticks, a Combat Ant's punch takes 2 hit points, an ant that is left with one
+                                         // walks home) can take the target's hit points in this many blows: 2 is a target of at most 4 hit points with a Combat Ant in the force (1 or 2 without one).
+                                         // Hunts of 3 or 4 blows (5 to 8 hit points) mostly chase an ant that walks on (a Hard bot started 8.9 hunts a match on TREASURE, 0.5 ended with the target dead) and
+                                         // cost win rate: 28.5 percent with 4 blows, 36.7 with 2 and 35.5 with no hunts (TREASURE, 128 matches each, docs/BOTS.md)
     uint32_t hunt_force{3};              // ants at most
     uint32_t hunt_odds_percent{120};     // the force's strength (hit points times damage) against what answers near the target, in percent: a clear local advantage
     int32_t hunt_reach{10};              // free ants within this many tiles of the target are called
@@ -189,12 +191,16 @@ struct LevelPlan {
     // behind the leader and the endgame (v0.6; docs/BOTS.md, "Behind the leader and the endgame"): the bot that is behind escalates, scaled by level; in the last minute the leader guards and the bot
     // behind goes all-in. The pressure is the deficit (the leader's box above the own) in percent of what can still be earned (the food on the field in points or the time left at catchup_earn_milli,
     // the less of the two): a pressure from catchup_tier1 / 2 / 3 is a tier 1 / 2 / 3 (Hard 40, 80, 130 percent; Medium 1.5 times those, Easy 2.5 times: the weaker the level, the later it escalates)
-    bool catchup{false};                 // (every level, scaled) the tiers: 1 a strike force of Combat Ants (and raids for a smaller loot), 2 workers join it, the skirmish and the raids open for every level, a Thief and
-                                         // Combat Ants are wanted, odds are lowered; 3 all-in: no stop for the strike in the last minutes, the lowest odds
+    bool catchup{false};                 // (every level, scaled) the tiers: 1 a strike force of Combat Ants (and raids for a smaller loot), 2 a hill with a guard is raided, a plan that does not raid (Easy)
+                                         // raids and wants a Thief and Combat Ants (catchup_lift_tier); 3 all-in: no stop for the strike in the last minutes, the lowest odds. Workers never join the strike
+                                         // (catchup_workers_tier)
     uint32_t catchup_tier1{40};
     uint32_t catchup_tier2{80};
     uint32_t catchup_tier3{130};
-    uint8_t catchup_workers_tier{2};     // from this tier on workers join the strike and the skirmish opens for every level (the Combat Ants of the bot are the force below it)
+    uint8_t catchup_workers_tier{4};     // from this tier on workers join the strike and the skirmish opens for every level; 4: never. A worker's blow takes one hit point and one blow lands per hit clip, so workers
+                                         // kill nothing above two hit points: with them from tier 2 a bot 2,000 ticks late in TREASURE scored 1,749 points against 1,859 with no catch-up, from tier 3 1,793,
+                                         // with Combat Ants only 1,844 (Hard, 96 matches each, docs/BOTS.md)
+    uint8_t catchup_lift_tier{2};        // from this tier on a plan that does not raid, take a Thief or take Combat Ants (Easy) does
     bool catchup_wants{true};            // from tier 1 on more Combat Ants (and from tier 2 a Thief) are wanted: more trips for power-ups
     uint32_t catchup_min_leader{300};    // the leader holds at least this many points (below that a fight is not worth the trip)
     uint32_t catchup_earn_milli{160};    // thousandths of a point per tick that a team can earn at most (the best bots bank about 2,200 points in 14,400 ticks)

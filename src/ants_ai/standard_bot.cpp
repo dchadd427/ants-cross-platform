@@ -100,11 +100,11 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         if (plan.takes_combat && (fists || free_ants || !plan.combat_when_attacked)) {
             tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(plan.max_combat + (attacked ? plan.combat_extra : 0u));
         }
-        // behind the leader, a strike needs its Combat Ants: as many as the force is (from tier 2 on a level that does not take them otherwise takes them too, and a Thief for the raids)
-        if ((plan.takes_combat || st.tier >= plan.catchup_workers_tier) && ((plan.strikes && !plan.strike_workers && st.behind) || (escalating && plan.catchup_wants))) {
+        // behind the leader, a strike needs its Combat Ants: as many as the force is (from the lift tier on a level that does not take them otherwise takes them too, and a Thief for the raids)
+        if ((plan.takes_combat || st.tier >= plan.catchup_lift_tier) && ((plan.strikes && !plan.strike_workers && st.behind) || (escalating && plan.catchup_wants))) {
             tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(std::max<uint32_t>(std::max<uint32_t>(plan.max_combat, plan.strike_force), tactics_.wants[static_cast<size_t>(sim::AntType::Combat)]));
         }
-        if (!plan.takes_thief && st.tier >= plan.catchup_workers_tier && plan.catchup_wants) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = 1;
+        if (!plan.takes_thief && st.tier >= plan.catchup_lift_tier && plan.catchup_wants) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = 1;
     }
 
     // 3. the tasks, the one that takes ants from the others first
@@ -112,7 +112,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     walls_.step(context);
     powerups_.step(context);
     bombs_.step(context);
-    if ((plan.raids || (plan.catchup && st.tier >= plan.catchup_workers_tier)) && !fallback) raids_.step(context);
+    if ((plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier)) && !fallback) raids_.step(context);
     if (plan.guards) guard_.step(context);
     if (plan.strikes || plan.wipe_focus || plan.catchup) strike_.step(context);
     if (plan.harass) harass_.step(context);

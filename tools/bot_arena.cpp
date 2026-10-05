@@ -589,6 +589,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "cu2") { p.catchup_tier2 = static_cast<uint32_t>(v); return true; }
     if (key == "cu3") { p.catchup_tier3 = static_cast<uint32_t>(v); return true; }
     if (key == "cuworkers") { p.catchup_workers_tier = static_cast<uint8_t>(v); return true; }
+    if (key == "culift") { p.catchup_lift_tier = static_cast<uint8_t>(v); return true; }
     if (key == "cuwants") return flag(p.catchup_wants);
     if (key == "cuearn") { p.catchup_earn_milli = static_cast<uint32_t>(v); return true; }
     if (key == "endgame") return flag(p.endgame);

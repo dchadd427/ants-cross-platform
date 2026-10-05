@@ -38,7 +38,6 @@ LevelPlan plan_for(Level level) noexcept {
             p.catchup_tier1 = 100;               // Easy escalates 2.5 times later than Hard, Medium 1.5 times
             p.catchup_tier2 = 200;
             p.catchup_tier3 = 325;
-            p.hunt_blows = 2;
             p.hunt_force = 2;
             p.hunt_reach = 6;
             p.hunt_wide = false;                 // Easy hunts what stands next to its ants and nothing else
@@ -68,7 +67,6 @@ LevelPlan plan_for(Level level) noexcept {
             p.catchup_tier1 = 60;
             p.catchup_tier2 = 120;
             p.catchup_tier3 = 195;
-            p.hunt_blows = 3;
             p.hunt_force = 3;
             p.hunt_reach = 10;                   // Medium hunts what is within the leash of its hill and at its piles as well
             break;
@@ -98,7 +96,6 @@ LevelPlan plan_for(Level level) noexcept {
             p.gate = true;                       // guiding for eating: +4 to +23 percent alone on every shipped map (docs/BOTS.md)
             p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOTS.md "Aggression")
             p.raid_min_loot = 15;                // a raid for 15 points is a swing of 30 and a trip of a few hundred ticks: it pays (raidmin 10 / 30 / 60: 96.5 / 94.1 / 93.1 percent against Medium, Medium, Easy)
-            p.hunt_blows = 4;
             p.hunt_force = 3;
             p.hunt_reach = 10;
             p.hunt_leader_carriers = true;       // Hard also hunts the carriers of the leading team wherever they are
