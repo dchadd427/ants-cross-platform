@@ -79,8 +79,8 @@ struct RoomSpec {
     uint32_t run_ms{2u * 3600u * 1000u};    // a match that is still running this long after it began is ended (failed, "took too long"): a wall-clock limit on the life of
                                             // a room (it never waits for a seat, but a match that does not end by its rules would run on for ever). It counts from the moment the match
                                             // began (the 5 s before its first turn, the start dialog, count: protocol 12), without the time that it waited for a seat that was away
-    // Reconnect (protocol 10): the room holds the seat of a player whose connection is lost. OFF by default in this release (the server's `--reconnect` and the control interface's
-    // "reconnect" turn it on): a server that held seats for clients that cannot come back yet would be worse than one that does not.
+    // Reconnect (protocol 10): the room holds the seat of a player whose connection is lost. A spec built by code says what it wants (false here); the server's rooms start from
+    // RoomManager::default_spec(), which holds seats unless `--no-reconnect` or the room's own "reconnect": false says otherwise (kReconnectByDefault).
     bool reconnect{false};
     uint32_t vote_after_ms{net::kVoteAfterMs};      // the others may vote on going on without a seat once it has been away this long in all (5 s .. 1 h; the control key "hold_vote_seconds")
     uint32_t max_pause_ms{net::kMaxPauseMs};        // the match's total paused time is capped: at the cap every seat that is not present is dropped (1 min .. 24 h; the control key "max_pause_seconds")

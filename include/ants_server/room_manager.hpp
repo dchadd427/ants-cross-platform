@@ -33,8 +33,8 @@ namespace ants::server {
 class ParkedLink;                                // (room_manager.cpp: the connection of a Hello that waits for its room)
 
 /// Whether the rooms of a server hold the seat of a player whose connection is lost unless something says otherwise (ServerLimits::reconnect, the server's `--reconnect` / `--no-reconnect`: the rooms
-/// that the control interface makes and the demo rooms follow it). OFF while the game's own clients cannot come back by themselves; the release that adds that (release B) flips this one constant.
-inline constexpr bool kReconnectByDefault = false;
+/// that the control interface makes and the demo rooms follow it). ON since release B: the game's own clients come back by themselves (NetGame, the application's screens, the page's Rejoin).
+inline constexpr bool kReconnectByDefault = true;
 
 struct ServerLimits {
     size_t max_rooms{256};
@@ -58,8 +58,8 @@ struct ServerLimits {
     // map, for two), so that a page that offers a map the server does not allow still gets the players it asked for. What a code does not choose is `demo_map` and
     // `demo_players`, as before. The choice rides in the room code because the Hello has no other field (the protocol is unchanged).
     std::vector<std::string> demo_maps;
-    // Reconnect (protocol 10; ants_server's --reconnect, --hold-vote-seconds, --max-pause-seconds, --max-catch-up-seconds, --resume-countdown-seconds, --log-mb): what a room holds unless its specification says otherwise. Demo rooms follow
-    // `reconnect`. OFF by default in this release.
+    // Reconnect (protocol 10; ants_server's --reconnect / --no-reconnect, --hold-vote-seconds, --max-pause-seconds, --max-catch-up-seconds, --resume-countdown-seconds, --log-mb): what a room holds unless its specification says otherwise. Demo rooms follow
+    // `reconnect`. ON by default (kReconnectByDefault).
     bool reconnect{kReconnectByDefault};
     uint32_t hold_vote_ms{net::kVoteAfterMs};                       // the vote opens after a seat has been away this long in all
     uint32_t max_pause_ms{net::kMaxPauseMs};                        // a match's pauses may last this long in all; at the cap every seat that is not present is dropped

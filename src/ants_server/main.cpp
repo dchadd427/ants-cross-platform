@@ -25,9 +25,9 @@
 //                      what it does not choose is 4 players on --demo-map (needs --demo-rooms). A demo room waits ten minutes for its players.
 //   --reconnect, --no-reconnect
 //                      a room holds the seat of a player whose connection is lost (protocol 10): the match is paused for everybody, the seat comes back with its key, the others
-//                      may vote to go on without it, the match's total pause is capped. This is the default of the rooms (the control interface's "reconnect" overrides it per room;
-//                      demo rooms follow it). OFF by default in this release: the game's own clients do not come back yet (release B), so a server that held seats for them would only make
-//                      the others wait; the last of the two options wins
+//                      may vote to go on without it, the match's total pause is capped. ON by default (the game's own clients come back by themselves: release B); --no-reconnect turns it
+//                      off (a lost player is dropped at once and no restart record is kept). It is the default of the rooms (the control interface's "reconnect" overrides it per room;
+//                      demo rooms follow it); the last of the two options wins
 //   --hold-vote-seconds N
 //                      the others may vote on going on without a seat once it has been away N seconds in all (5 - 3600, default 30; the control interface's "hold_vote_seconds")
 //   --max-pause-seconds N
@@ -42,7 +42,7 @@
 //                      writes every sealed turn to a file here (mode 600: it holds the keys of the seats) BEFORE the turn is sent to anybody, so that a server that is stopped, crashes or is
 //                      redeployed does not end the matches that run: the server that starts again finds the records, replays them (checked against stored state hashes), holds every seat
 //                      and the players come back with their keys. Default: the folder "restart" in --results-dir; without a results folder the server keeps none. A record of another network
-//                      protocol is not restored (the room is closed with that reason). Only rooms that hold seats (--reconnect, a room's "reconnect") keep one
+//                      protocol is not restored (the room is closed with that reason). Only rooms that hold seats (the default, unless --no-reconnect or a room's "reconnect": false) keep one
 //   --no-restart-records
 //                      keep no restart records (a running match ends with the server, as it did before records), whatever --results-dir says
 //   --restart-vote-seconds N
@@ -413,7 +413,7 @@ int main(int argc, char** argv) {
         }
         if (rooms.restart_store() != nullptr) {
             log("restart records in " + rc.dir + ": a running match of a room that holds seats survives a restart (budget " + std::to_string(o.restart_budget_mb) + " MiB, the others may vote on a seat that has not come back after " +
-                std::to_string(o.restart_vote_s) + " s)" + (o.reconnect ? std::string() : std::string("; no room holds seats unless its specification says so (--reconnect), so none is kept now")));
+                std::to_string(o.restart_vote_s) + " s)" + (o.reconnect ? std::string() : std::string("; no room holds seats unless its specification says so (--no-reconnect), so none is kept now")));
         } else if (o.no_restart_records) {
             log("restart records are off (--no-restart-records): a running match ends with the server");
         } else if (rc.dir.empty()) {
@@ -421,9 +421,11 @@ int main(int argc, char** argv) {
         }
     }
     if (o.reconnect) {
-        log("rooms hold the seat of a player whose connection is lost (--reconnect): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
+        log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
             " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
             std::to_string(o.log_mb) + " MiB per room");
+    } else {
+        log("rooms hold no seats (--no-reconnect): a player whose connection is lost is dropped at once, unless a room's specification says \"reconnect\": true");
     }
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));

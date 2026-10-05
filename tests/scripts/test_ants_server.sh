@@ -619,7 +619,36 @@ check "the stack: demo-n1 (no map in the code) is made on the default map, TREAS
 check "the stack: demo-tiny-n2 is made on TINY.LVL (a code that names a map still chooses it)" "$([ "$(stack_map_of_room demo-tiny-n2)" = "TINY.LVL" ]; echo $?)"
 check "the stack: demo-treasure-n3 is made on TREASURE.LVL" "$([ "$(stack_map_of_room demo-treasure-n3)" = "TREASURE.LVL" ]; echo $?)"
 check "the stack: demo-islands-2p-n4 is made on ISLANDS.LVL" "$([ "$(stack_map_of_room demo-islands-2p-n4)" = "ISLANDS.LVL" ]; echo $?)"
+# release B turned the switch on: the stack passes no reconnect option and its rooms hold the seat of a player whose connection is lost (the log says so; a demo room, and a room that the
+# control interface makes without a setting, say reconnect true)
+stack_reconnect_of_room() { curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$STACK_CTL/rooms/$1" | python3 -c 'import sys, json; print(str(json.load(sys.stdin).get("reconnect", "")).lower())' 2> /dev/null; }
+check "the stack passes no reconnect option (the default is what holds the seats)" "$(echo "$STACK_OPTS" | grep -q -e '--reconnect' -e '--no-reconnect'; [ "$?" -ne 0 ]; echo $?)"
+check "the stack: the log says that rooms hold seats, as the default" "$(grep -q 'rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off)' "$WORK/stack_demo.log"; echo $?)"
+check "the stack: its demo rooms hold seats (reconnect true in their status)" "$([ "$(stack_reconnect_of_room demo-n1)" = "true" ] && [ "$(stack_reconnect_of_room demo-islands-2p-n4)" = "true" ]; echo $?)"
+check "the stack: a room that the control interface makes without a setting holds seats, and one that says false does not" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-1"}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":true' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-2","reconnect":false}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":false'; echo $?)"
 for p in $STACK_PIDS; do kill "$p" 2> /dev/null; done
+stop_server
+
+# the off state stays covered: --no-reconnect, after the stack's own options, makes every room hold no seats (a demo room too, and the records say that none is kept), and a room's own "reconnect": true still holds them
+NOREC_PORT="$(free_port)"
+NOREC_CTL="$(free_port)"
+# shellcheck disable=SC2086
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$NOREC_PORT" --ctl-port "$NOREC_CTL" --results-dir "$WORK/norec_results" $STACK_OPTS --no-reconnect > "$WORK/norec.log" 2>&1 &
+SERVER_PID=$!
+NOREC_UP=1
+for _ in $(seq 1 50); do
+    if curl -s -m 1 "http://127.0.0.1:$NOREC_CTL/healthz" | grep -q '"ok"'; then NOREC_UP=0; break; fi
+    kill -0 "$SERVER_PID" 2> /dev/null || break
+    sleep 0.1
+done
+check "a server started with the stack's options and --no-reconnect runs" "$NOREC_UP"
+"$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$NOREC_PORT" --room demo-nr1 --frames 400 > "$WORK/norec_demo.log" 2>&1 &
+NOREC_PID=$!
+norec_reconnect_of_room() { for _ in $(seq 1 60); do R="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$NOREC_CTL/rooms/$1" | python3 -c 'import sys, json; print(str(json.load(sys.stdin).get("reconnect", "")).lower())' 2> /dev/null)"; [ -n "$R" ] && break; sleep 0.2; done; echo "$R"; }
+check "--no-reconnect: the log says that rooms hold no seats, and that no record is kept" "$(grep -q 'rooms hold no seats (--no-reconnect)' "$WORK/norec.log" && grep -q 'no room holds seats unless its specification says so (--no-reconnect), so none is kept now' "$WORK/norec.log"; echo $?)"
+check "--no-reconnect: a demo room holds no seats (reconnect false in its status)" "$([ "$(norec_reconnect_of_room demo-nr1)" = "false" ]; echo $?)"
+check "--no-reconnect: a room that the control interface makes without a setting holds none, and one that says true holds seats" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-1"}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":false' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-2","reconnect":true}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":true'; echo $?)"
+kill "$NOREC_PID" 2> /dev/null
 stop_server
 fi
 
