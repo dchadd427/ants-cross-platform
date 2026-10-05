@@ -1,5 +1,5 @@
-// Runs the page's own code that validates ?fill= and ?teams= on tables of addresses' values (tests/scripts/test_ants_server.sh): web/shell.html's antsFillArg / antsFillPlanArg / antsTeamsArg (what may
-// reach the game's arguments as --fill-bots and --teams) and web/lobby.html's validFill / validFillPlan (what may go into a link of the room). The functions are cut out of the pages between their marker
+// Runs the page's own code that validates ?fill=, ?teams= and ?start= on tables of addresses' values (tests/scripts/test_ants_server.sh): web/shell.html's antsFillArg / antsFillPlanArg / antsTeamsArg /
+// antsStartArg (what may reach the game's arguments as --fill-bots, --teams and --start-when) and web/lobby.html's validFill / validFillPlan (what may go into a link of the room). The functions are cut out of the pages between their marker
 // comments and run as they are.
 // usage: node web_fill_check.js web/shell.html web/lobby.html     (exit 0: every row of the table holds; the first differing row is printed)
 'use strict';
@@ -37,6 +37,14 @@ const planTable = table.concat([
     ['none,none,easy,hard\u0000', ''], ['none,none,ｅａｓｙ,hard', ''], ['none,none,İEASY,hard', ''], ['constructor,none,easy,hard', ''], ['__proto__,none,easy,hard', ''],
     ['hard,'.repeat(2000), ''], [['none', 'none', 'easy', 'hard'], ''], [{ toString() { return 'none,none,easy,hard'; } }, ''],
 ]);
+// how many people the leader's game waits for before it presses START by itself (the front page's card: 1 + its Friend rows): one digit 1 - 4, "" for anything else (no hook)
+const startTable = [
+    ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'],
+    ['', ''], [null, ''], [undefined, ''], [1, ''], [2, ''], [{}, ''], [['2'], ''], [{ toString() { return '2'; } }, ''],
+    ['0', ''], ['5', ''], ['9', ''], ['10', ''], ['12', ''], ['01', ''], ['02', ''], ['-1', ''], ['+2', ''], ['2.0', ''], ['2.5', ''], ['1e1', ''], ['0x2', ''],
+    [' 2', ''], ['2 ', ''], ['2\n', ''], ['\n2', ''], ['2\t', ''], ['2\0', ''], ['2,3', ''], ['2;ls', ''], ['2&seat=1', ''], ['2 --room x', ''], ['two', ''], ['\u0662', ''], ['\uff12', ''], ['constructor', ''],
+    ['2'.repeat(2000), ''],
+];
 // the teams: two different seats 0 - 3 as A+B (a "+" that arrived as a blank is read too); "" for anything else, free for all included (nothing to tell the game)
 const teamsTable = [
     ['0+1', '0+1'], ['0+2', '0+2'], ['0+3', '0+3'], ['1+2', '1+2'], ['1+3', '1+3'], ['2+3', '2+3'], ['3+0', '3+0'], ['1+0', '1+0'], ['2+1', '2+1'],
@@ -56,7 +64,7 @@ const run = (label, fn, rows) => {
         if (got !== want) { console.log('FAIL ' + label + '(' + JSON.stringify(value).slice(0, 40) + ') = ' + JSON.stringify(got) + ', wanted ' + JSON.stringify(want)); failed++; }
     }
 };
-for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'ANTS_FILL_END', ['antsFillArg', 'antsFillPlanArg', 'antsTeamsArg']], [process.argv[3], 'FILL_BEGIN', 'FILL_END', ['validFill', 'validFillPlan']]]) {
+for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'ANTS_FILL_END', ['antsFillArg', 'antsFillPlanArg', 'antsTeamsArg', 'antsStartArg']], [process.argv[3], 'FILL_BEGIN', 'FILL_END', ['validFill', 'validFillPlan']]]) {
     if (!path) { console.log('usage: web_fill_check.js shell.html lobby.html'); process.exit(2); }
     let fns;
     try { fns = extract(path, begin, end, names); } catch (e) { console.log('FAIL ' + e.message); failed++; continue; }
@@ -64,6 +72,7 @@ for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'A
     run(names[0], fns[names[0]], table.concat([['none,none,easy,hard', ''], ['easy,hard', ''], ['easy,easy,easy,easy', '']]));
     run(names[1], fns[names[1]], planTable);
     if (names[2]) run(names[2], fns[names[2]], teamsTable);
+    if (names[3]) run(names[3], fns[names[3]], startTable);
 }
 // The meeting of ?fill= and the mouse-wheel zoom in one page (web/shell.html carries both): the page cancels the wheel and Safari's pinch over the game's CANVAS only (nothing on window,
 // document or body, so the title, the selector and the guide scroll as usual) and the game's own wheel handler has the page to itself; web/four.html (the games' frames) has no wheel
@@ -103,5 +112,5 @@ for (const [path, isShell] of [[process.argv[2], true], [process.argv[3], false]
     }
 }
 
-console.log(failed === 0 ? 'ok: ' + (table.length + planTable.length + teamsTable.length) + ' values, five functions, the wheel handlers of the pages' : failed + ' rows differ');
+console.log(failed === 0 ? 'ok: ' + (table.length + planTable.length + teamsTable.length + startTable.length) + ' values, six functions, the wheel handlers of the pages' : failed + ' rows differ');
 process.exit(failed === 0 ? 0 : 1);

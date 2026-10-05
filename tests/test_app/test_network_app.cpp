@@ -6070,6 +6070,118 @@ void run_room_chat_box_tests() {
     } TEST_END();
 }
 
+// The front page's one card (web/lobby.html: "New match") sends every player to the game page of a room of four seats with the card's plan, and the game starts the match by itself: `--seat` (the colour
+// of the person: any of the four), `--fill-bots` (four words: a bot row is its level, You, Friend and Nobody are none) and `--start-when N` (1 + the Friend rows: the leader's game presses START once N
+// people are in). The same plan and the same N are in every link of the room, because whoever connects first leads and only the leader's game starts the match.
+void run_one_card_tests() {
+    using L = net::FillLevel;
+    server::ServerLimits limits;
+    limits.demo_rooms = 4;
+    limits.demo_map = "TINY.LVL";
+    limits.demo_maps = {"TINY.LVL"};
+    const auto join_config = [](const Server& server, const std::string& room, const std::string& name, uint8_t seat, const net::FillPlan& plan, uint8_t start_when) {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = server.port();
+        cfg.net_room = room;
+        cfg.player_name = name;
+        cfg.net_seat = seat;
+        cfg.fill_bots = plan;
+        cfg.net_start_when = start_when;
+        return cfg;
+    };
+
+    TEST_CASE("N5.83 One Card, The Game's Arguments: --seat, --fill-bots (Four Words: A Level For A Bot Row, none For You / Friend / Nobody) And --start-when N Together; The Seat Is Any Of The Four Colours And The Plan Keeps A Bot At Green") {
+        std::vector<std::string> args = {"ants", "--join-url", "wss://play.example.org/ws", "--room", "demo-treasure-4p-t12-k7m2xq", "--seat", "2", "--fill-bots", "easy,medium,none,none", "--start-when", "1", "--name", "Ann", "--aspect", "16:9"};
+        std::vector<char*> st;
+        ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.empty());
+        ASSERT_TRUE(c.net_url == "wss://play.example.org/ws" && c.net_room == "demo-treasure-4p-t12-k7m2xq" && c.net_seat == 2 && c.net_start_when == 1 && c.player_name == "Ann");
+        ASSERT_TRUE(c.fill_bots == net::FillPlan(std::array<L, 4>{L::Easy, L::Medium, L::None, L::None}));        // (a bot at Green: the plan's seat 0 is a seat like the others)
+        for (int seat = 0; seat < 4; ++seat) {                                                                   // every colour can be the person's
+            const std::string text = std::to_string(seat);
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "demo-small-4p-abc", "--seat", text, "--start-when", "3"};
+            c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_TRUE(c.net_seat == seat && c.net_start_when == 3 && c.startup_error.empty());
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.84 One Card, Bots Only: A Leader Who Sits At Any Colour With --start-when 1 Starts The Match At Once, The Bots Of The Plan In Their Seats (A Bot At Green Too), The Nobody Seat Empty, The Room's Teams Made; The Plan's Word For The Leader's Own Seat Is Ignored") {
+        struct Row {
+            uint8_t seat;
+            std::array<L, 4> plan;
+            const char* code;
+            uint8_t mask;                          // the seats that play
+            const char* teams;                     // "ffa" or "A+B"
+            std::array<std::pair<uint8_t, const char*>, 2> bots;
+        };
+        const Row rows[] = {
+            {2, {L::Easy, L::Medium, L::None, L::None}, "demo-tiny-4p-t12-abcdef", 0x07, "1+2", {{{0, "Bot (Easy)"}, {1, "Bot (Medium)"}}}},        // Blue, bots at Green and Red; Red + Blue are a team, Green plays alone
+            {0, {L::None, L::None, L::Hard, L::Easy}, "demo-tiny-4p-abcdef", 0x0D, "ffa", {{{2, "Bot (Hard)"}, {3, "Bot (Easy)"}}}},                  // Green, bots at Blue and Black, Red is Nobody
+            {3, {L::Medium, L::None, L::Hard, L::None}, "demo-tiny-4p-t02-abcdef", 0x0D, "0+2", {{{0, "Bot (Medium)"}, {2, "Bot (Hard)"}}}},          // Black; Green + Blue are a team (both bots), Black plays alone, Red is Nobody
+            {2, {L::Easy, L::Medium, L::Hard, L::None}, "demo-tiny-4p-abcdef", 0x07, "ffa", {{{0, "Bot (Easy)"}, {1, "Bot (Medium)"}}}},                // a word for the leader's own seat (Hard at Blue): a person holds it, the word counts for nothing
+        };
+        for (const Row& row : rows) {
+            Server server(limits);
+            Application leader;
+            ASSERT_TRUE(leader.init(join_config(server, row.code, "Ann", row.seat, net::FillPlan(row.plan), 1)));
+            Hall hall{server, &leader, {}};
+            ASSERT_TRUE(hall.until([&]() { return leader.state() == AppState::Playing; }, 20000));                // (the hook pressed START by itself: one person and the plan's bots)
+            ASSERT_EQ(leader.net()->my_seat(), row.seat);                                                        // (the room of four took the colour that was asked for, whatever it is)
+            server::RoomStatus s = server.status(row.code);
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 2);
+            for (size_t i = 0; i < 2; ++i) ASSERT_TRUE(s.bots[i].seat == row.bots[i].first && s.bots[i].name == row.bots[i].second && s.bots[i].fill);
+            ASSERT_EQ(s.names[row.seat], std::string("Ann"));
+            ASSERT_EQ(leader.sim().roster_mask(), row.mask);                                                     // the person and the two bots play; the fourth seat stays empty
+            ASSERT_EQ(s.teams, std::string(row.teams));
+            ASSERT_EQ(server.status(row.code).ignored_start_requests, 0u);                                       // (one START, and it was the leader's)
+            hall.step(kDialogMs + 1500);
+            s = server.status(row.code);
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.ticks > 20 && !leader.net()->desynced());
+            leader.quit();
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.85 One Card, A Friend Row: The Match Starts When The Friend Is In (--start-when 2), Whichever Of The Two Connected First And So Leads: The Same Roster, The Plan's Bot, The Seat Of The Nobody Row Empty, The Code's Teams; The Game That Does Not Lead Sends Nothing (No START Of Its Own Is Heard)") {
+        for (const bool host_first : {true, false}) {
+            Server server(limits);
+            const std::string code = "demo-tiny-4p-t01-abcdef";                          // Green + Red are a team: Red is a bot of the plan, Green the host
+            const net::FillPlan plan(std::array<L, 4>{L::None, L::Medium, L::None, L::None});          // Red a Medium bot, Blue is Nobody, Black is the friend's (none): the host is Green (none)
+            const ApplicationConfig host_cfg = join_config(server, code, "Host", 0, plan, 2);
+            const ApplicationConfig friend_cfg = join_config(server, code, "Pal", 3, plan, 2);          // the same plan and the same number for everybody
+            Application first;
+            Application second;
+            ASSERT_TRUE(first.init(host_first ? host_cfg : friend_cfg));
+            Hall hall{server, &first, {}};
+            ASSERT_TRUE(hall.until([&]() { return first.net()->phase() == net::NetGame::Phase::Room && first.net()->is_leader(); }, 8000));
+            hall.step(3000);                                                                            // alone in the room: the hook wants two people, nothing is pressed
+            ASSERT_TRUE(server.status(code).state == server::RoomState::Waiting && server.status(code).joined == 1 && server.status(code).ignored_start_requests == 0);
+            ASSERT_EQ(first.state(), AppState::MapSelect);
+            ASSERT_TRUE(second.init(host_first ? friend_cfg : host_cfg));
+            hall.second = &second;
+            bool second_led = false;                                                                    // (the leader's flag is only there while the room waits: it is looked at at every step)
+            ASSERT_TRUE(hall.until([&]() { second_led = second_led || second.net()->is_leader(); return first.state() == AppState::Playing && second.state() == AppState::Playing; }, 20000));
+            ASSERT_FALSE(second_led);
+            server::RoomStatus s = server.status(code);
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 1);
+            ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].name == "Bot (Medium)" && s.bots[0].fill);
+            ASSERT_TRUE(s.names[0] == "Host" && s.names[3] == "Pal" && s.names[2].empty());              // (the Nobody seat stays empty: the room of four started with three)
+            ASSERT_EQ(first.net()->my_seat(), host_first ? uint8_t{0} : uint8_t{3});
+            ASSERT_EQ(second.net()->my_seat(), host_first ? uint8_t{3} : uint8_t{0});
+            ASSERT_EQ(s.ignored_start_requests, 0u);                                                     // the game that does not lead pressed nothing (a START of a non-leader is ignored and counted)
+            ASSERT_TRUE(first.sim().roster_mask() == 0x0B && second.sim().roster_mask() == 0x0B);
+            ASSERT_EQ(s.teams, std::string("0+1"));                                                      // the code's team, made at this START
+            ASSERT_TRUE(s.allies[0] == 1 && s.allies[1] == 0 && s.allies[3] == sim::ALLIANCE_NONE);
+            hall.step(kDialogMs + 1500);
+            ASSERT_TRUE(hall.identical(first.sim(), second.sim()));
+            ASSERT_FALSE(first.net()->desynced() || second.net()->desynced());
+            first.quit();
+            second.quit();
+        }
+    } TEST_END();
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -6089,6 +6201,7 @@ int main(int argc, char* argv[]) {
     run_room_bot_tests();
     run_room_chat_ui_tests();
     run_room_chat_box_tests();
+    run_one_card_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

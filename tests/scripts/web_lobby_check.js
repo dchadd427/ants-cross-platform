@@ -460,6 +460,12 @@ try {
             for (const bad of ['easy,hard', 'none,none,none,none', 'none,easy,none', 'easy;--room x', 'none,easy,none,hard,none', 'none, easy,none,hard']) same('the game page: a plan ' + JSON.stringify(bad) + ' is no --fill-bots', rooms('&fill=' + encodeURIComponent(bad)), ['--join-url', 'wss://play.test/ws', '--room', 'abc']);
             for (const bad of ['ffa', '0+0', '0+4', '1+1', '01', '0++1', 'a+b', '0+1+2', '0+1;ls', '0+1\n--name x', '']) same('the game page: teams ' + JSON.stringify(bad) + ' is no --teams', rooms('&teams=' + encodeURIComponent(bad)), ['--join-url', 'wss://play.test/ws', '--room', 'abc']);
             same('without a join nothing about a plan or teams goes to the game', [P.joinArguments('?fill=easy&teams=0%2B1', true, 'play.test').args, P.joinArguments('?room=abc&fill=hard&teams=0%2B1', true, 'play.test').args], [[], []]);
+            // the number of people that the leader's game waits for before it presses START (the front page's card: &start=<1 + its Friend rows>): one digit 1 - 4 becomes --start-when, after the teams
+            const base = ['--join-url', 'wss://play.test/ws', '--room', 'abc'];
+            same('the game page passes &start= (one digit 1 - 4) as --start-when, after the plan and the teams', [rooms('&start=1'), rooms('&start=4'), rooms('&fill=none,easy,none,hard&teams=0%2B2&start=3')],
+                 [[...base, '--start-when', '1'], [...base, '--start-when', '4'], [...base, '--fill-bots', 'none,easy,none,hard', '--teams', '0+2', '--start-when', '3']]);
+            for (const bad of ['', '0', '5', '9', '12', '01', 'two', ' 2', '2 ', '2\n--name x', '2;ls', '2&seat=1', '-1', '2.5', '\u0662']) same('the game page: &start=' + JSON.stringify(bad) + ' is no --start-when', rooms('&start=' + encodeURIComponent(bad)), base);
+            same('... and without a join nothing about start goes to the game', [P.joinArguments('?start=2', true, 'play.test').args, P.joinArguments('?room=abc&start=2', true, 'play.test').args], [[], []]);
         }
     }
 } catch (e) {
