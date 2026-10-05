@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 12:45 PDT · current release **v0.7.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 12:53 PDT · current release **v0.7.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -21,6 +21,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 - The README is being split into short pages under docs/ and fact-checked against the game as built (docs only, so merging it does not change the site): the writing is under way, then a draft pull request, then the owner's yes to merge
+- Browser checks without Docker (draft pull request #13): a session that has no Docker can build the web pages and run the touch checks and the other browser checks; it changes no page (no redeploy) and waits for the owner's yes to merge
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
