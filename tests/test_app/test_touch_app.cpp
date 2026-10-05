@@ -1875,21 +1875,50 @@ void test_pointer_gone() {
     Hand hand(app);
     ViewportCamera& camera = app.renderer().camera();
     const LayoutRect view = app.layout().view();
-    camera.set_origin(500.0, 500.0, app.sim().grid().width(), app.sim().grid().height());
-    // a tap in the edge strip of the view's right side (the mouse there would scroll the map east for as long as it stays)
-    const Pt edge{view.right() - 2, view.y + view.h / 2};
-    hand.tap(edge);
-    check(app.pointer_outside(), "after the tap the pointer is outside");
+    const uint32_t map_w = app.sim().grid().width();
+    const uint32_t map_h = app.sim().grid().height();
+    const auto home = [&]() { camera.set_origin(500.0, 500.0, map_w, map_h); };
+    const auto frames = [&](int n) {
+        for (int i = 0; i < n; ++i) app.run_frame_with_delta(0.1f);
+    };
+    home();
+    // The place: the inner strip of the PICTURE's east edge (the last 5 columns, edge_scroll.hpp), over the HUD's panel. A mouse that rests there scrolls the map east for as long as it stays; a point
+    // of the map view's own right side is inside the quiet area, where nothing scrolls whatever the code does (the review found that this group used to tap there, so that it could not fail).
+    const Pt strip{app.picture().w - 3, view.y + view.h / 2};
+    {
+        app.handle_mouse_motion(motion_event(strip));
+        const float before = camera.x;
+        frames(12);
+        check(camera.x > before, "(the place has teeth: a mouse that rests in the east strip scrolls the map: " + std::to_string(before) + " to " + std::to_string(camera.x) + ")");
+        forget_pointer(app);
+        home();
+    }
+    hand.tap(strip);
+    check(app.pointer_outside(), "after the tap in the strip the pointer is outside");
     const float x0 = camera.x;
-    for (int i = 0; i < 12; ++i) app.run_frame_with_delta(0.1f);
-    check(camera.x == x0, "the map does not scroll from a finger that has lifted");
-    // a finger that rests in the strip is a pointer there: the strip scrolls the view as it did for the emulated mouse
-    hand.down(1, edge);
+    frames(12);
+    check(camera.x == x0, "the map does not scroll from a finger that has lifted (in a place where a mouse would scroll it)");
+    // a finger that rests in the strip is a pointer there: the strip scrolls the view as it did for the emulated mouse, for as long as it rests
+    hand.down(1, strip);
     hand.frame();
-    hand.wait(touch::kHoldMs + 5);
-    for (int i = 0; i < 3; ++i) app.run_frame_with_delta(0.1f);
-    check(camera.x == x0, "a resting finger in the strip: the hold's right press is made there and a captured press does not scroll (as for a held right button)");
-    hand.up(1, edge);
+    frames(4);
+    check(camera.x > x0, "a finger that rests in the strip scrolls the map, as the emulated mouse did");
+    hand.up(1, strip);
+    hand.frame();
+    check(app.pointer_outside(), "its lift takes the pointer away");
+    const float x1 = camera.x;
+    frames(12);
+    check(camera.x == x1, "and the scrolling stops with it");
+    // a finger whose touch is cancelled takes the pointer away too
+    home();
+    hand.down(1, strip);
+    hand.frame();
+    app.cancel_touch();
+    hand.frame();
+    const float x2 = camera.x;
+    frames(12);
+    check(app.pointer_outside() && camera.x == x2, "a cancel takes the pointer away: the map stops scrolling");
+    hand.up(1, strip);
     hand.frame();
 }
 

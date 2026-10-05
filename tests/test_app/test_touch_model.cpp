@@ -1788,13 +1788,17 @@ void test_soak() {
         bool left = false;
         bool right = false;
         auto account = [&](const TouchControl::Actions& acts) {
-            for (const TouchAction& a : acts) {
+            for (size_t i = 0; i < acts.size(); ++i) {
+                const TouchAction& a = acts[i];
+                const bool next_is_press = i + 1 < acts.size() && (acts[i + 1].kind == Kind::LeftDown || acts[i + 1].kind == Kind::RightDown);
                 switch (a.kind) {
                     case Kind::LeftDown: if (left || right) ++bad; left = true; break;
                     case Kind::LeftUp: if (!left) ++bad; left = false; break;
                     case Kind::RightDown: if (left || right) ++bad; right = true; break;
                     case Kind::RightUp: if (!right) ++bad; right = false; break;
                     case Kind::Cancel: if (!left && !right) ++bad; left = false; right = false; break;
+                    case Kind::Motion: if (!left && !right && !next_is_press) ++bad; break;        // (the pointer follows a press, or arrives for the press that comes next: after the end of its press it goes nowhere)
+                    case Kind::HoldFired: if (i == 0 || acts[i - 1].kind != Kind::RightDown) ++bad; break;      // (the feedback comes with the right button's press, never alone)
                     default: break;
                 }
             }
