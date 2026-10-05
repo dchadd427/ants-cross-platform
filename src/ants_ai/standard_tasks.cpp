@@ -33,6 +33,18 @@ bool occupied(const BotView& v, sim::TileCoord tile) noexcept {
     return false;
 }
 
+// Whether an ant of any team stands still on the tile (it holds the tile: an ant that walks moves on). The walk of a thief into a thief hole ends in "Can't go there." when the tiles in front of
+// the hole or the raid tile itself are held by ants
+bool held_by_standing_ant(const BotView& v, sim::TileCoord tile) noexcept {
+    for (const AntView& a : v.mine()) {
+        if (a.tile == tile && a.state != sim::UnitState::Walking) return true;
+    }
+    for (const AntView& a : v.others()) {
+        if (a.tile == tile && a.state != sim::UnitState::Walking) return true;
+    }
+    return false;
+}
+
 // A free tile next to `tile` for the ant that stands on it to step to (the ant is the one that is to order a special order onto the tile: a click on a tile with an ant on it, the ordering
 // ant included, is no special order; a person moves the ant aside first): walkable, no ant, no power-up, no fire wall; {-1, -1} when there is none
 sim::TileCoord step_aside(const BotView& v, uint8_t seat, sim::TileCoord tile) {
@@ -1325,8 +1337,21 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
         teams.push_back(t);
     }
     // the cheap checks first: a hill that is not there, or whose hole is shut, is no target, and a thief that looks at the world every few ticks must not search the map for nothing (a full
-    // search per look and thief was the most expensive thing that the bot did)
-    teams.erase(std::remove_if(teams.begin(), teams.end(), [&](uint8_t t) { return !c.map.hill(t).present || east_state(grid, c.map.hill(t)).shut(); }), teams.end());
+    // search per look and thief was the most expensive thing that the bot did). A hole is raided only when two of the three tiles in front of it are free (a thief can step onto them: nothing
+    // lit, bombed or solid, no ant standing on them) and no ant stands on the raid tile: with one free tile an ant on it, or a wall lit behind the thief, shuts the hole, and the order ends
+    // in "Can't go there." (CG2 of the can't-go report)
+    teams.erase(std::remove_if(teams.begin(), teams.end(),
+                               [&](uint8_t t) {
+                                   const HillInfo& h = c.map.hill(t);
+                                   if (!h.present) return true;
+                                   size_t free_tiles = 0;
+                                   for (const sim::TileCoord& e : east_tiles(h)) {
+                                       const EastTile k = classify_tile(grid, e);
+                                       free_tiles += (k == EastTile::Open || k == EastTile::Bare) && !held_by_standing_ant(v, e) ? 1u : 0u;
+                                   }
+                                   return free_tiles < 2 || held_by_standing_ant(v, h.raid);
+                               }),
+                teams.end());
     if (teams.empty()) return false;
     std::stable_sort(teams.begin(), teams.end(), [&](uint8_t x, uint8_t y) { return v.rows()[x].score > v.rows()[y].score; });
     const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());

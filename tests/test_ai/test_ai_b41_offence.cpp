@@ -268,7 +268,10 @@ void run_b41_offence_tests() {
             ASSERT_EQ(bot.raids().waiting(), 1u);
             const TileCoord at{sim.get_unit(thief).pos.x, sim.get_unit(thief).pos.y};
             ASSERT_TRUE(at.chebyshev_dist(TileCoord{hill.origin.x + 4 + plan.ambush_distance, hill.origin.y + 2}) <= 3);
-            sim.grid_mut().clear_firewall(static_cast<uint32_t>(east_tiles(hill)[1].x), static_cast<uint32_t>(east_tiles(hill)[1].y));       // a wall burns out
+            sim.grid_mut().clear_firewall(static_cast<uint32_t>(east_tiles(hill)[1].x), static_cast<uint32_t>(east_tiles(hill)[1].y));       // a wall burns out: one free tile is no hole to raid (CG2)
+            rig.run(20);
+            ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
+            sim.grid_mut().clear_firewall(static_cast<uint32_t>(east_tiles(hill)[0].x), static_cast<uint32_t>(east_tiles(hill)[0].y));       // a second one: two free tiles
             rig.run(20);
             ASSERT_TRUE(rig.as<StandardBot>().raids().raids_ordered() >= 1);
             ASSERT_EQ(rig.as<StandardBot>().raids().last_target(), 2);
@@ -305,6 +308,128 @@ void run_b41_offence_tests() {
                 rig.run(300);
                 ASSERT_EQ(rig.as<StandardBot>().raids().waiting(), 0u);
             }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI12.4 A Thief Raids A Hole Only When Two Of The Three Tiles In Front Of It Are Free (Nothing Lit, Bombed Or Solid On Them, No Ant Standing On Them) And No Ant Stands On The Raid Tile: One Free Tile, Or A Hole With A Standing Ant On Its Last Tile, Is Not Raided (Before: The Order Was Given And Refused, \"Can't Go There.\"); A Walking Ant Holds No Tile; The Raid Is Ordered As Before Where The Hole Is Open")
+    {
+        sim::SimulationEngine probe;
+        empty_field(probe, 62);
+        const MapInfo pmap(probe);
+        const HillInfo& victim = pmap.hill(1);                                                                // team 1's hill is at (50, 4)
+        const std::array<TileCoord, 3> east = east_tiles(victim);
+        // the raid orders that team 0's Thief gets in 300 ticks, with the reactions of the seat
+        const auto raids = [&](const std::function<void(sim::SimulationEngine&)>& set_up, uint64_t& reactions, uint64_t ticks = 300) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 62);
+            sim.set_player_score(1, 300);
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 12});
+            set_up(sim);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.run(ticks);
+            size_t n = 0;
+            for (const auto& e : rig.proposed) n += e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == thief ? 1u : 0u;
+            reactions = tally.seat(0).reactions;
+            return n;
+        };
+        uint64_t reactions = 0;
+        // (a) two walls and a Combat Ant on the third tile: one free tile and a hole that an ant holds
+        ASSERT_EQ(raids([&](sim::SimulationEngine& sim) {
+                      sim.set_fire_at(east[0], 3600);
+                      sim.set_fire_at(east[2], 3600);
+                      sim.spawn_unit(1, sim::AntType::Combat, east[1]);
+                  }, reactions), 0u);
+        ASSERT_EQ(reactions, 0u);
+        // (b) two walls and the third tile free: still one free tile
+        ASSERT_EQ(raids([&](sim::SimulationEngine& sim) {
+                      sim.set_fire_at(east[0], 3600);
+                      sim.set_fire_at(east[2], 3600);
+                  }, reactions), 0u);
+        // (c) one wall: two free tiles, the raid goes as before
+        ASSERT_TRUE(raids([&](sim::SimulationEngine& sim) { sim.set_fire_at(east[0], 3600); }, reactions) >= 1);
+        // (d) no wall, a standing ant on two of the three tiles: one free tile; on one tile only: two
+        ASSERT_EQ(raids([&](sim::SimulationEngine& sim) {
+                      sim.spawn_unit(1, sim::AntType::Worker, east[0]);
+                      sim.spawn_unit(1, sim::AntType::Worker, east[1]);
+                  }, reactions), 0u);
+        ASSERT_TRUE(raids([&](sim::SimulationEngine& sim) { sim.spawn_unit(1, sim::AntType::Worker, east[0]); }, reactions) >= 1);
+        // (e) an ant on the raid tile, in an open hole: not raided; three tiles from it: raided
+        ASSERT_EQ(raids([&](sim::SimulationEngine& sim) { sim.spawn_unit(1, sim::AntType::Worker, victim.raid); }, reactions), 0u);
+        ASSERT_TRUE(raids([&](sim::SimulationEngine& sim) { sim.spawn_unit(1, sim::AntType::Worker, TileCoord{victim.raid.x - 3, victim.raid.y - 2}); }, reactions) >= 1);
+        // (f) the open hole as before
+        ASSERT_TRUE(raids([&](sim::SimulationEngine&) {}, reactions) >= 1);
+        // (g) own ants hold tiles too: two of the bot's workers (standing at the first look: nothing has sent them off yet) leave one free tile, one of them leaves two
+        ASSERT_EQ(raids([&](sim::SimulationEngine& sim) {
+                      sim.spawn_unit(0, sim::AntType::Worker, east[0]);
+                      sim.spawn_unit(0, sim::AntType::Worker, east[1]);
+                  }, reactions, 1), 0u);
+        ASSERT_EQ(raids([&](sim::SimulationEngine& sim) { sim.spawn_unit(0, sim::AntType::Worker, east[0]); }, reactions, 1), 1u);
+        // (h) mud (a tile where no wall can stand, but a thief can) is free: a wall, a mud tile and an open one leave two
+        ASSERT_TRUE(raids([&](sim::SimulationEngine& sim) {
+                        sim.set_fire_at(east[0], 3600);
+                        sim.grid_mut().set_terrain_class(east[1].x, east[1].y, 3);
+                    }, reactions) >= 1);
+        // (i) a walking ant holds no tile, an enemy's or the bot's own: one wall, and an ant that walks up the east side of the hole; the thief looks while it is on the last tile (two tiles are
+        // free: raid)
+        for (const uint8_t team : {uint8_t{1}, uint8_t{0}}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 62);
+            sim.set_player_score(1, 300);
+            sim.set_fire_at(east[0], 3600);
+            const uint32_t walker = sim.spawn_unit(team, sim::AntType::Worker, TileCoord{east[2].x, east[2].y + 7});
+            sim.apply_command(command_of(CommandType::GroupMove, team, {walker}, east[1].x, east[1].y));
+            bool on_last_tile = false;
+            for (int t = 0; t < 400 && !on_last_tile; ++t) {
+                sim.tick();
+                const sim::AntUnit& u = sim.get_unit(walker);
+                on_last_tile = u.state == sim::UnitState::Walking && u.pos.x == east[2].x && u.pos.y == east[2].y;
+            }
+            ASSERT_TRUE(on_last_tile);                                                                        // (the premise: it walks on the last free tile)
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 12});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            rig.tick();                                                                                       // the first look
+            size_t n = 0;
+            for (const auto& e : rig.proposed) n += e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == thief ? 1u : 0u;
+            ASSERT_EQ(n, 1u);
+        }
+        // (j) an ant that stands in another state than idle holds its tile as well (one wall; an enemy ant that is shut in and shows can't go, one that punches): one free tile, no raid
+        for (const sim::UnitState state : {sim::UnitState::CantGo, sim::UnitState::Attacking}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 62);
+            sim.set_player_score(1, 300);
+            sim.set_fire_at(east[0], 3600);
+            const uint32_t stander = sim.spawn_unit(1, state == sim::UnitState::Attacking ? sim::AntType::Combat : sim::AntType::Worker, east[1]);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{east[1].x + 1, east[1].y});                      // (something for the Combat Ant to punch)
+            if (state == sim::UnitState::CantGo) sim.get_unit(stander).state = state;
+            bool reached = sim.get_unit(stander).state == state;
+            for (int t = 0; t < 40 && !reached; ++t) {
+                sim.tick();
+                reached = sim.get_unit(stander).state == state;
+            }
+            ASSERT_TRUE(reached);                                                                             // (the premise)
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 12});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            rig.tick();
+            size_t n = 0;
+            for (const auto& e : rig.proposed) n += e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == thief ? 1u : 0u;
+            ASSERT_EQ(n, 0u);
+        }
+        // (k) a team in the roster that has no hill is no victim (it has 300 points): nothing is ordered, whatever the three tiles in front of its not-hole look like
+        {
+            sim::SimulationEngine sim;
+            sim.init_test_world(60, 60, 62, 14400u * sim::TICK_MS);
+            for (const uint8_t p : {uint8_t{0}, uint8_t{2}, uint8_t{3}}) sim.grid_mut().set_anthill(p, kFightHills[p]);
+            sim.set_player_score(1, 300);
+            ASSERT_TRUE(((sim.roster_mask() >> 1) & 1u) != 0u);                                               // (the premise: team 1 plays)
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 12});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            ASSERT_FALSE(rig.map().hill(1).present);
+            rig.run(60);
+            size_t n = 0;
+            for (const auto& e : rig.proposed) n += e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == thief ? 1u : 0u;
+            ASSERT_EQ(n, 0u);
         }
     } TEST_END();
 }
