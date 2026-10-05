@@ -27,7 +27,7 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 - **Pacific time wherever the owner reads** (the owner's rule, 2026-10-05): every date and time written for the owner (messages, `STATUS.md`, pull request and changelog text, targets) is Pacific time (PDT, PST from 2026-11-01), never UTC; take it from the command above, not from memory. Logs and tools may keep UTC.
 
 ### 2. Code Quality & Standards
-- **Compiler Flags**: Code must compile cleanly with `-Wall -Wextra -Werror -Wsign-conversion`. Zero warnings allowed.
+- **Compiler Flags**: Code must compile cleanly with `-Wall -Wextra -Werror -Wsign-conversion`. Zero warnings allowed. The one exception is GCC's AddressSanitizer + UBSan build (`./run_tests.sh --asan`): it leaves `-Wsign-conversion` off, because GCC reports `(mask >> n) & 1u` there as a sign change when there is none (`CMakeLists.txt`); every other build, CI's too, has it on.
 - **Test Integrity**: Never break or disable existing tests. All tests (every suite of `./run_tests.sh`, every job of CI) must maintain a 100% pass rate. Counts of tests and assertions are printed by `./run_tests.sh` and are not kept in documents.
 - **Documentation**: Maintain code comments and existing documentation.
 - **Short Documents**: Documents, code comments and changelog entries say what and why, briefly; details live in the tests and the code. A code comment is one or two lines unless it records reverse-engineering evidence (addresses, constants). Audit notes are written only for deep-tier changes (rule 11). No document restates another: it links to it.
