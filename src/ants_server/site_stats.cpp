@@ -202,7 +202,7 @@ bool flush_to_disk(std::FILE* f) {
     return _commit(_fileno(f)) == 0;
 #else
     for (;;) {
-        if (::fsync(::fileno(f)) == 0) return true;
+        if (fsync(fileno(f)) == 0) return true;
         if (errno != EINTR) return false;
     }
 #endif
@@ -234,7 +234,6 @@ bool SiteStats::write_file(std::string& why) {
         ok = false;
         err = errno;
     }
-    if (!ok && err == 0) err = EIO;
     std::error_code ec;
     if (ok) fs::rename(tmp, path_, ec);                                    // (whole file or the old one: never half)
     if (!ok || ec) {

@@ -119,6 +119,7 @@ struct FsyncSpy {
     static inline std::string watched_text;
     static inline std::string beside_text;
     static inline bool fail = false;                // the sync of the watched file fails (EIO)
+    static inline bool interrupt_first = false;     // the first sync of the watched file is interrupted by a signal (EINTR)
 };
 
 extern "C" int fsync(int fd) {
@@ -133,6 +134,10 @@ extern "C" int fsync(int fd) {
             FsyncSpy::beside_text = stats_slurp(FsyncSpy::beside);
             if (FsyncSpy::fail) {
                 errno = EIO;
+                return -1;
+            }
+            if (FsyncSpy::interrupt_first && FsyncSpy::calls == 1) {
+                errno = EINTR;
                 return -1;
             }
         }
@@ -718,7 +723,7 @@ void run_site_stats_tests() {
     } TEST_END();
 
 #ifdef ANTS_FSYNC_SPY
-    TEST_CASE("S3.150 The counters' file is on the disk before it has its name: the temporary file holds the whole new text and is fsync'ed (once), and only then renamed; a sync that fails removes the temporary file, leaves the old file whole and is said, and the next try saves") {
+    TEST_CASE("S3.150 The counters' file is on the disk before it has its name: the temporary file holds the whole new text and is fsync'ed (once), and only then renamed; a sync that fails removes the temporary file, leaves the old file whole and is said, and the next try saves; a sync that a signal interrupts is asked again") {
         const fs::path dir = fs::canonical(temp_dir_for("stats-sync"));
         const std::string path = (dir / SiteStats::kFileName).string();
         StatsClock clock;
@@ -752,15 +757,26 @@ void run_site_stats_tests() {
         ASSERT_FALSE(failed);
         ASSERT_EQ(FsyncSpy::calls, 1);
         ASSERT_TRUE(stats_slurp(path) == second && !fs::exists(path + ".tmp") && stats.dirty());
-        ASSERT_TRUE(notice_has(stats.take_notices(), "could not be saved"));
+        const std::vector<std::string> said = stats.take_notices();
+        ASSERT_TRUE(notice_has(said, "could not be saved") && notice_has(said, "cannot write") && notice_has(said, ".tmp"));
         FsyncSpy::fail = false;
         ASSERT_TRUE(stats.save() && !stats.dirty() && stats_slurp(path) != second && !fs::exists(path + ".tmp"));
         ASSERT_TRUE(notice_has(stats.take_notices(), "saved again"));
+        // a sync that a signal interrupts is not a failure: it is asked again
+        stats.count_online();
+        FsyncSpy::calls = 0;
+        FsyncSpy::interrupt_first = true;
+        FsyncSpy::armed = true;
+        const bool interrupted = stats.save();
+        FsyncSpy::armed = false;
+        FsyncSpy::interrupt_first = false;
+        ASSERT_TRUE(interrupted && FsyncSpy::calls == 2 && !stats.dirty() && !fs::exists(path + ".tmp"));
+        ASSERT_TRUE(stats.take_notices().empty());
     } TEST_END();
 #endif
 
 #ifndef _WIN32
-    TEST_CASE("S3.151 A write that fails (a full disk: here the process may write no file) removes the temporary file, leaves the old file whole and is said; a folder in the place of the temporary file is not ours to remove; the file is made with the umask's mode") {
+    TEST_CASE("S3.151 A write that fails (a full disk: here the process may write no file) removes the temporary file, leaves the old file whole and is said (where); a temporary file that a crash left is written over; a folder in its place is not ours to remove; the file is made with the umask's mode") {
         const fs::path dir = temp_dir_for("stats-full");
         const std::string path = (dir / SiteStats::kFileName).string();
         StatsClock clock;
@@ -785,8 +801,11 @@ void run_site_stats_tests() {
         ::sigaction(SIGXFSZ, &before_action, nullptr);
         ASSERT_FALSE(saved);
         ASSERT_TRUE(!fs::exists(path + ".tmp") && stats_slurp(path) == first && stats.dirty());   // nothing half written is left, under any name
-        ASSERT_TRUE(notice_has(stats.take_notices(), "could not be saved"));
+        const std::vector<std::string> notices = stats.take_notices();
+        ASSERT_TRUE(notice_has(notices, "could not be saved") && notice_has(notices, "cannot write") && notice_has(notices, SiteStats::kFileName) && notice_has(notices, ".tmp"));   // the log says where
+        stats_write(path + ".tmp", std::string(500, 'x'));                                        // (a temporary file that a crash left behind: written over, never added to)
         ASSERT_TRUE(stats.save() && stats_slurp(path) != first && !fs::exists(path + ".tmp"));    // the disk is well again
+        ASSERT_TRUE(stats_slurp(path).rfind("{\"format\":1,", 0) == 0 && stats_slurp(path).find("xxxx") == std::string::npos);
         // a folder where the temporary file goes cannot be opened: it is not removed (it is not what this program made)
         fs::create_directories(path + ".tmp");
         stats.count_online();

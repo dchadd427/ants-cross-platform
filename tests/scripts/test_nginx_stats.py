@@ -232,6 +232,7 @@ SLOW_STUB = LOG_FORMAT + """server {
     listen 4002;
     access_log /dev/stdout stub;
     location = /stats {
+        if (-e /srv/stub/fail) { return 500; }
         alias /srv/stub/stats.json;
         default_type application/json;
         add_header Cache-Control "no-store" always;
@@ -265,10 +266,19 @@ class Rig:
 
     @classmethod
     def start_rig(cls):
+        """Starts the containers. A machine without docker skips (cls.why says so); a page whose nginx does not come up is an error (a broken file is not a missing docker)."""
         cls.why = docker_ready()
         cls.front = cls.stub = cls.network = ""
         if cls.why:
             return
+        try:
+            cls.start_containers()
+        except BaseException:
+            cls.stop_rig()
+            raise
+
+    @classmethod
+    def start_containers(cls):
         cls.tmp = tempfile.mkdtemp(prefix="ants_stats.")
         html = os.path.join(cls.tmp, "html")
         os.makedirs(html)
@@ -306,8 +316,7 @@ class Rig:
         ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.front, "--network", cls.network, "-p", "127.0.0.1:%d:80" % cls.port, "-v", conf + ":/etc/nginx/conf.d/default.conf:ro",
                               "-v", html + ":/usr/share/nginx/html:ro", IMAGE] + KEEP, capture_output=True, text=True)
         if ran.returncode != 0:
-            cls.why = "the container did not start: " + ran.stderr.strip()[:200]
-            return
+            raise RuntimeError("the container of the page did not start: " + ran.stderr.strip()[:300])
         for _ in range(100):
             up = subprocess.run(["docker", "exec", cls.stub, "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4002/ready"], capture_output=True)
             try:
@@ -316,7 +325,8 @@ class Rig:
             except OSError:
                 pass
             time.sleep(0.2)
-        cls.why = "nginx did not answer"
+        logs = subprocess.run(["docker", "logs", cls.front], capture_output=True, text=True)
+        raise RuntimeError("nginx of the page did not answer in front of the stand-in server:\n" + (logs.stdout + logs.stderr)[-1500:])
 
     @classmethod
     def stop_rig(cls):
@@ -489,21 +499,26 @@ class TheBlocksRun(Rig, unittest.TestCase):
             self.assertEqual((one["host"], one["conn"], one["up"], one["te"]), ("127.0.0.1", "close", "-", "-"))
 
     def flood(self, method, path, count, workers=8):
+        """(the status of each request, the seconds that all took, the seconds that the slowest took)"""
+        def one(_):
+            started = time.monotonic()
+            return self.ask(method, path)[0], time.monotonic() - started
         started = time.monotonic()
         with concurrent.futures.ThreadPoolExecutor(workers) as pool:
-            codes = list(pool.map(lambda _: self.ask(method, path)[0], range(count)))
-        return codes, time.monotonic() - started
+            results = list(pool.map(one, range(count)))
+        return [r[0] for r in results], time.monotonic() - started, max(r[1] for r in results)
 
     def test_stats_lets_a_burst_of_a_hundred_through_at_twenty_a_second_and_refuses_the_rest(self):
         before = len(self.stub_requests("/stats"))
         self.assertEqual(self.ask("GET", "/stats")[0], 200)                                   # (the first one fills the cache: the server sees this one only)
-        codes, took = self.flood("GET", "/stats", 400)
+        codes, took, slowest = self.flood("GET", "/stats", 400)
         allowed = codes.count(200) + 1
         self.assertTrue(set(codes) <= {200, 503}, set(codes))
         self.assertGreaterEqual(allowed, 100, codes.count(200))                                # the burst
         self.assertLessEqual(allowed, 101 + 20 * (took + 0.5) + 5, (allowed, took))            # ... and what the rate gives while the flood lasts
         self.assertGreater(codes.count(503), 0)
         self.assertEqual(codes.count(200) + codes.count(503), 400)
+        self.assertLess(slowest, 3.0, slowest)                                                 # (what is over the burst is refused at once: it is not queued to be let through at the rate)
         time.sleep(0.4)                                                                        # twenty a second: eight tokens are back in 0.4 s (two a second would give none)
         again = [self.ask("GET", "/stats")[0] for _ in range(3)]
         self.assertGreaterEqual(again.count(200), 2, again)
@@ -516,12 +531,14 @@ class TheBlocksRun(Rig, unittest.TestCase):
         took = time.monotonic() - started
         allowed = codes.count(204)
         self.assertTrue(set(codes) <= {204, 503}, set(codes))
+        self.assertLess(took, 8.0, took)                                                       # (forty requests in one go: refused at once, not queued to be let through at the rate)
         self.assertTrue(21 <= allowed <= 21 + int(took) + 1, (allowed, took))                  # the first request and the burst of 20, and a token a second while this goes on
         self.assertEqual(codes[:allowed], [204] * allowed)                                     # (the refusals come after the allowance, none between)
         self.assertEqual(len(self.stub_requests("/stats/local")) - before, allowed)            # what was refused never reached the server
-        time.sleep(1.2)                                                                        # sixty a minute: a token in a second (six a minute would need ten)
-        self.assertEqual(self.ask("POST", "/stats/local")[0], 204)
-        self.assertEqual(len(self.stub_requests("/stats/local")) - before, allowed + 1)
+        time.sleep(1.2)                                                                        # sixty a minute: a token in a second (six a minute would need ten, ten a second a dozen)
+        again = [self.ask("POST", "/stats/local")[0] for _ in range(6)]
+        self.assertTrue(1 <= again.count(204) <= 3, again)
+        self.assertEqual(len(self.stub_requests("/stats/local")) - before, allowed + again.count(204))
 
     def test_the_neighbours_of_the_two_addresses_are_the_game_page_and_nothing_is_passed_on(self):
         for path in ("/stats/", "/stats/local/", "/stats/x", "/statsx", "/stat"):
@@ -557,12 +574,20 @@ class TheCacheRuns(Rig, unittest.TestCase):
         elif os.path.exists(path):
             os.remove(path)
 
+    def broken(self, on):
+        path = os.path.join(self.stubdir, "fail")
+        if on:
+            open(path, "w").close()
+        elif os.path.exists(path):
+            os.remove(path)
+
     def asked(self):
         return len(self.stub_requests("/stats"))
 
     def tearDown(self):
         if not self.why:
             self.slow(False)
+            self.broken(False)
             self.numbers(1)
 
     def test_a_second_get_within_five_seconds_is_answered_by_the_cache_and_after_them_the_old_answer_is_served_while_the_new_one_is_fetched(self):
@@ -587,6 +612,10 @@ class TheCacheRuns(Rig, unittest.TestCase):
         self.assertEqual(self.ask("GET", "/stats")[2], first)                                  # still the answer of two seconds ago
         self.assertEqual(self.asked(), asked + 1)
         self.sleep_until(filled, 6.0)                                                          # five seconds are over, and nobody has asked since: the answer is old
+        self.broken(True)
+        error = self.ask("GET", "/stats")[0]
+        self.broken(False)
+        self.assertEqual(error, 500)                                                           # a server that answers with an error is not covered by the old numbers (one that does not answer is); the error is not kept
         self.slow(True)
         with concurrent.futures.ThreadPoolExecutor(2) as pool:
             fetching = pool.submit(self.timed, "GET", "/stats")                                # this one goes to the (slow) server ...
@@ -599,7 +628,7 @@ class TheCacheRuns(Rig, unittest.TestCase):
         self.assertEqual(fresh[0], 200)
         self.assertIn(b'"stub":2', fresh[2])                                                   # the one that the server gave: it was asked (once) when the five seconds were over
         self.assertGreater(fresh[3], 2.0, fresh[3])
-        self.assertEqual(self.asked(), asked + 2)
+        self.assertEqual(self.asked(), asked + 3)                                              # the first answer, the error, and the new numbers (once, whatever the visitors were)
 
     def test_a_crowd_that_comes_at_once_is_one_request_to_the_server(self):
         asked = self.asked()
@@ -663,6 +692,14 @@ class TheRealServerBehindTheFile(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        try:
+            cls.start()
+        except BaseException:
+            cls.tearDownClass()
+            raise
+
+    @classmethod
+    def start(cls):
         cls.why = docker_ready()
         cls.server = None
         cls.front = ""
@@ -713,9 +750,8 @@ class TheRealServerBehindTheFile(unittest.TestCase):
         ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.front, "--network", "host", "-v", conf + ":/etc/nginx/conf.d/default.conf:ro", "-v", html + ":/usr/share/nginx/html:ro", IMAGE],
                              capture_output=True, text=True)
         if ran.returncode != 0:
-            cls.why = "the container did not start: " + ran.stderr.strip()[:200]
             cls.front = ""
-            return
+            raise RuntimeError("the container of the page did not start: " + ran.stderr.strip()[:300])
         for _ in range(100):
             try:
                 if cls.through("GET", "/lobby.html")[0] == 200:
@@ -723,7 +759,8 @@ class TheRealServerBehindTheFile(unittest.TestCase):
             except OSError:
                 pass
             time.sleep(0.2)
-        cls.why = "nginx did not answer"
+        logs = subprocess.run(["docker", "logs", cls.front], capture_output=True, text=True)
+        raise RuntimeError("nginx of the page did not answer in front of ants_server:\n" + (logs.stdout + logs.stderr)[-1500:])
 
     @classmethod
     def tearDownClass(cls):
