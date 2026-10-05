@@ -1448,6 +1448,22 @@ void test_gates() {
             check(app.touch().fingers() == 0 && !app.hud().is_input_captured(), "(both fingers are gone)");
             s.clear();
         }
+        // the chat log's drag is a held press too: the finger that lands next does not take it away
+        const LayoutRect chat = app.layout().chat_view();
+        const Pt in_chat{chat.x + chat.w / 2, chat.y + chat.h / 2};
+        hand.down(1, in_chat);
+        hand.frame();
+        check(app.hud().chat_dragging() && app.touch().mode() == TouchControl::Mode::Left, "(a finger drags the chat log)");
+        const Pt on_worker = s.on_ant(s.worker);
+        hand.down(2, on_worker);
+        hand.wait(60);
+        hand.up(2, on_worker);
+        hand.frame();
+        check(app.hud().chat_dragging() && app.hud().get_selected_ant_ids().empty() && app.touch().fingers() == 1 && app.touch().mode() == TouchControl::Mode::Left,
+              "a finger that taps the map while another drags the chat log is ignored (nothing is selected): the drag goes on");
+        hand.up(1, in_chat);
+        hand.frame();
+        check(!app.hud().chat_dragging() && app.touch().fingers() == 0, "(the drag ends with its finger)");
     }
 
     // the second finger lands AFTER something opened under the first: the first finger began on the map, then the results came up (the match ended): no pair
