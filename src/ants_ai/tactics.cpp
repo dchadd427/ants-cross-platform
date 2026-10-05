@@ -26,6 +26,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 0;
             p.contest_opening_ants = 0;
+            p.islands = true;
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -48,6 +49,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.max_thief = 1;
             p.hatch_extra = 1;
             p.strike_force = 3;                  // (strikes, wipe_focus and hatches are OFF at every level: measured, they cost score, docs/BOTS.md; the numbers are for the flags)
+            p.islands = true;
+            p.island_swimmers = 2;
             break;
         case Level::Hard:
             p.defenders = 3;
@@ -75,6 +78,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.gate = true;                       // guiding for eating: +4 to +23 percent alone on every shipped map (docs/BOTS.md)
             p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOTS.md "Aggression")
             p.raid_min_loot = 15;                // a raid for 15 points is a swing of 30 and a trip of a few hundred ticks: it pays (raidmin 10 / 30 / 60: 96.5 / 94.1 / 93.1 percent against Medium, Medium, Easy)
+            p.islands = true;
+            p.island_swimmers = 3;
             break;
     }
     return p;

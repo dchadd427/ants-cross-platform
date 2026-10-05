@@ -334,6 +334,9 @@ const std::vector<int32_t>& PowerUpTask::field_for(TaskContext& c, sim::TileCoor
     const uint64_t now = v.tick();
     if (mask_tick_ != now) {
         mask_ = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
+        for (size_t i = 0; i < mask_.size() && i < tactics_.shut_tiles.size(); ++i) {
+            if (tactics_.shut_tiles[i] != 0) mask_[i] = 0;                                         // (the bridges that will not last the trip: the island task)
+        }
         mask_tick_ = now;
     }
     Cached& e = fields_[key_of(tile)];

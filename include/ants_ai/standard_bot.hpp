@@ -34,6 +34,7 @@
 #include <tuple>
 
 #include "ants_ai/bot.hpp"
+#include "ants_ai/island_tasks.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
@@ -67,7 +68,10 @@ private:
           hatch_(kHatch, tactics_),
           gate_(kGate, gate_params(plan)),
           harass_(kHarass, tactics_),
-          sabotage_(kSabotage, tactics_) {}
+          sabotage_(kSabotage, tactics_),
+          island_(kIslands, tactics_, island_params(plan)) {
+        island_.attach(&harvest_);
+    }
 
 public:
     const char* kind() const noexcept override { return "standard"; }
@@ -89,6 +93,7 @@ public:
     const GateTask& gate() const noexcept { return gate_; }
     const HarassTask& harass() const noexcept { return harass_; }
     const SabotageTask& sabotage() const noexcept { return sabotage_; }
+    const IslandTask& islands() const noexcept { return island_; }
     const Tactics& tactics() const noexcept { return tactics_; }
     /// The style that the bot plays (known once start() has run; Random for a bot with a plan of its own)
     Style style() const noexcept { return style_; }
@@ -120,6 +125,7 @@ public:
     static constexpr TaskId kGate = 11;
     static constexpr TaskId kHarass = 12;
     static constexpr TaskId kSabotage = 13;
+    static constexpr TaskId kIslands = 14;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -133,6 +139,32 @@ private:
         p.max_staged = plan.gate_max_staged;
         p.predictive = plan.gate_predictive;
         p.user_fail_limit = plan.gate_user_fails;
+        return p;
+    }
+    static IslandTask::Params island_params(const LevelPlan& plan) {
+        IslandTask::Params p;
+        p.swimmers = plan.island_swimmers;
+        p.builders = plan.island_builders;
+        p.bridge_ants = plan.island_bridge_ants;
+        p.guard = plan.island_guard;
+        // the margins grow with the latency of the level (Easy looks every 100 ticks and reacts after 60): its bridges are given up earlier and its ants kept away from them longer
+        switch (plan.level) {
+            case Level::Easy:
+                p.retire_life = 1500;
+                p.hot_life = 700;
+                p.close_margin = 400;
+                p.trigger_extra = 200;
+                p.max_bridges = 2;
+                break;
+            case Level::Medium:
+                break;
+            case Level::Hard:
+                p.retire_life = 350;
+                p.hot_life = 160;
+                p.close_margin = 100;
+                p.max_bridges = 4;
+                break;
+        }
         return p;
     }
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
@@ -180,6 +212,7 @@ private:
     GateTask gate_;
     HarassTask harass_;
     SabotageTask sabotage_;
+    IslandTask island_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);

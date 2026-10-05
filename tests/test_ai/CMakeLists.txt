@@ -17,6 +17,7 @@ add_executable(test_ai
     test_ai_b41_offence.cpp
     test_ai_b41_cost.cpp
     test_ai_islands.cpp
+    test_ai_island_task.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

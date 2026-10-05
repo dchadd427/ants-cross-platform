@@ -152,6 +152,12 @@ struct LevelPlan {
     uint32_t repeat_window{1200};
     uint32_t fallback_ticks{2400};
     uint32_t gate_user_fails{16};        // the gate stops guiding for 900 ticks after this many clicks onto the entrance in a row that delivered nothing (0: it never stops)
+    // islands (ISLANDS, SMALL: food beyond water; IslandTask, docs/BOTS.md "Islands"): a Swimmer digs bridges, the economy walks over them. Idle where nothing lies beyond water
+    bool islands{false};                 // the island task is on (every level of the standard bot; a plan made by hand, as the tests do, has it off)
+    uint32_t island_swimmers{1};         // the Swimmers that the bot wants (taken from the map by the power-up task)
+    uint32_t island_builders{1};         // Swimmers that dig bridges at a time
+    uint32_t island_bridge_ants{1};      // ants that work the piles over one bridge at a time (two that meet head-on on a one-wide bridge stop for good: IslandTask "traffic")
+    bool island_guard{true};             // false: the ants on a bridge that goes, and the ants that walk to one, are left alone (the ablation that the tests of the guard use)
     /// The order of the opening's power-up trips (PowerUpTask): the values of the owner's playbook, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
@@ -336,6 +342,8 @@ struct Tactics {
     bool strike_active{false};           // the strike force is out (set by the StrikeTask at its last step)
     bool harass_active{false};           // the squad has a target (set by the HarassTask at its last step)
     uint32_t wall_keeper{0};             // the Fire Ant that keeps the walls of the own thief hole (set by the WallTask at its last step; 0: none): the sabotage uses another one
+    /// Bridge tiles that no trip may be planned over now (index = y * width + x; empty: none): the bridges that will not last another trip (set by the IslandTask at its last refresh)
+    std::vector<uint8_t> shut_tiles;
 };
 
 /// Whether the fire walls in front of the own thief hole are wanted at this look, by the level's trigger: an enemy Thief ant has been seen lately (Easy, Medium, Hard), an enemy that

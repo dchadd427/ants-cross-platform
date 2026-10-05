@@ -465,7 +465,7 @@ void HarvestTask::step(TaskContext& c) {
     };
     std::vector<Candidate> cands;
     for (const PileView& p : v.piles()) {
-        if (blacklisted(p.index, now)) continue;
+        if (blacklisted(p.index, now) || closed_.count(p.index) != 0) continue;
         const PileInfo* info = c.map.pile(p.index);
         if (info == nullptr) continue;                                                      // a lunchbox, or a pile made after the start: not in the analysis
         const PileView* bite = info->bite_index == p.index ? &p : find_pile(v.piles(), info->bite_index);
@@ -495,6 +495,12 @@ void HarvestTask::step(TaskContext& c) {
         if (params_.rank_by_remaining && profile.value_aware_piles) k.rank = static_cast<int64_t>(p.value) * static_cast<int64_t>(bite->remaining) * 100000 / trip;
         k.cap = std::max<uint32_t>(1u, std::min<uint32_t>(profile.max_ants_per_pile, static_cast<uint32_t>(trip) / std::max<uint32_t>(1u, params_.gate_gap_ticks) + 2u));
         for (const auto& e : recs_) k.load += e.second.pile == p.index ? 1u : 0u;
+        const auto limit = limits_.find(p.index);
+        if (limit != limits_.end()) {                                                       // (the island task: a pile over a bridge gets so many ants and no more)
+            if (k.load >= limit->second) continue;
+            k.cap = std::min<uint32_t>(k.cap, limit->second);
+            k.limit = limit->second;
+        }
         k.bite = info->bite_index;
         k.units = bite->remaining;
         k.shut_at_start = shut;
@@ -552,6 +558,7 @@ void HarvestTask::step(TaskContext& c) {
         size_t best = cands.size();
         for (size_t k = 0; k < cands.size(); ++k) {
             if (excluded(a->id, cands[k].pile, now)) continue;                              // this ant failed there lately
+            if (cands[k].load >= cands[k].limit) continue;                                  // (a limit holds for the fallback below as well)
             if (!free_now && !cands[k].shut_at_start && !pile_touches(c.map, c.seat, stands_in, *c.map.pile(cands[k].pile))) continue;
             if (best == cands.size()) best = k;
             if (cands[k].load < cands[k].cap) {
