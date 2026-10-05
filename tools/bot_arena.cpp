@@ -550,6 +550,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "leash") { p.leash_tiles = static_cast<int32_t>(v); return true; }
     if (key == "linger") { p.fight_linger_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "aid") return flag(p.carrier_aid);
+    if (key == "styled") return true;                                                // not a field of the plan: a tuned bot of a spec with no style draws its style like the registry's bot (arena_factory)
     if (key == "contest") return flag(p.contest_aware);
     if (key == "clow") { p.contest_low = static_cast<uint32_t>(v); return true; }
     if (key == "chigh") { p.contest_high = static_cast<uint32_t>(v); return true; }
@@ -557,6 +558,16 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "cone") return flag(p.contest_one_first);
     if (key == "creact") return flag(p.contest_reactive);
     if (key == "copen") { p.contest_opening_ants = static_cast<uint32_t>(v); return true; }
+    if (key == "race") return flag(p.race);
+    if (key == "racegap") { p.race_gap_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "raceslack") { p.race_slack_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "racefloor") { p.race_floor = static_cast<uint32_t>(v); return true; }
+    if (key == "raceone") return flag(p.race_one);
+    if (key == "raceticks") { p.race_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "raceants") { p.race_ants = static_cast<uint32_t>(v); return true; }
+    if (key == "racearmy") { p.race_army_weight = static_cast<uint32_t>(v); return true; }
+    if (key == "racearmypct") { p.race_army_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "copenticks") { p.contest_opening_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "copenmin") { p.contest_opening_min_ants = static_cast<uint32_t>(v); return true; }
     if (key == "typedh") return flag(p.typed_harvest);
     if (key == "firew") return flag(p.fire_aware);
@@ -636,6 +647,11 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         p.guards = false;
         return true;
     }
+    if (key == "prev") {                                                              // the bot of v0.5.0: none of the rules of v0.6 (the tournaments' comparison; they are the shipped plan now)
+        if (v == 0) return true;
+        p.race = false;
+        return true;
+    }
     if (key == "old") {                                                               // the conflict tactics as they were shipped before the win-rate measurements: all off, one Thief
         if (v == 0) return true;
         p.contest_aware = false;
@@ -702,7 +718,9 @@ std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
             std::string err;
             if (!apply_tune(probe, t.first, t.second, err)) return nullptr;
         }
-        if (spec.style == ai::Style::Random) {                                       // no style named: the level's neutral plan, no variations (the ablations of the tournaments)
+        bool styled = false;                                                         // `styled=1`: draw the style and the variations like the registry's bot, then put the tuning over them (the duels of two plans)
+        for (const auto& t : keys) styled = styled || (t.first == "styled" && t.second != 0);
+        if (spec.style == ai::Style::Random && !styled) {                            // no style named: the level's neutral plan, no variations (the ablations of the tournaments)
             ai::LevelPlan plan = ai::plan_for(spec.level);
             apply_tuning(plan, keys);
             return diag_wrap(std::make_unique<ai::StandardBot>(plan), spec);

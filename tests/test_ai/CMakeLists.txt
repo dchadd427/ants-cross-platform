@@ -16,6 +16,7 @@ add_executable(test_ai
     test_ai_b41_style.cpp
     test_ai_b41_offence.cpp
     test_ai_b41_cost.cpp
+    test_ai_race.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

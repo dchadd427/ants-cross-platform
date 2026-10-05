@@ -17,6 +17,9 @@ constexpr uint8_t kSecureOpening = static_cast<uint8_t>((1u << static_cast<unsig
 LevelPlan plan_for(Level level) noexcept {
     LevelPlan p;
     p.level = level;
+    // v0.6 (docs/BOTS.md, "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the owner's report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
+    // switches them all off again (the bot of v0.5.0, for the tournaments' comparison)
+    p.race = true;
     switch (level) {
         case Level::Easy:
             p.defenders = 1;
@@ -128,6 +131,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 break;
             case Style::Economic:
                 p.contest_opening_ants = 0;
+                p.race = false;                                                               // (no contest of the middle: that is the style)
                 p.wall_trigger = WallTrigger::Early;
                 p.raid_min_loot = p.raid_min_loot * 3;                                       // (it defends like the others: the Combat Ant that harvests costs nothing and is its defence)
                 break;
@@ -142,6 +146,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 p.defenders += 1;
                 p.ally_help = true;
                 p.contest_opening_ants = 0;
+                p.race = false;                                                               // (no contest of the middle)
                 break;
             case Style::Random:
                 break;

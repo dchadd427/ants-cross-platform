@@ -51,6 +51,17 @@ struct LevelPlan {
     bool contest_reactive{false};        // the tournaments' experiment: a contested pile first only while an enemy ant is at it
     uint32_t contest_opening_ants{0};    // the opening: this many ants go to the contested centre of the map at the start (Medium 1, Hard 2), the rest harvest by value per trip (the owner's
                                          // playbook: strong players contest the centre first; a whole-match duel against the plain order is a tie, docs/BOTS.md); 0: none (Easy)
+    // the race: contested food first for the ants that the gate cannot use (HarvestTask::Params::race)
+    bool race{false};
+    uint32_t race_gap_ticks{100};
+    uint32_t race_slack_percent{100};    // the ants that the gate can use (about one deposit per race_gap_ticks) harvest in the plain order, the ants beyond that race (0: every ant races: measured worse)
+    uint32_t race_floor{0};              // at least this many ants of the pool go to the piles where a race is open, whatever the gate can use (the owner's playbook: the centre is the starting food)
+    bool race_one{false};
+    uint32_t race_ants{0};
+    uint32_t race_ticks{1200};           // the first minute of the match
+    uint32_t race_army_weight{8};
+    uint32_t race_army_percent{150};
+    uint32_t contest_opening_ticks{1200};  // (experiment) the opening lasts this long
     uint32_t contest_opening_min_ants{6};  // ... only with at least this many ants at the start (TINY has 3, SMALL 4: there the contest of the middle costs and loses; MEDIUM, GAUNTLET and TREASURE have 6 or more)
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating", the owner's playbook): 55 to 65 ticks per deposit instead of 93 to 116
