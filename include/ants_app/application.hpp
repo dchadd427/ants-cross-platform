@@ -301,6 +301,9 @@ public:
     bool pan_view(int32_t dx, int32_t dy);
     /// The browser took the touch away, the window lost the focus, the page was hidden: no finger is tracked any more and a press that a finger held ends with no act (the next frame hands it to the HUD)
     void cancel_touch();
+    /// The page's touchcancel (a call that comes from outside the event loop): the same, behind the events that SDL already holds. A finger that went down in the same frame begins and is
+    /// cancelled in order, and the lift that SDL makes of a cancel finds it unknown (done at once, as cancel_touch(), when SDL has no event to give). Public for the web build's export and the tests.
+    void cancel_touch_queued();
     /// Is a touch device's finger one of the model's? Not a platform's own touch made from the mouse, and not a trackpad's (a touch screen counts, and so does a device that SDL does not know: a test's)
     static bool counts_as_finger(SDL_TouchID device, SDL_TouchDeviceType kind) noexcept;
     /// How many holds have fired their feedback (the buzz of the web build): for the tests
@@ -536,6 +539,7 @@ private:
     };
     TouchZone touch_zone_at(double x, double y) const;
     bool touch_two_fingers_allowed(double x, double y) const;
+    static Uint32 touch_cancel_event_type() noexcept;       // the type of the event that carries a queued cancel through SDL's queue (registered once; (Uint32)-1 when SDL has none)
     bool touch_match_screen() const;                       // a match with no dialog or results over it (its catch-up picture too): the HUD's presses are what a cancel ends
     bool touch_view_open() const;                          // a match's map view with nothing over it, and not the catch-up picture: what a pan or a zoom needs, at every move
     void feed_touch(const SDL_TouchFingerEvent& finger);   // a finger's event: the model, and what it says is queued

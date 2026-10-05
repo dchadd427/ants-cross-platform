@@ -101,6 +101,16 @@ struct Hand {
     void down(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERDOWN, finger, at, fx, fy); }
     void move(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERMOTION, finger, at, fx, fy); }
     void up(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERUP, finger, at, fx, fy); }
+    /// A window event in SDL's queue, in its place among the finger events
+    void window(SDL_WindowEventID what) {
+        SDL_Event e;
+        SDL_zero(e);
+        e.type = SDL_WINDOWEVENT;
+        e.window.type = SDL_WINDOWEVENT;
+        e.window.timestamp = now;
+        e.window.event = static_cast<Uint8>(what);
+        SDL_PeepEvents(&e, 1, SDL_ADDEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT);
+    }
     void wait(uint32_t ms) { now += ms; }
     void frame() { app.run_frame_with_delta(0.016f); }
     /// The time passes with the application's frames running (one every `step` ms): the model knows that the finger is down all the while. wait() alone is a stall.
@@ -1575,6 +1585,47 @@ void test_cancel() {
         returned.event = static_cast<Uint8>(back);
         app.handle_window_event(returned);
     }
+    // THE WINDOW OR THE CANVAS CHANGES SIZE (a rotation, a fullscreen toggle, the address bar): the same spot of the glass is another pixel of the picture now, so what the fingers held ends (review L5)
+    {
+        begin_band();
+        check(app.hud().is_input_captured(), "(the band is held)");
+        app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_SIZE_CHANGED; return we; }());
+        hand.frame();
+        check(!app.hud().is_input_captured() && app.touch().fingers() == 0, "a size change: the band is dropped and no finger is tracked");
+        hand.up(1, q);
+        hand.frame();
+        check(app.hud().get_selected_ant_ids().empty(), "(and the lift that follows selects nothing)");
+        // in the order of the events: a finger waits, the size changes, the finger moves far and lifts: no band, no click (the finger that was there is not the one that moves now)
+        s.clear();
+        const TouchControl::Stats before = app.touch().stats();
+        hand.down(1, p);
+        hand.wait(30);
+        hand.window(SDL_WINDOWEVENT_SIZE_CHANGED);
+        hand.wait(30);
+        hand.move(1, q);
+        hand.wait(30);
+        hand.up(1, q);
+        hand.frame();
+        check(app.touch().stats().drags == before.drags && app.touch().stats().taps == before.taps && app.hud().get_selected_ant_ids().empty() && app.touch().fingers() == 0,
+              "a finger that waits when the size changes and moves far afterwards makes no band and no tap");
+        // a size change is no cancel for fingers that come after it
+        hand.tap(s.on_ant(s.worker));
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "(the next tap works)");
+        s.clear();
+        // and the other window events are not a size change: a finger that rests goes on resting
+        hand.down(1, p);
+        hand.frame();
+        for (const SDL_WindowEventID other : {SDL_WINDOWEVENT_EXPOSED, SDL_WINDOWEVENT_MOVED, SDL_WINDOWEVENT_ENTER, SDL_WINDOWEVENT_FOCUS_GAINED, SDL_WINDOWEVENT_SHOWN, SDL_WINDOWEVENT_TAKE_FOCUS}) {
+            SDL_WindowEvent we{};
+            we.type = SDL_WINDOWEVENT;
+            we.event = static_cast<Uint8>(other);
+            app.handle_window_event(we);
+            check(app.touch().fingers() == 1 && app.touch().mode() == TouchControl::Mode::Waiting, "window event " + std::to_string(static_cast<int>(other)) + " does not cancel the finger that waits");
+        }
+        hand.up(1, p);
+        hand.frame();
+        s.clear();
+    }
     // a hold's right press
     s.clear();
     s.select({s.worker});
@@ -1597,6 +1648,63 @@ void test_cancel() {
     s.clear();
     hand.tap(s.on_ant(s.worker), 6);
     check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "after a cancel the next finger is the first one: a tap selects");
+    // A touchcancel in the SAME frame as its touchstart (review L2): the page's cancel waits behind the finger events that SDL already holds, so the finger begins and is cancelled in order, and the
+    // lift that SDL makes of a cancel finds it unknown. (A cancel that clears the model at once leaves the finger behind it in the queue: it would begin, and the lift would end it as a tap.)
+    {
+        const auto page_cancels = [&] { app.cancel_touch_queued(); };
+        s.clear();
+        const Pt on = s.on_ant(s.worker);
+        const TouchControl::Stats before = app.touch().stats();
+        hand.down(1, on);
+        page_cancels();
+        hand.wait(30);
+        hand.up(1, on);                                                    // (SDL's own lift for the touchcancel)
+        hand.frame();
+        check(app.hud().get_selected_ant_ids().empty() && app.touch().stats().taps == before.taps && app.touch().fingers() == 0, "a touch cancelled in the frame that it began in is no tap: nothing is selected");
+        const UIButton help = app.hud().help_button();
+        const Pt on_help{help.x + help.w / 2, help.y + help.h / 2};
+        hand.down(1, on_help);
+        page_cancels();
+        hand.wait(30);
+        hand.up(1, on_help);
+        hand.frame();
+        check(!app.hud().is_quick_help_open() && !app.hud().help_button().is_pressed && app.touch().fingers() == 0, "... nor the press of a button: the Help button neither opens its page nor stays pressed");
+        hand.down(1, on);                                                  // a finger that is tracked already (a band is held): the queued cancel ends it in its order
+        hand.frame();
+        hand.wait(30);
+        hand.move(1, q);
+        hand.frame();
+        check(app.hud().is_input_captured(), "(a band is held)");
+        page_cancels();
+        hand.frame();
+        check(!app.hud().is_input_captured() && app.touch().fingers() == 0 && app.hud().get_selected_ant_ids().empty(), "a queued cancel ends a press that is held already, with no act");
+        hand.up(1, q);
+        hand.frame();
+        page_cancels();                                                    // the next touch, in the same frame as the cancel but after it, is a first finger
+        hand.down(2, on);
+        hand.wait(60);
+        hand.up(2, on);
+        hand.frame();
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "a finger that lands after the cancel in the same frame is not swallowed: its tap selects");
+        // the order is kept the other way too: a finger that lifted BEFORE the cancel made its tap (the lift came first)
+        s.clear();
+        hand.down(1, on);
+        hand.frame();
+        hand.wait(60);
+        hand.up(1, on);
+        page_cancels();
+        hand.frame();
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "a finger that lifted before the cancel (in the same frame) is a tap: the events are handled in the order that they came");
+        // a page that goes hidden in the frame that a finger began in: the same
+        s.clear();
+        hand.down(1, on);
+        app.set_page_hidden(true);
+        hand.wait(30);
+        hand.up(1, on);
+        hand.frame();
+        app.set_page_hidden(false);
+        check(app.hud().get_selected_ant_ids().empty() && app.touch().fingers() == 0, "a page that is hidden in the frame that a finger went down in: no tap either");
+    }
     // THE DIALOGS OF THE MATCH: a cancel never fires the control under the finger (review L3). SDL's emulation made a cancelled touch the lift of the finger, where it is: the quit dialog's Yes left
     // the match. Now the press is let go of where no control is, whatever the cause: the page's touchcancel, a lost focus, a hidden page, a minimised window.
     {
@@ -1822,17 +1930,18 @@ void test_other_screens() {
             // START and Quit (Leave) of the setup screen: the buttons that do the most harm
             const Pt start{MapSelectScreen::BTN_START_X + MapSelectScreen::BTN_START_W / 2, MapSelectScreen::BTN_START_Y + MapSelectScreen::BTN_START_H / 2};
             const Pt quit{MapSelectScreen::BTN_QUIT_X + MapSelectScreen::BTN_QUIT_W / 2, MapSelectScreen::BTN_QUIT_Y + MapSelectScreen::BTN_QUIT_H / 2};
-            for (int cause = 0; cause < 2; ++cause) {
+            for (int cause = 0; cause < 3; ++cause) {
                 for (const Pt& on : {start, quit}) {
                     hand.down(1, on);
                     hand.frame();
                     if (cause == 0) app.cancel_touch();
-                    else app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }());
+                    else if (cause == 1) app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }());
+                    else app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_SIZE_CHANGED; return we; }());
                     hand.frame();
                     hand.up(1, on);
                     hand.frame();
                     check(app.state() == AppState::MapSelect && app.is_running() && app.touch().fingers() == 0,
-                          std::string(on.x == start.x ? "START" : "Leave") + " of the setup screen under a finger that is cancelled by " + (cause == 0 ? "the page" : "a lost focus") + ": it does not fire");
+                          std::string(on.x == start.x ? "START" : "Leave") + " of the setup screen under a finger that is cancelled by " + (cause == 0 ? "the page" : cause == 1 ? "a lost focus" : "a size change") + ": it does not fire");
                     app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_GAINED; return we; }());
                 }
             }

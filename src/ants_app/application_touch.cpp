@@ -96,6 +96,23 @@ void Application::cancel_touch() {
     queue_touch(touch_.cancel());
 }
 
+Uint32 Application::touch_cancel_event_type() noexcept {
+    static const Uint32 type = SDL_RegisterEvents(1);
+    return type;
+}
+
+// An event of its own type waits in SDL's queue behind the finger events that are already there; the event loop cancels when it comes out of it (handle_events)
+void Application::cancel_touch_queued() {
+    const Uint32 type = touch_cancel_event_type();
+    if (type != static_cast<Uint32>(-1)) {
+        SDL_Event event;
+        SDL_zero(event);
+        event.type = type;
+        if (SDL_PushEvent(&event) == 1) return;
+    }
+    cancel_touch();
+}
+
 void Application::queue_touch(const TouchControl::Actions& actions) {
     touch_queue_.insert(touch_queue_.end(), actions.begin(), actions.end());
 }

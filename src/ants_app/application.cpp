@@ -1485,6 +1485,7 @@ void Application::set_page_hidden(bool hidden) {
     if (hidden == page_hidden_) return;
     if (hidden) {
         cancel_touch();                                      // (the browser may never say that a finger lifted while the page was away)
+        cancel_touch_queued();                               // (and the finger events that SDL holds are followed by the cancel too)
         page_hidden_ = true;                                 // from now on the wake-ups may drive a network match: the first one counts the time since the last frame
         last_frame_run_ = 0;                                 // (only a frame that runs from now on shows that the browser still delivers frames)
         hidden_since_ = now_counter();
@@ -1624,10 +1625,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {
     if (g_web_app != nullptr) g_web_app->leave_network_match();
 }
 
-// For the page (web/shell.html): the browser took the touch away (touchcancel: a system gesture, a call, the lock screen) or the page lost it: no finger is tracked any more and a press that a finger
-// held ends with no act. SDL turns a touchcancel into the finger's lift as well, which the touch model finds unknown by then and ignores.
+// For the page (web/shell.html): the browser took the touch away (touchcancel: a system gesture, a call, the lock screen) or the page knows that no finger of the game can be down (a first
+// touch lands: whatever the game still tracks lost its lift): no finger is tracked any more and a press that a finger held ends with no act. The cancel waits behind the finger events that SDL
+// already holds (a finger that went down in the same frame is cancelled after it begins). SDL turns a touchcancel into the finger's lift as well, which the touch model finds unknown by then.
 extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel() {
-    if (g_web_app != nullptr) g_web_app->cancel_touch();
+    if (g_web_app != nullptr) g_web_app->cancel_touch_queued();
 }
 
 // For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The selector of the picture under the game restarts the game
@@ -1771,6 +1773,10 @@ void Application::handle_events() {
         } else if (SDL_PollEvent(&event)) {
             if (event.type == SDL_FINGERDOWN || event.type == SDL_FINGERMOTION || event.type == SDL_FINGERUP) {
                 feed_touch(event.tfinger);                   // (what the model says is queued and comes first, before the next event of SDL's)
+                continue;
+            }
+            if (event.type == touch_cancel_event_type()) {   // (the page's touchcancel, behind the finger events that came before it: cancel_touch_queued)
+                cancel_touch();
                 continue;
             }
         } else if (!touch_timers_run) {
@@ -1965,6 +1971,7 @@ void Application::handle_window_event(const SDL_WindowEvent& we) {
         is_paused_ = false;
         midi_player_.resume();
     }
+    if (we.event == SDL_WINDOWEVENT_SIZE_CHANGED) cancel_touch();              // (a rotation, a fullscreen toggle, the address bar: the same spot of the glass is another pixel of the picture, and a finger that rests would become a drag)
     if (we.event == SDL_WINDOWEVENT_SIZE_CHANGED || we.event == SDL_WINDOWEVENT_RESIZED || we.event == SDL_WINDOWEVENT_MAXIMIZED ||
         we.event == SDL_WINDOWEVENT_RESTORED) {
         if (renderer_ && window_) {
