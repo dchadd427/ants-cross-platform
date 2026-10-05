@@ -772,25 +772,27 @@ for (const junk of ['easy', 'easy,medium', 'easy,medium,hard,easy', 'easy,,hard'
     env.type('player-name', 'Ann');
     env.$('host').click();
     const link = env.$('any-link').value;
-    check('Host makes the room of 4', env.roomStarted() && /room=demo-treasure-4p-/.test(link), link);
-    same('the link for anybody carries the plan (four words, the leader\'s seat none) and the team (the + is %2B)', [env.param(link, 'fill'), env.param(link, 'teams'), /&teams=0%2B2/.test(link)], ['none,easy,none,hard', '0+2', true]);
-    same('the address of the page names the room with both', [String(env.replaced[0][2]).indexOf('fill=none,easy,none,hard') !== -1, String(env.replaced[0][2]).indexOf('teams=0%2B2') !== -1], [true, true]);
+    check('Host makes the room of 4, and its code names the team (a word of the code, t02 for 0 + 2: the room makes the teams for every start)', env.roomStarted() && /^demo-treasure-4p-t02-[a-z2-9]{6}$/.test(env.param(link, 'room')), link);
+    same('the link for anybody carries the plan (four words, the leader\'s seat none) and no teams parameter: the code carries them', [env.param(link, 'fill'), env.param(link, 'teams'), /teams=/.test(link)], ['none,easy,none,hard', null, false]);
+    same('the address of the page names the room with the plan and the code', [String(env.replaced[0][2]).indexOf('fill=none,easy,none,hard') !== -1, String(env.replaced[0][2]).indexOf('teams=') !== -1, /room=demo-treasure-4p-t02-/.test(String(env.replaced[0][2]))], [true, false, true]);
     const hint = env.$('fill-hint');
-    check('the room panel says the seats and the teams in words', !hint.hidden && /Empty seats at START: Red Easy, Black Hard\./.test(hint.textContent) && /Teams at START: Green \+ Blue against Red \+ Black\./.test(hint.textContent) && /Every link of this room carries the choices/.test(hint.textContent), hint.textContent);
+    check('the room panel says the seats and the teams in words: the teams are the room\'s (in its code, for every start), the bots are the leader\'s START',
+          !hint.hidden && /Empty seats at START: Red Easy, Black Hard\./.test(hint.textContent) && /Teams of this room: Green \+ Blue against Red \+ Black\. They are in the room code, so the match starts with them every time: when the room fills up as well as at START\./.test(hint.textContent) &&
+          /Every link of this room carries the bots; only the leader's START uses them\.$/.test(hint.textContent) && !/Teams at START/.test(hint.textContent), hint.textContent);
     env.rowButton(1, 'Play here').click();
     const frame = env.frameOf(1);
-    same('a seat that plays on the page gets both in its game address', [env.param(frame.src, 'fill'), env.param(frame.src, 'teams')], ['none,easy,none,hard', '0+2']);
+    same('a seat that plays on the page gets the plan in its game address (the teams are in the room code)', [env.param(frame.src, 'fill'), env.param(frame.src, 'teams'), /room=demo-treasure-4p-t02-/.test(frame.src)], ['none,easy,none,hard', null, true]);
     env.rowButton(0, 'Copy link').click();
-    same('the link of a seat for somebody else carries both', [env.param(env.copied[0], 'fill'), env.param(env.copied[0], 'teams')], ['none,easy,none,hard', '0+2']);
+    same('the link of a seat for somebody else carries the plan and the code', [env.param(env.copied[0], 'fill'), env.param(env.copied[0], 'teams'), /room=demo-treasure-4p-t02-/.test(env.copied[0])], ['none,easy,none,hard', null, true]);
     env.$('play-tab').click();
-    same('"Play in this tab" carries both', [env.param(env.assigned[0], 'fill'), env.param(env.assigned[0], 'teams')], ['none,easy,none,hard', '0+2']);
+    same('"Play in this tab" carries the plan and the code', [env.param(env.assigned[0], 'fill'), env.param(env.assigned[0], 'teams'), /room=demo-treasure-4p-t02-/.test(env.assigned[0])], ['none,easy,none,hard', null, true]);
     same('what is remembered: the four words and the team (the opponents of the first card are not touched)', [env.storage.data['ants-four-fill'], env.storage.data['ants-four-teams'], 'ants-solo-seats' in env.storage.data], ['none,easy,none,hard', '0+2', false]);
     // the same card, 3 players: the seats beyond the room are none in the link, and one level for the seats that the room has is one word
     const three = runLobby('', {}, {});
     three.hostPlayers(3);
     setHostSeats(three, ['hard', 'hard', 'easy']);
     three.$('host').click();
-    same('three players, Red and Blue Hard (Black is no seat of the room): one word, no teams parameter for free for all', [three.param(three.$('any-link').value, 'fill'), three.param(three.$('any-link').value, 'teams')], ['hard', null]);
+    same('three players, Red and Blue Hard (Black is no seat of the room): one word, no teams parameter and no word in the code for free for all', [three.param(three.$('any-link').value, 'fill'), three.param(three.$('any-link').value, 'teams'), /^demo-treasure-3p-[a-z2-9]{6}$/.test(three.param(three.$('any-link').value, 'room'))], ['hard', null, true]);
     const mixed = runLobby('', {}, {});
     mixed.hostPlayers(3);
     setHostSeats(mixed, ['easy', 'hard', 'easy']);
@@ -798,7 +800,7 @@ for (const junk of ['easy', 'easy,medium', 'easy,medium,hard,easy', 'easy,,hard'
     same('three players, Red Easy and Blue Hard: four words with Black none', mixed.param(mixed.$('any-link').value, 'fill'), 'none,easy,hard,none');
     const quiet = runLobby('', {}, {});
     quiet.$('host').click();
-    same('no bots and free for all: no fill and no teams in the room\'s links, the address or the hint', [quiet.param(quiet.$('any-link').value, 'fill'), quiet.param(quiet.$('any-link').value, 'teams'), /fill=|teams=/.test(String(quiet.replaced[0][2])), quiet.$('fill-hint').hidden], [null, null, false, true]);
+    same('no bots and free for all: no fill and no teams in the room\'s links, the address or the hint, and no word in the code', [quiet.param(quiet.$('any-link').value, 'fill'), quiet.param(quiet.$('any-link').value, 'teams'), /fill=|teams=/.test(String(quiet.replaced[0][2])), quiet.$('fill-hint').hidden, /^demo-treasure-4p-[a-z2-9]{6}$/.test(quiet.param(quiet.$('any-link').value, 'room'))], [null, null, false, true, true]);
 }
 {   // what the card remembered: four words, one word (the first versions), a team; anything else is none and free for all
     const four = runLobby('', { 'ants-four-players': '4', 'ants-four-fill': 'none,easy,none,hard', 'ants-four-teams': '0+3' }, { firstVisit: true });
@@ -826,10 +828,67 @@ for (const junk of ['easy', 'easy,medium', 'easy,medium,hard,easy', 'easy,,hard'
     same('a plan of two words and a team of one seat are nothing: no fill and no teams in the links', [bad.param(bad.$('any-link').value, 'fill'), bad.param(bad.$('any-link').value, 'teams'), bad.$('fill-hint').hidden], [null, null, true]);
     const host = runLobby('?map=small&players=3&fill=hard&teams=1%2B2', {});
     host.$('who-go').click();
-    same('?map= &players=3 &fill=hard &teams=1+2 hosts the room of three with both (one word for the seats that the room has)', [/room=demo-small-3p-/.test(host.$('any-link').value), host.param(host.$('any-link').value, 'fill'), host.param(host.$('any-link').value, 'teams')], [true, 'hard', '1+2']);
+    same('?map= &players=3 &fill=hard &teams=1+2 hosts the room of three with both: the plan in the links (one word for the seats that the room has), the teams in the code (t12)', [/^demo-small-3p-t12-[a-z2-9]{6}$/.test(host.param(host.$('any-link').value, 'room')), host.param(host.$('any-link').value, 'fill'), host.param(host.$('any-link').value, 'teams')], [true, 'hard', null]);
     const far = runLobby('?map=small&players=4&teams=1%2B2', {});
     far.$('who-go').click();
-    same('a team that the room of four does not offer is dropped when the address hosts it', far.param(far.$('any-link').value, 'teams'), null);
+    same('a team that the room of four does not offer is dropped when the address hosts it: no word in the code, no teams in the links', [far.param(far.$('any-link').value, 'teams'), /^demo-small-4p-[a-z2-9]{6}$/.test(far.param(far.$('any-link').value, 'room'))], [null, true]);
+}
+{   // the room's teams are a word of its code (protocol 13): what the Host card makes for every choice of a room of two, three and four players on every map
+    let words = 0;
+    let bad = '';
+    for (const mapKey of ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands']) {
+        for (const players of [2, 3, 4]) {
+            for (const choice of (players === 4 ? ['ffa', '0+1', '0+2', '0+3'] : players === 3 ? ['ffa', '0+1', '0+2', '1+2'] : ['ffa'])) {
+                const env = runLobby('', {}, {});
+                env.$('map-host').value = mapKey;
+                env.hostPlayers(players);
+                env.$('host-teams').value = choice;
+                env.$('host-teams').fire('change', {});
+                env.$('host').click();
+                const link = env.$('any-link').value;
+                const code = env.param(link, 'room');
+                const word = choice === 'ffa' ? '' : 't' + choice[0] + choice[2] + '-';
+                if (word) words++;
+                if (!new RegExp('^demo-' + mapKey + '-' + players + 'p-' + word + '[a-z2-9]{6}$').test(code) || env.param(link, 'teams') !== null || /teams=/.test(String(env.replaced[0][2]))) bad += ' ' + mapKey + '/' + players + '/' + choice + ': ' + code;
+            }
+        }
+    }
+    check('Host: the code of every room is demo-<map>-<n>p-[t<a><b>-]<six characters> for every map, player count and Teams choice (' + words + ' words), and no link or address carries a teams parameter:' + bad, words === 36 && bad === '');
+}
+{   // an address that names a room: the teams that the code names are the room's (the address's &teams= does not replace them), the links carry no parameter for them, and the panel says so
+    const env = runLobby('?room=demo-small-4p-t01-abc123&teams=1%2B2&fill=medium', {});
+    env.$('who-go').click();
+    const link = env.$('any-link').value;
+    same('?room= with a word in the code and another &teams=: the room\'s teams are the code\'s: the links carry the plan and no teams, the address the same, the code is unchanged', [env.roomStarted(), env.param(link, 'room'), env.param(link, 'fill'), env.param(link, 'teams'), /teams=/.test(String(env.replaced[0][2]))], [true, 'demo-small-4p-t01-abc123', 'medium', null, false]);
+    const hint = env.$('fill-hint').textContent;
+    check('... and the panel says the teams of the code (Green + Red against Blue + Black), not the address\'s (Red + Blue against Green + Black)', /Teams of this room: Green \+ Red against Blue \+ Black\./.test(hint) && !/Red \+ Blue against/.test(hint) && !/Teams at START/.test(hint), hint);
+    env.rowButton(2, 'Copy link').click();
+    check('... a seat\'s link has the code and no teams', env.param(env.copied[0], 'room') === 'demo-small-4p-t01-abc123' && env.param(env.copied[0], 'teams') === null, env.copied[0]);
+    const alone = runLobby('?room=demo-small-3p-t12-abc123', {});
+    alone.$('who-go').click();
+    same('a word in the code and nothing else in the address: the panel is shown (the teams are in the code) and the links carry no teams', [alone.$('fill-hint').hidden, /Teams of this room: Red \+ Blue against Green\./.test(alone.$('fill-hint').textContent), alone.param(alone.$('any-link').value, 'teams'), alone.param(alone.$('any-link').value, 'fill')], [false, true, null, null]);
+    const word = runLobby('?room=demo-small-3p-t03-abc123&teams=1%2B2', {});
+    word.$('who-go').click();
+    same('a word that the room of three cannot make (seat 3): the room has it nonetheless (the server says "No teams" at the start); the address\'s teams do not replace it, and the page announces nothing', [word.$('fill-hint').hidden, word.param(word.$('any-link').value, 'teams'), /teams=/.test(String(word.replaced[0][2]))], [true, null, false]);
+    const two = runLobby('?room=demo-small-2p-t01-abc123&teams=0%2B1', {});
+    two.$('who-go').click();
+    same('a word in a room of two (two seats cannot be teams): the same', [two.$('fill-hint').hidden, two.param(two.$('any-link').value, 'teams')], [true, null]);
+}
+{   // &teams= for a room that has no teams of its own: narrowed to the room's player count when the code says it (as the Host card narrows its Teams select), passed on when the page cannot know
+    const kept = runLobby('?room=demo-small-3p-abc123&teams=1%2B2', {});
+    kept.$('who-go').click();
+    same('a code for three players and a team that three seats offer (Red + Blue against Green): kept, in the links and the address, and said in the panel', [kept.param(kept.$('any-link').value, 'teams'), /teams=1%2B2/.test(String(kept.replaced[0][2])), /Teams at START: Red \+ Blue against Green\./.test(kept.$('fill-hint').textContent)], ['1+2', true, true]);
+    for (const [room, team, what] of [['demo-small-3p-abc123', '0+3', 'seat 3 is no seat of a room of three'], ['demo-small-2p-abc123', '0+1', 'a team of two seats ends the match at once'], ['demo-small-4p-abc123', '1+2', 'the Host card offers a room of four the pairs with Green only'],
+                                       ['demo-small-4p-abc123', '2+3', 'the same'], ['demo-2p-abc123', '0+1', 'a code without a map names its players too']]) {
+        const env = runLobby('?room=' + room + '&teams=' + encodeURIComponent(team), {});
+        env.$('who-go').click();
+        same('?room=' + room + '&teams=' + team + ' (' + what + '): dropped, no teams in the links or the address, no panel', [env.roomStarted(), env.param(env.$('any-link').value, 'teams'), /teams=/.test(String(env.replaced[0][2])), env.$('fill-hint').hidden], [true, null, false, true]);
+    }
+    for (const [room, what] of [['myroom', 'a code that the page did not make'], ['demo-x7k2', 'an old code that names no players'], ['demo-small-x7k2', 'a map and no players'], ['party-t01-abcdef', 'a code that is no demo code (no word in it counts)']]) {
+        const env = runLobby('?room=' + room + '&teams=1%2B2', {});
+        env.$('who-go').click();
+        same('?room=' + room + '&teams=1+2 (' + what + '): the page cannot know the seats of the room (Red + Blue is no choice of a room of four, but one of three), so the game gets it as it is (the server judges)', [env.roomStarted(), env.param(env.$('any-link').value, 'teams'), /teams=1%2B2/.test(String(env.replaced[0][2]))], [true, '1+2', true]);
+    }
 }
 check('"How it works" is a details element that no script opens or closes (the script only hides it with the cards, and shows it with them)', /<details class="how" id="how" hidden>\s*<summary>/.test(lobbyText) && (lobbyScript.match(/\$\('how'\)[.\w]*/g) || []).length === 2 && (lobbyScript.match(/\$\('how'\)[.\w]*/g) || []).every((u) => u === "$('how').hidden") && !/getElementById\('how'\)/.test(lobbyScript));
 for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {

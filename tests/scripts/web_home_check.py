@@ -19,7 +19,7 @@ profile and port; nothing of yours is touched). What it checks:
     front page remembers the choices;
   * the OLD ADDRESSES: /?join=...&room=... and /?embed=1 open the game page (a shared link asks for a name), /four.html?room=... goes to /?room=... and the front page asks for the name of a
     shared link, /play.html with nothing is today's front page (the setup screen, no arguments);
-  * the HOST: 3 players and Host the match make the room panel, and "Play in this tab" takes this tab to the game page with the room, the name and the bots of the leader's START.
+  * the HOST: 3 players and Host the match make the room panel (the team is a word of the room's code), and "Play in this tab" takes this tab to the game page with the room, the name and the bots of the leader's START.
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made because the environment is not there (no browser, nothing answers at the page's address).
 """
 import argparse
@@ -391,7 +391,7 @@ def main():
             tab.ev("document.getElementById('host').click(); 1")
             time.sleep(0.8)
             room = tab.ev("document.getElementById('room-code').textContent")
-            check(tab.ev("!document.getElementById('room-panel').hidden") and room.startswith("demo-treasure-3p-"), "Host the match makes the room panel (%s)" % room)
+            check(tab.ev("!document.getElementById('room-panel').hidden") and re.match(r"^demo-treasure-3p-t01-[a-z2-9]{6}$", room) is not None, "Host the match makes the room panel, and the room's code names its team (%s)" % room)
             check(tab.ev("document.body.classList.contains('in-room') && document.getElementById('cards').hidden && document.getElementById('how').hidden && getComputedStyle(document.querySelector('.tv')).display === 'none'"),
                   "... in its room mode: the two cards and the header's picture give way to the room")
             before = pages()
@@ -401,7 +401,7 @@ def main():
             a = json.loads(tab.ev("JSON.stringify({search: location.search, args: ANTS_ARGS})")) if ok else {"search": "", "args": []}
             check(ok and ("room=" + room) in a["search"] and pages() == before, "Play in this tab takes this tab to the game page of the room (%s), no new tab" % a["search"])
             check("--join-url" in a["args"] and "--fill-bots" in a["args"] and a["args"][a["args"].index("--fill-bots") + 1] == "easy" and "--name" in a["args"], "... with the room, the leader's bots and the name in the game's arguments (%s)" % a["args"])
-            check("--teams" in a["args"] and a["args"][a["args"].index("--teams") + 1] == "0+1", "... and the room's team (%s)" % a["args"])
+            check("--room" in a["args"] and a["args"][a["args"].index("--room") + 1] == room and "--teams" not in a["args"], "... the room's team is in its code (the game reads it there), so there is no --teams (%s)" % a["args"])
     except NotReachable as e:
         print("  SKIP: %s" % e)
         return 3

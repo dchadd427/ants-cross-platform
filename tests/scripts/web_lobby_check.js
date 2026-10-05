@@ -5,7 +5,8 @@
 //     localGameQuery (the address of a game on THIS computer: ?map=<key>[&bots=<levels>][&teams=0%2BN]&name=<name>&aspect=<shape>, never a ?join=, a room or a server);
 //   * the same block's Host card (protocol 13): hostSeats / hostSeatsText (the levels of the three seats after the leader's, as the browser remembers them: four words, or the one word of the first versions),
 //     hostFillText (what a room of 2 - 4 players asks of START, as an address holds it), hostTeamChoices / hostTeam / hostTeamText (the room's teams), validFillPlan and validRoomTeams (what an address may say),
-//     hostPlanText (the words of the room panel);
+//     hostPlanText (the words of the room panel), roomTeamWord / codeTeams (the room's teams are a word of its code, demo-treasure-4p-t01-k7m2xq: the page reads a code as the server and every game do,
+//     every line of tests/data/room_code_teams.tsv, the table that net::room_code_teams is tested against too);
 //   * web/shell.html, ANTS_PAGE.localArguments: the game page's local parameters through a WHITELIST (the map by its key out of the six shipped maps, the opponents by one level word or three,
 //     the teams by ffa or 0+N, a name of printable ASCII): what reaches the game's own arguments is a file name from a fixed table, level words that were tested, a seat that has a bot, a
 //     cleaned name and flags, never the text of the address; nothing at all for an address with no local parameter (today's front page: the setup screen);
@@ -55,7 +56,7 @@ const lobbyCode = [
     'function mapByKey(key) { for (var i = 0; i < MAPS.length; i++) if (MAPS[i].key === key) return MAPS[i]; return null; }',
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath),
-    'return { MAPS: MAPS, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, soloTeamChoices: soloTeamChoices, soloTeam: soloTeam, SOLO_SEATS: SOLO_SEATS, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostSeatsText: hostSeatsText, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, SEAT_COLOURS: SEAT_COLOURS };',
+    'return { MAPS: MAPS, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, soloTeamChoices: soloTeamChoices, soloTeam: soloTeam, SOLO_SEATS: SOLO_SEATS, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostSeatsText: hostSeatsText, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, roomTeamWord: roomTeamWord, codeTeams: codeTeams, SEAT_COLOURS: SEAT_COLOURS };',
 ].join('\n');
 const L = new Function(lobbyCode)();
 
@@ -371,6 +372,39 @@ try {
         same('hostTeam: a choice of the room stays, a choice that the room does not offer (another size, a pair of seats that do not play) and anything that is no choice is free for all',
              [L.hostTeam('0+1', 4), L.hostTeam('0+3', 4), L.hostTeam('1+2', 3), L.hostTeam('1+2', 4), L.hostTeam('0+3', 3), L.hostTeam('0+1', 2), L.hostTeam('ffa', 4), L.hostTeam('0+4', 4), L.hostTeam('1+3', 4), L.hostTeam('', 4), L.hostTeam(null, 4), L.hostTeam('0 1', 4), L.hostTeam('constructor', 4)],
              ['0+1', '0+3', '1+2', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa']);
+
+        // the room's teams are a word of the code: what the card makes and what a code says (the same table as the game's reading: tests/data/room_code_teams.tsv)
+        same('roomTeamWord: t<a><b> for the pairs of seats 0 - 3, the lower first; free for all, anything else and a pair the wrong way round are no word', [L.roomTeamWord('0+1'), L.roomTeamWord('0+3'), L.roomTeamWord('1+2'), L.roomTeamWord('2+3'), L.roomTeamWord('ffa'), L.roomTeamWord(''), L.roomTeamWord('1+0'), L.roomTeamWord('2+2'), L.roomTeamWord('0+4'), L.roomTeamWord('0 1'), L.roomTeamWord(null), L.roomTeamWord(undefined), L.roomTeamWord(['0+1'])],
+             ['t01', 't03', 't12', 't23', '', '', '', '', '', '', '', '', '']);
+        {
+            const table = fs.readFileSync(path.join(repo, 'tests', 'data', 'room_code_teams.tsv'), 'utf8').split(/\r?\n/).filter((line) => line !== '' && line[0] !== '#');
+            let lines = 0;
+            let named = 0;
+            let wrongLines = '';
+            for (const line of table) {
+                const [code, teams] = line.split('\t');
+                lines++;
+                named += teams !== 'ffa' ? 1 : 0;
+                if ((L.codeTeams(code) || 'ffa') !== teams) wrongLines += ' ' + code + ' -> ' + JSON.stringify(L.codeTeams(code)) + ' (the table: ' + teams + ');';
+            }
+            check('codeTeams reads every code of the table as net::room_code_teams does (' + lines + ' codes, ' + named + ' with teams):' + wrongLines, lines >= 50 && named >= 15 && lines - named >= 30 && wrongLines === '');
+        }
+        {   // what the card makes is read back: every choice of a room of 2 - 4 players, on every map
+            let words = 0;
+            let bad = '';
+            for (const m of L.MAPS) {
+                for (const players of [2, 3, 4]) {
+                    for (const choice of L.hostTeamChoices(players)) {
+                        const word = L.roomTeamWord(choice.value);
+                        const code = 'demo-' + m.key + '-' + players + 'p-' + (word ? word + '-' : '') + 'k7m2xq';
+                        if (word) words++;
+                        if ((L.codeTeams(code) || 'ffa') !== choice.value || (word !== '') !== (choice.value !== 'ffa') || code.length > 27 || !/^[A-Za-z0-9_-]{1,32}$/.test(code)) bad += ' ' + code;
+                    }
+                }
+            }
+            check('every choice of the Host card is a word of its code that codeTeams reads back (' + words + ' words; free for all and two players have none; at most 27 characters):' + bad, words === L.MAPS.length * 6 && bad === '');
+        }
+        same('codeTeams: a code that is no string names nothing', [L.codeTeams(null), L.codeTeams(undefined), L.codeTeams(5), L.codeTeams({}), L.codeTeams(['demo-small-4p-t01-x'])], ['', '', '', '', '']);
 
         // what an address may say
         same('validFillPlan: one level in any case, or four words (none for none): the tested lower case text; no bots at all and anything else is ""',

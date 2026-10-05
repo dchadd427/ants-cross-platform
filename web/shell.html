@@ -1292,7 +1292,8 @@
         //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
         //   fill   the bots that this player's START seats in the empty seats of the room when this player is its leader (the first to connect): easy, medium or hard (any case) for every seat, or four words
         //          for the seats 0 - 3 (none,none,easy,hard): the game's --fill-bots; harmless for everybody else
-        //   teams  the teams that the leader's START makes: two different seats 0 - 3 as A+B: the game's --teams; harmless for everybody else too
+        //   teams  the teams that the leader's START makes: two different seats 0 - 3 as A+B: the game's --teams; harmless for everybody else too, and ignored by a room whose own code names teams (a team
+        //          word, demo-treasure-4p-t01-k7m2xq: the game reads the code itself)
         //   embed  the page is a frame of another page (lobby.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
         var ANTS_EMBED = false;

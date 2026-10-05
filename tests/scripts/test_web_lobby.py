@@ -131,7 +131,7 @@ class TheFrontPageMarkup(PageCase):
     def test_play_goes_to_this_tab_and_the_host_s_own_seat_too(self):
         self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(", self.page)
         self.assertIn("var LOCAL_PAGE = 'play.html';", self.page)
-        self.assertIn("window.location.assign(joinUrl(room, checked.name, fill, roomTeams));", self.page)
+        self.assertIn("window.location.assign(joinUrl(room, checked.name, fill, teamsInCode ? '' : roomTeams));", self.page)       # (the teams that the room's code names travel in the code)
         self.assertIn("window.location.assign(joinUrl(code, checked.name, '', ''));", self.page)
 
     def test_the_old_address_and_its_state_addresses_still_work_at_the_front_page(self):
