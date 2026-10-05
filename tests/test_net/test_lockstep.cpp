@@ -12,6 +12,7 @@
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
+#include <bitset>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
@@ -9886,7 +9887,7 @@ void run_protocol13_tests() {
         size_t accepted_teams = 0;
         size_t refused_teams = 0;
         for (unsigned roster = 0; roster < 16; ++roster) {
-            if (__builtin_popcount(roster) < 2) continue;                                                         // (a Start of fewer than two players is refused for that reason)
+            if (std::bitset<8>(roster).count() < 2) continue;                                                           // (a Start of fewer than two players is refused for that reason)
             for (unsigned a = 0; a < 256; a += (a < 6 ? 1 : (a == 254 ? 1 : 249))) {                               // 0 .. 5, 255 (the values between are no different)
                 for (unsigned b = 0; b < 256; b += (b < 6 ? 1 : (b == 254 ? 1 : 249))) {
                     const StartMsg st = start_with(static_cast<uint8_t>(roster), static_cast<uint8_t>(a), static_cast<uint8_t>(b));
