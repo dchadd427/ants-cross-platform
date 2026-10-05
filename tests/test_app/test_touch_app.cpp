@@ -1217,6 +1217,31 @@ void test_gates() {
         check(app.touch().fingers() == 0, "(both fingers are gone)");
     }
 
+    // where two fingers act is decided at their MIDDLE point: a second finger that puts the middle point over the panel is ignored, one over the panel whose middle point is over the map is not
+    {
+        const Pt edge{view.x + view.w - 12, view.y + 200};
+        const Pt far_right{view.x + view.w + 150, view.y + 200};
+        hand.down(1, edge);
+        hand.frame();
+        hand.down(2, far_right);
+        hand.frame();
+        check(app.touch().mode() == TouchControl::Mode::Waiting && app.touch().ignored() == 1, "a second finger that puts the middle point over the HUD's panel is ignored (no pair)");
+        hand.up(2, far_right);
+        hand.up(1, edge);
+        hand.frame();
+        const Pt inner{view.x + view.w - 160, view.y + 200};
+        const Pt near_panel{view.x + view.w + 40, view.y + 200};
+        hand.down(1, inner);
+        hand.frame();
+        hand.down(2, near_panel);
+        hand.frame();
+        check(app.touch().mode() == TouchControl::Mode::Two && app.touch().ignored() == 0, "a second finger over the panel whose middle point with the first is over the map makes a pair");
+        hand.up(2, near_panel);
+        hand.up(1, inner);
+        hand.frame();
+        check(app.touch().fingers() == 0, "(both fingers are gone)");
+    }
+
     // a window comes up in the middle of a gesture: the pair began while the view was open, the next move finds a quit dialog over it: the gesture is over (no pan, no zoom), the fingers are dropped
     {
         camera.set_origin(500.0, 500.0, map_w, map_h);
