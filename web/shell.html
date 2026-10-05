@@ -45,16 +45,16 @@
 
         /* A TOUCH SCREEN. The game reads its fingers itself (SDL's touch events, Application::feed_touch: a tap is a left click, a hold a right click, two fingers move and zoom the map): the browser
            must leave them alone. The canvas has touch-action none (below); everything else on the page keeps its panning and its pinch but no double-tap zoom (manipulation: iOS Safari ignores
-           user-scalable=no); and a pull down or a swipe past the end of the page neither reloads it (Android's Chrome) nor passes to another scroller (overscroll-behavior: none does not stop
-           the page's own scrolling, the guide below the game scrolls as ever). */
+           user-scalable=no); and a pull down past the top of the page does not reload it (Android's Chrome) nor does a swipe past the end pass to another scroller (overscroll-behavior-y: none, the
+           vertical axis only: it does not stop the page's own scrolling, the guide below the game scrolls as ever, and a desktop trackpad's horizontal swipe, back and forward, is as it was). */
         html {
             touch-action: manipulation;
-            overscroll-behavior: none;
+            overscroll-behavior-y: none;
         }
 
         body {
             position: relative;
-            overscroll-behavior: none;
+            overscroll-behavior-y: none;
             background: var(--clay) url("front/clay.png");
             color: var(--ink);
             font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif;

@@ -4,7 +4,7 @@ fingers move and zoom the map: src/ants_app/application_touch.cpp, include/ants_
 here, so everything that the page can say about it without one is checked:
 
   - the style: the canvas has touch-action none, the page has manipulation (no double-tap zoom) and every control too, a pull down or a swipe past the end of the page does not reload it or
-    chain to another scroller (overscroll-behavior: none, which does not stop the page's own scrolling), a long press makes no callout or selection over the game, the viewport still
+    chain to another scroller (overscroll-behavior-y: none, which does not stop the page's own scrolling), a long press makes no callout or selection over the game, the viewport still
     forbids scaling (Chrome on Android obeys it; iOS Safari does not, which is what the gesture listeners are for);
   - the script: the block of the guards exists once and is RUN with fakes for the page (node, when it is installed: tests/scripts/web_touch_check.js): the listeners that it registers and how
     (the browser's pinch on the canvas AND the document, not passive; the touch listeners passive: the page never cancels, stops or delays a touch), the cancel of the context menu, the
@@ -72,12 +72,14 @@ class TheStyle(PageCase):
         root = css_rule(self.page, r"html")
         self.assertIsNotNone(root)
         self.assertIn("touch-action: manipulation;", root)           # the whole page: panning and pinch stay, double-tap zoom goes (iOS Safari honours it from iOS 13)
-        self.assertIn("overscroll-behavior: none;", root)
+        self.assertIn("overscroll-behavior-y: none;", root)
 
     def test_a_swipe_past_the_end_of_the_page_does_not_reload_it(self):
         body = css_rule(self.page, r"body")
         self.assertIsNotNone(body)
-        self.assertIn("overscroll-behavior: none;", body)
+        self.assertIn("overscroll-behavior-y: none;", body)
+        self.not_found(css_rule(self.page, r"html") or "", r"overscroll-behavior(?!-y)", "only the vertical axis (no shorthand, no -x): a desktop trackpad's horizontal swipe (back, forward) stays as it was")
+        self.not_found(body, r"overscroll-behavior(?!-y)", "only the vertical axis (no shorthand, no -x): a desktop trackpad's horizontal swipe (back, forward) stays as it was")
         self.not_found(css_rule(self.page, r"html") or "", r"overflow\s*:\s*hidden", "the page itself must scroll: the guide is below the game")
 
     def test_a_long_press_on_the_game_is_no_callout_no_selection_no_flash(self):

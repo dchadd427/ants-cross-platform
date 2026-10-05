@@ -34,7 +34,8 @@ SDL's Emscripten backend reads the canvas's touches itself, and SDL's own touch-
 player's cannot bring it back), so the page only keeps the browser out of the way:
 
 - the canvas has `touch-action: none` and the page `touch-action: manipulation` (panning and pinch stay, double-tap zoom goes), every control outside the canvas too;
-- `overscroll-behavior: none` on html and body (a swipe past the end of the page does not reload it), without stopping the page's own scrolling;
+- `overscroll-behavior-y: none` on html and body (a pull down past the top of the page does not reload it), without stopping the page's own scrolling; only the vertical axis, so a desktop trackpad's
+  horizontal swipe (back, forward) is as it was;
 - no callout, selection or tap highlight over the game (`-webkit-touch-callout`, `user-select`), the context menu cancelled over the game's box;
 - the browser's pinch (`gesturestart`, `gesturechange`, `gestureend`) cancelled on the canvas and, while a game finger is down, on the document; a trackpad's pinch still zooms the game through the wheel;
 - a `touchcancel` tells the game (`Module._ants_touch_cancel`): no finger is tracked any more and a held press ends with no act (on a dialog or a screen it is let go of where no control is, so that
