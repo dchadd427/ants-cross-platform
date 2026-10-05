@@ -415,4 +415,26 @@ void run_island_task_tests() {
         ASSERT_EQ(m.island(0).closed_piles().count(pile), 1u);
         ASSERT_EQ(m.island(0).pile_limits().count(pile), 0u);
     } TEST_END();
+
+    TEST_CASE("AI15.16 No Special Order Names A Tile With An Ant On It (The Controller Refuses It: A Click On An Ant Selects It): An Ant Of The Seat Comes To Rest On The Second Tile Of The Chain That The Builder Has Planned (A Medium Bot, ISLANDS, Seat 0); After The First Tile It Names The Second Never, Gives It Up After 200 Ticks And Digs Another Chain")
+    {
+        Match m;
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0x01);
+        std::vector<TileCoord> chain;
+        for (int t = 0; t < 400 && chain.empty(); ++t) {
+            m.tick();
+            chain = m.island(0).chain();
+        }
+        ASSERT_TRUE(chain.size() >= 2);
+        const TileCoord blocked = chain[1];
+        m.sim.spawn_unit(0, sim::AntType::Swimmer, blocked);                                                     // (no ferry in this lab: it stays where it is)
+        m.run(1500);
+        size_t named = 0;
+        for (const auto& e : m.log()) named += e.second.type == CommandType::GroupSpecial && e.second.tile_x == blocked.x && e.second.tile_y == blocked.y ? 1u : 0u;
+        ASSERT_EQ(named, 0u);
+        ASSERT_EQ(m.ctl->stats(0).filtered, 0u);
+        ASSERT_TRUE(finished(m.sim, chain[0]));                                                                  // (the first tile was dug before it came to the second)
+        ASSERT_TRUE(m.island(0).blocked_tiles() >= 1);
+        ASSERT_TRUE(m.island(0).chains_finished() >= 1);                                                         // (another chain is dug)
+    } TEST_END();
 }

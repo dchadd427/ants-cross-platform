@@ -48,6 +48,7 @@ public:
         uint32_t renew_life{900};            // the next bridge to a pile is planned when the one it has will be retired within this many ticks
         uint32_t tie_cost{20};               // a way over retired bridges is counted when it costs at most this much more than the best one (the engine may take it)
         uint32_t blacklist_ticks{600};       // a tile that could not be dug is left alone this long
+        uint32_t blocked_ticks{200};         // a tile with an ant on it (no special order names one) is given up after this long
         uint32_t swimmers{1};                // the Swimmers the bot wants (the power-up task takes them from the map)
         uint32_t builders{1};                // Swimmers that dig at a time
         uint32_t min_workers{1};             // no Swimmer digs while fewer workers than this are free at the hill's island (nobody would walk the bridge)
@@ -97,6 +98,9 @@ public:
     uint32_t repaths() const noexcept { return repaths_; }
     /// Bridges that were planned for a pile that was worked over a bridge that was to be retired soon
     uint32_t renewals() const noexcept { return renewals_; }
+    /// Builders sent aside off the tile they had to dig, and tiles given up because an ant stayed on them (no special order names a tile with an ant: BotController::allowed)
+    uint32_t asides() const noexcept { return asides_; }
+    uint32_t blocked_tiles() const noexcept { return blocked_tiles_; }
     /// Ants of the economy that the guard has now, and what it does with one: -1 none, 0 sends it off a bridge (Escape), 1 calls it home (Home), 2 keeps it where it stands (Hold)
     size_t guarded() const noexcept { return guarded_.size(); }
     int guard_mode(uint32_t ant) const noexcept {
@@ -132,6 +136,8 @@ private:
         bool parked{true};                   // the swimmer rests off the bridge
         sim::TileCoord park{-1, -1};
         uint64_t idle_since{0};              // the first look at which it had nothing to dig (0: it has)
+        uint64_t blocked_since{0};           // the first look at which an ant stood on the tile to dig (0: none does)
+        uint64_t aside_at{0};                // the look at which the swimmer was last sent aside, off the tile it has to dig
     };
     struct Plan {
         std::vector<sim::TileCoord> tiles;
@@ -203,6 +209,8 @@ private:
     uint32_t holds_{0};
     uint32_t repaths_{0};
     uint32_t renewals_{0};
+    uint32_t asides_{0};
+    uint32_t blocked_tiles_{0};
     bool collapsed_{false};
 };
 

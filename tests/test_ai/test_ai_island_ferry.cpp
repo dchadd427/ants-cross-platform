@@ -52,13 +52,16 @@ void run_island_ferry_tests() {
 
     TEST_CASE("AI18.3 The Ferry Pays: A Medium Bot With A Builder And A Ferry Swimmer Scores More Over 9,000 Ticks Than The Same Bot With The Builder Alone (ISLANDS, Seat 0, Seed 1), And Loses No Ant")
     {
-        const auto play = [](bool ferry, int* lost) {
+        uint32_t refused = 0, asides = 0;
+        const auto play = [&](bool ferry, int* lost) {
             Match m;
             m.ferry = ferry;
             m.init("ISLANDS", 1, 0x01, Level::Medium, 0x01);
             m.sim.spawn_unit(0, sim::AntType::Swimmer, m.ctl->map().hill(0).starts[0]);
             m.run(9000);
             *lost = m.total_unforced();
+            refused += m.ctl->stats(0).filtered;
+            asides += m.island(0).asides();
             return m.sim.get_player_score(0);
         };
         int lost_with = 0, lost_without = 0;
@@ -66,6 +69,8 @@ void run_island_ferry_tests() {
         const int32_t without = play(false, &lost_without);
         ASSERT_TRUE(with > without + 200);
         ASSERT_EQ(lost_with + lost_without, 0);
+        ASSERT_EQ(refused, 0u);                                                                                  // (the builder rests on the tile it digs next: it steps aside, no order is refused: AI15.16)
+        ASSERT_TRUE(asides >= 1);
     } TEST_END();
 
     TEST_CASE("AI18.4 The Trip Model Of The Ferry Is The Engine's: The First Round Trip Of A Swimmer To A Pile (From The Order To The Deposit) Takes The Ticks That The Search Predicted, Within 20 Percent Under And 40 Over (The Delay Of The Order Is In It; ISLANDS, Seat 0)")

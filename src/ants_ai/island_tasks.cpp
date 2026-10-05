@@ -23,6 +23,17 @@ const AntView* find_ant(const std::vector<AntView>& ants, uint32_t id) noexcept 
     return it != ants.end() && it->id == id ? &*it : nullptr;
 }
 
+// The ant of any team that stands on the tile, the seat's own included, or null: no special order names such a tile (BotController::allowed: a click on an ant selects it or attacks it)
+const AntView* ant_on(const BotView& v, sim::TileCoord t) noexcept {
+    for (const AntView& a : v.mine()) {
+        if (a.tile == t) return &a;
+    }
+    for (const AntView& a : v.others()) {
+        if (a.tile == t) return &a;
+    }
+    return nullptr;
+}
+
 int32_t index_of(const sim::Grid& grid, sim::TileCoord t) noexcept { return t.y * static_cast<int32_t>(grid.width()) + t.x; }
 sim::TileCoord tile_at(const sim::Grid& grid, int32_t idx) noexcept {
     const int32_t w = static_cast<int32_t>(grid.width());
@@ -394,6 +405,33 @@ void IslandTask::step_builder(TaskContext& c, uint32_t ant, Builder& b) {
         b.ordered = false;
         return;
     }
+    if (const AntView* on = ant_on(v, t)) {                                                        // an ant stands on the tile: no click names it, the swimmer's own rest there included
+        if (b.blocked_since == 0) b.blocked_since = now;
+        if (on->id == ant && a->idle() && !v.has_pending_path(ant) && now >= b.aside_at + 40u) {   // (it steps aside, to a free water tile that is not one of the tiles to dig, and digs from there)
+            for (int r = 1; r <= 3 && b.aside_at != now; ++r) {
+                for (int dy = -r; dy <= r && b.aside_at != now; ++dy) {
+                    for (int dx = -r; dx <= r && b.aside_at != now; ++dx) {
+                        const sim::TileCoord s{t.x + dx, t.y + dy};
+                        if (!grid.in_bounds(s) || grid.terrain_class_at(s) != sim::movement::kTerrainWater || !grid.get_cell(s).is_empty_overlay() || ant_on(v, s) != nullptr) continue;
+                        if (std::find(b.chain.begin() + static_cast<std::ptrdiff_t>(b.next), b.chain.end(), s) != b.chain.end()) continue;
+                        c.orders.move({ant}, s);
+                        b.aside_at = now;
+                        ++asides_;
+                    }
+                }
+            }
+        }
+        if (now >= b.blocked_since + params_.blocked_ticks) {                                      // it stays: the tile is left alone for a while and another chain is looked for
+            ++blocked_tiles_;
+            bad_[index_of(grid, t)] = now + params_.blacklist_ticks;
+            b.chain.clear();
+            b.next = 0;
+            b.ordered = false;
+            b.blocked_since = 0;
+        }
+        return;
+    }
+    b.blocked_since = 0;
     c.orders.special(ant, t);
     b.ordered = true;
     b.decided = now;
