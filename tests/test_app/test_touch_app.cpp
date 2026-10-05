@@ -1128,6 +1128,56 @@ void test_gates() {
         hand.frame();
     }
 
+    // a press that a MOUSE holds (a touch screen and a mouse on one computer): two fingers on the map are refused while it is held, whatever it is: a button, the minimap with either button,
+    // the chat log's drag; the second finger is ignored (no pair), and when nothing is held the same two fingers are a pair
+    {
+        struct Held {
+            const char* name;
+            uint8_t button;
+            Pt at;
+        };
+        const auto middle = [](const UIButton& button) { return Pt{button.x + button.w / 2, button.y + button.h / 2}; };
+        const LayoutRect mini = app.layout().minimap();
+        const LayoutRect chat = app.layout().chat_view();
+        const std::vector<Held> held = {
+            {"the Help button", SDL_BUTTON_LEFT, middle(app.hud().help_button())},
+            {"the Options button", SDL_BUTTON_LEFT, middle(app.hud().options_button())},
+            {"the Quit button", SDL_BUTTON_LEFT, middle(app.hud().quit_button())},
+            {"the [All] button", SDL_BUTTON_LEFT, middle(app.hud().send_to_button())},
+            {"the team button", SDL_BUTTON_LEFT, middle(app.hud().team_button())},
+            {"the minimap with the left button", SDL_BUTTON_LEFT, Pt{mini.x + mini.w / 2, mini.y + mini.h / 2}},
+            {"the minimap with the right button", SDL_BUTTON_RIGHT, Pt{mini.x + mini.w / 2, mini.y + mini.h / 2}},
+            {"the chat log", SDL_BUTTON_LEFT, Pt{chat.x + chat.w / 2, chat.y + chat.h / 2}},
+        };
+        const auto pair_forms = [&]() {                                    // two fingers land on the map: do they make a pair?
+            hand.down(1, a);
+            hand.frame();
+            hand.down(2, b);
+            hand.frame();
+            const bool pair = app.touch().mode() == TouchControl::Mode::Two;
+            const size_t ignored = app.touch().ignored();
+            hand.up(2, b);
+            hand.up(1, a);
+            hand.frame();
+            return std::make_pair(pair, ignored);
+        };
+        s.clear();
+        check(pair_forms() == std::make_pair(true, size_t{0}), "(with nothing held two fingers on the map are a pair)");
+        for (const Held& h : held) {
+            app.hud().set_on_team(true);                                   // (the team button is there for a seat that has an ally; every frame sets the flag from the world again)
+            mouse_press(app, h.button, h.at);
+            check(app.hud().is_input_captured() || app.hud().chat_dragging(), std::string("(the mouse holds ") + h.name + ")");
+            const auto got = pair_forms();
+            check(got == std::make_pair(false, size_t{1}), std::string("two fingers on the map while the mouse holds ") + h.name + ": no pair, the second finger is ignored");
+            mouse_release(app, h.button, Pt{a.x, a.y + 60});               // (let go away from it: nothing fires)
+            forget_pointer(app);
+            check(!app.hud().is_input_captured() && !app.hud().chat_dragging(), std::string("(the mouse let go of ") + h.name + ")");
+            s.clear();
+            check(!app.hud().is_modal_open(), std::string("(and nothing opened: ") + h.name + ")");
+            check(pair_forms() == std::make_pair(true, size_t{0}), std::string("(and then two fingers are a pair again, after ") + h.name + ")");
+        }
+    }
+
     // taps are still clicks where two fingers do nothing: the quit dialog's No, the options window's Return
     {
         app.hud().open_quit_dialog();
@@ -1578,6 +1628,11 @@ void test_inset_picture() {
     hand.frame();
     check(app.touch().primary_point(fx, fy) && fx == 0.0 && std::fabs(fy - 50.5) < 0.01, "a finger in the bar left of the picture is at its left edge: (" + std::to_string(fx) + ", " + std::to_string(fy) + ")");
     hand.up(1, Pt{-100, 50});
+    hand.frame();
+    hand.down(1, Pt{50, -20});
+    hand.frame();
+    check(app.touch().primary_point(fx, fy) && std::fabs(fx - 50.5) < 0.01 && fy == 0.0, "a finger in the bar above the picture is at its top edge: (" + std::to_string(fx) + ", " + std::to_string(fy) + ")");
+    hand.up(1, Pt{50, -20});
     hand.frame();
     hand.down(1, Pt{690, 500});
     hand.frame();

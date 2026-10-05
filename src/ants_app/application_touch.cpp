@@ -47,7 +47,6 @@ bool Application::touch_view_open() const {
 // Emscripten's SDL reads as its window's); on a desktop the window's size in points stands for it (and the output's size in pixels for the device's).
 double Application::touch_slop() const {
     const double canvas_w = renderer_ ? static_cast<double>(renderer_->canvas_w()) : static_cast<double>(ScreenLayout::kClassicWidth);
-    const double canvas_h = renderer_ ? static_cast<double>(renderer_->canvas_h()) : static_cast<double>(ScreenLayout::kClassicHeight);
     double per_css = 1.0;
     double per_device = 1.0;
 #if defined(__EMSCRIPTEN__)
@@ -62,6 +61,7 @@ double Application::touch_slop() const {
     int window_w = 0;
     int window_h = 0;
     if (window_ != nullptr) SDL_GetWindowSize(window_, &window_w, &window_h);
+    const double canvas_h = renderer_ ? static_cast<double>(renderer_->canvas_h()) : static_cast<double>(ScreenLayout::kClassicHeight);
     if (window_w > 0 && window_h > 0 && canvas_w > 0.0 && canvas_h > 0.0) {
         const double scale = std::min(static_cast<double>(window_w) / canvas_w, static_cast<double>(window_h) / canvas_h);     // (SDL's logical size: the largest scale that fits)
         per_css = 1.0 / scale;

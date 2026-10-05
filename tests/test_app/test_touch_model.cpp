@@ -598,6 +598,17 @@ void test_feedback() {
             if (r.y == 80 && r.color.r == 255 && r.x < 100) gold_across += r.w;
         }
         check(gold_across >= 3 && gold_across <= 5, "the gold line is 3 or 4 pixels thick on a row through the middle (3.84): " + std::to_string(gold_across));
+        // across the line, from the outside in: a dark pixel, the gold, a dark pixel (it is seen on grass, sand and rock alike)
+        std::vector<std::pair<int32_t, char>> row;
+        for (const TouchPaint& r : r1) {
+            if (r.y == 80 && r.x < 100) row.emplace_back(r.x, r.color.r == 255 ? 'g' : 'e');
+        }
+        std::sort(row.begin(), row.end());
+        std::string across;
+        for (const auto& piece : row) {
+            if (across.empty() || across.back() != piece.second) across += piece.second;
+        }
+        check(across == "ege", "across the ring on a row through its middle the rectangles are dark, gold, dark (" + across + ")");
     }
     // it moves with the mark and does not change shape, and a pixel-centred mark makes a symmetric ring
     {
