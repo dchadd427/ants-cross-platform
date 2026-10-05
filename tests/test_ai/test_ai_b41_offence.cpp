@@ -319,13 +319,15 @@ void run_b41_offence_tests() {
         const HillInfo& victim = pmap.hill(1);                                                                // team 1's hill is at (50, 4)
         const std::array<TileCoord, 3> east = east_tiles(victim);
         // the raid orders that team 0's Thief gets in 300 ticks, with the reactions of the seat
-        const auto raids = [&](const std::function<void(sim::SimulationEngine&)>& set_up, uint64_t& reactions, uint64_t ticks = 300) {
+        const auto raids = [&](const std::function<void(sim::SimulationEngine&)>& set_up, uint64_t& reactions, uint64_t ticks = 300, bool aware = true) {
             sim::SimulationEngine sim;
             empty_field(sim, 62);
             sim.set_player_score(1, 300);
             const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 12});
             set_up(sim);
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.cantgo_aware = aware;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             CantGoTally tally;
             rig.count_with(&tally);
             rig.run(ticks);
@@ -416,6 +418,22 @@ void run_b41_offence_tests() {
             for (const auto& e : rig.proposed) n += e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == thief ? 1u : 0u;
             ASSERT_EQ(n, 0u);
         }
+        // (l) the switch off (cg=0, the bot as it was): a hole with one free tile, a hole whose last tile an ant holds (the order is refused) and a hole with an ant on its raid tile are raided; a hole
+        // with no free tile is not
+        ASSERT_TRUE(raids([&](sim::SimulationEngine& sim) {
+                        sim.set_fire_at(east[0], 3600);
+                        sim.set_fire_at(east[2], 3600);
+                    }, reactions, 300, false) >= 1);
+        ASSERT_TRUE(raids([&](sim::SimulationEngine& sim) {
+                        sim.set_fire_at(east[0], 3600);
+                        sim.set_fire_at(east[2], 3600);
+                        sim.spawn_unit(1, sim::AntType::Combat, east[1]);
+                    }, reactions, 300, false) >= 1);
+        ASSERT_TRUE(reactions >= 1);
+        ASSERT_TRUE(raids([&](sim::SimulationEngine& sim) { sim.spawn_unit(1, sim::AntType::Worker, victim.raid); }, reactions, 300, false) >= 1);
+        ASSERT_EQ(raids([&](sim::SimulationEngine& sim) {
+                      for (const TileCoord& e : east) sim.set_fire_at(e, 3600);
+                  }, reactions, 300, false), 0u);
         // (k) a team in the roster that has no hill is no victim (it has 300 points): nothing is ordered, whatever the three tiles in front of its not-hole look like
         {
             sim::SimulationEngine sim;

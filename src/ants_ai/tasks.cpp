@@ -430,7 +430,7 @@ void HarvestTask::step(TaskContext& c) {
             if (now >= it->second + params_.rescue_cooldown_ticks) it = rescued_.erase(it);
             else ++it;
         }
-        if (!home.empty() && v.has_grid()) {                                                // a carrier that no walk joins to the hill (a ring of fire walls round its gate) is not sent: it would be refused
+        if (params_.cantgo_aware && !home.empty() && v.has_grid()) {                         // a carrier that no walk joins to the hill (a ring of fire walls round its gate) is not sent: it would be refused
             const MapInfo::NowField joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
             home.erase(std::remove_if(home.begin(), home.end(), [&](uint32_t id) {
                            const AntView* a = find_ant(v.mine(), id);

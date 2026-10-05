@@ -582,6 +582,7 @@ public:
         uint32_t blocked_ticks{900};         // a tile that the controller refused a click onto (a power-up on it) is not chosen again this long
         uint32_t user_fail_limit{16};        // this many clicks onto the entrance in a row that delivered nothing (a healthy gate fails up to 10 in a row: measured on the shipped maps): it stops guiding for blocked_ticks (0: never)
         uint32_t field_ticks{200};           // the walking field of the hill as it is now (MapInfo::field_now) is made again after this many ticks, and at once when a tile of the ring round the gate or of the queue row changed
+        bool cantgo_aware{true};             // the gate asks that field before it guides, places only the carriers that it joins to the hill, and waits while an own ant stands on the ramp: LevelPlan::cantgo_aware
         bool predictive{true};
         int32_t doorstep_dx0{-4};
         int32_t doorstep_dx1{6};

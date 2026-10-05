@@ -148,6 +148,7 @@ private:
         p.max_staged = plan.gate_max_staged;
         p.predictive = plan.gate_predictive;
         p.user_fail_limit = plan.gate_user_fails;
+        p.cantgo_aware = plan.cantgo_aware;
         return p;
     }
     static IslandTask::Params island_params(const LevelPlan& plan) {
@@ -188,6 +189,7 @@ private:
         }
         if (plan.combat_harvests) p.extra_types = static_cast<uint8_t>(p.extra_types | (1u << static_cast<unsigned>(sim::AntType::Combat)));
         p.fire_aware = plan.fire_aware;
+        p.cantgo_aware = plan.cantgo_aware;
         if (plan.gate) {
             p.rescue = false;                                    // the gate task owns every carrier
             p.gate_gap_ticks = plan.gate_gap_ticks;

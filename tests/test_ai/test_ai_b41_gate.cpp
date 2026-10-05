@@ -808,4 +808,107 @@ void run_b41_gate_tests() {
             }
         }
     } TEST_END();
+
+    TEST_CASE("AI10.14 The Switch cg=0 (LevelPlan::cantgo_aware False) Is The Bot As It Was: The Scenes Of AI10.8 To AI10.12 Again, And Each Of Them Shows What The Fix Prevents (The Gate Orders Into A Ringed Hill And Is Refused, Places A Carrier That Is Shut In, The Rescue And The Aid Send A Carrier Into A Shut Hill, The Entrance Is Clicked While An Ant Stands On The Ramp; The Worker Bot Is Not Changed)")
+    {
+        {   // (a) a ring of fire walls round the gate (AI10.8)
+            GateScene scene;
+            scene.build(7);
+            LevelPlan plan = gate_plan(true);
+            plan.cantgo_aware = false;
+            Rig rig(scene.sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.run(700);
+            const CantGoTally::Seat before = tally.seat(0);
+            const MapInfo m(scene.sim);
+            for (const TileCoord& t : SabotageTask::ring_of(m.hill(0))) scene.sim.set_fire_at(t, 3600);
+            rig.run(1500);
+            ASSERT_TRUE(tally.seat(0).orders - before.orders >= 20);
+            ASSERT_TRUE(tally.seat(0).refused - before.refused >= 20);
+        }
+        {   // (b) a carrier in a pocket of rocks far from the gate (AI10.9): it is named in orders to the end
+            GateScene scene;
+            scene.build(4);
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx != 0 || dy != 0) scene.sim.set_terrain(10 + dx, 12 + dy, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            const uint32_t shut = scene.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10, 12});
+            scene.sim.get_unit(shut).pick_up_food(1, 25);
+            LevelPlan plan = gate_plan(true);
+            plan.cantgo_aware = false;
+            Rig rig(scene.sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 8);
+            rig.run(1500);
+            size_t late = 0;
+            for (const auto& e : rig.sent) {
+                for (const uint32_t id : e.second.ants) late += id == shut && e.first > 260 ? 1u : 0u;
+            }
+            ASSERT_TRUE(late >= 1);
+        }
+        for (const bool ring : {true}) {   // (c) the rescue (AI10.10) and (d) the aid (AI10.11) with the hill shut by a ring
+            for (const bool aid : {false, true}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 8);
+                const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, aid ? TileCoord{9, 9} : TileCoord{12, 12});
+                sim.get_unit(carrier).pick_up_food(1, 25);
+                const uint32_t enemy = aid ? sim.spawn_unit(1, sim::AntType::Worker, TileCoord{9, 11}) : 0u;
+                LevelPlan plan = plan_for(Level::Medium);
+                plan.defenders = 0;
+                plan.cantgo_aware = false;
+                Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
+                CantGoTally tally;
+                rig.count_with(&tally);
+                if (ring) {
+                    const MapInfo m(sim);
+                    for (const TileCoord& t : SabotageTask::ring_of(m.hill(0))) sim.set_fire_at(t, 3600);
+                }
+                if (aid) {
+                    rig.run(3);
+                    sim.apply_command(command_of(CommandType::GroupAttack, 1, {enemy}, 9, 9));
+                    rig.run(500);
+                    ASSERT_TRUE(rig.as<StandardBot>().aid().sent_home() >= 1);
+                } else {
+                    rig.run(900);
+                    ASSERT_TRUE(rig.as<StandardBot>().harvest().rescues() >= 1);
+                }
+                ASSERT_TRUE(tally.seat(0).refused >= 1);
+            }
+        }
+        {   // (e) an own ant stands on the ramp (AI10.12): the entrance is clicked and the click is refused
+            const TileCoord hill{26, 26};
+            sim::SimulationEngine sim;
+            sim.init_test_world(60, 60, 5, 14400u * sim::TICK_MS);
+            sim.grid_mut().set_anthill(0, hill);
+            sim.grid_mut().set_anthill(1, TileCoord{4, 4});
+            sim.grid_mut().set_anthill(2, TileCoord{54, 4});
+            sim.grid_mut().set_anthill(3, TileCoord{54, 54});
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{27, 20});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{hill.x + 1, hill.y});
+            LevelPlan plan = gate_plan(true);
+            plan.cantgo_aware = false;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.run(400);
+            ASSERT_TRUE(rig.as<StandardBot>().gate().entrance_clicks() >= 1);
+            ASSERT_TRUE(tally.seat(0).refused >= 1);
+        }
+        {   // (f) the worker bot, the frozen yardstick, is not changed by the fixes: its rescue still sends a carrier into a hill that a ring shuts
+            sim::SimulationEngine sim;
+            empty_field(sim, 8);
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<WorkerBot>(), 4, 4);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            const MapInfo m(sim);
+            for (const TileCoord& t : SabotageTask::ring_of(m.hill(0))) sim.set_fire_at(t, 3600);
+            rig.run(900);
+            ASSERT_TRUE(rig.as<WorkerBot>().harvest().rescues() >= 1);
+            ASSERT_TRUE(tally.seat(0).refused >= 1);
+        }
+    } TEST_END();
 }

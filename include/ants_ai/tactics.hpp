@@ -42,6 +42,8 @@ struct LevelPlan {
     int32_t leash_tiles{10};             // a fight is never carried further than this from the place of the blow (or from the hill, for a thief)
     uint32_t fight_linger_ticks{100};    // a fight ends this long after the last blow that was seen
     bool carrier_aid{true};              // a carrier that was hit stands idle with its food (the blow cleared its walk): it is sent home at once, as a person would click it
+    bool cantgo_aware{true};             // no order that the engine is bound to refuse for a reason that the view shows (docs/BOTS.md, "The can't-go loop"): nobody is sent into a hill that a ring of fire shuts, or
+                                         // out of a pocket, a hole is raided only with two free tiles in front of it, the entrance is not clicked while an ant stands on the ramp; false (the ablation cg=0): the bot as it was before
     // the economy
     bool contest_aware{false};           // the pile order of the owner's playbook: the piles that several enemies reach first, then those that one reaches, the safe ones, those of the ally, the hopeless (HarvestTask::Params::contest_aware)
     uint32_t contest_low{70};            // an enemy whose cost to a pile is below this percentage of the own cost is there first

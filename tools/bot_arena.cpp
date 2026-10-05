@@ -550,6 +550,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "leash") { p.leash_tiles = static_cast<int32_t>(v); return true; }
     if (key == "linger") { p.fight_linger_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "aid") return flag(p.carrier_aid);
+    if (key == "cg") return flag(p.cantgo_aware);                                    // the can't-go fixes of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before them)
     if (key == "styled") return true;                                                // not a field of the plan: a tuned bot of a spec with no style draws its style like the registry's bot (arena_factory)
     if (key == "contest") return flag(p.contest_aware);
     if (key == "clow") { p.contest_low = static_cast<uint32_t>(v); return true; }
@@ -2054,6 +2055,8 @@ int selftest() {
                     probe.repeat_window == 600 && apply_tune(probe, "fallback", 700, tune_err) && probe.fallback_ticks == 700 && apply_tune(probe, "gatefails", 4, tune_err) && probe.gate_user_fails == 4 &&
                     !apply_tune(probe, "stal", 1, tune_err),
                 "the tuning keys of the stall detector and of the gate's pause (stall, repeat, repwindow, fallback, gatefails) set the plan; a misspelt key is refused");
+        ai::LevelPlan cg = ai::plan_for(ai::Level::Hard);
+        t.check(cg.cantgo_aware && apply_tune(cg, "cg", 0, tune_err) && !cg.cantgo_aware && apply_tune(cg, "cg", 1, tune_err) && cg.cantgo_aware, "the key cg switches the can't-go fixes of the plan (on by default)");
     }
 
     t.section("the table of baselines (tests/test_ai/baselines.inc)");
