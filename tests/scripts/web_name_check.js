@@ -721,6 +721,9 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     same('the row has Share too where the browser has it', [invites(env)[0].children.length, invites(env)[0].children[3].textContent], [4, 'Share']);
     invites(env)[0].children[3].click();
     same('Share gives the browser the link of that seat (a title and a line of text as well, nothing private)', [env.shared.length, env.shared[0].url, env.shared[0].title, /Blue/.test(env.shared[0].text), Object.keys(env.shared[0]).sort()], [1, inviteLinks(env)[0], 'Ants', true, ['text', 'title', 'url']]);
+    check('a link that was shared is in use like a copied one: no note yet', env.$('links-note').hidden);
+    choose(env, 3, 'hard');
+    check('... and a choice that changes the links after a Share brings the note', !env.$('links-note').hidden);
     const refused = runLobby('', {}, { share: 'throws' });
     choose(refused, 2, 'friend');
     let ok = true;
@@ -775,6 +778,12 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     same('a reload after the map changed keeps the room of that map (the tab saved it when it was made)', [/^demo-islands-4p-/.test(third.param(inviteLinks(third)[0], 'room')), third.param(inviteLinks(third)[0], 'room') === reloaded.param(inviteLinks(reloaded)[0], 'room')], [true, true]);
     const other = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: '' }) } });
     check('a code that the tab holds for another map is not used (the choices changed meanwhile): the page makes a room of its own', /^demo-islands-4p-/.test(other.param(inviteLinks(other)[0], 'room')) && other.param(inviteLinks(other)[0], 'room') !== 'demo-tiny-4p-abcdef');
+    check('... and with no link copied there is no note', other.$('links-note').hidden);
+    const kept = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: 'the links that were copied' }) } });
+    check('... but what was copied stays known (the map changed in another tab): the links are not those any more, so the note is up', !kept.$('links-note').hidden && /^demo-islands-4p-/.test(kept.param(inviteLinks(kept)[0], 'room')));
+    const longUsed = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: 'x'.repeat(4001) }) } });
+    const numberUsed = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: 5 }) } });
+    check('... a record that is too long or is no text is not believed', longUsed.$('links-note').hidden && numberUsed.$('links-note').hidden);
     for (const junk of ['not json', '{}', '{"code":5}', '{"code":"demo-islands-4p-ABCDEF"}', '{"code":"demo-islands-4p-t01-abcdef"}', '{"code":"x"}', 'null', '[]', '"demo-islands-4p-abcdef"']) {
         const j = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': junk } });
         check('a room entry that is junk (' + junk.slice(0, 40) + ') is not used: the page makes its own', /^demo-islands-4p-[a-z2-9]{6}$/.test(j.param(inviteLinks(j)[0], 'room')) && j.param(inviteLinks(j)[0], 'room') !== 'abcdef');
@@ -792,6 +801,16 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     let ok = true;
     try { const t = runLobby('', {}, { noSession: true }); choose(t, 1, 'friend'); ok = inviteLinks(t).length === 1; } catch (e) { ok = false; }
     check('a browser with no session storage (or one that refuses it) still has its links', ok);
+}
+{   // Back from the browser's memory without START (from a Join, say): the card's room and what was copied stay
+    const env = runLobby('', {});
+    choose(env, 1, 'friend');
+    const link = inviteLinks(env)[0];
+    copyOf(env, 0).click();
+    env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
+    same('a page that comes back from the browser\'s memory without START shows the same links, still in use: no note', [inviteLinks(env), env.$('links-note').hidden], [[link], true]);
+    choose(env, 3, 'hard');
+    check('... and a change after that brings the note (what was copied is not forgotten)', !env.$('links-note').hidden);
 }
 {   // START
     const env = runLobby('', {});

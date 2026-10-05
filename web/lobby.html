@@ -1301,8 +1301,8 @@ their music and their sound: only the window you are in is heard). The match is 
         // The room that the invitations and START use, made when the page first needs one (a Friend seat, or START) and kept while the map and the teams stay, since the code holds them: another map or other teams
         // are another room, and the invitations change with it. The tab keeps it until START, so that a reload (the picture's selector reloads the page; a phone may discard a page that was left for the
         // messages) does not change the links that were sent. Once START has taken the tab into the match it is let go: the next match is another room. `used` is the links as they were when one was last
-        // copied or shared ('' before): the links that are shown now say so when they are not those any more (the plan and the number of people are in every link, and a friend who leads the room starts with
-        // what the link says), and the note under them asks for them to be copied again.
+        // copied or shared ('' before; kept when the code no longer fits, e.g. the map was changed in another tab): the links that are shown now say so when they are not those any more (the plan and the
+        // number of people are in every link, and a friend who leads the room starts with what the link says), and the note under them asks for them to be copied again.
         var cardRoom = null;                       // { code, used }
         var linksNow = '';                         // the links that are shown, joined
         function cardRoomSave() {
@@ -1314,7 +1314,7 @@ their music and their sound: only the window you are in is heard). The match is 
         (function () {
             var stored = null;
             try { stored = JSON.parse(window.sessionStorage.getItem(CARD_ROOM_KEY)); } catch (e) { stored = null; }
-            if (stored && typeof stored === 'object' && cardRoomFits(stored.code, card)) cardRoom = { code: stored.code, used: typeof stored.used === 'string' && stored.used.length <= 4000 ? stored.used : '' };
+            if (stored && typeof stored === 'object') cardRoom = { code: stored.code, used: typeof stored.used === 'string' && stored.used.length <= 4000 ? stored.used : '' };       // (the code is judged where it is used)
         })();
         function cardEnsureRoom() {
             if (cardRoom && cardRoomFits(cardRoom.code, card)) return cardRoom.code;
@@ -1447,8 +1447,8 @@ their music and their sound: only the window you are in is heard). The match is 
             });
         });
         nameInput.addEventListener('input', showYouName);
-        // A page that comes back from the browser's memory (Back after START) shows the card again with a room of its own: the room of the match that it started is that match's
-        window.addEventListener('pageshow', function (e) { if (e && e.persisted) { cardRoomForget(); showCard(); } });
+        // A page that comes back from the browser's memory (Back after START) shows the card again: START let go of the room (the match's now), so the card makes another when it needs one
+        window.addEventListener('pageshow', function (e) { if (e && e.persisted) showCard(); });
         showCard();
         // A game on this computer, for an address that asks for one: this tab goes to the game page (never a new tab) with the map, the opponents, the typed name and the picture's shape (the game page's own parameters)
         function startLocal(mapKey, levels) {
