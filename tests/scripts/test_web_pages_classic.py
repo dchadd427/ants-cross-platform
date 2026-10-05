@@ -24,7 +24,6 @@ FRONT = os.path.join(REPO, "web", "front")
 
 # Pages that are not in the Classic look yet. The coordinator removes a line when the branch that restyles that page is merged (this test then says so).
 PENDING = {
-    "web/shell.html": "the game page: restyled on the branch game-page-classic",
 }
 
 # The colours that a page must share with the stylesheet to be in the look without linking it (the names of the front page's own :root).
