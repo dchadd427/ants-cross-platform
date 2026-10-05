@@ -625,6 +625,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ambushdist") { p.ambush_distance = static_cast<int32_t>(v); return true; }
     if (key == "ambushn") { p.ambush_thieves = static_cast<uint32_t>(v); return true; }
     if (key == "raidmin") { p.raid_min_loot = static_cast<uint32_t>(v); return true; }
+    if (key == "raidfree") { p.raid_min_free = static_cast<uint32_t>(v); return true; }          // the free tiles in front of a hole that a raid needs (1: any; 2: the quiet variant of "The can't-go loop")
     if (key == "raidblack") { p.raid_black_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "sabotage") return flag(p.sabotage);
     if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }
@@ -2057,6 +2058,8 @@ int selftest() {
                 "the tuning keys of the stall detector and of the gate's pause (stall, repeat, repwindow, fallback, gatefails) set the plan; a misspelt key is refused");
         ai::LevelPlan cg = ai::plan_for(ai::Level::Hard);
         t.check(cg.cantgo_aware && apply_tune(cg, "cg", 0, tune_err) && !cg.cantgo_aware && apply_tune(cg, "cg", 1, tune_err) && cg.cantgo_aware, "the key cg switches the can't-go fixes of the plan (on by default)");
+        t.check(cg.raid_min_free == 1u && apply_tune(cg, "raidfree", 2, tune_err) && cg.raid_min_free == 2u && apply_tune(cg, "raidfree", 1, tune_err) && cg.raid_min_free == 1u,
+                "the key raidfree sets the free tiles in front of a hole that a raid needs (1 by default)");
     }
 
     t.section("the table of baselines (tests/test_ai/baselines.inc)");
