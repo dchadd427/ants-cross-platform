@@ -94,6 +94,27 @@ bool valid_room_code(const std::string& code) noexcept {
     return true;
 }
 
+sim::StartTeams room_code_teams(const std::string& code) noexcept {
+    const size_t prefix = std::char_traits<char>::length(kDemoRoomPrefix);
+    if (code.size() <= prefix || code.compare(0, prefix, kDemoRoomPrefix) != 0) return sim::StartTeams{};
+    size_t dash = code.find('-', prefix);                                              // (the first word, the map's or the player count's, is never a token)
+    while (dash != std::string::npos) {
+        const size_t from = dash + 1;
+        const size_t next = code.find('-', from);
+        const size_t length = (next == std::string::npos ? code.size() : next) - from;
+        if (length == 3 && (code[from] == 't' || code[from] == 'T') && code[from + 1] >= '0' && code[from + 1] <= '3' && code[from + 2] > code[from + 1] && code[from + 2] <= '3') {
+            return sim::StartTeams{true, static_cast<uint8_t>(code[from + 1] - '0'), static_cast<uint8_t>(code[from + 2] - '0')};
+        }
+        dash = next;
+    }
+    return sim::StartTeams{};
+}
+
+std::string room_code_team_word(const sim::StartTeams& teams) {
+    if (!teams.set || teams.a >= teams.b || teams.b >= sim::MAX_PLAYERS) return std::string();
+    return std::string("t") + static_cast<char>('0' + teams.a) + static_cast<char>('0' + teams.b);
+}
+
 MsgType peek_type(const uint8_t* data, size_t size) noexcept {
     if (data == nullptr || size == 0) return MsgType::None;
     const uint8_t t = data[0];

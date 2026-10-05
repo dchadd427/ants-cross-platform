@@ -336,7 +336,7 @@ void Room::update(uint32_t now_ms) {
         const bool early = spec_.early_start && asked_by != net::kNoLeader && lobby_.leader() == asked_by;
         // The fill (protocol 11, a level for each seat since 13): only the leader's request seats bots, in the seats that are still empty and whose level is not none, the lowest seat first, up to the players
         // the room expects (the seat that a person took meanwhile is skipped, its level is ignored); a room that is full starts by itself with nobody added. Bots and Fog of War never mix (docs/BOTS.md
-        // rule 8): the leader is told, and the match starts without bots if two people are there. The teams (protocol 13) are the leader's too, and are checked against the seats that really play below.
+        // rule 8): the leader is told, and the match starts without bots if two people are there. The teams (protocol 13) are the room's own (its code) or else the leader's, and are checked against the seats that really play below.
         net::FillPlan fill;
         if (early && !full) fill = net::FillPlan(asked_fill);
         if (fill.any() && lobby_.fog()) {
@@ -355,13 +355,14 @@ void Room::update(uint32_t now_ms) {
                 // (an early start for seats that the map cannot be played by: nothing happens, the room waits for the others, it does not fail; the leader who asked for bots is told)
                 if (!fill_seats.empty() && net::time_reached(now_ms, retry_at_ms_)) lobby_.notify(asked_by, net::kNoticeFillMap);
             } else if (net::time_reached(now_ms, retry_at_ms_)) {
-                // The teams: the leader's choice counts when its request starts the match, and when the seats that play can make it (one rule for every engine: sim::plan_start_teams). When they cannot,
-                // the match starts without teams and everybody in the room is told why, once it has started.
+                // The teams: the room's own (its code) for every start, else the leader's choice when its request is what starts the match (sim::start_teams_for); they count when the seats that play
+                // can make them (one rule for every engine: sim::plan_start_teams). When they cannot, the match starts without teams and everybody in the room is told why, once it has started.
+                const sim::StartTeams wanted = sim::start_teams_for(spec_.teams, early, asked_teams);
                 sim::StartTeams teams;
                 std::string no_teams;
-                if (early && asked_teams.set) {
-                    const sim::StartTeamsPlan plan = sim::plan_start_teams(asked_teams, roster);
-                    if (plan.why.empty()) teams = asked_teams;
+                if (wanted.set) {
+                    const sim::StartTeamsPlan plan = sim::plan_start_teams(wanted, roster);
+                    if (plan.why.empty()) teams = wanted;
                     else no_teams = plan.short_why;
                 }
                 bool seated = true;
@@ -773,6 +774,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.fog = spec_.fog;
     s.expected = spec_.players;
     s.early_start = spec_.early_start;
+    if (spec_.teams.set) s.room_teams = sim::start_teams_text(spec_.teams);
     s.leader = state_ == RoomState::Waiting || state_ == RoomState::Loading ? lobby_.leader() : uint8_t{255};      // (the lead means something until the match runs)
     s.ignored_start_requests = lobby_.ignored_start_requests() + (session_ ? session_->ignored_start_requests() : 0u);       // (the late ones of a running match are the session's)
     s.state = state_;

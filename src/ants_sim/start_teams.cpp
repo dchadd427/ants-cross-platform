@@ -72,6 +72,11 @@ StartTeamsPlan plan_start_teams(const StartTeams& teams, uint8_t roster) {
     return plan;
 }
 
+StartTeams start_teams_for(const StartTeams& room_own, bool by_leader, const StartTeams& asked) noexcept {
+    if (room_own.set) return room_own;
+    return by_leader ? asked : StartTeams{};
+}
+
 std::vector<StartTeams> local_team_choices(uint8_t own_seat, uint8_t filled_mask) {
     std::vector<StartTeams> choices{StartTeams{}};
     size_t filled = 0;

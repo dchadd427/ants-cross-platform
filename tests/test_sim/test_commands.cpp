@@ -1397,6 +1397,38 @@ void run_start_team_tests() {
             }
         }
     } TEST_END();
+
+    TEST_CASE("N1.25 start_teams_for: Which Teams A Start Asks For (The Room's Own, Which Its Code Names, For Every Start; A Leader's Request Only When It Is What Starts The Match And Only In A Room That Has None Of Its Own), Over Every Combination") {
+        const StartTeams none;
+        const StartTeams own_a{true, 0, 1};
+        const StartTeams own_b{true, 2, 3};
+        const StartTeams asked_a{true, 1, 2};
+        const StartTeams asked_b{true, 0, 3};
+        const StartTeams impossible{true, 3, 3};                                                           // (no pair: the rule does not judge a pair, plan_start_teams does)
+        for (const StartTeams& own : {none, own_a, own_b, impossible}) {
+            for (const bool by_leader : {false, true}) {
+                for (const StartTeams& asked : {none, asked_a, asked_b, own_a}) {
+                    const StartTeams got = start_teams_for(own, by_leader, asked);
+                    if (own.set) {
+                        ASSERT_TRUE(got == own);                                                           // the room's own win, even over an equal request and over one that starts the match
+                    } else if (by_leader) {
+                        ASSERT_TRUE(got == asked);                                                         // a room without teams: the leader's request that starts the match
+                    } else {
+                        ASSERT_FALSE(got.set);                                                             // ... and nothing when the request is not what starts it (the asker left, the room fills up by itself)
+                    }
+                }
+            }
+        }
+        // the cases that matter by name
+        ASSERT_TRUE(start_teams_for(own_a, false, none) == own_a);                                          // a full room's automatic start: no request at all, the room's teams
+        ASSERT_TRUE(start_teams_for(own_a, true, asked_a) == own_a);                                        // a leader's START in a room that names others: the room's
+        ASSERT_TRUE(start_teams_for(none, true, asked_a) == asked_a);                                       // a room that names none: the leader's
+        ASSERT_FALSE(start_teams_for(none, false, asked_a).set);                                            // a request that does not start the match counts for nothing
+        ASSERT_FALSE(start_teams_for(none, false, none).set);
+        ASSERT_FALSE(start_teams_for(none, true, none).set);
+        // a room's teams that the seats cannot make stay the room's: the start is then without teams, never with the request's
+        ASSERT_FALSE(plan_start_teams(start_teams_for(StartTeams{true, 0, 3}, true, asked_a), 0x07).why.empty());
+    } TEST_END();
 }
 
 }  // namespace

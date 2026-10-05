@@ -208,9 +208,11 @@ struct Trio {
 // A dedicated server in the test: the real room manager behind a real TCP listener on the loopback interface. The tests step it together with the application and
 // the bare machines (a room is made with make_room, joined with the room's code; the first player who joins leads it)
 struct Server {
-    server::RoomManager mgr{server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps")};
+    server::RoomManager mgr;
     std::unique_ptr<net::TcpListener> listener{net::TcpListener::listen(0, true)};
     uint32_t now{1000};
+
+    explicit Server(const server::ServerLimits& limits = server::ServerLimits()) : mgr(server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps"), limits) {}
 
     bool make_room(const std::string& code, uint8_t players, bool early_start = true) {
         server::RoomSpec spec;
@@ -4003,7 +4005,8 @@ void run_room_bot_tests() {
                     for (const bool fog : {false, true}) {
                         net::RoomMsg room;
                         for (const uint8_t seat : people) room.slots[seat] = {net::SlotState::Client, "P", 10};
-                        const std::vector<std::string> prompts = net::NetGame::start_prompt_texts(plan, t, room, fog);
+                      for (const bool room_owned : {false, true}) {                                 // (the teams are this START's own choice, or the room's: its code names them)
+                        const std::vector<std::string> prompts = net::NetGame::start_prompt_texts(plan, t, room, fog, room_owned);
                         if (!prompts.empty()) {
                             // the shortest way of saying it fits the two lines of the classic label (293 px) and of the wide one (363 px); the longest that fits is what a screen picks
                             ASSERT_TRUE(wrap_label_text(r, prompts.back(), 293, FontSize::Px14).size() <= 2);
@@ -4016,7 +4019,7 @@ void run_room_bot_tests() {
                                 (two_lines ? fitting : too_long) += 1;
                             }
                         }
-                        const net::NetGame::FooterTexts footer = net::NetGame::start_footer(plan, t, room, fog);
+                        const net::NetGame::FooterTexts footer = net::NetGame::start_footer(plan, t, room, fog, room_owned);
                         for (const std::vector<std::string>& line : footer.line) {
                             if (line.empty()) continue;
                             bool fits = false;
@@ -4028,6 +4031,7 @@ void run_room_bot_tests() {
                             ASSERT_TRUE(fits);                                                      // some way of saying the line fits the box at 12 px
                         }
                         ++checked;
+                      }
                     }
                 }
             }
@@ -4042,6 +4046,111 @@ void run_room_bot_tests() {
         ASSERT_TRUE(MS::footer_font(r, "Teams: Green + Red against Blue + Black") != FontSize::Px18);
         ASSERT_EQ(MS::footer_font(r, std::string(80, 'W')), FontSize::Px12);                         // (what fits at no size is cut at 12 px by the screen)
         app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.81 Protocol 13, The Room's Own Teams In The Application (Its Code Names Them): A Leader Is Told That They Are The Room's And Its Own --teams Is Not What The Room Makes (The Referee's, Both Games' Engines Have The Room's Alliances Before Their First Tick, The News Flash Comes Once For Each Pair); A Room Of Three Fills Up With Two Games And A Bare Machine And Starts By Itself With The Room's Teams On Every Engine, Nobody Having Pressed START") {
+        using L = net::FillLevel;
+        server::ServerLimits limits;
+        limits.demo_rooms = 4;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_maps = {"TINY.LVL"};
+        const auto count_of = [](const std::string& text, const std::string& what) {
+            size_t n = 0;
+            for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
+            return n;
+        };
+        {   // a room of four whose code names Green + Red; the leader's own choice (--teams) is Red + Blue, and its START seats two bots
+            Server server(limits);
+            const std::string code = "demo-tiny-4p-t01-abcdef";
+            ApplicationConfig lead_cfg = join_config(server, code, "Leader");
+            lead_cfg.fill_bots = net::FillPlan(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});
+            lead_cfg.teams = LocalTeams{true, 1, 2};
+            Application leader;
+            ASSERT_TRUE(leader.init(lead_cfg));
+            Hall hall{server, &leader, {}};
+            ASSERT_TRUE(hall.until([&]() { return leader.net()->phase() == net::NetGame::Phase::Room && leader.net()->is_leader(); }, 8000));
+            Application guest;
+            ASSERT_TRUE(guest.init(join_config(server, code, "Guest")));
+            hall.second = &guest;
+            ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room && leader.net()->room().slots[1].state == net::SlotState::Client && leader.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+            hall.step(300);
+            ASSERT_TRUE(server.status(code).room_teams == "0+1" && server.status(code).state == server::RoomState::Waiting);
+            ASSERT_TRUE(leader.net()->room_teams() == sim::StartTeams({true, 0, 1}) && leader.net()->effective_teams() == sim::StartTeams({true, 0, 1}));
+            ASSERT_TRUE(leader.net()->start_teams() == sim::StartTeams({true, 1, 2}));                    // (its own choice is kept, and is not what the screens show or the room makes)
+            ASSERT_FALSE(guest.net()->room_teams().set && guest.net()->is_leader());
+            const std::vector<std::string>& prompts = leader.net()->prompt_texts();
+            ASSERT_TRUE(prompts.size() >= 4 && prompts.front() == "Press START: Blue gets an Easy bot, Black a Hard bot; the room's teams: Green + Red against Blue + Black.");
+            for (const std::string& text : prompts) ASSERT_TRUE(text.find("Red + Blue") == std::string::npos);        // (the leader's own pair appears nowhere)
+            const std::string shown = leader.map_select().room().status;
+            ASSERT_TRUE(std::find(prompts.begin(), prompts.end(), shown) != prompts.end() && leader.map_select().prompt_fits(leader.renderer(), shown));
+            ASSERT_TRUE(shown.find("Green + Red") != std::string::npos && shown.find("teams") != std::string::npos);
+            click_start(leader);
+            ASSERT_TRUE(hall.until([&]() { return leader.state() == AppState::Playing && guest.state() == AppState::Playing; }, 15000));
+            server::RoomStatus s = server.status(code);
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.bots.size() == 2 && s.teams == "0+1" && s.room_teams == "0+1");
+            ASSERT_TRUE(s.allies[0] == 1 && s.allies[1] == 0 && s.allies[2] == 3 && s.allies[3] == 2);   // the referee: the room's pair, and the two bots as the other team (not Red + Blue)
+            ASSERT_EQ(s.ticks, 0u);
+            for (Application* a : {&leader, &guest}) {
+                ASSERT_EQ(a->sim().current_tick(), uint64_t{0});
+                for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_EQ(a->sim().alliance_of(seat), static_cast<uint8_t>(seat ^ 1u));
+            }
+            ASSERT_TRUE(leader.net()->start_info().team_a == 0 && leader.net()->start_info().team_b == 1 && guest.net()->start_info().team_a == 0);
+            hall.step(kDialogMs + 1500);
+            for (Application* a : {&leader, &guest}) {
+                const std::string log = a->hud().chat_transcript("t");
+                ASSERT_EQ(count_of(log, "are a team now!"), size_t{2});
+                ASSERT_TRUE(log.find("Leader (Green) and Guest (Red) are a team now!") != std::string::npos);
+                ASSERT_TRUE(log.find("Bot (Easy) (Blue) and Bot (Hard) (Black) are a team now!") != std::string::npos);
+                ASSERT_TRUE(a->net()->pregame_chat().empty() || !a->net()->pregame_chat().back().notice());
+            }
+            ASSERT_TRUE(hall.identical(leader.sim(), guest.sim()));
+            ASSERT_FALSE(leader.net()->desynced() || guest.net()->desynced());
+            hall.step(3000);
+            s = server.status(code);
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.ticks > 60 && s.allies[0] == 1 && s.allies[3] == 2);        // (a room whose referee disagreed on a hash would have failed)
+            leader.quit();
+            guest.quit();
+        }
+        {   // a room of three whose code names Red + Blue (1 + 2): two games and a bare machine fill it, nobody presses START: it starts by itself with the room's teams, seat 0 plays alone
+            Server server(limits);
+            const std::string code = "demo-tiny-3p-t12-abcdef";
+            ApplicationConfig lead_cfg = join_config(server, code, "Leader");
+            lead_cfg.teams = LocalTeams{true, 0, 1};                                                    // (the leader's own choice: not the room's, and nobody asks the room for it)
+            Application leader;
+            ASSERT_TRUE(leader.init(lead_cfg));
+            Peer carl;
+            Hall hall{server, &leader, {&carl}};
+            ASSERT_TRUE(hall.until([&]() { return leader.net()->phase() == net::NetGame::Phase::Room && leader.net()->is_leader(); }, 8000));
+            Application guest;
+            ASSERT_TRUE(guest.init(join_config(server, code, "Guest")));
+            hall.second = &guest;
+            ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room; }, 8000));
+            ASSERT_TRUE(server.status(code).state == server::RoomState::Waiting && server.status(code).joined == 2);
+            ASSERT_TRUE(carl.net.join("127.0.0.1", server.port(), "Carl", 255, code));                    // the third seat: the room is full
+            ASSERT_TRUE(hall.until([&]() { return leader.state() == AppState::Playing && guest.state() == AppState::Playing && carl.net.phase() == net::NetGame::Phase::Playing; }, 20000));
+            server::RoomStatus s = server.status(code);
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.empty() && s.teams == "1+2" && s.room_teams == "1+2");
+            ASSERT_TRUE(s.allies[0] == sim::ALLIANCE_NONE && s.allies[1] == 2 && s.allies[2] == 1 && s.allies[3] == sim::ALLIANCE_NONE);
+            ASSERT_EQ(s.ticks, 0u);
+            for (const sim::SimulationEngine* e : {&leader.sim(), &guest.sim(), &carl.sim}) {            // both games and the bare machine
+                ASSERT_EQ(e->current_tick(), uint64_t{0});
+                ASSERT_TRUE(e->alliance_of(0) == sim::ALLIANCE_NONE && e->alliance_of(1) == 2 && e->alliance_of(2) == 1 && e->alliance_of(3) == sim::ALLIANCE_NONE);
+            }
+            ASSERT_TRUE(leader.net()->start_info().team_a == 1 && leader.net()->start_info().team_b == 2);
+            hall.step(kDialogMs + 1500);
+            for (Application* a : {&leader, &guest}) {
+                const std::string log = a->hud().chat_transcript("t");
+                ASSERT_EQ(count_of(log, "are a team now!"), size_t{1});                                   // the one pair, on each game
+                ASSERT_TRUE(log.find("Guest (Red) and Carl (Blue) are a team now!") != std::string::npos);
+                ASSERT_TRUE(a->net()->pregame_chat().empty() || !a->net()->pregame_chat().back().notice());
+            }
+            ASSERT_TRUE(hall.identical(leader.sim(), guest.sim()));
+            ASSERT_FALSE(leader.net()->desynced() || guest.net()->desynced() || carl.net.desynced());
+            hall.step(3000);
+            ASSERT_TRUE(server.status(code).state == server::RoomState::Running && server.status(code).ticks > 60);
+            leader.quit();
+            guest.quit();
+        }
     } TEST_END();
 }
 
@@ -5228,6 +5337,56 @@ void run_room_chat_box_tests() {
             ASSERT_TRUE(open_leader(d, "BOX-FILL-CLASSIC", Aspect::Classic4x3, net::FillLevel::Medium, false, true));
             ASSERT_EQ(footer(d.app), none);
             d.app.quit();
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.82 Protocol 13, The Room's Teams On The Leader's 16:9 Screen: The Foot Of The Players' Status Box Says \"Room teams:\" And The Pair When The Room's Code Names Them (Whatever The Leader's Own --teams Is), \"Teams at START:\" For The Leader's Own Choice In A Room Whose Code Names None; A Room That Reads No Code (Made By The Control Interface) Still Gets The Code's Teams, Because The Leader's START Carries The Effective Teams") {
+        using L = net::FillLevel;
+        const auto footer = [](Application& app) { return std::vector<std::string>{app.map_select().fill_footer()[0], app.map_select().fill_footer()[1]}; };
+        const net::FillPlan blue_easy_black_hard(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});
+        {   // the room's code names Green + Red: the leader and Bob are in, no bots yet
+            BoxRoom d;
+            ASSERT_TRUE(open_leader(d, "demo-tiny-4p-t01-box123", Aspect::Wide16x9, L::None, false, true));
+            Application& app = d.app;
+            ASSERT_TRUE(app.net()->room_teams() == sim::StartTeams({true, 0, 1}));
+            ASSERT_EQ(footer(app), (std::vector<std::string>{"Room teams:", "Green + Red"}));          // (the seats that play so far: the pair alone)
+            app.set_start_teams(LocalTeams{true, 1, 2});                                               // the leader's own choice: the room's code wins, nothing of it is shown
+            d.hall.step(30);
+            ASSERT_EQ(footer(app), (std::vector<std::string>{"Room teams:", "Green + Red"}));
+            ASSERT_TRUE(app.net()->start_teams() == sim::StartTeams({true, 1, 2}) && app.net()->effective_teams() == sim::StartTeams({true, 0, 1}));
+            app.set_fill_bots(blue_easy_black_hard);
+            d.hall.step(30);
+            const std::vector<std::string> both = footer(app);                                        // bots and teams: the bots in the first line, the room's teams in the second
+            ASSERT_EQ(both, (std::vector<std::string>{"Bots: Blue Easy, Black Hard", "Room teams: Green + Red vs Blue + Black"}));      // (the longest way that fits the box at 12 px with the real font: "against" does not)
+            app.quit();
+        }
+        {   // a room whose code names none: the leader's own choice, said as a choice of START, as before
+            BoxRoom d;
+            ASSERT_TRUE(open_leader(d, "demo-tiny-4p-box456", Aspect::Wide16x9, L::None, false, true));
+            Application& app = d.app;
+            ASSERT_FALSE(app.net()->room_teams().set);
+            ASSERT_EQ(footer(app), (std::vector<std::string>{"", ""}));
+            app.set_start_teams(LocalTeams{true, 1, 2});
+            d.hall.step(30);
+            ASSERT_EQ(footer(app), (std::vector<std::string>{"Teams at START:", "Red + Blue"}));
+            app.quit();
+        }
+        {   // a room that reads no code (the control interface made it, as these rooms are made): its code names Green + Red, the leader's START carries them and the room has none of its own
+            BoxRoom d;
+            ASSERT_TRUE(open_leader(d, "demo-tiny-4p-t01-box789", Aspect::Wide16x9, L::None, false, true));
+            Application& app = d.app;
+            ASSERT_TRUE(d.server.status("demo-tiny-4p-t01-box789").room_teams.empty());
+            app.set_start_teams(LocalTeams{true, 1, 2});                                               // (its own choice: not what the request carries)
+            app.set_fill_bots(blue_easy_black_hard);
+            d.hall.step(30);
+            app.room_key_down(SDLK_s, 0, false);
+            ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.peer.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+            const server::RoomStatus s = d.server.status("demo-tiny-4p-t01-box789");
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.bots.size() == 2 && s.room_teams.empty());
+            ASSERT_EQ(s.teams, std::string("0+1"));                                                    // the effective teams, not the leader's own 1 + 2
+            ASSERT_TRUE(s.allies[0] == 1 && s.allies[1] == 0 && s.allies[2] == 3 && s.allies[3] == 2);
+            ASSERT_TRUE(app.sim().alliance_of(0) == 1 && app.sim().alliance_of(2) == 3 && d.peer.sim.alliance_of(1) == 0);
+            app.quit();
         }
     } TEST_END();
 

@@ -38,6 +38,10 @@ struct StartTeamsPlan {
 };
 StartTeamsPlan plan_start_teams(const StartTeams& teams, uint8_t roster);
 
+/// The teams that a start asks for (protocol 13): the room's own, which its code names (net::room_code_teams), hold for EVERY start, the automatic start of a full room included; a leader's request
+/// counts only when it is what starts the match (`by_leader`) and only in a room that has none of its own. What the seats that play can make of them is plan_start_teams's business.
+StartTeams start_teams_for(const StartTeams& room_own, bool by_leader, const StartTeams& asked) noexcept;
+
 /// The choices of a screen for a player at `own_seat` against the bots of `filled_mask` (bit s: a bot at seat s): free for all, then the player with each bot; only while two or more bots play
 /// (with one the team would be the whole match: plan_start_teams refuses it).
 std::vector<StartTeams> local_team_choices(uint8_t own_seat, uint8_t filled_mask);

@@ -73,6 +73,10 @@ struct RoomSpec {
     /// is shown as a bot ("Bot (Medium)") and is run by the server as a virtual client. At least one seat must be left for a person, the seats are distinct and Fog of War is off
     /// (RoomManager::create_room refuses anything else). Empty: no bot code runs in the room, unless its leader's START asks for a fill.
     std::vector<ai::BotSpec> bots;
+    /// The room's own teams (protocol 13): a demo room's code names them (`demo-treasure-4p-t01-k7m2xq`: net::room_code_teams). The match starts with them EVERY time, when the full room starts by itself and
+    /// when its leader's START starts it early; a leader's StartRequest has teams of its own only in a room that has none (sim::start_teams_for). They are checked against the seats that really play at
+    /// the start (sim::plan_start_teams): when they cannot be made the match starts without them and the room says why. Not set: the leader's START chooses.
+    sim::StartTeams teams;
     bool has_seed{false};
     uint32_t seed{1};                       // the match's random seed (the server draws one when the spec has none)
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
@@ -152,6 +156,7 @@ struct RoomStatus {
     std::vector<Bot> bots;
     std::string teams;                      // the teams that the match started with, "ffa" or "A+B" (protocol 13; "" before the match), and the referee's own alliances by seat now (4: none): for the tests, not shown by
     std::array<uint8_t, 4> allies{4, 4, 4, 4};     // the control interface
+    std::string room_teams;                 // the room's own teams, "A+B" ("" when its code names none: the leader's START chooses): for the tests, not shown by the control interface
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
     uint32_t bot_start_hold{0};             // ... and its start hold in ticks (BotController::start_hold: ai::kStartHoldTicks, the product's opening; 0 without a controller): for the tests, not shown by the control interface
     uint32_t bot_decisions{0};              // how many times the room's bots have looked at the match since its controller was made (the sum of BotController::SeatStats::decisions): a controller that is called after every tick

@@ -3116,12 +3116,14 @@ int main(int argc, char** argv) {
             code = shown_code(app);
             const net::FillPlan plan = fill_of(net::FillLevel::Easy, net::FillLevel::None, net::FillLevel::Hard);
             ASSERT_TRUE(app.fill_bots() == plan && app.net() != nullptr && app.net()->fill_bots() == plan);
-            ASSERT_TRUE(app.start_teams() == green_red && app.net()->start_teams() == green_red);
+            // the teams are a word of the room's code (the room makes them every time, a full room's automatic start too), not the START's choice: this player's own START teams stay free for all
+            ASSERT_TRUE(code.find("-3p-") == std::string::npos && code.find("-4p-t01-") != std::string::npos && net::room_code_teams(code) == green_red);
+            ASSERT_TRUE(app.net()->room_teams() == green_red && app.net()->effective_teams() == green_red && !app.start_teams().set && !app.net()->start_teams().set);
             bool seats = false;
             bool teams = false;
             for (const MenuElement& e : app.start_menu().elements()) {
                 seats = seats || e.text == "At START: Red gets an Easy bot, Black a Hard bot.";
-                teams = teams || e.text == "Teams: Green + Red against Blue + Black.";
+                teams = teams || e.text == "Room teams: Green + Red against Blue + Black.";
             }
             ASSERT_TRUE(seats && teams);                                                       // the room's panel: what START will do
             click(app, MenuId::EnterRoom);
@@ -3136,6 +3138,7 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(s.names[0] == "Solo" && s.names[1] == "Bot (Easy)" && s.names[3] == "Bot (Hard)");
             ASSERT_EQ(app.sim().roster_mask(), 0x0B);                                          // Green, Red and Black play
             ASSERT_EQ(s.teams, std::string("0+1"));
+            ASSERT_EQ(s.room_teams, std::string("0+1"));                                       // (the room's own: its code named them)
             ASSERT_TRUE(s.allies[0] == 1 && s.allies[1] == 0 && s.allies[2] == sim::ALLIANCE_NONE && s.allies[3] == sim::ALLIANCE_NONE);       // the referee
             ASSERT_TRUE(app.sim().alliance_of(0) == 1 && app.sim().alliance_of(1) == 0 && app.sim().alliance_of(3) == sim::ALLIANCE_NONE);     // the leader's engine
             hall.step(net::kMatchStartDelayMs + 4000);

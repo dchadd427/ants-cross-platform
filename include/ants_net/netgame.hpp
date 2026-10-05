@@ -246,21 +246,28 @@ public:
     /// that play can (else the match starts without them and everybody in the room is told why). A LAN host's own START and a server's leader's request carry them.
     void set_start_teams(const sim::StartTeams& teams) noexcept { teams_ = teams; }
     const sim::StartTeams& start_teams() const noexcept { return teams_; }
+    /// The teams that the room's own code names (protocol 13: net::room_code_teams of the room that this machine joined; none for the host of a LAN room): the room makes them for EVERY start, when it fills
+    /// up and starts by itself too, and ignores the teams of a leader's request.
+    sim::StartTeams room_teams() const noexcept { return role_ == Role::Client ? room_code_teams(target_.room) : sim::StartTeams{}; }
+    /// The teams that this machine's screens show and its START asks for: the room's own when its code names some, else set_start_teams' (sim::start_teams_for)
+    sim::StartTeams effective_teams() const noexcept { return sim::start_teams_for(room_teams(), true, teams_); }
     /// What the status line of the setup screen says to somebody who can START a room that has a fill level or teams (the host of a room on the local network, the leader of a server's room), in
     /// place of the original's "Press START when all players' thumbs have appeared.": "Press START: the empty seats get Medium bots." (one level for every empty seat), "Press START: Red gets
     /// an Easy bot, Black a Hard bot; teams Green + Red against Blue + Black." and, in a room with Fog of War (bots and fog never mix), "Fog of War is on, so START seats no bots."
     static std::string start_prompt(FillLevel level, bool fog);
     /// The same line for a plan and teams over the seats of `room`, and shorter ways to say it for a label that is too narrow (the longest first); empty when there is nothing to say (no bot
-    /// would be seated and no teams are chosen: the original's own prompt stands)
-    static std::vector<std::string> start_prompt_texts(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog);
+    /// would be seated and no teams are chosen: the original's own prompt stands). `room_teams`: the teams are the room's own (its code names them), not a choice of this START: "the room's teams:
+    /// Green + Red against Blue + Black" in place of "teams Green + Red against Blue + Black".
+    static std::vector<std::string> start_prompt_texts(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog, bool room_teams = false);
     /// The foot of the leader's Players' Status box on the 16:9 setup screen (two lines, each in the ways it can be said, the longest first; the screen takes the first that fits): "Empty seats at
     /// START:" / "Medium bots" for one level in every empty seat (the footer of protocol 11), "Empty seats at START:" / "Red Easy, Black Hard" for a level for each seat, "Teams at START:" / "Green + Red
     /// against Blue + Black" for teams alone, and with both the bots in the first line and "Teams: ..." in the second. Empty lines: nothing to say (no bot would be seated, no teams, Fog of War).
+    /// `room_teams` (the teams are the room's own): "Room teams:" in place of "Teams at START:", and "Room teams: ..." first in the second line.
     struct FooterTexts {
         std::array<std::vector<std::string>, 2> line;
         bool empty() const noexcept { return line[0].empty() && line[1].empty(); }
     };
-    static FooterTexts start_footer(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog);
+    static FooterTexts start_footer(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog, bool room_teams = false);
     /// The START prompt that status_text() shows in the room, in its other (shorter) ways of saying it, longest first: the application picks the longest that fits its label. Empty while the
     /// original's own prompt stands (a guest, a START that seats no bot and makes no teams).
     const std::vector<std::string>& prompt_texts() const noexcept { return prompts_; }

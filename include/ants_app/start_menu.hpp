@@ -85,14 +85,17 @@ const char* fill_choice_caption() noexcept;
 /// "Empty seats will be Medium bots." (the same level in every seat), else the seats one by one: "At START: Red gets an Easy bot, Black a Hard bot." (the short form "At START: Red Easy, Blue Medium,
 /// Black Hard." when the long one would not fit the line)
 std::string fill_choice_sentence(const net::FillPlan& plan, int players = 4);
-/// What the room's panel tells the leader about the teams of START, "Teams: Green + Red against Blue + Black." (the colour words of the seats of a room of `players`); "" for free for all
+/// What the room's panel tells about the teams of the room it made, "Room teams: Green + Red against Blue + Black." (the colour words of the seats of a room of `players`; they are in the room's code,
+/// so the room makes them for every start); "" for free for all
 std::string room_teams_sentence(const LocalTeams& teams, int players);
 
-/// The room code of a hosted match, made as web/lobby.html makes it: "demo-<map>-<n>p-<six characters>", the six from kRoomCodeAlphabet (lower case letters without i, l and o,
-/// and the digits 2 - 9: no look-alikes). `random` gives 32 random bits at each call. At most 23 characters, so it always fits the 32 that a room code may hold.
+/// The room code of a hosted match, made as web/lobby.html makes it: "demo-<map>-<n>p-[<team word>-]<six characters>", the six from kRoomCodeAlphabet (lower case letters without i, l and o,
+/// and the digits 2 - 9: no look-alikes). `random` gives 32 random bits at each call. `teams` (protocol 13) is the room's teams: the word `t01` for the pair 0 + 1 (net::room_code_team_word) goes
+/// after the player count when `teams` is one of the choices of a room of `players` (three or four; free for all and anything else leave it out): the server makes the room with them for every
+/// start. At most 27 characters, so it always fits the 32 that a room code may hold.
 inline constexpr const char* kRoomCodeAlphabet = "abcdefghjkmnpqrstuvwxyz23456789";
 inline constexpr size_t kRoomCodeRandomChars = 6;
-std::string make_room_code(const MenuMap& map, int players, const std::function<uint32_t()>& random);
+std::string make_room_code(const MenuMap& map, int players, const std::function<uint32_t()>& random, const LocalTeams& teams = LocalTeams{});
 
 /// The player's name as the menu sends it: blanks at both ends cut away, printable ASCII only (what the original's edit field takes), at most `net::kMaxNameChars`
 std::string clean_player_name(const std::string& raw);

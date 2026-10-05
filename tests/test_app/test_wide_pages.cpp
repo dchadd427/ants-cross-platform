@@ -1202,7 +1202,7 @@ void test_host_panel(const assets::AssetArchive& arc) {
                     menu.set_settings(settings);
                     menu.show_room("demo-small-4p-b7x2qk", 1, players);
                     for (const MenuElement& e : menu.elements()) {
-                        if (e.kind == MenuKind::Text && e.font == FontSize::Px18 && (e.text.rfind("Empty seats", 0) == 0 || e.text.rfind("At START", 0) == 0 || e.text.rfind("Teams:", 0) == 0)) {
+                        if (e.kind == MenuKind::Text && e.font == FontSize::Px18 && (e.text.rfind("Empty seats", 0) == 0 || e.text.rfind("At START", 0) == 0 || e.text.rfind("Room teams:", 0) == 0)) {
                             fits_line(e, e.rect.w, "the room's sentence");
                         }
                     }

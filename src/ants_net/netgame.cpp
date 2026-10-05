@@ -317,7 +317,7 @@ void NetGame::refresh_status() {
         }
         case Phase::Room:
             prompts_.clear();
-            if (role_ == Role::Host || is_leader()) prompts_ = start_prompt_texts(fill_, teams_, room_, room_.fog);          // (the bots make up the seats: no thumbs to wait for)
+            if (role_ == Role::Host || is_leader()) prompts_ = start_prompt_texts(fill_, effective_teams(), room_, room_.fog, room_teams().set);          // (the bots make up the seats: no thumbs to wait for)
             if (!prompts_.empty()) status_ = prompts_.front();
             else status_ = str::text(role_ == Role::Host || is_leader() ? str::kPressStart : str::kWaitingForHost);      // the leader of a server's room has START: the host's prompt
             break;
@@ -385,7 +385,7 @@ StartFacts start_facts(const FillPlan& plan, const sim::StartTeams& teams, const
 
 // The plan of a START in one line: the bots that it seats (the one level of the empty seats, or each seat's own) and the teams, longest way first. A room whose START seats nothing and makes no teams has
 // no line of its own: the original's prompt stands.
-std::vector<std::string> NetGame::start_prompt_texts(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog) {
+std::vector<std::string> NetGame::start_prompt_texts(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog, bool room_teams) {
     const StartFacts f = start_facts(plan, teams, room, fog);
     struct Part {
         std::string full;
@@ -402,7 +402,7 @@ std::vector<std::string> NetGame::start_prompt_texts(const FillPlan& plan, const
     Part team;
     if (f.teams) {
         const std::string note = f.can_team ? "" : " (not with these seats)";
-        team = Part{"teams " + f.title + note, "teams " + f.vs + note};
+        team = room_teams ? Part{"the room's teams: " + f.title + note, "teams " + f.vs + note} : Part{"teams " + f.title + note, "teams " + f.vs + note};
     }
     if (bots.full.empty() && team.full.empty()) return {};
     std::vector<std::string> out;
@@ -424,7 +424,7 @@ std::vector<std::string> NetGame::start_prompt_texts(const FillPlan& plan, const
 }
 
 // The foot of the leader's Players' Status box (16:9): two lines, each in the ways it can be said (longest first)
-NetGame::FooterTexts NetGame::start_footer(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog) {
+NetGame::FooterTexts NetGame::start_footer(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog, bool room_teams) {
     const StartFacts f = start_facts(plan, teams, room, fog);
     FooterTexts out;
     const bool bots = !f.fog && (f.same != FillLevel::None || !f.seats.empty()) && f.bots;
@@ -433,11 +433,12 @@ NetGame::FooterTexts NetGame::start_footer(const FillPlan& plan, const sim::Star
         out.line[0] = {"Empty seats at START:"};                                              // (the footer of protocol 11, for one level in every seat: "Empty seats at START:" / "Medium bots")
         out.line[1] = {bots_detail};
     } else if (!bots && f.teams) {
-        out.line[0] = {"Teams at START:"};
+        out.line[0] = {room_teams ? "Room teams:" : "Teams at START:"};
         out.line[1] = {f.title, f.vs};
     } else if (bots && f.teams) {
         out.line[0] = f.same != FillLevel::None ? std::vector<std::string>{"Empty seats: " + bots_detail} : std::vector<std::string>{"Bots: " + bots_detail, bots_detail};
         out.line[1] = {"Teams: " + f.title, f.title, "Teams: " + f.vs, f.vs};
+        if (room_teams) out.line[1].insert(out.line[1].begin(), {"Room teams: " + f.title, "Room teams: " + f.vs});      // ("Room teams: ..." where it fits; the shorter ways keep the colours and the teams)
     }
     return out;
 }
@@ -457,7 +458,7 @@ bool NetGame::request_start() {
     size_t players = 0;
     for (const auto& slot : room_.slots) players += slot.state != SlotState::Empty ? 1u : 0u;
     if (players < 2 && plan_fill_seats(fill_, room_, sim::MAX_PLAYERS).empty()) return false;      // "too few players": as the host's START (with bots to seat they make up the rest: one person is enough)
-    return client_lobby_->request_start(fill_.level, teams_);
+    return client_lobby_->request_start(fill_.level, effective_teams());              // (the room's own teams are the ones its code names: it ignores these when it has any)
 }
 
 // ---- the waiting room's chat (protocol 11) ----------------------------------------------------------------------------------------------------------

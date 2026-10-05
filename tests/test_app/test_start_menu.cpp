@@ -1455,7 +1455,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(StartMenu::host_teams_text(green_black, 4), std::string("Green + Black against Red + Blue"));
         ASSERT_EQ(StartMenu::host_teams_text(green_red, 3), std::string("Green + Red against Blue"));
         ASSERT_EQ(StartMenu::host_teams_text(red_blue, 3), std::string("Red + Blue against Green"));
-        ASSERT_EQ(room_teams_sentence(green_red, 4), std::string("Teams: Green + Red against Blue + Black."));
+        ASSERT_EQ(room_teams_sentence(green_red, 4), std::string("Room teams: Green + Red against Blue + Black."));        // (they are the room's: its code names them)
         ASSERT_EQ(room_teams_sentence(ffa, 4), std::string());
         ASSERT_EQ(room_teams_sentence(green_black, 3), std::string());                         // (a choice that the room does not offer is no teams)
         ASSERT_EQ(room_teams_sentence(green_red, 2), std::string());
@@ -1518,9 +1518,9 @@ int main(int argc, char* argv[]) {
         room.click(MenuId::HostTeams);                                                         // Green + Blue against Red + Black
         room.menu.show_room("demo-tiny-4p-abc234", 1, 4);
         const size_t with_teams = room.menu.elements().size();
-        ASSERT_TRUE(has_text(room.menu.elements(), "Teams: Green + Blue against Red + Black."));
+        ASSERT_TRUE(has_text(room.menu.elements(), "Room teams: Green + Blue against Red + Black."));
         room.menu.show_room("demo-tiny-2p-abc234", 1, 2);                                      // (a room of two has no teams)
-        ASSERT_FALSE(has_text(room.menu.elements(), "Teams:"));
+        ASSERT_FALSE(has_text(room.menu.elements(), "Room teams:"));
         ASSERT_EQ(room.menu.elements().size() + 1, with_teams);
         Rig plain;
         plain.menu.show_room("demo-tiny-4p-abc234", 1, 4);
@@ -1528,7 +1528,7 @@ int main(int argc, char* argv[]) {
         room.clipboard.writable = false;
         room.menu.show_room("demo-tiny-4p-abc234", 1, 4);
         room.key(SDLK_c, KMOD_GUI);
-        ASSERT_TRUE(has_text(room.menu.elements(), "Copy failed") && !has_text(room.menu.elements(), "Teams:"));
+        ASSERT_TRUE(has_text(room.menu.elements(), "Copy failed") && !has_text(room.menu.elements(), "Room teams:"));
         // the settings file: written under `host_teams` (ffa or the pair), read back, anything else is free for all
         {
             TempDir temp;
@@ -1569,6 +1569,69 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(stale.element(MenuId::HostTeams).value, std::string("Free for all"));
         stale.click(MenuId::Host);
         ASSERT_TRUE(stale.take().teams == ffa);
+    } TEST_END();
+
+    TEST_CASE("M4.6 Host: the Teams row's choice is a word of the room's code (demo-<map>-<n>p-t01-<six characters>: the room makes the teams for every start, the one when it fills up too): every map and every choice of a room of three or four, nothing for free for all, for a room of two and for a choice that the room does not offer; the code is what the server and every game read (net::room_code_teams), valid and within the 32 characters; the Host button's request carries the choice and the code made from it names it") {
+        const char* keys[] = {"tiny", "small", "medium", "gauntlet", "treasure", "islands"};
+        const auto counter = []() {
+            auto n = std::make_shared<uint32_t>(0);
+            return std::function<uint32_t()>([n]() { return *n += 977u; });
+        };
+        size_t words = 0;
+        for (size_t m = 0; m < kMenuMapCount; ++m) {
+            for (int players = 2; players <= 4; ++players) {
+                for (const sim::StartTeams& choice : sim::room_team_choices(static_cast<uint8_t>(players))) {
+                    const std::string plain = make_room_code(menu_map(m), players, counter());                       // (what the code was before: the same random characters)
+                    const std::string code = make_room_code(menu_map(m), players, counter(), choice);
+                    ASSERT_TRUE(net::valid_room_code(code) && code.size() <= 27 && code.size() <= net::kMaxRoomCodeChars);
+                    ASSERT_TRUE(net::room_code_teams(code) == choice);
+                    if (!choice.set) {
+                        ASSERT_EQ(code, plain);                                                                         // free for all: the code is what it was
+                        continue;
+                    }
+                    ++words;
+                    const std::string word = std::string("t") + static_cast<char>('0' + choice.a) + static_cast<char>('0' + choice.b);
+                    const std::string head = std::string("demo-") + keys[m] + "-" + std::to_string(players) + "p-";
+                    ASSERT_EQ(code, head + word + "-" + plain.substr(head.size()));                                     // the word between the player count and the six characters, nothing else changed
+                    ASSERT_EQ(code.size(), plain.size() + 4);
+                }
+            }
+        }
+        ASSERT_EQ(words, kMenuMapCount * 6);                                                                           // three choices for three players, three for four, on each of the six maps
+        // a choice that the room does not offer is no word: a room of two, a seat that the room does not have, the same team written from the other end
+        const LocalTeams green_red{true, 0, 1};
+        const std::vector<std::pair<int, LocalTeams>> not_offered = {
+            {2, green_red}, {3, LocalTeams{true, 0, 3}}, {3, LocalTeams{true, 2, 3}}, {4, LocalTeams{true, 1, 2}}, {4, LocalTeams{true, 2, 3}}, {4, LocalTeams{true, 1, 0}},
+            {4, LocalTeams{true, 0, 0}}, {0, green_red},                                                               // (0 players is a room of two)
+        };
+        for (const auto& c : not_offered) {
+            const std::string plain = make_room_code(menu_map(4), c.first, counter());
+            const std::string code = make_room_code(menu_map(4), c.first, counter(), c.second);
+            ASSERT_EQ(code, plain);
+            ASSERT_FALSE(net::room_code_teams(code).set);
+        }
+        ASSERT_EQ(make_room_code(menu_map(4), 9, counter(), green_red), make_room_code(menu_map(4), 4, counter(), green_red));      // (the players are clamped to 2 .. 4 first: nine is four)
+        ASSERT_EQ(make_room_code(menu_map(4), 4, []() { return 0u; }, LocalTeams{true, 0, 3}), std::string("demo-treasure-4p-t03-aaaaaa"));      // the form of the code, by name
+        ASSERT_EQ(make_room_code(menu_map(1), 3, []() { return 0u; }, LocalTeams{true, 1, 2}), std::string("demo-small-3p-t12-aaaaaa"));
+        // the Host button: the request carries the choice, and the code made from it names it
+        Rig r;
+        r.to_panel(MenuId::HostOnline);
+        r.click(MenuId::HostTeams);
+        r.click(MenuId::HostTeams);
+        r.click(MenuId::HostTeams);                                                                                    // Green + Black against Red + Blue
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string("Green + Black against Red + Blue"));
+        r.click(MenuId::Host);
+        const MenuRequest request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.teams == LocalTeams({true, 0, 3}) && request.players == 4);
+        const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, []() { return 0u; }, request.teams);
+        ASSERT_EQ(code, std::string("demo-treasure-4p-t03-aaaaaa"));
+        ASSERT_TRUE(net::room_code_teams(code) == LocalTeams({true, 0, 3}));
+        r.menu.connection_failed("The server is busy.");
+        r.click(MenuId::HostPlayers);                                                                                  // 4 -> 2: the choice is gone from the request, so from the code
+        r.click(MenuId::Host);
+        const MenuRequest two = r.take();
+        ASSERT_TRUE(two.players == 2 && !two.teams.set);
+        ASSERT_FALSE(net::room_code_teams(make_room_code(menu_map(static_cast<size_t>(two.map)), two.players, []() { return 0u; }, two.teams)).set);
     } TEST_END();
 
     TEST_CASE("M4.4 Host: the map is Treasure until a choice is stored (the list keeps the page's order, so Tiny, its first entry, is not the default) and a stored choice wins: a new menu, an empty store, a store with a word that is no map, a store with each of the six (any case); the panel shows it, the request carries it, the room's code names it, a change is stored") {

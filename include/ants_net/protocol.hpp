@@ -118,6 +118,16 @@ inline constexpr size_t kMaxRoomCodeChars = 32;
 inline constexpr size_t kMaxTokenChars = 64;                     // an opaque credential that a lobby hands out with the room code (printable, never interpreted by the game)
 bool valid_room_code(const std::string& code) noexcept;
 
+/// The prefix of the codes that a server makes a room for on the first Hello when it is run with demo rooms ("demo-<map>-<n>p-<random>"); the server's choice of map and players is read from the words after it
+inline constexpr const char* kDemoRoomPrefix = "demo-";
+/// The teams that a room's own code names (protocol 13): a word `t<a><b>` of a demo room's code (two different seats 0 - 3, the lower first: `t01`, `t13`), between dashes or at the code's end, in any
+/// case, and never the first word after the prefix (that is the map's or the player count's). "demo-treasure-4p-t01-k7m2xq": seats 0 and 1 are a team (the other two too when both play). The
+/// first such word counts; no word (every code made before this: the pages' random part is six characters), no teams. The room makes them for EVERY start, the automatic start of a full room
+/// included (docs/NETWORK_PORT.md, "Protocol 13"). The server and every client read the code with this one function; whether the seats can make them is sim::plan_start_teams's business at the start.
+sim::StartTeams room_code_teams(const std::string& code) noexcept;
+/// The word for a pair, `t01`: empty for free for all and for a pair that is no word (equal or unordered seats, a seat above 3)
+std::string room_code_team_word(const sim::StartTeams& teams);
+
 /// Dropped (protocol 10): the key is right and the seat was dropped (by the others' vote, by the cap on the pauses, by a violation): the player is told it is out ("Sorry, you
 /// have been dropped from the game", the original's own text). RejoinFailed: the key is right but the way back is closed (the server's turn log is not usable, or it cannot tell a
 /// machine that has nothing how to load the match, or that machine could not load the map, or the seat has used up what a key holder may ask of the server: the catch-up time of the

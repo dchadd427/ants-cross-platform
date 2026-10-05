@@ -141,10 +141,10 @@ void Application::process_menu_request(const MenuRequest& request) {
             break;
         case MenuRequest::Type::Host: {
             set_fill_bots(request.fill);                                  // the Host panel's seat rows: this player leads the room it makes, and its START carries the levels
-            set_start_teams(request.teams);                               // ... and the Teams choice
+            set_start_teams(LocalTeams{});                                // (the Teams choice is not the START's: it is a word of the room's code, below, and the room makes the teams every time)
             static std::random_device entropy;
             const std::function<uint32_t()> random = config_.room_code_random ? config_.room_code_random : std::function<uint32_t()>([]() { return static_cast<uint32_t>(entropy()); });
-            const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, random);
+            const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, random, request.teams);
             begin_menu_connection(true, code, request.name, request.players, request.map);
             break;
         }

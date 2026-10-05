@@ -278,7 +278,7 @@ std::string fill_choice_sentence(const net::FillPlan& plan, int players) {
 std::string room_teams_sentence(const LocalTeams& teams, int players) {
     const sim::StartTeams chosen = offered_teams(teams, players);
     if (!chosen.set) return std::string();
-    return "Teams: " + StartMenu::host_teams_text(chosen, players) + ".";
+    return "Room teams: " + StartMenu::host_teams_text(chosen, players) + ".";
 }
 
 const MenuMap& menu_map(size_t index) noexcept { return kMaps[index < kMenuMapCount ? index : static_cast<size_t>(kDefaultMenuMap)]; }
@@ -291,9 +291,11 @@ int menu_map_index(const std::string& key) noexcept {
     return -1;
 }
 
-std::string make_room_code(const MenuMap& map, int players, const std::function<uint32_t()>& random) {
+std::string make_room_code(const MenuMap& map, int players, const std::function<uint32_t()>& random, const LocalTeams& teams) {
     const int n = std::clamp(players, 2, 4);
     std::string code = std::string("demo-") + map.key + "-" + std::to_string(n) + "p-";
+    const sim::StartTeams offered = offered_teams(teams, n);                     // (only what a room of this many players offers: a pair that it cannot make is no word of its code)
+    if (offered.set) code += net::room_code_team_word(offered) + "-";
     const size_t alphabet = std::char_traits<char>::length(kRoomCodeAlphabet);
     for (size_t i = 0; i < kRoomCodeRandomChars; ++i) code.push_back(kRoomCodeAlphabet[random() % alphabet]);
     return code;

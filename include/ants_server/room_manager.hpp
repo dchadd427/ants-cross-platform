@@ -52,7 +52,8 @@ struct ServerLimits {
     uint8_t demo_players{4};
     // How long a demo room waits for its players, from the first Hello (the page's link goes to friends on other computers: they need time to arrive)
     uint32_t demo_wait_ms{10u * 60u * 1000u};
-    // The maps that a Hello may choose for a demo room. The code of a demo room chooses: "demo-[<map>-][<n>p-]<anything>": <map> is the name of one of these
+    // The maps that a Hello may choose for a demo room. The code of a demo room chooses: "demo-[<map>-][<n>p-]<anything>" (and a team word t01 after the first word names the room's teams:
+    // net::room_code_teams, protocol 13): <map> is the name of one of these
     // maps without its extension (any case, then a dash; file names of the maps folder, e.g. "SMALL.LVL"), <n>p the number of players, 2 to 4 ("demo-small-2p-x7k2":
     // SMALL.LVL for two). The player count may also follow a first word that is not one of these maps ("demo-medium-2p-x" on a server without MEDIUM: the default
     // map, for two), so that a page that offers a map the server does not allow still gets the players it asked for. What a code does not choose is `demo_map` and
@@ -70,7 +71,7 @@ struct ServerLimits {
 };
 
 /// The code prefix of the rooms that a Hello may make when demo rooms are on
-inline constexpr const char* kDemoRoomPrefix = "demo-";
+inline constexpr const char* kDemoRoomPrefix = net::kDemoRoomPrefix;
 
 /// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running with a person in it (a room that a restart brought back also for its first minutes: Room::busy),
 /// and the people (bots are not people) in the rooms that wait, load or run. Plain counts: no name, no code; exactly these two fields (tools/deploy_wait.py accepts nothing else).

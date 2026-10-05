@@ -118,7 +118,7 @@ bool iequals(const std::string& a, const std::string& b) {
     return true;
 }
 
-// What the code of a demo room chooses: "demo-[<map>-][<n>p-]<anything>". <map> is the name of one of the allowed maps without its extension (any case; of
+// What the code of a demo room chooses: "demo-[<map>-][<n>p-]<anything>" (the team word of the code, `t01`, is read by net::room_code_teams: it names the room's teams, not the map or the players). <map> is the name of one of the allowed maps without its extension (any case; of
 // several that fit, the longest name wins: a name may contain dashes itself); <n>p is the number of players, 2 to 4 ("demo-small-2p-x7k2": SMALL.LVL for two
 // players). When the first word is not an allowed map, <n>p may still be the first or the second word (the page offers the six maps of the original; a server
 // that allows fewer still makes the room for the players the page shows). What the code does not choose is the default (`demo_map`, `demo_players`).
@@ -178,6 +178,7 @@ bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
     const DemoChoice choice = demo_choice_of(code, limits_);
     spec.map = choice.map;
     spec.players = choice.players;
+    spec.teams = net::room_code_teams(code);                        // (protocol 13: a team word in the code, `demo-treasure-4p-t01-k7m2xq`: the room starts with them every time)
     spec.early_start = true;                                        // the first player in a demo room may start it with the players who are there (the page tells them)
     spec.wait_ms = limits_.demo_wait_ms;
     spec.keep_ms = 30000;

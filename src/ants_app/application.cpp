@@ -2391,7 +2391,7 @@ void Application::sync_room_view() {
         panel.caret = room_chat_.caret(static_cast<uint32_t>(net_time_ms_));
         if (map_select_.setup_variant() == SetupVariant::Online) {
             // what START will do with the empty seats and the teams (the choices of the host panel / the command line; not for a guest, who cannot START): each line in its ways, the longest that fits the box
-            const net::NetGame::FooterTexts footer = net::NetGame::start_footer(config_.fill_bots, config_.teams, room, room.fog);
+            const net::NetGame::FooterTexts footer = net::NetGame::start_footer(config_.fill_bots, net_->effective_teams(), room, room.fog, net_->room_teams().set);
             const auto pick = [this](const std::vector<std::string>& ways) {
                 for (const std::string& text : ways) {
                     if (renderer_ && renderer_->get_text_width(text, FontSize::Px12) <= MapSelectScreen::footer_width()) return text;       // (it fits at the smallest size: the screen draws it as big as it can)
