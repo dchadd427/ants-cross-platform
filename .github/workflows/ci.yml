@@ -306,6 +306,11 @@ jobs:
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
+      - name: Burn diagnostics (diagnostic push, not for merging)
+        if: ${{ !cancelled() }}
+        run: |
+          for f in build/tests/test_net/burn_diag_*.txt; do echo "##### $f"; cat "$f"; done || true
+
       - name: Tool self-tests (map_sweep, bot_arena)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |

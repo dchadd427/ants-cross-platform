@@ -16,6 +16,7 @@
 #include "ants_net/lockstep.hpp"
 #include "ants_net/prediction.hpp"
 #include "ants_net/protocol.hpp"
+#include "burn_diag.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -167,15 +168,14 @@ Command random_unpredicted(Lcg& rng, uint8_t seat) {
 
 // Work that costs `ns` of the thread's CPU time AND of wall time: a block is charged the smaller of the two (work_cost_ns), and Windows' thread clock moves in steps of about
 // 15.6 ms, so it can read 25 ms after 10 ms of work. A clock that stands still fails the tests instead of hanging them: the spin gives up when the clock has not moved in 100 ms.
-void burn_cpu(uint64_t ns) {
-    const uint64_t t0 = thread_cpu_ns();
-    const auto wall0 = std::chrono::steady_clock::now();
-    for (;;) {
-        const uint64_t spent = thread_cpu_ns() - t0;
-        const auto wall = std::chrono::steady_clock::now() - wall0;
-        if (spent >= ns && wall >= std::chrono::nanoseconds(static_cast<std::chrono::nanoseconds::rep>(ns))) return;
-        if (spent == 0 && wall > std::chrono::milliseconds(100)) return;
-    }
+void burn_cpu(uint64_t ns) { burn_diag::burn(ns); }     // DIAG (the loop is the same, with a record of the clocks)
+
+void dnote(const std::string& text) {                    // DIAG
+    if (burn_diag::slot() != nullptr) burn_diag::slot()->note(text);
+}
+std::string dstats(const Prediction::Stats& st) {          // DIAG
+    return "over_budget=" + std::to_string(st.over_budget) + " ticks_advanced=" + std::to_string(st.ticks_advanced) + " starts=" + std::to_string(st.starts) + " rebuilds=" +
+           std::to_string(st.rebuilds) + " cooldowns=" + std::to_string(st.cooldowns) + " advance_ns_max=" + std::to_string(st.advance_ns_max);
 }
 
 constexpr uint64_t kMs = 1000ull * 1000ull;
@@ -1263,6 +1263,7 @@ void run_cue_tests() {
                 }
             }
         }
+        dnote("RP7.1 began=" + std::to_string(began) + " ended=" + std::to_string(ended) + " at_start: " + dstats(at_start) + " | now: " + dstats(p.stats()));   // DIAG
         ASSERT_TRUE(began != 0 && ended != 0 && refused && suspended_meanwhile);
         ASSERT_EQ(at_start.over_budget, 4u);                                                   // four strikes: the copy that began it and the three ticks that followed it
         ASSERT_EQ(at_start.ticks_advanced, 3u);
@@ -1320,6 +1321,7 @@ void run_cue_tests() {
         Rig rig(sc);
         rig.run(60);                                                                           // (no foreign command, no order: nothing is rebuilt, one run of ticks for every tick)
         Prediction& p = *rig.prediction();
+        dnote("RP7.3 " + dstats(p.stats()) + " active=" + std::to_string(p.active()) + " cooling=" + std::to_string(p.cooling_down()));   // DIAG
         ASSERT_TRUE(p.active() && !p.cooling_down());
         ASSERT_TRUE(p.stats().over_budget >= 50);                                              // every tick was a strike ...
         ASSERT_EQ(p.stats().rebuilds, 0u);
@@ -1346,6 +1348,7 @@ void run_cue_tests() {
             was_cooling = p.cooling_down();
         });
         rig.run(260);
+        dnote("RP7.4 began=" + std::to_string(began.size()) + " ended=" + std::to_string(ended.size()) + " " + dstats(p.stats()));   // DIAG
         ASSERT_TRUE(began.size() >= 6 && ended.size() >= 5);
         const uint64_t lengths[5] = {10, 20, 40, 40, 40};                                      // doubled, doubled, the cap, the cap ...
         for (size_t i = 0; i < 5; ++i) {
@@ -1410,6 +1413,7 @@ void run_cue_tests() {
             Rig rig(sc);
             Prediction& p = *rig.prediction();
             rig.run(8);
+            dnote("RP7.5 (15 ms) " + dstats(p.stats()));   // DIAG
             ASSERT_TRUE(p.stats().over_budget >= 4);                                           // every block cost 15 ms
             ASSERT_TRUE(p.stats().cooldowns >= 1 && !p.active());
         }
@@ -1728,6 +1732,7 @@ void run_measure() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    burn_diag::start("prediction");   // DIAG
     if (argc > 1 && std::string(argv[1]) == "--measure") {      // (not a test: prints how often and how much the prediction corrects the picture; takes a minute)
         run_measure();
         return 0;
@@ -1739,6 +1744,14 @@ int main(int argc, char* argv[]) {
     run_property_tests();
     run_state_tests();
     run_cue_tests();
+    if (std::getenv("ANTS_DIAG_NO_SURVEY") == nullptr) {      // DIAG: the spins of the tests, on their own, under whatever load the runner has
+        burn_diag::slot()->note("survey begins");
+        for (int i = 0; i < 300; ++i) burn_cpu(kMs);
+        for (int i = 0; i < 100; ++i) burn_cpu(25 * kMs);
+        for (int i = 0; i < 100; ++i) burn_cpu(30 * kMs);
+        for (int i = 0; i < 60; ++i) burn_cpu(15 * kMs);
+        burn_diag::slot()->note("survey ends");
+    }
     std::cout << "\n=======================================================\n"
               << " PREDICTION TEST SUMMARY\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Passed:           " << (g_test_count - g_test_failures) << "\n Failed:           "
