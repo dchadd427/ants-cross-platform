@@ -131,11 +131,11 @@ void TouchControl::emit(Actions& out, Kind kind, double x, double y, uint32_t at
     out.push_back(a);
 }
 
-// The clock: a hold that is due fires at its own time, before whatever the call does. An event's stamp is when SDL saw it, which a stall makes late, so while a finger is tracked an event
-// is judged no later than kStallMs after the last moment the model knew what the finger did (known_: a frame, or the first finger's arrival). A frame (update) is that knowledge itself: the
+// The clock: a hold that is due fires at its own time, before whatever the call does. An event's stamp is when SDL saw it, which a stall makes late, so while a finger that counts is tracked
+// (a spent one does not) an event is judged no later than kStallMs after the last moment the model knew what the finger did (known_: a frame, or the first finger's arrival). A frame (update) is that knowledge itself: the
 // finger is down now, so a hold that is due fires from it; from an event it fires only when the event, so judged, is past the hold's time.
 void TouchControl::advance(uint32_t now_ms, bool frame, Actions& out) {
-    if (!frame && !fingers_.empty()) {
+    if (!frame && std::any_of(fingers_.begin(), fingers_.end(), [](const Finger& g) { return !g.spent; })) {         // (a spent finger holds nothing: a finger that lands next is at its own stamp)
         const uint32_t limit = known_ + touch::kStallMs;
         if (static_cast<int32_t>(now_ms - limit) > 0) now_ms = limit;
     }
@@ -275,6 +275,7 @@ TouchControl::Actions TouchControl::finger_down(int64_t touch, int64_t finger, d
             g.role = Role::Ignored;
             g.spent = true;
         }
+        advance(now_ms, false, out);                                                          // (every finger tracked is spent now, so nothing holds this one's time back: it is at its stamp)
         arrived.role = Role::Primary;
         fingers_.push_back(arrived);
         known_ = clock_;

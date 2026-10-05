@@ -1448,6 +1448,34 @@ void test_gates() {
             check(app.touch().fingers() == 0 && !app.hud().is_input_captured(), "(both fingers are gone)");
             s.clear();
         }
+        // a STALL with a thumb resting (second review, NEW-1): the finger that lands after a stall is at its own stamp. The thumb used to make the clock early, the touch looked longer, and a tap
+        // of 200 ms became a hold (a right click, a buzz, an order)
+        {
+            s.clear();
+            const Pt thumb = thumbs[0];
+            const Pt target = s.on_ant(s.worker);
+            hand.down(1, thumb);
+            hand.frame();
+            hand.down(2, target);                                          // the first tap on the map: the thumb is let go of and spent
+            hand.wait(60);
+            hand.up(2, target);
+            hand.frame();
+            s.clear();
+            hand.rest(1000);                                               // the game runs (frames 20 ms apart) ...
+            hand.wait(400);                                                // ... stalls for 400 ms ...
+            const TouchControl::Stats before = app.touch().stats();
+            const uint32_t buzzes = app.touch_feedbacks();
+            hand.down(3, target);                                          // ... and a finger lands (stamped after the stall) and taps for 200 ms with the frames running again
+            hand.rest(200);
+            hand.up(3, target);
+            hand.frame();
+            check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker} && app.touch().stats().taps == before.taps + 1 && app.touch().stats().holds == before.holds && app.touch_feedbacks() == buzzes,
+                  "a tap of 200 ms after a stall, a thumb resting: a click (it selects the worker), no hold, no buzz");
+            hand.up(1, thumb);
+            hand.frame();
+            check(app.touch().fingers() == 0, "(both fingers are gone)");
+            s.clear();
+        }
         // the chat log's drag is a held press too: the finger that lands next does not take it away
         const LayoutRect chat = app.layout().chat_view();
         const Pt in_chat{chat.x + chat.w / 2, chat.y + chat.h / 2};
