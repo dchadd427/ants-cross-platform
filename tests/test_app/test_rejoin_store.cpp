@@ -415,7 +415,7 @@ void run_file_tests() {
     } TEST_END();
 
 #if !defined(_WIN32)
-    TEST_CASE("RS4.1 The File Is Mode 0600 Whatever The Umask Says (A Loose One, A Tight One), A File That Was Mode 0644 Is Replaced By One That Is 0600, And So Is The Temp File Of Every Write, Which Is Gone Afterwards") {
+    TEST_CASE("RS4.1 The File Is Mode 0600 Whatever The Umask Says (A Loose One, A Tight One, One That Takes The Owner's Write Bit), A File That Was Mode 0644 Is Replaced By One That Is 0600, And So Is The Temp File Of Every Write, Which Is Gone Afterwards") {
         const fs::path dir = scratch().fresh("rs41");
         Clock clock;
         const mode_t old_umask = ::umask(0);                                                        // the loosest: nothing is taken away from the mode that was asked for
@@ -440,9 +440,13 @@ void run_file_tests() {
         store.forget(rk("R3", 2, kServer, 3));
         ASSERT_EQ(mode_of(dir / "rejoin.txt"), mode_t{0600});                                       // (a rewrite after a forget is private too)
         ASSERT_TRUE(temp_modes.size() == 4 && temp_modes[2] == 0600 && temp_modes[3] == 0600);
+        ::umask(0277);                                                                              // one that takes the owner's own write bit away: the mode is still the 0600 that is promised
+        ASSERT_TRUE(store.put(rk("R4", 3, kServer, 4)));
+        ASSERT_EQ(mode_of(dir / "rejoin.txt"), mode_t{0600});
+        ASSERT_TRUE(temp_modes.size() == 5 && temp_modes[4] == 0600);
         ASSERT_EQ(files_in(dir), size_t{1});
         ::umask(old_umask);
-        ASSERT_EQ(temp_names.size(), size_t{4});
+        ASSERT_EQ(temp_names.size(), size_t{5});
         for (const std::string& name : temp_names) ASSERT_TRUE(!fs::exists(name) && name.find(".tmp") != std::string::npos);
     } TEST_END();
 #endif

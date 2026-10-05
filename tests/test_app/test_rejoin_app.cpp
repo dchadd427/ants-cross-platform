@@ -689,7 +689,7 @@ Reach poke(Application& app, uint32_t ant_id) {
     SDL_PushEvent(&typed);
     app.run_frame_with_delta(0.001f);
     r.text = !app.hud().get_chat_input().empty();
-    while (!app.hud().get_chat_input().empty()) app.handle_key_down(key_event(SDLK_BACKSPACE));
+    for (int i = 0; i < 8 && !app.hud().get_chat_input().empty(); ++i) app.hud().handle_key_down(SDLK_BACKSPACE, app.sim(), app.renderer().camera(), 0, false);      // (the HUD's own: the loop's key may be swallowed)
     app.handle_key_down(key_event(SDLK_o, false, KMOD_LCTRL));
     r.options = app.hud().is_modal_open();
     return r;
@@ -1156,6 +1156,7 @@ void run_screen_tests() {
         ASSERT_TRUE(app.net_overlay_now().vote.count == "0 of 2 voted to continue" && w.status("RA-21").votes_continue == 0);
         ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);                                     // the click did not reach the map
         app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONDOWN, buttons.go_on.x + 3, buttons.go_on.y + 3));
+        ASSERT_FALSE(app.hud().is_input_captured());                                             // (the button took the press: the map has no rubber band)
         app.handle_mouse_button(mouse_event(SDL_MOUSEBUTTONUP, buttons.go_on.x - 40, buttons.go_on.y + 3));    // released beside it: nothing
         w.run(300);
         ASSERT_TRUE(app.net_overlay_now().vote.keep_pressed && w.status("RA-21").votes_continue == 0);
@@ -1455,8 +1456,10 @@ void run_way_back_tests() {
                 ASSERT_TRUE(app.catch_up_screen_active());
                 const int64_t over = plain.differing(grab(app, dir / "ra13-b.bmp"));
                 ASSERT_TRUE(over > 2000);
-                const LayoutPoint m = app.layout().modal_offset();                                // the mouse works on the dialog too: a click on No, where it is drawn
+                const LayoutPoint m = app.layout().modal_offset();                                // the mouse works on the dialog too: it lights No, and a click on No, where it is drawn
                 const UIButton no = app.hud().quit_no_button();
+                pointer_at(no.x + m.x + 10, no.y + m.y + 10);
+                ASSERT_TRUE(app.hud().quit_no_button().is_active);                                 // (the button shows its hover picture)
                 click(app, LayoutRect{no.x + m.x, no.y + m.y, no.w, no.h});
                 ASSERT_FALSE(app.hud().is_quit_dialog_open());
                 ASSERT_TRUE(app.catch_up_screen_active());
