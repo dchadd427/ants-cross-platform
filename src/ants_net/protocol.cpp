@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "ants_net/wire.hpp"
+#include "ants_sim/game_strings.hpp"
 
 namespace ants::net {
 
@@ -91,6 +92,27 @@ bool valid_room_code(const std::string& code) noexcept {
         if (!ok) return false;
     }
     return true;
+}
+
+sim::StartTeams room_code_teams(const std::string& code) noexcept {
+    const size_t prefix = std::char_traits<char>::length(kDemoRoomPrefix);
+    if (code.size() <= prefix || code.compare(0, prefix, kDemoRoomPrefix) != 0) return sim::StartTeams{};
+    size_t dash = code.find('-', prefix);                                              // (the first word, the map's or the player count's, is never a token)
+    while (dash != std::string::npos) {
+        const size_t from = dash + 1;
+        const size_t next = code.find('-', from);
+        const size_t length = (next == std::string::npos ? code.size() : next) - from;
+        if (length == 3 && (code[from] == 't' || code[from] == 'T') && code[from + 1] >= '0' && code[from + 1] <= '3' && code[from + 2] > code[from + 1] && code[from + 2] <= '3') {
+            return sim::StartTeams{true, static_cast<uint8_t>(code[from + 1] - '0'), static_cast<uint8_t>(code[from + 2] - '0')};
+        }
+        dash = next;
+    }
+    return sim::StartTeams{};
+}
+
+std::string room_code_team_word(const sim::StartTeams& teams) {
+    if (!teams.set || teams.a >= teams.b || teams.b >= sim::MAX_PLAYERS) return std::string();
+    return std::string("t") + static_cast<char>('0' + teams.a) + static_cast<char>('0' + teams.b);
 }
 
 MsgType peek_type(const uint8_t* data, size_t size) noexcept {
@@ -392,6 +414,8 @@ std::vector<uint8_t> encode(const StartMsg& m) {
         w.str8(e.address.size() > 64 ? std::string() : e.address);
         w.u16(e.port);
     }
+    w.u8(m.team_a);
+    w.u8(m.team_b);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, StartMsg& out) {
@@ -413,9 +437,13 @@ bool decode(const uint8_t* data, size_t size, StartMsg& out) {
         e.port = r->u16();
         if (!valid_address(e.address)) return false;
     }
+    m.team_a = r->u8();
+    m.team_b = r->u8();
     int players = 0;
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) players += (m.roster >> p) & 1;
     if (!r->done() || fog > 1 || !valid_map_name(m.map_name) || (m.roster & 0xF0) != 0 || players < 2) return false;
+    // the teams (protocol 13): none, or a pair that this roster can make (the room checked it before it sent the Start: a machine that is told otherwise would start another match than the others)
+    if ((m.team_a != kNoTeam || m.team_b != kNoTeam) && !sim::plan_start_teams(sim::StartTeams{true, m.team_a, m.team_b}, m.roster).why.empty()) return false;
     m.fog = fog == 1;
     out = std::move(m);
     return true;
@@ -553,16 +581,31 @@ std::vector<uint8_t> encode(const StartRequestMsg& m) {
     std::vector<uint8_t> out;
     ByteWriter w(out);
     w.u8(static_cast<uint8_t>(MsgType::StartRequest));
-    w.u8(static_cast<uint8_t>(m.fill));
+    for (const FillLevel level : m.fill) w.u8(static_cast<uint8_t>(level));
+    w.u8(m.team_a);
+    w.u8(m.team_b);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, StartRequestMsg& out) {
     ByteReader storage(nullptr, 0);
     ByteReader* r = nullptr;
     if (!open(data, size, MsgType::StartRequest, r, storage)) return false;
-    const uint8_t fill = r->u8();
-    if (!r->done() || fill > kFillLevelLast) return false;               // exactly the type and one fill level: protocol 7's single byte is no StartRequest any more
-    out.fill = static_cast<FillLevel>(fill);
+    std::array<uint8_t, sim::MAX_PLAYERS> fill{};
+    for (uint8_t& level : fill) level = r->u8();
+    const uint8_t team_a = r->u8();
+    const uint8_t team_b = r->u8();
+    if (!r->done()) return false;                                        // exactly the type, four levels and two team bytes: the single level of protocol 11 is no StartRequest any more
+    for (const uint8_t level : fill) {
+        if (level > kFillLevelLast) return false;
+    }
+    if (team_a == kNoTeam || team_b == kNoTeam) {
+        if (team_a != team_b) return false;                              // free for all is both bytes 255, never one
+    } else if (team_a >= sim::MAX_PLAYERS || team_b >= sim::MAX_PLAYERS || team_a == team_b) {
+        return false;                                                    // a pair is two different seats of the match
+    }
+    for (size_t i = 0; i < fill.size(); ++i) out.fill[i] = static_cast<FillLevel>(fill[i]);
+    out.team_a = team_a;
+    out.team_b = team_b;
     return true;
 }
 
@@ -596,6 +639,74 @@ std::string fill_level_title(FillLevel level) {
         case FillLevel::None: break;
     }
     return std::string();
+}
+
+bool parse_fill_plan(std::string_view text, FillPlan& out, std::string& why) {
+    std::array<FillLevel, sim::MAX_PLAYERS> levels{};
+    size_t count = 0;
+    size_t from = 0;
+    for (;;) {
+        const size_t comma = text.find(',', from);
+        const std::string_view word = text.substr(from, comma == std::string_view::npos ? std::string_view::npos : comma - from);
+        FillLevel level = FillLevel::None;
+        if (!parse_fill_level(word, level)) {
+            why = "write none, easy, medium or hard for every seat, or four of them joined by commas for the seats 0 to 3 (none,none,easy,hard).";
+            return false;
+        }
+        if (count < levels.size()) levels[count] = level;
+        ++count;
+        if (comma == std::string_view::npos) break;
+        from = comma + 1;
+    }
+    if (count == 1) {
+        out = FillPlan(levels[0]);
+        return true;
+    }
+    if (count != levels.size()) {
+        why = "give one level for every seat, or exactly four, one for each of the seats 0 to 3 (none,none,easy,hard).";
+        return false;
+    }
+    out = FillPlan(levels);
+    return true;
+}
+
+std::string fill_plan_text(const FillPlan& plan) {
+    if (plan.uniform()) return fill_level_name(plan.level[0]);
+    std::string out;
+    for (size_t seat = 0; seat < plan.level.size(); ++seat) out += (seat == 0 ? "" : ",") + std::string(fill_level_name(plan.level[seat]));
+    return out;
+}
+
+std::vector<std::pair<uint8_t, FillLevel>> plan_fill_seats(const FillPlan& plan, const RoomMsg& room, uint8_t players) {
+    std::vector<std::pair<uint8_t, FillLevel>> seats;
+    size_t taken = 0;
+    for (const RoomMsg::Slot& slot : room.slots) taken += slot.state != SlotState::Empty ? 1u : 0u;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS && taken + seats.size() < players; ++seat) {
+        if (plan.level[seat] != FillLevel::None && room.slots[seat].state == SlotState::Empty) seats.emplace_back(seat, plan.level[seat]);
+    }
+    return seats;
+}
+
+namespace {
+
+std::string seat_colour_word(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(sim::strings::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
+
+}  // namespace
+
+std::string fill_seats_sentence(const std::vector<std::pair<uint8_t, FillLevel>>& seats) {
+    std::string out;
+    for (size_t i = 0; i < seats.size(); ++i) {
+        const std::string level = fill_level_title(seats[i].second);
+        const std::string article = seats[i].second == FillLevel::Easy ? "an " : "a ";
+        out += (i == 0 ? "" : ", ") + seat_colour_word(seats[i].first) + (i == 0 ? " gets " : " ") + article + level + " bot";
+    }
+    return out;
+}
+
+std::string fill_seats_short(const std::vector<std::pair<uint8_t, FillLevel>>& seats) {
+    std::string out;
+    for (size_t i = 0; i < seats.size(); ++i) out += (i == 0 ? "" : ", ") + seat_colour_word(seats[i].first) + " " + fill_level_title(seats[i].second);
+    return out;
 }
 
 std::string fill_bot_name(FillLevel level) {

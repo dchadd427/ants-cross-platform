@@ -47,6 +47,7 @@
 #include "ants_app/scorecard.hpp"
 #include "ants_app/setup_layout.hpp"
 #include "ants_app/start_menu.hpp"
+#include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/wide_page.hpp"
 #include "ants_assets/asset_archive.hpp"
@@ -409,11 +410,16 @@ constexpr MockRect kMockMenuJoin[] = {
     {"room code field", 270, 214, 420, 34},   {"button \"Join\"", 320, 266, 320, 46},    {"button \"Back\"", 320, 320, 320, 40}, {"server line", 220, 484, 520, 14},
     {"hint line", 200, 506, 560, 14},
 };
+// The Host panel has a row for each seat after the leader's (the bot that START puts there) and the room's teams since bot games part B (network protocol 13, the owner's requests for a level for
+// each bot and for teams chosen before the start): the mock-up's panel had the one "Empty seats at START" choice, so this table and the panel's digest are the panel as it is now (the model's numbers,
+// StartMenu::elements, with the 16:9 shift), for the settings that the mock-up tool assumed: the name "Player", Treasure, four players, the empty seats stay empty, free for all.
 constexpr MockRect kMockMenuHost[] = {
-    {"title plate", 280, 28, 400, 44},        {"label \"Map\"", 220, 115, 220, 22},      {"map chooser", 450, 108, 250, 36},     {"label \"Players\"", 220, 155, 220, 22},
-    {"players chooser", 450, 148, 250, 36},   {"label \"Empty seats at START\"", 220, 195, 220, 22}, {"fill chooser", 450, 188, 250, 36}, {"fill caption", 400, 226, 350, 14},
-    {"label \"Your name\"", 220, 250, 220, 22}, {"name field", 450, 244, 250, 34},       {"button \"Host\"", 320, 296, 320, 44}, {"button \"Back\"", 320, 346, 320, 38},
-    {"info text", 220, 396, 520, 40},         {"server line", 220, 484, 520, 14},       {"hint line", 200, 506, 560, 14},
+    {"title plate", 280, 28, 400, 44},        {"label \"Map\"", 220, 112, 134, 22},       {"map chooser", 360, 108, 380, 27},      {"label \"Players\"", 220, 141, 134, 22},
+    {"players chooser", 360, 137, 380, 27},   {"label \"Red at START\"", 220, 170, 134, 22}, {"Red seat chooser", 360, 166, 380, 27}, {"label \"Blue at START\"", 220, 199, 134, 22},
+    {"Blue seat chooser", 360, 195, 380, 27}, {"label \"Black at START\"", 220, 228, 134, 22}, {"Black seat chooser", 360, 224, 380, 27}, {"label \"Teams\"", 220, 257, 134, 22},
+    {"teams chooser", 360, 253, 380, 27},     {"fill caption", 360, 283, 380, 14},       {"label \"Your name\"", 220, 305, 134, 22}, {"name field", 360, 300, 380, 28},
+    {"button \"Host\"", 320, 333, 320, 32},   {"button \"Back\"", 320, 369, 320, 32},    {"info text", 220, 407, 520, 28},        {"server line", 220, 484, 520, 14},
+    {"hint line", 200, 506, 560, 14},
 };
 constexpr MockRect kMockMenuConnecting[] = {
     {"title plate", 280, 28, 400, 44}, {"connecting text", 220, 180, 520, 100}, {"button \"Cancel\"", 360, 320, 240, 46}, {"hint line", 200, 506, 560, 14},
@@ -1125,7 +1131,7 @@ void draw_menu_picture(RendererRig& rig, const assets::AssetArchive& arc, const 
 constexpr uint64_t kMockLoadingDigest = 0x94eabba28aea947eull;
 constexpr uint64_t kMockQuickHelpDigest = 0x94b71b16f7a70dcdull;
 constexpr uint64_t kMockResultsDigest = 0xbb947f9aa3aa2a78ull;
-constexpr uint64_t kMockMenuDigest[6] = {0x7ba0d0a4ec7fb2ddull, 0x1702617f6d84b631ull, 0x519d85125827ebc9ull, 0x906f3b97b3a5995dull, 0x8980eaac55423631ull, 0x722ef4cf407305e9ull};
+constexpr uint64_t kMockMenuDigest[6] = {0x7ba0d0a4ec7fb2ddull, 0x1702617f6d84b631ull, 0x519d85125827ebc9ull, 0x82c371dda4ca0001ull, 0x8980eaac55423631ull, 0x722ef4cf407305e9ull};
 
 /// --save: the picture as a bitmap (RGBA bytes of a canvas)
 void save_picture(const std::string& name, const std::vector<uint8_t>& px, int32_t w, int32_t h) {
@@ -1210,6 +1216,108 @@ void test_mockups(const assets::AssetArchive& arc) {
         const uint64_t c = masked_digest(px, 960, 540, masks);
         check(a != b && a == c, "the digest sees a pixel of the art and does not see one in a text area");
     }
+}
+
+// =====================================================================================================================================================
+// 5b. The Host panel's texts in every state, with the real font
+// =====================================================================================================================================================
+
+/// The Host panel (the labels, the words of every row, the caption, the note and a failure's line) and the room's panel (what START will do, the teams) in every state that the choices make: two, three
+/// and four players, every level in every seat, every team choice. Every text fits the place that the layout gives it, with the real font, in the classic picture and the 16:9 one (the model's tests
+/// use an estimate of the width: this is the font that the player sees).
+void test_host_panel(const assets::AssetArchive& arc) {
+    group("host panel", "every text of the Host panel and of the room's panel fits its place with the real font, for two, three and four players, every level of every seat and every team choice, in both pictures");
+    RendererRig rig(arc, 960, 540);
+    check(rig.ok, "the renderer starts");
+    if (!rig.ok) return;
+    const IRenderer& text = rig.renderer;
+    using L = net::FillLevel;
+    std::string bad;                                            // the first text that does not fit
+    int texts = 0;
+    const auto fits_line = [&](const MenuElement& e, int32_t room, const char* what) {
+        ++texts;
+        const std::string shown = e.kind == MenuKind::Cycler ? e.value : e.text;
+        if (text.get_text_width(shown, e.font) > room && bad.empty()) bad = std::string(what) + " \"" + shown + "\" is " + std::to_string(text.get_text_width(shown, e.font)) + " px in " + std::to_string(room);
+    };
+    const auto fits_lines = [&](const MenuElement& e, int32_t room, int32_t height, const char* what) {
+        ++texts;
+        const size_t lines = wrap_label_text(text, e.text, room, e.font).size();
+        if (lines > static_cast<size_t>(std::max(1, height / font_cell_height(e.font))) && bad.empty()) bad = std::string(what) + " \"" + e.text + "\" needs " + std::to_string(lines) + " lines";
+    };
+    for (const bool wide : {false, true}) {
+        for (int players = 2; players <= 4; ++players) {
+            const std::vector<sim::StartTeams> choices = sim::room_team_choices(static_cast<uint8_t>(players));
+            for (const sim::StartTeams& teams : choices) {
+                for (const L level : {L::None, L::Easy, L::Medium, L::Hard}) {
+                    StartMenu menu;
+                    menu.set_wide_layout(wide);
+                    MenuSettings settings;
+                    settings.name = "Player";
+                    settings.host_players = players;
+                    settings.host_fill = net::FillPlan(level);
+                    settings.host_teams = teams;
+                    menu.set_settings(settings);
+                    menu.set_server(ServerAddress{});
+                    menu.show_main();
+                    MenuElement entry;
+                    menu.find_element(MenuId::HostOnline, entry);
+                    menu.on_mouse_move(entry.rect.x + entry.rect.w / 2, entry.rect.y + entry.rect.h / 2);
+                    menu.on_mouse_down(entry.rect.x + entry.rect.w / 2, entry.rect.y + entry.rect.h / 2, SDL_BUTTON_LEFT);
+                    menu.on_mouse_up(entry.rect.x + entry.rect.w / 2, entry.rect.y + entry.rect.h / 2, SDL_BUTTON_LEFT);
+                    check(menu.panel() == MenuPanel::Host, "the Host panel opens");
+                    for (const MenuElement& e : menu.elements()) {
+                        if (e.kind == MenuKind::Cycler) fits_line(e, e.rect.w - 56, "a row's value");                      // (the arrows take 28 px on each side)
+                        else if (e.kind == MenuKind::Text && e.rect.h <= 22) fits_line(e, e.rect.w, "a label");
+                        else if (e.kind == MenuKind::Text && e.tone == MenuTone::Dim && e.font == FontSize::Px14 && e.rect.h <= 14) fits_line(e, e.rect.w, "the caption");
+                        else if (e.kind == MenuKind::Text) fits_lines(e, e.rect.w, e.rect.h, "the note");
+                    }
+                }
+            }
+        }
+        // the failures that the application reports, in the notice that takes the note's place (two lines of the 14 px text in a box of 520 px less its padding)
+        for (const std::string& message : {std::string("Cannot reach beta.playants.org:4001. Check the server's address and your connection."),
+                                           std::string("The server beta.playants.org:4001 did not answer. Check the server's address and your connection."), std::string("The server is busy."),
+                                           std::string("The connection to the server was lost.")}) {
+            StartMenu menu;
+            menu.set_wide_layout(wide);
+            MenuSettings settings;
+            settings.name = "Player";
+            menu.set_settings(settings);
+            menu.set_server(ServerAddress{});
+            menu.show_main();
+            menu.room_left(message);
+            for (const MenuElement& e : menu.elements()) {
+                if (e.kind != MenuKind::Notice) continue;
+                ++texts;
+                const size_t lines = wrap_label_text(text, e.text, e.rect.w - 20, e.font).size();
+                if (lines > static_cast<size_t>(std::max(1, (e.rect.h - 14) / font_cell_height(e.font))) && bad.empty()) bad = "a failure \"" + e.text + "\" needs " + std::to_string(lines) + " lines";
+            }
+        }
+        // the room's panel: what START will do for every plan of every room size, and the teams
+        for (int players = 2; players <= 4; ++players) {
+            for (int plan = 0; plan < 64; ++plan) {
+                for (const sim::StartTeams& teams : sim::room_team_choices(static_cast<uint8_t>(players))) {
+                    StartMenu menu;
+                    menu.set_wide_layout(wide);
+                    MenuSettings settings;
+                    settings.name = "Player";
+                    settings.host_fill.level[1] = static_cast<L>(plan % 4);
+                    settings.host_fill.level[2] = static_cast<L>((plan / 4) % 4);
+                    settings.host_fill.level[3] = static_cast<L>(plan / 16);
+                    settings.host_teams = teams;
+                    menu.set_settings(settings);
+                    menu.show_room("demo-small-4p-b7x2qk", 1, players);
+                    for (const MenuElement& e : menu.elements()) {
+                        if (e.kind == MenuKind::Text && e.font == FontSize::Px18 && (e.text.rfind("Empty seats", 0) == 0 || e.text.rfind("At START", 0) == 0 || e.text.rfind("Room teams:", 0) == 0)) {
+                            fits_line(e, e.rect.w, "the room's sentence");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    check(bad.empty(), "every text fits (" + std::to_string(texts) + " texts measured): " + bad);
+    check(texts > 1000, "the check measured the texts (" + std::to_string(texts) + ")");
 }
 
 // =====================================================================================================================================================
@@ -1736,7 +1844,7 @@ constexpr Golden kGolden[] = {
     {"ptr.wide.pages.menu_main", 0x1087e844bb59f825, 518400ull},
     {"ptr.wide.pages.menu_single", 0xd35f033870708055, 518400ull},
     {"ptr.wide.pages.menu_join", 0x34549dbe8ad8413d, 518400ull},
-    {"ptr.wide.pages.menu_host", 0xdb1d7f3d435d96f5, 518400ull},
+    {"ptr.wide.pages.menu_host", 0x7d812d2fb7508a31, 518400ull},
     {"ptr.wide.pages.menu_connecting", 0x3f6f7ab6ef755ea5, 518400ull},
     {"ptr.wide.pages.menu_room", 0xc91cf83b9fa919a5, 518400ull},
     {"screen.wide.pages.loading.t0", 0x2ede1097bf7bcbeb, 48ull},
@@ -1755,8 +1863,9 @@ constexpr Golden kGolden[] = {
     {"screen.wide.pages.menu_main", 0x0af18420436d3565, 160ull},
     {"screen.wide.pages.menu_single", 0x29fe2740618363c0, 232ull},
     {"screen.wide.pages.menu_join", 0xc2108141358be108, 162ull},
-    // menu_host moved deliberately in B4-1 (v0.3.0): the caption under the choice of the bots changed (see test_view_fingerprint.cpp, screen.menu.host.*); the draw-call count is the same.
-    {"screen.wide.pages.menu_host", 0x50bca38b5ce97ecb, 224ull},
+    // menu_host moved deliberately in bot games part B (network protocol 13): the panel has a row for each seat after the leader's and the Teams row (see test_view_fingerprint.cpp, screen.menu.host.*),
+    // so its draw calls (224 -> 296), its pixels outside the text (the mock-up's digest above is the panel as it is now), its notice state and the control under every pixel changed.
+    {"screen.wide.pages.menu_host", 0xa96cf288b285f6c6, 296ull},
     {"screen.wide.pages.menu_connecting", 0x9baf3e53f92d4060, 128ull},
     {"screen.wide.pages.menu_room", 0x1898efe83479baa8, 164ull},
     {"px.wide.pages.loading.t0", 0xc849e041f5dc9132, 518400ull},
@@ -1774,11 +1883,11 @@ constexpr Golden kGolden[] = {
     {"px.wide.pages.menu_main", 0x7ba0d0a4ec7fb2dd, 518400ull},
     {"px.wide.pages.menu_single", 0x1702617f6d84b631, 518400ull},
     {"px.wide.pages.menu_join", 0x519d85125827ebc9, 518400ull},
-    {"px.wide.pages.menu_host", 0x906f3b97b3a5995d, 518400ull},
+    {"px.wide.pages.menu_host", 0x82c371dda4ca0001, 518400ull},
     {"px.wide.pages.menu_connecting", 0x8980eaac55423631, 518400ull},
     {"px.wide.pages.menu_room", 0x722ef4cf407305e9, 518400ull},
     {"px.wide.pages.menu_join.notice", 0x86253223cf31f79d, 518400ull},
-    {"px.wide.pages.menu_host.notice", 0xb96a17e94f129ec9, 518400ull},
+    {"px.wide.pages.menu_host.notice", 0x1b6b029bb2e065f9, 518400ull},
     {"px.wide.pages.menu_main.notice", 0xfb2796a527da148d, 518400ull},
 };
 
@@ -1968,6 +2077,7 @@ int main(int argc, char* argv[]) {
     test_loading_order(archive);
     test_catch_up_screen(archive);
     test_mockups(archive);
+    test_host_panel(archive);
     test_counters(archive);
     test_pointer(archive);
     test_application(archive);

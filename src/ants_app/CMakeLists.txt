@@ -53,7 +53,6 @@ add_library(ants_app STATIC
     text_layout.cpp
     latency_corner.cpp
     net_overlay.cpp
-    local_teams.cpp
     start_menu.cpp
     start_menu_view.cpp
     touch_control.cpp

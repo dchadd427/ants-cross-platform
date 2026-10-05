@@ -104,6 +104,7 @@ struct Peer {
             if (ok) {
                 sim.set_fog_of_war_enabled(s.fog);
                 sim.init(level, s.seed, s.roster);
+                sim::apply_start_teams(sim, s.teams());
             }
             net.report_loaded(ok);
         }

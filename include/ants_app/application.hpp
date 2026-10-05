@@ -123,14 +123,15 @@ struct ApplicationConfig {
     std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
     std::string net_token;                      // Join: the credential that came with the room code (--token T)
     uint8_t net_seat{255};                      // Join: the seat asked for (--seat N, 0 .. 3: the colours green, red, blue, black); 255: any free seat
-    /// A test hook (--start-when N, 1 .. 4; 0 = off, the default): a headless client has nobody to click START, so when it leads a server's room it presses START itself (the S key
-    /// of the setup screen, the same path as a click) once N players are in the room, again every second until the match starts. 1 is for a leader with --fill-bots (one person is
-    /// enough then; without a fill the START of one person is the can't-go cue, every second). A game that is played never uses it.
+    /// --start-when N (1 .. 4; 0 = off, the default): when this game leads a server's room it presses START itself (the S key of the setup screen, the same path as a click) once N
+    /// players are in the room, again every second until the match starts. The web front page's card gives it to the game of a match (1 + the card's Friend rows: the START of the
+    /// card was the click) and a headless test client has nobody to click at all. 1 is for a leader with --fill-bots (one person is enough then; without a fill the START of one
+    /// person is the can't-go cue, every second). A game started from the menus never uses it.
     uint8_t net_start_when{0};
-    /// --fill-bots none|easy|medium|hard (protocol 11): the bots that this player's START seats in the empty seats of its room when it can start one: the leader of a server's room
-    /// (the request goes to the server, which seats them and runs them) and the host of a room on the local network (this machine runs them, as for --bot). None, the default, is the START
-    /// of every earlier version. A game that is not a room ignores it. The start menu's Host panel ("Empty seats at START") sets it for the room that it makes (a Join sets none), `--start-menu --fill-bots hard` starts that panel at Hard, and the web page's address (`?fill=`, web/shell.html) gives it to the game of the room's leader.
-    net::FillLevel fill_bots{net::FillLevel::None};
+    /// --fill-bots none|easy|medium|hard, or four of them joined by commas for the seats 0 - 3 (protocol 11; a level for each seat since 13): the bots that this player's START seats in the empty
+    /// seats of its room when it can start one: the leader of a server's room (the request goes to the server, which seats them and runs them) and the host of a room on the local network
+    /// (this machine runs them, as for --bot). None, the default, is the START of every earlier version. A game that is not a room ignores it. The start menu's Host panel ("Empty seats at START") sets it for the room that it makes (a Join sets none), `--start-menu --fill-bots hard` starts that panel at Hard, and the web page's address (`?fill=`, web/shell.html) gives it to the game of the room's leader.
+    net::FillPlan fill_bots;
     /// A test hook (--say TEXT): this client says the line once in the waiting room, as soon as two players are in it (so that somebody hears it). The lines that arrive in the room go to the
     /// log of the program (stderr, "Room chat: Name: text") and to NetGame::take_pregame_chat().
     std::string net_say;
@@ -158,8 +159,9 @@ struct ApplicationConfig {
     /// --bot SEAT[:SPEC] (repeatable): computer players at these seats (docs/BOTS.md). A local game then plays the seats that are taken (the local player and the bots); with
     /// --host the room shows the bots as players and the host's machine runs them. Empty by default: a game without --bot runs no bot code at all.
     std::vector<ai::BotSpec> bots;
-    /// --teams ffa | A+B (docs/BOTS.md, "Alliances"), for a game on this computer: ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the
-    /// match start with the original's commands (Application::form_start_teams); a pair that cannot be made starts the game without teams and says why. A room refuses it.
+    /// --teams ffa | A+B (docs/BOTS.md, "Alliances"): ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the match start with the
+    /// original's commands: in a game on this computer by Application::form_start_teams (a pair that cannot be made starts the game without teams and says why), in a room (protocol 13) by every machine
+    /// from the Start message, which the room's START puts them into: this player's START (the leader of a server's room, the host of a room on the local network) carries the choice.
     LocalTeams teams;
     /// For the tests: builds the bot of a spec instead of the registry (which has the idle bot and, since B3, the worker bot), so that the application's door for a
     /// bot's commands (the local sink, the room's sink) can be exercised with a bot of the test's own that acts in a way it wants to. Empty in a game that is played.
@@ -323,13 +325,20 @@ public:
 
     /// The bots of the running game (nullptr without --bot, and on a guest's machine: only the machine that owns a bot runs it)
     const ai::BotController* bots() const noexcept { return bots_.get(); }
-    /// The bots that this player's START seats in the empty seats of its room (protocol 11; --fill-bots at the start): the start menu's Host panel calls it when the player hosts (and a Join with none),
-    /// and anything that lets the player choose later can call it any time before START. It takes effect for the next START of a leader (the request carries it) and of a LAN host (net_start_from_setup).
-    void set_fill_bots(net::FillLevel level) {
-        config_.fill_bots = level;
-        if (net_) net_->set_fill_bots(level);
+    /// The bots that this player's START seats in the empty seats of its room (protocol 11; a level for each seat since 13; --fill-bots at the start): the start menu's Host panel calls it when the
+    /// player hosts (and a Join with none), and anything that lets the player choose later can call it any time before START. It takes effect for the next START of a leader (the request carries it)
+    /// and of a LAN host (net_start_from_setup). One level is every seat's.
+    void set_fill_bots(const net::FillPlan& plan) {
+        config_.fill_bots = plan;
+        if (net_) net_->set_fill_bots(plan);
     }
-    net::FillLevel fill_bots() const noexcept { return config_.fill_bots; }
+    const net::FillPlan& fill_bots() const noexcept { return config_.fill_bots; }
+    /// The teams that this player's START asks for (protocol 13; --teams at the start), as set_fill_bots: any time before START
+    void set_start_teams(const LocalTeams& teams) {
+        config_.teams = teams;
+        if (net_) net_->set_start_teams(teams);
+    }
+    const LocalTeams& start_teams() const noexcept { return config_.teams; }
 
     // ---- the setup screen of a room: keys, text and clicks as the event loop gets them (public so that the tests can drive them) ----
     /// A key on the setup screen. On the screen of a ROOM (a network game in its waiting room or while the map loads) T opens the chat input (RoomChatInput); while the input is open every key
