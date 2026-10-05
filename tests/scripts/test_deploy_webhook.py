@@ -13,7 +13,6 @@ nor the host nor the port nor the secret part of the path may appear in anything
 import http.server
 import os
 import shutil
-import socket
 import subprocess
 import threading
 import unittest
@@ -56,13 +55,10 @@ class Webhook:
         self.server.server_close()
 
 
-def refusing_port(test):
-    """A port where a connection is refused: a socket that is bound and never listens holds it for the test (a port that was closed and given back could be
-    taken meanwhile by a test that runs beside this one: one did, and answered the POST with 501)."""
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    test.addCleanup(s.close)
-    return s.getsockname()[1]
+# A port where a connection is refused, on Linux and macOS alike: nothing listens on port 1 of the loopback, and a test that runs beside this one cannot take
+# it (below 1024). A free port that was closed and given back was taken once by such a test (its server answered the POST with 501), and a port held by a
+# socket that never listens is refused on Linux but makes macOS wait for the timeout.
+REFUSING_PORT = 1
 
 
 @unittest.skipUnless(shutil.which("curl") and shutil.which("bash"), "curl and bash are needed")
@@ -112,7 +108,7 @@ class DeployWebhook(unittest.TestCase):
         self.assertNoSecret(result, hook.url())
 
     def test_an_address_that_is_not_there_fails_without_naming_it(self):
-        url = "http://127.0.0.1:%d%s" % (refusing_port(self), SECRET_PATH)
+        url = "http://127.0.0.1:%d%s" % (REFUSING_PORT, SECRET_PATH)
         result = self.call(url, "production")
         self.assertEqual(result.returncode, 1)
         self.assertIn("FAILED (curl exit status 7", result.stdout)
