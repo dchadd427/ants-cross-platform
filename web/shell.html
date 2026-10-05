@@ -474,6 +474,7 @@
         .name-step-msg { margin-top: 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
         .name-step-msg:empty { display: none; }
         .name-step-hint { margin-top: 12px; font-size: 14px; line-height: 1.35; color: var(--ink); }
+        .name-step-back { margin-top: 14px; }
 
         .splash-card {
             text-align: center;
@@ -1030,6 +1031,7 @@
             </div>
             <div class="name-step-msg" id="name-step-msg" role="alert"></div>
             <div class="name-step-hint">The name the other players see. Leave it empty to play as Player.</div>
+            <a class="btn sm name-step-back" id="name-step-back" href="/">&larr; Back to the front page</a>
         </div>
     </div>
 
@@ -1180,7 +1182,7 @@
         //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
         //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
-        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
+        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &teams= &start= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
         //   localArguments the arguments of a game on THIS computer (?map= &bots= &teams= &name=: the front page's Play), through a whitelist
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
@@ -1348,18 +1350,42 @@
                 return accept;
             }
 
-            // ANTS_FILL_BEGIN (tests/scripts/web_fill_check.js runs this function on a table of addresses)
+            // ANTS_FILL_BEGIN (tests/scripts/web_fill_check.js runs these functions on a table of addresses)
             // The bots of the leader's START, from the address: easy, medium or hard in any case (the game's own --fill-bots takes any case), and ONLY those three words. What this returns is
             // the lower case word that was tested, never the text of the address: nothing else can reach the game's arguments through ?fill=.
             function antsFillArg(value) {
                 var word = typeof value === 'string' ? value.toLowerCase() : '';
                 return /^(easy|medium|hard)$/.test(word) ? word : '';
             }
+            // ... or a level for each seat (protocol 13): four of those words, or none for none, for the seats 0 - 3 (none,none,easy,hard; the game's --fill-bots takes both forms). The tested lower case text comes
+            // back, '' for no bots at all or for anything that is not one word or four.
+            function antsFillPlanArg(value) {
+                var words = typeof value === 'string' ? value.toLowerCase().split(',') : [];
+                if (words.length === 1) return antsFillArg(words[0]);
+                if (words.length !== 4) return '';
+                var levels = [];
+                for (var i = 0; i < 4; i++) {
+                    if (words[i] === 'none') levels.push('none');
+                    else if (antsFillArg(words[i])) levels.push(words[i]);
+                    else return '';
+                }
+                return levels.every(function (l) { return l === 'none'; }) ? '' : levels.join(',');
+            }
+            // The teams of the leader's START, from the address: two different seats 0 - 3 as A+B (the "+" of an address arrives as a blank: both are read), what the game's --teams takes; '' for anything else
+            function antsTeamsArg(value) {
+                var m = typeof value === 'string' ? /^([0-3])[+ ]([0-3])$/.exec(value) : null;
+                return m && m[1] !== m[2] ? m[1] + '+' + m[2] : '';
+            }
+            // How many people must be in the room before the leader's game presses START by itself (the front page's card: 1 + its Friend rows), from the address: one digit 1 - 4, what the game's --start-when
+            // takes ('' for anything else: no hook). Only the leader's game acts on it (a game that does not lead sends nothing); the tested digit comes back, never the text of the address.
+            function antsStartArg(value) {
+                return typeof value === 'string' && /^[1-4]$/.test(value) ? value : '';
+            }
             // ANTS_FILL_END
 
             // What the address says about joining a game server (docs/NETWORK_PORT.md): the arguments to give the game and whether the page is a frame of another page. `search` is the
-            // address's query, `secure` says https (wss), `host` is the site's host. Only a door on THIS site counts: /ws or a path below it, no //, no ..; a room code, a seat, a fill level and a name
-            // that do not fit their rule are left out (the game checks them too). Without a valid join nothing about a room, a seat or a name goes to the game.
+            // address's query, `secure` says https (wss), `host` is the site's host. Only a door on THIS site counts: /ws or a path below it, no //, no ..; a room code, a seat, a fill level, the teams,
+            // the number of people to wait for (start) and a name that do not fit their rule are left out (the game checks them too). Without a valid join nothing about a room goes to the game.
             function joinArguments(search, secure, host) {
                 var out = { embed: false, args: [] };
                 var q;
@@ -1368,7 +1394,9 @@
                 var room = q.get('room');
                 var seat = q.get('seat');
                 var name = q.get('name');
-                var fill = antsFillArg(q.get('fill'));
+                var fill = antsFillPlanArg(q.get('fill'));
+                var teams = antsTeamsArg(q.get('teams'));
+                var start = antsStartArg(q.get('start'));
                 out.embed = q.get('embed') === '1';
                 if (out.embed) out.args.push('--audio-focus');
                 if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
@@ -1376,6 +1404,8 @@
                     if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) out.args.push('--room', room);
                     if (seat && /^[0-3]$/.test(seat)) out.args.push('--seat', seat);
                     if (fill) out.args.push('--fill-bots', fill);
+                    if (teams) out.args.push('--teams', teams);
+                    if (start) out.args.push('--start-when', start);
                     if (name) {
                         name = name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
                         if (name) out.args.push('--name', name);
@@ -1518,10 +1548,15 @@
                      downloadWithRetries: downloadWithRetries };
         })();
 
-        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&fill=easy|medium|hard (any case)][&embed=1] (ANTS_PAGE.joinArguments reads it)
+        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&fill=<plan>][&teams=A+B][&start=<1-4>][&embed=1] (ANTS_PAGE.joinArguments reads it)
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
         //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
-        //   fill   the bots that this player's START seats in the empty seats of the room when this player is its leader (the first to connect): the game's --fill-bots; harmless for everybody else
+        //   fill   the bots that this player's START seats in the empty seats of the room when this player is its leader (the first to connect): easy, medium or hard (any case) for every seat, or four words
+        //          for the seats 0 - 3 (none,none,easy,hard): the game's --fill-bots; harmless for everybody else
+        //   teams  the teams that the leader's START makes: two different seats 0 - 3 as A+B: the game's --teams; harmless for everybody else too, and ignored by a room whose own code names teams (a team
+        //          word, demo-treasure-4p-t01-k7m2xq: the game reads the code itself)
+        //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
+        //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
         //   embed  the page is a frame of another page (lobby.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
         var ANTS_EMBED = false;
