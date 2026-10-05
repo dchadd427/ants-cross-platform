@@ -72,6 +72,15 @@ struct ServerLimits {
 /// The code prefix of the rooms that a Hello may make when demo rooms are on
 inline constexpr const char* kDemoRoomPrefix = "demo-";
 
+/// A demo room's cap on the match's pauses: the match of a page's link that nobody comes back to must not hold one of the few demo places for the server's 30 minutes. A demo room takes the smaller of
+/// this and the server's cap; the rooms of the control interface keep the server's.
+inline constexpr uint32_t kDemoMaxPauseMs = 10u * 60u * 1000u;
+
+/// A demo room whose people have all been gone this long is abandoned: when a Hello needs a demo place and none is free, the demo room that has been abandoned the longest is ended and its place is
+/// given to the new room (RoomManager::make_demo_room). A room with a person at its match, or in its lobby, is never ended for that. The floor keeps a blip of every link at once (a proxy that
+/// restarts) from costing a match.
+inline constexpr uint32_t kDemoAbandonedMs = 60u * 1000u;
+
 /// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running with a person in it (a room that a restart brought back also for its first minutes: Room::busy),
 /// and the people (bots are not people) in the rooms that wait, load or run. Plain counts: no name, no code; exactly these two fields (tools/deploy_wait.py accepts nothing else).
 struct BusyCounts {
@@ -217,8 +226,11 @@ private:
     void release_parked(const std::string& code, uint32_t now_ms);
     void reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms);
     std::string new_code();
-    /// Makes the demo room that a Hello names, when demo rooms are on, the code has the prefix, and there is a free one; false otherwise
+    /// Makes the demo room that a Hello names, when demo rooms are on, the code has the prefix, and there is a free place (or one can be had: evict_abandoned_demo); false otherwise
     bool make_demo_room(const std::string& code, uint32_t now_ms);
+    /// Ends the demo room that has been abandoned the longest (at least kDemoAbandonedMs: every seat of a person held absent, nobody back): its clients are dropped, its record is deleted, its log is
+    /// freed, its end is reported, and it is forgotten at once so that its place can be taken. False when no demo room qualifies (a room with a person present never does).
+    bool evict_abandoned_demo(uint32_t now_ms);
 
     MapStore store_;
     ServerLimits limits_;

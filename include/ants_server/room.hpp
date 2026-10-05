@@ -274,6 +274,9 @@ public:
     RoomStatus status(uint32_t now_ms) const;
     /// What a restart would interrupt here (see RoomBusy): cheap, no status is built
     RoomBusy busy(uint32_t now_ms) const;
+    /// How long a running match has had no person at it, in ms: every seat of a person is held absent (nobody is present or catching up). 0 while a person is there and for a room that does not run.
+    /// RoomManager ends the demo room with the biggest number when a Hello needs its place (kDemoAbandonedMs).
+    uint32_t abandoned_ms(uint32_t now_ms) const;
 
 private:
     void fail(const std::string& reason, uint32_t now_ms);
@@ -344,6 +347,7 @@ private:
     uint32_t restore_ms_{0};
     uint64_t restored_hash_{0};
     uint32_t restored_at_ms_{0};             // when the room was brought back (the server's clock): /busy counts the room as a match for kRestoredBusyWindowMs after it
+    uint32_t last_person_ms_{0};             // the last pass of a running match in which a person was present or catching up (abandoned_ms)
     // the replay under way (begin_replay, then replay_step until it says Replayed or Refused)
     const RestartLoaded* replay_rec_{nullptr};   // the record that the turns are read from (the caller keeps it alive)
     std::unique_ptr<RestartTurnReader> replay_reader_;

@@ -1858,6 +1858,129 @@ void run_way_back_tests() {
         ASSERT_TRUE(a.hash_at.count(end.ticks) == 1 && a.hash_at[end.ticks] == end.referee_hash && b.hash_at.count(end.ticks) == 1 && b.hash_at[end.ticks] == end.referee_hash);
         ASSERT_FALSE(a.net.desynced() || b.net.desynced());
     } TEST_END();
+
+    TEST_CASE("RJ1.19 A Demo Match That Nobody Comes Back To Does Not Hold Its Place For Long (The Review's M1): A Demo Room's Pause Cap Is 10 Minutes, Not The Server's 30; A Hello That Needs A Demo Place When None Is Free Ends The Room That Has Been Abandoned The Longest (Once It Has Been For A Minute); A Room With A Person At It Is Never Ended For That; The Rooms Of The Control Interface Keep The Server's Cap; /busy Counts As It Did") {
+        ServerLimits limits;
+        limits.demo_rooms = 2;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_players = 2;
+        limits.reconnect = true;
+        limits.resume_countdown_ms = 0;
+        const auto close_tabs = [](World& w, std::initializer_list<Machine*> ms) {         // a tab that is closed says no goodbye: its link is just gone
+            for (Machine* m : ms) w.machines.erase(std::remove_if(w.machines.begin(), w.machines.end(), [m](const std::unique_ptr<Machine>& p) { return p.get() == m; }), w.machines.end());
+        };
+        {   // the caps, as the status says them (the rooms of the control interface start from default_spec: the server's own)
+            ServerLimits small = limits;
+            small.max_pause_ms = 120000;                                                 // a server that was told a cap below the demo cap keeps it
+            World w(nullptr, small);
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_EQ(kDemoMaxPauseMs, 10u * 60u * 1000u);
+            Machine& a = w.join("Ann", "demo-cap1");
+            ASSERT_TRUE(w.run_until([&]() { return a.net.phase() == NetGame::Phase::Room; }, 4000));
+            ASSERT_EQ(w.status("demo-cap1").max_pause_ms, 120000u);
+            RoomSpec control = w.server.mgr->default_spec();
+            control.code = "CTRL-1";
+            control.map = "TINY.LVL";
+            ASSERT_TRUE(w.server.mgr->create_room(control, w.server_now()).ok);
+            ASSERT_EQ(w.status("CTRL-1").max_pause_ms, 120000u);
+        }
+        {   // a room that somebody made (the control interface starts from default_spec) keeps the half hour of the server's default
+            World w(nullptr, limits);
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_EQ(w.server.mgr->default_spec().max_pause_ms, 30u * 60u * 1000u);
+            RoomSpec control = w.server.mgr->default_spec();
+            control.code = "CTRL-1";
+            control.map = "TINY.LVL";
+            ASSERT_TRUE(w.server.mgr->create_room(control, w.server_now()).ok);
+            ASSERT_EQ(w.status("CTRL-1").max_pause_ms, 30u * 60u * 1000u);
+        }
+        World w("rj19", limits);                                                         // (with restart records: an ended room's record must go)
+        ASSERT_TRUE(w.server.start(w.now));
+        Machine& a1 = w.join("Ann", "demo-sc1");
+        Machine& b1 = w.join("Bob", "demo-sc1");
+        Machine& a2 = w.join("Cat", "demo-sc2");
+        Machine& b2 = w.join("Dan", "demo-sc2");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a1, &b1, &a2, &b2}); }, 14000 + kPre));
+        ASSERT_EQ(w.status("demo-sc1").max_pause_ms, 600000u);                          // a demo room's cap
+        ASSERT_EQ(w.status("demo-sc2").max_pause_ms, 600000u);
+        ASSERT_TRUE(w.server.mgr->busy(w.server_now()).matches == 2 && w.server.mgr->busy(w.server_now()).players == 4);
+        ASSERT_TRUE(std::filesystem::exists(w.server.record_path("demo-sc1")) && std::filesystem::exists(w.server.record_path("demo-sc2")));
+        // the people of sc1 close their tabs; 40 s later so do the people of sc2
+        close_tabs(w, {&a1, &b1});
+        w.run(40000);
+        close_tabs(w, {&a2, &b2});
+        w.run(10000);
+        ASSERT_TRUE(w.status("demo-sc1").state == RoomState::Running && w.status("demo-sc1").paused && w.status("demo-sc1").absent.size() == 2);
+        ASSERT_TRUE(w.status("demo-sc2").state == RoomState::Running && w.status("demo-sc2").paused);
+        ASSERT_TRUE(w.server.mgr->busy(w.server_now()).matches == 0 && w.server.mgr->busy(w.server_now()).players == 0);     // (nobody is there: /busy counts as it always did)
+        ASSERT_TRUE(w.server.mgr->rooms_created() == 2);
+        // sc1 has been abandoned for 50 s: less than the floor, and no place is free: the answer is today's
+        Machine& c0 = w.join("Eve", "demo-sc3");
+        ASSERT_TRUE(w.run_until([&]() { return c0.net.phase() != NetGame::Phase::Connecting; }, 4000));
+        ASSERT_TRUE(c0.net.phase() == NetGame::Phase::Failed && c0.net.reject_reason() == net::RejectReason::NoSuchRoom);
+        ASSERT_TRUE(w.server.mgr->room_count() == 2 && w.status("demo-sc3").code.empty() && w.status("demo-sc1").state == RoomState::Running);
+        close_tabs(w, {&c0});
+        // five minutes after the people of sc1 went: the newcomer is given a place, and it is sc1's (the room that has been abandoned the longest); sc2 is not touched
+        w.run(4 * 60 * 1000 - 3000);
+        (void)w.server.mgr->take_ended(w.server_now());
+        const uint64_t log_before = w.server.mgr->log_bytes();
+        Machine& c = w.join("Eve", "demo-sc3");
+        ASSERT_TRUE(w.run_until([&]() { return c.net.phase() == NetGame::Phase::Room; }, 4000));
+        ASSERT_TRUE(w.status("demo-sc1").code.empty());                                 // gone: its place was needed
+        ASSERT_TRUE(w.status("demo-sc2").state == RoomState::Running && w.status("demo-sc3").state == RoomState::Waiting && w.server.mgr->room_count() == 2);
+        const std::vector<RoomStatus> ended = w.server.mgr->take_ended(w.server_now());
+        ASSERT_TRUE(ended.size() == 1 && ended[0].code == "demo-sc1" && ended[0].state == RoomState::Failed && ended[0].reason.find("abandoned") != std::string::npos);      // (its end is reported once, like any room's)
+        ASSERT_TRUE(w.server.mgr->take_ended(w.server_now()).empty());
+        ASSERT_FALSE(std::filesystem::exists(w.server.record_path("demo-sc1")));          // its record is deleted (a restart would not bring it back) ...
+        ASSERT_TRUE(std::filesystem::exists(w.server.record_path("demo-sc2")));
+        ASSERT_TRUE(log_before > 0 && w.server.mgr->log_bytes() < log_before);           // ... and its turn log is freed
+        // the cap of a demo room has ended sc2 on its own when 10 minutes of pause have gone by (it has been abandoned since 40 s after sc1)
+        w.run(11 * 60 * 1000 - 5 * 60 * 1000);
+        ASSERT_TRUE(w.status("demo-sc2").state == RoomState::Finished && w.status("demo-sc2").reason == "everybody left");
+    } TEST_END();
+
+    TEST_CASE("RJ1.20 A Room With A Person At It Is Never Ended For A Demo Place (One Person Is Enough: Its Partner's Seat Is Held, The Match Is Paused, And The Room Stays); A Room That Waits Is Not Ended Either; When No Room Qualifies The Hello Is Answered As Before, And The Room That Is Abandoned Later Is Ended Then") {
+        ServerLimits limits;
+        limits.demo_rooms = 2;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_players = 2;
+        limits.reconnect = true;
+        limits.resume_countdown_ms = 0;
+        World w(nullptr, limits);
+        ASSERT_TRUE(w.server.start(w.now));
+        Machine& a1 = w.join("Ann", "demo-pr1");
+        Machine& b1 = w.join("Bob", "demo-pr1");
+        Machine& a2 = w.join("Cat", "demo-pr2");
+        Machine& b2 = w.join("Dan", "demo-pr2");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a1, &b1, &a2, &b2}); }, 14000 + kPre));
+        const auto close_tabs = [&w](std::initializer_list<Machine*> ms) {
+            for (Machine* m : ms) w.machines.erase(std::remove_if(w.machines.begin(), w.machines.end(), [m](const std::unique_ptr<Machine>& p) { return p.get() == m; }), w.machines.end());
+        };
+        close_tabs({&b1, &a2, &b2});                                                     // pr1 keeps Ann; pr2's people are gone
+        w.run(2 * 60 * 1000);                                                            // two minutes: pr1's match is paused for Bob's seat, pr2 has been abandoned
+        ASSERT_TRUE(w.status("demo-pr1").paused && w.status("demo-pr1").absent.size() == 1 && w.status("demo-pr2").absent.size() == 2);
+        Machine& c = w.join("Eve", "demo-pr3");
+        ASSERT_TRUE(w.run_until([&]() { return c.net.phase() == NetGame::Phase::Room; }, 4000));
+        ASSERT_TRUE(w.status("demo-pr2").code.empty() && w.status("demo-pr1").state == RoomState::Running);       // pr2 went, pr1 (a person at it) stayed
+        // no room qualifies now: pr1 has Ann at it, pr3 waits (and has Eve): the next Hello is told NoSuchRoom, and nobody is ended for it, however long it takes
+        w.run(5 * 60 * 1000);
+        Machine& d = w.join("Fay", "demo-pr4");
+        ASSERT_TRUE(w.run_until([&]() { return d.net.phase() != NetGame::Phase::Connecting; }, 4000));
+        ASSERT_TRUE(d.net.phase() == NetGame::Phase::Failed && d.net.reject_reason() == net::RejectReason::NoSuchRoom);
+        ASSERT_TRUE(w.status("demo-pr1").state == RoomState::Running && w.status("demo-pr3").state == RoomState::Waiting && w.server.mgr->room_count() == 2);
+        ASSERT_TRUE(a1.net.phase() == NetGame::Phase::Playing && !w.server.mgr->take_ended(w.server_now()).empty());      // (Ann is still in her match: pr2's end was the only one)
+        // Ann closes her tab: pr1 is abandoned from now on; for half a minute it is not ended, after a minute it is
+        close_tabs({&a1});
+        w.run(30000);
+        Machine& e = w.join("Fay", "demo-pr4");
+        ASSERT_TRUE(w.run_until([&]() { return e.net.phase() != NetGame::Phase::Connecting; }, 4000));
+        ASSERT_TRUE(e.net.phase() == NetGame::Phase::Failed && w.status("demo-pr1").state == RoomState::Running);
+        close_tabs({&e});
+        w.run(40000);
+        Machine& f = w.join("Fay", "demo-pr4");
+        ASSERT_TRUE(w.run_until([&]() { return f.net.phase() == NetGame::Phase::Room; }, 4000));
+        ASSERT_TRUE(w.status("demo-pr1").code.empty() && w.status("demo-pr3").state == RoomState::Waiting && w.status("demo-pr4").state == RoomState::Waiting);
+    } TEST_END();
 }
 
 int main() {

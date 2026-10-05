@@ -234,6 +234,7 @@ void Room::begin_match(uint32_t now_ms) {
         sim_->set_player_name(seat, start.names[seat]);
     }
     started_ms_ = now_ms;                                        // (run_ms counts from here: the 5 s before the first turn count, the match's pauses do not)
+    last_person_ms_ = now_ms;
     build_session(restart_store_ != nullptr ? restart_store_->config().restart_vote_after_ms : net::kRestartVoteAfterMs);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);
@@ -373,6 +374,10 @@ void Room::update(uint32_t now_ms) {
 
     if (state_ == RoomState::Running && session_) {
         session_->update(now_ms);
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            const net::Attendance::State st = session_->attendance().state(seat);
+            if (st == net::Attendance::State::Present || st == net::Attendance::State::CatchingUp) last_person_ms_ = now_ms;
+        }
         if (record_ != nullptr && restart_store_ != nullptr && net::time_reached(now_ms, next_sync_ms_)) {       // the record is made durable once a second (what write() leaves to the operating system)
             next_sync_ms_ = now_ms + restart_store_->config().sync_every_ms;
             if (record_->dirty() && !record_->sync()) record_stop("the disk refused a flush: " + record_->error());
@@ -717,6 +722,7 @@ bool Room::begin_restored(uint32_t now_ms, std::string& why) {
     state_ = RoomState::Running;
     restored_ = true;
     restored_at_ms_ = now_ms;
+    last_person_ms_ = now_ms;                                    // (every seat of a person is held absent from now: the room is abandoned from now on, if nobody comes back)
     restored_turns_ = replay_turns_;
     last_turns_ = session_->turns_sealed();
     last_ticks_ = static_cast<uint32_t>(sim_->current_tick());
@@ -745,6 +751,17 @@ RoomBusy Room::busy(uint32_t now_ms) const {
     b.match = present > 0 || just_restored;
     b.players = present + (just_restored ? held : 0u);
     return b;
+}
+
+// A running match with nobody at it (every person's seat is held absent): since when. A bot has no seat in the attendance, so a room with only bots left counts as nobody here too (the room
+// finishes "everybody left" by itself when no person is present or held, so this is about held seats).
+uint32_t Room::abandoned_ms(uint32_t now_ms) const {
+    if (state_ != RoomState::Running || session_ == nullptr) return 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        const net::Attendance::State st = session_->attendance().state(seat);
+        if (st == net::Attendance::State::Present || st == net::Attendance::State::CatchingUp) return 0;
+    }
+    return now_ms - last_person_ms_;
 }
 
 RoomStatus Room::status(uint32_t now_ms) const {

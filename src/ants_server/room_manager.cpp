@@ -172,9 +172,13 @@ bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
     size_t demos = 0;
     for (const auto& kv : rooms_) demos += kv.first.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
     for (const Restoring& r : restoring_) demos += r.code.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
-    if (demos >= limits_.demo_rooms) return false;
+    while (demos >= limits_.demo_rooms) {                           // no place is free: a match that nobody has come back to for a while gives its place up (never a room with a person at it)
+        if (!evict_abandoned_demo(now_ms)) return false;
+        --demos;
+    }
     RoomSpec spec = default_spec();                                 // (demo rooms follow the server's reconnect setting and its limits)
     spec.code = code;
+    spec.max_pause_ms = std::min(spec.max_pause_ms, kDemoMaxPauseMs);      // (the cap of a match that is abandoned: a demo place is not held for half an hour)
     const DemoChoice choice = demo_choice_of(code, limits_);
     spec.map = choice.map;
     spec.players = choice.players;
@@ -183,6 +187,29 @@ bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
     spec.keep_ms = 30000;
     spec.run_ms = 30u * 60u * 1000u;                                // a demo room does not hold its slot for longer than half an hour of play
     return create_room(std::move(spec), now_ms).ok;
+}
+
+bool RoomManager::evict_abandoned_demo(uint32_t now_ms) {
+    const std::string prefix = kDemoRoomPrefix;
+    auto best = rooms_.end();
+    uint32_t best_ms = 0;
+    for (auto it = rooms_.begin(); it != rooms_.end(); ++it) {
+        if (it->first.compare(0, prefix.size(), prefix) != 0) continue;
+        const uint32_t gone = it->second->abandoned_ms(now_ms);
+        if (gone >= kDemoAbandonedMs && (best == rooms_.end() || gone > best_ms)) {     // (on a tie the first code in the map's order: the same room every time)
+            best = it;
+            best_ms = gone;
+        }
+    }
+    if (best == rooms_.end()) return false;
+    Room& room = *best->second;
+    room.close("abandoned: nobody came back to the match, and its place was needed", now_ms);     // (Failed: the clients are dropped, the record is deleted, the log is freed)
+    if (!room.end_reported()) {
+        room.mark_end_reported();
+        unreported_.push_back(room.status(now_ms));
+    }
+    rooms_.erase(best);
+    return true;
 }
 
 void RoomManager::reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms) {
