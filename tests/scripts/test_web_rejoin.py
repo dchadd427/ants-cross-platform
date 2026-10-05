@@ -201,10 +201,13 @@ class TheBrowserCheckAndTheGame(unittest.TestCase):
         self.assertIn('set(busy) == {"matches", "players"}', self.check)
         self.assertIn("signal.SIGTERM", self.check)
 
-    def test_it_has_the_four_parts_and_the_statuses_of_the_other_browser_checks(self):
-        self.assertIn('PARTS = ("reload", "restart", "rejoin", "none")', self.check)
-        for part in ("reload", "restart", "rejoin", "none"):
+    def test_it_has_the_five_parts_and_the_statuses_of_the_other_browser_checks(self):
+        self.assertIn('PARTS = ("reload", "restart", "rejoin", "leave", "none")', self.check)
+        for part in ("reload", "restart", "rejoin", "leave", "none"):
             self.assertIn('if wanted("%s"):' % part, self.check)
+        leave = self.check[self.check.index('if wanted("leave"):'):self.check.index('if wanted("none"):')]
+        for needle in ("document.getElementById('menu-btn').click()", "Leave the game and go back to the menu?", "never paused the room for that seat", "the key is gone from the second player's storage", "offers no Rejoin"):
+            self.assertIn(needle, leave, needle)
         self.assertEqual(len(re.findall(r"return 3\b", self.check)), 6)                                         # (a skip: no browser, no server program, no page, the site's /busy does not answer, it is not the server's, a browser that did not start)
         self.assertIn("return 1 if failures else 0", self.check)
         for text in ("Exit status 0:", "3: the check could not be made"):
@@ -214,7 +217,7 @@ class TheBrowserCheckAndTheGame(unittest.TestCase):
         self.assertIn("self.browser = Browser(path)", self.check)                                                 # (its own profile: its own storage)
         self.assertEqual(len(re.findall(r"print\([^)]*key", self.check)), 0)
         self.assertIn("def key_hexes(self):", self.check)
-        self.assertIn("def key_nowhere(label, ps):", self.check)
+        self.assertIn("def key_nowhere(label, ps, earlier=None):", self.check)
         self.assertNotRegex(self.check, r"/home/|/Users/|/tmp/")                           # (nothing of this machine in the file)
 
     def test_the_wrapper_is_opt_in_and_skips_without_its_environment(self):

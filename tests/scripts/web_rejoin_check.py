@@ -15,9 +15,13 @@ browser of its own (its own profile: its own local storage, as a player's own co
              on in N" (the game's own words, read through ants_probe 16 and 10000 +); the match goes on and the two games' state hashes (the sync lines that every game posts every 100 ticks) agree;
              the server's status says it was paused, took a player back and is not paused any more;
   * restart  the same match; the server is stopped with SIGTERM and started again on the same folder and ports: both pages say "Connection lost. Reconnecting...", both come back by themselves,
-             the room came back from its restart record, a screen counts the match back in, and the match goes on with equal hashes;
+             the room came back from its restart record (the server's clock for a pause begins at the restore: players back within 3 s of it resume at once, and a pause of 3 s or more is
+             counted down on a screen), and the match goes on with equal hashes;
   * rejoin   the first player CLOSES its tab in the middle of the match (the key stays in the browser's storage), a new tab opens the front page: "Rejoin your match (CODE)" is there with its note,
              pressing it puts the player back in its seat (the address has no key), the other player sees "... is back", the match goes on with equal hashes;
+  * leave    two players in a match; the second leaves ON PURPOSE through the page's Menu button and says yes to its question ("Leave the game and go back to the menu?"): the page goes to the front
+             page, the server drops the seat at once (the room is never paused: a closed tab would have held the seat and stopped the match for the other player), the first player's screen never
+             says that a connection was lost, the key is gone from the second browser's storage and the front page offers no Rejoin;
   * none     the front page with no entry, with an old one (it is removed), one of another server (it stays), malformed ones and a fresh one of this site (the button is there, then gone with the
              entry; a phone-sized window with a room code of 32 characters has no sideways scroll).
 In every part the key is in no address, no text of any page and no console line.
@@ -45,7 +49,7 @@ from web_aspect_check import Browser, NotReachable                           # n
 from web_hidden_check import find_browser, free_port                         # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("reload", "restart", "rejoin", "none")
+PARTS = ("reload", "restart", "rejoin", "leave", "none")
 
 # What runs in every new document of a player's tab: the state hashes that the game posts on the broadcast channel (every 100 ticks), and an id of the document (a reload makes a new one).
 HOOK = r"""
@@ -471,14 +475,15 @@ def main():
         check(all(x == y for _, x, y in common), "%s: their state hashes agree at every one of them" % label)
         check(not a.conflicts and not b.conflicts, "%s: no game reported one tick with two hashes (%s)" % (label, a.conflicts + b.conflicts))
 
-    def key_nowhere(label, ps):
-        """The keys of these browsers are in no address, no text of a page and no console line (the check reads them from the storage to look for them, and prints none)."""
+    def key_nowhere(label, ps, earlier=None):
+        """The keys of these browsers are in no address, no text of a page and no console line (the check reads them from the storage to look for them, and prints none). `earlier`: {player: keys}
+        that were read before the storage was emptied (a player who left no longer holds one)."""
         leaked = []
         searched = 0
         for p in ps:
             if p.target is None:
                 continue
-            for key in p.key_hexes():
+            for key in sorted(set(p.key_hexes()) | set((earlier or {}).get(p, []))):
                 searched += 1
                 page = p.ev("[location.href, document.body ? document.body.innerText : '', document.title].join('\\n')") or ""
                 if key.lower() in page.lower():
@@ -716,6 +721,37 @@ def main():
                     a.shot(args.shots, "rejoin_back")
                     key_nowhere("rejoin", [a, b])
                     clean_consoles("rejoin", [a, b])
+            end_part()
+
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        if wanted("leave"):
+            print("[web rejoin] leave: a player who leaves a match on purpose (the page's Menu button, confirmed) drops the seat at once: nobody waits for it, no key is left")
+            room = new_room()
+            a, b, running = begin_match(room)
+            check(running, "two players joined %s and the match runs, with no dialog open" % room)
+            if running:
+                watch = Watch(server, room, [a, b])
+                watch.until(lambda: a.ticks and b.ticks, 40)
+                check(b.stored_entries() == ["ants.rejoin.%s.1" % room], "the second player holds the key of its seat (%s)" % b.stored_entries())
+                held = {a: a.key_hexes(), b: b.key_hexes()}                                       # (to look for them afterwards: the one who leaves holds none then)
+                before = len(b.dialogs)
+                watch = Watch(server, room, [a])
+                b.ev("document.getElementById('menu-btn').click(); 1")                             # the page's Menu button (the check says yes to its question: Player accepts every dialog)
+                went = wait_for(lambda: b.ev("location.pathname") == "/" and "join=" not in (b.ev("location.search") or ""), 20, 0.2)
+                check(bool(went), "the second player's tab goes to the front page of the site")
+                check(b.dialogs[before:] == ["Leave the game and go back to the menu?"], "... after the page asked first (%s)" % b.dialogs[before:])
+                watch.until(lambda: False, 12)                                                      # (a seat that is held shows within 3 s: the link closes with the page, the room pauses for it)
+                states = [(paused, absent) for _, paused, _, absent in watch.status]
+                check(bool(states) and not any(paused or absent for paused, absent in states), "the server never paused the room for that seat: it was dropped at once, not held (%d looks, %d of them with a pause or a seat missing)" % (len(states), len([1 for paused, absent in states if paused or absent])))
+                status = server.room(room) or {}
+                note("the room after the second player left: state %s, paused %s, absent %s, %s turns" % (status.get("state"), status.get("paused"), status.get("absent"), status.get("turns")))
+                check(not any(re.search(r"lost the connection|is coming back|Connection lost", line) for line in watch.tl(a).lines()), "the first player's screen never said that a connection was lost (it said: %s)" % watch.tl(a).account())
+                wait_for(lambda: b.ev("!!document.getElementById('rejoin')"), 20, 0.3)
+                time.sleep(0.5)
+                check(b.stored_entries() == [], "the key is gone from the second player's storage (%s)" % b.stored_entries())
+                check(bool(b.ev("document.getElementById('rejoin').hidden")), "and the front page offers no Rejoin for it")
+                key_nowhere("leave", [a, b], held)
+                clean_consoles("leave", [a, b])
             end_part()
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------

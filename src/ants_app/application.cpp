@@ -1314,6 +1314,10 @@ std::string Application::declined_team_up_note(const sim::NewsEvent& event) cons
     return ai::team_up_decline_text(ai::team_up_answer(view, local_player_id_), sim_.get_player_name(event.subject));
 }
 
+void Application::leave_network_match() {
+    if (net_) net_->leave();                                   // (Leave is sent, the key is let go of; the page navigates away in the same breath)
+}
+
 void Application::quit() {
     if (menu_enabled_) start_menu_.flush();                    // (a name that was typed and not written yet)
     if (net_) net_->leave();
@@ -1594,6 +1598,13 @@ extern "C" void emscripten_main_loop_iter(void* arg) {
 // NetGame::set_on_wake). It does nothing in a page that is shown, and nothing while a step is already running.
 extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
     if (g_web_app != nullptr) g_web_app->background_pump();
+}
+
+// For the page (web/shell.html): the player has left a network match on purpose (the header's Menu button, the footer's Menu link, the picture selector's "Leave the match to change the picture?" once
+// the player has said yes): the game tells the server (Leave: the seat is dropped now, the others do not wait for it) and lets go of the key. The page navigates away right after. A closed tab and a
+// reload do not call it: the seat is held and the key kept, so that the player can come back. The page calls it only once the game runs (isReadyToPlay).
+extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {
+    if (g_web_app != nullptr) g_web_app->leave_network_match();
 }
 
 // For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The selector of the picture under the game restarts the game

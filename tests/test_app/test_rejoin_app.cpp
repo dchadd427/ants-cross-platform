@@ -1657,6 +1657,56 @@ void run_way_back_tests() {
         ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
     } TEST_END();
 
+    TEST_CASE("RA6.3 The Page Leaves A Match On Purpose (ants_leave_match: The Menu Button And Link, The Picture Selector's Yes; The Review's M2): Leave Is Sent, The Server Drops The Seat At Once (The Others Are Not Held Up: No Seat Is Missing, The Room Is Not Paused), The Key Is Let Go Of; A Closed Tab Is Not That: Its Seat Is Held And Its Key Kept") {
+        const Captured output;
+        {   // three in the room: the one who leaves is dropped, the other two play on
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-63", 3), w.server_now()).ok);
+            const fs::path dir = scratch_dir("ra63");
+            Application& app = w.start_app(w.config(dir, "RA-63", "Ann"));
+            Machine& bob = w.join("Bob", "RA-63");
+            Machine& cat = w.join("Cat", "RA-63");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&bob, &cat}); }, 14000 + kPre));
+            w.run(3000);
+            const uint8_t seat = app.local_player_id();
+            ASSERT_EQ(app.rejoin_store()->entries().size(), size_t{1});
+            const net::SeatKey key = app.rejoin_store()->entries()[0].key;
+            app.leave_network_match();
+            ASSERT_EQ(app.net()->phase(), NetGame::Phase::Off);
+            ASSERT_TRUE(app.rejoin_store()->entries().empty());                                  // the key is let go of ...
+            ASSERT_FALSE(fs::exists(dir / "rejoin.txt"));
+            w.run(3000);
+            const server::RoomStatus st = w.status("RA-63");
+            ASSERT_TRUE(st.state == server::RoomState::Running && !st.paused && st.absent.empty());      // ... and the seat is dropped at once: nobody waits for it
+            for (Machine* other : {&bob, &cat}) {
+                bool left = false;
+                for (const NetGame::Event& e : other->events) left = left || (e.type == NetGame::Event::Type::PlayerLeft && e.seat == seat);
+                ASSERT_TRUE(left);
+                ASSERT_TRUE(other->net.pause_info().missing.empty() && !other->net.pause_info().vote_open && !other->net.paused());
+            }
+            app.leave_network_match();                                                           // (again: nothing happens)
+            ASSERT_TRUE(app.rejoin_store()->entries().empty());
+            ASSERT_TRUE(output.text().find(rejoin_key_hex(key)) == std::string::npos);
+        }
+        {   // a closed tab says no goodbye: the seat is held, the key is kept
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-63B"), w.server_now()).ok);
+            const fs::path dir = scratch_dir("ra63b");
+            Application& app = w.start_app(w.config(dir, "RA-63B", "Ann"));
+            Machine& bob = w.join("Bob", "RA-63B");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+            w.run(3000);
+            ASSERT_EQ(app.rejoin_store()->entries().size(), size_t{1});
+            w.crash_app(dir);
+            ASSERT_TRUE(w.run_until([&]() { return w.status("RA-63B").paused; }, 4000));
+            ASSERT_TRUE(w.status("RA-63B").absent.size() == 1);
+            FileRejoinStore file((dir / "rejoin.txt").string());
+            ASSERT_EQ(file.entries().size(), size_t{1});
+        }
+    } TEST_END();
+
     TEST_CASE("RA6.2 Esc: In A Match That Runs, And While Another Player's Seat Is Missing, It Is The Original's (Everything Is Deselected, No Dialog); On The Way Back, With This Machine's Link Lost, It Opens The Quit Dialog (A Held Key Does Not): N Or Esc Closes It, Y Leaves The Match For Good And The Key Is Let Go Of; The Selection Is Not Touched By The Esc That Asks") {
         const Captured output;
         World w;

@@ -5,7 +5,7 @@
 # Reconnecting...", come back by themselves, the room is restored from its record), the front page's "Rejoin your match (CODE)" after a closed tab, and the front page without a usable entry.
 # No automated test reaches this chain: the quick tier runs the front page's Rejoin block and the way back of the library and the application separately, never through a browser and nginx.
 #
-#   ANTS_WEB_URL=http://127.0.0.1:8080/ ANTS_WS_PORT=4012 tests/scripts/test_web_rejoin.sh [--only reload|restart|rejoin|none] [--shots DIR] [--server PATH-TO-ants_server]
+#   ANTS_WEB_URL=http://127.0.0.1:8080/ ANTS_WS_PORT=4012 tests/scripts/test_web_rejoin.sh [--only reload|restart|rejoin|leave|none] [--shots DIR] [--server PATH-TO-ants_server]
 #
 # The site is the web image of this tree (`docker build -t ants-beta .`, run on a port) whose nginx passes /ws and /busy to the WebSocket port ANTS_WS_PORT of a game server that is NOT running: the
 # check starts its own `ants_server` there (the program of this tree, built to build/src/ants_server/ants_server, with the options of docker-compose.stack.yml and no reconnect option) and stops it at

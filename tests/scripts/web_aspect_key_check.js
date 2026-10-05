@@ -96,8 +96,11 @@ function runShell(path, search, stored, options) {
         getElementById(id) { if (id === 'game-stage') return stage; throw new Error('the page asked for #' + id); },
         querySelectorAll(selectorText) { if (selectorText === '.seg button[data-aspect]') return buttons; throw new Error('the page asked for ' + selectorText); },
     };
-    const code = page + '\n' + selector + '\nreturn { aspect: ANTS_ASPECT, source: ANTS_ASPECT_SOURCE, args: ANTS_ARGS, embed: ANTS_EMBED, key: ANTS_ASPECT_KEY };';
-    const result = new Function('window', 'document', code)(win, doc);
+    // the game that the page talks to: `ready` is the page's isReadyToPlay, `module` makes the Module of the program (given the window, so that it can look at where the page has gone by then)
+    const ready = !!(options && options.ready);
+    const fake = options && options.module ? options.module(win) : undefined;
+    const code = 'var isReadyToPlay = ' + ready + '; var Module = fakeModule;\n' + page + '\n' + selector + '\nreturn { aspect: ANTS_ASPECT, source: ANTS_ASPECT_SOURCE, args: ANTS_ARGS, embed: ANTS_EMBED, key: ANTS_ASPECT_KEY };';
+    const result = new Function('window', 'document', 'fakeModule', code)(win, doc, fake);
     result.storage = storage;
     result.win = win;
     result.stage = stage;
@@ -209,6 +212,38 @@ try {
         expect('shell.html selector in a room: it asks', r.win.asked.length, 1);
         expect('shell.html selector in a room, answered No: nothing is written', JSON.stringify(r.storage.writes), '[]');
         expect('shell.html selector in a room, answered No: no reload', r.win.assigned.length, 0);
+    }
+    // LEAVING ON PURPOSE (the review's M2): a player who says yes in a joined match leaves it for good: the game is told once (ants_leave_match: Leave is sent, the key is let go of), before the page moves; a
+    // closed tab and a reload never come here (they hold the seat)
+    {
+        const calls = [];
+        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, module: (win) => ({ _ants_match_running() { return 1; }, _ants_leave_match() { calls.push(win.assigned.length); } }) });
+        r.buttons[1].listeners.click();
+        expect('shell.html selector in a room, answered Yes: the game is told once, before the page moves', JSON.stringify(calls), '[0]');
+        expect('shell.html selector in a room, answered Yes: and the page moves', r.win.assigned.length, 1);
+    }
+    {
+        const calls = [];
+        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, decline: true, module: (win) => ({ _ants_leave_match() { calls.push('left'); } }) });
+        r.buttons[1].listeners.click();
+        expect('shell.html selector in a room, answered No: the game is not told, nothing moves', calls.length + ' ' + r.win.assigned.length, '0 0');
+    }
+    {
+        const calls = [];
+        const r = runShell(shellPath, '', {}, { ready: true, module: (win) => ({ _ants_match_running() { return 0; }, _ants_leave_match() { calls.push('left'); } }) });
+        r.buttons[1].listeners.click();
+        expect('shell.html selector in a game of this computer (no room, no match): no question, the game is not told', calls.length + ' ' + r.win.asked.length + ' ' + r.win.assigned.length, '0 0 1');
+    }
+    {
+        const calls = [];
+        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: false, module: (win) => ({ _ants_leave_match() { calls.push('left'); } }) });
+        r.buttons[1].listeners.click();
+        expect('shell.html selector in a room, the game not ready yet (an export that is called while the program compiles is undefined for good): not told, the page moves', calls.length + ' ' + r.win.assigned.length, '0 1');
+    }
+    for (const [what, module] of [['a game without the export', () => ({})], ['a game whose export throws', () => ({ _ants_leave_match() { throw new Error('the game is gone'); } })]]) {
+        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, module });
+        r.buttons[1].listeners.click();
+        expect('shell.html selector in a room, answered Yes with ' + what + ': the page moves all the same', r.win.assigned.length, 1);
     }
     {
         const r = runShell(shellPath, '', THROWS);                                  // a private window: the click still reloads with the address, nothing breaks

@@ -372,6 +372,10 @@ public:
     /// the match now and no step is running. The web build asks the browser first whether the page is hidden (so a visibilitychange that was missed cannot leave the
     /// match without a driver). The page's timer for a quiet server calls it too (ants_background_pump).
     bool background_pump();
+    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link, the picture selector's "Leave the match?": ants_leave_match): the
+    /// server is told (Leave: the seat is dropped at once and the others do not wait for it) and the key is let go of. Does nothing without a network game. A closed tab or a reload never gets here:
+    /// its seat is held and its key kept, which is what lets it come back.
+    void leave_network_match();
     /// The same with the time given (seconds; the tests call it)
     bool background_pump_after(float dt);
     /// What a wake-up does with the time that has passed since the clocks last moved (`elapsed`, real time; a clock that went backwards counts for nothing). The network's
