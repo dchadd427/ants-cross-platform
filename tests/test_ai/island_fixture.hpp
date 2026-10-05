@@ -48,6 +48,8 @@ public:
         ants::sim::canonical_order(due);
         for (const ants::sim::Command& c : due) sim_.apply_command(c);
     }
+    /// A command that is lost on its way: what has been released and has not reached the engine yet is never applied (the bot was told that it left)
+    void drop_pending() { pending_.clear(); }
     std::vector<std::pair<uint64_t, ants::sim::Command>> log;                                        // what was released (tick, command), as RecordingSink's
 
 private:
@@ -150,7 +152,9 @@ struct Match {
     StandardBot* bot(uint8_t seat) { return dynamic_cast<StandardBot*>(ctl->bot(seat)); }
     const IslandTask& island(uint8_t seat) { return bot(seat)->islands(); }
     int total_collapsed() const { return collapsed[0] + collapsed[1] + collapsed[2] + collapsed[3]; }
-    /// Ants that drowned for a reason of their own bot's making (a bridge that went under them, a flight): not the blows of an enemy
+    /// Ants that drowned for a reason of their own bot's making (a bridge that went under them, a flight): not the blows of an enemy. An ant that drowns with an enemy within three tiles counts
+    /// as fought, whoever threw it: a drowning in a crowded landing is not seen here when an enemy stands near (the matches of four bots, AI16, print how many were fought: none today). The
+    /// flights are covered by the matches of one seat, with no enemy on the map (AI17.3, AI17.10)
     int total_unforced() const {
         int n = 0;
         for (int t = 0; t < 4; ++t) n += collapsed[t] + other_drowned[t] - fought[t];

@@ -132,12 +132,14 @@ struct LevelPlan {
     uint32_t sabotage_putout_limit{2};
     uint32_t sabotage_giveup_ticks{3600};
     uint32_t sabotage_escort_ticks{900};  // the escorts leave this long after the ring stands
+    uint32_t sabotage_escort_wait{2400};  // a fire-in whose escorts are not at the entrance after this long (no walk gets them there) is given up: the team is left alone for sabotage_giveup_ticks
     // the defence against being fired in (contest batch): fire walls on the ring round the own gate send the fighters at the Fire Ant that lights them, and the walls are put out only when no enemy ant
     // stands on the tile, no enemy Fire Ant is near to light them again and the enemy's force near them is not stronger than the own
     bool fire_defence{false};
     int32_t fire_defence_radius{14};     // an enemy Fire Ant within this many tiles of the own hill is the one that fires it in
     uint32_t fire_defence_extra{1};      // fighters more than the level's defenders go after it
     int32_t fire_defence_wait{10};       // a wall on the ring is not put out while an enemy Fire Ant is within this many tiles of it (it would light it again)
+    uint32_t fire_defence_hold{1800};    // ... for this many ticks from the first look at lit walls on the ring: a Fire Ant that the fighters cannot reach (it stands on a wall or a power-up, or no walk gets to it) holds them no longer
     bool harass{false};                  // (Hard) the squad hunts the carriers of the other teams from the start of the match, whatever the score (HarassTask)
     uint32_t harass_workers{0};          // workers that join the Combat Ants of the squad (an ant less at the piles while a target lasts)
     uint32_t harass_reserve{4};          // ants that never join (the economy: four carriers fill a gate)

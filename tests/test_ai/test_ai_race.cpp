@@ -24,7 +24,7 @@ void run_race_tests() {
         {   // (a) TREASURE (seed 7): the ants that the gate cannot use go to the centre first. Easy has no power-up trips, so every seat sends 3 to 4 of its 6 ants there and its first harvest order is
             //     the centre's (the owner: "they start eating the Cheerios"); Medium and Hard send three ants for power-ups first, and of the three left the centre gets the ones beyond what fills the
             //     gate: 1, 0, 3 and 1 ants at seats 0 to 3 (seat 1's three ants all work its own piles, whose trips are long); with the race off Easy sends none
-            const size_t at_least[3][4] = {{3, 3, 3, 3}, {1, 0, 1, 1}, {1, 0, 1, 1}};
+            const size_t at_least[3][4] = {{3, 3, 3, 3}, {1, 0, 3, 1}, {1, 0, 3, 1}};
             for (size_t li = 0; li < 3; ++li) {
                 const Level level = li == 0 ? Level::Easy : li == 1 ? Level::Medium : Level::Hard;
                 for (uint8_t seat = 0; seat < 4; ++seat) {
@@ -47,6 +47,16 @@ void run_race_tests() {
             Rig rig(sim, 0, Level::Easy, std::make_unique<StandardBot>(legacy), 4, 4);
             rig.run(60);
             ASSERT_EQ(ants_to_pile(rig, sim, treasure_piles, static_cast<int>(centre), 60), 0u);              // (the previous order, kept selectable: Easy harvests near piles first)
+            // seat 2's three ants of Medium and Hard are the race (the capped opening of v0.5.0 sends one at Medium and two at Hard, so the rows above are met by it only up to there)
+            for (const Level level : {Level::Medium, Level::Hard}) {
+                sim::SimulationEngine old_sim;
+                start_match(old_sim, "TREASURE", 7, 0x0F);
+                LevelPlan old_plan = plan_for(level);
+                old_plan.race = false;
+                Rig old_rig(old_sim, 2, level, std::make_unique<StandardBot>(old_plan), 4, 4);
+                old_rig.run(60);
+                ASSERT_TRUE(ants_to_pile(old_rig, old_sim, treasure_piles, static_cast<int>(centre), 60) < 3u);
+            }
         }
         {   // (b) a contested pile before a richer safe one: the middle pile (15 a unit) before the near one (25 a unit); with the race off the richer near pile first; with at most three ants at a
             //     pile that is a race (race_ants) the rest harvest the near one
@@ -111,6 +121,21 @@ void run_race_tests() {
             rig.run(30);
             ASSERT_EQ(rig.as<StandardBot>().harvest().tier_of(static_cast<uint32_t>(centre)), static_cast<int>(PileClass::Multi));
             ASSERT_EQ(rig.as<StandardBot>().harvest().tier_of(1u), static_cast<int>(PileClass::Safe));         // (a pile with one competitor is no race: it reads as Safe)
+            // raceone=1 (the experiment, off in every plan) makes a pile with one competitor a race too: seat 0 reads piles 1 and 6 as One, except that an enemy far nearer (contest_low 77: 238
+            // against 314) is "there first": the pile is eaten before the ants arrive (Hopeless, no race, it reads as Safe) whatever one competitor there is
+            for (const uint32_t low : {70u, 77u}) {
+                sim::SimulationEngine one_sim;
+                start_match(one_sim, "TREASURE", 7, 0x0F);
+                LevelPlan one = plan_for(Level::Hard);
+                one.race_one = true;
+                one.contest_low = low;
+                Rig one_rig(one_sim, 0, Level::Hard, std::make_unique<StandardBot>(one), 4, 4);
+                one_rig.run(30);
+                ASSERT_EQ(one_rig.as<StandardBot>().harvest().tier_of(static_cast<uint32_t>(centre)), static_cast<int>(PileClass::Multi));
+                ASSERT_EQ(one_rig.as<StandardBot>().harvest().tier_of(1u), static_cast<int>(PileClass::One));
+                ASSERT_EQ(one_rig.as<StandardBot>().harvest().tier_of(6u), static_cast<int>(low == 70u ? PileClass::One : PileClass::Safe));
+            }
+            ASSERT_FALSE(plan_for(Level::Hard).race_one);
         }
         {   // (f) the race lasts race_ticks from the start of the match (1200: the first minute): a look at tick 1 inside a window of 2 ticks races, a window of 1 tick has none (the plain order)
             for (const uint32_t window : {1u, 2u}) {

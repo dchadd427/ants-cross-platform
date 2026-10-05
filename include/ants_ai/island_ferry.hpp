@@ -60,6 +60,8 @@ private:
         uint64_t sent{0};                    // the tick at which the order left (Bot::Fate::Sent); 0: not yet
         bool dropped{false};                 // the order never left (the budget, the controller's filter): the Swimmer is ordered again
         sim::TileCoord origin{};             // where the Swimmer stood
+        sim::TileCoord click{};              // the cell that the order named (kept here: the search that is made every reask_ticks may choose another cell for the pile, and the fate of this order must still be known)
+        bool rescued{false};                 // it was sent to the hill's entrance with its food (the engine's loop ended): once it has banked the food its record ends
     };
 
     void search(TaskContext& context);

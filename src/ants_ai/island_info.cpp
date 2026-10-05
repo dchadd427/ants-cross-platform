@@ -15,7 +15,9 @@ namespace {
 constexpr int kDx[8] = {0, 1, 1, 1, 0, -1, -1, -1};
 constexpr int kDy[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
 
-// FUN_0101d762 / is_special_base_tile: the raid tile, the entrance and the three tiles of the queue row of every hill on the map (the hills of a roster: a team that is not in the match has none)
+// FUN_0101d762 / is_special_base_tile: the raid tile, the entrance and the three tiles of the queue row of every hill on the map (the hills of a roster: a team that is not in the match has none).
+// The engine skips the hills of teams that have dropped out; the analysis is made once, at the first look, and counts them all: after a drop-out a few tiles are refused that the engine would accept
+// (the safe side: no bridge, no bomb and no flight is planned there)
 bool special_base_tile(const sim::Grid& grid, sim::TileCoord t) noexcept {
     for (const assets::AnthillSpawn& ah : grid.anthills()) {
         const int32_t bx = static_cast<int32_t>(ah.x);
@@ -148,19 +150,27 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
     std::vector<int32_t> dist(static_cast<size_t>(w) * static_cast<size_t>(h));
     std::vector<int32_t> prev(static_cast<size_t>(w) * static_cast<size_t>(h));
     const auto at = [&](int x, int y) { return static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x); };
+    std::vector<std::vector<int>> shore_of(static_cast<size_t>(n));                    // the bridgeable water tiles that touch a component, in reading order: the seeds of its search (one pass over the map, not one per component)
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            if (!bridge_water(grid, sim::TileCoord{x, y})) continue;
+            int32_t seen[8];
+            int seen_n = 0;
+            for (int k = 0; k < 8; ++k) {
+                const int32_t c = comp_at(x + kDx[k], y + kDy[k]);
+                if (c < 0 || std::find(seen, seen + seen_n, c) != seen + seen_n) continue;
+                seen[seen_n++] = c;
+                shore_of[static_cast<size_t>(c)].push_back(y * w + x);
+            }
+        }
+    }
     for (int32_t a = 0; a < n; ++a) {
         std::fill(dist.begin(), dist.end(), -1);
         std::fill(prev.begin(), prev.end(), -1);
         std::deque<int> queue;
-        for (int y = 0; y < h; ++y) {
-            for (int x = 0; x < w; ++x) {
-                if (!bridge_water(grid, sim::TileCoord{x, y})) continue;
-                bool shore = false;
-                for (int k = 0; k < 8 && !shore; ++k) shore = comp_at(x + kDx[k], y + kDy[k]) == a;
-                if (!shore) continue;
-                dist[at(x, y)] = 1;
-                queue.push_back(y * w + x);
-            }
+        for (const int idx : shore_of[static_cast<size_t>(a)]) {
+            dist[static_cast<size_t>(idx)] = 1;
+            queue.push_back(idx);
         }
         std::vector<int32_t> best_len(static_cast<size_t>(n), -1);
         std::vector<int> best_end(static_cast<size_t>(n), -1);
@@ -229,7 +239,11 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
                 }
             }
         }
-        std::sort(raw.begin(), raw.end(), [](const Raw& a, const Raw& b) { return a.comp != b.comp ? a.comp < b.comp : a.tile.y != b.tile.y ? a.tile.y < b.tile.y : a.tile.x < b.tile.x; });
+        std::sort(raw.begin(), raw.end(), [](const Raw& a, const Raw& b) {            // (two members can touch the same tile: the member is the last key, so that no library's order of ties is in the result)
+            if (a.comp != b.comp) return a.comp < b.comp;
+            if (a.tile.y != b.tile.y) return a.tile.y < b.tile.y;
+            return a.tile.x != b.tile.x ? a.tile.x < b.tile.x : a.power < b.power;
+        });
         TokenGroup g;
         if (!raw.empty()) {                                                          // the members in the order of a walk from the first entrance (a row of tokens is walked from its end)
             g.members.push_back(raw.front().power);

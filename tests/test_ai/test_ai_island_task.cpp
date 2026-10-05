@@ -326,14 +326,20 @@ void run_island_task_tests() {
         m.run(7200);
         std::map<uint32_t, uint64_t> last;
         uint64_t least = ~uint64_t{0};
+        size_t stops = 0, repeats = 0;
         for (const auto& e : m.log()) {
             if (e.second.type != CommandType::Stop) continue;
             for (const uint32_t ant : e.second.ants) {
+                ++stops;
                 const auto it = last.find(ant);
-                if (it != last.end()) least = std::min(least, e.first - it->second);
+                if (it != last.end()) {
+                    least = std::min(least, e.first - it->second);
+                    ++repeats;
+                }
                 last[ant] = e.first;
             }
         }
+        ASSERT_TRUE(stops >= 4 && repeats >= 1);                                                                          // (the premise: the guard did stop ants, some of them more than once: 14 and 8 today)
         ASSERT_TRUE(least >= 20);
     } TEST_END();
 

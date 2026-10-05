@@ -21,8 +21,8 @@ const AntView* find_ant(const std::vector<AntView>& ants, uint32_t id) noexcept 
     return it != ants.end() && it->id == id ? &*it : nullptr;
 }
 
-// Whether a visible ant of any team, the seat's own included, stands on the tile: no special order may name such a tile (BotController::allowed: a click on an ant selects it or attacks it, the
-// target cursor shows only where no ant is under the pointer)
+// Whether an ant of any team, the seat's own included, stands on the tile (one that dies on its clip too): no special order may name such a tile (BotController::allowed: a click on an ant
+// selects it or attacks it, the target cursor shows only where no ant is under the pointer)
 bool occupied(const BotView& v, sim::TileCoord tile) noexcept {
     for (const AntView& a : v.mine()) {
         if (a.tile == tile) return true;
@@ -30,7 +30,7 @@ bool occupied(const BotView& v, sim::TileCoord tile) noexcept {
     for (const AntView& a : v.others()) {
         if (a.tile == tile) return true;
     }
-    return false;
+    return v.dying_at(tile);
 }
 
 // A free tile next to `tile` for the ant that stands on it to step to (the ant is the one that is to order a special order onto the tile: a click on a tile with an ant on it, the ordering
@@ -315,8 +315,9 @@ void FightTask::start_fire_defence(TaskContext& c) {
 //   hunt      (plan.hunt, every level) a KILL that is available of a WOUNDED ant: by kill_plan (the real blows: one lands per hit clip, only a Combat Ant's punch finishes an ant, so the plan is built on
 //             Combat Ants and an opener for an odd number of hit points) within plan.hunt_blows blows, and the force has plan.hunt_odds_percent of the strength near the target. The hit points of
 //             every ant are on the view. The scope is Easy: what stands within plan.hunt_next tiles of a free ant; Medium and Hard also what is within the leash of the own hill and at a pile that the
-//             own ants work, and Hard the carriers of the leading team wherever they are. The hunt is kept until the target is dead or the advantage is gone (the fight is bound to its target, a fresh
-//             enemy does not take the ants away), and the ants go back to the economy afterwards
+//             own ants work, and Hard the carriers of the leading team wherever they are. The hunt is kept until the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
+//             (the odds that it began with are not asked again: a wounded target is finished; the fight is bound to its target, a fresh enemy does not take the ants away), and the ants go back
+//             to the economy afterwards
 //   skirmish  (plan.skirmish, Hard) pressure: a carrier on its way (a blow clears its walk and it stands with its food until its owner sends it on) or a worker at a pile, with plan.skirmish_odds_percent
 // Strength is the square law's number: the sum of the hit points times the sum of the damage of a round. What answers near the target are the plan.*_enemy_cap strongest enemy ants within
 // plan.*_near tiles that carry nothing (the standard bot of Hard sends three).
@@ -599,6 +600,10 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
             if (!c.ledger.take(a->id, id())) continue;
             f.defenders[a->id] = Defender{};
         }
+    }
+    if (f.offence && f.defenders.empty() && now > f.started) {                  // nobody is left to hunt it (they were hurt, taken by a task of a higher rank or killed) and no free ant near it takes over: it is over, and the next one may begin
+        end = true;
+        return;
     }
     // who strikes next (health-aware fights): with a Combat Ant among the defenders only punches finish an ant (kill_plan), so an ant of an even number of hit points is struck by Combat Ants alone, one of
     // an odd number (3 or more) first by ONE other ant, the nearest, so that it is never left standing with one hit point; without a Combat Ant everybody strikes
@@ -903,13 +908,14 @@ void PowerUpTask::step(TaskContext& c) {
 // ---- WallTask -------------------------------------------------------------------------------------------------------------------------------------------
 
 // Whether a fire wall of the ring round the own gate is not to be put out now (the owner's report: the bots "just extinguish all of the fire" and leave the Fire Ant that lights it free to light it
-// again): an enemy Fire Ant is near the tile (the fighters go after it, FightTask::start_fire_defence), or the enemy's force near it is stronger than the own (the Fire Ant would walk into it)
-bool fired_in_wall(const BotView& v, const HillInfo& hill, const LevelPlan& plan, sim::TileCoord tile) {
+// again): an enemy Fire Ant is near the tile (the fighters go after it, FightTask::start_fire_defence) for plan.fire_defence_hold ticks at the most (`hold_over`: one that no blow reaches, on a wall
+// or a power-up, would hold the walls for the 3,600 ticks that they burn), or the enemy's force near it is stronger than the own (the Fire Ant would walk into it)
+bool fired_in_wall(const BotView& v, const HillInfo& hill, const LevelPlan& plan, sim::TileCoord tile, bool hold_over) {
     bool on_ring = false;
     for (const sim::TileCoord& r : SabotageTask::ring_of(hill)) on_ring = on_ring || r == tile;
     if (!on_ring) return false;
     for (const AntView& e : v.others()) {
-        if (e.type == sim::AntType::Fire && e.tile.chebyshev_dist(tile) <= plan.fire_defence_wait && !(v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) return true;
+        if (!hold_over && e.type == sim::AntType::Fire && e.tile.chebyshev_dist(tile) <= plan.fire_defence_wait && !(v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) return true;
     }
     const Strength theirs = enemy_strength(v, tile, 6, 0, 4);
     if (theirs.n == 0) return false;
@@ -943,6 +949,12 @@ void WallTask::step(TaskContext& c) {
     const HillInfo& hill = c.map.hill(c.seat);
     if (!hill.present || !v.has_grid()) return;
     const sim::Grid& grid = v.grid();
+    // the walls of the ring round the own gate wait for the fighters to deal with the Fire Ant that lit them (fired_in_wall), but not for ever
+    bool ring_lit = false;
+    for (const sim::TileCoord& r : SabotageTask::ring_of(hill)) ring_lit = ring_lit || (grid.in_bounds(r) && grid.has_fire_at(r));
+    if (!ring_lit) ring_lit_since_ = 0;
+    else if (ring_lit_since_ == 0) ring_lit_since_ = now;
+    const bool hold_over = ring_lit_since_ != 0 && now >= ring_lit_since_ + plan.fire_defence_hold;
     // 1. the keeper: an own Fire Ant. It is claimed (taken from the economy, in which a Fire Ant harvests) only while it has work, and given back when it has none
     if (keeper_ != 0) {
         const AntView* k = find_ant(v.mine(), keeper_);
@@ -1047,7 +1059,7 @@ void WallTask::step(TaskContext& c) {
             }
             const auto b = counter_black_.find(static_cast<int64_t>(w.tile.y) * 4096 + w.tile.x);
             if (ours || (b != counter_black_.end() && b->second > now)) continue;
-            if (plan.fire_defence && fired_in_wall(v, hill, plan, w.tile)) continue;          // a wall of the ring round the own gate: not before the Fire Ant that lights it is dealt with
+            if (plan.fire_defence && fired_in_wall(v, hill, plan, w.tile, hold_over)) continue;          // a wall of the ring round the own gate: not before the Fire Ant that lights it is dealt with
             const int harm = harm_to(v, c.map, plan, w.tile);                              // the own economy first, then the ally's
             if (harm == 0) continue;
             const int32_t d = keeper->tile.chebyshev_dist(w.tile);
@@ -1477,6 +1489,11 @@ void RaidTask::step(TaskContext& c) {
             }
             continue;
         }
+        if (!launching_) {                                                              // no raid is wanted now (the pressure fell): the thief is the economy's again
+            if (held) c.ledger.release(a.id, id());
+            waiting_.erase(a.id);
+            continue;
+        }
         // free to go: empty-handed and healthy, standing or on its way to a pile (a thief that harvests is never idle: its walk to the pile, the bite and the walk home are the engine's loop, so a
         // raid that waited for an idle thief would hardly ever start); one that carries food delivers it first
         const bool free_to_go = (plan_idle_or_walking(a)) && !a.holding && a.carried_points == 0 && a.hp >= 4 && a.takes_orders() && v.powerup_at(a.tile) == nullptr;
@@ -1736,6 +1753,7 @@ void SabotageTask::release_escorts(AntLedger& ledger) {
         if (ledger.owner(id) == this->id()) ledger.release(id, this->id());
     }
     escorts_.clear();
+    escort_since_ = 0;
 }
 
 void SabotageTask::step(TaskContext& c) {
@@ -1832,8 +1850,16 @@ void SabotageTask::step(TaskContext& c) {
         }
     }
     const sim::TileCoord station = foe_hill.origin.y >= 5 ? sim::TileCoord{foe_hill.origin.x + 1, foe_hill.origin.y - 4} : sim::TileCoord{foe_hill.origin.x + 1, foe_hill.origin.y + 6};
-    // Nobody is called to an enemy gate without a Fire Ant to light it (the one that this task has, or a free one: the choice below, the hands apart), and the escorts of a ring that stands are
-    // held for plan.sabotage_escort_ticks and then let go (and not taken again while it stands: ring_done_ is set until a wall has to be renewed)
+    // the entrance must be a tile that the escorts can stand on and walk to (on a rock, on an island or on a power-up they would wait for ever, or take the power-up)
+    const bool station_ok = grid.in_bounds(station) && MapInfo::walkable(grid, c.seat, station, v.walk_context()) && v.powerup_at(station) == nullptr && reachable_by(c.map, c.seat, station);
+    // The ring stands when no tile of it can be lit any more, whoever lit it: ring_done_ is the tick it was first seen so, and is cleared the moment a wall has to be lit again
+    if (open.empty()) {
+        if (ring_done_ == 0) ring_done_ = now;
+    } else {
+        ring_done_ = 0;
+    }
+    // Nobody is called to an enemy gate without a Fire Ant to light it (the one that this task has, or a free one: the choice below, the hands apart) and without a wall to light: a ring that stands
+    // is no work. The escorts that were called while it was lit are held for plan.sabotage_escort_ticks after it stood and then let go (and not called again until a wall has to be renewed)
     bool fire_ant_ready = false;
     for (const AntView& a : v.mine()) {
         if (a.type != sim::AntType::Fire || a.hp < 5 || (a.id == tactics_.wall_keeper && plan.sabotage_spare_keeper)) continue;
@@ -1841,8 +1867,9 @@ void SabotageTask::step(TaskContext& c) {
         if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
         fire_ant_ready = true;
     }
-    const bool ring_held = ring_done_ != 0;
-    const bool escorts_wanted = plan.sabotage_safe && can_put_out && (fire_ant_ready || ring_held) && !(ring_held && now >= ring_done_ + plan.sabotage_escort_ticks);
+    const bool lighting = !open.empty() && fire_ant_ready;
+    const bool holding = open.empty() && !escorts_.empty() && now < ring_done_ + plan.sabotage_escort_ticks;
+    const bool escorts_wanted = plan.sabotage_safe && can_put_out && (lighting || holding);
     bool escorted = true;
     if (escorts_wanted) {
         for (auto it = escorts_.begin(); it != escorts_.end();) {                         // the escorts that are still ours and fit
@@ -1854,7 +1881,7 @@ void SabotageTask::step(TaskContext& c) {
                 ++it;
             }
         }
-        if (escorts_.size() < plan.sabotage_escort) {                                     // more: the Combat Ants that no task of a higher rank holds, the nearest to the hill first
+        if (lighting && station_ok && escorts_.size() < plan.sabotage_escort) {           // more: the Combat Ants that no task of a higher rank holds, the nearest to the hill first
             std::vector<const AntView*> cands;
             for (const AntView& a : v.mine()) {
                 if (a.type != sim::AntType::Combat || escorts_.count(a.id) != 0 || !can_fight(v, a) || a.hp < 5) continue;
@@ -1871,7 +1898,7 @@ void SabotageTask::step(TaskContext& c) {
                 }
             }
         }
-        if (escorts_.size() < plan.sabotage_escort) {                                     // no force to hold the walls: no fire-in
+        if (lighting && (!station_ok || escorts_.size() < plan.sabotage_escort)) {        // no entrance to hold, or no force to hold it: no fire-in
             ++refused_safe_;
             give_back();
             release_escorts(c.ledger);
@@ -1891,8 +1918,23 @@ void SabotageTask::step(TaskContext& c) {
                 }
             }
         }
+        // the first wall waits for the escorts, but not for ever: escorts that no walk gets to the entrance within plan.sabotage_escort_wait end the attempt at that team for a while
+        if (lighting && !escorted) {
+            if (escort_since_ == 0) escort_since_ = now;
+            if (now >= escort_since_ + plan.sabotage_escort_wait) {
+                ++escort_timeouts_;
+                giveup_until_[static_cast<size_t>(victim)] = now + plan.sabotage_giveup_ticks;
+                give_back();
+                release_escorts(c.ledger);
+                return;
+            }
+        } else {
+            escort_since_ = 0;
+        }
     } else if (!escorts_.empty()) {
         release_escorts(c.ledger);
+    } else {
+        escort_since_ = 0;
     }
     // the ant: an own Fire Ant that is free (or has a task of lower rank), healthy, with empty hands
     const AntView* ant = ant_ != 0 ? find_ant(v.mine(), ant_) : nullptr;
@@ -1917,13 +1959,10 @@ void SabotageTask::step(TaskContext& c) {
         if (ant == nullptr) return;
         ant_ = ant->id;
     }
-    if (open.empty()) {                                                                    // the ring stands: the ant goes back to the economy, the escorts stay a while
+    if (open.empty()) {                                                                    // the ring stands: the ant goes back to the economy, the escorts stay a while (holding)
         give_back();
-        if (ring_done_ == 0) ring_done_ = now;
-        if (now >= ring_done_ + plan.sabotage_escort_ticks) release_escorts(c.ledger);
         return;
     }
-    ring_done_ = 0;
     if (c.ledger.owner(ant_) != id()) {
         if (ant->holding || ant->carried_points > 0 || !ant->takes_orders() || !c.ledger.take(ant_, id())) return;
         working_ = true;

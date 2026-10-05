@@ -8,7 +8,8 @@
 //   AI20.4  hunting the kill, the owner's case: a wounded enemy within reach of a Combat Ant and a worker is attacked at once (no attack was ordered before), by the Combat Ant alone; two workers
 //           cannot kill it and do not try; the kills are made
 //   AI20.5  the hunt: the plan of the blows as a table, the choice (the one that dies soonest), the scope by level, kept until done, the stronger force, the last ants and the carriers
-//   AI20.6  the fire-in is safe: no lone Fire Ant against a team that can put the fire out, escorts, the give-up
+//   AI20.6  the fire-in is safe: no lone Fire Ant against a team that can put the fire out, escorts (called for a wall to light, never for a ring that stands; the entrance that cannot be held, the walk
+//           that takes too long), the give-up
 //   AI20.7  the defence against being fired in: the fighters go after the Fire Ant, the walls are put out when it is safe
 //   AI20.8  no task orders a special order at a tile that an ant stands on
 //   AI20.9  behind the leader and the endgame: the pressure and its tiers, the strike, Easy's raids, the last minute
@@ -389,6 +390,23 @@ void run_contest_tests() {
             for (const auto& e : attacks_of(rig)) ASSERT_TRUE(!(e.second.tile_x == 29 && e.second.tile_y == 32));
             ASSERT_TRUE(attacks_of(rig).size() >= 2);                                                                                  // (the target was struck more than once)
         }
+        {   // (b3) a hunt whose force is gone (its ants are killed) and that no free ant near it can take over is over at once, and the next hunt may begin (the clock of 400 ticks would keep the slot)
+            sim::SimulationEngine sim;
+            const auto own = world(sim, 1, 1);
+            for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 10});                                  // (more ants at home: the reserve of the last ants is not what ends it)
+            enemy_at(sim, 31, 30, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            rig.run(4);
+            ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 1u);
+            for (const uint32_t id : own) sim.kill_unit(id);
+            rig.run(30);
+            ASSERT_EQ(rig.as<StandardBot>().fight().fights(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().fight().offence_running(), 0u);
+            sim.spawn_unit(0, sim::AntType::Combat, TileCoord{28, 31});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{27, 31});
+            rig.run(60);
+            ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 2u);                                                              // the next hunt began
+        }
         {   // (c) a stronger force near the target: three enemy Combat Ants stand three tiles from a 4-hit-point worker: no hunt (the same world without them hunts); with a plan that takes any odds it goes
             for (const int variant : {0, 1, 2}) {
                 sim::SimulationEngine sim;
@@ -523,7 +541,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI20.6 The Fire-In Is Safe (The Owner: \"The Hard Bot Sent One Fire Ant To The Enemy Gate That Was Put Out At Once\"): A Lone Fire Ant Is Not Sent To A Hill Whose Team Has A Fire Ant In Sight Or A Fire Power-Up It Can Still Take; It Is Sent When Neither Is There; A Fire Ant With Two Combat Ants That Hold The Entrance Is Sent Though The Enemy Could Put The Fire Out; Walls Put Out Twice End The Attempt For A While")
+    TEST_CASE("AI20.6 The Fire-In Is Safe (The Owner: \"The Hard Bot Sent One Fire Ant To The Enemy Gate That Was Put Out At Once\"): A Lone Fire Ant Is Not Sent To A Hill Whose Team Has A Fire Ant In Sight Or A Fire Power-Up It Can Still Take; It Is Sent When Neither Is There; A Fire Ant With Two Combat Ants That Hold The Entrance Is Sent Though The Enemy Could Put The Fire Out; Walls Put Out Twice End The Attempt For A While; A Ring That Already Stands Calls Nobody, A Wall To Renew Calls The Escorts Again Before It Is Lit, Escorts That Do Not Arrive Or An Entrance That Cannot Be Held End The Attempt")
     {
         LevelPlan plan = plan_for(Level::Hard);
         plan.sabotage = true;
@@ -671,6 +689,158 @@ void run_contest_tests() {
             rig.run(400);
             ASSERT_TRUE(rig.as<StandardBot>().sabotage().walls_ordered() > before);                                                   // and tried again afterwards
         }
+        {   // (f) a ring that stands when the task first looks (another bot lit it) is no work: nobody is called to the entrance for it, though the enemy could put the fire out and a spare Fire Ant and
+            //     two Combat Ants are there (the forward guard that the owner left out), and the Combat Ants stay where they are
+            sim::SimulationEngine sim;
+            build(sim, 2, true, false);
+            for (const TileCoord& t : ring) sim.grid_mut().place_firewall(static_cast<uint32_t>(t.x), static_cast<uint32_t>(t.y), 2);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(1500);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().walls_ordered(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().ledger().count(StandardBot::kSabotage), 0u);
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                if (a.player_id == 0 && a.raw_type == sim::AntType::Combat) ASSERT_TRUE(tc(a.tile_x, a.tile_y).chebyshev_dist(station) > 10);
+            }
+        }
+        {   // (g) a ring that stood for a long time and loses a wall: the escorts are called again and the first new wall waits for them (the first ring's hold was over, they had been let go)
+            sim::SimulationEngine sim;
+            build(sim, 2, true, false);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            uint64_t guard = 0;
+            while (rig.as<StandardBot>().sabotage().walls_ordered() < 1 && guard++ < 1500) rig.run(1);
+            rig.run(900);
+            ASSERT_TRUE(lit(sim) >= 6);
+            const size_t whole = lit(sim);
+            rig.run(2000);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 2u);
+            bool cleared = false;
+            for (const TileCoord& t : ring) {
+                if (!cleared && sim.grid().has_fire_at(t)) {
+                    sim.grid_mut().clear_firewall(static_cast<uint32_t>(t.x), static_cast<uint32_t>(t.y));
+                    cleared = true;
+                }
+            }
+            ASSERT_TRUE(cleared);
+            const uint32_t before = rig.as<StandardBot>().sabotage().walls_ordered();
+            guard = 0;
+            while (rig.as<StandardBot>().sabotage().walls_ordered() == before && guard++ < 900) rig.run(1);
+            ASSERT_TRUE(rig.as<StandardBot>().sabotage().walls_ordered() > before);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 4u);                                                          // (called before the wall was ordered)
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 2u);
+            guard = 0;
+            while (lit(sim) < whole && guard++ < 900) rig.run(1);
+            ASSERT_EQ(lit(sim), whole);
+            rig.run(300);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 2u);                                                                 // (the ring is whole again: held from now on, not let go at once by the clock of the first ring)
+        }
+        {   // (g2) while the ring stands and the escorts hold the entrance, nobody new is called when one of them is lost (a ring that stands is no work): the third Combat Ant stays where it is
+            LevelPlan p = plan;
+            p.catchup = false;                                                                                                         // (the strike of a bot that is behind would take the Combat Ants)
+            sim::SimulationEngine sim;
+            build(sim, 3, true, false);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
+            uint64_t guard = 0;
+            while (rig.as<StandardBot>().sabotage().walls_ordered() < 1 && guard++ < 1500) rig.run(1);
+            rig.run(900);
+            ASSERT_TRUE(lit(sim) >= 6);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 2u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 2u);
+            bool killed = false;
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                if (!killed && a.player_id == 0 && a.raw_type == sim::AntType::Combat && tc(a.tile_x, a.tile_y).chebyshev_dist(station) <= 3) {
+                    sim.kill_unit(a.id);
+                    killed = true;
+                }
+            }
+            ASSERT_TRUE(killed);
+            rig.run(100);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 1u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 2u);
+        }
+        {   // (h) escorts that are not at the entrance within plan.sabotage_escort_wait end the attempt at that team for a while: the Fire Ant and the Combat Ants are the economy's again, no wall is ordered
+            LevelPlan p = plan;
+            p.sabotage_escort_wait = 30;                                                                                              // (the walk from where they stand takes longer)
+            sim::SimulationEngine sim;
+            build(sim, 2, true, false);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
+            rig.run(400);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escort_timeouts(), 1u);
+            ASSERT_TRUE(rig.as<StandardBot>().sabotage().gave_up(1, sim.current_tick()));
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().walls_ordered(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().ledger().count(StandardBot::kSabotage), 0u);
+            ASSERT_EQ(plan_for(Level::Hard).sabotage_escort_wait, 2400u);
+        }
+        {   // (h2) the wait begins afresh with every attempt: when the give-up has run out the escorts are called again and have their whole time (a clock that was not cleared when the escorts were let
+            //      go would end the next attempt at its first look)
+            LevelPlan p = plan;
+            p.sabotage_escort_wait = 30;
+            p.sabotage_giveup_ticks = 5;
+            sim::SimulationEngine sim;
+            build(sim, 2, true, false);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
+            uint64_t guard = 0;
+            while (rig.as<StandardBot>().sabotage().escort_timeouts() < 1 && guard++ < 600) rig.run(1);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escort_timeouts(), 1u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 2u);
+            rig.run(20);                                                                                                               // (the give-up is over, the escorts are called again and have 30 ticks)
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 4u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escort_timeouts(), 1u);
+            rig.run(60);
+            ASSERT_TRUE(rig.as<StandardBot>().sabotage().escort_timeouts() >= 2u);                                                     // (and the second attempt ends by its own clock)
+        }
+        {   // (i) an entrance that no ant can stand on (a rock on the station) cannot be held: no escort is called and no fire-in is made against a team that can put the fire out (and where nothing can, it is made)
+            for (const bool enemy_fire : {true, false}) {
+                sim::SimulationEngine sim;
+                build(sim, 2, enemy_fire, false);
+                sim.set_terrain(station.x, station.y, sim::TERRAIN_OBSTACLE);
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(1500);
+                if (enemy_fire) {
+                    ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 0u);
+                    ASSERT_EQ(rig.as<StandardBot>().sabotage().walls_ordered(), 0u);
+                    ASSERT_TRUE(rig.as<StandardBot>().sabotage().refused_safe() >= 1u);
+                } else {
+                    ASSERT_TRUE(lit(sim) >= 6);
+                }
+            }
+        }
+        {   // (i3) an entrance that becomes one that cannot be held after the escorts were called (a rock comes up on the station): the attempt is given up at once and the escorts are let go, not after the wait
+            sim::SimulationEngine sim;
+            build(sim, 2, true, false);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(40);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 2u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().refused_safe(), 0u);
+            sim.set_terrain(station.x, station.y, sim::TERRAIN_OBSTACLE);
+            rig.run(40);
+            ASSERT_TRUE(rig.as<StandardBot>().sabotage().refused_safe() >= 1u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().walls_ordered(), 0u);
+        }
+        {   // (i2) the same for an entrance with a power-up on it (an escort that stands there takes it) and for one that no ant can walk to (water all round it: the escorts would wait for ever)
+            for (const int variant : {0, 1}) {
+                sim::SimulationEngine sim;
+                build(sim, 2, true, false);
+                if (variant == 0) {
+                    sim.grid_mut().place_powerup(station.x, station.y, static_cast<uint8_t>(sim::AntType::Swimmer));
+                } else {
+                    for (int dy = -1; dy <= 1; ++dy) {
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            if (dx != 0 || dy != 0) sim.set_terrain(station.x + dx, station.y + dy, sim::TERRAIN_WATER);
+                        }
+                    }
+                }
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(1500);
+                ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 0u);
+                ASSERT_EQ(rig.as<StandardBot>().sabotage().walls_ordered(), 0u);
+                ASSERT_TRUE(rig.as<StandardBot>().sabotage().refused_safe() >= 1u);
+            }
+        }
     } TEST_END();
 
     TEST_CASE("AI20.7 A Bot Whose Entrance Is Fired In Goes After The Fire Ant (The Owner: \"The Other Team Just Extinguishes All Of The Fire, It Does Not Try To Kill The Fire Ant That Is Firing Them In\"): The Fighters Attack The Enemy Fire Ant Near The Ring Round Its Gate (A Wounded One First); The Walls Of The Ring Are Not Put Out While That Ant Is Near Or An Enemy Force That Is Stronger Than The Own Stands Near Them, Never From A Tile That An Ant Stands On; When The Fire Ant Is Dead The Keeper Puts Them Out")
@@ -773,6 +943,51 @@ void run_contest_tests() {
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
             rig.run(300);
             for (const auto& e : rig.proposed) ASSERT_TRUE(!(e.second.type == CommandType::GroupSpecial && e.second.tile_x == ring[0].x && e.second.tile_y == ring[0].y));
+        }
+        {   // (e) a Fire Ant that stands on a lit tile of the ring cannot be hunted (no blow reaches it there): it holds the other walls for plan.fire_defence_hold ticks and no longer (not for the 3,600 ticks that they
+            //     burn); the tile that it stands on is never ordered
+            for (const uint32_t hold : {1800u, 200u}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 91);
+                sim.spawn_unit(0, sim::AntType::Fire, TileCoord{8, 10});
+                for (int i = 0; i < 5; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9 + i, 12});
+                for (int i = 0; i < 3; ++i) sim.grid_mut().place_firewall(static_cast<uint32_t>(ring[static_cast<size_t>(i)].x), static_cast<uint32_t>(ring[static_cast<size_t>(i)].y), 1);
+                sim.spawn_unit(1, sim::AntType::Fire, ring[0]);
+                LevelPlan p = plan_for(Level::Hard);
+                p.fire_defence_hold = hold;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
+                rig.run(600);
+                ASSERT_EQ(rig.as<StandardBot>().fight().fire_hunts(), 0u);                                                              // (nobody can hunt it there)
+                ASSERT_EQ(extinguish_orders(rig) >= 1u, hold == 200u);
+                for (const auto& e : rig.proposed) ASSERT_TRUE(!(e.second.type == CommandType::GroupSpecial && e.second.tile_x == ring[0].x && e.second.tile_y == ring[0].y));
+            }
+            ASSERT_EQ(plan_for(Level::Hard).fire_defence_hold, 1800u);
+        }
+        {   // (e2) the hold starts again with every fire on the ring: the walls burn out (the ring is dark for a while), are lit again with the Fire Ant still on its tile, and wait for it for
+            //      plan.fire_defence_hold ticks again (a clock that was never reset would be over at once)
+            sim::SimulationEngine sim;
+            empty_field(sim, 91);
+            sim.spawn_unit(0, sim::AntType::Fire, TileCoord{8, 10});
+            for (int i = 0; i < 5; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9 + i, 12});
+            const auto light = [&] {
+                for (int i = 0; i < 3; ++i) sim.grid_mut().place_firewall(static_cast<uint32_t>(ring[static_cast<size_t>(i)].x), static_cast<uint32_t>(ring[static_cast<size_t>(i)].y), 1);
+            };
+            light();
+            sim.spawn_unit(1, sim::AntType::Fire, ring[0]);
+            LevelPlan p = plan_for(Level::Hard);
+            p.fire_defence_hold = 200;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
+            rig.run(600);
+            const size_t first = extinguish_orders(rig);
+            ASSERT_TRUE(first >= 1u);                                                                                                  // (the first hold ended: walls were put out)
+            for (int i = 0; i < 3; ++i) sim.grid_mut().clear_firewall(static_cast<uint32_t>(ring[static_cast<size_t>(i)].x), static_cast<uint32_t>(ring[static_cast<size_t>(i)].y));
+            rig.run(100);
+            ASSERT_EQ(lit(sim), 0u);
+            light();
+            rig.run(150);
+            ASSERT_EQ(extinguish_orders(rig), first);                                                                                  // (the new hold has 50 ticks to run: nothing is put out yet)
+            rig.run(300);
+            ASSERT_TRUE(extinguish_orders(rig) > first);                                                                               // (and ends)
         }
     } TEST_END();
 
@@ -968,6 +1183,47 @@ void run_contest_tests() {
                 ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered() >= 1u, deficit == 2500);
                 ASSERT_EQ(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Thief)], deficit == 2500 ? 1u : 0u);      // (and a Thief is wanted for them)
             }
+        }
+        {   // (e2) the pressure falls while a Thief is kept for a raid (Easy raids from tier 2 only): the raid under way is seen out, no second one is ordered, and the Thief is the economy's again (it is
+            //      not kept for a raid that nobody wants any more, which a bot below the lift tier would never release)
+            sim::SimulationEngine sim;
+            build(sim, 100, 2600, 14400, 0);
+            sim.spawn_unit(0, sim::AntType::Thief, TileCoord{20, 20});
+            tick_all(sim, 7200);
+            sim.set_player_score(0, 100);
+            sim.set_player_score(1, 2600);
+            sim.apply_command(command_of(CommandType::GroupMove, 1, {ants_of(sim, 1)[0]}, 40, 40));
+            Rig rig(sim, 0, Level::Easy, std::make_unique<StandardBot>(plan_for(Level::Easy)), 4, 4);
+            rig.run(60);
+            ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 1u);
+            ASSERT_EQ(rig.as<StandardBot>().ledger().count(StandardBot::kRaids), 1u);
+            sim.set_player_score(1, 100);                                                                                              // (the bot has caught up: tier 0)
+            rig.run(3000);
+            ASSERT_EQ(rig.as<StandardBot>().tactics().standing.tier, 0u);
+            ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 1u);
+            ASSERT_EQ(rig.as<StandardBot>().ledger().count(StandardBot::kRaids), 0u);
+        }
+        {   // (e3) the same for a Thief that waits for a hole to open (the ambush, a flag that no plan sets: on for Easy here): when the pressure falls it is released and waits no longer
+            sim::SimulationEngine sim;
+            build(sim, 100, 2600, 14400, 0);
+            sim.spawn_unit(0, sim::AntType::Thief, TileCoord{20, 20});
+            tick_all(sim, 7200);
+            sim.set_player_score(0, 100);
+            sim.set_player_score(1, 2600);
+            const MapInfo hills(sim);
+            for (const TileCoord& t : east_tiles(hills.hill(1))) sim.set_fire_at(t, 3500);                                             // (every hole of the leader is shut)
+            LevelPlan plan = plan_for(Level::Easy);
+            plan.ambush = true;
+            Rig rig(sim, 0, Level::Easy, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(300);
+            ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().raids().waiting(), 1u);
+            ASSERT_EQ(rig.as<StandardBot>().ledger().count(StandardBot::kRaids), 1u);
+            sim.set_player_score(1, 100);                                                                                              // (the bot has caught up: tier 0)
+            rig.run(200);
+            ASSERT_EQ(rig.as<StandardBot>().tactics().standing.tier, 0u);
+            ASSERT_EQ(rig.as<StandardBot>().raids().waiting(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().ledger().count(StandardBot::kRaids), 0u);
         }
         {   // (f) the last minute (a match of 2,000 ticks, the last 1,200 begin at tick 800): the bot that leads guards, the one that is behind is at tier 3 and its strike does not stop (the old stop is
             //     the last 900 ticks). The leader's box is kept 60 points above the bot's (or 100 below it) all along, so that the standing does not change with the bot's own income

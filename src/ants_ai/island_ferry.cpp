@@ -30,9 +30,7 @@ uint32_t swim_step(const sim::Grid& grid, sim::TileCoord from, sim::TileCoord to
 void FerryTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
     if (command.type != sim::CommandType::GroupMove || command.ants.size() != 1) return;
     const auto it = recs_.find(command.ants[0]);
-    if (it == recs_.end()) return;
-    const auto click = clicks_.find(it->second.pile);
-    if (click == clicks_.end() || command.tile_x != click->second.x || command.tile_y != click->second.y) return;
+    if (it == recs_.end() || command.tile_x != it->second.click.x || command.tile_y != it->second.click.y) return;       // (the order to a pile, not the one that sends a carrier home)
     if (fate == Bot::Fate::Sent) it->second.sent = tick;                                            // the clock of the order starts when it LEFT
     else it->second.dropped = true;
 }
@@ -49,7 +47,7 @@ void FerryTask::search(TaskContext& c) {
     const auto passable = [&](sim::TileCoord t) {
         if (!grid.in_bounds(t)) return false;
         if (MapInfo::walkable(grid, c.seat, t, ctx)) return true;
-        return grid.terrain_class_at(t) == sim::movement::kTerrainWater && grid.get_cell(t).is_empty_overlay();   // open water: a Swimmer swims over it (a dig in progress, a bomb, an object do not)
+        return grid.terrain_class_at(t) == sim::movement::kTerrainWater && grid.get_cell(t).is_empty_overlay() && !grid.is_solid_object(t);   // open water: a Swimmer swims over it (a dig in progress, a bomb, an object, a rock or a reed do not: the engine's R4)
     };
     using Item = std::pair<int32_t, int32_t>;
     std::priority_queue<Item, std::vector<Item>, std::greater<Item>> open;
@@ -126,11 +124,28 @@ void FerryTask::step(TaskContext& c) {
         if (a.type != sim::AntType::Swimmer) continue;
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id()) continue;
+        // a carrier that stands idle with its food: the engine's loop ended without a deposit (no way home: "Can't go there.", and nothing retries it), the Swimmer that works a pile (it has a
+        // record) as well as a free one. After rescue_after ticks it is sent to the hill's entrance, which banks the food
+        if (a.holding && a.idle()) {
+            const auto it = carrying_.emplace(a.id, now).first;
+            if (now >= it->second + params_.rescue_after && c.map.hill(c.seat).present) {
+                c.orders.move({a.id}, c.map.hill(c.seat).entrance);
+                it->second = now;
+                ++rescues_;
+                const auto rec = recs_.find(a.id);
+                if (rec != recs_.end()) rec->second.rescued = true;
+            }
+            continue;
+        }
         if (recs_.count(a.id) != 0) {
             // an order that did nothing: the Swimmer stands where it stood, empty, long after the order left (or the order never left: it is ordered again)
             const Rec& r = recs_[a.id];
             const bool late = r.sent != 0 ? now >= r.sent + params_.fail_after : now >= r.decided + 3u * params_.fail_after;
-            if (r.dropped) {
+            if (r.rescued && !a.holding) {                                                           // it has banked the food that it was sent home with: it is free again (its record would read the empty Swimmer by the hill as an order that did nothing)
+                carrying_.erase(a.id);
+                c.ledger.release(a.id, id());
+                recs_.erase(a.id);
+            } else if (r.dropped) {
                 c.ledger.release(a.id, id());
                 recs_.erase(a.id);
             } else if (a.idle() && !a.holding && late && a.tile.chebyshev_dist(r.origin) <= 1) {
@@ -141,17 +156,7 @@ void FerryTask::step(TaskContext& c) {
             }
             continue;
         }
-        if (!a.takes_orders() || a.holding || a.carried_points > 0) {
-            if (a.holding && a.idle()) {                                                             // a carrier that stands idle with its food: the engine's loop ended
-                const auto it = carrying_.emplace(a.id, now).first;
-                if (now >= it->second + params_.rescue_after && c.map.hill(c.seat).present) {
-                    c.orders.move({a.id}, c.map.hill(c.seat).entrance);
-                    it->second = now;
-                    ++rescues_;
-                }
-            }
-            continue;
-        }
+        if (!a.takes_orders() || a.holding || a.carried_points > 0) continue;
         carrying_.erase(a.id);
         if (a.idle()) pool.push_back(&a);
     }
@@ -191,6 +196,7 @@ void FerryTask::step(TaskContext& c) {
             r.pile = k.pile;
             r.decided = now;
             r.origin = a->tile;
+            r.click = k.click;
             recs_[a->id] = r;
             c.orders.move({a->id}, k.click);
             ++k.load;

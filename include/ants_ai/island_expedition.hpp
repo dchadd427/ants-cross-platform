@@ -11,6 +11,7 @@
 // Everything is read from the BotView and nothing is a promise: an ant that died, a bomb that is gone, an enemy on the shore are seen at the next look and the leg or the row is planned
 // again. Idle where a Swimmer lies within a walk (SMALL), where no row has a Swimmer left, and while the bot has the Swimmers it wants.
 
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <set>
@@ -34,7 +35,7 @@ public:
         uint32_t plant_wait{50};             // a plant order that has made no bomb after this many ticks (and the latency of the level) is given again
         uint32_t hop_wait{160};              // a hop order after which the ant is still on the island this long: the bomb was a dud
         uint32_t stuck_ticks{2400};          // no progress for this long: the expedition is given up (and tried again after retry_ticks)
-        uint32_t retry_ticks{900};
+        uint32_t retry_ticks{900};           // the pause after the first attempt that was given up; it doubles with each one in a row, up to eight times this
         uint32_t min_ticks_left{3600};       // nothing starts with less than this left on the clock
     };
 
@@ -49,6 +50,12 @@ public:
     void attach(const IslandTask* islands) noexcept { islands_ = islands; }
     void set_params(const Params& params) { params_ = params; }
     const Params& params() const noexcept { return params_; }
+
+    /// The pause after an attempt that was given up: `retry_ticks` after the first one in a row, twice that after the second, four and eight times after the next, and eight times from then on
+    /// (`in_a_row` counts the one that was just given up)
+    static constexpr uint64_t pause_after(uint32_t retry_ticks, uint32_t in_a_row) noexcept {
+        return static_cast<uint64_t>(retry_ticks) << std::min<uint32_t>(in_a_row == 0u ? 0u : in_a_row - 1u, 3u);
+    }
 
     // ---- for the tests and the reports ----
     bool active() const noexcept { return !route_.empty(); }
@@ -140,6 +147,7 @@ private:
     uint32_t swimmers_taken_{0};
     uint32_t planned_{0};
     uint32_t given_up_{0};
+    uint32_t giveups_in_a_row_{0};           // the attempts given up since the last one that got its Swimmers (the pause before the next grows with it)
     uint64_t first_plant_{0};
     uint64_t first_landing_{0};
     uint64_t first_swimmer_{0};
