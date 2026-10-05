@@ -1,5 +1,5 @@
 // Tests of the keys' storage (ants_app/rejoin_store.hpp, docs/NETWORK_PORT.md "What the clients do in release B"): the desktop's file and the browser's local storage behind one interface. No window,
-// no sockets, a clock of the test's own: the file's format and what a broken line does, the age of an entry (24 hours), the cap (8), replace and forget, the file's mode (0600, whatever the umask
+// no sockets, a clock of the test's own: the file's format and what a broken line does, the age of an entry (3 hours), the cap (8), replace and forget, the file's mode (0600, whatever the umask
 // says, the temp file's too), the atomic write (a reader sees the old file or the new one, never half of one) and the web backend's names and values over a map.
 //
 // A KEY IS A SECRET: no test prints one (a failed assertion names its condition, never a value).
@@ -73,6 +73,7 @@ namespace {
 
 constexpr int64_t kSecond = 1000;
 constexpr int64_t kHour = 3600 * kSecond;
+constexpr int64_t kAge = 3 * kHour;                              // how long a key is of use (rejoin_store.hpp: a key that outlives its match is a button for a match that is gone)
 constexpr int64_t kT0 = 1'700'000'000'000;                         // a Unix time in ms, a whole second
 
 // A folder of this process alone, made new and removed with everything in it when the program ends
@@ -345,22 +346,23 @@ void run_file_tests() {
         ASSERT_EQ(files_in(dir), size_t{1});
     } TEST_END();
 
-    TEST_CASE("RS3.1 An Entry Is Of Use For 24 Hours: One Second Short Of A Day It Is Given Back, A Second Past It Is Not; A Read Writes Nothing, The Next Write Leaves It Out, And A Time In The Far Future Is No Entry") {
+    TEST_CASE("RS3.1 An Entry Is Of Use For 3 Hours: One Second Short Of Them It Is Given Back, A Second Past Them It Is Not; A Read Writes Nothing, The Next Write Leaves It Out, And A Time In The Far Future Is No Entry") {
+        ASSERT_EQ(kRejoinMaxAgeMs, kAge);                                                           // (the limit itself: three hours; it was 24)
         const fs::path dir = scratch().fresh("rs31");
         Clock clock;
         FileRejoinStore store((dir / "rejoin.txt").string(), clock.fn());
         ASSERT_TRUE(store.put(rk("OLD", 1, kServer, 1)));
-        clock.now = kT0 + 24 * kHour - kSecond;
+        clock.now = kT0 + kAge - kSecond;
         ASSERT_EQ(store.entries().size(), size_t{1});
-        clock.now = kT0 + 24 * kHour;
-        ASSERT_EQ(store.entries().size(), size_t{1});                                               // (a day exactly: not older than a day)
-        clock.now = kT0 + 24 * kHour + kSecond;
+        clock.now = kT0 + kAge;
+        ASSERT_EQ(store.entries().size(), size_t{1});                                               // (three hours exactly: not older than that)
+        clock.now = kT0 + kAge + kSecond;
         ASSERT_TRUE(store.entries().empty() && !store.find(kServer, "OLD") && !store.newest());
         ASSERT_EQ(read_file(dir / "rejoin.txt"), line_of(kServer, "OLD", 1, 1, kT0 / kSecond));      // reading removed nothing from the file ...
         ASSERT_TRUE(store.put(rk("NEW", 2, kServer, 2)));                                            // ... a write does not write it again
         ASSERT_EQ(read_file(dir / "rejoin.txt"), line_of(kServer, "NEW", 2, 2, clock.now / kSecond));
         // the same through the other direction: a file from the future (the clock was set back) is judged by the same limit
-        write_file(dir / "rejoin.txt", line_of(kServer, "SOON", 0, 3, (clock.now + 23 * kHour) / kSecond) + line_of(kServer, "FAR", 0, 4, (clock.now + 25 * kHour) / kSecond));
+        write_file(dir / "rejoin.txt", line_of(kServer, "SOON", 0, 3, (clock.now + kAge - kHour) / kSecond) + line_of(kServer, "FAR", 0, 4, (clock.now + kAge + kHour) / kSecond));
         const std::vector<RejoinEntry> got = store.entries();
         ASSERT_TRUE(got.size() == 1 && got[0].room == "SOON");
     } TEST_END();
@@ -502,7 +504,7 @@ void run_other_store_tests() {
         ASSERT_TRUE(store.find(kServer, "ROOM-4"));
         store.forget(rk("ROOM-4", 0, kServer, 98));
         ASSERT_FALSE(store.find(kServer, "ROOM-4"));
-        clock.now = kT0 + 9 * kSecond + 24 * kHour;                                                 // ROOM-9 was put at +9 s: exactly a day old; ROOM-8, a second older, is not given back
+        clock.now = kT0 + 9 * kSecond + kAge;                                                       // ROOM-9 was put at +9 s: exactly as old as a key may be; ROOM-8, a second older, is not given back
         ASSERT_TRUE(store.entries().size() == 1 && store.entries()[0].room == "ROOM-9");
     } TEST_END();
 
@@ -531,16 +533,16 @@ void run_other_store_tests() {
         ASSERT_EQ(storage.items().size(), size_t{3});
     } TEST_END();
 
-    TEST_CASE("RS6.2 The Web Backend: An Entry Older Than 24 Hours Is Removed When It Is Read, A Key Is Let Go Of By Its Key (A Newer Key Of The Seat Stays), 8 At Most, And What Is Not An Entry Is Ignored") {
+    TEST_CASE("RS6.2 The Web Backend: An Entry Older Than 3 Hours Is Removed When It Is Read, A Key Is Let Go Of By Its Key (A Newer Key Of The Seat Stays), 8 At Most, And What Is Not An Entry Is Ignored") {
         MapStorage storage;
         Clock clock;
         LocalStorageRejoinStore store(storage, clock.fn());
         ASSERT_TRUE(store.put(rk("OLD", 0, "wss://x/y", 1)));
-        clock.now = kT0 + 12 * kHour;
+        clock.now = kT0 + kAge / 2;
         ASSERT_TRUE(store.put(rk("MID", 1, "wss://x/y", 2)));
-        clock.now = kT0 + 24 * kHour;
+        clock.now = kT0 + kAge;
         ASSERT_EQ(store.entries().size(), size_t{2});
-        clock.now = kT0 + 24 * kHour + kSecond;
+        clock.now = kT0 + kAge + kSecond;
         std::vector<RejoinEntry> all = store.entries();
         ASSERT_TRUE(all.size() == 1 && all[0].room == "MID");
         ASSERT_TRUE(storage.items().count("ants.rejoin.OLD.0") == 0 && storage.items().count("ants.rejoin.MID.1") == 1);       // removed when read

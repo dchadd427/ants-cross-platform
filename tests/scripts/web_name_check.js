@@ -259,8 +259,8 @@ check('a copy of the address of a game that was given a name is a shared link', 
     check('... and so does one for another room', asks('?join=/ws&room=XYZ&seat=1', KEEP) === true);
     check('... and one for another seat of the room (a link for the friend\'s seat: the key is mine, the seat is not)', asks('?join=/ws&room=ABC&seat=2', KEEP) === true);
     check('a key of another server does not count', asks('?join=/ws&room=ABC&seat=1', { 'ants.rejoin.ABC.1': entry(5000, 'wss://other.example/ws') }) === true);
-    check('a key of a day and a second does not count (the game would not use it either)', asks('?join=/ws&room=ABC&seat=1', { 'ants.rejoin.ABC.1': entry(24 * 3600 * 1000 + 1000) }) === true);
-    check('a key of a day to the millisecond does', asks('?join=/ws&room=ABC&seat=1', { 'ants.rejoin.ABC.1': entry(24 * 3600 * 1000) }) === false);
+    check('a key of three hours and a second does not count (the game would not use it either)', asks('?join=/ws&room=ABC&seat=1', { 'ants.rejoin.ABC.1': entry(3 * 3600 * 1000 + 1000) }) === true);
+    check('a key of three hours to the millisecond does', asks('?join=/ws&room=ABC&seat=1', { 'ants.rejoin.ABC.1': entry(3 * 3600 * 1000) }) === false);
     check('a broken entry does not count', asks('?join=/ws&room=ABC&seat=1', { 'ants.rejoin.ABC.1': 'junk' }) === true);
     check('the door of the address is the server that the key must be of: /ws/room-1 is another server than /ws', asks('?join=/ws/room-1&room=ABC&seat=1', KEEP) === true && holds('?join=/ws/room-1&room=ABC&seat=1', { 'ants.rejoin.ABC.1': entry(5000, 'ws://h/ws/room-1') }) === true);
     check('with a storage that cannot be read the step asks, as for any shared link', shell.holdsThisSeat('?join=/ws&room=ABC&seat=1', args('?join=/ws&room=ABC&seat=1'), null, NOW) === false);
@@ -962,8 +962,8 @@ const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-d
         check('a remembered name that the rules refuse is no name (the field is empty too)', env.assigned.length === 1 && env.param(env.assigned[0], 'name') === '' && /&name=&aspect=/.test(env.assigned[0]), env.assigned[0]);
     }
     {
-        const env = runLobby('', { 'ants.rejoin.old-room.0': entry(25 * 3600 * 1000), 'ants.rejoin.mid-room.1': entry(23 * 3600 * 1000) }, { firstVisit: true });
-        same('an entry older than a day is not offered and is removed (as the game does); one a little younger is the offer', [rejoinView(env).button, Object.keys(env.storage.data)], ['Rejoin your match (mid-room)', ['ants.rejoin.mid-room.1']]);
+        const env = runLobby('', { 'ants.rejoin.old-room.0': entry(4 * 3600 * 1000), 'ants.rejoin.mid-room.1': entry(2 * 3600 * 1000) }, { firstVisit: true });
+        same('an entry older than three hours is not offered and is removed (as the game does); one a little younger is the offer', [rejoinView(env).button, Object.keys(env.storage.data)], ['Rejoin your match (mid-room)', ['ants.rejoin.mid-room.1']]);
     }
     {
         const env = runLobby('', { 'ants.rejoin.other.0': entry(1000, 'wss://other.test/ws'), 'ants.rejoin.mine.1': entry(9000) }, { firstVisit: true });

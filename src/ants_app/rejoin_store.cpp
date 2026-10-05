@@ -38,7 +38,7 @@ bool printable_text(const std::string& s, size_t max_chars) noexcept {
 
 bool storable_room(const std::string& room) noexcept { return !room.empty() && net::valid_room_code(room); }
 
-// The age of an entry against the clock: a key of a match that a day has passed over is of no use; a time far in the future is a broken clock or a broken file, and is no entry either
+// The age of an entry against the clock: a key of a match that kRejoinMaxAgeMs have passed over is of no use; a time that far in the future is a broken clock or a broken file, and is no entry either
 bool fresh_at(int64_t written_ms, int64_t now_ms) noexcept {
     if (written_ms < 0) return false;
     if (now_ms - written_ms > kRejoinMaxAgeMs) return false;
@@ -522,7 +522,7 @@ std::vector<RejoinEntry> LocalStorageRejoinStore::read_all() {
         RejoinEntry e;
         std::string hex;
         if (!parse_value(*value, hex, e.server, e.written_ms) || !rejoin_key_from_hex(hex, e.key) || !printable_text(e.server, kMaxServerChars)) continue;
-        if (now - e.written_ms > kRejoinMaxAgeMs) {                       // a day old: removed when read
+        if (now - e.written_ms > kRejoinMaxAgeMs) {                       // too old: removed when read
             storage_.remove(name);
             continue;
         }

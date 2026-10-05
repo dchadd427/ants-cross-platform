@@ -319,7 +319,10 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
     bool rejoin = false;                                           // a player who comes back to a match that runs (a Hello with the key of a seat)
     auto it = hello.room.empty() ? rooms_.end() : rooms_.find(hello.room);
     const bool ended = it != rooms_.end() && (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed);
-    if (ended && is_demo_code(hello.room) && limits_.demo_rooms > 0) {
+    // A Hello that shows a key is a player who comes back to a match: never a newcomer. It does not make a demo room and does not replace an ended one (the match of its key is over: NoSuchRoom,
+    // and its machine lets the key go); the review found a stale key that opened a new, empty room of the same code and left the player alone in it.
+    const bool keyed = !net::key_is_zero(hello.key);
+    if (ended && !keyed && is_demo_code(hello.room) && limits_.demo_rooms > 0) {
         // A demo room that is over is forgotten at once when somebody comes back to its code (a late friend, a reload, a rematch with the same
         // link): its end is reported, and the Hello makes a new room below
         if (!it->second->end_reported()) {
@@ -336,7 +339,7 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
             return;
         }
     }
-    if (it == rooms_.end() && !hello.room.empty() && make_demo_room(hello.room, now_ms)) it = rooms_.find(hello.room);
+    if (it == rooms_.end() && !keyed && !hello.room.empty() && make_demo_room(hello.room, now_ms)) it = rooms_.find(hello.room);
     if (it == rooms_.end()) {
         good = false;
         reason = net::RejectReason::NoSuchRoom;

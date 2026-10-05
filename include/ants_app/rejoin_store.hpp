@@ -1,16 +1,16 @@
 #pragma once
 
 // Where a player's machine keeps the keys of its seats, so that a game that was closed or a page that was reloaded can take its seat in a running match again (docs/NETWORK_PORT.md,
-// "What the clients do in release B"). NetGame hands a key out (set_on_key) at every Welcome of a server's room that holds seats and lets go of it (set_on_forget_key) when it is of no
-// more use; the application writes both here, and a join that names the room looks the key up (Application::init, the start menu's "Rejoin your match").
+// "What the clients do in release B"). NetGame hands a key out (set_on_key) when the match of a server's room that holds seats has begun (the Start; a rejoin's Welcome says it again) and lets go of
+// it (set_on_forget_key) when it is of no more use; the application writes both here, and a join that names the room looks the key up (Application::init, the start menu's "Rejoin your match").
 //
 // A KEY IS A SECRET: whoever has it can take the seat. It is kept where only its owner can read it (a file of mode 0600; the browser's local storage), and it never appears in a URL, a log
 // line, a status text or a test's output.
 //
 //   desktop  one file, `rejoin.txt`, beside the settings file: a line per key, tab-separated: server, room, seat, key (32 hex digits), written (Unix seconds). Made with mode 0600 on POSIX
 //            (the temp file of the atomic write too: opened with 0600, then fchmod); on Windows the per-user folder is private already. At most 8 entries (the newest are kept); an entry
-//            older than 24 hours is not given back and is not written again; every write is a temp file that is renamed over the old one.
-//   web      localStorage `ants.rejoin.<room>.<seat>` = {"k": hex, "s": server, "t": epoch ms} (the same storage as the settings); entries older than 24 hours are removed when read.
+//            older than 3 hours is not given back and is not written again; every write is a temp file that is renamed over the old one.
+//   web      localStorage `ants.rejoin.<room>.<seat>` = {"k": hex, "s": server, "t": epoch ms} (the same storage as the settings); entries older than 3 hours are removed when read.
 //
 // The classes know nothing of sockets, SDL or the window: the tests run them with a clock of their own.
 
@@ -36,8 +36,9 @@ struct RejoinEntry {
     int64_t written_ms{0};             // the wall clock when the Welcome gave it (a file keeps whole seconds)
 };
 
-/// An entry is of no use after this long (the matches that a server keeps are far shorter; a key that a day has passed over belongs to a match that is gone)
-inline constexpr int64_t kRejoinMaxAgeMs = int64_t{24} * 3600 * 1000;
+/// An entry is of no use after this long: a match of a public server is over well within it (a demo room's play is 30 minutes at the most, its pauses 10), and a key that outlives its match is a button
+/// for a match that is gone (the review: it was 24 hours). The same limit judges an entry from the future (a clock that was set back).
+inline constexpr int64_t kRejoinMaxAgeMs = int64_t{3} * 3600 * 1000;
 /// The file keeps this many entries (the newest)
 inline constexpr size_t kRejoinMaxEntries = 8;
 
@@ -62,7 +63,7 @@ public:
     virtual bool put(const net::RejoinKey& key) = 0;
     /// Lets go of the entry of that server, room and seat that holds that key: another key of the seat (a newer match of the same room) stays
     virtual void forget(const net::RejoinKey& key) = 0;
-    /// The fresh entries (not older than a day), newest first
+    /// The fresh entries (not older than kRejoinMaxAgeMs), newest first
     virtual std::vector<RejoinEntry> entries() = 0;
 
     /// The newest entry of that server and room (and that seat, unless it is 255)
@@ -84,7 +85,7 @@ private:
     std::vector<RejoinEntry> kept_;
 };
 
-/// The desktop's file (see the top of this file). A line that is not an entry is ignored, and so is every entry older than a day; nothing is written by a read.
+/// The desktop's file (see the top of this file). A line that is not an entry is ignored, and so is every entry older than kRejoinMaxAgeMs; nothing is written by a read.
 class FileRejoinStore final : public RejoinStore {
 public:
     explicit FileRejoinStore(std::string path, std::function<int64_t()> clock = wall_clock_ms) : path_(std::move(path)), clock_(std::move(clock)) {}
@@ -155,7 +156,7 @@ public:
     static bool parse_value(const std::string& text, std::string& hex, std::string& server, int64_t& written_ms);
 
 private:
-    std::vector<RejoinEntry> read_all();                                   // every fresh entry, newest first (a day old: removed)
+    std::vector<RejoinEntry> read_all();                                   // every fresh entry, newest first (too old: removed)
 
     KeyValueStorage& storage_;
     std::function<int64_t()> clock_;

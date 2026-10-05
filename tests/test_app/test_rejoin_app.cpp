@@ -702,7 +702,7 @@ Reach poke(Application& app, uint32_t ant_id) {
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 void run_key_tests() {
-    TEST_CASE("RA1.1 The Application Keeps The Key Of Its Seat In A File Beside Its Settings As Soon As The Room Gives It (Mode 0600, The Server, The Room And The Seat In Its Line); Bob's Key Is Not In It; Leaving Lets Go Of It, And Nothing That The Program Printed Holds A Key") {
+    TEST_CASE("RA1.1 The Application Keeps The Key Of Its Seat In A File Beside Its Settings As Soon As The Match Begins (The Start; A Waiting Room Gives It None: Mode 0600, The Server, The Room And The Seat In Its Line); Bob's Key Is Not In It; Leaving Lets Go Of It, And Nothing That The Program Printed Holds A Key") {
         const Captured output;
         World w;
         ASSERT_TRUE(w.server.start(w.now));
@@ -710,9 +710,11 @@ void run_key_tests() {
         const fs::path dir = scratch_dir("ra11");
         Application& app = w.start_app(w.config(dir, "RA-1", "Ann"));
         ASSERT_TRUE(w.run_until([&]() { return app.net()->phase() == NetGame::Phase::Room && app.net()->my_seat() == 0; }, 5000));
-        ASSERT_TRUE(w.run_until([&]() { return app.rejoin_store() != nullptr && app.rejoin_store()->entries().size() == 1; }, 2000));        // the Welcome gave the key
+        w.run(500);
+        ASSERT_TRUE(app.rejoin_store() != nullptr && app.rejoin_store()->entries().empty() && !fs::exists(dir / "rejoin.txt"));       // the room's Welcome gave a key, and a waiting room keeps none (the review: a visit alone leaves nothing to outlive it)
         Machine& bob = w.join("Bob", "RA-1");
         ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        ASSERT_TRUE(w.run_until([&]() { return app.rejoin_store()->entries().size() == 1; }, 2000));        // the Start gave the key
         ASSERT_TRUE(!bob.keys_given.empty());
         const net::SeatKey bob_key = bob.keys_given[0].key;
         // the file: one line, its server, room and seat, the key of the application's seat (not Bob's)
@@ -863,8 +865,8 @@ void run_use_tests() {
             {"--seat that no entry holds: a new player", {line(me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 2, 0, 2},
             {"another room", {line(me, "ROOM-A", 1, 11, 5)}, "ROOM-B", 255, 0, -1},
             {"another server", {line("elsewhere.example:4001", "ROOM-A", 1, 11, 5), line("127.0.0.1:1", "ROOM-A", 1, 12, 4)}, "ROOM-A", 255, 0, -1},
-            {"an entry of a day and a minute", {line(me, "ROOM-A", 1, 11, 24 * 60 + 1)}, "ROOM-A", 255, 0, -1},
-            {"an entry of a day less a minute", {line(me, "ROOM-A", 1, 11, 24 * 60 - 1)}, "ROOM-A", 255, 11, 1},
+            {"an entry of three hours and a minute", {line(me, "ROOM-A", 1, 11, 3 * 60 + 1)}, "ROOM-A", 255, 0, -1},
+            {"an entry of three hours less a minute", {line(me, "ROOM-A", 1, 11, 3 * 60 - 1)}, "ROOM-A", 255, 11, 1},
             {"two seats of the room: the newest", {line(me, "ROOM-A", 0, 21, 60), line(me, "ROOM-A", 3, 22, 10)}, "ROOM-A", 255, 22, 3},
             {"two seats of the room, --seat 0: the older", {line(me, "ROOM-A", 0, 21, 60), line(me, "ROOM-A", 3, 22, 10)}, "ROOM-A", 0, 21, 0},
             {"no room (a direct join)", {line(me, "ROOM-A", 1, 11, 5)}, "", 255, 0, -1},
@@ -984,10 +986,10 @@ void run_menu_tests() {
             std::ofstream out(path, std::ios::binary | std::ios::trunc);
             out << text;
         };
-        // not offered: a day and a minute old, a URL
+        // not offered: three hours and a minute old, a URL
         {
             const fs::path dir = scratch_dir("ra72a");
-            write_file(dir / "rejoin.txt", key_line(server, "OLD-1", 0, key_of(1), now - 24 * 3600 * 1000 - 60 * 1000) + key_line("wss://play.example.org/game", "WEB-1", 1, key_of(2), now));
+            write_file(dir / "rejoin.txt", key_line(server, "OLD-1", 0, key_of(1), now - 3 * 3600 * 1000 - 60 * 1000) + key_line("wss://play.example.org/game", "WEB-1", 1, key_of(2), now));
             Application& menu = w.start_menu_app(dir);
             ASSERT_FALSE(menu.start_menu().rejoin().has_value() || menu_has(menu, MenuId::Rejoin));
         }

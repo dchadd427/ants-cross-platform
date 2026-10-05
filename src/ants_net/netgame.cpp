@@ -255,6 +255,8 @@ void NetGame::begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_por
     reload_used_ = false;
     join_key_ = key;
     welcomed_ = false;
+    pending_key_ = SeatKey{};
+    start_key_announced_ = false;
     have_key_ = false;
     rejoin_key_ = RejoinKey{};
     last_mode_ = ClientSession::Mode::Normal;
@@ -287,6 +289,8 @@ void NetGame::leave() {
     reload_used_ = false;
     join_key_ = SeatKey{};
     welcomed_ = false;
+    pending_key_ = SeatKey{};
+    start_key_announced_ = false;
     last_mode_ = ClientSession::Mode::Normal;
 }
 
@@ -549,6 +553,8 @@ void NetGame::update_client() {
                     start_ = client_lobby_->start_info();
                     begin_peer_links();                          // the links between guests are made while the map loads
                     events_.push_back(Event{Event::Type::StartRequested, 255, client_lobby_->rejoined()});
+                    announce_start_key();                        // (the match has begun: a new player's key is kept now; the function that is told may end the session)
+                    if (!client_lobby_) return;
                     break;
                 case ClientLobby::Event::Type::Begun:
                     begin_match();
@@ -566,6 +572,8 @@ void NetGame::update_client() {
                         set_notice("The start was cancelled.");
                     }
                     events_.push_back(Event{Event::Type::Cancelled, who});
+                    unannounce_start_key();                      // (the room waits again: it keeps no key; the function that is told may end the session)
+                    if (!client_lobby_) return;
                     break;
                 }
                 case ClientLobby::Event::Type::Rejected:
@@ -717,18 +725,38 @@ void NetGame::forget_key() {
     fn(gone);
 }
 
-// The lobby's Welcome is the moment that a room hands out a key (none from a game on the local network or a room that holds no seats). A Hello that showed a key and was answered as a new player's (the
-// Welcome has no rejoin flag and another key: the match is gone and a room with the same code, a demo room that the Hello made again, is waiting for its players) found nothing to take the seat of: the
-// old key is of no use, and the machine is a player of the waiting room like any other. The same key without the flag is the seat taken back in a waiting room.
+// The lobby's Welcome is the moment that a room hands out a key (none from a game on the local network or a room that holds no seats). A rejoin's Welcome (the flag: the match is this machine's own, it
+// is running) announces the key at once. A new player's key waits for the Start (announce_start_key): a visit to a waiting room alone, a tab that is closed in it, leaves no key behind to be offered
+// for a match that never began. A Hello that showed a key and was answered as a new player's (the Welcome has no rejoin flag and another key: a room with the same code is waiting for its players, a
+// demo room that another Hello made; the server never makes one for a Hello that shows a key) found nothing to take the seat of: the old key is of no use, and the machine is a player of the waiting
+// room like any other. The same key without the flag is the seat taken back in a waiting room.
 void NetGame::note_lobby_welcome() {
     if (welcomed_ || !client_lobby_ || client_lobby_->my_seat() >= sim::MAX_PLAYERS) return;
     welcomed_ = true;
-    const SeatKey& key = client_lobby_->key();
+    const SeatKey key = client_lobby_->key();
     if (!key_is_zero(join_key_) && !client_lobby_->rejoined() && !key_matches(key, join_key_)) {
         forget_key();
         set_notice(kTextNewRoom);
     }
+    if (client_lobby_->rejoined()) announce_key(key, client_lobby_->my_seat());
+    else pending_key_ = key;                                    // (zero for a room that gives none: nothing to announce then)
+}
+
+// The Start arrived: the match begins, so the key that the room gave a new player is kept now. A rejoin announced its key at its Welcome already (pending_key_ is zero then).
+void NetGame::announce_start_key() {
+    if (key_is_zero(pending_key_) || !client_lobby_) return;
+    const SeatKey key = pending_key_;
+    pending_key_ = SeatKey{};
+    start_key_announced_ = true;
     announce_key(key, client_lobby_->my_seat());
+}
+
+// A start that is cancelled is no match: the key that it gave out goes again, and the next Start gives it again (a waiting room keeps no key)
+void NetGame::unannounce_start_key() {
+    if (!start_key_announced_ || !client_lobby_) return;
+    start_key_announced_ = false;
+    pending_key_ = rejoin_key_.key;
+    forget_key();
 }
 
 // The session's mode changed (it was looked at after every update). A rejoin's Welcome (Rejoining to CatchingUp, or straight to Normal) says the key again; the end of the way back, in whichever way
@@ -834,6 +862,7 @@ void NetGame::begin_reload() {
     client_lobby_ = std::make_unique<ClientLobby>(transport_->uplink.get(), lobby_config(key, seat_));
     join_key_ = key;
     welcomed_ = false;
+    pending_key_ = SeatKey{};
     phase_ = Phase::Connecting;
     refresh_status();
 }

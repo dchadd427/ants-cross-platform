@@ -4,7 +4,7 @@
 //     page writes ({"k": 32 hex digits that are not all zero, "s": a printable server, "t": a whole number of milliseconds}: no member more or less, no other type), and nothing else;
 //   * the server: an entry is for THIS site when its "s" is what the game page joins from this origin (web/shell.html, ANTS_PAGE.joinArguments: wss:// for https, ws:// otherwise, the host, /ws): the
 //     same text, checked against the game page's own function on both schemes; every other text (another scheme, host, port, path, case, a trailing slash) is another server's and is not offered;
-//   * the age: a day to the millisecond is fresh, a millisecond more is too old and the entry is REMOVED (the game's rule when it reads), whatever its server; a time up to a minute ahead of the clock is
+//   * the age: three hours to the millisecond is fresh (it was 24 hours: a key that outlives its match is a button for a match that is gone), a millisecond more is too old and the entry is REMOVED (the game's rule when it reads), whatever its server; a time up to a minute ahead of the clock is
 //     fresh, a millisecond more is a wrong clock: not offered, and left in the storage; an entry of another server, a malformed one and a foreign item are left as they are;
 //   * the newest of several (by time; on a tie the lower seat, then the room), whatever the order of the storage; a good entry among bad ones is found; and the same question for one room and one seat
 //     (the game page asks it: does this browser hold the key of this very seat?), which leaves the entries of other rooms and seats where they are and still removes the old ones;
@@ -60,6 +60,7 @@ const NOW = 1790000000000;                                  // the clock of the 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
+const AGE = 3 * HOUR;                      // how long a key is offered (the game's rule: src/ants_app/rejoin_store.hpp, kRejoinMaxAgeMs)
 const SERVER = 'wss://play.test/ws';
 const HEX = '00112233445566778899aabbccddeeff';
 const entryText = (t, server, key) => '{"k":"' + (key || HEX) + '","s":"' + (server === undefined ? SERVER : server) + '","t":' + t + '}';        // as src/ants_app/rejoin_store.cpp (value_of) writes it
@@ -86,7 +87,7 @@ const offer = (items, server, now, throwing) => { const st = makeStorage(items, 
 // the constants and the server
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 check('the entries are the game page\'s: ants.rejoin.<room>.<seat>', R.REJOIN_PREFIX === 'ants.rejoin.');
-check('a day is 24 hours to the millisecond, and a clock that was wrong by more than a minute is not trusted', R.REJOIN_MAX_AGE_MS === DAY && R.REJOIN_FUTURE_MS === MIN);
+check('a key is of use for three hours to the millisecond, and a clock that was wrong by more than a minute is not trusted', R.REJOIN_MAX_AGE_MS === AGE && R.REJOIN_FUTURE_MS === MIN);
 same('the server of an https page is wss://<host>/ws, of an http page ws://<host>/ws (with the port the host has)', [R.rejoinServer(true, 'beta.playants.org'), R.rejoinServer(false, '127.0.0.1:8080'), R.rejoinServer(true, 'play.test:8443')],
      ['wss://beta.playants.org/ws', 'ws://127.0.0.1:8080/ws', 'wss://play.test:8443/ws']);
 {
@@ -142,11 +143,11 @@ check('a storage with only other items offers nothing (the settings, the name, t
 
 // the age
 {
-    const exactly = offer({ [nameOf('a', 0)]: entryText(NOW - DAY) });
-    same('an entry that is exactly a day old is fresh (the game\'s rule: older than a day is of no use)', exactly.got, { room: 'a', seat: 0, t: NOW - DAY });
+    const exactly = offer({ [nameOf('a', 0)]: entryText(NOW - AGE) });
+    same('an entry that is exactly three hours old is fresh (the game\'s rule: older than that is of no use)', exactly.got, { room: 'a', seat: 0, t: NOW - AGE });
     check('... and is not removed', exactly.storage.data.has(nameOf('a', 0)) && exactly.storage.calls.removeItem.length === 0);
-    const over = offer({ [nameOf('a', 0)]: entryText(NOW - DAY - 1) });
-    check('an entry a millisecond older than a day is not offered', over.got === null);
+    const over = offer({ [nameOf('a', 0)]: entryText(NOW - AGE - 1) });
+    check('an entry a millisecond older than three hours is not offered', over.got === null);
     check('... and is REMOVED, as the game does when it reads', !over.storage.data.has(nameOf('a', 0)) && over.storage.calls.removeItem.length === 1 && over.storage.calls.removeItem[0] === nameOf('a', 0));
     const mixed = offer({ [nameOf('old', 0)]: entryText(NOW - 3 * DAY), [nameOf('new', 1)]: entryText(NOW - HOUR) });
     same('an old entry does not hide a fresh one, and goes while the fresh one stays', [mixed.got, Array.from(mixed.storage.data.keys())], [{ room: 'new', seat: 1, t: NOW - HOUR }, [nameOf('new', 1)]]);
@@ -154,7 +155,7 @@ check('a storage with only other items offers nothing (the settings, the name, t
     check('an old entry of another server is removed too (a key that old is of no use to any server)', oldOther.got === null && oldOther.storage.data.size === 0);
     const oldBad = offer({ [nameOf('a', 0)]: '{"k":"' + HEX + '","s":"' + SERVER + '","t":' + (NOW - 2 * DAY) + ',"v":2}', [nameOf('b', 1)]: 'junk' });
     check('what is no entry of the game is never removed, however it looks', oldBad.got === null && oldBad.storage.data.size === 2 && oldBad.storage.calls.removeItem.length === 0);
-    check('a time of 0 (1970) is a day old at least', offer({ [nameOf('a', 0)]: entryText(0) }).got === null);
+    check('a time of 0 (1970) is far too old', offer({ [nameOf('a', 0)]: entryText(0) }).got === null);
 }
 
 // the future
@@ -212,7 +213,7 @@ check('a storage with only other items offers nothing (the settings, the name, t
     check('the server still counts: a room of another server is not held', ask('room-c', 3) === null && ask('room-c') === null);
     const old = makeStorage({ [nameOf('room-x', 0)]: entryText(NOW - 2 * DAY), [nameOf('room-y', 0)]: entryText(NOW - 1000) });
     same('a question about one room still removes the old entries of the others (the game does when it reads), and is answered by the room\'s own', [R.rejoinOffer(old, NOW, SERVER, 'room-y', 0), Array.from(old.data.keys())], [{ room: 'room-y', seat: 0, t: NOW - 1000 }, [nameOf('room-y', 0)]]);
-    check('an entry of the room that is a day old is removed, not held', R.rejoinOffer(makeStorage({ [nameOf('room-x', 0)]: entryText(NOW - DAY - 1) }), NOW, SERVER, 'room-x', 0) === null);
+    check('an entry of the room that is too old is removed, not held', R.rejoinOffer(makeStorage({ [nameOf('room-x', 0)]: entryText(NOW - AGE - 1) }), NOW, SERVER, 'room-x', 0) === null);
     check('an entry of the room from the future is not held', R.rejoinOffer(makeStorage({ [nameOf('room-x', 0)]: entryText(NOW + MIN + 1) }), NOW, SERVER, 'room-x', 0) === null);
 }
 

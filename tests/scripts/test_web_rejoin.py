@@ -6,7 +6,7 @@ closed the tab, or whose browser crashed, opens the site's front page and finds 
 site's game server. The key is a secret and is never read out of the storage into an address, a text or a log: the game page finds it itself.
 
   - the block REJOIN of web/lobby.html is RUN (node, when it is installed: tests/scripts/web_rejoin_block_check.js): which storage entries count (exactly the game's JSON, a room by the page's own rule,
-    a seat 0 - 3), this site's server (the game page's own join, on both schemes), the age (a day to the millisecond: older is removed, as the game does; a minute ahead: not offered, not removed),
+    a seat 0 - 3), this site's server (the game page's own join, on both schemes), the age (three hours to the millisecond: older is removed, as the game does; a minute ahead: not offered, not removed),
     another server's entry (kept, not offered), the newest of several, a storage that throws, the words, the address, the game page reading that address, and no key anywhere;
   - the page as a whole is run in the fake browser of tests/scripts/web_name_check.js (when the button is there, what it says, where it goes, the return from the browser's memory);
   - what needs no browser is read from the files: the markup (hidden, above the cards, no text of its own), the style (the page's teal button, a note of one line, the whole width on a phone), the
@@ -82,11 +82,11 @@ class TheBlockAndTheWiring(unittest.TestCase):
 
     def test_the_constants_are_the_games(self):
         self.assertIn("var REJOIN_PREFIX = 'ants.rejoin.';", self.keys)
-        self.assertIn("var REJOIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;", self.keys)
+        self.assertIn("var REJOIN_MAX_AGE_MS = 3 * 60 * 60 * 1000;", self.keys)
         self.assertIn("var REJOIN_FUTURE_MS = 60 * 1000;", self.keys)
         store = read("include", "ants_app", "rejoin_store.hpp")
         self.assertIn('static constexpr const char* kKeyPrefix = "ants.rejoin.";', store)
-        self.assertIn("inline constexpr int64_t kRejoinMaxAgeMs = int64_t{24} * 3600 * 1000;", store)
+        self.assertIn("inline constexpr int64_t kRejoinMaxAgeMs = int64_t{3} * 3600 * 1000;", store)                 # (the page and the game keep a key for the same three hours)
 
     def test_the_room_code_rule_is_the_pages_own_everywhere(self):
         rule = "[A-Za-z0-9_-]{1,32}"

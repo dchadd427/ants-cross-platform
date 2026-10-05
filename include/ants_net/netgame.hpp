@@ -163,9 +163,10 @@ public:
     void leave();
 
     // ---- the way back (docs/NETWORK_PORT.md "Reconnect") ---------------------------------------------------------------------------------------------
-    /// Told when a Welcome has handed this machine a key (a dedicated server's room that holds seats): where to keep it so that the match can be taken up again if the game is closed or the page reloaded
-    /// (join / join_url with the key). Told again at the Welcome of every rejoin, with the same key. Never for a room that gives none (a game on the local network, a room that holds no seats).
-    /// The function may end the session (leave()).
+    /// Told when this machine has been handed a key by a dedicated server's room that holds seats and the match it is for has begun: where to keep it so that the match can be taken up again if the game is
+    /// closed or the page reloaded (join / join_url with the key). A player of a waiting room is told when the Start arrives, not at the room's Welcome (a visit to a waiting room alone leaves no key to
+    /// outlive it, and a reload in the waiting room is a new visit); a start that is cancelled takes the key back (set_on_forget_key) and the next Start gives it again. Told again at the Welcome of every
+    /// rejoin, with the same key (the match is running then). Never for a room that gives none (a game on the local network, a room that holds no seats). The function may end the session (leave()).
     void set_on_key(std::function<void(const RejoinKey&)> fn) { on_key_ = std::move(fn); }
     /// Told once per key when it can no longer be used and is to be let go of: the match ended (freeze), the server dropped the seat or has no such match any more or does not hold the seat, the time to
     /// wait ran out, the player left (leave), or the room that took the code does not know the key (a new room). Not told when another window has the seat (Superseded) or when the server would not take
@@ -427,8 +428,12 @@ private:
     void announce_key(const SeatKey& key, uint8_t seat);
     void forget_key();
     std::string server_text() const;
-    /// The lobby's Welcome came: a key that it handed out is announced; a Hello that showed a key and was answered as a new player's (the match is gone, a new room took the code) forgets the old one
+    /// The lobby's Welcome came: a Hello that showed a key and was answered as a new player's (the match is gone, a new room took the code) forgets the old one; the key of a rejoin is announced at once, the
+    /// key of a new player waits for the Start (announce_start_key)
     void note_lobby_welcome();
+    /// The Start arrived: the key that the room's Welcome gave a new player is announced now (the match has begun), and a cancelled start takes it back (unannounce_start_key)
+    void announce_start_key();
+    void unannounce_start_key();
     /// The session's mode changed: a rejoin's Welcome (the key again), the end of the way back (Rejoined)
     void note_session_mode();
 
@@ -464,6 +469,8 @@ private:
     bool have_key_{false};                  // client: a key is out (announced, or given to join): the place that keeps it has it until forget_key()
     RejoinKey rejoin_key_;                  // ... and which
     bool welcomed_{false};                  // client: the lobby's Welcome has been looked at (note_lobby_welcome)
+    SeatKey pending_key_{};                 // client: the key of a new player that waits for the Start to be announced (announce_start_key); zero: none
+    bool start_key_announced_{false};       // client: the key was announced at a Start (a cancelled start takes it back)
     ClientSession::Mode last_mode_{ClientSession::Mode::Normal};      // client: the session's mode at the last look (note_session_mode)
     std::function<void(const RejoinKey&)> on_key_;
     std::function<void(const RejoinKey&)> on_forget_key_;

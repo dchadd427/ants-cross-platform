@@ -10,7 +10,8 @@
 //
 // A Hello with a KEY (protocol 10) for a room whose match runs and that holds seats goes to that room (Room::rejoin: the session takes the connection over and gives the player the match
 // again); a key that fits no seat, a room that does not hold seats and a room that is loading are answered MatchRunning, as a Hello without a key is, so that nothing is revealed; a room
-// that is over is NoSuchRoom. A Hello with a key for a room that still waits is the lobby's (a page that was reloaded in the waiting room takes its seat over). A Hello for a room whose restart
+// that is over is NoSuchRoom, and so is one for a room that is gone: a Hello that shows a key never makes a demo room and never replaces a demo room that ended (its match is over; its player is
+// told so and lets the key go). A Hello with a key for a room that still waits is the lobby's. A Hello for a room whose restart
 // record still waits for its replay is PARKED (the connection and the Hello wait in the manager, a minute at the most) and goes through this door as soon as the room is restored. The server's
 // own defaults for what the rooms hold (reconnect, the vote, the cap, the limit of the log) and the budget that all the logs share are ServerLimits.
 

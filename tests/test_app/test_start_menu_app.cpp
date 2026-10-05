@@ -1854,7 +1854,7 @@ int main(int argc, char** argv) {
         TempDir temp;
         write_no_quick_help(temp.file("s.ini"));
         Server server(16);
-        for (const bool holds : {false, true}) {   // the room is closed under the players: the match cannot go on. A server that holds no seats (--no-reconnect) loses the connection and says so; the default (release B) holds seats: the game tries to come back and the server's answer is the notice
+        for (const bool holds : {false, true}) {   // the room is closed under the players: the match cannot go on. A server that holds no seats (--no-reconnect) loses the connection and says so; the default (release B) holds seats: the game tries to come back and its keyed Hello is told that the match is over (a room that is gone is not made again for a key) and the server's answer is the notice
             Server closing(16, kAllMaps, holds);
             Application app;
             Peer guest;
@@ -1870,7 +1870,7 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 12000));
             ASSERT_TRUE(app.is_running());
             ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);
-            ASSERT_HAS(app.start_menu().message(), holds ? "take you back" : "lost");        // the notice is on the first panel
+            ASSERT_HAS(app.start_menu().message(), holds ? "The match is over." : "lost");        // the notice is on the first panel
             ASSERT_TRUE(app.net() == nullptr);
             ASSERT_EQ(app.window_title(), std::string("Ants"));
         }
@@ -2684,7 +2684,7 @@ int main(int argc, char** argv) {
             ASSERT_EQ(app.local_player_id(), 0);                                              // the seat that was played is not the seat of the next game
             ASSERT_EQ(app.hud().local_player_id(), 0);
             ASSERT_TRUE(app.net_notice().empty());                                            // the reason went to the first panel (below) and is not kept
-            ASSERT_HAS(app.start_menu().message(), holds ? "take you back" : "lost");
+            ASSERT_HAS(app.start_menu().message(), holds ? "The match is over." : "lost");
         }
         for (const bool holds : {false, true}) {   // a room that fills while its code is on the screen starts the match; leaving it must not leave the attempt behind (the menu was told "the connection was lost" a frame later)
             Server server(4, kAllMaps, holds);
@@ -2701,7 +2701,7 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 12000));
             hall.step(500);                                                                    // frames at the menu: nothing of the attempt is left to say anything
             ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);
-            ASSERT_HAS(app.start_menu().message(), holds ? "take you back" : "lost");          // (the match's notice, not a failure of the attempt)
+            ASSERT_HAS(app.start_menu().message(), holds ? "The match is over." : "lost");          // (the match's notice, not a failure of the attempt)
             ASSERT_TRUE(app.net() == nullptr);
         }
     } TEST_END();
