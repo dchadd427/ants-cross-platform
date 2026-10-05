@@ -175,16 +175,16 @@ class TheLocations(unittest.TestCase):
                        "at most 120 reports count in any 60 seconds", "twenty a second per address with a burst of 100", "answered from a cache of 5 seconds", "sixty a minute per address with a burst of 20",
                        "cross-site", "nothing of the visitor's headers", "a body over 1 KiB is 413"):
             self.assertIn(needle, notes)
-        readme = read("README.md")
+        server_page = read("docs", "SERVER.md")
         for needle in ("`GET /stats`", "`POST /stats/local`", "site-stats.json", "at most 120 count a minute"):
-            self.assertIn(needle, readme)
+            self.assertIn(needle, server_page)
 
     def test_the_counting_rule_of_the_documents_is_the_one_of_the_code(self):
         header = read("include", "ants_server", "site_stats.hpp")
         ticks = re.search(r"kMinTicks\s*=\s*(\d+)\s*;", header)
         self.assertIsNotNone(ticks)
         self.assertEqual(ticks.group(1), "600")                                              # 30 seconds of play at 20 ticks a second
-        for name in (os.path.join("docs", "NETWORK_PORT.md"), "README.md", os.path.join("docs", "audit", "site_stats_notes.md")):
+        for name in (os.path.join("docs", "NETWORK_PORT.md"), os.path.join("docs", "SERVER.md"), os.path.join("docs", "audit", "site_stats_notes.md")):
             self.assertIn("at least 600 ticks (30 seconds of play)", read(name), name)
 
 

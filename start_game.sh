@@ -11,9 +11,9 @@
 #                                   --players 1 is the plain game
 #   ./start_game.sh --single        the plain game (the default; the same as --players 1)
 #   ./start_game.sh --dry-run ...   print the command line of every window and stop (nothing is built or started)
-#   every other argument goes to every window (the game's own options, see README.md)
+#   every other argument goes to every window (the game's own options, see docs/COMMAND_LINE.md)
 #   --host, --join, --bot, --lan-list, --headless, --screenshot and --map are options of one game: given without --players they make this a single game,
-#   so that `./start_game.sh --host --name Alice` and `./start_game.sh --join 192.168.1.20` still do what the README says. --bot cannot be combined with --players
+#   so that `./start_game.sh --host --name Alice` and `./start_game.sh --join 192.168.1.20` still do what docs/COMMAND_LINE.md says. --bot cannot be combined with --players
 #   (the other windows are guests, and a guest runs no bots: a game against bots is one window; use --host --bot and let others join it)
 #
 # Environment: ANTS_PORT (the room's TCP port, default 4001), ANTS_NAMES_SEED (makes the random names repeatable), ANTS_CMAKE (the cmake command, default cmake).
