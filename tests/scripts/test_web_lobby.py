@@ -271,17 +271,18 @@ class TheImageAndTheCi(PageCase):
 
 
 class TheDocuments(unittest.TestCase):
-    def test_the_readme_and_the_notes_say_where_the_one_card_is_and_what_it_does(self):
-        readme = read("README.md")
+    def test_the_browser_page_and_the_notes_say_where_the_one_card_is_and_what_it_does(self):
+        page = read("docs", "PLAY_IN_BROWSER.md")
         for needle in ("`/play.html?map=", "**one card for every game, New match**", "**You**", "**Sit here**", "**Friend**", "**Nobody**", "**Teams**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "/four.html", "`--start-when`", "**Menu**",
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`"):
-            self.assertIn(needle, readme, needle)
+            self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")
         for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The card**", "**Invitations**", "**The leader's game starts the match**", "`ants-match`", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
             self.assertIn(needle, notes, needle)
-        self.assertNotIn("web/four.html", readme)
+        readme = read("README.md")
+        self.assertNotIn("web/four.html", readme + page)
         for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card"):         # (the pages that the card replaced)
-            self.assertNotIn(stale, readme + notes, stale)
+            self.assertNotIn(stale, readme + page + notes, stale)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the front page's rules were NOT run (tests/scripts/web_lobby_check.js)")
