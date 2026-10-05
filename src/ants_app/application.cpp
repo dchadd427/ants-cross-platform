@@ -2853,13 +2853,9 @@ void Application::render_net_overlay() {
 // The seat that the room gave this machine (the waiting room's Room message, or the Welcome of a rejoin at its Start) is told once, and again when it changes
 void Application::note_seat() {
     const net::NetGame::Phase phase = net_->phase();
-    const bool seated = phase == net::NetGame::Phase::Room || phase == net::NetGame::Phase::Loading || phase == net::NetGame::Phase::Playing;
-    const uint8_t seat = seated ? net_->my_seat() : uint8_t{255};
-    if (seat >= sim::MAX_PLAYERS) {
-        if (!seated) seat_told_ = 255;
-        return;
-    }
-    if (seat == seat_told_) return;
+    if (phase != net::NetGame::Phase::Room && phase != net::NetGame::Phase::Loading && phase != net::NetGame::Phase::Playing) return;
+    const uint8_t seat = net_->my_seat();
+    if (seat >= sim::MAX_PLAYERS || seat == seat_told_) return;
     seat_told_ = seat;
     if (on_seat_known_) on_seat_known_(seat);
 }

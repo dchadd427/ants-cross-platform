@@ -9475,6 +9475,14 @@ void run_restore_tests() {
         w.run(5000);
         ASSERT_TRUE(readings >= 8);                                                              // (a flush a second again)
         ASSERT_TRUE(w.status("FL-1").state == RoomState::Running && w.status("FL-1").record_kept && w.status("FL-1").record_note.empty());
+        // a room that comes back from its record starts at the configured interval, and keeps its pace from there
+        step = 30;
+        ASSERT_TRUE(w.until([&]() { return w.status("FL-1").record_sync_ms == 2000; }, 1500));
+        w.stop_server(true);
+        step = 1;
+        w.start_server(500);
+        ASSERT_TRUE(w.status("FL-1").restored && w.status("FL-1").record_kept);
+        ASSERT_EQ(w.status("FL-1").record_sync_ms, 1000u);
         (void)m;
     } TEST_END();
 

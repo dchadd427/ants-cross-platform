@@ -1777,10 +1777,17 @@ void run_way_back_tests() {
         ASSERT_TRUE(told == std::vector<unsigned>({0u}));
         w.run(2000);
         ASSERT_TRUE(told == std::vector<unsigned>({0u}));
-        // leaving ends the session: nothing more is told, and a game of one machine tells nothing at all
+        // leaving ends the session: nothing more is told
         again.leave_network_match();
         w.run(500);
         ASSERT_TRUE(told == std::vector<unsigned>({0u}));
+        // a second session of the same application (another room): its seat is told again, also when it is the same one
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-101B"), w.server_now()).ok);
+        ASSERT_TRUE(again.net()->join("127.0.0.1", w.server.port(), "Ann", 255, "RA-101B"));
+        ASSERT_TRUE(w.run_until([&]() { return told.size() == 2; }, 5000));
+        ASSERT_TRUE(told == std::vector<unsigned>({0u, 0u}));
+        again.net()->leave();
+        // a game of one machine tells nothing at all
         {
             std::vector<unsigned> local;
             World v;
