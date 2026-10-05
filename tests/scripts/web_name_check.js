@@ -9,6 +9,8 @@
 //     the Host card (players 2 - 4, the empty seats; an old stored 1 player is 2), the host's own seat in this tab, and the field that every button shares is remembered and filled in, its name goes to the seat that this person plays
 //     (the first seat of the page) and the other seats of the page keep random names, a link made for somebody else carries none, bad names start nothing, a name with < > & is only
 //     ever text (the page writes no markup at all), an empty field falls back to a random name (and to Player for a join), a shared link of the page asks first and starts nothing before.
+//     the Rejoin button at the top of the front page as a whole (only on the plain page, with a fresh entry of this site: its words, its address, no key anywhere; old entries removed, other servers' left alone;
+//     the page's return from memory and the storage events), the block's own rules being tests/scripts/web_rejoin_block_check.js.
 // tests/scripts/test_web_name.py runs this with node (the quick tier). usage: node web_name_check.js web/shell.html web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
@@ -327,6 +329,9 @@ function runLobby(search, stored, options) {
         data,
         getItem(k) { if (stored === THROWS) throw new Error('storage is blocked'); return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
         setItem(k, v) { if (stored === THROWS) throw new Error('storage is blocked'); data[k] = String(v); },
+        get length() { if (stored === THROWS) throw new Error('storage is blocked'); return Object.keys(data).length; },
+        key(i) { if (stored === THROWS) throw new Error('storage is blocked'); const names = Object.keys(data); return i < names.length ? names[i] : null; },
+        removeItem(k) { if (stored === THROWS) throw new Error('storage is blocked'); delete data[k]; },
     };
     const win = {
         location: { search, href: 'https://play.test/' + search, pathname: '/', origin: 'https://play.test', protocol: 'https:', host: 'play.test', assign(u) { env.assigned.push(u); } },
@@ -886,6 +891,96 @@ const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-d
         await settle();
         check('a room has the line too', room.roomStarted() && statsView(room).hidden === false);
     }
+
+// ---- the Rejoin button at the top of the front page (the block REJOIN has its own check, web_rejoin_block_check.js; here is the page as a whole: when it is there, what it says, where it goes)
+{
+    const SERVER = 'wss://play.test/ws';                                    // (the fake page is https://play.test/)
+    const KEY = '0f1e2d3c4b5a69788796a5b4c3d2e1f0';
+    const entry = (age, server) => '{"k":"' + KEY + '","s":"' + (server || SERVER) + '","t":' + (Date.now() - age) + '}';
+    const rejoinView = (env) => ({ hidden: env.$('rejoin').hidden, button: env.$('rejoin-go').textContent, note: env.$('rejoin-note').textContent });
+    const wholeText = (env) => Object.values(env.elements).map((e) => e.textContent + '|' + JSON.stringify(e.attributes)).join('\n') + env.innerHTMLWrites.join('');
+    {
+        const env = runLobby('', {}, { firstVisit: true });
+        same('no entry: nothing of the Rejoin is shown, and the cards are there as ever', [rejoinView(env).hidden, env.$('cards').hidden, env.$('how').hidden], [true, false, false]);
+        check('... the markup has it hidden, with no text of its own (the script fills it in)', /<section id="rejoin" class="rejoin" aria-label="Your running match" hidden>\s*<button id="rejoin-go" type="button" class="btn big"><\/button>\s*<p class="rejoin-note" id="rejoin-note"><\/p>\s*<\/section>/.test(lobbyText));
+    }
+    {
+        const stored = { 'ants.rejoin.demo-tiny-2p-abc.1': entry(5000) };
+        const env = runLobby('', stored, { firstVisit: true });
+        same('a fresh entry of this site: ONE button with the room, and the note under it', rejoinView(env), { hidden: false, button: 'Rejoin your match (demo-tiny-2p-abc)', note: 'Your match in room demo-tiny-2p-abc is still running: go back to your seat.' });
+        check('... the cards stay where they were (the button is above them, in its own block, not in their grid)', !env.$('cards').hidden && lobbyText.indexOf('<section id="rejoin"') > lobbyText.indexOf('</header>') && lobbyText.indexOf('<section id="rejoin"') < lobbyText.indexOf('<main class="page">'));
+        check('... and the key is in no text or attribute of the page', wholeText(env).indexOf(KEY) === -1 && wholeText(env).indexOf(KEY.slice(0, 8)) === -1);
+        env.$('rejoin-go').click();
+        same('pressing it takes THIS tab to the game page: the room, the seat, the (empty) name and the shape', env.assigned, ['https://play.test/?join=/ws&room=demo-tiny-2p-abc&seat=1&name=&aspect=16:9']);
+        check('... with no key in the address, and nothing opened in another window', env.assigned[0].indexOf(KEY) === -1 && env.opened.length === 0 && env.storage.data['ants.rejoin.demo-tiny-2p-abc.1'] === stored['ants.rejoin.demo-tiny-2p-abc.1']);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.r-1.3': entry(1000), 'ants.name': 'Maya', 'ants.aspect.v2': '4:3' }, { firstVisit: true });
+        env.$('rejoin-go').click();
+        same('the remembered name and the remembered shape go with it', env.assigned, ['https://play.test/?join=/ws&room=r-1&seat=3&name=Maya&aspect=4:3']);
+    }
+    {
+        const env = runLobby('?aspect=4:3', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'Maya' }, { firstVisit: true });
+        env.$('rejoin-go').click();
+        same('the shape of the address is the page\'s shape, so it is the one that goes with the button', env.assigned, ['https://play.test/?join=/ws&room=r-1&seat=0&name=Maya&aspect=4:3']);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'Zo\u00eb' }, { firstVisit: true });
+        env.$('rejoin-go').click();
+        check('a remembered name that the rules refuse is no name (the field is empty too)', env.assigned.length === 1 && env.param(env.assigned[0], 'name') === '' && /&name=&aspect=/.test(env.assigned[0]), env.assigned[0]);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.old-room.0': entry(25 * 3600 * 1000), 'ants.rejoin.mid-room.1': entry(23 * 3600 * 1000) }, { firstVisit: true });
+        same('an entry older than a day is not offered and is removed (as the game does); one a little younger is the offer', [rejoinView(env).button, Object.keys(env.storage.data)], ['Rejoin your match (mid-room)', ['ants.rejoin.mid-room.1']]);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.other.0': entry(1000, 'wss://other.test/ws'), 'ants.rejoin.mine.1': entry(9000) }, { firstVisit: true });
+        same('an entry of another server is not offered and stays, even when it is newer', [rejoinView(env).button, Object.keys(env.storage.data).sort()], ['Rejoin your match (mine)', ['ants.rejoin.mine.1', 'ants.rejoin.other.0']]);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.other.0': entry(1000, 'ws://play.test/ws'), 'ants.rejoin.bad.7': entry(1000), 'ants.rejoin.junk.1': 'not json' }, { firstVisit: true });
+        check('only entries of the game count: another scheme, a seat that is none and a value that is no JSON show nothing', rejoinView(env).hidden === true && Object.keys(env.storage.data).length === 3);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.a.0': entry(60000), 'ants.rejoin.b.2': entry(1000), 'ants.rejoin.c.1': entry(30000) }, { firstVisit: true });
+        same('of several entries the newest is offered, and the seat goes with it', [rejoinView(env).button, (env.$('rejoin-go').click(), env.assigned.map((u) => env.param(u, 'seat')))], ['Rejoin your match (b)', ['2']]);
+    }
+    for (const [label, search] of [['a room (?room=)', '?room=demo-tiny-2p-abc'], ['a room that starts at once (?play=here)', '?room=demo-tiny-2p-abc&play=here'], ['a match to host (?map=)', '?map=tiny&players=2&play=here']]) {
+        const env = runLobby(search, { 'ants.rejoin.demo-tiny-2p-abc.1': entry(1000) }, { firstVisit: true });
+        check(label + ': the page is about that, not about the match of the key: no button', rejoinView(env).hidden === true && env.$('cards').hidden === true);
+        env.$('who-go').click();
+        check('... not even after the name step', rejoinView(env).hidden === true);
+    }
+    {   // the page that comes back from the browser's memory (Back), and another tab that changes the storage: the match may have ended meanwhile
+        const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000) }, { firstVisit: true });
+        check('the page listens for its return and for the storage', (env.win.listeners.pageshow || []).length === 1 && (env.win.listeners.storage || []).length === 1);
+        delete env.storage.data['ants.rejoin.r-1.1'];
+        env.win.listeners.pageshow.forEach((fn) => fn({ persisted: false }));
+        check('a page that is loaded anew is not looked at again by pageshow (it has just looked)', rejoinView(env).hidden === false);
+        env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
+        check('the match ended in another tab, and the page comes back from memory: the button is gone', rejoinView(env).hidden === true);
+        env.storage.data['ants.rejoin.r-2.0'] = entry(500);
+        env.win.listeners.storage.forEach((fn) => fn({}));
+        same('a new match in another tab: the button is there, for that match', [rejoinView(env).hidden, rejoinView(env).button], [false, 'Rejoin your match (r-2)']);
+        delete env.storage.data['ants.rejoin.r-2.0'];
+        env.win.listeners.storage.forEach((fn) => fn({}));
+        check('... and gone again when the key is let go of', rejoinView(env).hidden === true);
+        env.$('rejoin-go').click();
+        check('a press that comes after the button is gone goes nowhere', env.assigned.length === 0);
+    }
+    {
+        let env = null;
+        try { env = runLobby('', THROWS, { firstVisit: true }); } catch (e) { check('a browser that refuses its storage still runs the page, with no button', false, e.message); }
+        if (env) check('a storage that throws offers nothing, and the cards are there', rejoinView(env).hidden === true && !env.$('cards').hidden);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000) }, { firstVisit: true });
+        const before = JSON.stringify(env.storage.data);
+        env.$('rejoin-go').click();
+        check('the page writes nothing to the storage for it (the game page owns the entries)', JSON.stringify(env.storage.data) === before);
+    }
+}
+
 })().then(() => {
     console.log('web name check: ' + checks + ' checks, ' + failures + ' failures');
     process.exit(failures === 0 ? 0 : 1);
