@@ -2541,6 +2541,34 @@ void test_net_overlay() {
             check(net_overlay_max_width(view) == view.w - 20, "overlay layout: a line may be the view's width less its boxes' sides and a margin");
         }
     }
+    {   // what the browser check reads of the lines (ants_probe 16 and 10000 +, read-only): how many there are, and each character of each line
+        const auto text_of = [](const NetOverlayLine& overlay, int line) {
+            std::string out;
+            for (int index = 0; index < 1000; ++index) {
+                const int code = net_overlay_probe(overlay, 10000 + 1000 * line + index);
+                if (code <= 0) break;
+                out.push_back(static_cast<char>(code));
+            }
+            return out;
+        };
+        const NetOverlayLine none;
+        check(net_overlay_probe(none, 16) == 0 && net_overlay_probe(none, 10000) == -1, "overlay probe: nothing shown is no line, and no character");
+        NetOverlayLine shown;
+        shown.lines = {"Bob is back: the match goes on in 7", "Esc leaves the match", ""};
+        check(net_overlay_probe(shown, 16) == 3, "overlay probe: it counts the lines");
+        check(text_of(shown, 0) == "Bob is back: the match goes on in 7" && text_of(shown, 1) == "Esc leaves the match" && text_of(shown, 2).empty(), "overlay probe: the characters of each line, read one at a time, are the line");
+        check(net_overlay_probe(shown, 10000 + 35) == 0 && net_overlay_probe(shown, 10000 + 999) == 0 && net_overlay_probe(shown, 10000 + 1000 * 2) == 0, "overlay probe: past the end of a line (or an empty one) is 0");
+        check(net_overlay_probe(shown, 10000 + 1000 * 3) == -1 && net_overlay_probe(shown, 10000 + 1000 * 9 + 5) == -1, "overlay probe: a line that is not there is -1");
+        NetOverlayLine accent;
+        accent.lines = {std::string("\xE9\xFF")};
+        check(net_overlay_probe(accent, 10000) == 0xE9 && net_overlay_probe(accent, 10001) == 0xFF, "overlay probe: a byte is a code from 0 to 255 (never a negative number)");
+        for (const int what : {-1, 0, 15, 17, 100, 9999}) check(net_overlay_probe(shown, what) == -1, "overlay probe: any other number is -1");
+        NetOverlayInput lost;
+        lost.reconnecting = true;
+        lost.away_s = 12;
+        const NetOverlayLine real = net_overlay_line(lost);
+        check(net_overlay_probe(real, 16) == 2 && text_of(real, 0) == "Connection lost. Reconnecting... 0:12" && text_of(real, 1) == "Esc leaves the match", "overlay probe: it reads what the model makes for a lost connection");
+    }
 }
 
 // The network's share of the corner: "ping NN ms" and "delay NN ms" next to the frame rate (latency_corner.hpp). The strings, where the readout is drawn at all, the

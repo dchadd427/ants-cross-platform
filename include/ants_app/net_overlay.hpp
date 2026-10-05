@@ -143,4 +143,8 @@ struct NetOverlayLayout {
 };
 NetOverlayLayout net_overlay_layout(const LayoutRect& view, const NetOverlayMetrics& metrics, bool with_vote);
 
+/// What the browser check reads of the lines on screen (the page cannot read the game's canvas; read-only; Application's ants_probe 16 and 10000 +): 16 is how many lines `overlay` has; 10000 + 1000 * line + index
+/// is the code of the character at `index` of that line (0 past its end, -1 where there is no such line or `index` is 1000 or more). Any other `what`: -1.
+int net_overlay_probe(const NetOverlayLine& overlay, int what);
+
 }  // namespace ants::app

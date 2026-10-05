@@ -163,4 +163,14 @@ NetOverlayLayout net_overlay_layout(const LayoutRect& view, const NetOverlayMetr
     return out;
 }
 
+int net_overlay_probe(const NetOverlayLine& overlay, int what) {
+    if (what == 16) return static_cast<int>(overlay.lines.size());
+    if (what < 10000) return -1;
+    const size_t line = static_cast<size_t>((what - 10000) / 1000);
+    const size_t index = static_cast<size_t>((what - 10000) % 1000);
+    if (line >= overlay.lines.size()) return -1;
+    const std::string& text = overlay.lines[line];
+    return index < text.size() ? static_cast<int>(static_cast<unsigned char>(text[index])) : 0;
+}
+
 }  // namespace ants::app
