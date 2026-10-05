@@ -265,6 +265,7 @@ check('a copy of the address of a game that was given a name is a shared link', 
     check('the door of the address is the server that the key must be of: /ws/room-1 is another server than /ws', asks('?join=/ws/room-1&room=ABC&seat=1', KEEP) === true && holds('?join=/ws/room-1&room=ABC&seat=1', { 'ants.rejoin.ABC.1': entry(5000, 'ws://h/ws/room-1') }) === true);
     check('with a storage that cannot be read the step asks, as for any shared link', shell.holdsThisSeat('?join=/ws&room=ABC&seat=1', args('?join=/ws&room=ABC&seat=1'), null, NOW) === false);
     check('with no door in the arguments there is no key to hold', shell.holdsThisSeat('?room=ABC&seat=1', [], storageOf(KEEP), NOW) === false);
+    check('... and no other word of the arguments is taken for the door (the program\'s own name, say, which an entry may name as its server)', shell.holdsThisSeat('?room=ABC&seat=1', ['./this.program', '--room', 'ABC'], storageOf({ 'ants.rejoin.ABC.1': entry(5000, './this.program') }), NOW) === false);
     check('a frame (embed) is never asked, whatever the keys: the page does not even look', /var asks = !ANTS_EMBED && ANTS_PAGE\.asksForName\(window\.location\.search\);\s*if \(asks\) \{[^}]*holdsThisSeat\(window\.location\.search, ANTS_ARGS, window\.localStorage, Date\.now\(\)\)/.test(shellText));
     check('the keys block is the same text in the front page and the game page', keysBlockShell === between(lobbyText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', lobbyPath));
 }
@@ -981,6 +982,9 @@ const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-d
         check(label + ': the page is about that, not about the match of the key: no button', rejoinView(env).hidden === true && env.$('cards').hidden === true);
         env.$('who-go').click();
         check('... not even after the name step', rejoinView(env).hidden === true);
+        (env.win.listeners.pageshow || []).forEach((fn) => fn({ persisted: true }));
+        (env.win.listeners.storage || []).forEach((fn) => fn({}));
+        check('... nor when the page comes back from the browser\'s memory or another tab writes to the storage (the cards are not up)', rejoinView(env).hidden === true && env.$('cards').hidden === true);
     }
     {   // the page that comes back from the browser's memory (Back), and another tab that changes the storage: the match may have ended meanwhile
         const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000) }, { firstVisit: true });

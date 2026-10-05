@@ -238,6 +238,7 @@ for (const room of ['a', 'Room_1-B', 'x'.repeat(32)]) {
 }
 same('the query: the door, the room, the seat, the name and the shape', R.rejoinQuery({ room: 'demo-tiny-2p-abc', seat: 1, t: 1 }, 'Ann', '16:9'), '?join=/ws&room=demo-tiny-2p-abc&seat=1&name=Ann&aspect=16:9');
 same('the query: the name is encoded, whatever it holds', R.rejoinQuery({ room: 'r', seat: 3, t: 1 }, 'A&B=c d#e', '4:3'), '?join=/ws&room=r&seat=3&name=A%26B%3Dc%20d%23e&aspect=4:3');
+same('the query: the room is encoded too, whatever the function is given (the page only offers rooms that need no encoding)', R.rejoinQuery({ room: 'a b&c=d#e', seat: 1, t: 1 }, 'Ann', '16:9'), '?join=/ws&room=a%20b%26c%3Dd%23e&seat=1&name=Ann&aspect=16:9');
 same('the query: no name is a name that was chosen (empty), so the game page does not ask for one', R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '16:9'), '?join=/ws&room=r&seat=0&name=&aspect=16:9');
 same('the query: a shape that is not 4:3 is 16:9', [R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', 'wide'), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', undefined), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '4:3 ')].map((q) => q.slice(q.indexOf('&aspect='))), ['&aspect=16:9', '&aspect=16:9', '&aspect=16:9']);
 {

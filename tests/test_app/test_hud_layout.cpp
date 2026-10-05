@@ -2563,6 +2563,12 @@ void test_net_overlay() {
         accent.lines = {std::string("\xE9\xFF")};
         check(net_overlay_probe(accent, 10000) == 0xE9 && net_overlay_probe(accent, 10001) == 0xFF, "overlay probe: a byte is a code from 0 to 255 (never a negative number)");
         for (const int what : {-1, 0, 15, 17, 100, 9999}) check(net_overlay_probe(shown, what) == -1, "overlay probe: any other number is -1");
+        NetOverlayLine wide;
+        std::string long_text;
+        for (int i = 0; i < 350; ++i) long_text.push_back(static_cast<char>('A' + (i * 7 + i / 26) % 26));
+        wide.lines = {"x", long_text};
+        check(text_of(wide, 1) == long_text && net_overlay_probe(wide, 10000 + 1000 + 350) == 0 && net_overlay_probe(wide, 10000 + 1000 + 999) == 0,
+              "overlay probe: a line of 350 characters is read to its last character (the index runs to 999), and past it is 0");
         NetOverlayInput lost;
         lost.reconnecting = true;
         lost.away_s = 12;
