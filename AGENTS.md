@@ -6,6 +6,7 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 ## Key Commands
 - **Build Local**: `cmake --build build -j8`
 - **Build Web (Docker / beta.playants.org)**: `wsl docker build -t ants-beta .`
+- **Web Page Without Docker (Linux, a session that has no Docker daemon)**: `tools/web_without_docker.py -- COMMAND` builds the pages with the Dockerfile's own commands, serves them with nginx and runs COMMAND with `ANTS_WEB_URL` set, e.g. `tests/scripts/test_web_aspect.sh` (`docs/WORKFLOW.md`, "Browser checks without Docker")
 - **Quick Tests (every change)**: `./run_tests.sh --fast` (the quick tier, about a minute; see rule 11)
 - **Master Test Suite**: `./run_tests.sh` (Runs all asset, simulation, integration, E2E and repository-check suites; prints each suite's time and the totals)
 - **Integration Tests**: `./build/tests/test_app/test_app_integration`
@@ -45,7 +46,7 @@ Native C++17 macOS port and remake of the 1998 classic RTS game *Ants*, featurin
 
 ### 6. WebAssembly / Beta Deployment Synchronization & Cache Invariant
 - **Synchronize Web Builds**: Ensure any game logic, asset, or simulation engine changes remain continuously synchronized with the WebAssembly / Emscripten build and deployment pipeline (`docker/nginx.conf`, `web/`).
-- **The Web Image Is Built by CI**: CI builds the web image (`docker build -t ants-beta .`) and the game server's image for every pull request and every push to `main` and `staging`, runs `nginx -t` on it and checks the page; a pull request whose Docker build fails cannot be merged. A local `wsl docker build -t ants-beta .` is for a change to the Dockerfiles or the web build that CI cannot show.
+- **The Web Image Is Built by CI**: CI builds the web image (`docker build -t ants-beta .`) and the game server's image for every pull request and every push to `main` and `staging`, runs `nginx -t` on it and checks the page; a pull request whose Docker build fails cannot be merged. A local `wsl docker build -t ants-beta .` is for a change to the Dockerfiles or the web build that CI cannot show. A session that has no Docker tries a change to the page or the web build with `tools/web_without_docker.py` and the browser checks; CI's Docker build stays the gate.
 - **Cache Invalidation**: Web builds served on beta (e.g. `beta.playants.org`) must enforce strict revalidation headers (`Cache-Control: "no-cache, must-revalidate"`) for `.wasm`, `.data`, `.html`, `.js`, and `.css` so clients immediately execute updated game binaries without stale browser caching.
 
 ### 7. Version Tracking & Build Identification Invariant
