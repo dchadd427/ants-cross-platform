@@ -64,6 +64,7 @@ namespace {
 constexpr size_t kMaxVersionChars = 32;
 constexpr size_t kMaxBuildIdChars = 64;
 constexpr size_t kMaxStartBytes = 2048;
+constexpr uint16_t kLastProtocolWithoutStartTeams = 12;           // (protocol 13 added the two team bytes to the Start message)
 constexpr size_t kMaxBots = sim::MAX_PLAYERS;
 
 bool printable(const std::string& s, size_t max_chars, bool allow_empty) {
@@ -197,7 +198,17 @@ bool decode_restart_head(const uint8_t* payload, size_t size, RestartHead& out, 
     if (!r.ok() || start_len == 0 || start_len > kMaxStartBytes) return bad("the head of the record has a start message of an impossible size");
     const uint8_t* start_bytes = r.take(start_len);
     if (start_bytes == nullptr) return bad("the head of the record is cut short");
-    if (!net::decode(start_bytes, start_len, h.start)) return bad("the start message in the record is not one");
+    if (!net::decode(start_bytes, start_len, h.start)) {
+        // protocol 12's Start has no team bytes: with them added as "no teams" it reads, and judge_record then refuses the record for its protocol (kept for a day, the room fails and says why)
+        bool read = false;
+        if (h.identity.protocol == kLastProtocolWithoutStartTeams) {
+            std::vector<uint8_t> widened(start_bytes, start_bytes + start_len);
+            widened.push_back(net::kNoTeam);
+            widened.push_back(net::kNoTeam);
+            read = net::decode(widened.data(), widened.size(), h.start);
+        }
+        if (!read) return bad("the start message in the record is not one");
+    }
     for (net::SeatKey& k : h.keys) {
         const uint8_t* key = r.take(k.size());
         if (key == nullptr) return bad("the head of the record is cut short");

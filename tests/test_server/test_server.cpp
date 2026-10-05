@@ -7105,7 +7105,7 @@ void run_persist_server_tests_4() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.125 Protocol 13, A Restart Record Keeps What The Leader's START Chose: Its Start Message Has The Pair (A Record Of Protocol 12 Is Refused), Its Bots Their Own Levels; The Restored Referee Makes The Same Teams (A Replay That Did Not Would Be Refused At The First Checkpoint), Its Status Says So, The Machine That Comes Back With Its Turns Keeps Its Engine And A Machine That Comes Back From Nothing Is Given The Start With The Teams And Stands At The Referee's State") {
+    TEST_CASE("S3.125 Protocol 13, A Restart Record Keeps What The Leader's START Chose: Its Start Message Has The Pair, Its Bots Their Own Levels; The Restored Referee Makes The Same Teams (A Replay That Did Not Would Be Refused At The First Checkpoint), Its Status Says So, The Machine That Comes Back With Its Turns Keeps Its Engine And A Machine That Comes Back From Nothing Is Given The Start With The Teams And Stands At The Referee's State") {
         using net::FillLevel;
         const auto allies_text = [](const std::array<uint8_t, 4>& a) {
             std::string out;
@@ -7171,7 +7171,7 @@ void run_persist_server_tests_4() {
         ASSERT_EQ(engine_allies(reloaded.sim), std::string("3210"));                           // (the bots kept their teams to the end)
     } TEST_END();
 
-    TEST_CASE("S3.126 A Record Of Protocol 12 (Its Start Message Has No Team Bytes) Cannot Be Read By This Build: At The Restart It Is Not Restored (Nothing Of It Is Replayed), Its Match Ends, The File Is Deleted And The Log Says Why; The Same Record In This Build's Layout Is Restored") {
+    TEST_CASE("S3.126 A Record Of Protocol 12 (Its Start Message Has No Team Bytes) Is Read As A Start Without Teams And Refused For Its Protocol, Like A Record Of Any Other Protocol: At The Restart It Is Not Restored (Nothing Of It Is Replayed), Its Room Is A Failed Room That Names The Protocols, The File Is Kept Whole For A Day (Not Deleted As Corrupt) And The Log Says So; An Old Layout That No Release Wrote (Protocol 11, 13 Or 14 With It) Stays Unreadable; The Same Record In This Build's Layout Is Restored") {
         PWorld w("persist-126");
         w.start_server(500);
         const auto crash = [](PWorld& world, const char* code) {                               // a match that is played for a while, and a server that dies with its record
@@ -7185,29 +7185,54 @@ void run_persist_server_tests_4() {
         const RestartLoaded rec = parse_restart_record(bytes.data(), bytes.size());
         ASSERT_TRUE(rec.ok() && rec.head.start.team_a == net::kNoTeam && rec.head.identity.protocol == net::kProtocolVersion);
         const std::vector<uint8_t> start = net::encode(rec.head.start);                        // the Start inside the head, in this build's layout
-        std::vector<uint8_t> payload(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].first + 5), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second - 4));
-        const auto found = std::search(payload.begin(), payload.end(), start.begin(), start.end());
-        ASSERT_TRUE(found != payload.end());
-        const size_t at = static_cast<size_t>(found - payload.begin());
-        payload.erase(payload.begin() + static_cast<std::ptrdiff_t>(at + start.size() - 2), payload.begin() + static_cast<std::ptrdiff_t>(at + start.size()));      // protocol 12's Start: the same bytes without the two team bytes ...
-        const uint16_t old_length = static_cast<uint16_t>(start.size() - 2);
-        payload[at - 2] = static_cast<uint8_t>(old_length & 0xFFu);                            // ... and its length in front of it
-        payload[at - 1] = static_cast<uint8_t>(old_length >> 8);
-        const size_t protocol_at = 2u + 1u + payload[2];                                       // the identity: format (u16), game version (str8), then the protocol (u16)
-        payload[protocol_at] = 12;
-        payload[protocol_at + 1] = 0;
-        std::vector<uint8_t> old_record = with_magic(test_frame(1, payload));
-        old_record.insert(old_record.end(), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end());
-        write_all_bytes(w.record_path("OLD-1"), old_record);
+        // the record as protocol `protocol` with the old layout wrote it: the Start without its two team bytes (and its length in front of it), and the protocol in the identity
+        const auto old_layout = [&](uint16_t protocol) {
+            std::vector<uint8_t> payload(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].first + 5), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second - 4));
+            const auto found = std::search(payload.begin(), payload.end(), start.begin(), start.end());
+            if (found == payload.end()) throw std::runtime_error("the Start is not in the record's head");
+            const size_t at = static_cast<size_t>(found - payload.begin());
+            payload.erase(payload.begin() + static_cast<std::ptrdiff_t>(at + start.size() - 2), payload.begin() + static_cast<std::ptrdiff_t>(at + start.size()));      // protocol 12's Start: the same bytes without the two team bytes ...
+            const uint16_t old_length = static_cast<uint16_t>(start.size() - 2);
+            payload[at - 2] = static_cast<uint8_t>(old_length & 0xFFu);                        // ... and its length in front of it
+            payload[at - 1] = static_cast<uint8_t>(old_length >> 8);
+            const size_t protocol_at = 2u + 1u + payload[2];                                   // the identity: format (u16), game version (str8), then the protocol (u16)
+            payload[protocol_at] = static_cast<uint8_t>(protocol & 0xFFu);
+            payload[protocol_at + 1] = static_cast<uint8_t>(protocol >> 8);
+            std::vector<uint8_t> record = with_magic(test_frame(1, payload));
+            record.insert(record.end(), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end());
+            return record;
+        };
+        const std::vector<uint8_t> v12 = old_layout(12);
+        {   // the parser: protocol 12's record reads, as a Start without teams (the rest of it is what this build reads), and that is what the refusal judges
+            const RestartLoaded old = parse_restart_record(v12.data(), v12.size());
+            ASSERT_TRUE(old.ok() && old.head.identity.protocol == 12);
+            ASSERT_TRUE(old.head.start.team_a == net::kNoTeam && old.head.start.team_b == net::kNoTeam && old.head.start.roster == rec.head.start.roster && old.head.start.seed == rec.head.start.seed);
+            ASSERT_TRUE(old.turn_count == rec.turn_count && old.turn_count > 100 && !old.checks.empty() && old.head.code == "OLD-1" && old.head.players == 2);
+            // the old layout is no Start of any other protocol: it is read only for the release that wrote it
+            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
+                const std::vector<uint8_t> not_12 = old_layout(other);
+                const RestartLoaded r = parse_restart_record(not_12.data(), not_12.size());
+                ASSERT_TRUE(!r.ok() && r.why.find("start message") != std::string::npos);
+            }
+        }
+        write_all_bytes(w.record_path("OLD-1"), v12);
         w.start_server(500);
-        ASSERT_TRUE(w.report.items.size() == 1 && w.report.items[0].outcome == RestoreItem::Outcome::Unreadable);
-        ASSERT_TRUE(w.report.items[0].note.find("start message") != std::string::npos);        // (its Start has the layout of the release before: no decoder of this build takes it)
-        ASSERT_TRUE(w.record_files().empty());                                                 // the file is deleted: nothing of it can be used by this build
-        RoomStatus none;
-        ASSERT_FALSE(w.mgr->status("OLD-1", none, w.server_now()));                            // no room of it: a player who comes back is told that there is no such room
+        ASSERT_TRUE(w.report.items.size() == 1 && w.report.items[0].outcome == RestoreItem::Outcome::Ended && w.report.count(RestoreItem::Outcome::Restored) == 0 && w.report.count(RestoreItem::Outcome::Unreadable) == 0);
+        const std::string note = w.report.items[0].note;                                       // the protocol rule's sentence: both protocols and the reason
+        ASSERT_TRUE(note.find("network protocol 12") != std::string::npos && note.find("this server speaks protocol " + std::to_string(net::kProtocolVersion)) != std::string::npos &&
+                    note.find("change of the rules") != std::string::npos);
+        ASSERT_TRUE(w.record_files().empty());                                                 // (not in the folder that a start reads any more)
+        const fs::path kept = fs::path(w.restart.dir) / "refused" / fs::path(w.record_path("OLD-1")).filename();
+        ASSERT_TRUE(fs::exists(kept) && read_all_bytes(kept) == v12);                          // kept whole for a day: the owner may want it back (a corrupt record is deleted at once)
+        const RoomStatus failed = w.status("OLD-1");                                           // its room: failed, with the reason, nothing replayed
+        ASSERT_TRUE(failed.state == RoomState::Failed && failed.reason == note && !failed.restored && !failed.record_kept && failed.ticks > 100);
         bool logged = false;
-        for (const std::string& n : w.notices) logged = logged || (n.find("was not restored") != std::string::npos && n.find("start message") != std::string::npos);
-        ASSERT_TRUE(logged);
+        bool kept_logged = false;
+        for (const std::string& n : w.notices) {
+            logged = logged || (n.find("was not restored") != std::string::npos && n.find("network protocol 12") != std::string::npos);
+            kept_logged = kept_logged || (n.find("OLD-1") != std::string::npos && n.find("refused") != std::string::npos && n.find("24 hours") != std::string::npos);
+        }
+        ASSERT_TRUE(logged && kept_logged);
         PWorld control("persist-126b");                                                        // the same match, as this build writes it: restored
         control.start_server(500);
         crash(control, "NEW-1");
