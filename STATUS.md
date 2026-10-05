@@ -1,16 +1,25 @@
 # Status
 
-_Updated 2026-10-05 05:08 PDT · current release **v0.6.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 08:28 PDT · current release **v0.6.0** · details: [CHANGELOG](CHANGELOG.md)_
+
+## Release schedule (the next releases in order; targets in Pacific time)
+| Release | Progress | Target | Now |
+|---|---|---|---|
+| **v0.7.0** a phone can pan, zoom and right click | ██████░░░░ 57% | Mon 2026-10-05, late morning | the second review's fixes are merged; the browser checks, then the five CI checks and the deploy |
+| **v0.8.0** one start card for every game (network protocol 13) | █░░░░░░░░░ 14% | Mon 2026-10-05, early afternoon | the owner's priority: being merged onto v0.6.0 and tested |
+| **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ███░░░░░░░ 29% | Mon or Tue | the two finished batches are being merged and re-tested |
+| **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the one card |
+
+A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- One start card for every game, all online: your colour, a friend or a bot level for each other colour, invite links in the card; with online bot games and teams (network protocol 13): built and checked in a real browser, ships after v0.6.0 with the short room codes
-- Short room codes: 8 random letters and numbers instead of the long code, a mistyped code says "no such match", and the word "demo" is gone from the codes, the server settings and the docs (planned: starts when the one card and the reconnect fixes are merged; same release, v0.7.0)
-- Bots, stage 1: contested food first, finishing wounded ants (a bot sees every ant's health), fighting when behind, the endgame, the fire play (no lone fire ant, killing the fire ant)
-- Bots: getting off the island (Islands: bomb over, swimmers, bridges; Small: the swimmer ferry)
-- Bots: the power-up playbook is written (the owner's review is next); the flower play comes first (Small, Medium, Gauntlet; Islands with the island work), then the other tactics (fire a base in, a combat skirmish, fire ant with thief, bombs along the base's edges)
-- Bots: the "Can't go there." noise is measured: mostly the game's own loop for ants shut in by fire walls (rings, trapped thieves), not illegal orders; the pointless orders get fixed after the first bot batch, a quieter display is proposed
+- One start card (v0.8.0): the card and the bot-games work (a fill level for each seat, teams) are being merged onto v0.6.0 and tested in a real browser
+- Touch controls (v0.7.0): the second review's fixes (a resting thumb while the game stalls; a cancelled options slider) are done and merged; the browser checks and the five CI checks are next
+- Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are finished and being merged into one batch
+- Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
+- Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls (not illegal orders); the batch being merged no longer orders special actions onto an ant (-95% on Small); a counter and the rest follow
+- Short room codes, and the platform and operating system icons: planned after the one card
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
-- Touch controls on a phone: two-finger pan and pinch zoom, hold for a right click (started; its own release)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 
