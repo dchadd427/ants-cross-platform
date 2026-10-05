@@ -372,7 +372,7 @@ function randomName(n) { return NAMES_OF_THE_PAGE.indexOf(n) !== -1; }
 {
     const env = runLobby('', {});
     check('the page has ONE name field, near the top, in the same box for Host and Join', !!env.$('player-name') && !env.$('join-name') && env.$('who') && !env.$('who').hidden);
-    check('nothing is asked first: the two cards and "How it works" are there, the step\'s button is not', !env.$('cards').hidden && !env.$('how').hidden && env.$('who-go').hidden && env.$('who-title').hidden);
+    check('nothing is asked first: the two cards and "How it works" are there, the step\'s button and its way out are not', !env.$('cards').hidden && !env.$('how').hidden && env.$('who-back').hidden && env.$('who-go').hidden && env.$('who-title').hidden);
     check('... and the page is not in its room mode', !env.body.classList.contains('in-room'));
     check('nothing remembered: the field is empty and its placeholder is Player', env.$('player-name').value === '' && env.$('player-name').getAttribute('placeholder') === 'Player' && env.$('player-name').getAttribute('maxlength') === '32');
 }
@@ -519,6 +519,7 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
     check('no element of the page was made from the name\'s characters (a < in a name makes no tag)', cell0.findAll((e) => e.tagName === 'img').length === 0 && env.rows()[0].findAll((e) => e.tagName === 'img').length === 0);
     check('the frame\'s address carries the name encoded: no raw < or > or quote in it', env.frameOf(0).src.indexOf('<') === -1 && env.frameOf(0).src.indexOf('>') === -1 && env.param(env.frameOf(0).src, 'name') === typed, env.frameOf(0).src);
 }
+check('the step\'s way out is a plain anchor to "/" with a readable text, hidden in the markup (the script shows it with the step)', /<a id="who-back" class="btn sm who-back" href="\/" hidden>&larr; Back to the front page<\/a>/.test(lobbyText));
 check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobbyText) && !/document\.write/.test(lobbyText) && !/insertAdjacentHTML/.test(lobbyText));
 
 // ---- a link of the page that asks for a match: the name is asked first, every time, and nothing starts before
@@ -526,13 +527,14 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobb
     const env = runLobby('?room=demo-small-2p-abc12', { 'ants.name': 'Maya' });
     check('a shared room link: the step is up, with the remembered name in the field and a Join button', !env.$('who-go').hidden && env.$('who-go').textContent === 'Join' && !env.$('who-title').hidden && /demo-small-2p-abc12/.test(env.$('who-title').textContent) && env.$('player-name').value === 'Maya');
     check('... nothing starts before the button: no room panel, no frame, the address is not rewritten', !env.roomStarted() && env.frames().length === 0 && env.replaced.length === 0 && env.opened.length === 0 && env.$('cards').hidden && env.$('how').hidden);
+    check('... the step has a way out: "Back to the front page" is shown, a plain link to the site\'s front page (no query: nothing of the match goes with it)', !env.$('who-back').hidden && env.$('who-back').getAttribute('href') === '/');
     check('... the name step is the full page, not a room (the room class comes with the room)', !env.body.classList.contains('in-room'));
     env.type('player-name', 'Bot (x)');
     env.$('who-go').click();
     check('... a bad name does not start it and says why', !env.roomStarted() && env.$('name-msg').textContent.length > 8);
     env.type('player-name', 'Zed');
     env.$('player-name').key('Enter');
-    check('... Enter with a good name does: the room panel opens (the address is rewritten to the room), the step goes away', env.roomStarted() && env.replaced.length === 1 && env.$('who-go').hidden && env.$('who-title').hidden && env.storage.data['ants.name'] === 'Zed');
+    check('... Enter with a good name does: the room panel opens (the address is rewritten to the room), the step goes away', env.roomStarted() && env.replaced.length === 1 && env.$('who-go').hidden && env.$('who-title').hidden && env.$('who-back').hidden && env.storage.data['ants.name'] === 'Zed');
     env.rowButton(1, 'Play here').click();
     check('... and the seat that this person plays takes the name', env.param(env.frameOf(1).src, 'name') === 'Zed');
 }
@@ -546,7 +548,7 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobb
 }
 {
     const env = runLobby('?map=treasure&players=2', {});
-    check('a link that hosts a match on a map asks for the name first too (button: Host)', !env.$('who-go').hidden && env.$('who-go').textContent === 'Host' && !env.roomStarted() && env.replaced.length === 0);
+    check('a link that hosts a match on a map asks for the name first too (button: Host), and has its way out too', !env.$('who-go').hidden && !env.$('who-back').hidden && env.$('who-go').textContent === 'Host' && !env.roomStarted() && env.replaced.length === 0);
     env.type('player-name', 'Alice');
     env.$('who-go').click();
     check('... then the room is made on that map', env.roomStarted() && env.replaced.length === 1 && /room=demo-treasure-2p-/.test(String(env.replaced[0][2])));
