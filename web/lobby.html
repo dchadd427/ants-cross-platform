@@ -87,7 +87,7 @@
         /* ---- the way back to a match that is still running (the block REJOIN): there only while this browser holds a fresh key of a seat on this site's game server ---- */
         .rejoin { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 18px 0 0; }
         .rejoin .btn { max-width: 100%; text-align: center; overflow-wrap: anywhere; }
-        .rejoin-note { max-width: 100%; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }       /* (not .note: the cards' notes wrap at 34 characters) */
+        .rejoin-note { max-width: 100%; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }       /* (not .note: the card's notes wrap at 34 characters) */
 
         /* ---- the two-state buttons of the game (Fog of War On / Off): radio buttons for the picture's shape, the players of a match and the level of each opponent ---- */
         .pair { position: relative; display: inline-flex; gap: 6px; }
@@ -271,6 +271,7 @@
         iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
         .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: #849688; border: 1px solid #000; }
         .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border-color: #888; }
+        .invite .dot { width: 13px; height: 13px; margin-right: 8px; border: 2px solid #15100c; box-shadow: 0 0 0 2px #f4ead8; }       /* (on the clay, where red would be lost, a ring of cream shows each colour) */
         .frames-note { width: 100%; max-width: 1332px; margin: 18px auto 0; padding: 0 30px; font-size: 13.5px; line-height: 1.4; }
 
         /* ---- footer: the emerald bar of the match screen ---- */
@@ -569,7 +570,7 @@ their music and their sound: only the window you are in is heard). The match is 
             { key: 'tiny', name: 'Tiny' }, { key: 'small', name: 'Small' }, { key: 'medium', name: 'Medium' },
             { key: 'gauntlet', name: 'Gauntlet' }, { key: 'treasure', name: 'Treasure' }, { key: 'islands', name: 'Islands' }
         ];
-        // The map that the two cards offer until a choice is remembered (a remembered choice and ?map= win). The list keeps its order, by size, so a card would open on its first entry, Tiny: the
+        // The map that the card offers until a choice is remembered (a remembered choice and ?map= win). The list keeps its order, by size, so a card would open on its first entry, Tiny: the
         // order does not choose the default. Treasure is the map that is played most (the owner's request: Treasure is the default of everything).
         var DEFAULT_MAP_KEY = 'treasure';
         // The Map Info line of each map, as the setup screen of the game shows it: the description and the minutes of the level file (tests/scripts/test_web_front.py reads them from Original-Ants/Maps)
@@ -649,7 +650,7 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // NAME_END
 
-        // The name field is shared by Host and Join. It is filled in with the name that this browser remembered; readName() is its check: a bad name is explained under the field and nothing
+        // The name field is shared by START, Join and the room panel. It is filled in with the name that this browser remembered; readName() is its check: a bad name is explained under the field and nothing
         // starts, a good one (or none) is remembered.
         var nameInput = $('player-name');
         var nameMsg = $('name-msg');
@@ -986,7 +987,7 @@ their music and their sound: only the window you are in is heard). The match is 
             return '?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9');
         }
         // REJOIN_END
-        // The button is there while the two cards are, and only while an entry is offered; it is looked at again when the page comes back from the browser's memory (the Back button) and when another
+        // The button is there while the card is, and only while an entry is offered; it is looked at again when the page comes back from the browser's memory (the Back button) and when another
         // tab changes the storage: the match may have ended meanwhile.
         var rejoinOffered = null;
         function showRejoin() {
@@ -1218,7 +1219,7 @@ their music and their sound: only the window you are in is heard). The match is 
             roomMap = mapName;
             var seats = SEATS.slice(0, seatCount);
             resetMatch();
-            $('cards').hidden = true;                // the room takes the place of the two cards and of "How it works"
+            $('cards').hidden = true;                // the room takes the place of the card and of "How it works"
             $('how').hidden = true;
             document.body.classList.add('in-room');   // (and the header is a smaller one)
             $('room-panel').hidden = false;
@@ -1490,7 +1491,7 @@ their music and their sound: only the window you are in is heard). The match is 
         function fromAddress() {                    // what the address asks for, once the name step (if there is one) is done
             if (wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted)) {
                 var d = describeCode(wanted);
-                // &teams= is for a room that has no teams of its own: narrowed to the room's player count as the Host card narrows its Teams select when the code says it (a pair that three seats cannot make is
+                // &teams= is for a room that has no teams of its own: narrowed to the room's player count (hostTeam) when the code says it (a pair that three seats cannot make is
                 // free for all); a room that the page did not make is the game's to judge. The teams that the code names win in startRoom.
                 var askedTeams = d.named ? hostTeam(wantedTeams, d.players).replace('ffa', '') : wantedTeams;
                 startRoom(wanted, d.map, params.get('play') === 'here' ? 'here' : '', d.players, wantedFill, askedTeams);
@@ -1650,7 +1651,7 @@ their music and their sound: only the window you are in is heard). The match is 
         // STATS_END
 
         $('new-room').addEventListener('click', function () {
-            // the front page again, with its two cards (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
+            // the front page again, with its card (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
             window.location.assign(window.location.origin + window.location.pathname.replace(/^\/+/, '/'));
         });
 

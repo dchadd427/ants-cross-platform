@@ -286,6 +286,11 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn(".invite input[type=text] { flex: 1 1 200px; min-width: 0;", self.style)                      # (a field can shrink under its row: a long link never makes the page wider)
         self.assertIn(".invite { display: flex; flex-wrap: wrap;", self.style)
 
+    def test_the_colour_of_an_invitation_shows_on_the_clay_in_a_ring(self):
+        # the invitations are on the page's red-orange clay, where a red dot is lost: a dark ring and a cream one round each colour (checked by eye at 4x; the red and the clay are the same hue)
+        self.assertIn(".invite .dot { width: 13px; height: 13px; margin-right: 8px; border: 2px solid #15100c; box-shadow: 0 0 0 2px #f4ead8; }", self.style)
+        self.assertLess(self.style.index(".dot.black {"), self.style.index(".invite .dot {"))                      # (later: it wins over the black dot's grey border)
+
 
 class TheColours(unittest.TestCase):
     """The text of the page is at least 4.5:1 against its background, in every state of the buttons and banners (the browser check measures the whole page; this reads the colours)."""
