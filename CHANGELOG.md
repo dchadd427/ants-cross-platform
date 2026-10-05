@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **A phone can pan, zoom and right click:** a tap is a left click and a drag is a selection box, as before. Hold a finger still on the map for about half a second (a ring closes around it, the phone buzzes) and lift it: that is a right click (a move order, a special power, or "send the selected ants there" on the minimap). Two fingers move the map, and pinching zooms towards them.
+- **The page stays out of the way:** no double-tap zoom, no pull to reload, no text selection or menu on a long press, and the sound still unlocks on the first touch.
+- Taps and drags on the menus, the dialogs and the minimap work as they did. Two fingers do nothing under a dialog.
+- Made for Android Chrome first; the guards for iPhone and iPad are in but have not been tried on a real device.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW), [the touch notes](docs/TOUCH.md)
+
 ## v0.6.0 - 2026-10-05 - An online match waits for you
 
 **For players:**
