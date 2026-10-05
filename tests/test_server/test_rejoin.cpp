@@ -1997,8 +1997,8 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.run_until([&]() { return f.net.phase() == NetGame::Phase::Room; }, 4000));
         ASSERT_TRUE(w.status("demo-pr1").code.empty() && w.status("demo-pr3").state == RoomState::Waiting && w.status("demo-pr4").state == RoomState::Waiting);
         {   // a stall of the server's loop (a frozen machine, a swap storm; the re-check's N2): the first pass after it reads a Hello for a third code before the rooms have looked at their people
-            // again, and by the clock alone both rooms have been abandoned for two minutes. Their people are at them: Cat and Dan at one, Ann at the other (she came back after her tab was closed,
-            // and is catching up: a person too, her partner's seat is held). Nobody is ended for a place.
+            // again, and by the clock alone both rooms have been abandoned for two minutes. Their people are at them: Dan at one (the seat of his partner Cat is held), Ann at the other (she came
+            // back after her tab was closed, and is catching up: a person too, and Bob's seat is held). A person on the first seat and one on the second: each seat counts. Nobody is ended for a place.
             World s(nullptr, limits);
             ASSERT_TRUE(s.server.start(s.now));
             Machine& ann = s.join("Ann", "demo-st1");
@@ -2008,11 +2008,11 @@ void run_way_back_tests() {
             ASSERT_TRUE(s.run_until([&]() { return s.running({&ann, &bob, &cat, &dan}); }, 14000 + kPre));
             s.run(3000);
             ASSERT_TRUE(s.status("demo-st1").state == RoomState::Running && s.status("demo-st2").state == RoomState::Running);
-            ASSERT_TRUE(ann.keys_given.size() == 1);
+            ASSERT_TRUE(ann.keys_given.size() == 1 && ann.net.my_seat() == 0 && dan.net.my_seat() == 1);
             const net::RejoinKey ann_key = ann.keys_given[0];
-            for (Machine* gone : {&ann, &bob}) s.machines.erase(std::remove_if(s.machines.begin(), s.machines.end(), [gone](const std::unique_ptr<Machine>& p) { return p.get() == gone; }), s.machines.end());
-            s.run(70000);                                                                // (the tabs of st1 are closed: a minute and ten seconds on, st1 is abandoned by the floor)
-            ASSERT_TRUE(s.status("demo-st1").paused && s.status("demo-st1").absent.size() == 2 && s.status("demo-st2").absent.empty());
+            for (Machine* gone : {&ann, &bob, &cat}) s.machines.erase(std::remove_if(s.machines.begin(), s.machines.end(), [gone](const std::unique_ptr<Machine>& p) { return p.get() == gone; }), s.machines.end());
+            s.run(70000);                                                                // (those tabs are closed: a minute and ten seconds on, st1 is abandoned by the floor, st2 has Dan)
+            ASSERT_TRUE(s.status("demo-st1").paused && s.status("demo-st1").absent.size() == 2 && s.status("demo-st2").paused && s.status("demo-st2").absent.size() == 1);
             Machine& back = s.add_machine("Ann");
             ASSERT_TRUE(back.net.join("127.0.0.1", s.server.port(), "Ann", ann_key.seat, "demo-st1", "", ann_key.key));
             bool catching_up = false;
