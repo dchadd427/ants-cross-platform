@@ -405,6 +405,7 @@ struct Machine {
     std::vector<net::RejoinKey> keys_forgotten;   // what set_on_forget_key was told
     size_t leave_on_key{0};                       // the n-th time that the machine is given its key it leaves, from inside that very call (0: never)
     bool leave_on_forget{false};                  // the first time that it is told to let go of the key it leaves, from inside that very call
+    bool fail_load{false};                        // the machine cannot load the map of a Start (the file is missing on its computer)
 
     explicit Machine(std::string n, uint32_t seed = 1) : name(std::move(n)), rng(seed) {
         net.set_discovery(0);
@@ -445,7 +446,7 @@ struct Machine {
             const net::StartMsg& s = net.start_info();
             assets::LevelData level;
             uint64_t hash = 0;
-            const bool ok = level.load_lvl(maps_dir() + s.map_name) && net::hash_file(maps_dir() + s.map_name, hash) && hash == s.map_hash;
+            const bool ok = !fail_load && level.load_lvl(maps_dir() + s.map_name) && net::hash_file(maps_dir() + s.map_name, hash) && hash == s.map_hash;
             if (ok) {
                 sim.set_fog_of_war_enabled(s.fog);
                 sim.init(level, s.seed, s.roster);
@@ -2096,6 +2097,61 @@ void run_way_back_tests() {
         ASSERT_EQ(n.net.phase(), NetGame::Phase::Off);
         v.run(500);
         ASSERT_TRUE(n.net.phase() == NetGame::Phase::Off && n.keys_forgotten.size() == 1);
+        // a guest whose OWN load of the map fails (the re-check's N1) is back in the room at once and the lobby takes no Cancel of the server's after that: it lets go of the key that the Start
+        // made it keep, then and there, and not at a Cancel that never counts
+        {
+            World f;
+            ASSERT_TRUE(f.server.start(f.now));
+            f.server.door = Server::Door::Scripted;
+            f.server.script_messages = {net::encode(welcome), net::encode(room)};
+            Machine& g = f.add_machine("Bob");
+            g.orders = false;
+            g.fail_load = true;
+            ASSERT_TRUE(g.net.join("127.0.0.1", f.server.port(), "Bob", 1, "RJ-22"));
+            ASSERT_TRUE(f.run_until([&]() { return g.net.phase() == NetGame::Phase::Room; }, 5000));
+            ASSERT_TRUE(f.server.scripted_send(net::encode(start)));
+            ASSERT_TRUE(f.run_until([&]() { return g.saw(NetGame::Event::Type::Cancelled); }, 5000));
+            ASSERT_TRUE(g.net.phase() == NetGame::Phase::Room && g.loads == 0);
+            ASSERT_TRUE(g.keys_given.size() == 1 && g.keys_forgotten.size() == 1 && net::key_matches(g.keys_forgotten[0].key, key) && g.keys_forgotten[0].room == "RJ-22");
+            ASSERT_TRUE(f.server.scripted_send(net::encode(cancel)));                    // the server's own Cancel (it was told Loaded{false}) changes nothing: the key goes once
+            f.run(500);
+            ASSERT_TRUE(g.keys_given.size() == 1 && g.keys_forgotten.size() == 1);
+            ASSERT_TRUE(f.server.scripted_send(net::encode(start)));                     // the room tries again: kept again, and let go of again
+            ASSERT_TRUE(f.run_until([&]() { return g.keys_forgotten.size() == 2; }, 5000));
+            ASSERT_TRUE(g.keys_given.size() == 2 && net::key_matches(g.keys_given[1].key, key));
+        }
+        {   // the same, with the real server: Ann loads, Bob cannot; every Start gives a key and every cancel takes it back, for the one who could load and for the one who could not
+            ServerLimits limits;
+            World r(nullptr, limits);
+            ASSERT_TRUE(r.server.start(r.now));
+            ASSERT_TRUE(r.server.mgr->create_room(held_spec("RJ-22B", 2), r.server_now()).ok);
+            Machine& ann = r.join("Ann", "RJ-22B");
+            Machine& bob = r.add_machine("Bob");
+            bob.fail_load = true;
+            ASSERT_TRUE(bob.net.join("127.0.0.1", r.server.port(), "Bob", 255, "RJ-22B"));
+            ASSERT_TRUE(r.run_until([&]() { return bob.count(NetGame::Event::Type::Cancelled) >= 1 && bob.net.phase() == NetGame::Phase::Room; }, 15000));
+            ASSERT_TRUE(!bob.keys_given.empty() && bob.keys_given.size() == bob.keys_forgotten.size());     // (not one key left in the store of a match that did not begin)
+            ASSERT_TRUE(r.run_until([&]() { return ann.count(NetGame::Event::Type::Cancelled) >= 1 && ann.net.phase() == NetGame::Phase::Room; }, 15000));
+            ASSERT_TRUE(!ann.keys_given.empty() && ann.keys_given.size() == ann.keys_forgotten.size());
+            ASSERT_TRUE(r.status("RJ-22B").state == RoomState::Waiting);
+        }
+        {   // the function that is told to let go of the key leaves from inside that call: the session is over, and nothing touches it afterwards
+            World f;
+            ASSERT_TRUE(f.server.start(f.now));
+            f.server.door = Server::Door::Scripted;
+            f.server.script_messages = {net::encode(welcome), net::encode(room)};
+            Machine& g = f.add_machine("Bob");
+            g.orders = false;
+            g.fail_load = true;
+            g.leave_on_forget = true;
+            ASSERT_TRUE(g.net.join("127.0.0.1", f.server.port(), "Bob", 1, "RJ-22"));
+            ASSERT_TRUE(f.run_until([&]() { return g.net.phase() == NetGame::Phase::Room; }, 5000));
+            ASSERT_TRUE(f.server.scripted_send(net::encode(start)));
+            ASSERT_TRUE(f.run_until([&]() { return !g.keys_forgotten.empty(); }, 5000));
+            ASSERT_EQ(g.net.phase(), NetGame::Phase::Off);
+            f.run(500);
+            ASSERT_TRUE(g.net.phase() == NetGame::Phase::Off && g.keys_given.size() == 1 && g.keys_forgotten.size() == 1);
+        }
     } TEST_END();
 
     TEST_CASE("RJ1.23 A Vote About A Machine's Own Seat Is Not Shown To It And Cannot Be Cast By It (L5 Of The Review): A Seat That Flaps Is Put To The Vote At Once; When Its Machine Is Back The Others Have The Block With The Vote About It, And Its Own Screen Has None (pause_info Has No Vote, vote() Is False For Both Choices)") {
