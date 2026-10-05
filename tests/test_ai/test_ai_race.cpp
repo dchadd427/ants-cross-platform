@@ -1,7 +1,7 @@
-// The race of the standard bot (contest batch, AI14.1): "they eat their food in a weird order ... the center food in the treasure map is contested on all four sides, so that is usually the starting
+// The race of the standard bot (contest batch, AI20.1): "they eat their food in a weird order ... the center food in the treasure map is contested on all four sides, so that is usually the starting
 // food" (the owner) and what followed from it (docs/BOTS.md, "The race for contested food"). Hand-made worlds (b41_helpers.hpp) and TREASURE, quick enough for suite 2.20.
 //
-//   AI14.1  the ants that the gate cannot use go to the contested piles first (on TREASURE every level, a contested pile before a safe one of higher value, the gate keeps its own ants, a pile that
+//   AI20.1  the ants that the gate cannot use go to the contested piles first (on TREASURE every level, a contested pile before a safe one of higher value, the gate keeps its own ants, a pile that
 //           an enemy army holds is no race, a pile with two competitors stays one though an enemy is far nearer, the window, where nothing is contested and with fewer than six ants nothing changes)
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
@@ -14,7 +14,7 @@ using namespace b41;
 using namespace contest;
 
 void run_race_tests() {
-    TEST_CASE("AI14.1 The Race (Contested Food First): On TREASURE Every Seat At Every Level Sends Its Ants To The Pile In The Centre First (Easy Too); A Contested Pile Is Served Before A Richer Safe One; With The Gate Full Nobody Is Surplus And The Plain Order Stays; A Pile That An Enemy Army Holds Is No Race (Unless The Own Force Matches It); A Pile With Two Competitors Stays A Race Though One Enemy Is Far Nearer; After The Window (1200 Ticks), Where Nothing Is Contested And With Fewer Than Six Ants The Orders Are The Plain Ones")
+    TEST_CASE("AI20.1 The Race (Contested Food First): On TREASURE Every Seat At Every Level Sends Its Ants To The Pile In The Centre First (Easy Too); A Contested Pile Is Served Before A Richer Safe One; With The Gate Full Nobody Is Surplus And The Plain Order Stays; A Pile That An Enemy Army Holds Is No Race (Unless The Own Force Matches It); A Pile With Two Competitors Stays A Race Though One Enemy Is Far Nearer; After The Window (1200 Ticks), Where Nothing Is Contested And With Fewer Than Six Ants The Orders Are The Plain Ones")
     {
         sim::SimulationEngine probe;
         start_match(probe, "TREASURE", 7, 0x0F);

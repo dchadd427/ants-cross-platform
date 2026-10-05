@@ -1,6 +1,6 @@
 #pragma once
 
-// Helpers that the contest tests (contest batch, AI14.x: test_ai_race.cpp, test_ai_contest.cpp) share: the attack orders of a rig, a carrier, the ants that the harvest orders sent to a pile, the middle pile
+// Helpers that the contest tests (contest batch, AI20.x: test_ai_race.cpp, test_ai_contest.cpp) share: the attack orders of a rig, a carrier, the ants that the harvest orders sent to a pile, the middle pile
 // of TREASURE and the hand-made world of the race.
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"

@@ -14,7 +14,7 @@ The simulation, the lock-step rules, the network protocol and every golden hash 
 | Fire: the safe fire-in (a Fire Ant to light, escorts only then, give-up), the defence against being fired in | `SabotageTask`, `WallTask`, `FightTask` |
 | No special order onto an ant (a dying one too): the controller refuses, the tasks step aside; the simulation is not changed | `BotController::allowed`, the tasks |
 | Behind the leader (the pressure and its tiers; workers never join) and the last minute (the leader guards) | `standing_of` (`tactics.cpp`), `StrikeTask`, `RaidTask`, `HarassTask` |
-| Tests AI14.1 - AI14.9, AI1.1b, AI2.22 | `tests/test_ai/test_ai_race.cpp`, `test_ai_contest.cpp`, `contest_helpers.hpp`, `test_ai_view.cpp`, `test_ai_controller.cpp` |
+| Tests AI20.1 - AI20.9, AI1.1b, AI2.22 | `tests/test_ai/test_ai_race.cpp`, `test_ai_contest.cpp`, `contest_helpers.hpp`, `test_ai_view.cpp`, `test_ai_controller.cpp` |
 | Tuning keys of `bot_arena` for every rule (`race`, `racefloor`, `raceslack`, `hunt`, `huntblows`, `huntodds`, `health`, `skirm`, `sabsafe`, `sabescort`, `firedef`, `catchup`, `cu1` - `cu3`, `cuworkers`, `culift`, `cuwants`, `endgame`, `styled` and more); `prev=1` turns the plan rules of the contest batch off | `tools/bot_arena.cpp` |
 
 ## The comparison
@@ -27,53 +27,53 @@ Spec files kept outside the repository, `tools/mutate.py`, one change at a time,
 
 | Mutant | File | Test | Result |
 |---|---|---|---|
-| `race-two-competitors-hopeless` | `tasks.cpp` | AI14.1 | caught |
-| `race-army-never-holds` | `tasks.cpp` | AI14.1 | caught |
-| `race-without-min-ants` | `tasks.cpp` | AI14.1 | caught |
-| `race-without-window` | `tasks.cpp` | AI14.1 | caught |
-| `race-gate-ignored` | `tasks.cpp` | AI14.1 | caught |
-| `race-never-surplus` | `tasks.cpp` | AI14.1 | caught |
+| `race-two-competitors-hopeless` | `tasks.cpp` | AI20.1 | caught |
+| `race-army-never-holds` | `tasks.cpp` | AI20.1 | caught |
+| `race-without-min-ants` | `tasks.cpp` | AI20.1 | caught |
+| `race-without-window` | `tasks.cpp` | AI20.1 | caught |
+| `race-gate-ignored` | `tasks.cpp` | AI20.1 | caught |
+| `race-never-surplus` | `tasks.cpp` | AI20.1 | caught |
 | `view-hp-hidden-for-others` | `bot_view.cpp` | AI1.1 | caught |
 | `controller-special-at-occupied` | `bot_controller.cpp` | AI2.22 | caught |
-| `hunt-fresh-allowed` | `standard_tasks.cpp` | AI14.4 | caught |
-| `hunt-odds-ignored` | `standard_tasks.cpp` | AI14.5 | caught |
-| `hunt-scope-everywhere` | `standard_tasks.cpp` | AI14.5 | caught |
-| `hunt-reserve-ignored` | `standard_tasks.cpp` | AI14.5 | caught |
-| `hunt-carriers-taken` | `standard_tasks.cpp` | AI14.5 | caught |
-| `hunt-wounded-not-first` | `standard_tasks.cpp` | AI14.5 | caught |
-| `kill-plan-parity-swapped` | `standard_tasks.cpp` | AI14.5 | caught |
-| `kill-plan-odd-without-opener` | `standard_tasks.cpp` | AI14.5 | caught |
-| `strikers-parity-off` | `standard_tasks.cpp` | AI14.4 | caught |
-| `fight-waits-always` | `standard_tasks.cpp` | AI14.3 | caught |
-| `fight-never-waits` | `standard_tasks.cpp` | AI14.5 | caught |
-| `escape-off` | `standard_tasks.cpp` | AI14.3 | caught |
-| `keep-one-blow-from-death-off` | `standard_tasks.cpp` | AI14.3 | caught |
-| `relief-off` | `standard_tasks.cpp` | AI14.3 | caught |
-| `fire-defence-off` | `standard_tasks.cpp` | AI14.7 | caught |
-| `fired-in-wall-never` | `standard_tasks.cpp` | AI14.7 | caught |
-| `sabotage-lone-fire-ant` | `standard_tasks.cpp` | AI14.6 | caught |
-| `sabotage-no-escort-needed` | `standard_tasks.cpp` | AI14.6 | caught |
-| `sabotage-no-giveup` | `standard_tasks.cpp` | AI14.6 | caught |
-| `raid-occupied-entrance` | `standard_tasks.cpp` | AI14.8 | caught |
-| `sabotage-occupied-ring` | `standard_tasks.cpp` | AI14.8 | equivalent |
-| `wall-build-occupied` | `standard_tasks.cpp` | AI14.8 | equivalent |
-| `pressure-ignores-time` | `tactics.cpp` | AI14.9 | caught |
-| `tiers-same-for-all-levels` | `tactics.cpp` | AI14.9 | caught |
-| `guard-never` | `tactics.cpp` | AI14.9 | caught |
-| `endgame-no-allin` | `tactics.cpp` | AI14.9 | caught |
-| `workers-join-at-tier1` | `standard_tasks.cpp` | AI14.9 | caught |
-| `easy-raids-never` | `standard_bot.cpp` | AI14.9 | caught |
-| `offence-in-guard-stance` | `standard_tasks.cpp` | AI14.9 | caught |
-| `strike-in-guard-stance` | `standard_tasks.cpp` | AI14.9 | equivalent |
-| `guard-defender-bonus` | `standard_tasks.cpp` | AI14.9 | caught |
-| `workers-join-by-default` | `tactics.hpp` | AI14.9 | caught |
-| `hunt-blows-default-three` | `tactics.hpp` | AI14.5 | caught |
-| `lift-tier-never` | `standard_bot.cpp` | AI14.9 | caught |
+| `hunt-fresh-allowed` | `standard_tasks.cpp` | AI20.4 | caught |
+| `hunt-odds-ignored` | `standard_tasks.cpp` | AI20.5 | caught |
+| `hunt-scope-everywhere` | `standard_tasks.cpp` | AI20.5 | caught |
+| `hunt-reserve-ignored` | `standard_tasks.cpp` | AI20.5 | caught |
+| `hunt-carriers-taken` | `standard_tasks.cpp` | AI20.5 | caught |
+| `hunt-wounded-not-first` | `standard_tasks.cpp` | AI20.5 | caught |
+| `kill-plan-parity-swapped` | `standard_tasks.cpp` | AI20.5 | caught |
+| `kill-plan-odd-without-opener` | `standard_tasks.cpp` | AI20.5 | caught |
+| `strikers-parity-off` | `standard_tasks.cpp` | AI20.4 | caught |
+| `fight-waits-always` | `standard_tasks.cpp` | AI20.3 | caught |
+| `fight-never-waits` | `standard_tasks.cpp` | AI20.5 | caught |
+| `escape-off` | `standard_tasks.cpp` | AI20.3 | caught |
+| `keep-one-blow-from-death-off` | `standard_tasks.cpp` | AI20.3 | caught |
+| `relief-off` | `standard_tasks.cpp` | AI20.3 | caught |
+| `fire-defence-off` | `standard_tasks.cpp` | AI20.7 | caught |
+| `fired-in-wall-never` | `standard_tasks.cpp` | AI20.7 | caught |
+| `sabotage-lone-fire-ant` | `standard_tasks.cpp` | AI20.6 | caught |
+| `sabotage-no-escort-needed` | `standard_tasks.cpp` | AI20.6 | caught |
+| `sabotage-no-giveup` | `standard_tasks.cpp` | AI20.6 | caught |
+| `raid-occupied-entrance` | `standard_tasks.cpp` | AI20.8 | caught |
+| `sabotage-occupied-ring` | `standard_tasks.cpp` | AI20.8 | equivalent |
+| `wall-build-occupied` | `standard_tasks.cpp` | AI20.8 | equivalent |
+| `pressure-ignores-time` | `tactics.cpp` | AI20.9 | caught |
+| `tiers-same-for-all-levels` | `tactics.cpp` | AI20.9 | caught |
+| `guard-never` | `tactics.cpp` | AI20.9 | caught |
+| `endgame-no-allin` | `tactics.cpp` | AI20.9 | caught |
+| `workers-join-at-tier1` | `standard_tasks.cpp` | AI20.9 | caught |
+| `easy-raids-never` | `standard_bot.cpp` | AI20.9 | caught |
+| `offence-in-guard-stance` | `standard_tasks.cpp` | AI20.9 | caught |
+| `strike-in-guard-stance` | `standard_tasks.cpp` | AI20.9 | equivalent |
+| `guard-defender-bonus` | `standard_tasks.cpp` | AI20.9 | caught |
+| `workers-join-by-default` | `tactics.hpp` | AI20.9 | caught |
+| `hunt-blows-default-three` | `tactics.hpp` | AI20.5 | caught |
+| `lift-tier-never` | `standard_bot.cpp` | AI20.9 | caught |
 | `controller-special-dying-ant-passes` | `bot_controller.cpp` | AI2.22 | caught |
 | `controller-special-own-ant-passes` | `bot_controller.cpp` | AI2.22 | caught |
 | `controller-special-ally-passes` | `bot_controller.cpp` | AI2.22 | caught |
-| `escorts-without-fire-ant` | `standard_tasks.cpp` | AI14.6 | caught |
-| `escorts-never-let-go` | `standard_tasks.cpp` | AI14.6 | caught |
+| `escorts-without-fire-ant` | `standard_tasks.cpp` | AI20.6 | caught |
+| `escorts-never-let-go` | `standard_tasks.cpp` | AI20.6 | caught |
 
 Equivalent: the occupant checks that `SabotageTask` and `WallTask` make before an ignite order (the engine's predicted acknowledgement refuses it already; the controller refuses it too) and the guard stance of `StrikeTask` (a leader has tier 0 and never strikes, unless `wipe_focus`, which is off in every plan).
 
@@ -86,8 +86,8 @@ GCC 13, `-fsanitize=address,undefined`, a Release build with `-DANTS_WERROR=OFF`
 | Test | Change | Why |
 |---|---|---|
 | AI1.1, AI1.25, AI2.5, AI2.16, AI2.21 | the hit points of another team's ant are the engine's (they were 0) | the owner's decision |
-| AI8.2, AI8.4, AI8.5, AI11.8, AI11.9 | the plan sets `race = false` | they hold the opening of v0.5.0 (one or two ants to the middle), which stays selectable; the race has AI14.1 |
-| AI7.15 | `plan.catchup = false` in two parts | the world has no food, so any deficit is the highest pressure at once (AI14.9 holds the tiers) |
+| AI8.2, AI8.4, AI8.5, AI11.8, AI11.9 | the plan sets `race = false` | they hold the opening of v0.5.0 (one or two ants to the middle), which stays selectable; the race has AI20.1 |
+| AI7.15 | `plan.catchup = false` in two parts | the world has no food, so any deficit is the highest pressure at once (AI20.9 holds the tiers) |
 | the fight plans of AI9.x (`fight_plan()`) | `catchup = false` | they hold the old trigger, a margin in points |
 
 ## "Can't go there." reactions

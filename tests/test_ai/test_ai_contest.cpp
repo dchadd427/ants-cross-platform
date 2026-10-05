@@ -1,17 +1,17 @@
-// The fights, the fire and the standing of the standard bot (contest batch, AI14.2 - AI14.9): the owner's report "the hard bots don't really fight unless they're defending; the losing player should be a
+// The fights, the fire and the standing of the standard bot (contest batch, AI20.2 - AI20.9): the owner's report "the hard bots don't really fight unless they're defending; the losing player should be a
 // little more aggressive", "they need to be aware of the health of other players ... KDR", "the ant was 4 HP and it just didn't kill it", the three bug reports on the fire play, and what followed
 // from them (docs/BOTS.md, "Fights of its own", "Fire play", "Behind the leader and the endgame"). Hand-made worlds (b41_helpers.hpp), quick enough for suite 2.20.
 //
-//   AI14.2  a skirmish of the bot's own (flag, off in every shipped plan): the stronger force attacks a carrier or a worker at a pile without a blow first
-//   AI14.3  health-aware fighting: the target that dies soonest, an attacker one blow from the kill stays, an own ant that would die first is relieved, a fight is kept up only while a kill is in
+//   AI20.2  a skirmish of the bot's own (flag, off in every shipped plan): the stronger force attacks a carrier or a worker at a pile without a blow first
+//   AI20.3  health-aware fighting: the target that dies soonest, an attacker one blow from the kill stays, an own ant that would die first is relieved, a fight is kept up only while a kill is in
 //           reach, a survivor that walks home is not chased
-//   AI14.4  hunting the kill, the owner's case: a wounded enemy within reach of a Combat Ant and a worker is attacked at once (no attack was ordered before), by the Combat Ant alone; two workers
+//   AI20.4  hunting the kill, the owner's case: a wounded enemy within reach of a Combat Ant and a worker is attacked at once (no attack was ordered before), by the Combat Ant alone; two workers
 //           cannot kill it and do not try; the kills are made
-//   AI14.5  the hunt: the plan of the blows as a table, the choice (the one that dies soonest), the scope by level, kept until done, the stronger force, the last ants and the carriers
-//   AI14.6  the fire-in is safe: no lone Fire Ant against a team that can put the fire out, escorts, the give-up
-//   AI14.7  the defence against being fired in: the fighters go after the Fire Ant, the walls are put out when it is safe
-//   AI14.8  no task orders a special order at a tile that an ant stands on
-//   AI14.9  behind the leader and the endgame: the pressure and its tiers, the strike, Easy's raids, the last minute
+//   AI20.5  the hunt: the plan of the blows as a table, the choice (the one that dies soonest), the scope by level, kept until done, the stronger force, the last ants and the carriers
+//   AI20.6  the fire-in is safe: no lone Fire Ant against a team that can put the fire out, escorts, the give-up
+//   AI20.7  the defence against being fired in: the fighters go after the Fire Ant, the walls are put out when it is safe
+//   AI20.8  no task orders a special order at a tile that an ant stands on
+//   AI20.9  behind the leader and the endgame: the pressure and its tiers, the strike, Easy's raids, the last minute
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 #include "contest_helpers.hpp"
@@ -23,7 +23,7 @@ using namespace b41;
 using namespace contest;
 
 void run_contest_tests() {
-    TEST_CASE("AI14.2 A Skirmish Of The Bot's Own (Hard): With The Stronger Force Near A Carrier Of An Enemy It Attacks Without Waiting To Be Hit, One Order Per Blow, And The Carrier Is Hurt; Not With The Weaker Force (Enemy Fighters Near The Carrier), Not With One Ant, Not A Thief, Not An Ant That Stands On A Power-Up; A Plan Without The Flag Waits To Be Hit") {
+    TEST_CASE("AI20.2 A Skirmish Of The Bot's Own (Hard): With The Stronger Force Near A Carrier Of An Enemy It Attacks Without Waiting To Be Hit, One Order Per Blow, And The Carrier Is Hurt; Not With The Weaker Force (Enemy Fighters Near The Carrier), Not With One Ant, Not A Thief, Not An Ant That Stands On A Power-Up; A Plan Without The Flag Waits To Be Hit") {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) ASSERT_FALSE(plan_for(level).skirmish);        // (built and measured as a loss: shipped OFF, docs/BOTS.md)
         LevelPlan plan = plan_for(Level::Hard);
         plan.skirmish = true;
@@ -112,7 +112,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI14.3 Health-Aware Fighting (The Owner: \"If They're Attacking An Ant And They're Low Health, They Should Continue And Try To Kill The Ant\"): The Target That Dies Soonest First, A Wounded Target Is Finished (An Attacker One Blow From The Kill Stays Though It Is Hurt), An Own Ant That Would Die Before Its Target Is Relieved By Another; Without The Flag The Same Fights Are Fought By Distance")
+    TEST_CASE("AI20.3 Health-Aware Fighting (The Owner: \"If They're Attacking An Ant And They're Low Health, They Should Continue And Try To Kill The Ant\"): The Target That Dies Soonest First, A Wounded Target Is Finished (An Attacker One Blow From The Kill Stays Though It Is Hurt), An Own Ant That Would Die Before Its Target Is Relieved By Another; Without The Flag The Same Fights Are Fought By Distance")
     {
         LevelPlan plan = plan_for(Level::Hard);
         plan.skirmish = true;
@@ -127,7 +127,7 @@ void run_contest_tests() {
                 sim.get_unit(hurt).hp = 2;
                 LevelPlan p = plan;
                 p.health_aware = health;
-                p.hunt = false;                                                                                                       // (the hunt of a kill reads the hit points by itself: AI14.4; this is the skirmish's choice of target)
+                p.hunt = false;                                                                                                       // (the hunt of a kill reads the hit points by itself: AI20.4; this is the skirmish's choice of target)
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
                 rig.run(40);
                 const auto attacks = attacks_of(rig);
@@ -229,7 +229,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI14.4 Hunt The Kill (The Owner: \"I Saw Lots Of Opportunities Where It Could Have Killed An Ant, The Ant Was 4 HP And It Just Didn't Kill It\"): An Enemy With 4 Hit Points Within Reach Of A Combat Ant And An Idle Worker, Nothing Else Near, Is Attacked At Once, Every Level, By The Combat Ant Alone (Before The Fix No Attack Was Ordered: The Fights Began Only From A Blow On An Own Ant); Two Workers Cannot Kill It In The Engine (A Worker's Blow Leaves An Ant With One Hit Point, And It Walks Home) And Do Not Try; The Kills Are Made (4, 5, 6 Hit Points); A Fresh Enemy Of 10 Is Nobody's Hunt")
+    TEST_CASE("AI20.4 Hunt The Kill (The Owner: \"I Saw Lots Of Opportunities Where It Could Have Killed An Ant, The Ant Was 4 HP And It Just Didn't Kill It\"): An Enemy With 4 Hit Points Within Reach Of A Combat Ant And An Idle Worker, Nothing Else Near, Is Attacked At Once, Every Level, By The Combat Ant Alone (Before The Fix No Attack Was Ordered: The Fights Began Only From A Blow On An Own Ant); Two Workers Cannot Kill It In The Engine (A Worker's Blow Leaves An Ant With One Hit Point, And It Walks Home) And Do Not Try; The Kills Are Made (4, 5, 6 Hit Points); A Fresh Enemy Of 10 Is Nobody's Hunt")
     {
         const auto world = [&](sim::SimulationEngine& sim, uint16_t enemy_hp, size_t workers, size_t combats, int32_t enemy_x = 30, uint32_t seed = 81) {
             empty_field(sim, seed);
@@ -310,7 +310,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI14.5 The Choice, The Scope And The Release Of A Hunt: Of Two Killable Enemies The One That Dies Soonest (The More Wounded) Is Hunted First; A Hunt Is Kept Until The Target Is Dead (A Fresh Enemy That Steps In Is Not Attacked) And The Ants Are Free Afterwards; Not Against A Stronger Force Near The Target, Never With The Last Ants Or Ants That Carry; Per Level: The Blows That The Kill Takes (A Combat Ant Punches For 2, An Odd Number Of Hit Points Needs An Opener, Workers Alone Only Kill 2 Hit Points And Only Three Of Them) Against What A Plan Hunts (The Shipped Plans: Two Blows At Every Level); Easy Hunts What Stands Next To Its Ants, Medium Also What Is Within The Leash Of Its Hill Or At A Pile It Works, Hard Also The Carriers Of The Leader")
+    TEST_CASE("AI20.5 The Choice, The Scope And The Release Of A Hunt: Of Two Killable Enemies The One That Dies Soonest (The More Wounded) Is Hunted First; A Hunt Is Kept Until The Target Is Dead (A Fresh Enemy That Steps In Is Not Attacked) And The Ants Are Free Afterwards; Not Against A Stronger Force Near The Target, Never With The Last Ants Or Ants That Carry; Per Level: The Blows That The Kill Takes (A Combat Ant Punches For 2, An Odd Number Of Hit Points Needs An Opener, Workers Alone Only Kill 2 Hit Points And Only Three Of Them) Against What A Plan Hunts (The Shipped Plans: Two Blows At Every Level); Easy Hunts What Stands Next To Its Ants, Medium Also What Is Within The Leash Of Its Hill Or At A Pile It Works, Hard Also The Carriers Of The Leader")
     {
         const auto world = [&](sim::SimulationEngine& sim, size_t workers, size_t combats, uint32_t seed = 82) {
             empty_field(sim, seed);
@@ -501,7 +501,7 @@ void run_contest_tests() {
                 sim.get_unit(carrier).hp = 4;
                 sim.set_player_score(1, 3000);
                 LevelPlan plan = plan_for(level);
-                plan.catchup = false;                                                                                                  // (no food on this field: 3000 points behind is tier 3, where the odds of a hunt are lowest: AI14.9)
+                plan.catchup = false;                                                                                                  // (no food on this field: 3000 points behind is tier 3, where the odds of a hunt are lowest: AI20.9)
                 Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(60);
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack) >= 1, level == Level::Hard);
@@ -523,7 +523,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI14.6 The Fire-In Is Safe (The Owner: \"The Hard Bot Sent One Fire Ant To The Enemy Gate That Was Put Out At Once\"): A Lone Fire Ant Is Not Sent To A Hill Whose Team Has A Fire Ant In Sight Or A Fire Power-Up It Can Still Take; It Is Sent When Neither Is There; A Fire Ant With Two Combat Ants That Hold The Entrance Is Sent Though The Enemy Could Put The Fire Out; Walls Put Out Twice End The Attempt For A While")
+    TEST_CASE("AI20.6 The Fire-In Is Safe (The Owner: \"The Hard Bot Sent One Fire Ant To The Enemy Gate That Was Put Out At Once\"): A Lone Fire Ant Is Not Sent To A Hill Whose Team Has A Fire Ant In Sight Or A Fire Power-Up It Can Still Take; It Is Sent When Neither Is There; A Fire Ant With Two Combat Ants That Hold The Entrance Is Sent Though The Enemy Could Put The Fire Out; Walls Put Out Twice End The Attempt For A While")
     {
         LevelPlan plan = plan_for(Level::Hard);
         plan.sabotage = true;
@@ -673,7 +673,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI14.7 A Bot Whose Entrance Is Fired In Goes After The Fire Ant (The Owner: \"The Other Team Just Extinguishes All Of The Fire, It Does Not Try To Kill The Fire Ant That Is Firing Them In\"): The Fighters Attack The Enemy Fire Ant Near The Ring Round Its Gate (A Wounded One First); The Walls Of The Ring Are Not Put Out While That Ant Is Near Or An Enemy Force That Is Stronger Than The Own Stands Near Them, Never From A Tile That An Ant Stands On; When The Fire Ant Is Dead The Keeper Puts Them Out")
+    TEST_CASE("AI20.7 A Bot Whose Entrance Is Fired In Goes After The Fire Ant (The Owner: \"The Other Team Just Extinguishes All Of The Fire, It Does Not Try To Kill The Fire Ant That Is Firing Them In\"): The Fighters Attack The Enemy Fire Ant Near The Ring Round Its Gate (A Wounded One First); The Walls Of The Ring Are Not Put Out While That Ant Is Near Or An Enemy Force That Is Stronger Than The Own Stands Near Them, Never From A Tile That An Ant Stands On; When The Fire Ant Is Dead The Keeper Puts Them Out")
     {
         sim::SimulationEngine probe;
         empty_field(probe, 91);
@@ -776,7 +776,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI14.8 No Task Orders A Special Order At A Tile That An Ant Stands On (The Owner: \"An Ant Standing On The Tile Cannot Be Targeted For Extinguish, Defuse, Plant, Ignite, Bridge Or Demolish\"): A Whole Run Of The Raid, The Sabotage And The Walls With An Ant (Enemy Or Own) On The Tile They Want Has No Order At An Occupied Tile; The Raid Takes A Free Tile Of The Mound, The Keeper Steps Aside; The Simulation Is Not Changed")
+    TEST_CASE("AI20.8 No Task Orders A Special Order At A Tile That An Ant Stands On (The Owner: \"An Ant Standing On The Tile Cannot Be Targeted For Extinguish, Defuse, Plant, Ignite, Bridge Or Demolish\"): A Whole Run Of The Raid, The Sabotage And The Walls With An Ant (Enemy Or Own) On The Tile They Want Has No Order At An Occupied Tile; The Raid Takes A Free Tile Of The Mound, The Keeper Steps Aside; The Simulation Is Not Changed")
     {
         // runs `ticks` ticks of a rig and counts the special orders that the bot proposed at a tile with an ant on it at the moment of the look (the view of the look is the state after the tick)
         const auto run_checked = [&](Rig& rig, const sim::SimulationEngine& sim, uint64_t ticks) {
@@ -861,7 +861,7 @@ void run_contest_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI14.9 Behind The Leader And The Endgame (The Owner: \"The Losing Player Should Be A Little More Aggressive\"): The Pressure Is The Deficit In Percent Of What Can Still Be Earned, Its Tiers Come Later The Weaker The Level (Hard 40, 80 And 130 Percent, Medium 1.5 Times, Easy 2.5 Times); The Old Margin Of 150 Points Never Fires In A Close Match, The Pressure Does; A Bot Behind Strikes At Tier 1 With Its Combat Ants, Workers Join Only Where The Plan Lets Them (Never In The Shipped Plans), Ahead It Does Not; Easy Raids From Tier 2; In The Last Minute The Leader Guards (No Offence, One Defender More) And The Bot Behind Is All-In (Tier 3, The Strike Does Not Stop)")
+    TEST_CASE("AI20.9 Behind The Leader And The Endgame (The Owner: \"The Losing Player Should Be A Little More Aggressive\"): The Pressure Is The Deficit In Percent Of What Can Still Be Earned, Its Tiers Come Later The Weaker The Level (Hard 40, 80 And 130 Percent, Medium 1.5 Times, Easy 2.5 Times); The Old Margin Of 150 Points Never Fires In A Close Match, The Pressure Does; A Bot Behind Strikes At Tier 1 With Its Combat Ants, Workers Join Only Where The Plan Lets Them (Never In The Shipped Plans), Ahead It Does Not; Easy Raids From Tier 2; In The Last Minute The Leader Guards (No Offence, One Defender More) And The Bot Behind Is All-In (Tier 3, The Strike Does Not Stop)")
     {
         // a field with plenty of food (10,000 points: the time is what limits what can be earned), the scores and the time of the case
         const auto build = [&](sim::SimulationEngine& sim, int32_t mine, int32_t leader, uint32_t ticks, uint64_t at, uint32_t seed = 110) {
@@ -927,7 +927,7 @@ void run_contest_tests() {
                 sim.set_player_score(1, 100 + k.deficit);
                 LevelPlan plan = plan_for(k.level);
                 plan.catchup = k.catchup;
-                plan.skirmish = false;                                                                                                 // (the skirmish of Hard would take the same ants for the same carriers: AI14.2)
+                plan.skirmish = false;                                                                                                 // (the skirmish of Hard would take the same ants for the same carriers: AI20.2)
                 Rig rig(sim, 0, k.level, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(120);
                 ASSERT_EQ(rig.as<StandardBot>().strike().strikes_started() >= 1u, k.want);
