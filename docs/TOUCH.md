@@ -61,6 +61,7 @@ the real event loop against the mouse's click, band and right click, point by po
 2.625, Android Chrome's user agent) and an iPhone-like one (390 x 844, ratio 3, the iPhone's user agent, no Fullscreen API, no vibration) drive the page with the DevTools protocol's multi-touch.
 
 **Not verified, and to be checked on a phone** (headless Chromium is not a phone, and has no WebKit): that SDL's Emscripten backend delivers the touches as assumed (its coordinates, `touchcancel` as a lift);
-a thumb that rests on the glass and holds by accident; the system's own gestures (the back swipe, pull to refresh); a finger's real jitter against the slop; the vibration motor; and, for iOS Safari,
+a thumb that rests on the glass and holds by accident; the system's own gestures (the back swipe, pull to refresh); a finger's real jitter against the slop; the vibration motor; that the browser's `touches`
+list and SDL's `SIZE_CHANGED` behave as the stale-finger rule and the size-change cancel assume; how often a stall of 150 - 450 ms happens on a phone (the stall rule's 100 ms); and, for iOS Safari,
 every guard that exists for it: the non-passive gesture listeners (the browser's pinch), `touch-action` (honoured from iOS 13), the callout and selection rules, the unlock on `touchend`, the page's own
 fullscreen on an iPhone and the missing vibration. They run in Chromium and break nothing there; whether they do what is meant on WebKit is only known on an iPhone or an iPad.
