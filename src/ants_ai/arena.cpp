@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ants_ai/map_info.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 namespace ants::ai {
@@ -21,8 +22,10 @@ struct Recorder {
     std::vector<RecordedCommand>* log{nullptr};
     const uint64_t* steps{nullptr};
     const sim::SimulationEngine* sim{nullptr};
+    CantGoTally* tally{nullptr};
     void applied(const sim::Command& c) const {
         if (log != nullptr) log->push_back(RecordedCommand{*steps, sim->current_tick(), c});
+        if (tally != nullptr) tally->command(c, sim->current_tick());
     }
 };
 
@@ -133,6 +136,40 @@ void ScoreLedger::sample(const sim::SimulationEngine& sim) {
     }
 }
 
+void CantGoTally::command(const sim::Command& c, uint64_t tick) {
+    if (!sim::is_group_order(c.type) || c.ants.empty()) return;                    // a Stop, a hatch and the rest ask for no walk
+    const uint8_t seat = c.issuer < sim::MAX_PLAYERS ? c.issuer : 0;
+    ++seats_[seat].orders;
+    refused_.push_back(0);
+    order_seat_.push_back(seat);
+    const uint32_t number = static_cast<uint32_t>(refused_.size());                  // 1, 2, ...
+    for (const uint32_t id : c.ants) {
+        if (id > (1u << 20)) continue;                                               // (the engine counts the ants from 1: a number like this names no ant)
+        if (id >= last_.size()) last_.resize(static_cast<size_t>(id) + 1);
+        last_[id] = Last{number, tick};
+    }
+}
+
+void CantGoTally::scan(const sim::SimulationEngine& sim, const std::vector<sim::NewsEvent>& news) {
+    for (const sim::NewsEvent& n : news) {
+        if ((n.string_id == sim::strings::kCantGoThere || n.string_id == sim::strings::kCantDoThat) && n.target_player < sim::MAX_PLAYERS) ++seats_[n.target_player].reactions;
+    }
+    const uint64_t tick = sim.current_tick();
+    for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+        if (a.id > (1u << 20)) continue;
+        if (a.id >= in_cantgo_.size()) in_cantgo_.resize(static_cast<size_t>(a.id) + 1, 0);
+        const bool now = a.state == sim::UnitState::CantGo;
+        if (now && in_cantgo_[a.id] == 0 && a.player_id < sim::MAX_PLAYERS) {
+            ++seats_[a.player_id].began;
+            if (a.id < last_.size() && last_[a.id].order != 0 && tick >= last_[a.id].tick && tick - last_[a.id].tick <= kRefusedWindow && refused_[last_[a.id].order - 1] == 0) {
+                refused_[last_[a.id].order - 1] = 1;
+                ++seats_[order_seat_[last_[a.id].order - 1]].refused;
+            }
+        }
+        in_cantgo_[a.id] = now ? 1 : 0;
+    }
+}
+
 void read_seat_result(const sim::SimulationEngine& sim, uint8_t seat, ArenaSeatResult& out) {
     out.score = sim.get_player_score(seat);
     out.shown_score = sim.get_display_score(seat);
@@ -166,10 +203,12 @@ ArenaResult play_match(const ArenaSpec& spec) {
     uint64_t steps = 0;
     ScoreLedger ledger;
     ledger.start(sim);
+    CantGoTally tally;
     Recorder rec;
     rec.log = spec.record ? &out.log : nullptr;
     rec.steps = &steps;
     rec.sim = &sim;
+    rec.tally = &tally;
     DirectSink direct(sim, rec);
     DelayedSink delayed(sim, spec.latency_ticks, rec);
     sim::CommandSink& sink = spec.latency_ticks == 0 ? static_cast<sim::CommandSink&>(direct) : static_cast<sim::CommandSink&>(delayed);
@@ -193,11 +232,12 @@ ArenaResult play_match(const ArenaSpec& spec) {
         if (spec.latency_ticks != 0) delayed.flush();
         controller.on_tick(sim);
         // nobody polls the news and audio queues here, and they would grow for the whole match: empty them every tick (and count what they held)
-        const size_t news = sim.poll_news_events().size();
+        const std::vector<sim::NewsEvent> news = sim.poll_news_events();
         const size_t audio = sim.poll_audio_events().size();
-        out.news_events += news;
+        tally.scan(sim, news);
+        out.news_events += news.size();
         out.audio_events += audio;
-        out.peak_queue = std::max(out.peak_queue, static_cast<uint32_t>(std::max(news, audio)));
+        out.peak_queue = std::max(out.peak_queue, static_cast<uint32_t>(std::max(news.size(), audio)));
         if (sim.current_tick() % kArenaHashPeriod == 0) out.checkpoints.push_back(sim.state_hash().total);
         if (sim.is_match_over()) {
             out.match_over = true;
@@ -228,6 +268,10 @@ ArenaResult play_match(const ArenaSpec& spec) {
         read_seat_result(sim, b.seat, r);
         r.banked = ledger.banked(b.seat);
         r.raided = ledger.raided(b.seat);
+        r.cantgo = tally.seat(b.seat).reactions;
+        r.cantgo_began = tally.seat(b.seat).began;
+        r.orders = tally.seat(b.seat).orders;
+        r.refused_orders = tally.seat(b.seat).refused;
         r.stats = controller.stats(b.seat);
         out.seats.push_back(r);
     }

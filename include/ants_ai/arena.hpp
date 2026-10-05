@@ -63,6 +63,43 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> raided_{};
 };
 
+/// What the arena counts of the "Can't go there." reactions (docs/BOTS.md, "The can't-go loop"). The engine posts the news item "Can't go there." (a walk that found no path) or "Can't do that..."
+/// (an ability order that is refused) to the seat of the ant, and the ant shows the can't-go clip (UnitState::CantGo). Four numbers per seat, from what a person sees of the match:
+///   reactions  the news items of the two texts that were posted to the seat: everything its owner hears
+///   began      of them, the ones in which the ant was not in the can't-go state a tick before: a walk, an order or a blow that was refused. The others are the repeats of the original's
+///              "can't-go loop" (an ant on a hill's special tile that walls and ants shut in is sent to its waiting tile again, and fails again, every 8 ticks), which no order can end
+///   orders     the commands for the seat that name ants and ask for something (a group move, special or attack) as the engine was given them
+///   refused    of them, the orders that were followed, within kRefusedWindow ticks of the tick they were applied at, by the first reaction of an ant that they named: the bot's own refused orders
+///              (the engine answers an order's walk within 4 ticks: 522 of the 531 refusals of a study of 84 matches, none later than 10). An ant that walks on from an earlier order and meets a
+///              wall within the window is counted too: the number is an indicator that the tests bound, not a proof of cause.
+/// Counted after every tick, once the commands of its turn were applied.
+class CantGoTally {
+public:
+    static constexpr uint64_t kRefusedWindow = 10;
+    struct Seat {
+        uint32_t reactions{0};
+        uint32_t began{0};
+        uint32_t orders{0};
+        uint32_t refused{0};
+    };
+    /// A command that the engine was given when its tick count was `tick`: the ants it names are remembered
+    void command(const sim::Command& c, uint64_t tick);
+    /// After the tick's commands were applied: counts `news` (the news items of the tick) and the ants that entered the can't-go state since the last call
+    void scan(const sim::SimulationEngine& sim, const std::vector<sim::NewsEvent>& news);
+    const Seat& seat(uint8_t s) const noexcept { return seats_[s < sim::MAX_PLAYERS ? s : 0]; }
+
+private:
+    struct Last {
+        uint32_t order{0};                     // the number of the last order that named the ant (0: none)
+        uint64_t tick{0};
+    };
+    std::array<Seat, sim::MAX_PLAYERS> seats_{};
+    std::vector<uint8_t> in_cantgo_;           // by ant id: the ant showed can't-go at the last scan
+    std::vector<Last> last_;                   // by ant id
+    std::vector<uint8_t> refused_;             // by order number: counted as refused already
+    std::vector<uint8_t> order_seat_;          // by order number: the seat it was for
+};
+
 struct ArenaSpec {
     const assets::LevelData* level{nullptr};   // the map (must outlive the call)
     uint32_t seed{1};                          // the engine's seed AND the controller's match seed
@@ -100,6 +137,10 @@ struct ArenaSeatResult {
     uint32_t kills{0};
     uint32_t losses{0};
     uint32_t stalls{0};                        // times a standard bot's stall detector sent it to the plain economy (StandardBot::stalls); 0 for the other kinds
+    uint32_t cantgo{0};                        // the "Can't go there." / "Can't do that..." reactions of the seat's ants (CantGoTally::Seat::reactions)
+    uint32_t cantgo_began{0};                  // of them, the ones that began from another state: the rest are the repeats of a can't-go loop
+    uint32_t orders{0};                        // the orders (group moves, specials, attacks) that the engine was given for the seat
+    uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {
