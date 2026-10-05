@@ -128,7 +128,8 @@
         .myname .lab { margin: 0 20px 0 0; font-size: 18px; }
         .myname .btn { margin-left: 12px; }
         .myname .hint { min-width: 0; margin-left: 20px; }
-        .who-title, .myname .msg { grid-column: 1 / -1; }
+        .who-title, .myname .msg, .myname .who-back { grid-column: 1 / -1; }
+        .myname .who-back { justify-self: start; margin: 14px 0 0; }
         .myname .who-title { justify-self: start; max-width: 100%; margin: 0 0 14px; padding: 7px 20px; font-size: 22px; text-align: left; color: var(--gold); text-shadow: 0 2px 0 #0b2a22; overflow-wrap: anywhere; }
         .myname .msg { margin-top: 8px; }
         .mob { display: none; }
@@ -378,6 +379,7 @@
             <button id="who-go" type="button" class="btn big" hidden>Join</button>
             <p class="hint" id="who-hint"><span id="who-general"><span class="desk">The name your ants play under. Leave it empty for a random name when you host and Player otherwise. This browser remembers it.</span><span class="mob">Your ants play under this name. Empty: a random one when you host, Player otherwise.</span></span><span id="who-step-hint" hidden></span></p>
             <p class="msg" id="name-msg" role="alert"></p>
+            <a id="who-back" class="btn sm who-back" href="/" hidden>&larr; Back to the front page</a>
         </section>
         <div class="picture" role="group" aria-labelledby="picture-label">
             <span id="picture-label">Picture</span>
@@ -1341,12 +1343,13 @@ their music and their sound: only the window you are in is heard). The match is 
                 show: function () {
                     $('who-title').hidden = false;
                     $('who-go').hidden = false;
+                    $('who-back').hidden = false;                // a shared link is a dead end without it: the front page is one tap away
                     $('who-general').hidden = true;
                     $('who-step-hint').textContent = (asksRoom ? 'The name your ants play under in this match: the seat that you play from this page takes it.' : asksSolo ? 'The name your ants play under in the game on this computer.' : 'The name your ants play under in the match that you host from this page.') +
                         ' Leave it empty for a random name. This browser remembers it.';
                     $('who-step-hint').hidden = false;
                 },
-                hide: function () { $('who-title').hidden = true; $('who-go').hidden = true; $('who-step-hint').hidden = true; $('who-general').hidden = false; }
+                hide: function () { $('who-title').hidden = true; $('who-go').hidden = true; $('who-back').hidden = true; $('who-step-hint').hidden = true; $('who-general').hidden = false; }
             }, { recall: recall, remember: remember }, fromAddress);
         } else {
             fromAddress();
