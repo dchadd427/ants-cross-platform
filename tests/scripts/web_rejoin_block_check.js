@@ -6,7 +6,8 @@
 //     same text, checked against the game page's own function on both schemes; every other text (another scheme, host, port, path, case, a trailing slash) is another server's and is not offered;
 //   * the age: a day to the millisecond is fresh, a millisecond more is too old and the entry is REMOVED (the game's rule when it reads), whatever its server; a time up to a minute ahead of the clock is
 //     fresh, a millisecond more is a wrong clock: not offered, and left in the storage; an entry of another server, a malformed one and a foreign item are left as they are;
-//   * the newest of several (by time; on a tie the lower seat, then the room), whatever the order of the storage; a good entry among bad ones is found;
+//   * the newest of several (by time; on a tie the lower seat, then the room), whatever the order of the storage; a good entry among bad ones is found; and the same question for one room and one seat
+//     (the game page asks it: does this browser hold the key of this very seat?), which leaves the entries of other rooms and seats where they are and still removes the old ones;
 //   * a storage that refuses (a call that throws: the browser's private window, a blocked storage) offers nothing or what it can, and never throws;
 //   * the words of the button and of the note, the query that the button opens (the page's other join links: /ws, the room, the seat, the name always there, the shape) and the game page reading that
 //     query as a join of this room and seat that asks for no name;
@@ -41,8 +42,9 @@ function between(text, begin, end, path) {
 
 const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
 const shellText = fs.readFileSync(shellPath, 'utf8');
+const keyBlock = between(lobbyText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', lobbyPath);
 const block = between(lobbyText, 'REJOIN_BEGIN', 'REJOIN_END', lobbyPath);
-const R = new Function(block + '\nreturn { REJOIN_PREFIX: REJOIN_PREFIX, REJOIN_MAX_AGE_MS: REJOIN_MAX_AGE_MS, REJOIN_FUTURE_MS: REJOIN_FUTURE_MS, rejoinServer: rejoinServer, rejoinParse: rejoinParse, rejoinOffer: rejoinOffer, rejoinWords: rejoinWords, rejoinQuery: rejoinQuery };')();
+const R = new Function(keyBlock + '\n' + block + '\nreturn { REJOIN_PREFIX: REJOIN_PREFIX, REJOIN_MAX_AGE_MS: REJOIN_MAX_AGE_MS, REJOIN_FUTURE_MS: REJOIN_FUTURE_MS, rejoinServer: rejoinServer, rejoinParse: rejoinParse, rejoinOffer: rejoinOffer, rejoinWords: rejoinWords, rejoinQuery: rejoinQuery };')();
 
 // the game page's own ANTS_PAGE (the same fakes as tests/scripts/web_lobby_check.js: it reads the address, the storage and two elements while it runs)
 function loadShell() {
@@ -85,11 +87,11 @@ const offer = (items, server, now, throwing) => { const st = makeStorage(items, 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 check('the entries are the game page\'s: ants.rejoin.<room>.<seat>', R.REJOIN_PREFIX === 'ants.rejoin.');
 check('a day is 24 hours to the millisecond, and a clock that was wrong by more than a minute is not trusted', R.REJOIN_MAX_AGE_MS === DAY && R.REJOIN_FUTURE_MS === MIN);
-same('the server of an https page is wss://<host>/ws, of an http page ws://<host>/ws (with the port the host has)', [R.rejoinServer(true, 'beta.playants.org'), R.rejoinServer(false, '127.0.0.1:19980'), R.rejoinServer(true, 'play.test:8443')],
-     ['wss://beta.playants.org/ws', 'ws://127.0.0.1:19980/ws', 'wss://play.test:8443/ws']);
+same('the server of an https page is wss://<host>/ws, of an http page ws://<host>/ws (with the port the host has)', [R.rejoinServer(true, 'beta.playants.org'), R.rejoinServer(false, '127.0.0.1:8080'), R.rejoinServer(true, 'play.test:8443')],
+     ['wss://beta.playants.org/ws', 'ws://127.0.0.1:8080/ws', 'wss://play.test:8443/ws']);
 {
     const P = loadShell();
-    for (const [secure, host] of [[true, 'beta.playants.org'], [false, '127.0.0.1:19980'], [true, 'play.test:8443'], [false, 'localhost']]) {
+    for (const [secure, host] of [[true, 'beta.playants.org'], [false, '127.0.0.1:8080'], [true, 'play.test:8443'], [false, 'localhost']]) {
         const joined = P.joinArguments('?join=/ws&room=demo-small-2p-x7k2&seat=1&name=Ann', secure, host).args;
         check('the server of an entry is the game page\'s own join of this origin (' + (secure ? 'https' : 'http') + ', ' + host + ')', joined[joined.indexOf('--join-url') + 1] === R.rejoinServer(secure, host), joined.join(' '));
     }
@@ -174,7 +176,7 @@ check('a storage with only other items offers nothing (the settings, the name, t
         check('an entry of the server ' + JSON.stringify(other) + ' is another server\'s: not offered', r.got === null);
         check('... and left alone', r.storage.data.size === 1 && r.storage.calls.removeItem.length === 0 && r.storage.calls.setItem.length === 0);
     }
-    check('a site on http: its own server is ws://<host>/ws (and wss:// is another one)', offer({ [nameOf('a', 0)]: entryText(NOW - 5000, 'ws://127.0.0.1:19980/ws') }, 'ws://127.0.0.1:19980/ws').got !== null && offer({ [nameOf('a', 0)]: entryText(NOW - 5000, 'wss://127.0.0.1:19980/ws') }, 'ws://127.0.0.1:19980/ws').got === null);
+    check('a site on http: its own server is ws://<host>/ws (and wss:// is another one)', offer({ [nameOf('a', 0)]: entryText(NOW - 5000, 'ws://127.0.0.1:8080/ws') }, 'ws://127.0.0.1:8080/ws').got !== null && offer({ [nameOf('a', 0)]: entryText(NOW - 5000, 'wss://127.0.0.1:8080/ws') }, 'ws://127.0.0.1:8080/ws').got === null);
     same('an entry of another server does not hide this site\'s, though it is newer', offer({ [nameOf('other', 0)]: entryText(NOW - 1000, 'wss://other.test/ws'), [nameOf('mine', 2)]: entryText(NOW - 90000) }).got, { room: 'mine', seat: 2, t: NOW - 90000 });
 }
 
@@ -196,6 +198,22 @@ check('a storage with only other items offers nothing (the settings, the name, t
     same('... then, at the same seat, the room that comes first', offer(tie).got, { room: 'a-room', seat: 2, t: NOW - 1000 });
     same('two seats of one room: the one that was written last', offer({ [nameOf('r', 0)]: entryText(NOW - 20000), [nameOf('r', 1)]: entryText(NOW - 10000) }).got, { room: 'r', seat: 1, t: NOW - 10000 });
     same('a good entry among bad ones is found', offer({ 'ants.rejoin.bad.9': entryText(NOW), [nameOf('junk', 0)]: 'junk', [nameOf('nokey', 1)]: '{"s":"' + SERVER + '","t":' + NOW + '}', [nameOf('good', 2)]: entryText(NOW - 7000), 'ants.name': 'Ann' }).got, { room: 'good', seat: 2, t: NOW - 7000 });
+}
+
+// the same question for one room and one seat (the game page's name step: a reload of a game that this browser is playing holds the key of that very seat)
+{
+    const items = { [nameOf('room-a', 0)]: entryText(NOW - 1000), [nameOf('room-a', 2)]: entryText(NOW - 5000), [nameOf('room-b', 1)]: entryText(NOW - 9000), [nameOf('room-c', 3)]: entryText(NOW - 2000, 'wss://other.test/ws') };
+    const ask = (room, seat, extra) => R.rejoinOffer(makeStorage(Object.assign({}, items, extra || {})), NOW, SERVER, room, seat);
+    same('no room, no seat: the newest of all (what the front page asks)', ask(), { room: 'room-a', seat: 0, t: NOW - 1000 });
+    same('a room: the newest of that room', [ask('room-a'), ask('room-b'), ask('room-c'), ask('room-none')], [{ room: 'room-a', seat: 0, t: NOW - 1000 }, { room: 'room-b', seat: 1, t: NOW - 9000 }, null, null]);
+    same('a room and a seat: that seat only (seat 0 is a seat: the filter is for numbers from 0)', [ask('room-a', 2), ask('room-a', 0), ask('room-a', 1), ask('room-b', 1), ask('room-b', 0)], [{ room: 'room-a', seat: 2, t: NOW - 5000 }, { room: 'room-a', seat: 0, t: NOW - 1000 }, null, { room: 'room-b', seat: 1, t: NOW - 9000 }, null]);
+    same('a seat without a room: any room\'s seat', [ask('', 1), ask(undefined, 2), ask(null, 3)], [{ room: 'room-b', seat: 1, t: NOW - 9000 }, { room: 'room-a', seat: 2, t: NOW - 5000 }, null]);
+    same('no seat in the question (nothing, -1, null, NaN, a text) is any seat', [ask('room-a', undefined), ask('room-a', -1), ask('room-a', null), ask('room-a', NaN), ask('room-a', '2')].map((o) => o && o.seat), [0, 0, 0, 0, 0]);
+    check('the server still counts: a room of another server is not held', ask('room-c', 3) === null && ask('room-c') === null);
+    const old = makeStorage({ [nameOf('room-x', 0)]: entryText(NOW - 2 * DAY), [nameOf('room-y', 0)]: entryText(NOW - 1000) });
+    same('a question about one room still removes the old entries of the others (the game does when it reads), and is answered by the room\'s own', [R.rejoinOffer(old, NOW, SERVER, 'room-y', 0), Array.from(old.data.keys())], [{ room: 'room-y', seat: 0, t: NOW - 1000 }, [nameOf('room-y', 0)]]);
+    check('an entry of the room that is a day old is removed, not held', R.rejoinOffer(makeStorage({ [nameOf('room-x', 0)]: entryText(NOW - DAY - 1) }), NOW, SERVER, 'room-x', 0) === null);
+    check('an entry of the room from the future is not held', R.rejoinOffer(makeStorage({ [nameOf('room-x', 0)]: entryText(NOW + MIN + 1) }), NOW, SERVER, 'room-x', 0) === null);
 }
 
 // a storage that refuses
@@ -251,6 +269,9 @@ same('the query: a shape that is not 4:3 is 16:9', [R.rejoinQuery({ room: 'r', s
     const got = R.rejoinOffer(st, NOW, SERVER);
     check('a key in capitals is not in them either', (JSON.stringify(got) + JSON.stringify(R.rejoinWords(got)) + R.rejoinQuery(got, '', '16:9')).toLowerCase().indexOf('abcdefabcdef') === -1);
 }
+
+// the game page carries the same text of the shared block (it asks the same question of the same storage)
+check('the keys block is the same text in the front page and the game page', between(shellText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', shellPath) === keyBlock);
 
 console.log('web rejoin block: ' + checks + ' checks, ' + failures + ' failures');
 process.exit(failures === 0 ? 0 : 1);

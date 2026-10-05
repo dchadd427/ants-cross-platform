@@ -45,47 +45,52 @@ class TheMarkupAndTheStyle(unittest.TestCase):
 
     def test_a_hidden_block_takes_no_room_and_nothing_else_moves(self):
         self.assertIn("[hidden] { display: none !important; }", self.style)                # (the block is a flex row: this rule is what hides it)
-        self.assertRegex(self.style, r"\.rejoin \{ display: flex; flex-wrap: wrap;")
+        self.assertIn(".rejoin { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 18px 0 0; }", self.style)       # (the button, and the line UNDER it)
         page_grid = re.search(r"\.page \{ display: grid;[^}]*\}", self.style).group(0)
         self.assertNotIn("rejoin", page_grid)                                              # (it is not a cell of the page's grid, whose areas stay as they were)
 
     def test_it_is_the_pages_teal_button_with_its_focus_and_a_note_of_one_line(self):
         self.assertRegex(self.style, r"a:focus-visible, \.btn:focus-visible,")             # (the outline of every button of the page: the Rejoin button is one)
-        self.assertIn(".rejoin-note { flex: 1 1 260px; min-width: 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }", self.style)
+        self.assertIn(".rejoin-note { max-width: 100%; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }", self.style)
         self.assertIn(".note { max-width: 34ch; }", self.style)                            # (the cards' note wraps at 34 characters: this one is not a .note, so that it does not, and the two notes of the cards stay two)
         self.assertEqual(len(re.findall(r'<p class="note[ "]', self.page)), 2)
-        self.assertIn(".rejoin .btn { text-align: center; overflow-wrap: anywhere; }", self.style)       # (a room code of 32 characters has no place to break)
+        self.assertIn(".rejoin .btn { max-width: 100%; text-align: center; overflow-wrap: anywhere; }", self.style)       # (a room code of 32 characters has no place to break)
 
     def test_on_a_phone_the_button_takes_the_width(self):
         phone = self.style[self.style.index("@media (max-width: 700px) {"):]
+        self.assertIn(".rejoin { margin: 10px 0 0; align-items: stretch; }", phone)
         self.assertIn(".rejoin .btn { width: 100%; }", phone)
 
 
 class TheBlockAndTheWiring(unittest.TestCase):
     def setUp(self):
         self.page = read("web", "lobby.html")
-        self.block = self.page[self.page.index("// REJOIN_BEGIN"):self.page.index("// REJOIN_END")]
+        self.keys = self.page[self.page.index("// REJOINKEY_BEGIN"):self.page.index("// REJOINKEY_END")]       # (the keys that this browser holds: the same text in the game page)
+        self.block = self.page[self.page.index("// REJOIN_BEGIN"):self.page.index("// REJOIN_END")]            # (the front page's own: where the button goes)
         self.wiring = self.page[self.page.index("// REJOIN_END"):self.page.index("var room = '';")]
 
-    def test_the_markers_are_once_and_the_block_touches_neither_the_page_nor_the_storage_itself(self):
-        self.assertEqual(self.page.count("// REJOIN_BEGIN"), 1)
-        self.assertEqual(self.page.count("// REJOIN_END"), 1)
-        self.assertNotRegex(self.block, r"innerHTML|insertAdjacentHTML|document\.|window\.|localStorage|sessionStorage|location\.|console\.|fetch\(|XMLHttpRequest|setItem")
-        for name in ("rejoinServer", "rejoinParse", "rejoinOffer", "rejoinWords", "rejoinQuery"):
-            self.assertEqual(len(re.findall(r"function %s\(" % name, self.page)), 1, name)
+    def test_the_markers_are_once_and_the_blocks_touch_neither_the_page_nor_the_storage_themselves(self):
+        for marker in ("// REJOINKEY_BEGIN", "// REJOINKEY_END", "// REJOIN_BEGIN", "// REJOIN_END"):
+            self.assertEqual(self.page.count(marker), 1, marker)
+        for text in (self.keys, self.block):
+            self.assertNotRegex(text, r"innerHTML|insertAdjacentHTML|document\.|window\.|localStorage|sessionStorage|location\.|console\.|fetch\(|XMLHttpRequest|setItem")
+        for name in ("rejoinParse", "rejoinOffer"):
+            self.assertEqual(len(re.findall(r"function %s\(" % name, self.keys)), 1, name)
+        for name in ("rejoinServer", "rejoinWords", "rejoinQuery"):
+            self.assertEqual(len(re.findall(r"function %s\(" % name, self.block)), 1, name)
 
     def test_the_constants_are_the_games(self):
-        self.assertIn("var REJOIN_PREFIX = 'ants.rejoin.';", self.block)
-        self.assertIn("var REJOIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;", self.block)
-        self.assertIn("var REJOIN_FUTURE_MS = 60 * 1000;", self.block)
+        self.assertIn("var REJOIN_PREFIX = 'ants.rejoin.';", self.keys)
+        self.assertIn("var REJOIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;", self.keys)
+        self.assertIn("var REJOIN_FUTURE_MS = 60 * 1000;", self.keys)
         store = read("include", "ants_app", "rejoin_store.hpp")
         self.assertIn('static constexpr const char* kKeyPrefix = "ants.rejoin.";', store)
         self.assertIn("inline constexpr int64_t kRejoinMaxAgeMs = int64_t{24} * 3600 * 1000;", store)
 
     def test_the_room_code_rule_is_the_pages_own_everywhere(self):
         rule = "[A-Za-z0-9_-]{1,32}"
-        self.assertEqual(len(re.findall(re.escape("/^" + rule + "$/"), self.page.replace(self.block, ""))), 3)       # (the address's room, the Join button, the shared link)
-        self.assertIn("/^ants\\.rejoin\\.(" + rule + ")\\.([0-3])$/", self.block)
+        self.assertEqual(len(re.findall(re.escape("/^" + rule + "$/"), self.page.replace(self.keys, "").replace(self.block, ""))), 3)       # (the address's room, the Join button, the shared link)
+        self.assertIn("/^ants\\.rejoin\\.(" + rule + ")\\.([0-3])$/", self.keys)
         self.assertIn("/^" + rule + "$/", read("web", "shell.html"))                                                  # (and the game page's)
 
     def test_what_it_checks_against_is_pinned(self):
@@ -97,11 +102,11 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertIn("cfg.net_url = argv[++i];", app)                                                                  # (--join-url, as the page gave it)
         self.assertIn("if (!url.empty()) return url;", read("src", "ants_app", "rejoin_store.cpp"))                    # (a browser build's server is its URL)
 
-    def test_the_key_is_not_in_what_the_block_makes(self):
-        parse = self.block[self.block.index("function rejoinParse("):self.block.index("// The match to offer")]
+    def test_the_key_is_not_in_what_the_blocks_make(self):
+        parse = self.keys[self.keys.index("function rejoinParse("):self.keys.index("// The seat to offer")]
         self.assertIn("return { room: m[1], seat: Number(m[2]), server: v.s, t: v.t };", parse)                        # (v.k is checked and let go)
-        self.assertIn("return best ? { room: best.room, seat: best.seat, t: best.t } : null;", self.block)
-        self.assertEqual(len(re.findall(r"\bv\.k\b", self.block)), 3)                                                   # (only the three checks of the key read it)
+        self.assertIn("return best ? { room: best.room, seat: best.seat, t: best.t } : null;", self.keys)
+        self.assertEqual(len(re.findall(r"\bv\.k\b", self.keys)), 3)                                                   # (only the three checks of the key read it)
 
     def test_the_button_is_looked_for_on_the_plain_front_page_only(self):
         branch = self.page[self.page.index("function fromAddress() {"):self.page.index("// A match that an address asks for is the page of somebody who was sent a link")]
@@ -130,6 +135,88 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertIn("button: 'Rejoin your match (' + offer.room + ')'", self.block)
         self.assertIn("note: 'Your match in room ' + offer.room + ' is still running: go back to your seat.'", self.block)
         self.assertIn("'?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9')", self.block)
+
+
+class TheGamePageDoesNotAskARejoinerForAName(unittest.TestCase):
+    """The browser check found that a reload of a game page waited for a name for ever: the page drops the name from its address bar (so that a copy of the address asks its owner), the reload's address
+    looked like a shared link, and the name step held the game back before it could connect with its key. A browser that holds the key of that very seat is not asked."""
+
+    def setUp(self):
+        self.shell = read("web", "shell.html")
+        self.lobby = read("web", "lobby.html")
+
+    def test_the_game_page_carries_the_same_keys_block_as_the_front_page(self):
+        def block(text):
+            return text[text.index("// REJOINKEY_BEGIN"):text.index("// REJOINKEY_END")]
+        self.assertEqual(self.shell.count("// REJOINKEY_BEGIN"), 1)
+        self.assertEqual(block(self.shell), block(self.lobby))
+
+    def test_the_step_asks_unless_the_browser_holds_this_seat_and_a_frame_is_never_asked(self):
+        self.assertIn("var asks = !ANTS_EMBED && ANTS_PAGE.asksForName(window.location.search);", self.shell)
+        self.assertIn("try { asks = !holdsThisSeat(window.location.search, ANTS_ARGS, window.localStorage, Date.now()); } catch (e) { /* no storage: the step asks, as for any shared link */ }", self.shell)
+        self.assertIn("return at !== -1 && rejoinOffer(storage, now, args[at + 1], q.get('room') || '', /^[0-3]$/.test(seat || '') ? Number(seat) : -1) !== null;", self.shell)
+
+    def test_the_address_still_loses_its_name_so_that_a_copy_of_it_asks_its_owner(self):
+        self.assertIn("var stripped = ANTS_PAGE.withoutName(window.location.search);", self.shell)
+        self.assertIn("window.history.replaceState(null, '', window.location.pathname + stripped + window.location.hash);", self.shell)
+
+
+class TheBrowserCheckAndTheGame(unittest.TestCase):
+    """The opt-in check (tests/scripts/web_rejoin_check.py) is not run here, but what it stands on is pinned: what the game exports for it, what it asks of the site and the server, its parts and its exit statuses."""
+
+    def setUp(self):
+        self.check = read("tests", "scripts", "web_rejoin_check.py")
+
+    def test_the_game_exports_what_the_check_reads(self):
+        app = read("src", "ants_app", "application.cpp")
+        self.assertIn('extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {', app)
+        self.assertIn("default: return net_overlay_probe(g_web_app->net_overlay_now(), what);", app)           # (16 and 10000 and up: the overlay's lines; the model function is tested natively)
+        self.assertIn("int net_overlay_probe(const NetOverlayLine& overlay, int what);", read("include", "ants_app", "net_overlay.hpp"))
+        for needle in ("Module._ants_probe(16)", "Module._ants_probe(10000 + 1000 * l + i)", "Module._ants_probe(5)", "Module._ants_match_running()"):
+            self.assertIn(needle, self.check, needle)
+        self.assertIn("window.parent.postMessage({ants: 'sync'", app)                                           # (a top-level game posts its hashes on the channel that the check listens to)
+        self.assertIn('new BroadcastChannel("ants-sync")', app)
+        self.assertIn("new BroadcastChannel('ants-sync')", self.check)
+
+    def test_the_probes_touch_the_game_only_once_the_page_says_that_it_is_ready(self):
+        # (index.js binds each export to the program at its first call: a call while the program is still being compiled leaves it undefined for the life of the page; a slow connection showed it)
+        for name in ("STATE_JS", "OVERLAY_JS"):
+            body = self.check.split(name + ' = """', 1)[1].split('"""', 1)[0]
+            self.assertIn("if (!window.isReadyToPlay || typeof Module === 'undefined'", body, name)
+        self.assertEqual(len(re.findall(r"Module\._ants_\w+\(", self.check)), 4)                                   # (the four calls of the two scripts: nothing else reads the game)
+
+    def test_it_runs_the_server_as_the_stack_does_and_asks_the_site_for_the_servers_busy_answer(self):
+        self.assertIn('"docker-compose.stack.yml"', self.check)                                                   # (the site's own options: the demo rooms)
+        self.assertIn("stack_command.py", self.check)
+        self.assertNotIn("--reconnect", self.check.replace("NO reconnect option", ""))                           # (what holds the seats is the default: no option is given)
+        self.assertNotIn("--no-reconnect", self.check)
+        self.assertIn('urllib.request.urlopen(web + "busy", timeout=10)', self.check)
+        self.assertIn('set(busy) == {"matches", "players"}', self.check)
+        self.assertIn("signal.SIGTERM", self.check)
+
+    def test_it_has_the_four_parts_and_the_statuses_of_the_other_browser_checks(self):
+        self.assertIn('PARTS = ("reload", "restart", "rejoin", "none")', self.check)
+        for part in ("reload", "restart", "rejoin", "none"):
+            self.assertIn('if wanted("%s"):' % part, self.check)
+        self.assertEqual(len(re.findall(r"return 3\b", self.check)), 6)                                         # (a skip: no browser, no server program, no page, the site's /busy does not answer, it is not the server's, a browser that did not start)
+        self.assertIn("return 1 if failures else 0", self.check)
+        for text in ("Exit status 0:", "3: the check could not be made"):
+            self.assertIn(text, self.check)
+
+    def test_a_player_is_a_browser_of_its_own_and_the_key_is_looked_for_but_never_printed(self):
+        self.assertIn("self.browser = Browser(path)", self.check)                                                 # (its own profile: its own storage)
+        self.assertEqual(len(re.findall(r"print\([^)]*key", self.check)), 0)
+        self.assertIn("def key_hexes(self):", self.check)
+        self.assertIn("def key_nowhere(label, ps):", self.check)
+        self.assertNotRegex(self.check, r"/home/|/Users/|/tmp/")                           # (nothing of this machine in the file)
+
+    def test_the_wrapper_is_opt_in_and_skips_without_its_environment(self):
+        wrapper = read("tests", "scripts", "test_web_rejoin.sh")
+        self.assertIn('if [ -z "$ANTS_WEB_URL" ] || [ -z "$ANTS_WS_PORT" ]; then', wrapper)
+        self.assertIn('python3 "$ROOT/tests/scripts/web_rejoin_check.py" --web "$ANTS_WEB_URL" --ws-port "$ANTS_WS_PORT" "$@"', wrapper)
+        self.assertIn('if [ "$status" -eq 3 ]; then', wrapper)
+        self.assertNotIn("test_web_rejoin.sh", read("run_tests.sh"))                                              # (opt-in, like the other browser checks)
+        self.assertTrue(os.access(os.path.join(REPO, "tests", "scripts", "test_web_rejoin.sh"), os.X_OK))
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Rejoin block's rules were NOT run (tests/scripts/web_rejoin_block_check.js)")

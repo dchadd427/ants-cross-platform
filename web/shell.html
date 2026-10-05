@@ -1349,6 +1349,56 @@
         }
         // NAME_END
 
+        // REJOINKEY_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
+        // THE KEYS OF THE SEATS that this browser holds. The game page keeps the key of every seat that it holds in a game server's room in the browser's local storage, ants.rejoin.<room>.<seat> =
+        // {"k": 32 hex digits, "s": the server's address, "t": epoch ms} (src/ants_app/rejoin_store.cpp), lets go of it when the match ends, the seat is dropped or the player leaves, and removes an
+        // entry that a day has passed over when it reads it. This block only LOOKS (the front page's Rejoin button and the game page's name step ask it): THE KEY IS A SECRET, it is read to check an
+        // entry and is in nothing that comes out of here; the game finds it in the storage by itself.
+        var REJOIN_PREFIX = 'ants.rejoin.';
+        var REJOIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;         // the game's own rule: an entry that is older is of no use
+        var REJOIN_FUTURE_MS = 60 * 1000;                    // a time further ahead than this is a clock that was wrong, not a match to go back to
+        // One entry of the storage: { room, seat, server, t } when `name` and `text` are exactly what the game page writes (a room code by the page's own rule, a seat 0 - 3, a JSON object with these three
+        // members and no others, a key of 32 hex digits that is not zero, a printable server of 1 - 255 characters, a time that is a whole number of milliseconds), else null. The key is not returned.
+        function rejoinParse(name, text) {
+            var m = /^ants\.rejoin\.([A-Za-z0-9_-]{1,32})\.([0-3])$/.exec(typeof name === 'string' ? name : '');
+            if (!m || typeof text !== 'string') return null;
+            var v;
+            try { v = JSON.parse(text); } catch (e) { return null; }
+            if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+            var members = Object.keys(v).sort().join(',');
+            if (members !== 'k,s,t') return null;
+            if (typeof v.k !== 'string' || !/^[0-9A-Fa-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;
+            if (typeof v.s !== 'string' || !/^[\x20-\x7e]{1,255}$/.test(v.s)) return null;
+            if (typeof v.t !== 'number' || !isFinite(v.t) || Math.floor(v.t) !== v.t || v.t < 0 || v.t > 999999999999999) return null;
+            return { room: m[1], seat: Number(m[2]), server: v.s, t: v.t };
+        }
+        // The seat to offer, or null: the newest (by t; on a tie the lower seat, then the room) entry of `server` that is not older than a day and not more than a minute ahead of `now` (ms), of the
+        // room `room` when one is given ('' or nothing: any) and of the seat `seat` when it is a number from 0 (nothing: any). `storage` is the browser's (length, key(i), getItem, removeItem; any call
+        // may throw). An entry that a day has passed over is removed, as the game does when it reads (whatever its server: a key that old is of no use to anybody); an entry of another server or room,
+        // one from the future and anything that is no entry of the game are left as they are. { room, seat, t }: no key.
+        function rejoinOffer(storage, now, server, room, seat) {
+            var names = [];
+            try {
+                for (var i = 0; i < storage.length; i++) {
+                    var name = storage.key(i);
+                    if (typeof name === 'string' && name.indexOf(REJOIN_PREFIX) === 0) names.push(name);
+                }
+            } catch (e) { return null; }
+            var best = null;
+            names.forEach(function (name) {
+                var text = null;
+                try { text = storage.getItem(name); } catch (e) { return; }
+                var entry = rejoinParse(name, text);
+                if (!entry) return;
+                if (now - entry.t > REJOIN_MAX_AGE_MS) { try { storage.removeItem(name); } catch (e) { /* it stays, and is not offered */ } return; }
+                if (entry.t - now > REJOIN_FUTURE_MS || entry.server !== server) return;
+                if ((room && entry.room !== room) || (typeof seat === 'number' && seat >= 0 && entry.seat !== seat)) return;
+                if (!best || entry.t > best.t || (entry.t === best.t && (entry.seat < best.seat || (entry.seat === best.seat && entry.room < best.room)))) best = entry;
+            });
+            return best ? { room: best.room, seat: best.seat, t: best.t } : null;
+        }
+        // REJOINKEY_END
+
         // NAMEGATE_BEGIN (tests/scripts/web_name_check.js runs this block)
         // The game of a link that somebody shared starts only when its player has chosen a name: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after the
         // name step is done, which puts the name into the game's arguments (--name; none for an empty name: the game's own Player) and opens the gate. The game does not connect before it starts.
@@ -1368,12 +1418,25 @@
             }
             return gate;
         }
+        // A reload of a game that this browser is playing is no shared link: the page takes the name out of the address bar itself (below), so the address that a reload opens looks like one that somebody
+        // shared and would ask for a name before the game could connect, although this browser holds the key of that very seat of that room on that server (the block above). Then nobody has to say who they
+        // are again: the game joins with the key (Application::init finds it by server, room and seat) and the server's roster has the name already. `args` are the game's arguments: its --join-url is the server.
+        function holdsThisSeat(search, args, storage, now) {
+            var at = args.indexOf('--join-url');
+            var q;
+            try { q = new URLSearchParams(search); } catch (e) { return false; }
+            var seat = q.get('seat');
+            return at !== -1 && rejoinOffer(storage, now, args[at + 1], q.get('room') || '', /^[0-3]$/.test(seat || '') ? Number(seat) : -1) !== null;
+        }
         // NAMEGATE_END
 
         // The name step of a shared link (the gate above): a card in the loading screen, filled in with the name that this browser remembered. The address of a game that was opened with a name by
         // web/lobby.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
         var ANTS_NAME_GATE = (function () {
             var asks = !ANTS_EMBED && ANTS_PAGE.asksForName(window.location.search);
+            if (asks) {                                           // (a browser that holds the key of this very seat is on its way back: no step, see holdsThisSeat)
+                try { asks = !holdsThisSeat(window.location.search, ANTS_ARGS, window.localStorage, Date.now()); } catch (e) { /* no storage: the step asks, as for any shared link */ }
+            }
             if (!ANTS_EMBED) {
                 var stripped = ANTS_PAGE.withoutName(window.location.search);
                 if (stripped !== window.location.search) {

@@ -85,9 +85,9 @@
         .tv img { width: 100%; aspect-ratio: 761 / 497; object-fit: cover; }
 
         /* ---- the way back to a match that is still running (the block REJOIN): there only while this browser holds a fresh key of a seat on this site's game server ---- */
-        .rejoin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 18px 0 0; }
-        .rejoin .btn { text-align: center; overflow-wrap: anywhere; }
-        .rejoin-note { flex: 1 1 260px; min-width: 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }       /* (not .note: the cards' notes wrap at 34 characters) */
+        .rejoin { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 18px 0 0; }
+        .rejoin .btn { max-width: 100%; text-align: center; overflow-wrap: anywhere; }
+        .rejoin-note { max-width: 100%; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }       /* (not .note: the cards' notes wrap at 34 characters) */
 
         /* ---- the two-state buttons of the game (Fog of War On / Off): radio buttons for the picture's shape, the players of a match and the level of each opponent ---- */
         .pair { position: relative; display: inline-flex; gap: 6px; }
@@ -326,7 +326,7 @@
             .single-grid .right { margin-top: 10px; }
             .joinrow { grid-template-columns: minmax(0, 1fr); }
             .online .btn { width: 100%; }
-            .rejoin { margin: 10px 0 0; }
+            .rejoin { margin: 10px 0 0; align-items: stretch; }
             .rejoin .btn { width: 100%; }
             .playrow { gap: 14px; }
             .startbtn { width: 196px; height: 54px; }
@@ -728,16 +728,14 @@ their music and their sound: only the window you are in is heard). The match is 
         })();
         // SHAPE_END
 
-        // REJOIN_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block)
-        // THE WAY BACK to a match that is still running (the Rejoin button at the top of the front page). The game page keeps the key of every seat that it holds in a game server's room in the browser's
-        // local storage, ants.rejoin.<room>.<seat> = {"k": 32 hex digits, "s": the server's address, "t": epoch ms} (src/ants_app/rejoin_store.cpp), lets go of it when the match ends, the seat is dropped
-        // or the player leaves, and removes an entry that a day has passed over when it reads it. This block only LOOKS: it offers the newest entry that the game page would use and says where the button
-        // goes. THE KEY IS A SECRET: it is read to check the entry and is in nothing that comes out of here (the offer, the words, the address); the game page finds it in the storage by itself.
+        // REJOINKEY_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
+        // THE KEYS OF THE SEATS that this browser holds. The game page keeps the key of every seat that it holds in a game server's room in the browser's local storage, ants.rejoin.<room>.<seat> =
+        // {"k": 32 hex digits, "s": the server's address, "t": epoch ms} (src/ants_app/rejoin_store.cpp), lets go of it when the match ends, the seat is dropped or the player leaves, and removes an
+        // entry that a day has passed over when it reads it. This block only LOOKS (the front page's Rejoin button and the game page's name step ask it): THE KEY IS A SECRET, it is read to check an
+        // entry and is in nothing that comes out of here; the game finds it in the storage by itself.
         var REJOIN_PREFIX = 'ants.rejoin.';
         var REJOIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;         // the game's own rule: an entry that is older is of no use
         var REJOIN_FUTURE_MS = 60 * 1000;                    // a time further ahead than this is a clock that was wrong, not a match to go back to
-        // This site's game server as the game page joins it (web/shell.html, ANTS_PAGE.joinArguments: the scheme of the page, its host, the door /ws): what an entry's "s" says when the game page wrote it
-        function rejoinServer(secure, host) { return (secure ? 'wss://' : 'ws://') + host + '/ws'; }
         // One entry of the storage: { room, seat, server, t } when `name` and `text` are exactly what the game page writes (a room code by the page's own rule, a seat 0 - 3, a JSON object with these three
         // members and no others, a key of 32 hex digits that is not zero, a printable server of 1 - 255 characters, a time that is a whole number of milliseconds), else null. The key is not returned.
         function rejoinParse(name, text) {
@@ -753,10 +751,11 @@ their music and their sound: only the window you are in is heard). The match is 
             if (typeof v.t !== 'number' || !isFinite(v.t) || Math.floor(v.t) !== v.t || v.t < 0 || v.t > 999999999999999) return null;
             return { room: m[1], seat: Number(m[2]), server: v.s, t: v.t };
         }
-        // The match to offer, or null: the newest (by t; on a tie the lower seat, then the room) entry of `server` that is not older than a day and not more than a minute ahead of `now` (ms). `storage` is
-        // the browser's (length, key(i), getItem, removeItem; any call may throw). An entry that a day has passed over is removed, as the game does when it reads (whatever its server: a key that old is of no use
-        // to anybody); an entry of another server, one from the future and anything that is no entry of the game are left as they are. { room, seat, t }: no key.
-        function rejoinOffer(storage, now, server) {
+        // The seat to offer, or null: the newest (by t; on a tie the lower seat, then the room) entry of `server` that is not older than a day and not more than a minute ahead of `now` (ms), of the
+        // room `room` when one is given ('' or nothing: any) and of the seat `seat` when it is a number from 0 (nothing: any). `storage` is the browser's (length, key(i), getItem, removeItem; any call
+        // may throw). An entry that a day has passed over is removed, as the game does when it reads (whatever its server: a key that old is of no use to anybody); an entry of another server or room,
+        // one from the future and anything that is no entry of the game are left as they are. { room, seat, t }: no key.
+        function rejoinOffer(storage, now, server, room, seat) {
             var names = [];
             try {
                 for (var i = 0; i < storage.length; i++) {
@@ -772,10 +771,17 @@ their music and their sound: only the window you are in is heard). The match is 
                 if (!entry) return;
                 if (now - entry.t > REJOIN_MAX_AGE_MS) { try { storage.removeItem(name); } catch (e) { /* it stays, and is not offered */ } return; }
                 if (entry.t - now > REJOIN_FUTURE_MS || entry.server !== server) return;
+                if ((room && entry.room !== room) || (typeof seat === 'number' && seat >= 0 && entry.seat !== seat)) return;
                 if (!best || entry.t > best.t || (entry.t === best.t && (entry.seat < best.seat || (entry.seat === best.seat && entry.room < best.room)))) best = entry;
             });
             return best ? { room: best.room, seat: best.seat, t: best.t } : null;
         }
+        // REJOINKEY_END
+
+        // REJOIN_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block, after the one above)
+        // THE WAY BACK to a match that is still running (the Rejoin button at the top of the front page): where the keys are looked for, what the button says and where it goes.
+        // This site's game server as the game page joins it (web/shell.html, ANTS_PAGE.joinArguments: the scheme of the page, its host, the door /ws): what an entry's "s" says when the game page wrote it
+        function rejoinServer(secure, host) { return (secure ? 'wss://' : 'ws://') + host + '/ws'; }
         // The words of the button and of the note under it (text only: a room code has letters, digits, - and _)
         function rejoinWords(offer) {
             return { button: 'Rejoin your match (' + offer.room + ')', note: 'Your match in room ' + offer.room + ' is still running: go back to your seat.' };
