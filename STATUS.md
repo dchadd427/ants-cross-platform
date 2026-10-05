@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-04 23:00 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-04 23:23 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
 - Every page in the original game's look: the game page, the changelog pages and "Sprites and sounds" (release v0.5.1), and a way back from the page that a shared link opens
@@ -9,7 +9,7 @@ _Updated 2026-10-04 23:00 PDT · current release **v0.5.0** · details: [CHANGEL
 - Short room codes: 8 random letters and numbers instead of the long code, a mistyped code says "no such match", and the word "demo" is gone from the codes, the server settings and the docs (planned: starts when the one card and the reconnect fixes are merged; same release, v0.7.0)
 - Bots, stage 1: contested food first, finishing wounded ants (a bot sees every ant's health), fighting when behind, the endgame, the fire play (no lone fire ant, killing the fire ant)
 - Bots: getting off the island (Islands: bomb over, swimmers, bridges; Small: the swimmer ferry)
-- Bots: a power-up playbook (a draft for the owner to review) that also covers the random power-up flowers on Small, Medium, Gauntlet and Islands, then the tactics built from it (fire a base in, a combat skirmish, fire ant with thief, bombs along the base's edges, holding a flower)
+- Bots: the power-up playbook is written (the owner's review is next); the flower play comes first (Small, Medium, Gauntlet; Islands with the island work), then the other tactics (fire a base in, a combat skirmish, fire ant with thief, bombs along the base's edges)
 - Bots: why their ants keep saying "Can't go there.": measuring which orders the game refuses (no code change yet), then fixing the bots' orders
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Touch controls on a phone: two-finger pan and pinch zoom, hold for a right click (started; its own release)
