@@ -129,7 +129,7 @@ void run_b41_team_tests() {
                     sim::SimulationEngine sim;
                     start_match(sim, "TREASURE", 7, 0x0F);
                     LevelPlan plan = plan_for(level);
-                    plan.race = false;                                                                        // (the race of v0.6 has its own tests, AI14.1: this one is about the legacy order of v0.5.0, kept selectable)
+                    plan.race = false;                                                                        // (the race of the contest batch has its own tests, AI14.1: this one is about the legacy order of v0.5.0, kept selectable)
                     plan.contest_aware = aware;
                     plan.contest_opening_ants = 0;                                                            // (the opening has its own test, AI8.4)
                     Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan), 4, 4);
@@ -297,7 +297,7 @@ void run_b41_team_tests() {
                 sim::SimulationEngine sim;
                 start_match(sim, "TREASURE", 7, 0x0F);
                 LevelPlan legacy = plan_for(level);
-                legacy.race = false;                                                                           // (the opening of v0.5.0, kept selectable: the race of v0.6 sends every ant, AI14.1)
+                legacy.race = false;                                                                           // (the opening of v0.5.0, kept selectable: the race of the contest batch sends every ant, AI14.1)
                 Rig rig(sim, seat, level, std::make_unique<StandardBot>(legacy), 4, 4);
                 rig.run(60);
                 if (seat == 0) ASSERT_EQ(ants_at_centre(rig, sim, 60), want);                                  // (from the other hills the plain order sends ants to the centre too, once the nearer piles are full)
@@ -365,7 +365,7 @@ void run_b41_team_tests() {
             sim::SimulationEngine sim;
             start_match(sim, map, 7, 0x0F);
             LevelPlan plan = plan_for(level);
-            plan.race = false;                                                                                // (the opening of v0.5.0: this test is about its minimum of six ants; the race of v0.6 has AI14.1)
+            plan.race = false;                                                                                // (the opening of v0.5.0: this test is about its minimum of six ants; the race of the contest batch has AI14.1)
             plan.contest_opening_ants = k;
             plan.contest_opening_min_ants = min_ants;
             Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan), 4, 4);

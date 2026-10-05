@@ -684,7 +684,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         p.guards = false;
         return true;
     }
-    if (key == "prev") {                                                              // the strategy of v0.5.0: none of the plan rules of v0.6 (the tournaments' comparison; they are the shipped plan now)
+    if (key == "prev") {                                                              // the strategy of v0.5.0: none of the plan rules of the contest batch (the tournaments' comparison; they are the shipped plan now)
         if (v == 0) return true;
         p.race = false;
         p.health_aware = false;

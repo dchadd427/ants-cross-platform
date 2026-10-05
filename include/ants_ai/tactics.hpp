@@ -125,14 +125,14 @@ struct LevelPlan {
     uint32_t sabotage_min_score{100};    // ... a team whose box shows at least this many points
     bool sabotage_spare_keeper{true};    // ... with a Fire Ant that is not the keeper of the own thief hole's walls (false: any Fire Ant that is free; the measurements' first version)
     uint32_t sabotage_after{600};        // ... not before this tick (the opening's own power-ups and walls come first)
-    bool sabotage_safe{false};           // (v0.6) no lone Fire Ant fires in a hill whose owner can simply put the fire out (an enemy Fire Ant of the team or its ally in sight, or a Fire power-up that it can
+    bool sabotage_safe{false};           // (contest batch) no lone Fire Ant fires in a hill whose owner can simply put the fire out (an enemy Fire Ant of the team or its ally in sight, or a Fire power-up that it can
                                          // still take): only with sabotage_escort Combat Ants that stay at the entrance and kill what comes; and a team whose walls were put out sabotage_putout_limit
                                          // times is left alone for sabotage_giveup_ticks
     uint32_t sabotage_escort{2};
     uint32_t sabotage_putout_limit{2};
     uint32_t sabotage_giveup_ticks{3600};
     uint32_t sabotage_escort_ticks{900};  // the escorts leave this long after the ring stands
-    // the defence against being fired in (v0.6): fire walls on the ring round the own gate send the fighters at the Fire Ant that lights them, and the walls are put out only when no enemy ant
+    // the defence against being fired in (contest batch): fire walls on the ring round the own gate send the fighters at the Fire Ant that lights them, and the walls are put out only when no enemy ant
     // stands on the tile, no enemy Fire Ant is near to light them again and the enemy's force near them is not stronger than the own
     bool fire_defence{false};
     int32_t fire_defence_radius{14};     // an enemy Fire Ant within this many tiles of the own hill is the one that fires it in
@@ -160,7 +160,7 @@ struct LevelPlan {
     bool harass_station{true};           // a Combat Ant without a target waits in the middle between the enemy hills (its reflex punches what passes within three tiles)
     uint32_t bench_idle_ticks{0};        // TOURNAMENTS ONLY (bot_arena --tune idle=N): the bot does nothing until this tick, so that it falls behind on purpose (a handicap); 0 in every level
     uint32_t fight_reserve{2};           // no ant is sent to fight while the bot has no more than this many (one more when no egg is left): the last ants stay out of it
-    // the bot's own fights (v0.6; docs/BOTS.md, "Fights of its own"): it reads the hit points that the view gives for every ant and plays for the kill ratio, and at Hard it does not wait to be hit
+    // the bot's own fights (contest batch; docs/BOTS.md, "Fights of its own"): it reads the hit points that the view gives for every ant and plays for the kill ratio, and at Hard it does not wait to be hit
     bool health_aware{false};            // (every level) a fight reads the hit points: the target that dies soonest first, a wounded target is finished (the fight lingers on), an own ant that would
                                          // die before its target is relieved by another, and the blows are counted in the real numbers (10 hit points, a blow takes 1, a Combat Ant's punch 2)
     bool skirmish{false};                // (Hard) with the stronger force at a place it cares about (a carrier on its way, a worker at a pile) enemy ants are attacked without waiting for a blow (FightTask)
@@ -174,7 +174,7 @@ struct LevelPlan {
     int32_t skirmish_chase{14};          // the target is not followed further than this from where it was first met
     uint32_t skirmish_ticks{600};        // a skirmish lasts at most this long (a target is chosen again at the next look)
     uint32_t skirmish_pause_ticks{600};  // after a skirmish that cost more ants than it took, none for this long
-    // hunting the kill (v0.6, the owner: "I saw lots of opportunities where it could have killed an ant, the ant was 4 HP and it just didn't kill it"): at every look the free ants go for a visible enemy
+    // hunting the kill (contest batch, the owner: "I saw lots of opportunities where it could have killed an ant, the ant was 4 HP and it just didn't kill it"): at every look the free ants go for a visible enemy
     // ant that they can kill before help arrives, whether or not it hit anybody first
     bool hunt{false};                    // (every level, scaled) a kill that is available is attacked at once, kept until it is done and the ants are released afterwards (FightTask)
     uint32_t hunt_blows{2};              // a kill is available when the real blows (kill_plan: one lands per hit clip of about 22 ticks, a Combat Ant's punch takes 2 hit points, an ant that is left with one
@@ -188,7 +188,7 @@ struct LevelPlan {
     bool hunt_wide{true};                // (Medium, Hard) the scope also holds what is within the leash of the own hill and what is at a pile that the own ants work
     bool hunt_leader_carriers{false};    // (Hard) ... and the carriers of the leading team wherever they are
     uint32_t hunt_ticks{400};            // a hunt lasts at most this long
-    // behind the leader and the endgame (v0.6; docs/BOTS.md, "Behind the leader and the endgame"): the bot that is behind escalates, scaled by level; in the last minute the leader guards and the bot
+    // behind the leader and the endgame (contest batch; docs/BOTS.md, "Behind the leader and the endgame"): the bot that is behind escalates, scaled by level; in the last minute the leader guards and the bot
     // behind goes all-in. The pressure is the deficit (the leader's box above the own) in percent of what can still be earned (the food on the field in points or the time left at catchup_earn_milli,
     // the less of the two): a pressure from catchup_tier1 / 2 / 3 is a tier 1 / 2 / 3 (Hard 40, 80, 130 percent; Medium 1.5 times those, Easy 2.5 times: the weaker the level, the later it escalates)
     bool catchup{false};                 // (every level, scaled) the tiers: 1 a strike force of Combat Ants (and raids for a smaller loot), 2 a hill with a guard is raided, a plan that does not raid (Easy)
@@ -386,7 +386,7 @@ struct Standing {
     int32_t leader_score{0};
     bool behind{false};                  // the leader's box is above the own by strike_margin points and by strike_margin_percent of itself, and holds strike_min_leader at least
     bool ahead{false};                   // the own box is not below the leader's
-    int32_t deficit{0};                  // (v0.6) the leader's box above the own, 0 when not behind
+    int32_t deficit{0};                  // (contest batch) the leader's box above the own, 0 when not behind
     uint32_t pressure{0};                // the deficit in percent of what can still be earned (plan.catchup_earn_milli, the food on the field), 0 when not behind
     uint8_t tier{0};                     // 0 not behind enough, 1 .. 3 the escalation (plan.catchup_tier1 / 2 / 3; the last minute puts a bot that is behind at 3: plan.endgame)
     bool guard{false};                   // the last minute and the bot leads: it guards (plan.endgame)
@@ -407,7 +407,7 @@ struct Tactics {
     /// cost nothing to use otherwise
     size_t surplus{0};
     Standing standing;                   // where the bot stands at this look
-    bool guard_stance{false};            // (v0.6, the endgame) the bot leads in the last minute (Standing::guard): no offence (hunt, skirmish, harassment, sabotage, strike) and one defender more answers a blow
+    bool guard_stance{false};            // (contest batch, the endgame) the bot leads in the last minute (Standing::guard): no offence (hunt, skirmish, harassment, sabotage, strike) and one defender more answers a blow
     bool strike_active{false};           // the strike force is out (set by the StrikeTask at its last step)
     bool harass_active{false};           // the squad has a target (set by the HarassTask at its last step)
     uint32_t wall_keeper{0};             // the Fire Ant that keeps the walls of the own thief hole (set by the WallTask at its last step; 0: none): the sabotage uses another one

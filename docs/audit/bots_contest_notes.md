@@ -1,8 +1,8 @@
-# Bots v0.6: the contest (what was built, how it was checked, what was left out)
+# Bots: the contest batch (what was built, how it was checked, what was left out)
 
-The owner's reports of 2026-10-05 (the hard bots do not fight unless they defend; the losing player should be a little more aggressive; the food order; health and the kill; three bugs of the fire play) and the plan that answered them (stage 1: the food order, the bot's own attacks, the escalation of a bot that is behind, the endgame, health-aware fights, the kill, the fire play). This is a deep-tier change (what a bot sees and does, `AGENTS.md` rule 11). The rules as they are, and the numbers, are in [`docs/BOTS.md`](../BOTS.md) (the sections "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame" and, in "Measurements", "The contest of v0.6"); this file holds what is specific to the check.
+The owner's reports of 2026-10-05 (the hard bots do not fight unless they defend; the losing player should be a little more aggressive; the food order; health and the kill; three bugs of the fire play) and the plan that answered them (stage 1: the food order, the bot's own attacks, the escalation of a bot that is behind, the endgame, health-aware fights, the kill, the fire play). This is a deep-tier change (what a bot sees and does, `AGENTS.md` rule 11). The rules as they are, and the numbers, are in [`docs/BOTS.md`](../BOTS.md) (the sections "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame" and, in "Measurements", "The contest batch"); this file holds what is specific to the check.
 
-The simulation, the lock-step rules, the network protocol and every golden hash are unchanged. Code and docs say "v0.6" for this batch: the release number is set when the batch is merged.
+The simulation, the lock-step rules, the network protocol and every golden hash are unchanged. Code and docs call this batch "the contest batch": it has no release number of its own.
 
 ## What changed
 
@@ -15,11 +15,11 @@ The simulation, the lock-step rules, the network protocol and every golden hash 
 | No special order onto an ant (a dying one too): the controller refuses, the tasks step aside; the simulation is not changed | `BotController::allowed`, the tasks |
 | Behind the leader (the pressure and its tiers; workers never join) and the last minute (the leader guards) | `standing_of` (`tactics.cpp`), `StrikeTask`, `RaidTask`, `HarassTask` |
 | Tests AI14.1 - AI14.9, AI1.1b, AI2.22 | `tests/test_ai/test_ai_race.cpp`, `test_ai_contest.cpp`, `contest_helpers.hpp`, `test_ai_view.cpp`, `test_ai_controller.cpp` |
-| Tuning keys of `bot_arena` for every rule (`race`, `racefloor`, `raceslack`, `hunt`, `huntblows`, `huntodds`, `health`, `skirm`, `sabsafe`, `sabescort`, `firedef`, `catchup`, `cu1` - `cu3`, `cuworkers`, `culift`, `cuwants`, `endgame`, `styled` and more); `prev=1` turns the plan rules of v0.6 off | `tools/bot_arena.cpp` |
+| Tuning keys of `bot_arena` for every rule (`race`, `racefloor`, `raceslack`, `hunt`, `huntblows`, `huntodds`, `health`, `skirm`, `sabsafe`, `sabescort`, `firedef`, `catchup`, `cu1` - `cu3`, `cuworkers`, `culift`, `cuwants`, `endgame`, `styled` and more); `prev=1` turns the plan rules of the contest batch off | `tools/bot_arena.cpp` |
 
 ## The comparison
 
-One bot with the rules of v0.6 against three of the strategy of v0.5.0 (`prev=1`), at every level on every map, as in B4-1: win rate, margin, kills and losses. `prev=1` is not byte for byte the binary of v0.5.0 (the controller's refusal, the view's hit points and `attackable()`'s refusal of an enemy that stands on a fire wall stay): a mirror of four Hard bots on TREASURE holds the two to the same within noise: the binary of v0.5.0 (48 matches) 2,200 points, 2,343 banked, 143 raided, 0.67 kills a match, `prev=1` (24 matches) 2,201, 2,344, 142 and 0.66 (`docs/BOTS.md`, "The contest of v0.6"). Against the real v0.5.0 binary the commands first differ at tick 216 (a thief's raid names another tile of the enemy mound when an ant stands on the usual one) and the state hashes from about tick 4,100.
+One bot with the rules of the contest batch against three of the strategy of v0.5.0 (`prev=1`), at every level on every map, as in B4-1: win rate, margin, kills and losses. `prev=1` is not byte for byte the binary of v0.5.0 (the controller's refusal, the view's hit points and `attackable()`'s refusal of an enemy that stands on a fire wall stay): a mirror of four Hard bots on TREASURE holds the two to the same within noise: the binary of v0.5.0 (48 matches) 2,200 points, 2,343 banked, 143 raided, 0.67 kills a match, `prev=1` (24 matches) 2,201, 2,344, 142 and 0.66 (`docs/BOTS.md`, "The contest batch"). Against the real v0.5.0 binary the commands first differ at tick 216 (a thief's raid names another tile of the enemy mound when an ant stands on the usual one) and the state hashes from about tick 4,100.
 
 ## Mutants
 
@@ -92,12 +92,12 @@ GCC 13, `-fsanitize=address,undefined`, a Release build with `-DANTS_WERROR=OFF`
 
 ## "Can't go there." reactions
 
-Counted by replaying recorded matches with the locomotion trace (every ant that shows "Can't go there." or "Can't do that..."), four Hard bots, per 1,000 ticks played: SMALL (seeds 1 to 8) 20.9 with the bots of v0.5.0 and 1.0 with the bots of v0.6 (1,609 reactions and 75); TREASURE (seeds 1 to 4) 35.8 and 28.1 (2,065 and 1,619). The SMALL cut is the rule on special orders and the safe fire-in (the orders at an occupied tile and the lone Fire Ant's walls); the thieves' raid tile on TREASURE, where most of the rest comes from, is untouched. Nothing here opens a ring over an enemy ant: that is the owner's decision.
+Counted by replaying recorded matches with the locomotion trace (every ant that shows "Can't go there." or "Can't do that..."), four Hard bots, per 1,000 ticks played: SMALL (seeds 1 to 8) 20.9 with the bots of v0.5.0 and 1.0 with the bots of the contest batch (1,609 reactions and 75); TREASURE (seeds 1 to 4) 35.8 and 28.1 (2,065 and 1,619). The SMALL cut is the rule on special orders and the safe fire-in (the orders at an occupied tile and the lone Fire Ant's walls); the thieves' raid tile on TREASURE, where most of the rest comes from, is untouched. Nothing here opens a ring over an enemy ant: that is the owner's decision.
 
 ## Left out, and why
 
 - **The skirmish of the bot's own** (`plan.skirmish`): built, off. Hard won 14.1 percent with it and 28.6 without (TREASURE, 96 matches each).
-- **Workers in the catch-up strike** (`catchup_workers_tier`, never) and hunts of three or more blows (`hunt_blows` 2): measured costs, in "The contest of v0.6".
+- **Workers in the catch-up strike** (`catchup_workers_tier`, never) and hunts of three or more blows (`hunt_blows` 2): measured costs, in "The contest batch".
 - **A race floor** (`race_floor`: at least this many ants race whatever the gate can use): 2 ants lost 12 points of win rate (22.6 against 34.9 percent) and 0 ships.
 - **The strict contest order** (v0.3.0): still off (6.2 percent).
 - **Who gets to a dropped Fire power-up first** (a refinement of the safe fire-in on maps with droppers, see "Known limits").

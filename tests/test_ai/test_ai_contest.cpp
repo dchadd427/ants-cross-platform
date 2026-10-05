@@ -1,4 +1,4 @@
-// The fights, the fire and the standing of the standard bot (v0.6, AI14.2 - AI14.9): the owner's report "the hard bots don't really fight unless they're defending; the losing player should be a
+// The fights, the fire and the standing of the standard bot (contest batch, AI14.2 - AI14.9): the owner's report "the hard bots don't really fight unless they're defending; the losing player should be a
 // little more aggressive", "they need to be aware of the health of other players ... KDR", "the ant was 4 HP and it just didn't kill it", the three bug reports on the fire play, and what followed
 // from them (docs/BOTS.md, "Fights of its own", "Fire play", "Behind the leader and the endgame"). Hand-made worlds (b41_helpers.hpp), quick enough for suite 2.20.
 //

@@ -199,7 +199,7 @@ public:
         /// rest harvest by value per trip as before; 0: off
         uint32_t contest_opening_ants{0};
         uint64_t contest_opening_ticks{1200};
-        /// The race (the standard bot; v0.6): CONTESTED FOOD FIRST FOR THE ANTS THAT THE GATE CANNOT USE. The hill's gate banks about one deposit per race_gap_ticks whatever the number of ants, so
+        /// The race (the standard bot; contest batch): CONTESTED FOOD FIRST FOR THE ANTS THAT THE GATE CANNOT USE. The hill's gate banks about one deposit per race_gap_ticks whatever the number of ants, so
         /// the economy is gate-limited: the ants that already work the best piles by points per trip fill it (the plain order), and every further ant is SURPLUS: it costs the gate nothing,
         /// and goes where a race is open first, the piles that several enemies (Multi) or one enemy (One) reach about as soon as this seat does (the classes of tier_for), before the piles
         /// that are the seat's own. The race is won by arriving first, so nobody has to be at the pile yet. With the gate full of long trips (everything near is eaten) nobody is surplus
