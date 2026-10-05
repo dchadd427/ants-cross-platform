@@ -1,6 +1,7 @@
 // AI17: the expedition of the standard bot (island_expedition.hpp, docs/BOTS.md "Islands"): a crew of plain workers is flown over the water by bombs to the Swimmers in the corners of ISLANDS,
 // and one worker takes one token of the row and walks out. One seat plays in each match here (a few thousand ticks); the whole matches of four seats are AI16 (suite 2.28).
 #include <functional>
+#include <map>
 
 #include "ai_test.hpp"
 #include "island_fixture.hpp"
@@ -170,13 +171,15 @@ void run_island_expedition_tests() {
         m.expedition = true;
         m.ferry = true;
         m.init("ISLANDS", 1, 0x01, Level::Medium, 0);
-        int idle_with_food = 0, longest = 0;
+        std::map<uint32_t, int> idle_with_food;                                                          // (one count for each Swimmer; an idle Swimmer in water reads Swimming, not Idle)
+        int longest = 0;
         for (int t = 1; t <= 9000; ++t) {
             m.tick();
             for (const auto& a : m.sim.get_world_state().ants) {
                 if (a.player_id != 0 || a.type != sim::AntType::Swimmer) continue;
-                if (a.is_holding && a.state == sim::UnitState::Idle) longest = std::max(longest, ++idle_with_food);
-                else idle_with_food = 0;
+                int& run = idle_with_food[a.id];
+                if (a.is_holding && (a.state == sim::UnitState::Idle || a.state == sim::UnitState::Swimming)) longest = std::max(longest, ++run);
+                else run = 0;
             }
         }
         ASSERT_TRUE(m.sim.get_player_score(0) >= 1000);
@@ -233,5 +236,63 @@ void run_island_expedition_tests() {
         ASSERT_EQ(r.lost, 0);
         ASSERT_EQ(r.drowned, 0);
         ASSERT_TRUE(r.first_landing > 0);
+    } TEST_END();
+
+    TEST_CASE("AI17.11 The Crew Is Never Smaller Than crew_min: A Row That Needs Fewer Ants Than The Crew Is Set To (Seven For A Row That Takes Five, No Spare; Nine Plain Ants At The Hill) Is Planned At The First Look With Seven Ants, Not Refused At Every Look For Ever (A Row That Starts With A Swimmer Needs One Ant, And The Same Group Was Chosen Each Time)")
+    {
+        Match m;
+        m.expedition = true;
+        m.ferry = true;
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0);
+        for (int i = 0; i < 3; ++i) m.sim.spawn_unit(0, sim::AntType::Worker, m.ctl->map().hill(0).starts[0]);
+        ExpeditionTask::Params p = m.bot(0)->expedition().params();
+        p.crew_min = 7;
+        p.crew_spare = 0;
+        m.bot(0)->expedition_for_labs().set_params(p);
+        m.run(5);
+        ASSERT_EQ(m.bot(0)->expedition().planned(), 1u);
+        ASSERT_EQ(m.bot(0)->expedition().crew_size(), 7u);
+        m.run(400);
+        ASSERT_EQ(m.bot(0)->expedition().planned(), 1u);                                                  // (one attempt, and it goes on: nothing was given up)
+        ASSERT_EQ(m.bot(0)->expedition().given_up(), 0u);
+        ASSERT_TRUE(m.bot(0)->expedition().planted() >= 1);
+        ASSERT_EQ(ExpeditionTask::Params{}.crew_min, 3u);
+    } TEST_END();
+
+    TEST_CASE("AI17.12 An Attempt That Is Given Up Is Tried Again After Longer Each Time: With A Patience Of 100 Ticks Nothing Progresses (Medium, ISLANDS, Seat 0), The Pause After Each Give-Up Is 900 Ticks, Then 1,800, Then 3,600 (Four Attempts In 7,000 Ticks), Not 900 Every Time (Seven), Which Held The Crew And A Bomber For Two Thirds Of The Match")
+    {
+        Match m;
+        m.expedition = true;
+        m.ferry = true;
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0);
+        ExpeditionTask::Params p = m.bot(0)->expedition().params();
+        p.stuck_ticks = 100;
+        m.bot(0)->expedition_for_labs().set_params(p);
+        std::vector<uint64_t> began;
+        uint32_t seen = 0;
+        for (int t = 1; t <= 7000; ++t) {
+            m.tick();
+            while (seen < m.bot(0)->expedition().planned()) {
+                began.push_back(m.sim.current_tick());
+                ++seen;
+            }
+        }
+        ASSERT_EQ(began.size(), 4u);
+        ASSERT_TRUE(began[0] <= 5);
+        ASSERT_TRUE(began[1] - began[0] >= 900 && began[1] - began[0] <= 1200);                            // (100 ticks of patience and a pause of 900)
+        ASSERT_TRUE(began[2] - began[1] >= 1800 && began[2] - began[1] <= 2400);                           // (then 1,800)
+        ASSERT_TRUE(began[3] - began[2] >= 3600 && began[3] - began[2] <= 4200);                           // (then 3,600)
+        ASSERT_EQ(m.bot(0)->expedition().given_up(), 3u);
+        ASSERT_EQ(ExpeditionTask::Params{}.retry_ticks, 900u);
+    } TEST_END();
+
+    TEST_CASE("AI17.13 The Pause After An Attempt That Was Given Up Doubles Three Times And Then Stays: With A Base Of 100 Ticks It Is 100, 200, 400, 800 And From The Fourth Give-Up In A Row 800 Again, Not 1,600 (The Attempts Of One Match Are Few, Because Each Takes Tokens, So The Rule Is Tested As Such; AI17.12 Shows That The Task Uses It)")
+    {
+        const uint64_t expected[] = {100, 200, 400, 800, 800, 800, 800};
+        for (uint32_t n = 1; n <= 7; ++n) ASSERT_EQ(ExpeditionTask::pause_after(100, n), expected[n - 1]);
+        ASSERT_EQ(ExpeditionTask::pause_after(100, 0), 100u);                                                // (never asked: the count is at least one when a give-up has happened)
+        ASSERT_EQ(ExpeditionTask::pause_after(900, 1), 900u);                                                // (the plans' base)
+        ASSERT_EQ(ExpeditionTask::pause_after(900, 4), 7200u);
+        ASSERT_EQ(ExpeditionTask::pause_after(900, 40), 7200u);
     } TEST_END();
 }

@@ -94,6 +94,21 @@ void run_view_tests() {
         ASSERT_TRUE(std::is_sorted(v.mine().begin(), v.mine().end(), [](const AntView& a, const AntView& b) { return a.id < b.id; }));
         ASSERT_TRUE(std::is_sorted(v.others().begin(), v.others().end(), [](const AntView& a, const AntView& b) { return a.id < b.id; }));
         ASSERT_TRUE(find_ant(v.mine(), mine[5]) == nullptr && find_ant(v.mine(), mine[6]) == nullptr && find_ant(v.others(), foes[7]) == nullptr);
+        // an ant that dies on its clip is not listed, but its tile says so: dying_at is true exactly where an ant of the engine's list has no hit points left, is dead or drowns (a copy of the view keeps it)
+        {
+            const BotView copy = v;
+            size_t dying_tiles = 0;
+            for (const sim::AntSnapshot& snap : ws.ants) {
+                bool dying_here = false;
+                for (const sim::AntSnapshot& o : ws.ants) {
+                    dying_here = dying_here || (o.tile_x == snap.tile_x && o.tile_y == snap.tile_y && (o.hp == 0 || o.state == sim::UnitState::Dead || o.state == sim::UnitState::Drowning));
+                }
+                ASSERT_EQ(v.dying_at(tc(snap.tile_x, snap.tile_y)), dying_here);
+                ASSERT_EQ(copy.dying_at(tc(snap.tile_x, snap.tile_y)), dying_here);
+                dying_tiles += dying_here ? 1u : 0u;
+            }
+            ASSERT_TRUE(dying_tiles >= 3);
+        }
         const AntView* me = find_ant(v.mine(), mine[0]);
         ASSERT_TRUE(me != nullptr);
         ASSERT_EQ(me->hp, 6);                                                          // the own ant is exact

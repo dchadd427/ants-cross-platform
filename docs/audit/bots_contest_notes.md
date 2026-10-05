@@ -77,6 +77,8 @@ Spec files kept outside the repository, `tools/mutate.py`, one change at a time,
 
 Equivalent: the occupant checks that `SabotageTask` and `WallTask` make before an ignite order (the engine's predicted acknowledgement refuses it already; the controller refuses it too) and the guard stance of `StrikeTask` (a leader has tier 0 and never strikes, unless `wipe_focus`, which is off in every plan).
 
+The review of the joined branch (2026-10-05) changed the fire-in (the escorts, the entrance, the wait), the hold of the fire defence, the release of a Thief that is kept for a raid, the dying ants and the end of a hunt; the faults for those rules, and the ones that are equivalent, are in `docs/audit/bots_integration_notes.md` ("The two reviews of the joined branch and their fixes").
+
 ## Sanitizers
 
 GCC 13, `-fsanitize=address,undefined`, a Release build with `-DANTS_WERROR=OFF` (GCC 13 gives known `-Wsign-conversion` false positives under UBSan in older files; the ordinary build with `-Werror` is clean, and so is a syntax pass of every changed file with clang 18 at the project's warning level). On the code of the last commit of the batch: the whole suite 2.20 `test_ai`: 160 cases, 526,044 assertions, no failure and no sanitizer report; the worker suite without its two pinned tables (AI3.9, AI3.12, as `run_tests.sh --asan` leaves them out): 21 cases, 4,218 assertions, none failed; `bot_arena --selftest`: 140 checks, no failure.

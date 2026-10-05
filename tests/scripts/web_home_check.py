@@ -305,7 +305,9 @@ def main():
             shot("home_front")
             info = json.loads(value("""JSON.stringify({title: document.title, path: location.pathname,
                 cards: document.querySelectorAll('.card').length, selects: document.querySelectorAll('select').length, host: !!document.getElementById('host'), solo: !!document.getElementById('map-solo'),
-                banner: document.querySelector('.card .banner').textContent, startLabel: document.getElementById('play').getAttribute('aria-label'),
+                banner: document.querySelector('.card .banner').textContent,
+                start: (function () { var b = document.getElementById('play'), r = b.getBoundingClientRect(), cs = getComputedStyle(b);
+                    return {text: b.textContent.trim(), label: b.getAttribute('aria-label'), w: Math.round(r.width), h: Math.round(r.height), bg: cs.backgroundImage, font: cs.fontSize}; })(),
                 shown: [!document.getElementById('cards').hidden, !document.getElementById('how').hidden], name: document.getElementById('player-name').value,
                 aspect: document.querySelector('input[name=aspect]:checked').value, code: !!document.getElementById('join-code') && !!document.getElementById('join-go'), haveCode: document.querySelector('.havecode .lab').textContent,
                 links: Array.prototype.map.call(document.querySelectorAll('header a'), function (a) { return [a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target')]; }),
@@ -316,7 +318,10 @@ def main():
             check(now["map"] == "treasure" and now["you"] == [0] and now["seats"] == ["medium", "medium", "medium", "medium"] and now["teams"] == "ffa", "a first visit: Treasure, You at Green, a Medium bot in the other seats, free for all (%s)" % now)
             check(now["teamsShown"] and now["teamOptions"] == ["ffa", "0+1", "0+2", "0+3"] and not now["invitesShown"] and not now["startOff"] and now["note"].startswith("Starts at once"),
                   "... four seats play: the Teams offer Green with each of the others; no invitation; START is on and says that it starts at once (%r)" % now["note"])
-            check(info["startLabel"] == "Start the match" and info["shown"] == [True, True] and info["code"] and info["haveCode"] == "Have a code?", "START (named for a screen reader), \"How it works\" and \"Have a code?\" with its field and Join are there (%s, %r)" % (info["startLabel"], info["haveCode"]))
+            start = info["start"]
+            check(start["text"] == "START!" and start["label"] is None and start["bg"] == "none" and 150 <= start["w"] <= 260 and 44 <= start["h"] <= 64,
+                  "START is a real button with its own text, drawn by the browser (no picture, so no blocky edges) at a modest size: 150 - 260 x 44 - 64 px, not the 294 x 81 of the original's picture blown up (%s)" % (start,))
+            check(info["shown"] == [True, True] and info["code"] and info["haveCode"] == "Have a code?", "\"How it works\" and \"Have a code?\" with its field and Join are there (%r)" % (info["haveCode"],))
             check(info["name"] == "" and info["aspect"] == "16:9", "no name yet, the picture is 16:9")
             hrefs = [l[1] for l in info["links"]]
             check("/asset_catalog/" in hrefs and "/changelog.html" in hrefs and any("github.com" in h and "issues" not in h for h in hrefs) and any(h.endswith("/issues") for h in hrefs),

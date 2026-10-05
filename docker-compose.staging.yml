@@ -38,8 +38,8 @@ services:
     restart: unless-stopped
     # as in docker-compose.stack.yml: a stop gives the server 15 s (on SIGTERM it makes the restart records of its running rooms durable and exits; the records stay on the volume below)
     stop_grace_period: 15s
-    # as in docker-compose.stack.yml: the demo rooms of web/lobby.html are on (ANTS_DEMO_ROOMS is 1 to 255, see that file's header)
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-12}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}"]
+    # as in docker-compose.stack.yml: the demo rooms of web/lobby.html are on (ANTS_DEMO_ROOMS is 1 to 255, see that file's header) and a room's turn log is at most 4 MiB (--log-mb 4: see the note there)
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:

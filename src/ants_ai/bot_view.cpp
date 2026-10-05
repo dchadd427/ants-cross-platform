@@ -70,7 +70,8 @@ BotView::BotView(const BotView& other)
       piles_(other.piles_),
       powerups_(other.powerups_),
       bombs_(other.bombs_),
-      fire_walls_(other.fire_walls_) {}
+      fire_walls_(other.fire_walls_),
+      dying_(other.dying_) {}
 
 BotView& BotView::operator=(const BotView& other) {
     if (this != &other) {
@@ -107,6 +108,10 @@ bool BotView::has_pending_path(uint32_t ant) const {
     const auto it = std::lower_bound(mine_.begin(), mine_.end(), ant, [](const AntView& a, uint32_t id) { return a.id < id; });
     if (it == mine_.end() || it->id != ant) return false;       // not an ant of the seat (or gone): a player does not know what other teams' ants were told
     return sim_->has_pending_path(ant);
+}
+
+bool BotView::dying_at(sim::TileCoord tile) const noexcept {
+    return std::find(dying_.begin(), dying_.end(), tile) != dying_.end();
 }
 
 const PowerUpView* BotView::powerup_at(sim::TileCoord tile) const noexcept {
@@ -147,7 +152,10 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
     }
     v.score_ = v.rows_[v.seat_].score;
     for (const sim::AntSnapshot& a : ws.ants) {
-        if (a.hp == 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning) continue;      // gone: nobody sees it as an ant any more
+        if (a.hp == 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning) {             // gone as an ant (not listed), but its clip is still drawn and still under the pointer
+            v.dying_.push_back(sim::TileCoord{a.tile_x, a.tile_y});
+            continue;
+        }
         AntView av;
         av.id = a.id;
         av.team = a.player_id;

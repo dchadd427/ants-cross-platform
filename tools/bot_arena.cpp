@@ -599,8 +599,10 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "sabescort") { p.sabotage_escort = static_cast<uint32_t>(v); return true; }
     if (key == "sabputout") { p.sabotage_putout_limit = static_cast<uint32_t>(v); return true; }
     if (key == "sabgiveup") { p.sabotage_giveup_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "sabwait") { p.sabotage_escort_wait = static_cast<uint32_t>(v); return true; }
     if (key == "firedef") return flag(p.fire_defence);
     if (key == "firedefx") { p.fire_defence_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "firehold") { p.fire_defence_hold = static_cast<uint32_t>(v); return true; }
     if (key == "raceticks") { p.race_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "raceants") { p.race_ants = static_cast<uint32_t>(v); return true; }
     if (key == "racearmy") { p.race_army_weight = static_cast<uint32_t>(v); return true; }

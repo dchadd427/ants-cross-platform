@@ -191,7 +191,8 @@ bool ExpeditionTask::plan(TaskContext& c) {
         return d;
     };
     std::stable_sort(plain.begin(), plain.end(), [&](const AntView* x, const AntView* y) { return shore_dist(x) < shore_dist(y); });
-    const uint32_t crew_n = std::min<uint32_t>(best.ants + params_.crew_spare, static_cast<uint32_t>(plain.size()) - spare);
+    // (a row whose near end starts with a Swimmer needs one ant, a lone Swimmer token too: the crew is never smaller than crew_min, else the same group would be chosen and refused at every look)
+    const uint32_t crew_n = std::min<uint32_t>(std::max(best.ants + params_.crew_spare, params_.crew_min), static_cast<uint32_t>(plain.size()) - spare);
     std::set<uint32_t> crew;
     for (const AntView* a : plain) {
         if (crew.size() >= crew_n) break;
@@ -681,8 +682,11 @@ void ExpeditionTask::step(TaskContext& c) {
     const bool lost = crew_.empty() && row_ant_.empty();
     if (finished || lost || now > progress_ + params_.stuck_ticks) {
         if (!finished) ++given_up_;
+        giveups_in_a_row_ = finished ? 0u : giveups_in_a_row_ + 1u;
         release_all(c);
-        retry_at_ = now + (finished ? 0u : params_.retry_ticks);
+        // an attempt that came to nothing is made again after retry_ticks, the next one after twice that, then four and eight times (and then at that rate): a row that nothing reaches (a stranger keeps
+        // the shore tile, no flight has the station tile that it needs) does not hold the crew and a Bomber for two thirds of the match
+        retry_at_ = now + (finished ? 0u : pause_after(params_.retry_ticks, giveups_in_a_row_));
         return;
     }
     for (const uint32_t ant : crew_) {                                                               // the landings: a crew ant that stands on a later island of the route

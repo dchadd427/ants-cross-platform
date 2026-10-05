@@ -120,7 +120,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     walls_.step(context);
     powerups_.step(context);
     bombs_.step(context);
-    if ((plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier)) && !fallback) raids_.step(context);
+    const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier);
+    raids_.set_launching(raiding);
+    if ((raiding || ledger_.count(kRaids) != 0) && !fallback) raids_.step(context);         // (when the pressure falls the raid under way is seen out: the thief is not kept for ever)
     if (plan.guards) guard_.step(context);
     if (plan.strikes || plan.wipe_focus || plan.catchup) strike_.step(context);
     if (plan.harass) harass_.step(context);

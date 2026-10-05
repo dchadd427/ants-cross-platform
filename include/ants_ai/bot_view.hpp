@@ -156,6 +156,9 @@ public:
     const std::vector<FireWallView>& fire_walls() const noexcept { return fire_walls_; }
     /// The power-up on `tile`, null when there is none (works on a COPY of a view too)
     const PowerUpView* powerup_at(sim::TileCoord tile) const noexcept;
+    /// Whether an ant that has died still plays its death clip (about 42 ticks) on `tile`: it is in neither mine() nor others(), but the screen draws it and a click on it is a click on an
+    /// ant (BotController::allowed refuses a special order there), so a task that picks the tile of a special order looks here too
+    bool dying_at(sim::TileCoord tile) const noexcept;
     /// Whether the ant STANDS on a power-up: its tile holds one and it is not walking (idle, on guard or in the "can't go" clip). Such an ant is immune: an attack order on it is
     /// acknowledged and then ends in "Can't go there." three or four ticks later, a Combat Ant's reflex fails the same way, and no bomb or fire wall can reach it. Own ants and other
     /// teams' ants alike (an ant that has only crossed into the tile on its way to take the power-up is not standing yet: it takes it within a few ticks and is vulnerable again).
@@ -209,6 +212,7 @@ private:
     std::vector<PowerUpView> powerups_;
     std::vector<BombView> bombs_;
     std::vector<FireWallView> fire_walls_;
+    std::vector<sim::TileCoord> dying_;              // the tiles of the ants in their death clip (not in mine_ or others_)
 };
 
 }  // namespace ants::ai

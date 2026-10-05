@@ -108,7 +108,7 @@ private:
         bool ally{false};                    // a blow on an ant of the ally: only ants within ally_help_radius of the target answer
         bool offence{false};                 // a skirmish of the bot's own (plan.skirmish): no blow came first, the force is skirmish_force and the fight ends by its strength and its clock
         bool fire{false};                    // the Fire Ant that lights fire walls on the ring round the own gate (plan.fire_defence): it is hunted while the walls stand
-        bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or the advantage is gone
+        bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
         std::map<uint32_t, Defender> defenders;
     };
 
@@ -252,6 +252,7 @@ private:
     std::map<int, uint64_t> failed_until_;
     Job counter_job_;                              // the enemy wall that is being put out (tile; decided 0: none)
     std::map<int64_t, uint64_t> counter_black_;    // enemy walls that could not be put out, until when they are left alone
+    uint64_t ring_lit_since_{0};                   // since when walls have been lit on the ring round the own gate (0: none are)
     uint32_t walls_ordered_{0};
     uint32_t renewals_{0};
     uint32_t failures_{0};
@@ -329,6 +330,9 @@ public:
     const char* name() const noexcept override { return "raids"; }
     void step(TaskContext& context) override;
     void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
+    /// Whether a free Thief is sent on a raid (the bot sets it at every look: the plan raids, or the pressure of the standing is at the lift tier). Off, the task only sees out what is under way:
+    /// a raid on its way is finished, then the Thief is the economy's again (none is kept for a raid that nobody wants)
+    void set_launching(bool on) noexcept { launching_ = on; }
 
     // ---- for the tests and the reports ----
     uint32_t raids_ordered() const noexcept { return raids_ordered_; }
@@ -365,6 +369,7 @@ private:
     uint32_t raids_ordered_{0};
     uint32_t failures_{0};
     int last_target_{-1};
+    bool launching_{true};
 };
 
 // ---- rank 4: the strike -------------------------------------------------------------------------------------------------------------------------------------
@@ -443,6 +448,8 @@ public:
     uint32_t escorts_called() const noexcept { return escorts_called_; }
     uint32_t put_out() const noexcept { return put_out_; }
     uint32_t refused_safe() const noexcept { return refused_safe_; }
+    /// How many fire-ins were given up because the escorts did not reach the entrance within plan.sabotage_escort_wait
+    uint32_t escort_timeouts() const noexcept { return escort_timeouts_; }
     bool gave_up(uint8_t team, uint64_t tick) const noexcept { return team < sim::MAX_PLAYERS && giveup_until_[team] > tick; }
     /// The tiles around the gate of `hill` that seal the queue row (see above)
     static std::array<sim::TileCoord, 8> ring_of(const HillInfo& hill) noexcept;
@@ -465,7 +472,9 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> putouts_{};        // walls of the team's ring put out since the last give-up
     std::array<uint64_t, sim::MAX_PLAYERS> giveup_until_{};   // the team is left alone until this tick
     std::map<uint32_t, uint64_t> escort_order_;      // escort -> the tick of its last order to the entrance
-    uint64_t ring_done_{0};                          // since when the ring stands (0: it does not)
+    uint64_t ring_done_{0};                          // since when the ring stands (0: it does not), whoever lit it
+    uint64_t escort_since_{0};                       // since when the escorts that a wall waits for are on their way to the entrance (0: they are not)
+    uint32_t escort_timeouts_{0};
     uint32_t put_out_{0};
     uint32_t refused_safe_{0};
     uint32_t escorts_called_{0};
