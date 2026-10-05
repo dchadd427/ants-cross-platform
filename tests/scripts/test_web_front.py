@@ -4,9 +4,13 @@
 The front page (web/lobby.html, served at "/") has the look of the 1998 game's own menus. Its pictures and its font are in web/front/ (served at /front/): cut out of the game's own
 sprites and screenshots by tools/front_page_art/make_art.py (a developer's tool, not part of any build or test), and the game's own font, Libre Franklin, with its licence text.
 
-  - the folder holds exactly the files that the tool makes, every PNG is what its name says (its size is the one that the page gives its <img>), and together they stay small
+  - the folder holds exactly the files that the tool makes (and the shared stylesheet, classic.css), every PNG is what its name says (its size is the one that the page gives its <img>), and
+    together they stay small
   - the font is a byte copy of the game's own, with the licence beside it (SIL OFL), and THIRD_PARTY_NOTICES.md names the copy
-  - the Dockerfile, the local web build and the CI's check of the image carry the folder (a page whose pictures are not in the image would be bare on the real site)
+  - the Dockerfile, the local web build and the CI's check of the image carry the folder (a page whose pictures are not in the image would be bare on the real site), and nginx revalidates
+    the stylesheet like every page
+  - the shared stylesheet (classic.css, linked by the changelog pages and Sprites and sounds): the font and the clay tile it names are in the folder, it loads nothing from another site, and
+    the text colours that its components pair are readable
   - the tool's files say that they are a developer's tool
   - the panels that the mockup did not draw: the name step (a banner and a big button), a room (a smaller header, the games as wide as the room's panel), the notices (a name or a code that
     is refused, the blocked windows) and the exact size of the games' frames in a wide window (the arithmetic of the two breakpoints is checked against the style's own numbers)
@@ -33,6 +37,7 @@ PICTURES = {
     "qh_quickhelp.png": (257, 453), "qh_power.png": (362, 455),
 }
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
+STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 BUDGET = 1000 * 1000        # bytes: the whole folder (the pictures are 0.67 MB, the font 0.14 MB); a picture that grows past this is a decision, not an accident
 
@@ -57,8 +62,8 @@ def png_size(path):
 
 
 class TheFolder(unittest.TestCase):
-    def test_it_holds_exactly_the_files_that_the_tool_makes(self):
-        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES)))
+    def test_it_holds_exactly_the_files_that_the_tool_makes_and_the_shared_stylesheet(self):
+        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES)))
 
     def test_every_picture_is_a_png_of_the_size_that_the_page_gives_it(self):
         for name, size in PICTURES.items():
@@ -93,12 +98,71 @@ class TheWayIntoTheImage(unittest.TestCase):
 
     def test_the_ci_looks_for_a_picture_and_the_font_in_the_image(self):
         ci = read(".github", "workflows", "ci.yml")
-        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf")
+        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/classic\.css")
 
     def test_git_does_not_ignore_the_pictures(self):
         ignore = read(".gitignore")
         self.assertIn("*.png", ignore)                                           # (the rule that would hide them)
         self.assertTrue(ignore.index("!web/front/**") > ignore.index("*.png"))      # (and the exception that comes after it)
+
+    def test_nginx_revalidates_the_stylesheet_with_the_pages_and_has_no_rule_of_its_own_for_front(self):
+        conf = "\n".join(line.split("#", 1)[0] for line in read("docker", "nginx.conf").splitlines())
+        block = re.search(r"location ~\* \\\.\(html\|css\|js\)\$ \{(.*?)\n    \}", conf, re.S)
+        self.assertIsNotNone(block, "the html, css and js block of docker/nginx.conf")
+        self.assertIn('add_header Cache-Control "no-cache, must-revalidate" always;', block.group(1))                  # (AGENTS.md rule 6: the stylesheet is never stale)
+        self.assertNotIn("expires", block.group(1))
+        locations = re.findall(r"^\s*location\s+(.*?)\s*\{", conf, re.M)
+        self.assertEqual([l for l in locations if "front" in l and "four" not in l], [])                              # (the folder is served by the default rules: files, the week for pictures)
+        before = locations[:locations.index("~* \\.(html|css|js)$")]
+        self.assertFalse([l for l in before if l.startswith("~*") and "css" in l], "an earlier regular-expression location would catch the stylesheet")
+
+
+class TheSharedStylesheet(unittest.TestCase):
+    """web/front/classic.css is the look of the changelog pages and of Sprites and sounds (the front page keeps its own inline copy of the colours)."""
+
+    def setUp(self):
+        self.css = read("web", "front", "classic.css")
+
+    def token(self, name):
+        return re.search(r"--%s: (#[0-9a-f]{6});" % name, self.css).group(1)
+
+    @staticmethod
+    def ratio(one, other):
+        high, low = sorted((TheColours.luminance(one), TheColours.luminance(other)), reverse=True)
+        return (high + 0.05) / (low + 0.05)
+
+    def test_the_font_and_the_clay_tile_it_names_are_in_the_folder_beside_it(self):
+        self.assertRegex(self.css, r'@font-face \{ font-family: "Libre Franklin"; src: url\("LibreFranklin-Medium\.ttf"\) format\("truetype"\);')       # (relative: it resolves next to the sheet)
+        self.assertIn('url("clay.png")', self.css)
+        for name in ("LibreFranklin-Medium.ttf", "clay.png"):
+            self.assertIn(name, os.listdir(FRONT))
+
+    def test_it_loads_nothing_from_another_site(self):
+        self.assertNotIn("@import", self.css)
+        for target in re.findall(r"url\(\s*[\"']?([^\"')]+)", self.css):
+            self.assertTrue(target.startswith("data:image/svg+xml,") or target in os.listdir(FRONT), target)          # (a file of this folder or the select's own arrow, drawn in the sheet)
+        self.assertNotRegex(self.css, r"url\(\s*[\"']?(?:https?:)?//")
+
+    def test_it_has_the_pieces_that_every_page_needs(self):
+        for needle in (".screen::after {", ".wrap {", ".btn, .banner {", ".btn:hover {", ".btn:active {", ".btn.sm {", ".btn.big {", ".banner {", ".panel {", ".site-head {", ".logo img {", ".bar {", ".bar .ver {",
+                       "select, input[type=text], input[type=search] {", "[hidden] { display: none !important; }"):
+            self.assertIn(needle, self.css, needle)
+        self.assertRegex(self.css, r"button:focus-visible[^{]*\{ outline: 3px solid var\(--gold\);")                    # (a focused control shows it, on every page)
+
+    def test_the_text_that_its_components_pair_is_at_least_4_5_to_1(self):
+        tone = self.token
+        pairs = (("cream on a button or a banner", "cream", "teal"), ("gold on a banner", "gold", "teal"), ("cream on a hovered button", "cream", "teal-hi"),
+                 ("a chosen button", "pressed-ink", "pressed"), ("cream in a black box", "cream", "inset"), ("gold in a black box", "gold", "inset"),
+                 ("a link in a black box", "mint", "inset"), ("small print in a black box", "muted", "inset"), ("a refused entry", "bad-ink", "bad-bg"))
+        for what, text, background in pairs:
+            self.assertGreaterEqual(self.ratio(tone(text), tone(background)), 4.5, "%s: %s on %s" % (what, text, background))
+        placeholder = re.search(r"::placeholder \{ color: (#[0-9a-f]{6}); \}", self.css).group(1)
+        self.assertGreaterEqual(self.ratio(placeholder, tone("inset")), 4.5)
+        for end in re.findall(r"linear-gradient\(180deg, (#[0-9a-f]{6}), (#[0-9a-f]{6})\)", self.css)[0]:                  # (the footer bar's two ends)
+            self.assertGreaterEqual(self.ratio(tone("cream"), end), 4.5, "cream on the footer bar " + end)
+            self.assertGreaterEqual(self.ratio("#ffffff", end), 4.5, "the version on the footer bar " + end)
+        for clay in (tone("clay"), "#fb335b"):                                                                          # (the two colours of the clay tile: the text that sits on the bare page)
+            self.assertGreaterEqual(self.ratio(tone("ink"), clay), 4.5, "ink on the clay " + clay)
 
 
 class TheTool(unittest.TestCase):
@@ -132,7 +196,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"}
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + m.key + '.png'", self.page)

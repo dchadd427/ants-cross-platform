@@ -77,8 +77,8 @@ COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py
 RUN cd /src/changelog && \
     GAME_VERSION="v$(head -n 1 /src/VERSION | tr -d '[:space:]')" && \
     BUILD_ID="$(cat /src/build_id.txt)" && \
-    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog_archive.html --other-label "Detailed history" && \
-    python3 changelog_to_html.py CHANGELOG_ARCHIVE.md changelog_archive.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog.html --other-label "Short changelog"
+    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog_archive.html --other-label "Detailed history" --page-link docs/CHANGELOG_ARCHIVE.md=changelog_archive.html && \
+    python3 changelog_to_html.py CHANGELOG_ARCHIVE.md changelog_archive.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog.html --other-label "Short changelog" --page-link CHANGELOG.md=changelog.html --link-base docs
 
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
@@ -105,7 +105,8 @@ COPY web/front/ /usr/share/nginx/html/front/
 # with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
 COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 
-# The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other)
+# The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other); they are in the Classic look of the front page: they link
+# /front/classic.css and show /front/logo.png, which the web/front/ copy above puts in the image
 COPY --from=builder /src/changelog/changelog.html /src/changelog/changelog_archive.html /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site

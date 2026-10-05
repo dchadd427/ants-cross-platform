@@ -9,7 +9,8 @@ the play online tab by setting to 1 player consolidate them". The Play online pa
   - what needs no browser is read from the files: the cards' markup (the buttons of the players and of each opponent's level, the Teams, START, Host the match), the header links and the footer of the front page, that nothing opens a new tab
     but the links that leave the game, the Menu link of the game page, one name for the catalog link on both pages, the Dockerfile that copies the lobby and the game page's second path, the CI's
     page check, and the documents.
-The routes of nginx are run in tests/scripts/test_nginx_routes.py; the whole flow in a real browser is tests/scripts/web_home_check.py (opt-in).
+The routes of nginx are run in tests/scripts/test_nginx_routes.py; the game page's look (the front page's) is read in tests/scripts/test_web_game.py; the whole flow in a real browser is
+tests/scripts/web_home_check.py (opt-in).
 """
 import os
 import re
@@ -137,10 +138,12 @@ class TheGamePage(PageCase):
         self.page = read("web", "shell.html")
 
     def test_the_menu_is_the_way_back_in_the_same_tab_in_the_header_and_the_footer(self):
-        header = re.search(r'<a href="/" id="menu-btn"([^>]*)>', self.page)
+        header = re.search(r'<a href="/" id="menu-btn"([^>]*)>Menu</a>', self.page)
         self.assertIsNotNone(header)
         self.assertNotIn("target=", header.group(1))
-        self.assertIn('<span class="btn-text">Menu</span><span class="btn-text-short">Menu</span>', self.page)
+        logo = re.search(r'<a href="/" id="logo-link"([^>]*)>\s*<img src="front/logo\.png"', self.page)                  # (the logo is the Menu's twin: the way back too)
+        self.assertIsNotNone(logo)
+        self.assertNotIn("target=", logo.group(1))
         footer = re.search(r'<a href="/" id="menu-link"([^>]*)>Menu</a>', self.page)
         self.assertIsNotNone(footer)
         self.assertNotIn("target=", footer.group(1))
@@ -148,9 +151,10 @@ class TheGamePage(PageCase):
         self.assertNotIn(">Play online<", self.page)
 
     def test_it_asks_before_it_leaves_a_game_that_runs_or_a_room_that_is_joined(self):
-        self.assertIn("window.confirm('Leave the game and go back to the menu?')", self.page)
+        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question for the logo, the Menu button and the footer's link)
         block = self.page[self.page.index("THE WAY BACK TO THE MENU"):]
         block = block[:block.index("// The fullscreen mouse: Locked")]
+        self.assertIn("['logo-link', 'menu-btn', 'menu-link'].forEach(function (id) {", block)
         self.assertIn("ANTS_ARGS.indexOf('--join-url') !== -1", block)
         self.assertIn("Module._ants_match_running() === 1", block)
         self.assertIn("e.preventDefault()", block)

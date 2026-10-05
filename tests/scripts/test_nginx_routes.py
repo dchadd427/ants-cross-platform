@@ -5,7 +5,8 @@ The front page and the game page share the address "/" (the owner: the Play onli
 page ever had keeps opening it): "/" is the lobby unless the query has join=... or embed=1, /four.html is a permanent redirect to "/" with the same query, /play.html is the game page. The
 rules cannot be seen by reading the file (what a `rewrite` or an `if` does with a query string, which headers an answer ends with), so this starts the real nginx of the image's own base
 (nginx:alpine) with the repository's docker/nginx.conf and two stand-in pages that carry the markers of the real ones, and asks it, with tests/scripts/web_routes_check.py (which the CI also
-runs against the real web image). Skipped, with the reason, where docker or the nginx image is not available. Static checks of the file's text run everywhere.
+runs against the real web image; the stand-in docroot also has the Classic look's stylesheet and font and the three other pages of the site). Skipped, with the reason, where docker or the nginx
+image is not available. Static checks of the file's text run everywhere.
 """
 import os
 import re
@@ -24,6 +25,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_routes_check.py")
 IMAGE = "nginx:alpine"
 
 LOBBY_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998)</title></head><body><input type="text" id="player-name"><p>the stand-in lobby</p></body></html>\n'
+CLASSIC_PAGE = '<!DOCTYPE html><html><head><title>a stand-in page</title><link rel="stylesheet" href="/front/classic.css"></head><body><p>a stand-in page of the site</p></body></html>\n'
 GAME_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998) - game</title></head><body><div id="game-stage" data-aspect="16:9"></div><p>the stand-in game page</p></body></html>\n'
 
 
@@ -89,9 +91,14 @@ class TheRoutesRun(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp(prefix="ants_routes.")
         html = os.path.join(cls.tmp, "html")
         os.makedirs(html)
-        for name, text in (("lobby.html", LOBBY_PAGE), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE)):
+        os.makedirs(os.path.join(html, "front"))
+        os.makedirs(os.path.join(html, "asset_catalog"))
+        for name, text in (("lobby.html", LOBBY_PAGE), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("changelog_archive.html", CLASSIC_PAGE),
+                           (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)
+        with open(os.path.join(html, "front", "LibreFranklin-Medium.ttf"), "wb") as f:
+            f.write(b"\x00\x01\x00\x00 a stand-in for the font")
         conf = os.path.join(cls.tmp, "default.conf")
         text = read(CONF)
         if not os.path.exists("/proc/net/if_inet6"):                                       # a kernel without IPv6 cannot listen on [::]: the rest of the file is the one under test
