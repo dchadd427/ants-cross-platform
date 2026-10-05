@@ -19,7 +19,11 @@ profile and port; nothing of yours is touched). What it checks:
     front page remembers the choices;
   * the OLD ADDRESSES: /?join=...&room=... and /?embed=1 open the game page (a shared link asks for a name), /four.html?room=... goes to /?room=... and the front page asks for the name of a
     shared link, /play.html with nothing is today's front page (the setup screen, no arguments);
-  * the HOST: 3 players and Host the match make the room panel, and "Play in this tab" takes this tab to the game page with the room, the name and the bots of the leader's START.
+  * the HOST: 3 players and Host the match make the room panel, and "Play in this tab" takes this tab to the game page with the room, the name and the bots of the leader's START;
+  * the GAME PAGE in the front page's look (web/shell.html at /play.html): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure card;
+    19 widths from 320 to 1600 px with no sideways scroll, the header's seven controls (one row with "More" up to 700 px: the five other links, over the picture), the picture, the bar and the guide
+    inside the frame, a phone on its side; the logo goes back to the front page as Menu does (it asks first while a match runs or a room is joined: No stays); the two pairs under the game
+    (the chosen one is pressed in; the clicks keep their ids and what they remember); the name step of a shared link; the contrast of every text (4.5:1) in each of these states.
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made because the environment is not there (no browser, nothing answers at the page's address).
 """
 import argparse
@@ -88,7 +92,7 @@ def main():
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
-    ap.add_argument("--only", default="", help="run only the parts whose name contains this text (front, levels, play, alone, menu, old, host)")
+    ap.add_argument("--only", default="", help="run only the parts whose name contains this text (front, levels, play, alone, menu, old, host, game)")
     ap.add_argument("--bot-seconds", type=float, default=45.0, help="how long the bots play before their scores are compared (default 45)")
     args = ap.parse_args()
     aspect.READY_TIMEOUT = args.ready_timeout
@@ -126,6 +130,14 @@ def main():
                     pass
 
         tab.dt.handlers.append(on_dialog)
+
+        def fresh_tab():
+            """A new tab, the old one closed: a tab that was emulated as a phone, or whose window was resized while its page was up, goes on reporting the media of a touch screen (no hover, so no
+            Fullscreen mouse control on the game page) whatever it is set to afterwards; a page that is loaded in a new tab, after one emulation of its size, has a mouse."""
+            nonlocal tab
+            old = tab
+            tab = Tab(browser)
+            old.close()
 
         def pages():
             """The number of tabs and windows of the browser (a new tab is a new page target)."""
@@ -398,6 +410,286 @@ def main():
             a = json.loads(tab.ev("JSON.stringify({search: location.search, args: ANTS_ARGS})")) if ok else {"search": "", "args": []}
             check(ok and ("room=" + room) in a["search"] and pages() == before, "Play in this tab takes this tab to the game page of the room (%s), no new tab" % a["search"])
             check("--join-url" in a["args"] and "--fill-bots" in a["args"] and a["args"][a["args"].index("--fill-bots") + 1] == "easy" and "--name" in a["args"], "... with the room, the leader's bots and the name in the game's arguments (%s)" % a["args"])
+
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        if wanted("game"):
+            print("[web home] the game page in the front page's look")
+            play = web + "play.html"
+            fresh_tab()
+
+            def contrast_of(where, at_least, prepare="", restore=""):
+                """Every visible text of the game page is at least 4.5:1 (`prepare` shows what is closed: the guide's panels, the More list; `restore` closes it again)."""
+                found = json.loads(value(prepare + "; var found = " + CONTRAST_JS + "; " + restore + "; found"))
+                check(found["texts"] >= at_least and found["lowest"][0][0] >= 4.5, "%s: the text contrast is at least 4.5:1 for all %d texts (lowest: %s)" % (where, found["texts"], found["lowest"]))
+
+            def hold(pattern):
+                """Hold the requests that match `pattern` (the DevTools Fetch domain): they are asked for and never answered until release() is called."""
+                held = []
+
+                def on_event(msg):
+                    if msg.get("method") == "Fetch.requestPaused" and msg.get("sessionId") == tab.session:
+                        held.append(msg["params"]["requestId"])
+
+                tab.dt.handlers.append(on_event)
+                tab.call("Fetch.enable", {"patterns": [{"urlPattern": pattern, "requestStage": "Request"}]})
+
+                def release():
+                    tab.call("Fetch.disable")
+                    tab.dt.handlers.remove(on_event)
+                    for request in held:
+                        try:
+                            tab.call("Fetch.continueRequest", {"requestId": request})
+                        except (RuntimeError, TimeoutError):
+                            pass
+                return release
+
+            def centre(selector):
+                return json.loads(value("JSON.stringify((function () { var b = document.querySelector(%s).getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })())" % json.dumps(selector)))
+
+            # --- the look, and the loading screen: the game's index.js is held, so that the page stays at its loading screen (the page's own watchdog is 60 s), and then, with a watchdog of
+            # 2.5 s, at its failure card
+            clear_storage()
+            release = hold("*index.js*")
+            script = None
+            try:
+                tab.emulate(1440, 900, 1)
+                tab.open(play + "?aspect=16:9", wait=False)
+                reached = wait_for(lambda: tab.ev("document.getElementById('status-text').textContent") == "Starting the game...", 90)
+                check(bool(reached), "the loading screen: the data downloads and the page says \"Starting the game...\" while the game's program is held")
+                loading = json.loads(value("""JSON.stringify((function () {
+                    var o = document.getElementById('splash-overlay'), logo = o.querySelector('.splash-logo'), bar = document.getElementById('progress-container'), s = getComputedStyle(o);
+                    var l = logo.getBoundingClientRect(), box = document.getElementById('game-container').getBoundingClientRect(), body = getComputedStyle(document.body);
+                    var first = document.querySelector('header .btn'), f = getComputedStyle(first);
+                    return { shown: s.display !== 'none' && parseFloat(s.opacity) > 0.99, bg: s.backgroundImage, logoLoaded: logo.complete && logo.naturalWidth === 581, logo: [l.width, l.height],
+                             barShown: getComputedStyle(bar).display !== 'none', barBg: getComputedStyle(bar).backgroundColor, fill: getComputedStyle(document.getElementById('progress-fill')).backgroundColor,
+                             fillWidth: document.getElementById('progress-fill').style.width, old: !!o.querySelector('.splash-title'), text: document.getElementById('status-text').textContent,
+                             inside: l.left >= box.left && l.right <= box.right && l.top >= box.top && l.bottom <= box.bottom,
+                             page: { bg: body.backgroundImage, font: body.fontFamily, button: f.backgroundColor, shadow: f.boxShadow, frame: getComputedStyle(document.body, '::after').boxShadow,
+                                     fontLoaded: Array.from(document.fonts).some(function (x) { return x.family.indexOf('Libre Franklin') !== -1 && x.status === 'loaded'; }) } };
+                })())"""))
+                check(loading["shown"] and "front/clay.png" in loading["bg"] and not loading["old"], "the loading screen is the clay with no \"ANTS\" word on it (%s)" % loading["bg"])
+                check(loading["logoLoaded"] and loading["inside"] and 100 < loading["logo"][0] <= 240, "... it shows the \"ants!\" logo (%.0f x %.0f px), whole and inside the picture's box" % tuple(loading["logo"]))
+                check(loading["barShown"] and loading["barBg"] == "rgb(7, 11, 15)" and loading["fill"] == "rgb(43, 99, 87)" and loading["fillWidth"] == "100%", "... and a teal bar in a black box (%s, %s, %s)" % (loading["barBg"], loading["fill"], loading["fillWidth"]))
+                page = loading["page"]
+                check("front/clay.png" in page["bg"] and page["font"].startswith('"Libre Franklin"') and page["fontLoaded"], "the page is on the clay, in the game's own font Libre Franklin (loaded from the site)")
+                check(page["button"] == "rgb(43, 99, 87)" and "rgb(157, 13, 23)" in page["shadow"] and "rgb(43, 95, 67)" in page["frame"] and "157, 13, 23" in page["frame"],
+                      "a button of the header is the teal one with the red shadow, and the page has the thin green frame with its red line (%s)" % page["shadow"][:60])
+                shot("game_loading_1440")
+                contrast_of("the loading screen at 1440 px", 20)
+                tab.emulate(390, 844, 2, mobile=True)
+                time.sleep(0.6)
+                inside = value("(function () { var l = document.querySelector('.splash-logo').getBoundingClientRect(), b = document.getElementById('game-container').getBoundingClientRect(); return l.left >= b.left && l.right <= b.right && l.top >= b.top && l.bottom <= b.bottom; })()")
+                check(inside is True, "the loading screen of a phone (390 px): the logo and the message fit the small picture's box")
+                shot("game_loading_390")
+                contrast_of("the loading screen at 390 px", 20)
+                # More opened while the loading screen is up: its list is above the loading screen (the picture's box keeps that screen's layer to itself)
+                x, y = centre("header .more summary")
+                tab.click(x, y)
+                time.sleep(0.4)
+                over = json.loads(value("""JSON.stringify((function () { var list = document.querySelector('.more-list'), r = list.getBoundingClientRect(), splash = document.getElementById('splash-overlay'), o = splash.getBoundingClientRect(), was = splash.style.pointerEvents;
+                    splash.style.pointerEvents = 'auto';                                 // (the loading screen takes no pointer: let it, so that the point's topmost element is what is painted there)
+                    var x = (r.left + r.right) / 2, y = (r.top + r.bottom) / 2, mid = document.elementFromPoint(x, y);
+                    splash.style.pointerEvents = was;
+                    return { open: document.querySelector('header .more').open, above: !!(mid && mid.closest('.more-list')), over: x >= o.left && x <= o.right && y >= o.top && y <= o.bottom }; })())"""))
+                check(over["open"] and over["above"] and over["over"], "More opened over the loading screen: its list is on top of it, not under it (%s)" % over)
+                shot("game_loading_390_more")
+                tab.click(x, y)
+                time.sleep(0.3)
+                # the watchdog (2.5 s here) puts the failure card up: the front page's notice with the teal button, no logo (the card needs the room)
+                script = tab.call("Page.addScriptToEvaluateOnNewDocument", {"source": "window.ANTS_START_TIMEOUT_MS = 2500;"})["identifier"]
+                tab.emulate(1440, 900, 1)
+                tab.open(play + "?aspect=16:9", wait=False)
+                card_up = wait_for(lambda: tab.ev("!!document.getElementById('load-failure')"), 90)
+                check(bool(card_up), "the game that does not start puts its failure card up (the page's watchdog)")
+                if card_up:
+                    card = json.loads(value("""JSON.stringify((function () {
+                        var c = document.getElementById('load-failure'), b = c.querySelector('button'), bs = getComputedStyle(b), cs = getComputedStyle(c), box = document.getElementById('game-container').getBoundingClientRect(), r = c.getBoundingClientRect();
+                        return { text: c.innerText.replace(/\\s+/g, ' '), button: bs.backgroundColor, shadow: bs.boxShadow, bg: cs.backgroundColor, logo: getComputedStyle(document.querySelector('.splash-logo')).display,
+                                 clicks: getComputedStyle(document.getElementById('splash-overlay')).pointerEvents, inside: r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom };
+                    })())"""))
+                    check("could not be started" in card["text"] and "Reload" in card["text"] and card["button"] == "rgb(43, 99, 87)" and "rgb(157, 13, 23)" in card["shadow"] and card["bg"] == "rgb(59, 13, 16)",
+                          "the failure card is the front page's notice with the teal Reload button (%s)" % card["text"][:70])
+                    check(card["logo"] == "none" and card["clicks"] == "auto" and card["inside"], "... the logo gives it the room, it takes the clicks, and it is inside the picture's box")
+                    shot("game_load_failed")
+                    contrast_of("the failure card", 4)
+            finally:
+                release()
+                if script:
+                    tab.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": script})
+            fresh_tab()
+
+            # --- the page at 19 widths: no sideways scroll, the header's controls, the picture, the bar and the guide inside the frame
+            LAYOUT = """JSON.stringify((function () {
+                var de = document.documentElement, rect = function (e) { var b = e.getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom]; };
+                var shown = function (e) { return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0 && (!e.checkVisibility || e.checkVisibility()); };
+                var controls = Array.prototype.filter.call(document.querySelectorAll('header a, header button, header summary'), shown).map(function (e) { return { text: e.innerText.trim(), rect: rect(e) }; });
+                return { inner: [de.clientWidth, window.innerHeight], scroll: [de.scrollWidth, de.scrollHeight], controls: controls, box: rect(document.getElementById('game-container')), bar: rect(document.querySelector('footer.bar')),
+                         panel: rect(document.getElementById('info-panel')), header: rect(document.querySelector('header')), more: shown(document.querySelector('header .more')), view: rect(document.getElementById('view-bar')),
+                         seg: Array.prototype.filter.call(document.querySelectorAll('.seg button'), shown).map(rect) };
+            })())"""
+            clear_storage()
+            load(play + "?aspect=16:9", ready=True, settle=1.5)
+            wrong = {"scroll": [], "header": [], "overlap": [], "frame": [], "picture": [], "foot": []}
+            for width in (320, 360, 375, 390, 414, 440, 441, 480, 600, 699, 700, 701, 768, 900, 1024, 1100, 1280, 1440, 1600):
+                tab.emulate(width, 900, 1)
+                time.sleep(0.5)
+                m = json.loads(value(LAYOUT))
+                narrow = width <= 700
+                if m["scroll"][0] > m["inner"][0]:
+                    wrong["scroll"].append((width, m["scroll"][0], m["inner"][0]))
+                texts = [c["text"] for c in m["controls"]]
+                want = (["", "Menu", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["", "Menu", "Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub", "Feedback"])
+                height = m["header"][3] - m["header"][1]
+                if texts != want or m["more"] != narrow or (narrow and height > 60):
+                    wrong["header"].append((width, texts, "More" if m["more"] else "no More", round(height)))
+                for i, a in enumerate(m["controls"]):
+                    for b in m["controls"][i + 1:]:
+                        same_row = min(a["rect"][3], b["rect"][3]) - max(a["rect"][1], b["rect"][1]) > 0.5 * (a["rect"][3] - a["rect"][1])
+                        if same_row and min(a["rect"][2], b["rect"][2]) - max(a["rect"][0], b["rect"][0]) > 0.5:
+                            wrong["overlap"].append((width, a["text"] or "logo", b["text"] or "logo"))
+                if any(c["rect"][0] < 10 or c["rect"][2] > m["inner"][0] - 10 for c in m["controls"]) or any(s[0] < 10 or s[2] > m["inner"][0] - 10 for s in m["seg"]) or m["panel"][0] < 10 or m["panel"][2] > m["inner"][0] - 10:
+                    wrong["frame"].append((width, [round(v) for v in m["panel"]]))
+                ring, shadow = (5, 3) if narrow else (8, 4)
+                box = m["box"]
+                if box[0] - ring < 10 or box[2] + ring + shadow > m["inner"][0] - 10 or box[2] - box[0] < 16 or abs((box[0] + box[2]) / 2 - m["inner"][0] / 2) > 1.5:
+                    wrong["picture"].append((width, [round(v, 1) for v in box]))
+                if abs(m["bar"][0]) > 0.5 or abs(m["bar"][2] - m["inner"][0]) > 0.5:
+                    wrong["foot"].append((width, [round(v, 1) for v in m["bar"]]))
+            check(not wrong["scroll"], "no sideways scroll from 320 to 1600 px (wrong: %s)" % (wrong["scroll"],))
+            check(not wrong["header"], "the header: up to 700 px one row of the logo, Menu, Fullscreen (Full up to 440 px) and More; above it the logo and the seven controls in their order (wrong: %s)" % (wrong["header"],))
+            check(not wrong["overlap"], "no control of the header lies over another or over the logo, in one row or two, at every width (wrong: %s)" % (wrong["overlap"][:6],))
+            check(not wrong["frame"], "the header's controls, the pair buttons and the guide stay inside the thin green frame at every width (wrong: %s)" % (wrong["frame"],))
+            check(not wrong["picture"], "the picture with its ring and shadow is centred and inside the frame at every width (wrong: %s)" % (wrong["picture"],))
+            check(not wrong["foot"], "the footer's bar spans the window at every width (wrong: %s)" % (wrong["foot"],))
+
+            # --- 1440 px: the page that is up, in every part
+            fresh_tab()
+            load(play + "?aspect=16:9", ready=True, settle=1.5)
+            shot("game_1440")
+            footer = json.loads(value("""JSON.stringify({text: document.querySelector('footer').innerText.replace(/\\s+/g, ' '), ids: [!!document.getElementById('game-version'), !!document.getElementById('game-build-id')],
+                links: Array.prototype.map.call(document.querySelectorAll('footer nav a'), function (a) { return a.innerText; }), bg: getComputedStyle(document.querySelector('footer')).backgroundImage})"""))
+            check("Version" in footer["text"] and "build" in footer["text"] and "@@" not in footer["text"] and footer["ids"] == [True, True] and "linear-gradient" in footer["bg"] and footer["links"] == ["Menu", "Sprites and sounds", "Changelog", "GitHub", "Feedback"],
+                  "the footer is the front page's emerald bar with the version, the build and the links (%r)" % footer["text"][:90])
+            contrast_of("the game page at 1440 px", 60, "document.querySelectorAll('#info-panel details').forEach(function (d) { d.open = true; })")
+
+            # --- the pairs under the game: the chosen button is pressed in, a click keeps its id and what it remembers
+            pairs = json.loads(value("""JSON.stringify(['aspect-16-9', 'aspect-4-3', 'lock-on', 'lock-off'].map(function (id) { var e = document.getElementById(id), s = getComputedStyle(e);
+                return [id, e.getAttribute('aria-checked'), s.backgroundColor, s.transform, (s.boxShadow.match(/rgb\(157, 13, 23\) (\d+)px (\d+)px/) || []).slice(1).join('x')]; }))"""))
+            pressed, raised = ("rgb(16, 43, 37)", "matrix(1, 0, 0, 1, 1, 2)"), ("rgb(43, 99, 87)", "none")
+            check([tuple(p[2:4]) for p in pairs] == [pressed, raised, pressed, raised] and [p[1] for p in pairs] == ["true", "false", "true", "false"],
+                  "the pairs under the game: 16:9 and Locked are pressed in (dark, moved), Classic 4:3 and Free are teal (%s)" % pairs)
+            check([p[4] for p in pairs] == ["1x1", "2x3", "1x1", "2x3"], "... a teal button has the front page's red shadow (2 x 3 px), a pressed one the small one (1 x 1 px) (%s)" % [p[4] for p in pairs])
+            x, y = centre("#lock-off")
+            tab.click(x, y)
+            time.sleep(0.4)
+            after = json.loads(value("JSON.stringify(['lock-on', 'lock-off'].map(function (id) { var e = document.getElementById(id); return [e.getAttribute('aria-checked'), getComputedStyle(e).backgroundColor]; }).concat([localStorage.getItem('ants.pointerlock')]))"))
+            check(after == [["false", raised[0]], ["true", pressed[0]], "off"], "Free clicked: it is pressed in, Locked is teal, and the browser remembers \"off\" (%s)" % (after,))
+            x, y = centre("#lock-on")
+            tab.click(x, y)
+            time.sleep(0.4)
+            check(value("document.getElementById('lock-on').getAttribute('aria-checked') + '/' + localStorage.getItem('ants.pointerlock')") == "true/on", "Locked clicked again: pressed in, remembered \"on\"")
+            x, y = centre("#aspect-4-3")
+            tab.click(x, y)
+            back = wait_for(lambda: tab.ev("!!window.isReadyToPlay && location.search.indexOf('aspect=4:3') !== -1"), 60)
+            time.sleep(1.0)
+            chosen = json.loads(value("JSON.stringify([['aspect-16-9', 'aspect-4-3'].map(function (id) { var e = document.getElementById(id); return [e.getAttribute('aria-checked'), getComputedStyle(e).backgroundColor]; }), localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect')])")) if back else []
+            check(chosen == [[["false", raised[0]], ["true", pressed[0]]], "4:3", "4:3"], "Classic 4:3 clicked: the page restarts with it, it is pressed in, 16:9 is teal, the browser remembers it (%s)" % (chosen,))
+            shot("game_classic_1440")
+            clear_storage()
+
+            # --- a phone held upright and on its side
+            tab.emulate(390, 844, 2, mobile=True)
+            tab.open(play + "?aspect=16:9", settle=1.5)
+            m = json.loads(value(LAYOUT))
+            tip = value("getComputedStyle(document.getElementById('mobile-tip-banner')).display")
+            panels = value("Array.prototype.map.call(document.querySelectorAll('#info-panel details'), function (d) { return d.open ? 1 : 0; }).reduce(function (a, b) { return a + b; }, 0)")
+            check(m["scroll"][0] <= m["inner"][0] and tip == "flex" and panels == 1 and m["more"] is True, "a phone held upright (390 px): no sideways scroll, the tip is shown, one panel of the guide is open, More is there (%s, %s, %d)" % (m["scroll"][0], tip, panels))
+            shot("game_390")
+            contrast_of("the game page at 390 px", 40, "document.querySelectorAll('#info-panel details').forEach(function (d) { d.open = true; })",
+                        "document.querySelectorAll('#info-panel details').forEach(function (d, i) { d.open = i === 0; })")
+            # More: a <details>, no script: closed at first, it opens over the picture with the other five links, whole and in the window, and closes again
+            check(value("document.querySelector('header .more').open") is False, "More is closed at first")
+            x, y = centre("header .more summary")
+            tab.click(x, y)
+            time.sleep(0.4)
+            more = json.loads(value("""JSON.stringify((function () {
+                var list = document.querySelector('.more-list'), r = list.getBoundingClientRect(), items = Array.prototype.map.call(list.querySelectorAll('a, button'), function (e) { var b = e.getBoundingClientRect(); return [e.innerText.trim(), b.left, b.right, b.top, b.bottom]; });
+                var mid = document.elementFromPoint((r.left + r.right) / 2, r.top + 8), picture = document.getElementById('game-container').getBoundingClientRect();
+                return { open: document.querySelector('header .more').open, items: items, list: [r.left, r.right, r.top, r.bottom], above: !!(mid && mid.closest('.more-list')), overPicture: r.top < picture.bottom && r.bottom > picture.top && r.left < picture.right };
+            })())"""))
+            check(more["open"] and [i[0] for i in more["items"]] == ["Sprites and sounds", "Changelog", "Reset", "GitHub", "Feedback"] and more["list"][0] >= 10 and more["list"][1] <= 390 - 10 and all(i[1] >= 10 and i[2] <= 380 for i in more["items"]),
+                  "More opens the other five links, whole and inside the window (%s)" % ([i[0] for i in more["items"]],))
+            check(more["above"] and more["overPicture"], "... over the picture and above it (the loading screen's layer does not cover it)")
+            shot("game_390_more")
+            contrast_of("the More list", 5)
+            tab.click(x, y)
+            time.sleep(0.3)
+            check(value("document.querySelector('header .more').open") is False, "... and closes with the same click")
+            tab.emulate(844, 390, 2, mobile=True)
+            tab.open(play + "?aspect=16:9", settle=1.5)
+            m = json.loads(value(LAYOUT))
+            check(m["scroll"][0] <= m["inner"][0] and m["view"][3] <= m["inner"][1] + 1 and m["header"][3] - m["header"][1] <= 60 and not m["more"],
+                  "a phone on its side (844 x 390): the header is one slim row, the whole picture and the bar under it fit the window, no sideways scroll (bar ends at %.0f of %d)" % (m["view"][3], m["inner"][1]))
+            shot("game_844")
+            tab.emulate(1440, 900, 1)
+
+            # --- the logo is the way back to the front page, as Menu is: it asks while a match runs or a room is joined (No stays), and does not ask at the setup screen
+            clear_storage()
+            load(play, ready=True, settle=1.0)
+            before = pages()
+            dialogs.clear()
+            tab.ev("document.getElementById('logo-link').click(); 1")
+            back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20)
+            check(back and not dialogs and pages() == before, "the logo at the setup screen (no match): back to the front page in this tab, nothing asked (%s)" % dialogs)
+            tab.emulate(1440, 900, 1)
+            tab.open(play + "?map=treasure&bots=medium&name=Ann", settle=2.0)
+            if start_by_enter():
+                dialogs.clear()
+                answer["accept"] = False
+                tab.ev("document.getElementById('logo-link').click(); 1")
+                time.sleep(0.8)
+                check(len(dialogs) == 1 and "Leave the game and go back to the menu?" in dialogs[0] and tab.ev("location.pathname") == "/play.html",
+                      "the logo while a match runs asks \"Leave the game and go back to the menu?\" (%s) and No stays in the game" % dialogs)
+                check(tab.ev("Module._ants_match_running()") == 1, "... the match goes on")
+                answer["accept"] = True
+                tab.ev("document.getElementById('logo-link').click(); 1")
+                back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20)
+                check(back and pages() == before, "... and Yes goes back to the front page in the same tab (no new tab)")
+            else:
+                check(False, "the local game started (Enter at the quick help)")
+            answer["accept"] = True
+            dialogs.clear()
+            tab.open(play + "?join=/ws&room=demo-small-2p-abc123&name=Ann&aspect=16:9", wait=False)
+            time.sleep(2.0)
+            answer["accept"] = False
+            tab.ev("document.getElementById('logo-link').click(); 1")
+            time.sleep(0.8)
+            check(len(dialogs) == 1 and "menu" in dialogs[0].lower() and tab.ev("location.pathname") == "/play.html", "the logo in a joined room asks too, and No stays (%s)" % dialogs)
+            answer["accept"] = True
+            dialogs.clear()
+
+            # --- the name step of a shared link: the front page's name step (a banner, the black field, the teal button), whole in a small window, with its notice
+            clear_storage()
+            for label, width, height, dpr, mobile in (("1440 px", 1440, 900, 1, False), ("390 px", 390, 844, 2, True)):
+                tab.emulate(width, height, dpr, mobile)
+                tab.open(play + "?join=/ws&room=demo-small-2p-abc123&aspect=16:9", wait=False)
+                shown = wait_for(lambda: tab.ev("!document.getElementById('name-step').hidden"), 20)
+                step = json.loads(value("""JSON.stringify((function () {
+                    var c = document.querySelector('.name-step'), r = c.getBoundingClientRect(), i = document.getElementById('name-step-input'), b = document.getElementById('name-step-go'), t = document.getElementById('name-step-title');
+                    return { inside: r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight, bg: getComputedStyle(c).backgroundImage, field: getComputedStyle(i).backgroundColor, button: getComputedStyle(b).backgroundColor,
+                             title: getComputedStyle(t).backgroundColor, text: t.textContent };
+                })())""")) if shown else {}
+                check(bool(shown) and step["inside"] and "front/clay.png" in step["bg"] and step["field"] == "rgb(7, 11, 15)" and step["button"] == "rgb(43, 99, 87)" and step["title"] == "rgb(43, 99, 87)",
+                      "the name step of a shared link at %s: a clay card with a teal banner, the black field and the teal Join button, whole in the window (%s)" % (label, step))
+                contrast_of("the name step at %s" % label, 4)
+                tab.ev("var i = document.getElementById('name-step-input'); i.value = 'Zo\\u00eb'; document.getElementById('name-step-go').click(); 1")
+                time.sleep(0.3)
+                note = json.loads(value("JSON.stringify((function () { var m = document.getElementById('name-step-msg'), s = getComputedStyle(m), r = m.getBoundingClientRect(), c = document.querySelector('.name-step').getBoundingClientRect(); return { text: m.textContent, bg: s.backgroundColor, inside: r.bottom <= c.bottom && r.right <= c.right }; })())"))
+                check("printable ASCII" in note["text"] and note["bg"] == "rgb(59, 13, 16)" and note["inside"], "... a name that is refused says so in the front page's notice, inside the card (%s)" % note["text"][:50])
+                contrast_of("the name step's notice at %s" % label, 5)
+                shot("game_name_step_%s" % label.split()[0])
+            tab.emulate(1440, 900, 1)
+            clear_storage()
     except NotReachable as e:
         print("  SKIP: %s" % e)
         return 3
