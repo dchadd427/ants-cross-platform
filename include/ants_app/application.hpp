@@ -513,6 +513,7 @@ private:
     void run_touch_action(const TouchAction& action);
     bool touch_late_press_still_fits(const TouchAction& action) const;
     void touch_feedback();                                   // the hold's feedback (a buzz where the browser has one)
+    void render_touch_feedback();                            // the ring around a finger that may become a hold and the pulse after one (touch_feedback.hpp), over the match and under the pointer
     void apply_pending_music();                           // what a hidden page's steps left for the ears: the music of a match that began, ended or was lost meanwhile
     void note_hidden_period();                            // the page is shown again: the console's line about the period
     void play_effect(uint32_t sound_id, uint32_t owner = 0);   // a sound effect that no tick makes: none in a background step

@@ -7,8 +7,11 @@
 //   * the second finger landing in each state (a waiting finger: silent; a drag or a hold: the press is cancelled), where it is refused (nothing happens, the first finger goes on),
 //     the pan (whole pixels, nothing lost), the pinch (the ratio to levels, the anchor at the middle point, the hysteresis, the ends of the list, fingers that touch);
 //   * the third finger, lifts in either order, a finger that stays, unknown finger ids, a finger that is down again, positions that are not numbers, a cancel in every state, two
-//     touch devices, the clock (wrap, backwards), the slop's size and the ring and the pulse.
+//     touch devices, the clock (wrap, backwards), the slop's size and the ring and the pulse;
+//   * the feedback's geometry (touch_feedback.hpp, pure too): an annulus is exactly the pixels whose centre lies in it, the sizes follow the slop, the ring closes and brightens, the pulse
+//     goes out and fades, and a mark that is no position is nothing.
 // Usage: test_touch_model. Exit code 0 when every check passes.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -19,6 +22,7 @@
 #include <vector>
 
 #include "ants_app/touch_control.hpp"
+#include "ants_app/touch_feedback.hpp"
 #include "ants_app/view_zoom.hpp"
 
 using namespace ants::app;
@@ -365,6 +369,290 @@ void test_ring() {
     Rig m;
     m.down(1, 800, 50, T0);
     check(m.touch.ring(T0 + 300).has_value(), "a finger on the minimap has one (a hold there is a right click)");
+}
+
+// ---- the feedback's geometry (include/ants_app/touch_feedback.hpp) ----
+
+using Paint = std::vector<TouchPaint>;
+const ants::assets::ColorRGBA kProbe{1, 2, 3, 4};
+
+/// The pixels of a window that a paint covers, counted (a pixel covered twice is an overlap); `ok` is false when a rectangle is not a span of one row or leaves the window
+struct Coverage {
+    int32_t x0{0};
+    int32_t y0{0};
+    int32_t size{0};
+    std::vector<int> n;
+    bool ok{true};
+    Coverage(int32_t left, int32_t top, int32_t side) : x0(left), y0(top), size(side), n(static_cast<size_t>(side) * static_cast<size_t>(side), 0) {}
+    int at(int32_t x, int32_t y) const { return n[static_cast<size_t>(y - y0) * static_cast<size_t>(size) + static_cast<size_t>(x - x0)]; }
+    void add(const Paint& paint) {
+        for (const TouchPaint& r : paint) {
+            if (r.h != 1 || r.w < 1 || r.x < x0 || r.y < y0 || r.x + r.w > x0 + size || r.y >= y0 + size) {
+                ok = false;
+                continue;
+            }
+            for (int32_t x = r.x; x < r.x + r.w; ++x) ++n[static_cast<size_t>(r.y - y0) * static_cast<size_t>(size) + static_cast<size_t>(x - x0)];
+        }
+    }
+};
+
+struct Box {
+    int32_t left{0};
+    int32_t top{0};
+    int32_t right{0};      // one past
+    int32_t bottom{0};
+    bool empty{true};
+};
+
+Box box_of(const Paint& paint) {
+    Box b;
+    for (const TouchPaint& r : paint) {
+        if (b.empty) {
+            b = Box{r.x, r.y, r.x + r.w, r.y + r.h, false};
+            continue;
+        }
+        b.left = std::min(b.left, r.x);
+        b.top = std::min(b.top, r.y);
+        b.right = std::max(b.right, r.x + r.w);
+        b.bottom = std::max(b.bottom, r.y + r.h);
+    }
+    return b;
+}
+
+/// The radius that a paint reaches: the half of its box, the box being centred on the mark
+double reach_of(const Paint& paint) {
+    const Box b = box_of(paint);
+    return b.empty ? 0.0 : std::max(static_cast<double>(b.right - b.left), static_cast<double>(b.bottom - b.top)) / 2.0;
+}
+
+/// The (most common) alpha of the gold rows and of the dark ones
+struct Alphas {
+    int gold{-1};
+    int edge{-1};
+};
+
+Alphas alphas_of(const Paint& paint) {
+    Alphas a;
+    for (const TouchPaint& r : paint) {
+        if (r.color.r == 255 && r.color.g == 214 && r.color.b == 64) a.gold = r.color.a;
+        else if (r.color.r == 24 && r.color.g == 16 && r.color.b == 0) a.edge = r.color.a;
+        else a.gold = a.edge = -2;          // (a colour that is neither)
+    }
+    return a;
+}
+
+bool same_paint(const Paint& a, const Paint& b, int32_t dx = 0, int32_t dy = 0) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i].x + dx != b[i].x || a[i].y + dy != b[i].y || a[i].w != b[i].w || a[i].h != b[i].h) return false;
+        if (a[i].color.r != b[i].color.r || a[i].color.g != b[i].color.g || a[i].color.b != b[i].color.b || a[i].color.a != b[i].color.a) return false;
+    }
+    return true;
+}
+
+void test_feedback() {
+    group("feedback", "the ring and the pulse: an annulus is exactly the pixels whose centre lies in it, the sizes follow the slop, a closing ring and a growing pulse, nothing for a mark that is no position");
+    // ---- the annulus: every pixel whose centre is from `inner` (included) to `outer` (not) away, once ----
+    uint32_t seed = 4242;
+    const auto unit = [&seed]() {
+        seed = seed * 1664525u + 1013904223u;
+        return static_cast<double>(seed >> 8) / 16777216.0;
+    };
+    int wrong = 0;
+    int overlapping = 0;
+    int shapes = 0;
+    size_t covered_total = 0;
+    for (int n = 0; n < 500; ++n) {
+        const double cx = unit() * 130.0 - 5.0;
+        const double cy = unit() * 130.0 - 5.0;
+        const double outer = 0.3 + unit() * 40.0;
+        const double inner = n % 5 == 0 ? 0.0 : unit() * outer;
+        Paint paint;
+        touch_annulus(cx, cy, outer, inner, kProbe, paint);
+        const int32_t side = static_cast<int32_t>(std::ceil(2.0 * outer)) + 8;
+        const int32_t x_lo = static_cast<int32_t>(std::floor(cx - outer)) - 4;
+        const int32_t y_lo = static_cast<int32_t>(std::floor(cy - outer)) - 4;
+        Coverage cover(x_lo, y_lo, side);
+        cover.add(paint);
+        if (!cover.ok) ++shapes;
+        for (int32_t y = y_lo; y < y_lo + side; ++y) {
+            for (int32_t x = x_lo; x < x_lo + side; ++x) {
+                const double dx = static_cast<double>(x) + 0.5 - cx;
+                const double dy = static_cast<double>(y) + 0.5 - cy;
+                const double d2 = dx * dx + dy * dy;
+                const bool inside = d2 >= inner * inner && d2 < outer * outer;
+                const int got = cover.at(x, y);
+                if (got > 1) ++overlapping;
+                if ((got == 1) != inside) ++wrong;
+                covered_total += got == 1 ? 1u : 0u;
+            }
+        }
+        for (const TouchPaint& r : paint) {
+            if (r.color.r != 1 || r.color.g != 2 || r.color.b != 3 || r.color.a != 4) ++shapes;
+        }
+    }
+    check(wrong == 0, "500 annuli (centres anywhere, fractions included, radii from a speck to 40): every pixel whose centre lies in the ring is covered and no other (" + std::to_string(wrong) + " wrong)");
+    check(overlapping == 0, "no pixel is covered twice (the spans of a row never overlap)");
+    check(shapes == 0, "every rectangle is one row high, wider than nothing, inside the window and in the colour that was given");
+    check(covered_total > 100000, "(the sweep has teeth: " + std::to_string(covered_total) + " covered pixels in all)");
+    {
+        Paint p;
+        touch_annulus(10.5, 10.5, 5.0, 3.0, kProbe, p);              // pixel centres exactly 3 and 5 away exist here: the inner circle's pixels are in, the outer's are out
+        Coverage c(0, 0, 24);
+        c.add(p);
+        check(c.at(10, 8) == 0 && c.at(10, 7) == 1 && c.at(10, 6) == 1 && c.at(10, 5) == 0 && c.at(5, 10) == 0 && c.at(6, 10) == 1 && c.at(7, 10) == 1 && c.at(8, 10) == 0 && c.at(10, 10) == 0,
+              "a ring about a pixel's middle with pixels exactly 3 and 5 away: the one 3 away is in (the inner edge is included), the one 5 away is out (the outer edge is not)");
+    }
+    // ---- what is nothing ----
+    {
+        Paint p;
+        touch_annulus(50, 50, 5.0, 5.0, kProbe, p);
+        touch_annulus(50, 50, 4.0, 5.0, kProbe, p);
+        touch_annulus(50, 50, 0.0, 0.0, kProbe, p);
+        touch_annulus(50, 50, -3.0, 0.0, kProbe, p);
+        touch_annulus(std::nan(""), 50, 5.0, 0.0, kProbe, p);
+        touch_annulus(50, std::numeric_limits<double>::infinity(), 5.0, 0.0, kProbe, p);
+        touch_annulus(50, 50, std::nan(""), 0.0, kProbe, p);
+        touch_annulus(50, 50, 5.0, std::nan(""), kProbe, p);
+        check(p.empty(), "an annulus that has no width, a radius that is not positive and positions or radii that are not numbers give nothing");
+        Paint wide;
+        touch_annulus(50, 50, 1.0e9, 0.0, kProbe, wide);
+        check(!wide.empty() && wide.size() < 10000, "a radius of a billion is cut to a size that a frame can draw (" + std::to_string(wide.size()) + " rectangles)");
+        Paint far;
+        touch_annulus(1.0e12, -1.0e12, 5.0, 0.0, kProbe, far);
+        const Box fb = box_of(far);
+        check(!fb.empty && fb.right <= 1001000 && fb.left >= 999000 && fb.bottom <= -999000 + 100 && fb.top >= -1001000, "a position that is far away is kept inside the 32 bits");
+        Paint negative;
+        touch_annulus(50, 50, 4.0, -7.0, kProbe, negative);
+        Paint solid;
+        touch_annulus(50, 50, 4.0, 0.0, kProbe, solid);
+        check(same_paint(negative, solid), "a negative inner radius is a disc");
+    }
+    // ---- the sizes follow the slop ----
+    check(std::fabs(touch::ring_end_radius(9.6) - 48.0) < 1e-9 && std::fabs(touch::ring_start_radius(9.6) - 76.8) < 1e-9 && std::fabs(touch::ring_stroke(9.6) - 3.84) < 1e-9,
+          "a slop of 9.6 picture pixels (8 CSS pixels of a box shown at 1.2): the ring ends at 48, starts at 76.8 and is 3.84 thick (5, 8 and 0.4 slops)");
+    check(touch::ring_end_radius(1.0) == 14.0 && touch::ring_start_radius(1.0) == 24.0 && touch::ring_stroke(1.0) == 3.0, "the smallest slop: 14 and 24 and 3 (a speck is not a ring)");
+    check(touch::ring_end_radius(64.0) == 100.0 && touch::ring_start_radius(64.0) == 160.0 && touch::ring_stroke(64.0) == 8.0, "the largest slop: 100 and 160 and 8 (a screen-sized ring is not a ring)");
+    bool monotone = true;
+    bool gap = true;
+    for (double s = 1.0; s <= 64.0; s += 0.25) {
+        monotone = monotone && touch::ring_end_radius(s + 0.25) >= touch::ring_end_radius(s) && touch::ring_start_radius(s + 0.25) >= touch::ring_start_radius(s) && touch::ring_stroke(s + 0.25) >= touch::ring_stroke(s);
+        gap = gap && touch::ring_start_radius(s) >= touch::ring_end_radius(s) + 10.0 - 1e-9;
+    }
+    check(monotone, "a bigger slop never makes a smaller ring");
+    check(gap, "the ring always starts at least 10 pixels wider than it ends (it closes: every slop)");
+    check(touch::kRingEndSlops == 5.0 && touch::kRingStartSlops == 8.0 && touch::kRingStrokeSlops == 0.4 && touch::kPulseGrowth == 0.8, "the proportions are 5 and 8 slops, a line of 0.4 and a pulse that grows by 0.8 of the end radius");
+
+    // ---- the ring closes ----
+    const double slop = 9.6;
+    const TouchControl::Mark at0{100.5, 80.5, 0.0};
+    const TouchControl::Mark at1{100.5, 80.5, 1.0};
+    const Paint r0 = touch_ring_paint(at0, slop);
+    const Paint r1 = touch_ring_paint(at1, slop);
+    check(!r0.empty() && !r1.empty(), "a ring at the start and one at the end are painted");
+    check(std::fabs(reach_of(r0) - 77.8) <= 1.0, "the ring starts at 76.8 (and a dark pixel more): " + std::to_string(reach_of(r0)));
+    check(std::fabs(reach_of(r1) - 49.0) <= 1.0, "it ends at 48 (and a dark pixel more): " + std::to_string(reach_of(r1)));
+    double last = 1.0e9;
+    bool closing = true;
+    bool brightening = true;
+    int last_alpha = -1;
+    for (int i = 0; i <= 20; ++i) {
+        const Paint p = touch_ring_paint(TouchControl::Mark{100.5, 80.5, i / 20.0}, slop);
+        const double reach = reach_of(p);
+        closing = closing && reach <= last;
+        last = reach;
+        const Alphas a = alphas_of(p);
+        brightening = brightening && a.gold >= last_alpha && a.gold > 0 && a.edge > 0 && a.edge < a.gold;
+        last_alpha = a.gold;
+    }
+    check(closing, "the ring only closes as the progress goes from 0 to 1");
+    check(brightening, "and brightens (the gold's alpha never falls; the dark edge is fainter than the gold)");
+    check(alphas_of(r0).gold == 120 && alphas_of(r1).gold == 235, "the gold's alpha is 120 at the start and 235 at the end");
+    {
+        const Alphas a = alphas_of(touch_ring_paint(TouchControl::Mark{100.5, 80.5, 0.5}, slop));
+        check(a.gold == 178 && a.edge == 133, "halfway: 178 for the gold (177.5 rounded) and three quarters of 177.5 for the dark edge: " + std::to_string(a.gold) + ", " + std::to_string(a.edge));
+    }
+    check(same_paint(touch_ring_paint(TouchControl::Mark{100.5, 80.5, -3.0}, slop), r0) && same_paint(touch_ring_paint(TouchControl::Mark{100.5, 80.5, 7.0}, slop), r1), "a progress outside 0 .. 1 is the nearest end");
+    // the colours: gold and a dark edge, nothing else; the hole is empty
+    {
+        bool colours = true;
+        for (const TouchPaint& r : r1) {
+            const bool is_gold = r.color.r == 255 && r.color.g == 214 && r.color.b == 64;
+            const bool is_edge = r.color.r == 24 && r.color.g == 16 && r.color.b == 0;
+            colours = colours && (is_gold || is_edge);
+        }
+        check(colours, "gold (255, 214, 64) and a dark edge (24, 16, 0), nothing else");
+        Coverage c(0, 0, 200);
+        c.add(r1);
+        int inside = 0;
+        for (int32_t y = 0; y < 200; ++y) {
+            for (int32_t x = 0; x < 200; ++x) {
+                const double d = std::hypot(static_cast<double>(x) + 0.5 - 100.5, static_cast<double>(y) + 0.5 - 80.5);
+                if (d < 48.0 - 3.84 - 1.0 - 1e-6 && c.at(x, y) != 0) ++inside;
+            }
+        }
+        check(c.ok && inside == 0, "nothing is painted inside the ring (the finger is seen, not covered)");
+        // the line is 3.84 thick: a row through the middle shows the gold across about that
+        int gold_across = 0;
+        for (const TouchPaint& r : r1) {
+            if (r.y == 80 && r.color.r == 255 && r.x < 100) gold_across += r.w;
+        }
+        check(gold_across >= 3 && gold_across <= 5, "the gold line is 3 or 4 pixels thick on a row through the middle (3.84): " + std::to_string(gold_across));
+    }
+    // it moves with the mark and does not change shape, and a pixel-centred mark makes a symmetric ring
+    {
+        const Paint moved = touch_ring_paint(TouchControl::Mark{107.5, 77.5, 0.3}, slop);
+        const Paint here = touch_ring_paint(TouchControl::Mark{100.5, 80.5, 0.3}, slop);
+        check(same_paint(here, moved, 7, -3), "a ring moved by whole pixels is the same ring moved");
+        Coverage c(0, 0, 220);
+        c.add(here);
+        bool mirrored = true;
+        for (int32_t y = 0; y < 220; ++y) {
+            for (int32_t x = 0; x < 220; ++x) {
+                const int32_t mx = 200 - x;                           // about the pixel 100 (centre 100.5): the pixel 100 + k and 100 - k
+                const int32_t my = 160 - y;
+                if (mx < 0 || mx >= 220 || my < 0 || my >= 220) continue;
+                if (c.at(x, y) != c.at(mx, y) || c.at(x, y) != c.at(x, my)) mirrored = false;
+            }
+        }
+        check(mirrored, "a ring about a pixel's middle is the same left and right and above and below");
+    }
+    // the number of rectangles that a frame has to draw
+    check(r0.size() < 1200 && r1.size() < 800, "a ring is some hundreds of rectangles (" + std::to_string(r0.size()) + " at the start, " + std::to_string(r1.size()) + " at the end)");
+    check(touch_ring_paint(TouchControl::Mark{100.5, 80.5, 0.0}, 64.0).size() < 2600 && touch_ring_paint(TouchControl::Mark{100.5, 80.5, 0.0}, 1.0).size() < 400, "and at the largest slop under two and a half thousand");
+
+    // ---- the pulse goes out ----
+    const Paint p0 = touch_pulse_paint(at0, slop);
+    check(same_paint(p0, r1), "the pulse begins where the ring ended: the same circle, the same brightness");
+    double reach_before = 0.0;
+    bool growing = true;
+    bool fading = true;
+    int alpha_before = 1000;
+    for (int i = 0; i <= 18; ++i) {
+        const Paint p = touch_pulse_paint(TouchControl::Mark{100.5, 80.5, i / 20.0}, slop);
+        if (p.empty()) {
+            fading = false;
+            break;
+        }
+        growing = growing && reach_of(p) >= reach_before;
+        reach_before = reach_of(p);
+        const Alphas a = alphas_of(p);
+        fading = fading && a.gold <= alpha_before;
+        alpha_before = a.gold;
+    }
+    check(growing && fading, "the pulse only grows and fades");
+    check(std::fabs(reach_of(touch_pulse_paint(TouchControl::Mark{100.5, 80.5, 0.5}, slop)) - (48.0 * 1.4 + 1.0)) <= 1.0, "halfway it is at 1.4 times the end radius (the growth is 0.8, linear)");
+    check(touch_pulse_paint(at1, slop).empty(), "at the end of the pulse nothing is left to draw");
+    check(alphas_of(touch_pulse_paint(TouchControl::Mark{100.5, 80.5, 0.5}, slop)).gold == 59, "halfway the gold's alpha is a quarter of 235 (the fade is quadratic): " + std::to_string(alphas_of(touch_pulse_paint(TouchControl::Mark{100.5, 80.5, 0.5}, slop)).gold));
+    check(same_paint(touch_pulse_paint(TouchControl::Mark{100.5, 80.5, -2.0}, slop), p0), "a progress under 0 is the start of the pulse");
+
+    // ---- what is no mark ----
+    const double nan = std::nan("");
+    check(touch_ring_paint(TouchControl::Mark{nan, 80.5, 0.5}, slop).empty() && touch_ring_paint(TouchControl::Mark{100.5, nan, 0.5}, slop).empty() && touch_ring_paint(TouchControl::Mark{100.5, 80.5, nan}, slop).empty() &&
+              touch_ring_paint(TouchControl::Mark{100.5, 80.5, 0.5}, nan).empty() && touch_ring_paint(TouchControl::Mark{100.5, 80.5, 0.5}, std::numeric_limits<double>::infinity()).empty(),
+          "a ring for a position, a progress or a slop that is not a number is nothing");
+    check(touch_pulse_paint(TouchControl::Mark{nan, 80.5, 0.5}, slop).empty() && touch_pulse_paint(TouchControl::Mark{100.5, 80.5, nan}, slop).empty() && touch_pulse_paint(TouchControl::Mark{100.5, 80.5, 0.5}, nan).empty(),
+          "so is a pulse");
 }
 
 void test_drag() {
@@ -1250,6 +1538,7 @@ int main(int argc, char* argv[]) {
     test_late();
     test_primary_point();
     test_ring();
+    test_feedback();
     test_drag();
     test_other_places();
     test_second_finger();

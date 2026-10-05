@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "ants_app/application.hpp"
+#include "ants_app/touch_feedback.hpp"
 
 #if defined(__EMSCRIPTEN__)
   #include <emscripten.h>
@@ -214,6 +215,17 @@ void Application::touch_feedback() {
 #if defined(__EMSCRIPTEN__)
     ants_touch_buzz(12);
 #endif
+}
+
+// The ring closes around a finger that waits to become a hold, and a pulse goes out where one fired: drawn only while the model has one to show (and only over the map view of a match,
+// nothing open over it), so that no other picture changes; the renderer keeps what is drawn inside the picture
+void Application::render_touch_feedback() {
+    if (!touch_view_open()) return;
+    const uint32_t now = touch_now();
+    const std::optional<TouchControl::Mark> ring = touch_.ring(now);
+    const std::optional<TouchControl::Mark> pulse = touch_.pulse(now);
+    if (!ring && !pulse) return;
+    draw_touch_feedback(*renderer_, ring, pulse, touch_.slop());
 }
 
 }  // namespace ants::app

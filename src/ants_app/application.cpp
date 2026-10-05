@@ -2816,6 +2816,7 @@ void Application::render_frame() {
 
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65): the pointer is the picture's
     renderer_->set_picture(picture_);
+    render_touch_feedback();                                 // (the ring of a coming hold: over everything of the picture, under the pointer)
     CursorType cur = CursorType::Normal;
     if (state_ == AppState::Playing && !scorecard_.is_open()) {
         sim::SimulationEngine& view = view_sim();

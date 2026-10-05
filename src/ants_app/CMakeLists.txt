@@ -56,6 +56,7 @@ add_library(ants_app STATIC
     start_menu.cpp
     start_menu_view.cpp
     touch_control.cpp
+    touch_feedback.cpp
     room_chat.cpp
     host_lookup.cpp
     application.cpp

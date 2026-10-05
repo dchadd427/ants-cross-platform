@@ -36,6 +36,7 @@
 #include "ants_app/options_screen.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/touch_control.hpp"
+#include "ants_app/touch_feedback.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
 
@@ -75,7 +76,7 @@ std::string show(const Pt& p) { return "(" + std::to_string(p.x) + ", " + std::t
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 /// Puts finger events into SDL's queue the way a touch screen's driver does (normalised over the canvas: what SDL's renderer makes of them), stamped with the test's clock, which is the
-/// application's touch clock as well. A position is the picture pixel that it names, at its middle (a fraction of a pixel never moves it to the next one).
+/// application's touch clock as well. A position is the picture pixel that it names, at its middle (a fraction of a pixel never moves it to the next one) unless a place inside the pixel is given.
 struct Hand {
     explicit Hand(Application& a, int64_t touch_device = 7) : app(a), device(touch_device) {
         app.set_touch_clock([this]() { return now; });
@@ -85,7 +86,7 @@ struct Hand {
     Hand(const Hand&) = delete;
     Hand& operator=(const Hand&) = delete;
 
-    void send(uint32_t type, int64_t finger, Pt at) {
+    void send(uint32_t type, int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) {
         SDL_Event e;
         SDL_zero(e);
         e.type = type;
@@ -93,13 +94,13 @@ struct Hand {
         e.tfinger.timestamp = now;
         e.tfinger.touchId = device;
         e.tfinger.fingerId = finger;
-        e.tfinger.x = static_cast<float>((static_cast<double>(at.x) + static_cast<double>(app.picture().x) + 0.5) / static_cast<double>(app.renderer().canvas_w()));
-        e.tfinger.y = static_cast<float>((static_cast<double>(at.y) + static_cast<double>(app.picture().y) + 0.5) / static_cast<double>(app.renderer().canvas_h()));
+        e.tfinger.x = static_cast<float>((static_cast<double>(at.x) + static_cast<double>(app.picture().x) + fx) / static_cast<double>(app.renderer().canvas_w()));
+        e.tfinger.y = static_cast<float>((static_cast<double>(at.y) + static_cast<double>(app.picture().y) + fy) / static_cast<double>(app.renderer().canvas_h()));
         SDL_PeepEvents(&e, 1, SDL_ADDEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT);
     }
-    void down(int64_t finger, Pt at) { send(SDL_FINGERDOWN, finger, at); }
-    void move(int64_t finger, Pt at) { send(SDL_FINGERMOTION, finger, at); }
-    void up(int64_t finger, Pt at) { send(SDL_FINGERUP, finger, at); }
+    void down(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERDOWN, finger, at, fx, fy); }
+    void move(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERMOTION, finger, at, fx, fy); }
+    void up(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERUP, finger, at, fx, fy); }
     void wait(uint32_t ms) { now += ms; }
     void frame() { app.run_frame_with_delta(0.016f); }
     /// A tap: down, 80 ms, up, a frame
@@ -642,6 +643,251 @@ void test_hold_timing() {
     hand.up(1, g);
     hand.frame();
     check(s.sink.commands.size() == 1, "a tap that lifts 399 ms after the down is a click");
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// The ring and the pulse (touch_feedback.hpp): over the match while a hold is coming and after it fired; nothing else of the picture changes
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/// A renderer that keeps the rectangles that are filled
+class FillRecorder : public IRenderer {
+public:
+    void draw_sprite(uint32_t, int32_t, int32_t, bool) override { ++others; }
+    void draw_named_sprite(const std::string&, int32_t, int32_t, bool) override { ++others; }
+    void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override { fills.push_back(TouchPaint{x, y, w, h, color}); }
+    void draw_rect(int32_t, int32_t, int32_t, int32_t, ants::assets::ColorRGBA) override { ++others; }
+    void draw_text(const std::string&, int32_t, int32_t, ants::assets::ColorRGBA) override { ++others; }
+    void set_hud_team(uint8_t) override {}
+    std::vector<TouchPaint> fills;
+    int others{0};
+};
+
+bool same_rects(const std::vector<TouchPaint>& a, const std::vector<TouchPaint>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        const TouchPaint& p = a[i];
+        const TouchPaint& q = b[i];
+        if (p.x != q.x || p.y != q.y || p.w != q.w || p.h != q.h || p.color.r != q.color.r || p.color.g != q.color.g || p.color.b != q.color.b || p.color.a != q.color.a) return false;
+    }
+    return true;
+}
+
+/// A frame in which nothing moves (the simulation's time and the animations stand still), read back
+Picture still_frame(Application& app) {
+    app.run_frame_with_delta(0.0f);
+    return read_canvas(app, app.renderer().canvas_w(), app.renderer().canvas_h());
+}
+
+/// The pixels of the map view in two pictures are the same (the frame rate in the corner, the minimap and the pedestals run on the wall clock: nothing is said of them)
+bool same_view(const Application& app, const Picture& a, const Picture& b) {
+    const LayoutRect view = app.layout().view();
+    for (int32_t y = view.y + app.picture().y; y < view.y + view.h + app.picture().y; ++y) {
+        for (int32_t x = view.x + app.picture().x; x < view.x + view.w + app.picture().x; ++x) {
+            const uint8_t* p = a.at(x, y);
+            const uint8_t* q = b.at(x, y);
+            if (p[0] != q[0] || p[1] != q[1] || p[2] != q[2]) return false;
+        }
+    }
+    return true;
+}
+
+/// What a frame shows beyond the still frame before the finger came: the pixels that differ, how many of those lie outside the rectangles that were expected, and how many of the expected
+/// pixels differ. The pixels nearer than `ignore_inside` to the finger are not looked at (the pointer's cursor is there once the right button is down).
+struct Drawn {
+    int differing{0};
+    int outside{0};
+    int expected{0};
+    int hit{0};
+    double mean{0.0};
+    int32_t left{0};                 // the box of the pixels that differ outside the expected ones (for the message of a failure)
+    int32_t top{0};
+    int32_t right{0};
+    int32_t bottom{0};
+};
+
+Drawn compare_with(const Picture& base, const Picture& frame, const Application& app, const std::vector<TouchPaint>& expected, double cx, double cy, double ignore_inside) {
+    std::vector<uint8_t> mask(static_cast<size_t>(base.w) * static_cast<size_t>(base.h), 0);
+    for (const TouchPaint& r : expected) {
+        for (int32_t y = r.y; y < r.y + r.h; ++y) {
+            for (int32_t x = r.x; x < r.x + r.w; ++x) {
+                const int32_t px = x + app.picture().x;
+                const int32_t py = y + app.picture().y;
+                if (px >= 0 && py >= 0 && px < base.w && py < base.h) mask[static_cast<size_t>(py) * static_cast<size_t>(base.w) + static_cast<size_t>(px)] = 1;
+            }
+        }
+    }
+    Drawn d;
+    double sum = 0.0;
+    const LayoutRect view = app.layout().view();
+    for (int32_t y = view.y + app.picture().y; y < view.y + view.h + app.picture().y; ++y) {
+        for (int32_t x = view.x + app.picture().x; x < view.x + view.w + app.picture().x; ++x) {
+            const double r = std::hypot(static_cast<double>(x - app.picture().x) + 0.5 - cx, static_cast<double>(y - app.picture().y) + 0.5 - cy);
+            if (r < ignore_inside) continue;
+            const bool wanted = mask[static_cast<size_t>(y) * static_cast<size_t>(base.w) + static_cast<size_t>(x)] != 0;
+            d.expected += wanted ? 1 : 0;
+            const uint8_t* p = base.at(x, y);
+            const uint8_t* q = frame.at(x, y);
+            if (p[0] == q[0] && p[1] == q[1] && p[2] == q[2]) continue;
+            ++d.differing;
+            sum += r;
+            if (wanted) {
+                ++d.hit;
+            } else {
+                if (d.outside == 0) {
+                    d.left = d.right = x;
+                    d.top = d.bottom = y;
+                }
+                ++d.outside;
+                d.left = std::min(d.left, x);
+                d.right = std::max(d.right, x);
+                d.top = std::min(d.top, y);
+                d.bottom = std::max(d.bottom, y);
+            }
+        }
+    }
+    d.mean = d.differing > 0 ? sum / d.differing : 0.0;
+    return d;
+}
+
+void test_ring() {
+    group("ring", "a ring closes around a finger that may become a hold and a pulse follows the hold: over the match, and nothing else of the picture changes");
+    {   // what draw_touch_feedback draws, and in which order
+        FillRecorder none;
+        draw_touch_feedback(none, std::nullopt, std::nullopt, 9.6);
+        check(none.fills.empty() && none.others == 0, "nothing to show: nothing is drawn");
+        const TouchControl::Mark ring{200.5, 150.5, 0.4};
+        const TouchControl::Mark pulse{320.5, 90.5, 0.2};
+        const std::vector<TouchPaint> ring_rects = touch_ring_paint(ring, 9.6);
+        const std::vector<TouchPaint> pulse_rects = touch_pulse_paint(pulse, 9.6);
+        FillRecorder only_ring;
+        draw_touch_feedback(only_ring, ring, std::nullopt, 9.6);
+        check(!ring_rects.empty() && only_ring.others == 0 && same_rects(only_ring.fills, ring_rects), "a ring: the rectangles of the ring, filled and nothing else");
+        FillRecorder only_pulse;
+        draw_touch_feedback(only_pulse, std::nullopt, pulse, 9.6);
+        check(!pulse_rects.empty() && only_pulse.others == 0 && same_rects(only_pulse.fills, pulse_rects), "a pulse: the rectangles of the pulse");
+        FillRecorder both;
+        draw_touch_feedback(both, ring, pulse, 9.6);
+        const std::vector<TouchPaint> first(both.fills.begin(), both.fills.begin() + static_cast<std::ptrdiff_t>(std::min(pulse_rects.size(), both.fills.size())));
+        const std::vector<TouchPaint> rest(both.fills.begin() + static_cast<std::ptrdiff_t>(std::min(pulse_rects.size(), both.fills.size())), both.fills.end());
+        check(both.fills.size() == pulse_rects.size() + ring_rects.size() && same_rects(first, pulse_rects) && same_rects(rest, ring_rects), "both: the pulse first, the ring over it");
+    }
+
+    Match m;
+    if (!m.ok) return check(false, "the match is up");
+    Application& app = m.app();
+    Scene& s = *m.scene;
+    Hand hand(app);
+    s.clear();                                                          // nothing selected: a hold orders nothing
+    forget_pointer(app);                                                // (and the cursor is not in the pictures: it is gone, as after a finger)
+    app.renderer().pin_animation_clock(1000);                           // (the terrain's animation runs on the wall clock otherwise: the pictures below must be the same where nothing is drawn)
+    const Pt g = s.ground(2, 2);
+    const double cx = static_cast<double>(g.x) + 0.37;                    // (the finger is not in the middle of its pixel: no pixel of the ring lies exactly on a circle, where a rounding of the
+    const double cy = static_cast<double>(g.y) + 0.21;                    // finger's float could change what the ring covers)
+    const Picture base = still_frame(app);
+    check(app.pointer_outside() && same_view(app, base, still_frame(app)), "(a frame that moves nothing is the same picture again: the comparisons below are exact)");
+
+    // THE RING: nothing for 150 ms (a tap shows none), then it closes around the finger until the hold's time
+    hand.down(1, g, 0.37, 0.21);
+    const double slop = app.touch_slop();
+    check(same_view(app, still_frame(app), base), "a finger that has just landed: nothing is drawn");
+    const uint32_t t0 = hand.now;
+    hand.wait(touch::kRingStartMs - 1);
+    check(same_view(app, still_frame(app), base), "149 ms: nothing is drawn (a tap is over by then)");
+    double last_mean = 1.0e9;
+    bool closing = true;
+    for (const uint32_t ms : {150u, 200u, 300u, 400u, 449u}) {
+        hand.wait(t0 + ms - hand.now);
+        const Picture frame = still_frame(app);
+        const double progress = static_cast<double>(ms - touch::kRingStartMs) / static_cast<double>(touch::kHoldMs - touch::kRingStartMs);
+        const std::vector<TouchPaint> wanted = touch_ring_paint(TouchControl::Mark{cx, cy, progress}, slop);
+        const Drawn d = compare_with(base, frame, app, wanted, cx, cy, 0.0);
+        check(d.outside == 0 && d.expected > 400 && d.hit * 100 >= d.expected * 95, std::to_string(ms) + " ms: the picture differs from the still one at the ring's pixels and nowhere else (" + std::to_string(d.differing) + " pixels differ, " +
+                                                                                      std::to_string(d.hit) + " of the ring's " + std::to_string(d.expected) + ", " + std::to_string(d.outside) + " outside it, in the box " + std::to_string(d.left) + "," + std::to_string(d.top) + " - " + std::to_string(d.right) + "," + std::to_string(d.bottom) + ")");
+        closing = closing && d.mean < last_mean;
+        last_mean = d.mean;
+    }
+    check(closing, "the ring closes: its pixels come nearer to the finger with every frame");
+    check(app.hud().get_selected_ant_ids().empty() && s.sink.commands.empty() && !app.hud().is_input_captured(), "(the ring is a picture only: nothing is held and nothing was ordered)");
+
+    // THE PULSE: the hold fires (one more frame), the ring is gone and a pulse goes out from where the ring ended, for 240 ms
+    const double end = touch::ring_end_radius(slop);
+    const double hole = end - touch::ring_stroke(slop) - 4.0;        // (the pointer's cursor lives inside; it is the right button's, and it is not ours)
+    double last_reach = 0.0;
+    bool growing = true;
+    for (const uint32_t ms : {0u, 60u, 120u, 180u}) {
+        hand.wait(t0 + touch::kHoldMs + ms - hand.now);
+        const Picture frame = still_frame(app);
+        const std::vector<TouchPaint> wanted = touch_pulse_paint(TouchControl::Mark{cx, cy, static_cast<double>(ms) / static_cast<double>(touch::kPulseMs)}, slop);
+        const Drawn d = compare_with(base, frame, app, wanted, cx, cy, hole);
+        check(d.outside == 0 && d.expected > 400 && d.hit * 100 >= d.expected * 85, "the pulse " + std::to_string(ms) + " ms after the hold: its pixels and nothing else outside the cursor's own place (" + std::to_string(d.differing) + " differ, " +
+                                                                                       std::to_string(d.hit) + " of " + std::to_string(d.expected) + ", " + std::to_string(d.outside) + " outside)");
+        growing = growing && d.mean > last_reach;
+        last_reach = d.mean;
+    }
+    check(growing, "the pulse goes out: its pixels get farther from the finger with every frame");
+    check(app.hud().is_input_captured() && app.touch().mode() == TouchControl::Mode::Right, "(the right button is held: the hold fired)");
+    hand.wait(t0 + touch::kHoldMs + touch::kPulseMs + 5 - hand.now);
+    {
+        const Drawn d = compare_with(base, still_frame(app), app, {}, cx, cy, hole);
+        check(d.differing == 0, "240 ms after the hold: the pulse is gone, nothing but the pointer's cursor is left (" + std::to_string(d.differing) + " pixels differ outside its place)");
+    }
+    hand.up(1, g);
+    check(same_view(app, still_frame(app), base), "after the lift the picture is the still one again, pixel for pixel");
+    check(s.sink.commands.empty(), "(and nothing was ordered: nothing was selected)");
+
+    // NO RING where there is no hold coming
+    hand.down(1, g);                                                    // a tap
+    hand.wait(80);
+    check(same_view(app, still_frame(app), base), "a tap: nothing is drawn while the finger is down");
+    hand.up(1, g);
+    hand.wait(10);
+    check(same_view(app, still_frame(app), base), "(and after its lift)");
+    // a drag: the finger leaves the slop at once, the band is drawn, and no ring joins it at 300 ms
+    hand.down(1, g);
+    hand.wait(20);
+    hand.move(1, Pt{g.x + 40, g.y + 30});
+    const Picture band_early = still_frame(app);
+    hand.wait(280);
+    check(same_view(app, still_frame(app), band_early), "a finger that left the slop has a band and no ring: the picture at 300 ms is the one at 20 ms");
+    hand.up(1, Pt{g.x + 40, g.y + 30});
+    hand.wait(10);
+    still_frame(app);
+    s.clear();
+    forget_pointer(app);
+    check(same_view(app, still_frame(app), base), "(the band is gone with the lift)");
+    // a dialog opens over the map while a hold is coming: nothing of the ring is drawn over it
+    hand.down(1, g);
+    still_frame(app);                                                   // (the finger is down on the map: it waits)
+    hand.wait(300);
+    app.hud().open_quit_dialog();
+    const Picture over_dialog = still_frame(app);
+    check(app.touch().mode() == TouchControl::Mode::Waiting, "(the finger still waits under the dialog)");
+    app.cancel_touch();
+    const Picture dialog_alone = still_frame(app);
+    check(app.touch().fingers() == 0 && same_view(app, over_dialog, dialog_alone), "a dialog that opened over a finger that waits: no ring over the dialog (the picture is the dialog's alone)");
+    hand.up(1, g);
+    hand.wait(10);
+    still_frame(app);
+    app.hud().close_quit_dialog();
+    forget_pointer(app);
+    check(same_view(app, still_frame(app), base), "(the dialog is closed: the picture is the still one again)");
+    // a second finger turns the hold that was coming into a pan: the ring goes
+    hand.down(1, g);
+    hand.wait(300);
+    const Pt other{g.x + 60, g.y + 10};
+    hand.down(2, other);
+    check(same_view(app, still_frame(app), base) && app.touch().mode() == TouchControl::Mode::Two, "a second finger lands while the ring is closing: the ring is gone, the pair waits");
+    hand.up(2, other);
+    hand.up(1, g);
+    hand.wait(10);
+    still_frame(app);
+    // a cancel (the browser took the touch) takes the ring away
+    hand.down(1, g);
+    still_frame(app);
+    hand.wait(300);
+    check(!same_view(app, still_frame(app), base), "(the ring is there before the cancel)");
+    app.cancel_touch();
+    check(same_view(app, still_frame(app), base), "a cancel: the ring is gone with the finger");
 }
 
 void test_pan() {
@@ -1251,6 +1497,95 @@ void test_letterbox() {
     check(std::fabs(app.touch_slop() - 6.0) < 0.01, "the slop of a window that shows the picture at 4/3: 8 points are 6 picture pixels: " + std::to_string(app.touch_slop()));
 }
 
+void test_inset_picture() {
+    group("inset", "a picture smaller than the canvas (the original's layout, centred in the wide canvas): fingers, orders, the pan and the ring are the picture's, not the canvas's");
+    Match m;
+    if (!m.ok) return check(false, "the match is up");
+    Application& app = m.app();
+    Scene& s = *m.scene;
+    app.set_layout(ScreenLayout::classic());
+    s.look();
+    check(app.picture() == (LayoutRect{160, 30, 640, 480}), "the classic layout is centred in the 16:9 canvas: (160, 30), 640 x 480 (" + std::to_string(app.picture().x) + ", " + std::to_string(app.picture().y) + ", " +
+                                                                std::to_string(app.picture().w) + " x " + std::to_string(app.picture().h) + ")");
+    Hand hand(app);
+    // a tap on an ant selects it and a hold on the ground orders it there, as the mouse's click and right click do
+    const Pt on = s.on_ant(s.worker);
+    s.clear();
+    hand.tap(on);
+    const Outcome tapped = outcome_of(s);
+    s.clear();
+    mouse_click(app, SDL_BUTTON_LEFT, on, on);
+    forget_pointer(app);
+    const Outcome clicked = outcome_of(s);
+    check(tapped.selected == std::vector<uint32_t>{s.worker} && same(tapped, clicked), "a tap on the worker selects it, as the mouse's click does: " + describe(tapped) + " against " + describe(clicked));
+    const Pt g = s.ground(1, 2);
+    s.clear();
+    s.select({s.worker});
+    hand.hold(g, g);
+    const Outcome held = outcome_of(s);
+    s.clear();
+    s.select({s.worker});
+    mouse_click(app, SDL_BUTTON_RIGHT, g, g);
+    forget_pointer(app);
+    const Outcome right_clicked = outcome_of(s);
+    check(held.commands.size() == 1 && same(held, right_clicked), "a hold on the ground orders the tile that the mouse's right click does: " + describe(held) + " against " + describe(right_clicked));
+    // two fingers pan by the distance they move
+    const ViewportCamera& camera = app.renderer().camera();
+    const float before_x = camera.x;
+    const float before_y = camera.y;
+    const Pt a{app.layout().view().x + 150, app.layout().view().y + 150};
+    const Pt b{a.x + 60, a.y};
+    hand.down(1, a);
+    hand.frame();
+    hand.down(2, b);
+    hand.frame();
+    for (int i = 1; i <= 5; ++i) {
+        hand.wait(16);
+        hand.move(1, Pt{a.x - 8 * i, a.y - 4 * i});
+        hand.move(2, Pt{b.x - 8 * i, b.y - 4 * i});
+        hand.frame();
+    }
+    hand.up(2, Pt{b.x - 40, b.y - 20});
+    hand.up(1, Pt{a.x - 40, a.y - 20});
+    hand.frame();
+    check(std::fabs(static_cast<double>(camera.x - before_x) - 40.0) < 1.5 && std::fabs(static_cast<double>(camera.y - before_y) - 20.0) < 1.5, "two fingers that move (-40, -20) in the picture move the view's origin by (+40, +20): (" + std::to_string(static_cast<double>(camera.x - before_x)) + ", " +
+                                                                                                                                             std::to_string(static_cast<double>(camera.y - before_y)) + ")");
+    // the ring is centred on the finger in the picture (the pulse of the hold above is over by then)
+    app.renderer().pin_animation_clock(1000);
+    s.clear();
+    forget_pointer(app);
+    hand.wait(touch::kPulseMs + 20);
+    still_frame(app);
+    const Pt p{app.layout().view().x + 200, app.layout().view().y + 200};
+    const double cx = static_cast<double>(p.x) + 0.37;
+    const double cy = static_cast<double>(p.y) + 0.21;
+    const Picture base = still_frame(app);
+    hand.down(1, p, 0.37, 0.21);
+    still_frame(app);
+    hand.wait(300);
+    const Picture frame = still_frame(app);
+    const double slop = app.touch_slop();
+    const std::vector<TouchPaint> wanted = touch_ring_paint(TouchControl::Mark{cx, cy, 0.5}, slop);
+    const Drawn d = compare_with(base, frame, app, wanted, cx, cy, 0.0);
+    check(d.outside == 0 && d.expected > 400 && d.hit * 100 >= d.expected * 95, "the ring is centred on the finger of the inset picture, over the canvas's offset: " + std::to_string(d.hit) + " of " + std::to_string(d.expected) + " pixels, " + std::to_string(d.outside) + " outside, in the box " +
+                                                                                                   std::to_string(d.left) + "," + std::to_string(d.top) + " - " + std::to_string(d.right) + "," + std::to_string(d.bottom));
+    hand.up(1, p);
+    hand.frame();
+    // a finger over the canvas's bar beside the picture is held to the picture's edge, as a mouse over a bar is
+    double fx = -1.0;
+    double fy = -1.0;
+    hand.down(1, Pt{-100, 50});
+    hand.frame();
+    check(app.touch().primary_point(fx, fy) && fx == 0.0 && std::fabs(fy - 50.5) < 0.01, "a finger in the bar left of the picture is at its left edge: (" + std::to_string(fx) + ", " + std::to_string(fy) + ")");
+    hand.up(1, Pt{-100, 50});
+    hand.frame();
+    hand.down(1, Pt{690, 500});
+    hand.frame();
+    check(app.touch().primary_point(fx, fy) && fx > 639.9 && fx < 640.0 && fy > 479.9 && fy < 480.0, "a finger in the bar below and right of it is at its last pixel: (" + std::to_string(fx) + ", " + std::to_string(fy) + ")");
+    hand.up(1, Pt{690, 500});
+    hand.frame();
+}
+
 void test_slop() {
     group("slop", "the slop is 8 points of the window (CSS pixels of the box) in picture pixels, whatever the window's size");
     QuietStdout quiet;
@@ -1267,6 +1602,14 @@ void test_slop() {
         check(ok, "the application is up at " + std::to_string(std::get<1>(c)) + " x " + std::to_string(std::get<2>(c)));
         if (!ok) continue;
         check(std::fabs(app.touch_slop() - std::get<3>(c)) < 0.01, "in a window of " + std::to_string(std::get<1>(c)) + " x " + std::to_string(std::get<2>(c)) + " the slop is " + std::to_string(std::get<3>(c)) + " picture pixels: " + std::to_string(app.touch_slop()));
+        if (std::fabs(std::get<3>(c) - 8.0) > 0.5) {                                 // (a window whose slop is not the model's own default: the finger's landing hands it over)
+            Hand hand(app);
+            hand.down(1, Pt{40, 40});
+            hand.frame();
+            check(std::fabs(app.touch().slop() - std::get<3>(c)) < 0.01, "the model has the window's slop from the finger's landing: " + std::to_string(app.touch().slop()));
+            hand.up(1, Pt{40, 40});
+            hand.frame();
+        }
     }
 }
 
@@ -1279,6 +1622,7 @@ int main(int argc, char* argv[]) {
     test_drag_is_the_band();
     test_hold_is_the_right_click();
     test_hold_timing();
+    test_ring();
     test_pan();
     test_pinch();
     test_gates();
@@ -1288,6 +1632,7 @@ int main(int argc, char* argv[]) {
     test_pointer_gone();
     test_other_screens();
     test_letterbox();
+    test_inset_picture();
     test_slop();
     std::printf("\ntouch application: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
