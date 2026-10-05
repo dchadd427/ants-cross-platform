@@ -2067,6 +2067,9 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.server.scripted_send(net::encode(start)));
         ASSERT_TRUE(w.run_until([&]() { return loaded() == 1; }, 5000));
         ASSERT_TRUE(m.keys_given.size() == 1 && net::key_matches(m.keys_given[0].key, key) && m.keys_given[0].seat == 1 && m.keys_given[0].room == "RJ-22" && m.keys_forgotten.empty());   // the Start: kept
+        ASSERT_TRUE(w.server.scripted_send(net::encode(start)));                         // a second Start without a cancel (a server that says it twice): the key is not given twice
+        w.run(500);
+        ASSERT_TRUE(m.keys_given.size() == 1 && m.keys_forgotten.empty());
         net::CancelMsg cancel;
         cancel.reason = net::CancelMsg::Reason::LoadFailed;
         cancel.player = 0;
