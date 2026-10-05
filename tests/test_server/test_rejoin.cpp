@@ -1994,6 +1994,46 @@ void run_way_back_tests() {
         Machine& f = w.join("Fay", "demo-pr4");
         ASSERT_TRUE(w.run_until([&]() { return f.net.phase() == NetGame::Phase::Room; }, 4000));
         ASSERT_TRUE(w.status("demo-pr1").code.empty() && w.status("demo-pr3").state == RoomState::Waiting && w.status("demo-pr4").state == RoomState::Waiting);
+        {   // a stall of the server's loop (a frozen machine, a swap storm; the re-check's N2): the first pass after it reads a Hello for a third code before the rooms have looked at their people
+            // again, and by the clock alone both rooms have been abandoned for two minutes. Their people are at them: Cat and Dan at one, Ann at the other (she came back after her tab was closed,
+            // and is catching up: a person too, her partner's seat is held). Nobody is ended for a place.
+            World s(nullptr, limits);
+            ASSERT_TRUE(s.server.start(s.now));
+            Machine& ann = s.join("Ann", "demo-st1");
+            Machine& bob = s.join("Bob", "demo-st1");
+            Machine& cat = s.join("Cat", "demo-st2");
+            Machine& dan = s.join("Dan", "demo-st2");
+            ASSERT_TRUE(s.run_until([&]() { return s.running({&ann, &bob, &cat, &dan}); }, 14000 + kPre));
+            s.run(3000);
+            ASSERT_TRUE(s.status("demo-st1").state == RoomState::Running && s.status("demo-st2").state == RoomState::Running);
+            ASSERT_TRUE(ann.keys_given.size() == 1);
+            const net::RejoinKey ann_key = ann.keys_given[0];
+            for (Machine* gone : {&ann, &bob}) s.machines.erase(std::remove_if(s.machines.begin(), s.machines.end(), [gone](const std::unique_ptr<Machine>& p) { return p.get() == gone; }), s.machines.end());
+            s.run(70000);                                                                // (the tabs of st1 are closed: a minute and ten seconds on, st1 is abandoned by the floor)
+            ASSERT_TRUE(s.status("demo-st1").paused && s.status("demo-st1").absent.size() == 2 && s.status("demo-st2").absent.empty());
+            Machine& back = s.add_machine("Ann");
+            ASSERT_TRUE(back.net.join("127.0.0.1", s.server.port(), "Ann", ann_key.seat, "demo-st1", "", ann_key.key));
+            bool catching_up = false;
+            for (int i = 0; i < 2000 && !catching_up; ++i) {                             // (her machine and the server move, no other, until the server has her catching up: her machine does not read the match)
+                back.frame(s.now);
+                s.server.pump(s.now);
+                for (const RoomStatus::Absent& held : s.status("demo-st1").absent) catching_up = catching_up || (held.catching_up && held.seat == ann_key.seat);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            ASSERT_TRUE(catching_up);
+            Machine& eve = s.add_machine("Eve");
+            ASSERT_TRUE(eve.net.join("127.0.0.1", s.server.port(), "Eve", 255, "demo-st3"));
+            for (int i = 0; i < 400; ++i) {                                              // (her Hello is on its way to a server that does not look: the loop is frozen)
+                eve.frame(s.now);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            s.now += 120000;                                                             // the loop wakes up two minutes later: one pass, with the Hello in it
+            s.server.pump(s.now);
+            ASSERT_TRUE(s.status("demo-st1").state == RoomState::Running && s.status("demo-st2").state == RoomState::Running);
+            ASSERT_TRUE(s.status("demo-st3").code.empty() && s.server.mgr->room_count() == 2 && s.server.mgr->rooms_created() == 2 && s.server.mgr->take_ended(s.server_now()).empty());
+            ASSERT_TRUE(s.run_until([&]() { return eve.net.phase() == NetGame::Phase::Failed; }, 4000));
+            ASSERT_TRUE(eve.net.reject_reason() == net::RejectReason::NoSuchRoom);       // the answer that it always was when no place is free
+        }
     } TEST_END();
 
     TEST_CASE("RJ1.21 A Keyed Hello To A Demo Room That Ended Does Not Replace It (The Review's M3): A Match Ended By The Cap While Its Players Were Away; Their Key Is Told NoSuchRoom (\"The match is over.\"), The Key Is Let Go Of, And The Room Stays As It Ended; A Hello Without A Key Makes A New Room, As It Always Did (A Late Friend, A Rematch With The Same Link)") {

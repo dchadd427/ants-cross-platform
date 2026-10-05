@@ -275,8 +275,8 @@ public:
     RoomStatus status(uint32_t now_ms) const;
     /// What a restart would interrupt here (see RoomBusy): cheap, no status is built
     RoomBusy busy(uint32_t now_ms) const;
-    /// How long a running match has had no person at it, in ms: every seat of a person is held absent (nobody is present or catching up), counted from the last pass in which one was. About 0 while a person is
-    /// there (a pass is milliseconds) and 0 for a room that does not run.
+    /// How long a running match has had no person at it, in ms: every seat of a person is held absent (nobody is present or catching up), counted from the last pass in which one was. 0 while a person is
+    /// there, whatever the clock says (a stalled loop makes a time old that is not an absence), and 0 for a room that does not run.
     /// RoomManager ends the demo room with the biggest number when a Hello needs its place (kDemoAbandonedMs).
     uint32_t abandoned_ms(uint32_t now_ms) const;
 

@@ -768,10 +768,15 @@ RoomBusy Room::busy(uint32_t now_ms) const {
     return b;
 }
 
-// A running match with nobody at it (every person's seat is held absent): since when, counted from the last pass in which a person was present or catching up (Room::update). A bot has no seat in the
-// attendance, so a room with only bots left counts as nobody here too (the room finishes "everybody left" by itself when no person is present or held, so this is about held seats).
+// A running match with nobody at it (every person's seat is held absent): since when, counted from the last pass in which a person was present or catching up (Room::update). A person who is present NOW
+// makes it 0 whatever the clock says: the loop of the server can stall, and the Hellos that wait are read before the rooms look at their people again, so a time that is old by the clock alone is no absence.
+// A bot has no seat in the attendance, so a room with only bots left counts as nobody here too (the room finishes "everybody left" by itself when no person is present or held, so this is about held seats).
 uint32_t Room::abandoned_ms(uint32_t now_ms) const {
     if (state_ != RoomState::Running || session_ == nullptr) return 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        const net::Attendance::State st = session_->attendance().state(seat);
+        if (st == net::Attendance::State::Present || st == net::Attendance::State::CatchingUp) return 0;
+    }
     return now_ms - last_person_ms_;
 }
 
