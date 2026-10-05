@@ -85,6 +85,10 @@ public:
     void on_press(int32_t x, int32_t y, uint32_t now_ms);
     /// A left release: the callbacks
     void on_release(int32_t x, int32_t y);
+    /// A press that ends with no act (the browser took the touch away, the focus was lost, the window changed size): a slider's drag ends WITHOUT its callback and the thumb goes back to the
+    /// value in effect (nothing is written or applied), and Return and the pairs of switches lose their capture. A release at some far point would end the drag too, but with the value that the
+    /// thumb was dragged to there (the slider follows the pointer's x): the cancel is not a release.
+    void cancel_press() noexcept;
     /// A key of the original (docs 5.45): Enter closes the screen, the others go to the field that has the focus
     void on_key(int32_t key_id);
     /// Typed text (SDL's text input): every printable ASCII character is a key of the original

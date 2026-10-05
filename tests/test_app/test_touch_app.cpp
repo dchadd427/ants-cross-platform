@@ -1655,6 +1655,12 @@ void test_second_finger_cancels() {
     check(s.sink.commands.empty() && app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "a waiting finger that a second finger joins clicks nothing");
 }
 
+/// A way in which a touch is taken away from the game, for the tests of what a cancel does
+struct Cause {
+    const char* name;
+    std::function<void()> act;
+};
+
 void test_cancel() {
     group("cancel", "a touch that the browser takes away, a lost focus and a page that is hidden leave no press held and no finger tracked");
     Match m;
@@ -1833,10 +1839,6 @@ void test_cancel() {
     // THE DIALOGS OF THE MATCH: a cancel never fires the control under the finger (review L3). SDL's emulation made a cancelled touch the lift of the finger, where it is: the quit dialog's Yes left
     // the match. Now the press is let go of where no control is, whatever the cause: the page's touchcancel, a lost focus, a hidden page, a minimised window.
     {
-        struct Cause {
-            const char* name;
-            std::function<void()> act;
-        };
         const std::vector<Cause> causes = {
             {"the page's touchcancel", [&] { app.cancel_touch(); }},
             {"a lost focus", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }()); }},
@@ -1892,6 +1894,74 @@ void test_cancel() {
         check(app.hud().is_modal_open() && app.touch().fingers() == 0, "Return of the options window under a finger that is cancelled does not close it");
         hand.tap(on_return);
         check(!app.hud().is_modal_open(), "(a tap on it does)");
+        // THE OPTIONS WINDOW'S SLIDERS (second review, NEW-2): a cancel during a drag ends it with no act. The release at the corner used to drag the thumb to the left end (a slider follows the
+        // pointer's x, whatever its y) and WRITE and apply 0: a volume or the scroll speed was lost and saved. What is saved is looked at in a store of the test's own.
+        {
+            ConfigStore saved;
+            app.hud().set_config_store(&saved);
+            struct Slider {
+                const char* name;
+                OptionSetting setting;
+                int32_t OptionsState::*field;
+                int32_t start;
+            };
+            const std::vector<Slider> sliders = {{"Sound Volume", OptionSetting::SoundVolume, &OptionsState::sound_volume, 52},
+                                                 {"Music Volume", OptionSetting::MusicVolume, &OptionsState::music_volume, 40},
+                                                 {"Scroll Speed", OptionSetting::ScrollSpeed, &OptionsState::scroll_speed, 30}};
+            const std::vector<Cause> slider_causes = {
+                {"the page's touchcancel", [&] { app.cancel_touch(); }},
+                {"a lost focus", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }()); }},
+                {"a size change", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_SIZE_CHANGED; return we; }()); }},
+            };
+            for (size_t i = 0; i < sliders.size(); ++i) {
+                const Slider& which = sliders[i];
+                for (const Cause& cause : slider_causes) {
+                    if (i > 0 && cause.name[4] != 'p') continue;                  // (the other two sliders: the page's touchcancel only)
+                    app.hud().options().*(which.field) = which.start;
+                    app.hud().open_options();
+                    const LayoutPoint where = app.layout().options_offset();
+                    const ScreenSlider& slider = app.hud().options_screen().slider(i);
+                    const int32_t home = slider.position();
+                    const Pt thumb{where.x + home, where.y + OptionsScreen::SLIDER_Y[i] + 8};
+                    const Pt dragged{thumb.x + 45, thumb.y};
+                    hand.down(1, thumb);
+                    hand.frame();
+                    hand.wait(30);
+                    hand.move(1, dragged);
+                    hand.frame();
+                    check(slider.dragging() && slider.position() == home + 45, std::string("(the finger drags the ") + which.name + " thumb: it follows)");
+                    cause.act();
+                    hand.frame();
+                    check(!slider.dragging() && slider.position() == home && app.hud().options().*(which.field) == which.start && !saved.has(OptionsState::key(which.setting)),
+                          std::string("a cancel (") + cause.name + ") during a drag of " + which.name + ": no drag, the thumb is home, the value in effect is " + std::to_string(which.start) + " and nothing is saved");
+                    hand.up(1, dragged);                                           // (SDL's own lift for the touchcancel: unknown by now)
+                    hand.frame();
+                    check(app.hud().options().*(which.field) == which.start && !saved.has(OptionsState::key(which.setting)) && app.hud().is_options_open(),
+                          "and the lift that follows changes nothing, and the window is still open");
+                    app.hud().close_options();
+                }
+            }
+            // the drag has teeth: the same drag with a plain lift writes the value under the finger
+            app.hud().options().sound_volume = 52;
+            app.hud().open_options();
+            {
+                const LayoutPoint where = app.layout().options_offset();
+                const Pt thumb{where.x + app.hud().options_screen().slider(0).position(), where.y + OptionsScreen::SLIDER_Y[0] + 8};
+                const Pt dragged{thumb.x + 45, thumb.y};
+                hand.down(1, thumb);
+                hand.frame();
+                hand.wait(30);
+                hand.move(1, dragged);
+                hand.frame();
+                hand.wait(30);
+                hand.up(1, dragged);
+                hand.frame();
+                check(app.hud().options().sound_volume > 52 && saved.has(OptionsState::key(OptionSetting::SoundVolume)) &&
+                          saved.get_int(OptionsState::key(OptionSetting::SoundVolume), -1, 0, 100) == app.hud().options().sound_volume,
+                      "(a plain lift writes the value under the finger: " + std::to_string(app.hud().options().sound_volume) + ")");
+            }
+            app.hud().close_options();
+        }
         s.clear();
         s.select({s.worker});
         hand.down(1, g);
@@ -2096,6 +2166,8 @@ void test_other_screens() {
                     hand.frame();
                     check(app.state() == AppState::MapSelect && app.is_running() && app.touch().fingers() == 0,
                           std::string(on.x == start.x ? "START" : "Leave") + " of the setup screen under a finger that is cancelled by " + (cause == 0 ? "the page" : cause == 1 ? "a lost focus" : "a size change") + ": it does not fire");
+                    app.map_select().handle_mouse_up(on.x, on.y, SDL_BUTTON_LEFT);       // (a release inside the button with no press before it: if the cancel left the capture standing this would fire it)
+                    check(app.state() == AppState::MapSelect && app.is_running(), std::string("... and its capture is gone: a release inside ") + (on.x == start.x ? "START" : "Leave") + " with no press before it fires nothing");
                     app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_GAINED; return we; }());
                 }
             }
