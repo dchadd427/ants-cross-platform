@@ -273,7 +273,7 @@ void Memory::update(const BotView& v, const MapInfo& map) {
     }
     while (!hit_log_.empty() && v.tick() > hit_log_.front().first + 2400u) hit_log_.erase(hit_log_.begin());
 
-    // the ally's ants that were hit since the previous look (their hit points are hidden, the clip is on the screen)
+    // the ally's ants that were hit since the previous look (the hit clip: the flinch or the flight of the ant that was struck)
     ally_hits_.clear();
     std::map<uint32_t, bool> hit_now;
     if (v.ally() < sim::MAX_PLAYERS) {

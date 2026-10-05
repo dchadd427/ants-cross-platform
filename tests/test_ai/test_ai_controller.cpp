@@ -196,7 +196,7 @@ void run_controller_tests() {
                     mine_seen[seat].push_back(static_cast<uint32_t>(v.mine().size()));
                     others_seen[seat].push_back(static_cast<uint32_t>(v.others().size()));
                     for (const AntView& a : v.mine()) ASSERT_EQ(a.team, seat);
-                    for (const AntView& a : v.others()) ASSERT_TRUE(a.team != seat && a.hp == 0);                   // another team's hit points are not on the screen
+                    for (const AntView& a : v.others()) ASSERT_TRUE(a.team != seat && a.hp > 0 && a.hp <= 10);     // another team's hit points are on the view (the owner's decision)
                 });
                 ASSERT_TRUE(b[seat] != nullptr && b[seat]->started && b[seat]->seat == seat);
             }
@@ -970,7 +970,7 @@ void run_controller_tests() {
         const sim::WorldState& ws = sim.get_world_state();
         bool engine_knows_other_hp = false;
         for (const sim::AntSnapshot& a : ws.ants) engine_knows_other_hp = engine_knows_other_hp || (a.player_id != 0 && a.hp > 0);
-        ASSERT_TRUE(engine_knows_other_hp);                                                   // (so the zeros below are the view's doing)
+        ASSERT_TRUE(engine_knows_other_hp);                                                   // (so the hit points below come from the engine: the view hides only the carried points)
         const BotView v0 = BotView::build(sim, 0);
         ASSERT_EQ(v0.score(), 150);                                                           // 100 + its ally's 50
         ASSERT_EQ(v0.rows()[1].score, 150);
@@ -982,7 +982,7 @@ void run_controller_tests() {
         ASSERT_EQ(v0.mine().size(), 12u);
         ASSERT_EQ(v0.others().size(), 36u);
         for (const AntView& a : v0.mine()) ASSERT_TRUE(a.team == 0 && a.hp > 0);              // the own ants are exact
-        for (const AntView& a : v0.others()) ASSERT_TRUE(a.team != 0 && a.hp == 0 && a.carried_points == 0);
+        for (const AntView& a : v0.others()) ASSERT_TRUE(a.team != 0 && a.hp > 0 && a.carried_points == 0);
         const BotView v2 = BotView::build(sim, 2);
         ASSERT_EQ(v2.invite_from(), 3);                                                       // the invitation that waits for seat 2
         ASSERT_EQ(v2.score(), 0);

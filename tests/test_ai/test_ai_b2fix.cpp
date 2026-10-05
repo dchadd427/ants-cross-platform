@@ -698,7 +698,7 @@ void run_b2fix_tests() {
         ASSERT_TRUE(states.size() >= 4);                                                                        // ants in fights, flights and bomb stuns were commanded as well
     } TEST_END();
 
-    TEST_CASE("AI1.25 Non-Interference: Two Engines That Differ Only In What Other Teams Hide (Hit Points, Carried Points, Eggs, An Egg Incubating, Orders In Flight) Give Byte-Identical Views To The Observing Seat; What Is On The Screen (A Crumb) Or Is The Seat's Own (Its Hit Points) Does Differ") {
+    TEST_CASE("AI1.25 Non-Interference: Two Engines That Differ Only In What Other Teams Hide (Carried Points, Eggs, An Egg Incubating, Orders In Flight) Give Byte-Identical Views To The Observing Seat; What Is On The Screen (A Crumb) Or Is The Seat's Own (Its Hit Points), Or Is Visible By The Owner's Decision (Another Team's Hit Points), Does Differ") {
         const auto make_pair_of_worlds = [&](uint8_t seat, sim::SimulationEngine& a, sim::SimulationEngine& b, bool with_orders) -> void {
             build_world(a, 51, 12);
             build_world(b, 51, 12);
@@ -725,10 +725,7 @@ void run_b2fix_tests() {
             for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
                 if (t == seat) continue;
                 b.set_player_eggs(t, 9);                                                                         // eggs
-                for (uint32_t id : ants_of(b, t)) {
-                    b.get_unit(id).hp = 6;                                                                       // hit points
-                    b.get_unit(id).carried_points = 25;                                                          // carried points
-                }
+                for (uint32_t id : ants_of(b, t)) b.get_unit(id).carried_points = 25;                            // carried points (the hit points of every ant are on the view: the owner's decision, the control below)
                 b.set_player_score(t, 500);
                 ASSERT_TRUE(b.try_hatch(t) == sim::SimulationEngine::HatchResult::Started);                      // an egg incubating, the score back to 300
                 if (with_orders) ASSERT_TRUE(b.apply_command(move_of(t, {ants_of(b, t)[0], ants_of(b, t)[1]}, 30, 30)).accepted());   // orders in flight
@@ -750,18 +747,19 @@ void run_b2fix_tests() {
                 ASSERT_TRUE(a.get_player_eggs(other) != b.get_player_eggs(other));
                 ASSERT_TRUE(a.get_pending_hatch_count(other) != b.get_pending_hatch_count(other));
                 const uint32_t id = ants_of(a, other)[2];
-                ASSERT_TRUE(a.get_unit(id).hp != b.get_unit(id).hp && a.get_unit(id).carried_points != b.get_unit(id).carried_points);
+                ASSERT_TRUE(a.get_unit(id).carried_points != b.get_unit(id).carried_points);
             }
-            // controls: what the screen shows, and what is the seat's own, DOES change the view (the engine's world state is a cache that a tick rebuilds)
+            // controls: what the screen shows, what is the seat's own, and the hit points of another team's ant (the owner's decision), DO change the view (the engine's world state is a cache that a tick rebuilds)
             const uint8_t other = static_cast<uint8_t>((seat + 1) % sim::MAX_PLAYERS);
-            for (const bool own : {false, true}) {
+            for (const int control : {0, 1, 2}) {
                 sim::SimulationEngine a;
                 sim::SimulationEngine b;
                 make_pair_of_worlds(seat, a, b, false);
                 a.tick();
                 b.tick();
                 ASSERT_EQ(view_text(BotView::build(a, seat)), view_text(BotView::build(b, seat)));
-                if (own) b.get_unit(ants_of(b, seat)[0]).hp = 3;                                                 // the seat's own hit points: its own business
+                if (control == 1) b.get_unit(ants_of(b, seat)[0]).hp = 3;                                        // the seat's own hit points: its own business
+                else if (control == 2) b.get_unit(ants_of(b, other)[0]).hp = 3;                                  // another team's hit points: on the view since the owner's decision
                 else b.get_unit(ants_of(b, other)[0]).holding = 1;                                               // another team's crumb: on the screen
                 a.tick();
                 b.tick();

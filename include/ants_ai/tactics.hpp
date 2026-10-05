@@ -3,9 +3,9 @@
 // What the tasks of the standard bot (standard_tasks.hpp) share: the switches and numbers of a level (LevelPlan), the geometry of a hill's thief hole (the three tiles in front of
 // it), and the bot's soft MEMORY of the last looks (who was hit, which enemy ants moved, which thieves were seen).
 //
-// Everything in here is something a person of the seat could know: the memory is built from the BotView alone (the hit points of the seat's OWN ants, the tile, type and drawn state of
-// every ant, the grid), and the geometry is the hill's. Nothing here reads another team's hit points, carried points, orders, eggs or timers, and nothing is a fact that the next look
-// could not give back: a bot that is started in the middle of a match has an empty memory and plays on (a hit that it did not see is a hit that it does not answer).
+// Everything in here is something a person of the seat could know: the memory is built from the BotView alone (the hit points, the tile, type and drawn state of every ant,
+// the grid), and the geometry is the hill's. Nothing here reads another team's carried points, orders, eggs or timers (the hit points of every ant are on the view by the owner's decision,
+// BotView), and nothing is a fact that the next look could not give back: a bot that is started in the middle of a match has an empty memory and plays on (a hit that it did not see is a hit that it does not answer).
 
 #include <array>
 #include <cstddef>
