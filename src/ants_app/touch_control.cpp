@@ -229,7 +229,8 @@ void TouchControl::move_two(uint32_t now_ms, Actions& out) {
         panned_y_ = want_y;
     }
     if (levels_.empty()) return;
-    const double ideal = static_cast<double>(zoom0_) * distance(first->x, first->y, second->x, second->y) / span0_;
+    const double span = std::max(distance(first->x, first->y, second->x, second->y), touch::kMinSpanSlops * gesture_slop_);        // (floored as the start span is: fingers that touch zoom nothing)
+    const double ideal = static_cast<double>(zoom0_) * span / span0_;
     if (!(ideal > 0.0) || !std::isfinite(ideal)) return;
     const size_t index = pick_level(levels_, level_index_, ideal);
     if (index == level_index_) return;

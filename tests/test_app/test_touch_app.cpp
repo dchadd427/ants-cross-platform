@@ -1129,6 +1129,31 @@ void test_pinch() {
     notch(app, -1);
     const float one_out = app.zoom();
     check(one_out == levels[5] && pinched <= one_out, "the wheel's levels are the pinch's: a notch out of 1 is " + zoom::level_name(one_out));
+    // two fingers that land closer than the floor (3 slops): a jitter and a spread under it change nothing, and the zoom does not run backwards (review L1)
+    {
+        app.set_zoom(1.0f, mid.x, mid.y);
+        const int floor = static_cast<int>(std::lround(touch::kMinSpanSlops * app.touch_slop()));
+        const int close = std::max(4, floor / 3);
+        hand.down(1, Pt{mid.x - close / 2, mid.y});
+        hand.down(2, Pt{mid.x - close / 2 + close, mid.y});
+        hand.frame();
+        for (const int spread : {close + 1, close - 1, close + 1, 2 * close, floor - 2}) {
+            hand.wait(16);
+            hand.move(2, Pt{mid.x - close / 2 + spread, mid.y});
+            hand.frame();
+            check(app.zoom() == 1.0f, "fingers that landed " + std::to_string(close) + " px apart, now " + std::to_string(spread) + " (the floor is " + std::to_string(floor) + "): the zoom stays 1");
+        }
+        for (int i = 1; i <= 8; ++i) {
+            hand.wait(16);
+            hand.move(2, Pt{mid.x - close / 2 + floor + i * floor / 4, mid.y});
+            hand.frame();
+        }
+        check(app.zoom() > 1.0f, "spread to three floors it zooms in: " + zoom::level_name(app.zoom()));
+        hand.up(1, Pt{mid.x, mid.y});
+        hand.up(2, Pt{mid.x + 10, mid.y});
+        hand.frame();
+        app.set_zoom(1.0f, mid.x, mid.y);
+    }
     // the renderer cannot make its offscreen target: only the level 1 is offered, and a pinch changes nothing (as the wheel)
     app.renderer().set_fail_world_target(true);
     app.run_frame_with_delta(0.016f);

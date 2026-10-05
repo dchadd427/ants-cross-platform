@@ -33,7 +33,8 @@ inline constexpr double kSlopFloorDevicePx = 6.0;
 /// A level changes when the fingers have gone this far past the middle of the step to the next one (a fraction of the step in ratio): 0.15 leaves a dead band of 0.3 of a step
 /// around the middle, so a pinch that rests at a level does not flutter between two
 inline constexpr double kHysteresis = 0.15;
-/// Two fingers that land closer than this many slops are measured from this distance (a pinch that starts from touching fingers would otherwise zoom by hundreds)
+/// Two fingers closer than this many slops are measured as this far apart, at the start and afterwards (a pinch that starts from touching fingers would otherwise zoom by hundreds, and a
+/// spread from 10 to 20 pixels would zoom OUT)
 inline constexpr double kMinSpanSlops = 3.0;
 /// An event is stamped when SDL SAW it, which a stall makes late (the web: when the browser handed it to the page; native: when the game read the queue). It is judged no later than this
 /// long after the last moment the model knew what the finger did (a frame, or the first finger's arrival): a frame every 100 ms or faster loses nothing, a stall of any length cannot

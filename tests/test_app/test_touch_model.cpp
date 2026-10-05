@@ -1322,6 +1322,36 @@ void test_pinch() {
         check(zooms == 2 && last == 1.0f, "just below it: back to 1");
     }
     {
+        // fingers that land closer than the floor (3 slops: 30 at the rig's slop of 10): the CURRENT distance is floored as the start one is (review L1). A jitter of a pixel between fingers that
+        // landed 10 apart zoomed to the bottom level, and a spread from 10 to 20 zoomed OUT
+        const double floor = touch::kMinSpanSlops * 10.0;
+        const auto zooms_of = [](const TouchControl::Actions& out) {
+            std::vector<float> levels_asked;
+            for (const TouchAction& a : out) {
+                if (a.kind == Kind::Zoom) levels_asked.push_back(a.level);
+            }
+            return levels_asked;
+        };
+        Rig r;
+        r.down(1, 295, 200, T0);
+        r.down(2, 305, 200, T0 + 10);
+        check(zooms_of(framed_move(r, 2, 306, 200, T0 + 20)).empty(), "a jitter of 1 px between fingers that landed 10 apart: no zoom");
+        check(zooms_of(framed_move(r, 2, 304, 200, T0 + 25)).empty(), "... the other way: no zoom");
+        check(zooms_of(framed_move(r, 2, 315, 200, T0 + 30)).empty(), "a spread from 10 to 20: no zoom (it used to zoom OUT)");
+        check(zooms_of(framed_move(r, 2, 295.0 + floor, 200, T0 + 40)).empty(), "to the floor itself: no zoom");
+        check(zooms_of(framed_move(r, 2, 295.0 + floor * (up_ratio - 0.01), 200, T0 + 50)).empty(), "just under the threshold above the floor: no zoom");
+        const std::vector<float> in = zooms_of(framed_move(r, 2, 295.0 + floor * (up_ratio + 0.01), 200, T0 + 60));
+        check(in.size() == 1 && in[0] == levels[3], "just over it: the next level in, as for fingers that landed far apart");
+        const std::vector<float> back = zooms_of(framed_move(r, 2, 307, 200, T0 + 70));        // the fingers come back together: the start level, never below it
+        check(back.size() == 1 && back[0] == 1.0f, "the fingers come back to 12 apart: the start level (1), not a zoom out");
+        Rig t;                                                  // fingers that touch (distance 0) and spread apart: the same floor
+        t.down(1, 300, 200, T0);
+        t.down(2, 300, 200, T0 + 10);
+        check(zooms_of(framed_move(t, 2, 310, 200, T0 + 20)).empty() && zooms_of(framed_move(t, 2, 330, 200, T0 + 30)).empty(), "fingers that landed touching and spread to a floor's width: no zoom");
+        const std::vector<float> wide = zooms_of(framed_move(t, 2, 300.0 + floor * 2.5, 200, T0 + 40));
+        check(wide.size() == 1 && wide[0] == levels[0], "and on to two and a half floors: the top level (2.5 is past every threshold), in one action");
+    }
+    {
         Rig r;                                                  // a long spread goes up to the top level in one action and then says nothing more
         r.down(1, 200, 200, T0);
         r.down(2, 300, 200, T0 + 10);
