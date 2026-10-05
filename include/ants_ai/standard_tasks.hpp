@@ -439,6 +439,8 @@ public:
     /// The Combat Ants that hold the walls of the fire-in at the moment (plan.sabotage_safe), the walls of the ring that the enemy put out, and the looks at which a fire-in was not started
     /// because the enemy could put it out and no force was there to hold the walls
     size_t escorts() const noexcept { return escorts_.size(); }
+    /// How many times an escort was called (taken from the economy to hold the entrance): two for a fire-in, and none for a bot that has no Fire Ant
+    uint32_t escorts_called() const noexcept { return escorts_called_; }
     uint32_t put_out() const noexcept { return put_out_; }
     uint32_t refused_safe() const noexcept { return refused_safe_; }
     bool gave_up(uint8_t team, uint64_t tick) const noexcept { return team < sim::MAX_PLAYERS && giveup_until_[team] > tick; }
@@ -466,6 +468,7 @@ private:
     uint64_t ring_done_{0};                          // since when the ring stands (0: it does not)
     uint32_t put_out_{0};
     uint32_t refused_safe_{0};
+    uint32_t escorts_called_{0};
     void release_escorts(AntLedger& ledger);
 };
 

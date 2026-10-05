@@ -595,6 +595,10 @@ void run_contest_tests() {
                 }
                 rig.run(900);
                 ASSERT_TRUE(lit(sim) >= 6);
+                rig.run(2000);                                                                                                       // the ring stands, the escorts held it for sabotage_escort_ticks: they are let go ...
+                ASSERT_TRUE(lit(sim) >= 6);
+                ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 0u);
+                ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 2u);                                                    // ... and not called to the entrance again and again
             }
             // one Combat Ant is no force: no fire-in
             sim::SimulationEngine one;
@@ -603,6 +607,20 @@ void run_contest_tests() {
             rig1.run(1500);
             ASSERT_EQ(lit(one), 0u);
             ASSERT_TRUE(rig1.as<StandardBot>().sabotage().refused_safe() >= 1u);
+        }
+        {   // (c2) no Fire Ant, nobody to escort: two Combat Ants of the bot stay where they are (nobody is called to an enemy gate for a fire-in that cannot be made)
+            sim::SimulationEngine sim;
+            empty_field(sim, 90);
+            sim.set_player_score(1, 400);
+            for (int i = 0; i < 2; ++i) sim.spawn_unit(0, sim::AntType::Combat, TileCoord{30 + i, 33});
+            sim.spawn_unit(1, sim::AntType::Fire, TileCoord{46, 14});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(600);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 0u);
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                if (a.player_id == 0 && a.raw_type == sim::AntType::Combat) ASSERT_TRUE(tc(a.tile_x, a.tile_y).chebyshev_dist(station) > 10);
+            }
         }
         {   // (d) when the enemy's Fire Ant is dead and no power-up is left to take, the lone Fire Ant goes: a Fire Ant that dies drops its power-up (the enemy can take it: no fire-in until it is gone)
             sim::SimulationEngine sim;

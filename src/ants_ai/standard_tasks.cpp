@@ -1533,8 +1533,8 @@ void StrikeTask::step(TaskContext& c) {
         if (!force_.empty()) disband(c);
         return;
     }
-    // behind the leader: the old trigger (plan.strikes, a margin in points) or the tiers of the pressure (plan.catchup); the tiers widen the force (workers from tier 2), lower the odds (120 percent at
-    // tier 2, 100 at tier 3) and take away the stop of the last minutes (tier 3: all-in)
+    // behind the leader: the old trigger (plan.strikes, a margin in points) or the tiers of the pressure (plan.catchup); the tiers lower the odds (120 percent at tier 2, 100 at tier 3), take away
+    // the stop of the last minutes (tier 3: all-in) and may widen the force (workers from plan.catchup_workers_tier: never as shipped, they kill nothing above two hit points)
     const bool striking = (plan.strikes && st.behind) || (plan.catchup && st.tier >= 1);
     const bool workers_join = plan.strike_workers || (plan.catchup && st.tier >= plan.catchup_workers_tier);
     const uint32_t reserve = plan.catchup && st.tier >= 3 ? std::min<uint32_t>(plan.strike_reserve, 2u) : plan.strike_reserve;
@@ -1829,8 +1829,19 @@ void SabotageTask::step(TaskContext& c) {
         }
     }
     const sim::TileCoord station = foe_hill.origin.y >= 5 ? sim::TileCoord{foe_hill.origin.x + 1, foe_hill.origin.y - 4} : sim::TileCoord{foe_hill.origin.x + 1, foe_hill.origin.y + 6};
+    // Nobody is called to an enemy gate without a Fire Ant to light it (the one that this task has, or a free one: the choice below, the hands apart), and the escorts of a ring that stands are
+    // held for plan.sabotage_escort_ticks and then let go (and not taken again while it stands: ring_done_ is set until a wall has to be renewed)
+    bool fire_ant_ready = false;
+    for (const AntView& a : v.mine()) {
+        if (a.type != sim::AntType::Fire || a.hp < 5 || (a.id == tactics_.wall_keeper && plan.sabotage_spare_keeper)) continue;
+        const TaskId owner = c.ledger.owner(a.id);
+        if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
+        fire_ant_ready = true;
+    }
+    const bool ring_held = ring_done_ != 0;
+    const bool escorts_wanted = plan.sabotage_safe && can_put_out && (fire_ant_ready || ring_held) && !(ring_held && now >= ring_done_ + plan.sabotage_escort_ticks);
     bool escorted = true;
-    if (plan.sabotage_safe && can_put_out) {
+    if (escorts_wanted) {
         for (auto it = escorts_.begin(); it != escorts_.end();) {                         // the escorts that are still ours and fit
             const AntView* e = find_ant(v.mine(), *it);
             if (e == nullptr || c.ledger.owner(*it) != id() || e->hp < 5) {
@@ -1851,7 +1862,10 @@ void SabotageTask::step(TaskContext& c) {
             std::stable_sort(cands.begin(), cands.end(), [&](const AntView* x, const AntView* y) { return x->tile.chebyshev_dist(station) < y->tile.chebyshev_dist(station); });
             for (const AntView* a : cands) {
                 if (escorts_.size() >= plan.sabotage_escort) break;
-                if (c.ledger.take(a->id, id())) escorts_.insert(a->id);
+                if (c.ledger.take(a->id, id())) {
+                    escorts_.insert(a->id);
+                    ++escorts_called_;
+                }
             }
         }
         if (escorts_.size() < plan.sabotage_escort) {                                     // no force to hold the walls: no fire-in
