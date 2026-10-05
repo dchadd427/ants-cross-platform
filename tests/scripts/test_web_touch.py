@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""The game page on a TOUCH SCREEN (run by ./run_tests.sh --fast and by the CI). The game reads its fingers itself (SDL's touch events: a tap is a left click, a hold a right click, two
+fingers move and zoom the map: src/ants_app/application_touch.cpp, include/ants_app/touch_control.hpp); what the page does is keep the browser out of the way. It cannot be run on a phone
+here, so everything that the page can say about it without one is checked:
+
+  - the style: the canvas has touch-action none, the page has manipulation (no double-tap zoom) and every control too, a pull down or a swipe past the end of the page does not reload it or
+    chain to another scroller (overscroll-behavior: none, which does not stop the page's own scrolling), a long press makes no callout or selection over the game, the viewport still
+    forbids scaling (Chrome on Android obeys it; iOS Safari does not, which is what the gesture listeners are for);
+  - the script: the block of the guards exists once and is RUN with fakes for the page (node, when it is installed: tests/scripts/web_touch_check.js): the listeners that it registers and how
+    (the browser's pinch on the canvas AND the document, not passive; the touch listeners passive: the page never cancels, stops or delays a touch), the cancel of the context menu, the
+    game told of a touchcancel, the trackpad's pinch still zooming the game through the wheel, and the count of fingers that cannot stick;
+  - the page's other code: no touchmove listener anywhere, the sound's unlock still on touchend (a hold that ends in a right click still unlocks it), nothing in the page stops a touch event;
+  - the guide's text for touch, and what the game exports for the page and for the browser check.
+The same things in a real browser: tests/scripts/web_touch_check.py (opt-in, against a running page; the coordinator runs it on the local web image).
+"""
+import os
+import re
+import shutil
+import subprocess
+import unittest
+
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+SHELL = os.path.join(REPO, "web", "shell.html")
+CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_touch_check.js")
+APPLICATION = os.path.join(REPO, "src", "ants_app", "application.cpp")
+APPLICATION_TOUCH = os.path.join(REPO, "src", "ants_app", "application_touch.cpp")
+
+
+def read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+class PageCase(unittest.TestCase):
+    """assertRegex / assertNotRegex without printing the whole page when they fail"""
+
+    def found(self, text, pattern, msg=None):
+        self.assertIsNotNone(re.search(pattern, text), msg or ("lacks: " + pattern))
+
+    def not_found(self, text, pattern, msg=None):
+        self.assertIsNone(re.search(pattern, text), msg or ("has: " + pattern))
+
+
+def css_rule(page, selector_pattern):
+    """The body of the first rule of the page's style whose selector matches"""
+    style = re.sub(r"/\*.*?\*/", "", "\n".join(re.findall(r"<style>(.*?)</style>", page, re.S)), flags=re.S)
+    match = re.search(r"(?:^|\})\s*" + selector_pattern + r"\s*\{(.*?)\}", style, re.S)
+    return match.group(1) if match else None
+
+
+def script_of(page):
+    return "\n".join(re.findall(r"<script>(.*?)</script>", page, re.S))
+
+
+def without_comments(js):
+    return "\n".join(re.sub(r"//.*$", "", line) for line in js.splitlines())
+
+
+class TheStyle(PageCase):
+    def setUp(self):
+        self.page = read(SHELL)
+
+    def test_the_canvas_takes_the_browsers_touch_away_and_the_page_keeps_panning_without_double_tap_zoom(self):
+        canvas = css_rule(self.page, r"canvas\.emscripten")
+        self.assertIsNotNone(canvas)
+        self.assertIn("touch-action: none;", canvas)
+        self.assertIn("-webkit-touch-callout: none;", canvas)
+        root = css_rule(self.page, r"html")
+        self.assertIsNotNone(root)
+        self.assertIn("touch-action: manipulation;", root)           # the whole page: panning and pinch stay, double-tap zoom goes (iOS Safari honours it from iOS 13)
+        self.assertIn("overscroll-behavior: none;", root)
+
+    def test_a_swipe_past_the_end_of_the_page_does_not_reload_it(self):
+        body = css_rule(self.page, r"body")
+        self.assertIsNotNone(body)
+        self.assertIn("overscroll-behavior: none;", body)
+        self.not_found(css_rule(self.page, r"html") or "", r"overflow\s*:\s*hidden", "the page itself must scroll: the guide is below the game")
+
+    def test_a_long_press_on_the_game_is_no_callout_no_selection_no_flash(self):
+        stage = css_rule(self.page, r"#game-stage")
+        self.assertIsNotNone(stage)
+        for declaration in ("-webkit-touch-callout: none;", "-webkit-user-select: none;", "user-select: none;", "-webkit-tap-highlight-color: transparent;"):
+            self.assertIn(declaration, stage)
+
+    def test_every_control_has_manipulation(self):
+        style = "\n".join(re.findall(r"<style>(.*?)</style>", self.page, re.S))
+        rules = re.findall(r"([^{}]+)\{([^{}]*)\}", style)
+        controls = [(sel.strip(), body) for sel, body in rules if "cursor: pointer" in body]
+        self.assertGreaterEqual(len(controls), 6, "the page has controls that this test must see")
+        for selector, body in controls:
+            self.assertIn("touch-action: manipulation", body, selector + " is a control without touch-action: manipulation (no double-tap zoom on a phone)")
+        # the buttons that the script makes itself
+        for text in re.findall(r"cursor:pointer[^'\"]*", self.page):
+            self.assertIn("touch-action:manipulation", text, "a button of the script's has no touch-action: " + text[:60])
+
+    def test_the_viewport_still_forbids_scaling(self):
+        meta = re.search(r'<meta name="viewport" content="([^"]*)">', self.page)
+        self.assertIsNotNone(meta)
+        for part in ("width=device-width", "initial-scale=1.0", "maximum-scale=1.0", "user-scalable=no", "viewport-fit=cover"):
+            self.assertIn(part, meta.group(1))
+
+
+class TheScript(PageCase):
+    def setUp(self):
+        self.page = read(SHELL)
+        self.script = script_of(self.page)
+
+    def test_the_block_of_the_guards_is_there_once(self):
+        self.assertEqual(len(re.findall(r"// ANTS_TOUCH_BEGIN", self.page)), 1)
+        self.assertEqual(len(re.findall(r"// ANTS_TOUCH_END", self.page)), 1)
+        self.assertLess(self.page.index("// ANTS_TOUCH_BEGIN"), self.page.index("// ANTS_TOUCH_END"))
+
+    def test_the_browsers_pinch_is_cancelled_on_the_canvas_and_the_document_and_not_passively(self):
+        block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
+        self.found(block, r"\['gesturestart', 'gesturechange', 'gestureend'\]\.forEach\(function \(name\) \{\s*document\.addEventListener\(name, .*\{ passive: false \}\);")
+        for name in ("gesturestart", "gesturechange", "gestureend"):
+            self.assertIsNotNone(re.search(r"canvas\.addEventListener\('%s',.*?\}, \{ passive: false \}\);" % name, block, re.S), "the canvas's %s is cancelled, not passively" % name)
+
+    def test_the_game_is_told_of_a_touchcancel(self):
+        block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
+        self.found(block, r"window\.addEventListener\('touchcancel'")
+        self.assertIn("Module._ants_touch_cancel", block)
+
+    def test_the_context_menu_is_cancelled_over_the_game(self):
+        block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
+        self.found(block, r"boxElement\.addEventListener\('contextmenu', function \(e\) \{ e\.preventDefault\(\); \}\);")
+        self.assertIn('oncontextmenu="event.preventDefault()"', self.page)                    # (the canvas's own, as before)
+
+    def test_no_touchmove_listener_and_nothing_stops_a_touch(self):
+        code = without_comments(self.script)
+        self.not_found(code, r"addEventListener\(\s*['\"]touchmove['\"]", "the page adds no touchmove listener (it would have to be passive: false to cancel, and it cancels nothing)")
+        for name in ("touchstart", "touchend", "touchcancel"):
+            for listener in re.findall(r"addEventListener\(\s*['\"]%s['\"],(.*?)\n\s*\}\s*(?:,\s*\{[^}]*\})?\s*\);" % name, code, re.S):
+                self.not_found(listener, r"stopPropagation|stopImmediatePropagation|preventDefault", "a listener of %s stops or cancels the touch" % name)
+
+    def test_the_sounds_unlock_is_still_on_touchend(self):
+        self.found(self.script, r"var events = \['pointerdown', 'mousedown', 'touchend', 'click', 'keydown'\];")
+        self.found(self.script, r"events\.forEach\(function\(name\) \{ window\.addEventListener\(name, onPress, true\); \}\);")
+
+    def test_the_gesture_conversion_to_the_wheel_stands_down_while_fingers_are_on_the_game(self):
+        block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
+        self.found(block, r"if \(count > 0\) return;")
+        self.assertIn("new WheelEvent('wheel'", block)
+
+    def test_the_fullscreen_button_is_the_pages_own_where_the_browser_has_none(self):
+        # (what it does today, on an iPhone: no Fullscreen API for an element, so the page's own fullscreen with its button to leave it; nothing here changed it)
+        self.assertIn("var request = stageElement.requestFullscreen || stageElement.webkitRequestFullscreen;", self.script)
+        self.assertIn("if (!request) { setPageFullscreen(true); return; }", self.script)
+        self.assertIn('id="pseudo-exit"', self.page)
+
+
+class TheGuide(PageCase):
+    def setUp(self):
+        self.page = read(SHELL)
+        panel = re.search(r'<details class="info-col" id="guide-touch" open>(.*?)</details>', self.page, re.S)
+        self.assertIsNotNone(panel)
+        self.touch = panel.group(1)
+
+    def test_it_says_how_to_play_with_fingers(self):
+        for text in ("<strong>Tap</strong>", "left click", "<strong>Hold</strong>", "right click", "the ring closes", "when you lift the finger", "Hold on the minimap",
+                     "<strong>Drag</strong>", "selection box", "<strong>Move the map:</strong>", "drag with two fingers", "<strong>Zoom:</strong>", "pinch with two fingers",
+                     "<strong>Minimap:</strong>", "<strong>Fullscreen:</strong>"):
+            self.assertIn(text, self.touch, "the touch guide lacks: " + text)
+
+    def test_the_old_advice_that_there_is_no_right_click_is_gone(self):
+        self.not_found(self.touch, r"no right click")
+
+    def test_the_rest_of_the_guide_is_as_it_was(self):
+        self.assertIn("the mouse wheel (a trackpad's two-finger scroll or pinch) over the map zooms in and out towards the pointer", self.page)
+        self.assertIn("<strong>Right click:</strong>", self.page)
+
+
+class TheGame(PageCase):
+    def test_the_game_exports_what_the_page_and_the_browser_check_use(self):
+        source = read(APPLICATION)
+        self.found(source, r'extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel\(\)')
+        for case in range(16, 23):
+            self.found(source, r"case %d: return " % case, "ants_probe has no case %d for the touch model" % case)
+        self.assertIn('SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");', source)
+
+    def test_the_buzz_is_never_required(self):
+        source = read(APPLICATION_TOUCH)
+        self.assertIn("if (navigator.vibrate) navigator.vibrate(milliseconds);", source)
+        self.found(source, r"try \{ if \(navigator\.vibrate\)")
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the page's guards for a touch screen were NOT run (tests/scripts/web_touch_check.js)")
+class ThePagesOwnCode(unittest.TestCase):
+    def test_the_guards_with_fakes_for_the_page(self):
+        done = subprocess.run([shutil.which("node"), CHECK_JS, SHELL], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failures", done.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()
