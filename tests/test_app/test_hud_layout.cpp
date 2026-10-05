@@ -2297,6 +2297,284 @@ void test_net_overlay() {
     in.desynced = true;
     check(net_overlay_line(in).text == "Out of sync: the match has stopped." && net_overlay_line(in).alarm, "overlay: a desync comes first and is drawn in red");
     check(NET_WAIT_MESSAGE_MS == 1000, "overlay: the wait message shows at one second");
+
+    // ---- the way back, the missing seats, the vote and the countdown (net_overlay.hpp rules 1 - 4) ----
+    check(net_overlay_clock(0) == "0:00" && net_overlay_clock(12) == "0:12" && net_overlay_clock(60) == "1:00" && net_overlay_clock(125) == "2:05" && net_overlay_clock(3720) == "62:00",
+          "overlay: the clock is m:ss");
+    {   // 1. this machine's own way back: two lines, the seconds, the attempt from the second link on; it comes before everything else
+        NetOverlayInput w;
+        w.reconnecting = true;
+        w.away_s = 12;
+        w.attempts = 1;
+        NetOverlayLine l = net_overlay_line(w);
+        check(l.lines.size() == 2 && l.lines[0] == "Connection lost. Reconnecting... 0:12" && l.lines[1] == "Esc leaves the match" && l.text == l.lines[0] && !l.alarm && !l.vote.open,
+              "overlay: the way back says Connection lost and the seconds, and that Esc leaves the match");
+        w.attempts = 0;
+        check(net_overlay_line(w).lines[0] == "Connection lost. Reconnecting... 0:12", "overlay: before the first link there is no attempt to name");
+        w.attempts = 2;
+        check(net_overlay_line(w).lines[0] == "Connection lost. Reconnecting... 0:12 (attempt 2)", "overlay: the first attempt has failed: the second is named");
+        w.attempts = 3;
+        w.away_s = 125;
+        check(net_overlay_line(w).lines[0] == "Connection lost. Reconnecting... 2:05 (attempt 3)", "overlay: minutes and seconds, and the third attempt");
+        // ... above every other rule
+        w.desynced = true;
+        w.electing = true;
+        w.stalled_ms = 5000;
+        w.waiting_for = "Cat";
+        w.catching_up = true;
+        w.self_lag_behind_ms = 9000;
+        w.lag_seat = 1;
+        w.lag_name = "Bob";
+        w.lag_behind_ms = 9000;
+        w.notice = "Bob is the host now.";
+        w.held_ms = 5000;
+        w.missing = {NetOverlaySeat{1, "Bob", 40, false, 0}};
+        w.vote_open = true;
+        w.vote_seat = 1;
+        w.vote_name = "Bob";
+        w.resume_seconds_left = 7;
+        l = net_overlay_line(w);
+        check(l.lines.size() == 2 && l.lines[0] == "Connection lost. Reconnecting... 2:05 (attempt 3)" && !l.alarm && !l.vote.open, "overlay: the way back comes before every other line, a desync and a vote included");
+        w.reconnecting = false;
+        w.way_back_catching_up = true;
+        l = net_overlay_line(w);
+        check(l.lines.empty() && l.text.empty() && !l.vote.open, "overlay: while the match is given to this machine the catch-up screen is drawn instead of the match: no overlay");
+    }
+    {   // 3. the seats that are missing: a second of pause first, one line each, at most three, longest away first
+        NetOverlayInput m;
+        m.missing = {NetOverlaySeat{1, "Bob", 42, false, 0}};
+        m.held_ms = 999;
+        check(net_overlay_line(m).lines.empty(), "overlay: a blip of less than a second is not worth a banner");
+        m.held_ms = NET_HELD_MESSAGE_MS;
+        NetOverlayLine l = net_overlay_line(m);
+        check(l.lines.size() == 1 && l.lines[0] == "Bob (Red) lost the connection, waiting 0:42" && l.text == l.lines[0] && !l.alarm && !l.vote.open, "overlay: a seat that is missing: name, colour and the seconds");
+        m.missing = {NetOverlaySeat{0, "Ann", 65, false, 0}, NetOverlaySeat{2, "", 20, false, 0}, NetOverlaySeat{3, "Dee", 7, true, 45}};
+        l = net_overlay_line(m);
+        check(l.lines.size() == 3 && l.lines[0] == "Ann (Green) lost the connection, waiting 1:05" && l.lines[1] == "Player 3 (Blue) lost the connection, waiting 0:20" &&
+                  l.lines[2] == "Dee (Black) is coming back... 45%",
+              "overlay: one line each in the order given (longest away first), a nameless seat is \"Player 3\", a seat that is back says how far it has caught up");
+        m.missing.push_back(NetOverlaySeat{1, "Bob", 1, false, 0});
+        check(net_overlay_line(m).lines.size() == 3, "overlay: at most three lines");
+        m.missing = {NetOverlaySeat{3, "Dee", 7, true, 250}};
+        check(net_overlay_line(m).lines[0] == "Dee (Black) is coming back... 100%", "overlay: the percent is never more than 100");
+        // they come before today's lines (a desync is not shown while a seat is missing: the match is held anyway)
+        m.desynced = true;
+        m.notice = "x";
+        check(net_overlay_line(m).lines[0] == "Dee (Black) is coming back... 100%" && !net_overlay_line(m).alarm, "overlay: the missing seats come before today's lines");
+    }
+    {   // 2. a vote: the block, the counts, this player's choice, and no wait for a second; a seat that is back but keeps flapping has a line of its own
+        NetOverlayInput v;
+        v.missing = {NetOverlaySeat{1, "Bob", 45, false, 0}};
+        v.vote_open = true;
+        v.vote_seat = 1;
+        v.vote_name = "Bob";
+        v.votes_continue = 1;
+        v.voters = 2;
+        v.held_ms = 0;                                                           // (a seat with a long total absence that is lost again: the vote is open at once)
+        NetOverlayLine l = net_overlay_line(v);
+        check(l.lines.size() == 1 && l.lines[0] == "Bob (Red) lost the connection, waiting 0:45" && l.vote.open && l.vote.count == "1 of 2 voted to continue" && l.vote.keep == "F2 Keep waiting" &&
+                  l.vote.go_on == "F3 Continue without Bob" && !l.vote.keep_pressed && !l.vote.go_on_pressed,
+              "overlay: a vote shows the seat that is missing, the count and the two buttons with their keys, at once");
+        v.my_vote = NetOverlayInput::Choice::Continue;
+        l = net_overlay_line(v);
+        check(l.vote.go_on_pressed && !l.vote.keep_pressed, "overlay: this player's choice is the button that is pressed (continue)");
+        v.my_vote = NetOverlayInput::Choice::KeepWaiting;
+        l = net_overlay_line(v);
+        check(l.vote.keep_pressed && !l.vote.go_on_pressed, "overlay: and keep waiting");
+        v.my_vote = NetOverlayInput::Choice::None;
+        v.vote_name.clear();
+        v.vote_seat = 2;
+        v.missing = {NetOverlaySeat{2, "", 45, false, 0}};
+        check(net_overlay_line(v).vote.go_on == "F3 Continue without Player 3", "overlay: a seat without a name is \"Player 3\" on the button too");
+        // a seat that flaps and is back: nobody is missing, the vote is about it, the block names it
+        NetOverlayInput f;
+        f.vote_open = true;
+        f.vote_seat = 3;
+        f.vote_name = "Dee";
+        f.votes_continue = 0;
+        f.voters = 2;
+        l = net_overlay_line(f);
+        check(l.lines.size() == 1 && l.lines[0] == "Dee (Black) keeps losing the connection" && l.vote.open && l.vote.count == "0 of 2 voted to continue" && l.vote.go_on == "F3 Continue without Dee",
+              "overlay: a seat that keeps losing its connection and is back is put to the vote: the block says which seat");
+        // a vote comes before the countdown and before today's lines
+        f.resume_seconds_left = 7;
+        f.back_name = "Dee";
+        f.desynced = true;
+        l = net_overlay_line(f);
+        check(l.lines.size() == 1 && l.lines[0] == "Dee (Black) keeps losing the connection" && !l.alarm, "overlay: a vote comes before the countdown and before today's lines");
+    }
+    {   // 4. the countdown after a pause: the seat that came back, or nobody; only when nothing above applies
+        NetOverlayInput c;
+        c.resume_seconds_left = 7;
+        c.back_name = "Bob";
+        NetOverlayLine l = net_overlay_line(c);
+        check(l.lines.size() == 1 && l.lines[0] == "Bob is back: the match goes on in 7" && !l.vote.open, "overlay: the countdown names the seat that came back");
+        c.back_name.clear();
+        check(net_overlay_line(c).lines[0] == "The match goes on in 7", "overlay: and says nothing of anybody when nobody came back (the others voted to go on without it)");
+        c.resume_seconds_left = 0;
+        check(net_overlay_line(c).lines.empty(), "overlay: no countdown, no line");
+        c.resume_seconds_left = 10;
+        c.desynced = true;
+        c.notice = "Bob is the host now.";
+        c.lag_seat = 1;
+        c.lag_behind_ms = 9000;
+        c.stalled_ms = 2000;
+        check(net_overlay_line(c).lines.size() == 1 && net_overlay_line(c).lines[0] == "The match goes on in 10" && !net_overlay_line(c).alarm, "overlay: the countdown comes before today's lines");
+    }
+    {   // the priorities as a table: the states that apply (in the columns) against the first line that is shown
+        struct Row {
+            const char* what;
+            bool way_back, vote, missing, countdown, desync, wait, lag;
+            const char* first;
+        };
+        const Row rows[] = {
+            {"nothing",                                false, false, false, false, false, false, false, ""},
+            {"lag only",                               false, false, false, false, false, false, true,  "Bob is lagging (9 s behind)"},
+            {"wait and lag",                           false, false, false, false, false, true,  true,  "Waiting for the other players..."},
+            {"desync and wait",                        false, false, false, false, true,  true,  false, "Out of sync: the match has stopped."},
+            {"countdown and desync",                   false, false, false, true,  true,  false, false, "Bob is back: the match goes on in 7"},
+            {"missing and countdown",                  false, false, true,  true,  false, false, false, "Bob (Red) lost the connection, waiting 0:45"},
+            {"missing and wait and desync",            false, false, true,  false, true,  true,  false, "Bob (Red) lost the connection, waiting 0:45"},
+            {"vote and missing",                       false, true,  true,  false, false, false, false, "Bob (Red) lost the connection, waiting 0:45"},
+            {"vote and countdown and lag",             false, true,  false, true,  false, false, true,  "Bob (Red) keeps losing the connection"},
+            {"way back and vote and missing",          true,  true,  true,  true,  true,  true,  true,  "Connection lost. Reconnecting... 0:05"},
+            {"way back and wait",                      true,  false, false, false, false, true,  false, "Connection lost. Reconnecting... 0:05"},
+            {"way back and desync",                    true,  false, false, false, true,  false, false, "Connection lost. Reconnecting... 0:05"},
+        };
+        for (const Row& r : rows) {
+            NetOverlayInput t;
+            t.reconnecting = r.way_back;
+            t.away_s = 5;
+            t.attempts = 1;
+            t.held_ms = 3000;
+            if (r.vote || r.missing) t.missing = {NetOverlaySeat{1, "Bob", 45, false, 0}};
+            if (r.vote) {
+                t.vote_open = true;
+                t.vote_seat = 1;
+                t.vote_name = "Bob";
+                t.voters = 2;
+                if (!r.missing) t.missing.clear();
+            }
+            if (r.countdown) {
+                t.resume_seconds_left = 7;
+                t.back_name = "Bob";
+            }
+            t.desynced = r.desync;
+            if (r.wait) t.stalled_ms = 4000;
+            if (r.lag) {
+                t.lag_seat = 1;
+                t.lag_name = "Bob";
+                t.lag_behind_ms = 9000;
+            }
+            const NetOverlayLine line = net_overlay_line(t);
+            const std::string first = line.lines.empty() ? std::string() : line.lines[0];
+            if (first != r.first) std::printf("    row \"%s\": the first line is \"%s\"\n", r.what, first.c_str());
+            check(first == r.first && line.text == first, "overlay: the priorities table (way back, vote, missing, countdown, today's lines)");
+            check(line.alarm == (!r.way_back && !r.vote && !r.missing && !r.countdown && r.desync), "overlay: only a desync that nothing above hides is red");
+        }
+    }
+    {   // a name is cut at the name: every line and every label fits the width that the caller gives, whatever the name is
+        const std::string name32(32, 'W');
+        for (const int32_t width : {422, 400, 380}) {                                                          // (the lines' own words are 330 px of the 8 px font: the name gets what is left)
+            NetOverlayInput f;
+            f.max_width = width;
+            f.measure = [](const std::string& text) { return static_cast<int32_t>(text.size()) * 8; };         // (a font of 8 px a character)
+            f.held_ms = 5000;
+            f.missing = {NetOverlaySeat{1, name32, 42, false, 0}, NetOverlaySeat{2, name32, 41, true, 99}, NetOverlaySeat{3, "", 40, false, 0}};
+            f.vote_open = true;
+            f.vote_seat = 1;
+            f.vote_name = name32;
+            f.votes_continue = 1;
+            f.voters = 3;
+            NetOverlayLine l = net_overlay_line(f);
+            check(l.lines.size() == 3 && l.vote.open, "overlay: the lines and the block are made for a name of 32 characters");
+            for (const std::string& text : l.lines) {
+                if (f.measure(text) > width) std::printf("    width %d: \"%s\" is %d px\n", width, text.c_str(), f.measure(text));
+                check(f.measure(text) <= width, "overlay: every line fits the width, the name cut");
+            }
+            check(f.measure(l.vote.count) <= width, "overlay: the count fits");
+            check(f.measure(l.vote.keep) + 16 + 8 + f.measure(l.vote.go_on) + 16 <= width, "overlay: the two buttons fit in one row");
+            check(l.lines[0].find("...") != std::string::npos, "overlay: a name that does not fit ends with the dots, at the name");
+            check(l.lines[0].find("lost the connection, waiting 0:42") != std::string::npos && l.lines[1].find("is coming back... 99%") != std::string::npos,
+                  "overlay: what is cut is the name, never the seconds or the percent");
+            check(l.vote.go_on.compare(0, 20, "F3 Continue without ") == 0, "overlay: and the label keeps its key and its words");
+        }
+        NetOverlayInput tiny;                                                     // a width that nothing fits in: the name is gone, the words stay, and nothing loops or breaks
+        tiny.max_width = 40;
+        tiny.measure = [](const std::string& text) { return static_cast<int32_t>(text.size()) * 8; };
+        tiny.held_ms = 5000;
+        tiny.missing = {NetOverlaySeat{1, name32, 42, false, 0}};
+        tiny.vote_open = true;
+        tiny.vote_seat = 1;
+        tiny.vote_name = name32;
+        check(net_overlay_line(tiny).lines.size() == 1 && net_overlay_line(tiny).lines[0].compare(0, 3, "...") == 0 && net_overlay_line(tiny).vote.go_on == "F3 Continue without ...", "overlay: a width that nothing fits in leaves the dots for the name");
+        NetOverlayInput plain;                                                    // no measure, no limit: nothing is cut
+        plain.held_ms = 5000;
+        plain.missing = {NetOverlaySeat{1, name32, 42, false, 0}};
+        check(net_overlay_line(plain).lines[0] == name32 + " (Red) lost the connection, waiting 0:42", "overlay: without a measure nothing is cut");
+    }
+    {   // where it all stands: the first line where it always stood, the others under it, the block under them; everything inside the view, at the original's picture and at the wide one
+        const LayoutRect views[] = {LayoutRect{16, 21, 442, 440}, ScreenLayout::with_size(960, 540).view()};
+        for (const LayoutRect& view : views) {
+            NetOverlayMetrics m;
+            m.line_w = {300, 250, 200};
+            m.text_h = 17;
+            m.count_w = 150;
+            m.keep_w = 100;
+            m.go_on_w = 180;
+            const NetOverlayLayout lay = net_overlay_layout(view, m, true);
+            const NetOverlayBox first = net_overlay_box(view, 300, 17);
+            check(lay.lines.size() == 3 && lay.lines[0].text_x == first.text_x && lay.lines[0].text_y == first.text_y && lay.lines[0].box == first.box, "overlay layout: the first line is where the one line always was");
+            for (size_t i = 1; i < lay.lines.size(); ++i) {
+                check(lay.lines[i].box.y >= lay.lines[i - 1].box.y + lay.lines[i - 1].box.h, "overlay layout: a line stands under the one before it, boxes apart");
+            }
+            check(lay.has_vote && lay.count.box.y >= lay.lines.back().box.y + lay.lines.back().box.h && lay.keep.y >= lay.count.box.y + lay.count.box.h, "overlay layout: the count line is under the lines and the buttons under it");
+            check(lay.keep.x + lay.keep.w < lay.go_on.x && lay.keep.y == lay.go_on.y && lay.keep.h == lay.go_on.h, "overlay layout: the two buttons stand side by side, a gap between");
+            check(lay.keep.w == 100 + 16 && lay.go_on.w == 180 + 16 && lay.keep_text_x == lay.keep.x + 8 && lay.go_on_text_x == lay.go_on.x + 8, "overlay layout: a button is its label and 8 px on both sides");
+            const int32_t row_left = lay.keep.x;
+            const int32_t row_right = lay.go_on.x + lay.go_on.w;
+            check(row_left >= view.x && row_right <= view.x + view.w && lay.keep.y + lay.keep.h <= view.y + view.h, "overlay layout: the buttons are inside the view");
+            check(std::abs((row_left - view.x) - (view.x + view.w - row_right)) <= 2, "overlay layout: the row is centred");
+            for (const NetOverlayBox& b : lay.lines) check(b.box.x >= view.x && b.box.x + b.box.w <= view.x + view.w, "overlay layout: every line is inside the view");
+            const NetOverlayLayout none = net_overlay_layout(view, m, false);
+            check(!none.has_vote && none.lines.size() == 3, "overlay layout: without a vote there is no block");
+            check(net_overlay_max_width(view) == view.w - 20, "overlay layout: a line may be the view's width less its boxes' sides and a margin");
+        }
+    }
+    {   // what the browser check reads of the lines (ants_probe 16 and 10000 +, read-only): how many there are, and each character of each line
+        const auto text_of = [](const NetOverlayLine& overlay, int line) {
+            std::string out;
+            for (int index = 0; index < 1000; ++index) {
+                const int code = net_overlay_probe(overlay, 10000 + 1000 * line + index);
+                if (code <= 0) break;
+                out.push_back(static_cast<char>(code));
+            }
+            return out;
+        };
+        const NetOverlayLine none;
+        check(net_overlay_probe(none, 16) == 0 && net_overlay_probe(none, 10000) == -1, "overlay probe: nothing shown is no line, and no character");
+        NetOverlayLine shown;
+        shown.lines = {"Bob is back: the match goes on in 7", "Esc leaves the match", ""};
+        check(net_overlay_probe(shown, 16) == 3, "overlay probe: it counts the lines");
+        check(text_of(shown, 0) == "Bob is back: the match goes on in 7" && text_of(shown, 1) == "Esc leaves the match" && text_of(shown, 2).empty(), "overlay probe: the characters of each line, read one at a time, are the line");
+        check(net_overlay_probe(shown, 10000 + 35) == 0 && net_overlay_probe(shown, 10000 + 999) == 0 && net_overlay_probe(shown, 10000 + 1000 * 2) == 0, "overlay probe: past the end of a line (or an empty one) is 0");
+        check(net_overlay_probe(shown, 10000 + 1000 * 3) == -1 && net_overlay_probe(shown, 10000 + 1000 * 9 + 5) == -1, "overlay probe: a line that is not there is -1");
+        NetOverlayLine accent;
+        accent.lines = {std::string("\xE9\xFF")};
+        check(net_overlay_probe(accent, 10000) == 0xE9 && net_overlay_probe(accent, 10001) == 0xFF, "overlay probe: a byte is a code from 0 to 255 (never a negative number)");
+        for (const int what : {-1, 0, 15, 17, 100, 9999}) check(net_overlay_probe(shown, what) == -1, "overlay probe: any other number is -1");
+        NetOverlayLine wide;
+        std::string long_text;
+        for (int i = 0; i < 350; ++i) long_text.push_back(static_cast<char>('A' + (i * 7 + i / 26) % 26));
+        wide.lines = {"x", long_text};
+        check(text_of(wide, 1) == long_text && net_overlay_probe(wide, 10000 + 1000 + 350) == 0 && net_overlay_probe(wide, 10000 + 1000 + 999) == 0,
+              "overlay probe: a line of 350 characters is read to its last character (the index runs to 999), and past it is 0");
+        NetOverlayInput lost;
+        lost.reconnecting = true;
+        lost.away_s = 12;
+        const NetOverlayLine real = net_overlay_line(lost);
+        check(net_overlay_probe(real, 16) == 2 && text_of(real, 0) == "Connection lost. Reconnecting... 0:12" && text_of(real, 1) == "Esc leaves the match", "overlay probe: it reads what the model makes for a lost connection");
+    }
 }
 
 // The network's share of the corner: "ping NN ms" and "delay NN ms" next to the frame rate (latency_corner.hpp). The strings, where the readout is drawn at all, the

@@ -234,6 +234,7 @@ void Room::begin_match(uint32_t now_ms) {
         sim_->set_player_name(seat, start.names[seat]);
     }
     started_ms_ = now_ms;                                        // (run_ms counts from here: the 5 s before the first turn count, the match's pauses do not)
+    last_person_ms_ = now_ms;
     build_session(restart_store_ != nullptr ? restart_store_->config().restart_vote_after_ms : net::kRestartVoteAfterMs);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);
@@ -373,10 +374,11 @@ void Room::update(uint32_t now_ms) {
 
     if (state_ == RoomState::Running && session_) {
         session_->update(now_ms);
-        if (record_ != nullptr && restart_store_ != nullptr && net::time_reached(now_ms, next_sync_ms_)) {       // the record is made durable once a second (what write() leaves to the operating system)
-            next_sync_ms_ = now_ms + restart_store_->config().sync_every_ms;
-            if (record_->dirty() && !record_->sync()) record_stop("the disk refused a flush: " + record_->error());
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            const net::Attendance::State st = session_->attendance().state(seat);
+            if (st == net::Attendance::State::Present || st == net::Attendance::State::CatchingUp) last_person_ms_ = now_ms;
         }
+        if (record_ != nullptr && restart_store_ != nullptr && net::time_reached(now_ms, next_sync_ms_)) sync_record(now_ms);       // the record is made durable once a second (what write() leaves to the operating system)
         last_turns_ = session_->turns_sealed();
         if (sim_) {
             last_ticks_ = static_cast<uint32_t>(sim_->current_tick());
@@ -454,6 +456,7 @@ void Room::record_open(uint32_t now_ms) {
         return;
     }
     const uint32_t every = std::max<uint32_t>(1, restart_store_->config().sync_every_ms);
+    sync_every_ms_ = every;
     next_sync_ms_ = now_ms + static_cast<uint32_t>(std::hash<std::string>{}(spec_.code) % every);      // (the rooms' syncs are spread over the second, not made all at once)
 }
 
@@ -493,6 +496,22 @@ void Room::drop_record() {
     record_->discard();
     record_.reset();
     stale_path_ = restart_store_ != nullptr && restart_store_->is_stale(path) ? path : std::string();
+}
+
+// The timed flush. It is measured in real time: a slow or busy disk makes the whole loop wait, and every room flushes once a second. A flush that takes more than slow_sync_ms doubles this room's interval to the
+// next one (to max_sync_every_ms at the most), a quicker one brings it back to sync_every_ms: a longer interval only leaves a longer tail to a crash (the record is made durable when the server stops).
+void Room::sync_record(uint32_t now_ms) {
+    const RestartConfig& cfg = restart_store_->config();
+    const uint32_t base = std::max<uint32_t>(1, cfg.sync_every_ms);
+    if (record_->dirty()) {
+        const uint32_t began = cfg.clock_ms ? cfg.clock_ms() : restart_steady_ms();
+        const bool synced = record_->sync();
+        const uint32_t took = (cfg.clock_ms ? cfg.clock_ms() : restart_steady_ms()) - began;
+        if (!synced) return record_stop("the disk refused a flush: " + record_->error());
+        const uint64_t longest = std::max<uint32_t>(base, cfg.max_sync_every_ms);
+        sync_every_ms_ = took > cfg.slow_sync_ms ? static_cast<uint32_t>(std::min<uint64_t>(longest, uint64_t{sync_every_ms_} * 2)) : base;
+    }
+    next_sync_ms_ = now_ms + sync_every_ms_;
 }
 
 void Room::flush_record() {
@@ -551,21 +570,19 @@ std::unique_ptr<Room> Room::refused(const RestartHead& head, const std::string& 
     return room;
 }
 
-Room::ReplayResult Room::replay(const RestartLoaded& rec, uint32_t restart_vote_after_ms, const ReplayLimits& limits, std::string& why) {
+Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_vote_after_ms, std::string& why) {
     why.clear();
     const RestartHead& h = rec.head;
     if (state_ != RoomState::Waiting || session_ != nullptr || !spec_.reconnect || restart_store_ == nullptr || h.code != spec_.code || !rec.ok()) {
         why = "the room is not one that a record can be restored into";
-        return ReplayResult::Refused;
+        return ReplayBegin::Refused;
     }
-    const auto clock = [&limits]() { return limits.clock ? limits.clock() : restart_steady_ms(); };
-    const uint32_t began = clock();
     // the bots: the specification's sat down when the room was made, the leader's fill sits down again now (the lobby refuses what the match could not have had)
     for (const ai::BotSpec& b : h.bots) {
         if ((h.fill_mask & (1u << b.seat)) == 0) continue;
         if (!lobby_.add_bot(b.seat, ai::bot_display_name(b))) {
             why = "a bot of the record cannot sit down again";
-            return ReplayResult::Refused;
+            return ReplayBegin::Refused;
         }
         bot_specs_.push_back(b);
         fill_seats_ = static_cast<uint8_t>(fill_seats_ | (1u << b.seat));
@@ -573,7 +590,7 @@ Room::ReplayResult Room::replay(const RestartLoaded& rec, uint32_t restart_vote_
     std::sort(bot_specs_.begin(), bot_specs_.end(), [](const ai::BotSpec& a, const ai::BotSpec& b) { return a.seat < b.seat; });
     if (bot_specs_.size() != h.bots.size()) {
         why = "the bots of the record do not all sit down again";
-        return ReplayResult::Refused;
+        return ReplayBegin::Refused;
     }
     const net::StartMsg& start = h.start;
     roster_ = start.roster;
@@ -596,49 +613,81 @@ Room::ReplayResult Room::replay(const RestartLoaded& rec, uint32_t restart_vote_
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((bot_mask & (1u << seat)) != 0) session_->add_bot_seat(seat);
     }
-    // The replay: every sealed turn goes into the log (what a player who comes back is given) and into the referee's runner, which runs them 20 at a time; at every checkpoint the referee's state
-    // hash must be the one that the old server had at that turn: a replay that is not the match that was played (the rules of this build are not those of the one that wrote the record) stops here.
-    // Every 20 turns the caller is asked whether to go on (the server was told to stop, the time of the whole restore is used up), and the room's own cap is looked at.
-    net::LockstepRunner& runner = session_->runner();
-    size_t next_check = 0;
-    ReplayCheck verdict = ReplayCheck::Go;
-    if (!for_each_restart_turn(rec, [&](const net::TurnMsg& turn) {          // (one decoded turn at a time: a record read as Streaming holds none)
-            if (!session_->restore_turn(turn)) {
-                why = "the turn log cannot hold the match (its limit, or the server's memory for logs)";
-                return false;
-            }
-            if ((turn.turn + 1) % net::kHashEveryTurns != 0) return true;
-            runner.fast_forward(static_cast<uint32_t>(runner.queued()));
-            if (next_check < rec.checks.size() && rec.checks[next_check].turn == turn.turn) {
-                if (sim_->state_hash().total != rec.checks[next_check].hash) {
-                    why = "the replay does not agree with the state hash that the record holds for turn " + std::to_string(turn.turn) + ": the rules of this build are not those that played the match";
-                    return false;
-                }
-                ++next_check;
-            }
-            if (limits.check) {
-                verdict = limits.check();
-                if (verdict != ReplayCheck::Go) return false;
-            }
-            if (clock() - began > limits.budget_ms) {
-                why = "the replay would take longer than the " + std::to_string(limits.budget_ms / 1000) + " s that a restore may";
-                return false;
-            }
-            return true;
-        })) {
-        if (verdict == ReplayCheck::Stop) return ReplayResult::Stopped;
-        if (verdict == ReplayCheck::Defer) return ReplayResult::Deferred;
-        if (why.empty()) why = "the record's turns could not be read again";
-        return ReplayResult::Refused;
+    replay_rec_ = &rec;
+    replay_reader_ = std::make_unique<RestartTurnReader>(rec);
+    replay_next_check_ = 0;
+    replay_work_ms_ = 0;
+    return ReplayBegin::Ready;
+}
+
+void Room::end_replay() noexcept {
+    if (replay_reader_ != nullptr) replay_read_ = replay_reader_->turns_read();
+    replay_reader_.reset();
+    replay_rec_ = nullptr;
+}
+
+// The replay: every sealed turn goes into the log (what a player who comes back is given) and into the referee's runner, which runs them 20 at a time; at every checkpoint the referee's state
+// hash must be the one that the old server had at that turn: a replay that is not the match that was played (the rules of this build are not those of the one that wrote the record) stops here.
+// The clock is looked at after every 20 turns: a slice ends within 20 turns' work of its time, and the room's own cap (RestartConfig::replay_budget_ms) is on the sum of its slices.
+Room::ReplayStep Room::replay_step(uint32_t slice_ms, const std::function<uint32_t()>& clock_fn, std::string& why) {
+    why.clear();
+    if (replay_reader_ == nullptr || replay_rec_ == nullptr || session_ == nullptr || replayed_ || restart_store_ == nullptr) {
+        why = "no replay is under way in this room";
+        return ReplayStep::Refused;
     }
+    const RestartLoaded& rec = *replay_rec_;
+    const auto clock = [&clock_fn]() { return clock_fn ? clock_fn() : restart_steady_ms(); };
+    const uint32_t began = clock();
+    const uint32_t cap = restart_store_->config().replay_budget_ms;
+    net::LockstepRunner& runner = session_->runner();
+    const auto refuse = [&](const std::string& reason) {
+        why = reason;
+        end_replay();
+        return ReplayStep::Refused;
+    };
+    net::TurnMsg turn;
+    while (replay_reader_->next(turn)) {                         // (one decoded turn at a time: a record read as Streaming holds none)
+        if (!session_->restore_turn(turn)) return refuse("the turn log cannot hold the match (its limit, or the server's memory for logs)");
+        if ((turn.turn + 1) % net::kHashEveryTurns != 0) continue;
+        runner.fast_forward(static_cast<uint32_t>(runner.queued()));
+        if (replay_next_check_ < rec.checks.size() && rec.checks[replay_next_check_].turn == turn.turn) {
+            if (sim_->state_hash().total != rec.checks[replay_next_check_].hash) {
+                return refuse("the replay does not agree with the state hash that the record holds for turn " + std::to_string(turn.turn) + ": the rules of this build are not those that played the match");
+            }
+            ++replay_next_check_;
+        }
+        const uint32_t spent = clock() - began;
+        if (replay_work_ms_ + spent > cap) return refuse("the replay would take longer than the " + std::to_string(cap / 1000) + " s that a restore may");
+        if (spent >= slice_ms) {                                 // this slice is used up: the rest of the turns are for the next
+            replay_work_ms_ += spent;
+            return ReplayStep::More;
+        }
+    }
+    if (replay_reader_->failed()) return refuse("the record's turns could not be read again (" + replay_reader_->why() + ")");
+    if (!finish_replay(rec, replay_next_check_, why)) {
+        end_replay();
+        return ReplayStep::Refused;
+    }
+    replay_work_ms_ += clock() - began;
+    restore_ms_ = replay_work_ms_;
+    end_replay();
+    return ReplayStep::Replayed;
+}
+
+// Every turn of the record has been given to the replay: the last turns are run, the replay must have run all of them and met every checkpoint, and what begin_restored() needs is kept (who is at the
+// table, where the record goes on being written). False, with the reason, when the replay is not the record.
+bool Room::finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why) {
+    net::LockstepRunner& runner = session_->runner();
     runner.fast_forward(static_cast<uint32_t>(runner.queued()));
     if (runner.next_turn_to_execute() != rec.turn_count || runner.queued() != 0 || !runner.at_boundary() || next_check != rec.checks.size()) {
         why = "the replay of the record did not run every turn of it";
-        return ReplayResult::Refused;
+        return false;
     }
     restored_hash_ = sim_->state_hash().total;
     // who is at the table: every seat of a person is held, except those that the match had dropped already (the engine knows who left: their Drop is in the turns)
-    replay_humans_ = static_cast<uint8_t>(start.roster & ~bot_mask);
+    uint8_t bot_mask = 0;
+    for (const ai::BotSpec& b : bot_specs_) bot_mask = static_cast<uint8_t>(bot_mask | (1u << b.seat));
+    replay_humans_ = static_cast<uint8_t>(roster_ & ~bot_mask);
     replay_dropped_ = 0;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((replay_humans_ & (1u << seat)) != 0 && sim_->is_player_dropped(seat)) replay_dropped_ = static_cast<uint8_t>(replay_dropped_ | (1u << seat));
@@ -646,9 +695,16 @@ Room::ReplayResult Room::replay(const RestartLoaded& rec, uint32_t restart_vote_
     replay_path_ = rec.path;
     replay_good_bytes_ = rec.good_bytes;
     replay_turns_ = rec.turn_count;
-    restore_ms_ = clock() - began;
     replayed_ = true;
-    return ReplayResult::Replayed;
+    return true;
+}
+
+Room::ReplayStep Room::replay(const RestartLoaded& rec, uint32_t restart_vote_after_ms, std::string& why, const std::function<uint32_t()>& clock) {
+    if (begin_replay(rec, restart_vote_after_ms, why) != ReplayBegin::Ready) return ReplayStep::Refused;
+    for (;;) {
+        const ReplayStep step = replay_step(std::numeric_limits<uint32_t>::max(), clock, why);
+        if (step != ReplayStep::More) return step;
+    }
 }
 
 bool Room::begin_restored(uint32_t now_ms, std::string& why) {
@@ -674,12 +730,14 @@ bool Room::begin_restored(uint32_t now_ms, std::string& why) {
     } else {
         record_hook_up();
         const uint32_t every = std::max<uint32_t>(1, restart_store_->config().sync_every_ms);
+        sync_every_ms_ = every;
         next_sync_ms_ = now_ms + static_cast<uint32_t>(std::hash<std::string>{}(spec_.code) % every);
     }
     if (!start_bots(seed_, why)) return false;                   // (the bots start again at the restored tick: their tasks are soft, docs/BOTS.md; a bot that was running goes on from what it sees)
     state_ = RoomState::Running;
     restored_ = true;
     restored_at_ms_ = now_ms;
+    last_person_ms_ = now_ms;                                    // (every seat of a person is held absent from now: the room is abandoned from now on, if nobody comes back)
     restored_turns_ = replay_turns_;
     last_turns_ = session_->turns_sealed();
     last_ticks_ = static_cast<uint32_t>(sim_->current_tick());
@@ -708,6 +766,13 @@ RoomBusy Room::busy(uint32_t now_ms) const {
     b.match = present > 0 || just_restored;
     b.players = present + (just_restored ? held : 0u);
     return b;
+}
+
+// A running match with nobody at it (every person's seat is held absent): since when, counted from the last pass in which a person was present or catching up (Room::update). A bot has no seat in the
+// attendance, so a room with only bots left counts as nobody here too (the room finishes "everybody left" by itself when no person is present or held, so this is about held seats).
+uint32_t Room::abandoned_ms(uint32_t now_ms) const {
+    if (state_ != RoomState::Running || session_ == nullptr) return 0;
+    return now_ms - last_person_ms_;
 }
 
 RoomStatus Room::status(uint32_t now_ms) const {
@@ -760,6 +825,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.record_kept = record_ != nullptr || stale;                // (a file that is still there is a record that a restart would use: never "not kept" while it is)
     s.record_stale = stale;
     s.record_bytes = record_ != nullptr ? record_->bytes() : 0u;
+    s.record_sync_ms = record_ != nullptr ? sync_every_ms_ : 0u;
     if (stale) {
         std::error_code size_ec;
         s.record_bytes = static_cast<uint64_t>(std::filesystem::file_size(stale_path_, size_ec));

@@ -24,20 +24,21 @@ services:
     restart: unless-stopped
     # A stop gives the server this long before docker kills it: on SIGTERM it makes the restart records of its running rooms durable (one fsync a room, a few milliseconds) and exits;
     # the records stay in /results/restart of the volume below and the server that starts again brings the matches back (docs/NETWORK_PORT.md "Restart records"; only rooms that hold
-    # seats keep a record: --reconnect, below). 15 s is the default 10 s and room for a slow volume (256 rooms at 30 ms for a flush are 7.7 s). Keep the volume: it holds the records.
+    # seats keep a record: every room does unless --no-reconnect, below). 15 s is the default 10 s and room for a slow volume (256 rooms at 30 ms for a flush are 7.7 s). Keep the volume: it holds the records.
     stop_grace_period: 15s
     # The page web/lobby.html (the front page) needs demo rooms, which are off by default: uncomment to allow them. The maps folder must hold the demo map and every map of
     # --demo-maps (the page offers the six maps of the original); the number of rooms is 1 to 255 (0, or 256 and more, stop the server at startup); a demo room waits
     # ten minutes for its players; whoever reaches a game port can fill the rooms.
     # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "12", "--demo-map", "TREASURE.LVL", "--demo-maps", "TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL"]
-    # Reconnect (network protocol 10, release A: the server's side only): "--reconnect" makes rooms hold the seat of a player whose connection is lost and pause the match for
-    # everybody (the others vote after 30 s: "--hold-vote-seconds" 5 - 3600; the match's total pause is capped: "--max-pause-seconds" 60 - 86400, default 1800; one absence may spend "--max-catch-up-seconds" 10 - 3600 (300) catching up; after a pause of 3 s or more the match is held for "--resume-countdown-seconds" 0 - 60 (10) before it goes on; the turn log that
-    # a returning player is given is at most "--log-mb" 1 - 256 MiB a room, 256 MiB for all rooms). Off by default, because the game's own clients do not come back yet (release B):
-    # a lost player would only keep the others waiting until they vote or the cap drops the seat. A room's "reconnect" key in the control interface overrides it.
+    # Reconnect (network protocol 10; ON by default since release B, when the game's own clients came back by themselves): rooms hold the seat of a player whose connection is lost and pause the match for
+    # everybody; "--no-reconnect" turns that off (a lost player is dropped at once and no restart record is kept; the last of "--reconnect" and "--no-reconnect" wins). The others vote after 30 s: "--hold-vote-seconds" 5 - 3600; the match's
+    # total pause is capped: "--max-pause-seconds" 60 - 86400, default 1800; one absence may spend "--max-catch-up-seconds" 10 - 3600 (300) catching up; after a pause of 3 s or more the match is held for
+    # "--resume-countdown-seconds" 0 - 60 (10) before it goes on; the turn log that a returning player is given is at most "--log-mb" 1 - 256 MiB a room, 256 MiB for all rooms. A room's "reconnect" key in the
+    # control interface overrides the default.
     # Restart records (the matches of rooms that hold seats survive a restart of the server): on by default into /results/restart; "--restart-dir DIR" chooses another folder (on a volume),
     # "--no-restart-records" switches them off, "--restart-vote-seconds" (30 - 3600, default 90) is how long the others wait before they may vote on a seat that has not come back after a
     # restart, "--restart-budget-mb" (1 - 4096, default 256) the disk that all the records may take.
-    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--reconnect", "--max-pause-seconds", "600"]
+    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--max-pause-seconds", "600"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:

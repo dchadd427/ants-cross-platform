@@ -2,6 +2,7 @@
 // make, the way into the original's screens, and the way back after a network game. The menu is part of a run only when ApplicationConfig::start_menu says so
 // (parse_arguments: a native game started without a mode on the command line); every other run has none of this code on its path.
 
+#include <filesystem>
 #include <iostream>
 #include <random>
 
@@ -73,9 +74,23 @@ void Application::init_start_menu() {
     start_menu_.set_clipboard(get, set);
 }
 
+// The newest fresh key of the store that this menu can use: a server of host:port (the entries of the browser's way are a URL and are for its page). The offer is what the first panel shows
+// ("Rejoin your match (CODE)"); pressing it joins exactly that room, seat and server with exactly that key (begin_menu_rejoin).
+std::optional<RejoinOffer> Application::rejoin_offer() {
+    if (!rejoin_store_) return std::nullopt;
+    for (const RejoinEntry& e : rejoin_store_->entries()) {                 // (newest first)
+        ServerAddress server;
+        std::string why;
+        if (!parse_server(e.server, server, why) || server_label(server) != e.server) continue;
+        return RejoinOffer{e.room, e.seat, server};
+    }
+    return std::nullopt;
+}
+
 // The first panel of the menu: the state, the pointer replayed into it (the pointer is one global, as for every screen)
 void Application::enter_start_menu(const std::string& notice) {
     state_ = AppState::StartMenu;
+    start_menu_.set_rejoin(rejoin_offer());
     start_menu_.show_main(notice);
     if (mouse_has_moved_ && !pointer_outside_) start_menu_.on_mouse_move(mouse_screen_x_, mouse_screen_y_);
 }
@@ -143,6 +158,10 @@ void Application::process_menu_request(const MenuRequest& request) {
             begin_menu_connection(true, code, request.name, request.players, request.map);
             break;
         }
+        case MenuRequest::Type::Rejoin:
+            set_fill_bots(net::FillLevel::None);                          // (a player who comes back to a match fills nothing)
+            begin_menu_rejoin(request);
+            break;
         case MenuRequest::Type::Cancel:
             abort_menu_connection();
             start_menu_.connection_cancelled();
@@ -164,24 +183,41 @@ void Application::process_menu_request(const MenuRequest& request) {
 
 // Join (hosting false: the room is the code that the player typed) and Host (hosting true: the code is a new "demo-<map>-<n>p-<random>" that the server makes on the first Hello): the same
 // path as `--join HOST:PORT --room CODE --name NAME`, after the server's name has been looked up on a worker thread (the window stays alive; Esc cancels)
-void Application::begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map) {
+void Application::begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map, const RejoinEntry* rejoin, const ServerAddress* server) {
     abort_menu_connection();
     menu_conn_ = MenuConnection{};
     menu_conn_.stage = MenuConnection::Stage::Lookup;
     menu_conn_.hosting = hosting;
     menu_conn_.room = room;
     menu_conn_.name = name;
-    menu_conn_.server = start_menu_.server();
+    menu_conn_.server = server != nullptr ? *server : start_menu_.server();
     menu_conn_.label = server_label(menu_conn_.server);
     menu_conn_.players = players;
     menu_conn_.map = map;
+    if (rejoin != nullptr) {
+        menu_conn_.rejoin = true;
+        menu_conn_.seat = rejoin->seat;
+        menu_conn_.key = rejoin->key;
+    }
     host_lookup_.start(menu_conn_.server.host, config_.host_resolver, config_.host_launcher);
+}
+
+// "Rejoin your match": the entry of the offer (its server, room and seat) is looked up again, since it may have been let go of or have grown too old while the menu stood open; then the same path as
+// a Join, with the key in the Hello and the entry's seat asked for
+void Application::begin_menu_rejoin(const MenuRequest& request) {
+    const std::optional<RejoinEntry> kept = rejoin_store_ ? rejoin_store_->find(server_label(request.server), request.room, request.seat) : std::nullopt;
+    if (!kept) {
+        menu_connection_failed("There is no match to rejoin any more: its key was let go of, or it is too old.");
+        return;
+    }
+    begin_menu_connection(false, request.room, request.name, 0, 0, &*kept, &request.server);
 }
 
 void Application::menu_connection_failed(const std::string& message) {
     const std::string text = message;
     abort_menu_connection();
     start_menu_.connection_failed(text);
+    start_menu_.set_rejoin(rejoin_offer());                                  // (a refusal of a rejoin may have let go of the key: the first panel offers what is left)
 }
 
 // Nothing of an attempt stays: the lookup is given up, the connection is closed, the title is the program's again
@@ -217,7 +253,7 @@ void Application::pump_menu_connection() {
             net_ = std::make_unique<net::NetGame>(sim_);
             net_time_ms_ = 0.0;
             attach_net();                                                    // (a guest announces nothing on the LAN: only a host's room does, so neither the announcement nor its version is set)
-            if (!net_->join(host_lookup_.address(), menu_conn_.server.port, menu_conn_.name, 255, menu_conn_.room, std::string())) {
+            if (!net_->join(host_lookup_.address(), menu_conn_.server.port, menu_conn_.name, menu_conn_.rejoin ? menu_conn_.seat : uint8_t{255}, menu_conn_.room, std::string(), menu_conn_.key)) {
                 menu_connection_failed(unreachable_text(menu_conn_.label));            // (no socket could be made for the address: the same to the player as a server that does not answer)
                 break;
             }
@@ -231,9 +267,12 @@ void Application::pump_menu_connection() {
             }
             switch (net_->phase()) {
                 case net::NetGame::Phase::Room:
+                    menu_connected();
+                    break;
                 case net::NetGame::Phase::Loading:                       // the last seat of a room: Welcome, Room and Start arrive together, the player is in the room and the match is loading
                 case net::NetGame::Phase::Playing:
-                    menu_connected();
+                    if (menu_conn_.rejoin) menu_rejoined();             // (a match that runs and gives this machine its seat: no waiting room, no quick help: the match begins by itself)
+                    else menu_connected();
                     break;
                 case net::NetGame::Phase::Failed:
                     menu_connection_failed(menu_failure_text());
@@ -288,6 +327,14 @@ void Application::menu_connected() {
     show_opening_screens();                                                  // the quick help, then the room's screen: the guest's, or the leader's with START
 }
 
+// A rejoin is under way: the room has given this machine its seat and the match from the server's log (the net's events, StartRequested and Begun, take it from here: Application::net_begin_match)
+void Application::menu_rejoined() {
+    apply_player_name(menu_conn_.name);
+    set_window_title((config_.title.empty() ? std::string("Ants") : config_.title) + " - room " + menu_conn_.room);
+    menu_conn_.stage = MenuConnection::Stage::None;
+    menu_conn_.key = net::SeatKey{};                                         // (it is the net's now)
+}
+
 // The room that the server made is on the map that the menu asked for (the file's name without its extension is the map's word of the room code, in any case)
 bool Application::room_has_chosen_map() const {
     if (!net_) return true;
@@ -301,6 +348,7 @@ bool Application::room_has_chosen_map() const {
 std::string Application::menu_failure_text() const {
     const std::string& server = menu_conn_.label;
     if (!net_) return "The connection to " + server + " failed.";
+    if (menu_conn_.rejoin && net_->fail_reason() == net::NetGame::FailReason::Rejected) return net_->status_text();      // the words of the way back (NetGame::way_back_text): the seat was dropped, the match is over, the server does not hold the seat ...
     switch (net_->fail_reason()) {
         case net::NetGame::FailReason::Unreachable:
             return unreachable_text(server);
@@ -389,6 +437,7 @@ void Application::leave_game() {
 
 // The tick, chat and HUD hooks of a NetGame that the application owns (a room or a match)
 void Application::attach_net() {
+    hook_rejoin_store();
     net_->set_prediction_enabled(prediction_wanted_);                              // the prediction of the player's own orders (net::Prediction): --prediction, the settings' key
     net_->set_on_prediction_dropped([this]() { hud_.set_sim_query(&sim_); });      // (its engine is gone: the HUD's special-target question goes back to the confirmed one at once)
     net_->set_fill_bots(config_.fill_bots);                                        // the bots that this machine's START seats in the empty seats (protocol 11; the menu's Host panel sets it)
@@ -400,6 +449,34 @@ void Application::attach_net() {
     });
     hud_.set_on_chat_send([this](const std::string& text, bool team) {
         if (network_active()) net_->chat(text, team);
+    });
+}
+
+// Where the keys of the seats are kept: the browser's local storage (the web build), a file beside the settings file (the folder of --settings, else the per-user application folder), and memory
+// alone for a run that has no settings file (a headless run: the tests'). rejoin_store.hpp
+void Application::make_rejoin_store() {
+#if defined(__EMSCRIPTEN__)
+    static BrowserStorage storage;
+    rejoin_store_ = std::make_unique<LocalStorageRejoinStore>(storage);
+#else
+    const std::string& settings = config_store_.location();
+    if (settings.empty()) {
+        rejoin_store_ = std::make_unique<MemoryRejoinStore>();
+        return;
+    }
+    rejoin_store_ = std::make_unique<FileRejoinStore>((std::filesystem::path(settings).parent_path() / "rejoin.txt").string());
+#endif
+}
+
+// The key of a seat is written when a server's room hands it out and let go of when it is of no more use (NetGame says when: the match ended, the seat was dropped, the player left ...). Nothing
+// here ever prints it.
+void Application::hook_rejoin_store() {
+    if (!net_ || !rejoin_store_) return;
+    net_->set_on_key([this](const net::RejoinKey& key) {
+        if (rejoin_store_ && !rejoin_store_->put(key)) std::cerr << "[Application] The key of your seat could not be kept: if this game is closed, it cannot take the seat back." << std::endl;
+    });
+    net_->set_on_forget_key([this](const net::RejoinKey& key) {
+        if (rejoin_store_) rejoin_store_->forget(key);
     });
 }
 

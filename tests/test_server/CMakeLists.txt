@@ -27,3 +27,19 @@ if(NOT WIN32)
 endif()
 
 add_test(NAME test_server COMMAND test_server)
+
+# The way back of the game's NetGame (docs/NETWORK_PORT.md "Reconnect"): real NetGames over loopback sockets against a real RoomManager, so it needs the server's library as test_server does
+add_executable(test_rejoin
+    test_rejoin.cpp
+)
+
+target_link_libraries(test_rejoin PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_rejoin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_rejoin COMMAND test_rejoin)

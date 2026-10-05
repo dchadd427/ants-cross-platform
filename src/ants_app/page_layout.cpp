@@ -74,6 +74,31 @@ void draw_loading_screen(IRenderer& renderer, const ants::assets::AssetArchive& 
     if (fill_w > 0) renderer.fill_rect(l.bar.x, l.bar.y, fill_w, l.bar.h, kLoadingBarColour);
 }
 
+std::string catch_up_text(int32_t percent) { return "Catching up " + std::to_string(std::clamp(percent, 0, 100)) + "%"; }
+
+CatchUpLayout catch_up_layout(bool wide, int32_t percent, int32_t text_w, int32_t hint_w) {
+    const LoadingLayout& l = LoadingLayout::of(wide);
+    CatchUpLayout out;
+    out.strip = l.strip;
+    out.text_x = l.strip.x + (l.strip.w - text_w) / 2;
+    out.text_y = l.strip.y + (l.strip.h - font_cell_height(FontSize::Px24)) / 2;
+    out.hint_x = l.strip.right() - 12 - hint_w;
+    out.hint_y = l.strip.y + (l.strip.h - font_cell_height(FontSize::Px14)) / 2;
+    out.bar_fill = LayoutRect{l.bar.x, l.bar.y, std::clamp(percent, 0, 100) * l.bar.w / 100, l.bar.h};
+    return out;
+}
+
+void draw_catch_up_screen(IRenderer& renderer, const ants::assets::AssetArchive& archive, bool wide, int32_t percent) {
+    draw_loading_screen(renderer, archive, wide, 0);                              // (the picture; the bar is filled below, to the percent)
+    const std::string text = catch_up_text(percent);
+    const std::string hint = kCatchUpHint;
+    const CatchUpLayout where = catch_up_layout(wide, percent, renderer.get_text_width(text, FontSize::Px24), renderer.get_text_width(hint, FontSize::Px14));
+    if (where.bar_fill.w > 0) renderer.fill_rect(where.bar_fill.x, where.bar_fill.y, where.bar_fill.w, where.bar_fill.h, kLoadingBarColour);
+    const ants::assets::ColorRGBA ink{7, 11, 15, 255};                            // (the black of the original's labels on the orange)
+    renderer.draw_text(text, where.text_x, where.text_y, ink, FontSize::Px24);
+    renderer.draw_text(hint, where.hint_x, where.hint_y, ink, FontSize::Px14);
+}
+
 const QuickHelpLayout& QuickHelpLayout::classic() noexcept { return kQuickHelpClassic; }
 const QuickHelpLayout& QuickHelpLayout::wide() noexcept { return kQuickHelpWide; }
 

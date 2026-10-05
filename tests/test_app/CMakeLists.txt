@@ -751,3 +751,71 @@ target_link_libraries(test_prestart_view PRIVATE ants_test_paths)
 
 add_test(NAME test_prestart_view COMMAND test_prestart_view)
 set_tests_properties(test_prestart_view PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The keys of the seats of a server's room (rejoin_store.hpp): the desktop's file (format, broken lines, 24 hours, 8 entries, replace, forget, mode 0600, the atomic write) and the browser's
+# local storage backend over a map. No window, no sockets
+add_executable(test_rejoin_store
+    test_rejoin_store.cpp
+)
+
+target_include_directories(test_rejoin_store PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_rejoin_store PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_rejoin_store PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_rejoin_store PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_rejoin_store PRIVATE ants_test_paths)
+
+add_test(NAME test_rejoin_store COMMAND test_rejoin_store)
+set_tests_properties(test_rejoin_store PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The screens of the way back and the keys' storage in the application (docs/NETWORK_PORT.md "What the clients do in release B"): a headless Application in a room of a real RoomManager
+# (ants_server_core) over loopback sockets with a bare second machine: the overlay, the vote block, the catch-up screen, the start of a rejoin, leaving while held, the keys' file, the start menu's Rejoin
+add_executable(test_rejoin_app
+    test_rejoin_app.cpp
+)
+
+target_include_directories(test_rejoin_app PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+# (ants_server_core brings ants_net, ants_ai, ants_sim and ants_assets with it)
+target_link_libraries(test_rejoin_app PRIVATE
+    ants_app
+    ants_server_core
+)
+
+target_link_libraries(test_rejoin_app PRIVATE ants_test_paths)
+
+if(APPLE)
+    target_link_libraries(test_rejoin_app PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_rejoin_app PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_rejoin_app COMMAND test_rejoin_app)
+set_tests_properties(test_rejoin_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

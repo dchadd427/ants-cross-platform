@@ -280,7 +280,7 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
             JsonValue body;
             std::string why;
             if (request.body.empty() || !ctl::parse_json(request.body, body, &why)) return error_response(400, request.body.empty() ? "a JSON body is required" : "bad JSON: " + why);
-            RoomSpec spec = rooms.default_spec();           // what the server was started with (--reconnect, --hold-vote-seconds, --max-pause-seconds, --log-mb); the body overrides it
+            RoomSpec spec = rooms.default_spec();           // what the server was started with (--reconnect / --no-reconnect, --hold-vote-seconds, --max-pause-seconds, --log-mb); the body overrides it
             if (!spec_from_json(body, spec, why)) return error_response(400, why);
             const CreateResult made = rooms.create_room(std::move(spec), now_ms);
             if (!made.ok) return error_response(made.http_status, made.error);

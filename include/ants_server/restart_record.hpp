@@ -156,8 +156,41 @@ RestartLoaded parse_restart_record(const uint8_t* data, size_t size, bool keep_t
 /// Reads the file at `path` (a regular file, not a symbolic link, at most `max_bytes` bytes) and parses it. `path` is kept in the result. The file is opened once, without following a link and without
 /// waiting on a pipe, and the open file is what is checked (its type, its size) and read: nothing can be swapped in between a look at the name and the read.
 RestartLoaded read_restart_record(const std::string& path, uint64_t max_bytes, RestartRead mode = RestartRead::Whole);
-/// Gives `fn` every turn of a record that was read, in order, until it says false: the kept turns, or (a Streaming record) the turns decoded again from the file's bytes, one at a time. True when `fn`
-/// was given every turn; false when it said stop, or when the bytes cannot be decoded (cannot be: they were checked when the record was read).
+/// The turns of a record that was read, one at a time, in order, as a PULL reader: the kept turns of a Whole record, or (Streaming) the turns decoded again from the file's bytes when they are asked for,
+/// so that a replay can stop after any turn and go on later (Room::replay_step) and never holds more than one decoded turn. It reads what read_restart_record judged good (the frames are not checked
+/// again, but the numbering of the turns and the sizes are, so that bytes that were changed afterwards fail the reader and are never handed out as turns). The record must outlive the reader.
+class RestartTurnReader {
+public:
+    explicit RestartTurnReader(const RestartLoaded& record);
+    /// The next turn into `out`. False when there is none (the end of the good frames: a torn tail is not read) or the reader failed (failed(), why()).
+    bool next(net::TurnMsg& out);
+    /// The bytes could not be decoded (a record that was not judged good, or whose bytes are not what was judged): next() has said false and says it from now on
+    bool failed() const noexcept { return failed_; }
+    const std::string& why() const noexcept { return why_; }
+    /// The turns that next() has given
+    uint32_t turns_read() const noexcept { return given_; }
+
+private:
+    bool fail(const char* why);
+    bool finish();
+    const RestartLoaded& rec_;
+    bool kept_{false};                                      // a Whole record: the turns are rec_.turns
+    bool failed_{false};
+    bool done_{false};
+    std::string why_;
+    uint32_t given_{0};                                     // the turns handed out (the number of the next one)
+    size_t pos_{0};                                         // Streaming: where the next frame starts
+    size_t end_{0};                                         // ... and where the good frames end
+    bool in_frame_{false};                                  // ... inside a turns frame: its place, its turns and where the next turn starts in its payload
+    size_t frame_pos_{0};
+    size_t frame_end_{0};
+    size_t frame_length_{0};
+    size_t frame_off_{0};
+    uint32_t frame_left_{0};
+};
+
+/// Gives `fn` every turn of a record that was read, in order, until it says false (a RestartTurnReader walk). True when `fn` was given every turn; false when it said stop, or when the bytes cannot be
+/// decoded (cannot be: they were checked when the record was read).
 bool for_each_restart_turn(const RestartLoaded& rec, const std::function<bool(const net::TurnMsg&)>& fn);
 
 /// What a server is told about its restart records
@@ -168,15 +201,16 @@ struct RestartConfig {
     uint64_t max_record_bytes{48ull * 1024 * 1024};         // one record may
     uint32_t restart_vote_after_ms{net::kRestartVoteAfterMs};   // after a restart the others may vote on a seat that has not come back once it has been away this long (never less than the room's own time)
     uint32_t max_age_ms{60u * 60u * 1000u};                 // a record whose last write is older than this is not restored: its players have given up
-    uint32_t replay_budget_ms{20u * 1000u};                 // the replay of one room may take this long, in real time; beyond it its record is refused as too slow
-    uint32_t restore_budget_ms{30u * 1000u};                // the restore at the start of the server may take this long in all, in real time: a room that it does not reach (or does not finish) is deferred, its
-                                                            // record stays on disk and the room is restored when its first player comes (RoomManager::restore_rooms)
-    std::function<uint32_t()> clock_ms;                     // the clock that these budgets are measured with, in real milliseconds (empty: restart_steady_ms): the tests give one of their own
+    uint32_t replay_budget_ms{20u * 1000u};                 // the replay of one room may take this long in all, in real time (the SUM of the work of its slices, not the time that other rooms took between them): beyond it its record is refused as too slow
+    uint32_t restore_slice_ms{5};                           // every pass of the server (RoomManager::update) spends at most this long, in real time, on replaying the records that wait (the room may run up to 20 turns' work past it)
+    std::function<uint32_t()> clock_ms;                     // the clock that the cap and the slice are measured with, in real milliseconds (empty: restart_steady_ms): the tests give one of their own
     uint32_t refused_keep_ms{24u * 60u * 60u * 1000u};      // a record that was read and refused is kept this long in the folder `refused` (the owner may want it back); the folder is held under budget_bytes
     uint32_t sync_every_ms{1000};                           // a room's record is made durable this often while it is written
+    uint32_t slow_sync_ms{20};                              // a flush that takes longer than this, in real time (clock_ms), doubles the room's interval to its next flush ...
+    uint32_t max_sync_every_ms{10u * 1000u};                // ... up to this one; a quicker flush brings the interval back to sync_every_ms (a slow disk holds up the loop of every room: one room's flushes, not all)
 };
 
-/// Real milliseconds from a steady clock (they mean something only as differences, and wrap after 49 days): the clock of the restore's budgets unless RestartConfig::clock_ms is set
+/// Real milliseconds from a steady clock (they mean something only as differences, and wrap after 49 days): the clock of the restore's cap and slices unless RestartConfig::clock_ms is set
 uint32_t restart_steady_ms() noexcept;
 
 class RestartStore;
@@ -241,8 +275,6 @@ public:
     bool prepare(std::string& why);
     /// Where the record of the room with this code is
     std::string path_for(const std::string& code) const;
-    /// The room code that the name of a record's file carries (the name that path_for makes), false for any other name: the restore defers a record by its name, without reading it
-    bool code_of_path(const std::string& path, std::string& code) const;
     /// The paths of the records in the folder, sorted by name (files that are made like a record's name; temporary files are not records)
     std::vector<std::string> records() const;
     /// Makes the record of a room (the head is written all at once, see the head of this file) and opens it for appending. Null, with the reason, when the budget or the size limit does not allow it or the
@@ -262,6 +294,11 @@ public:
     bool refuse_file(const std::string& path);
     /// Deletes what is older than refused_keep_ms in the folder `refused` (prepare() does it when the server starts); how many files
     size_t purge_refused();
+    /// The crash-loop guard. A record is marked (the empty file `<record>.replaying` next to it) before every piece of its replay and unmarked when that piece has returned (refuse_file
+    /// unmarks as well): a marker that a start finds says that the last run of the server stopped in the middle of the replay (a crash, a kill), so the record is not replayed again.
+    bool mark_replaying(const std::string& record_path);
+    void unmark_replaying(const std::string& record_path);
+    bool was_replaying(const std::string& record_path) const;
     bool is_stale(const std::string& path) const;
     size_t stale_count() const noexcept { return stale_.size(); }
 
