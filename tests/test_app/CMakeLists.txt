@@ -819,3 +819,71 @@ endif()
 
 add_test(NAME test_rejoin_app COMMAND test_rejoin_app)
 set_tests_properties(test_rejoin_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Touch model: what one finger or two do on the match screen (tap, drag, hold, the minimap, the pan and the pinch, the second and the third finger, cancels, the clock and the slop's size):
+# finger events in, actions out, with an injected clock (pure: no SDL, no window)
+add_executable(test_touch_model
+    test_touch_model.cpp
+)
+
+target_include_directories(test_touch_model PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_touch_model PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_touch_model PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_touch_model PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_touch_model COMMAND test_touch_model)
+set_tests_properties(test_touch_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Touch controls in the application: synthetic finger events through the real event loop of a headless application (tap, drag and hold against the mouse's click, band and right click, the pan and the
+# pinch, the places where two fingers do nothing, cancels, the late press, the other screens, the window's letterbox, the slop's size)
+add_executable(test_touch_app
+    test_touch_app.cpp
+)
+
+target_include_directories(test_touch_app PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_touch_app PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_touch_app PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_touch_app PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_touch_app PRIVATE ants_test_paths)
+
+add_test(NAME test_touch_app COMMAND test_touch_app)
+set_tests_properties(test_touch_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

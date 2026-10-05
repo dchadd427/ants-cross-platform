@@ -62,6 +62,11 @@ public:
         latched_ = latched;
         art_ = latched ? Art::Down : Art::Up;
     }
+    /// A press that ends with no act (the touch was taken away): the capture is gone and nothing fires; the latch stays as it was
+    void cancel_press() noexcept {
+        captured_ = false;
+        art_ = latched_ ? Art::Down : Art::Up;
+    }
 
     constexpr bool latched() const noexcept { return latched_; }
     constexpr bool captured() const noexcept { return captured_; }
