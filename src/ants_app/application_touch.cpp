@@ -39,8 +39,14 @@ bool Application::touch_two_fingers_allowed(double x, double y) const {
     return hud_.over_map(static_cast<int32_t>(std::floor(std::clamp(x, -1.0e6, 1.0e6))), static_cast<int32_t>(std::floor(std::clamp(y, -1.0e6, 1.0e6))));
 }
 
-bool Application::touch_view_open() const {
+// The match is on the screen with nothing over it (no results, no dialog): its HUD holds the presses that a cancel ends. A network match's catch-up screen is this too, though no match is drawn.
+bool Application::touch_match_screen() const {
     return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !hud_.is_modal_open();
+}
+
+// The map view is open to touches: the match screen, and not its catch-up picture (every mouse path is shut there as well: nothing may pan, zoom, wait for a hold or buzz over it)
+bool Application::touch_view_open() const {
+    return touch_match_screen() && !catch_up_screen_active();
 }
 
 // 8 CSS pixels of the game box on the glass (Android's own touch slop is 8 dp), at least 6 device pixels, in picture pixels. The page's box is what the browser shows the canvas in (its CSS size, which
@@ -190,7 +196,7 @@ void Application::run_touch_action(const TouchAction& action) {
             else set_zoom(action.level, action.x, action.y);
             break;
         case Kind::Cancel:
-            if (touch_view_open()) {
+            if (touch_match_screen()) {
                 hud_.cancel_press();
             } else {                                                        // a screen, a dialog or a page holds the press: it ends as the lift of the finger, where it is (what SDL's emulation made of a cancelled touch)
                 TouchAction lift;

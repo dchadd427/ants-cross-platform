@@ -14,8 +14,8 @@ guide on the game page (Touch & Mobile) says it to the player. A touch screen on
 | 1, on the minimap, a button, a dialog, any other screen | **Touch** | the press at once, as a mouse (nothing to wait for); a finger that rests on the minimap turns it into a right click there ("send the selected ants there") | 450 ms |
 | 2, on the map view | **Pan and pinch** | the map follows the middle point; the fingers' distance picks a level of the wheel's list, towards the middle point | hysteresis 0.15 of a step, a span under 3 slops is measured from 3 |
 
-A lift between 400 and 450 ms is neither a click nor a right click (the finger lingered). Two fingers act only where the wheel zooms: the map view of a match, no dialog, no results, no press held but the
-first finger's own on the map (the second finger ends that one with no selection and no order). Elsewhere a second finger does nothing and a tap is still a click. A third finger, and the finger that
+A lift between 400 and 450 ms is neither a click nor a right click (the finger lingered). Two fingers act only where the wheel zooms: the map view of a match, no dialog, no results, not the catch-up
+screen of a network match (a finger there is a plain press that the screen swallows: no ring, no buzz), no press held but the first finger's own on the map (the second finger ends that one with no selection and no order). Elsewhere a second finger does nothing and a tap is still a click. A third finger, and the finger that
 stays after the other lifts, are ignored until they lift. The pair is judged once per frame (a pinch's two moves arrive as two events, and between them the distance is wrong by a whole step).
 
 **A stall cannot make a touch long.** SDL stamps an event when it sees it (the browser's dispatch, the game's read of the queue), so a stall makes the stamp late. An event is judged no later than 100 ms

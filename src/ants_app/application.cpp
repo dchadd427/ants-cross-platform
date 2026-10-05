@@ -2853,7 +2853,9 @@ Application::NetVoteButtons Application::net_vote_buttons() const {
 // The catch-up screen (page_layout.hpp): the machine runs the match from the server's log without drawing it. A machine that starts the match again (NetGame's BadRequest fallback) has it from the
 // moment the old session ends: the loading picture, never the match that was reset behind it.
 bool Application::catch_up_screen_active() const {
-    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) return false;
+    if (state_ != AppState::Playing || scorecard_.is_open()) return false;
+    if (catch_up_forced_) return true;
+    if (!network_active()) return false;
     switch (net_->phase()) {
         case net::NetGame::Phase::Playing: return net_->pause_info().catching_up;
         case net::NetGame::Phase::Connecting:

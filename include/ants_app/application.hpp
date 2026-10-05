@@ -479,6 +479,8 @@ public:
     /// The catch-up screen is up instead of the match: the machine is given the match from the server's log (a game started again, a page reloaded, a link lost) and runs it without drawing it; the
     /// loading picture shows "Catching up N%" (catch_up_percent) until Event::Rejoined. Public for the tests.
     bool catch_up_screen_active() const;
+    /// A test hook: the catch-up screen is up in a match that has no network layer to stand in that phase (the screens' gates are tested without a server)
+    void force_catch_up_screen_for_test(bool on) noexcept { catch_up_forced_ = on; }
     int32_t catch_up_percent() const;
     /// The vote block's buttons where the screen draws them now (net_overlay_layout over the lines of net_overlay_now): `open` is false, and the rectangles are empty, when no vote is on screen.
     /// A click inside one is that choice (F2 keeps waiting, F3 goes on without the seat: NetGame::vote). Public for the tests.
@@ -534,7 +536,8 @@ private:
     };
     TouchZone touch_zone_at(double x, double y) const;
     bool touch_two_fingers_allowed(double x, double y) const;
-    bool touch_view_open() const;                          // a match's map view with nothing over it: what a pan or a zoom needs, at every move
+    bool touch_match_screen() const;                       // a match with no dialog or results over it (its catch-up picture too): the HUD's presses are what a cancel ends
+    bool touch_view_open() const;                          // a match's map view with nothing over it, and not the catch-up picture: what a pan or a zoom needs, at every move
     void feed_touch(const SDL_TouchFingerEvent& finger);   // a finger's event: the model, and what it says is queued
     void queue_touch(const TouchControl::Actions& actions);
     bool take_touch_event(SDL_Event& event);                // the next queued action as the mouse event that it is; the others (pan, zoom, cancel, feedback) are done here, and false is returned
@@ -646,6 +649,7 @@ private:
     std::deque<TouchAction> touch_queue_;                  // what the model said and the event loop has not done yet (always the actions of one finger event, and what a cancel adds)
     std::function<uint32_t()> touch_clock_;                // set_touch_clock: a test's clock (empty: SDL's ticks)
     uint32_t touch_feedbacks_{0};
+    bool catch_up_forced_{false};                          // force_catch_up_screen_for_test
     int32_t mouse_screen_x_{320};
     int32_t mouse_screen_y_{240};
     bool mouse_has_moved_{false};

@@ -1188,6 +1188,7 @@ void test_gates() {
         {"the quit dialog", [&] { app.hud().open_quit_dialog(); }, [&] { app.hud().close_quit_dialog(); }},
         {"the get ready dialog", [&] { app.hud().start_match_modal(); }, [&] { app.hud().dismiss_match_start_modal(); }},
         {"the results", [&] { app.scorecard().show(app.sim().get_world_state().match_result, 0); }, [&] { app.scorecard().hide(); }},
+        {"the catch-up screen of a network match", [&] { app.force_catch_up_screen_for_test(true); }, [&] { app.force_catch_up_screen_for_test(false); }},
     };
     for (const Case& c : cases) {
         c.open();
@@ -1199,6 +1200,84 @@ void test_gates() {
     check(attempt(), "after all of them: two fingers move the view again");
     camera.zoom = 1.0f;
     app.set_zoom(1.0f, 100, 100);
+
+    // THE CATCH-UP SCREEN of a network match (connecting, loading, catching up: the loading picture is on the screen and the match is not; every mouse path of the game is shut then). The
+    // view is not open to touches: two fingers would pan the hidden camera and pinch the remembered zoom, and a resting finger would draw a ring and a pulse over the picture and buzz.
+    {
+        app.force_catch_up_screen_for_test(true);
+        const float remembered = app.remembered_zoom();
+        check(!attempt() && app.remembered_zoom() == remembered, "the catch-up screen: two fingers pan and pinch nothing, and the remembered zoom is not touched");
+        const uint32_t holds = app.touch().stats().holds;
+        const uint32_t buzzes = app.touch_feedbacks();
+        hand.down(1, a);
+        hand.frame();
+        hand.rest(touch::kHoldMs + 100);
+        check(app.touch().stats().holds == holds && app.touch_feedbacks() == buzzes && app.touch().mode() == TouchControl::Mode::Left, "a finger that rests on the catch-up screen is no hold: no buzz, a plain press that the screen swallows");
+        check(!app.touch().ring(hand.now).has_value() && !app.touch().pulse(hand.now).has_value(), "... and has no ring and no pulse");
+        hand.up(1, a);
+        hand.frame();
+        s.clear();
+        hand.tap(s.on_ant(s.worker));
+        check(app.hud().get_selected_ant_ids().empty() && app.touch().fingers() == 0, "a tap on an ant of the hidden match selects nothing (the mouse's click does not either)");
+        // a finger that holds a HUD button when the screen comes up: a cancel still lets the button go, and it does not fire (the match's own presses end with no act)
+        app.force_catch_up_screen_for_test(false);
+        const UIButton help = app.hud().help_button();
+        const Pt on_help{help.x + help.w / 2, help.y + help.h / 2};
+        hand.down(1, on_help);
+        hand.frame();
+        check(app.hud().help_button().is_pressed, "(the Help button is held by the finger)");
+        app.force_catch_up_screen_for_test(true);
+        app.cancel_touch();
+        hand.frame();
+        check(!app.hud().help_button().is_pressed && !app.hud().is_quick_help_open() && app.touch().fingers() == 0, "a cancel on the catch-up screen still lets the button go, and it does not fire");
+        app.force_catch_up_screen_for_test(false);
+        hand.up(1, on_help);
+        hand.frame();
+        // a finger that began on the map and waits when the screen comes up: no ring is drawn over the picture, and a second finger that lands then is no pair
+        {
+            hand.down(1, a);
+            hand.frame();
+            hand.wait(300);
+            app.force_catch_up_screen_for_test(true);
+            const Picture over = still_frame(app);
+            check(app.touch().mode() == TouchControl::Mode::Waiting, "(the finger still waits when the catch-up screen comes up)");
+            const uint32_t pairs = app.touch().stats().two_finger;
+            hand.down(2, b);
+            hand.frame();
+            check(app.touch().mode() == TouchControl::Mode::Waiting && app.touch().ignored() == 1 && app.touch().stats().two_finger == pairs,
+                  "a second finger that lands after the catch-up screen came up under the first one is ignored: no pair");
+            hand.up(2, b);
+            hand.frame();
+            app.cancel_touch();
+            const Picture alone = still_frame(app);
+            check(app.touch().fingers() == 0 && same_view(app, over, alone), "no ring over the catch-up screen: the picture with the waiting finger is the picture without it");
+            hand.up(1, a);
+            hand.frame();
+            app.force_catch_up_screen_for_test(false);
+        }
+        // the screen comes up in the middle of a pinch (the link drops): the gesture is over, no pan, no zoom, no finger tracked
+        camera.set_origin(500.0, 500.0, map_w, map_h);
+        const float x0 = camera.x;
+        const float y0 = camera.y;
+        const float z0 = app.zoom();
+        hand.down(1, a);
+        hand.down(2, b);
+        hand.frame();
+        check(app.touch().mode() == TouchControl::Mode::Two, "(the pair is on)");
+        app.force_catch_up_screen_for_test(true);
+        hand.wait(16);
+        hand.move(1, Pt{a.x - 40, a.y + 20});
+        hand.move(2, Pt{b.x + 40, b.y + 20});
+        hand.frame();
+        check(camera.x == x0 && camera.y == y0 && app.zoom() == z0 && app.touch().fingers() == 0, "the catch-up screen that comes up over a pair ends the gesture: no pan, no zoom, no finger is tracked");
+        app.force_catch_up_screen_for_test(false);
+        hand.up(2, Pt{b.x + 40, b.y + 20});
+        hand.up(1, Pt{a.x - 40, a.y + 20});
+        hand.frame();
+        check(attempt(), "(and when the screen is gone, two fingers move the view again)");
+        camera.zoom = 1.0f;
+        app.set_zoom(1.0f, 100, 100);
+    }
 
     // a held press: the first finger holds a button, the minimap, the chat log: the second finger is ignored (and the first finger's press goes on)
     {
