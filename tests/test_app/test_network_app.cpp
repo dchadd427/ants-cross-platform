@@ -4816,7 +4816,7 @@ void run_room_chat_ui_tests() {
                 ASSERT_TRUE(fits(got));
             }
         }
-        ASSERT_TRUE(r.get_text_width(fill_choice_caption(), FontSize::Px14) <= 350);                  // (the Host panel's caption fits its 350 px rectangle with the real font)
+        ASSERT_TRUE(r.get_text_width(fill_choice_caption(), FontSize::Px14) <= 350);                  // (the Host panel's caption fits its rectangle with the real font: 380 px wide now, and it is within the 350 px that it had)
         {   // the same texts as the net cuts them: 84 characters
             const std::string net_cut = "Ann: " + std::string(100, 'W');
             MS::RoomView v;

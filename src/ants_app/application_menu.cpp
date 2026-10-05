@@ -41,11 +41,11 @@ void Application::init_start_menu() {
     for (const ai::BotSpec& bot : config_.bots) {                    // --start-menu --bot 1:hard: the seats start as the command line says
         if (bot.seat < 4 && bot.kind == "standard") settings.seats[bot.seat] = seat_choice_of_level(bot.level);
     }
-    if (config_.teams.set) settings.teams = config_.teams;                                        // --start-menu --teams 0+1: the Teams choice starts as the command line says (it counts when the seats offer it)
-    if (config_.fill_bots.any()) {                                                                // --start-menu --fill-bots hard: the Host panel starts as the command line says
-        settings.host_fill = config_.fill_bots.level[0];                                          // (one level for now: the panel's per-seat choice comes with the next step)
-        for (const net::FillLevel level : config_.fill_bots.level) settings.host_fill = settings.host_fill == net::FillLevel::None ? level : settings.host_fill;
+    if (config_.teams.set) {                                                                      // --start-menu --teams 0+1: the Teams choices start as the command line says (a choice counts when its panel offers it)
+        settings.teams = config_.teams;
+        settings.host_teams = config_.teams;
     }
+    if (config_.fill_bots.any()) settings.host_fill = config_.fill_bots;                         // --start-menu --fill-bots none,easy,hard,hard: the Host panel's rows start as the command line says
     start_menu_.set_settings(settings);
 
     // The server: --server, else the stored `server`, else the public beta server
@@ -140,7 +140,8 @@ void Application::process_menu_request(const MenuRequest& request) {
             begin_menu_connection(false, request.room, request.name, 0, 0);
             break;
         case MenuRequest::Type::Host: {
-            set_fill_bots(request.fill);                                  // the Host panel's "Empty seats at START": this player leads the room it makes, and its START carries the level
+            set_fill_bots(request.fill);                                  // the Host panel's seat rows: this player leads the room it makes, and its START carries the levels
+            set_start_teams(request.teams);                               // ... and the Teams choice
             static std::random_device entropy;
             const std::function<uint32_t()> random = config_.room_code_random ? config_.room_code_random : std::function<uint32_t()>([]() { return static_cast<uint32_t>(entropy()); });
             const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, random);

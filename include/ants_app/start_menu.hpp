@@ -75,13 +75,18 @@ const MenuMap& menu_map(size_t index) noexcept;
 /// The index of a key (any case), or -1
 int menu_map_index(const std::string& key) noexcept;
 
-/// What the Host panel's "Empty seats at START" holds: nothing (the match starts with the people who are there), or bots of a level that the server seats in the empty seats when this
-/// player, the room's leader, presses START (network protocol 11; the web page's `?fill=`): "Leave empty", "Easy bots", "Medium bots", "Hard bots"
-const char* fill_choice_text(net::FillLevel level) noexcept;
-/// The line under the choice on the Host panel (and under the choice on web/lobby.html): what the bots can do. "Bots gather food, raid and fight back."
+/// What a seat row of the Host panel holds (the rows of the seats after the leader's: Red, Blue and Black): nothing (the seat stays empty: the match starts with the people who are there), or a bot
+/// of a level that the server seats there when this player, the room's leader, presses START (network protocol 13: a level for each seat; the web page's `?fill=`):
+/// "Leave empty", "Easy bot", "Medium bot", "Hard bot"
+const char* fill_seat_text(net::FillLevel level) noexcept;
+/// The line under the seat rows on the Host panel (and under the choice on web/lobby.html): what the bots can do. "Bots gather food, raid and fight back."
 const char* fill_choice_caption() noexcept;
-/// What the room's panel tells the leader about START: "Empty seats will be Medium bots." / "Empty seats stay empty."
-std::string fill_choice_sentence(net::FillLevel level);
+/// What the room's panel tells the leader about START, from the plan's levels of the seats 1 .. `players` - 1 (the leader has seat 0): "Empty seats stay empty." (no level),
+/// "Empty seats will be Medium bots." (the same level in every seat), else the seats one by one: "At START: Red gets an Easy bot, Black a Hard bot." (the short form "At START: Red Easy, Blue Medium,
+/// Black Hard." when the long one would not fit the line)
+std::string fill_choice_sentence(const net::FillPlan& plan, int players = 4);
+/// What the room's panel tells the leader about the teams of START, "Teams: Green + Red against Blue + Black." (the colour words of the seats of a room of `players`); "" for free for all
+std::string room_teams_sentence(const LocalTeams& teams, int players);
 
 /// The room code of a hosted match, made as web/lobby.html makes it: "demo-<map>-<n>p-<six characters>", the six from kRoomCodeAlphabet (lower case letters without i, l and o,
 /// and the digits 2 - 9: no look-alikes). `random` gives 32 random bits at each call. At most 23 characters, so it always fits the 32 that a room code may hold.
@@ -101,11 +106,12 @@ bool check_player_name(const std::string& raw, std::string& clean, std::string& 
 bool check_room_code(const std::string& raw, std::string& clean, std::string& why);
 
 /// Which of the remembered values changed (the owner stores that one: one file write per change)
-enum class MenuSetting : uint8_t { Name, Bots, HostMap, HostPlayers, HostFill, Teams };
+enum class MenuSetting : uint8_t { Name, Bots, HostMap, HostPlayers, HostFill, Teams, HostTeams };
 
 /// The values of the menu that the program remembers in its settings file (config_store.hpp), under the remake's own keys (the original's nine entries keep their names): `name`,
 /// `bots` (four words by seat: off, easy, medium, hard), `teams` (ffa, or the player's seat and a bot's seat as A+B: the single-player panel's Teams choice), `host_map` (a map key), `host_players` (2 - 4),
-/// `host_fill` (none, easy, medium, hard: the empty seats at START), and `server` (host[:port]; written by hand, the menu shows it and never edits it)
+/// `host_fill` (the bots that START seats in the empty seats of the Host panel's room: one word, or four for the seats 0 - 3 as in `--fill-bots`; an old file's one word means every seat),
+/// `host_teams` (ffa, or two seats of the room as A+B: the Host panel's Teams choice), and `server` (host[:port]; written by hand, the menu shows it and never edits it)
 struct MenuSettings {
     std::string name;                                   // "" when none is stored (the menu then proposes the game's default)
     std::string server;                                 // "" when none is stored (the default server)
@@ -113,7 +119,8 @@ struct MenuSettings {
     LocalTeams teams{};                                 // the single-player panel's Teams choice (free for all until one is stored); only a choice that the seats offer counts (StartMenu::teams)
     int host_map{kDefaultMenuMap};                      // index into the six maps (Treasure until a choice is stored)
     int host_players{4};                                // 2 - 4
-    net::FillLevel host_fill{net::FillLevel::None};     // the bots that the leader's START seats in the empty seats (none: the match starts with the people who are there)
+    net::FillPlan host_fill{};                          // the bots that the leader's START seats in the empty seats, a level for each seat (none: the match starts with the people who are there); seat 0 is the leader's: always none
+    LocalTeams host_teams{};                            // the Host panel's Teams choice (free for all until one is stored); only a choice that the room's player count offers counts (StartMenu::host_teams)
 
     static constexpr const char* kKeyName = "name";
     static constexpr const char* kKeyServer = "server";
@@ -122,6 +129,7 @@ struct MenuSettings {
     static constexpr const char* kKeyHostMap = "host_map";
     static constexpr const char* kKeyHostPlayers = "host_players";
     static constexpr const char* kKeyHostFill = "host_fill";
+    static constexpr const char* kKeyHostTeams = "host_teams";
 
     /// Reads the stored values with the rules of the store (printable text cut to its maximum, numbers in their range, anything else is the default)
     void load(const ConfigStore& store);
@@ -139,12 +147,14 @@ enum class MenuId : uint8_t {
     Single, JoinWithCode, HostOnline, Quit,             // the first panel
     Seat0, Seat1, Seat2, Seat3, Continue,               // single player
     Name, Code, Join,                                   // join with a code
-    HostMap, HostPlayers, HostFill, HostName, Host,     // host an online match
+    HostMap, HostPlayers, HostSeat1, HostName, Host,    // host an online match (HostSeat1 is the Red seat's row: the old single choice stood here, and the numbers after it are in the golden pointer fingerprints)
     Cancel,                                             // connecting
     Copy, EnterRoom,                                    // the room's code
     Back,                                               // every panel but the first (on the room's panel: leave the room)
     Teams,                                              // single player, only while two or more seats have a bot (last: the numbers above are in the golden fingerprints of the wide pages)
-    SingleName                                          // single player: the player's name (the same text as Name and HostName: one remembered name)
+    SingleName,                                         // single player: the player's name (the same text as Name and HostName: one remembered name)
+    HostSeat2, HostSeat3,                               // host: the Blue and the Black seat's rows (a room of three or four players)
+    HostTeams                                           // host: the room's teams (a room of three or four players)
 };
 
 enum class MenuKind : uint8_t {
@@ -190,9 +200,9 @@ struct MenuRequest {
     std::string room;                         // Join: the room code (cleaned)
     int map{0};                               // Host: the index of the map
     int players{4};                           // Host: 2 - 4
-    net::FillLevel fill{net::FillLevel::None};   // Host: the bots that START seats in the empty seats (Application::set_fill_bots before the connection is made)
+    net::FillPlan fill{};                     // Host: the bots that START seats in the empty seats, a level for each seat (Application::set_fill_bots before the connection is made): the seats 1 .. players - 1 that the panel shows, none elsewhere
     std::vector<ai::BotSpec> bots;            // Single: the computer players, by seat
-    LocalTeams teams;                         // Single: the teams of the game (free for all unless the Teams choice says otherwise): Application::menu_start_single
+    LocalTeams teams;                         // Single: the teams of the game (free for all unless the Teams choice says otherwise): Application::menu_start_single; Host: the teams that START makes (Application::set_start_teams)
 };
 
 class StartMenu {
@@ -296,6 +306,14 @@ public:
     LocalTeams teams() const;
     /// What the Teams cycler shows for a choice: "Free for all", "You + Red" (the colour of the bot's seat)
     static std::string teams_text(const LocalTeams& teams, uint8_t own_seat);
+    /// The Host panel's choices as Host asks for them. The bots: the levels of the seats 1 .. players - 1 (the leader has seat 0; the seats beyond the room's players are left out)
+    net::FillPlan host_fill() const;
+    /// What the Host panel's Teams cycler offers now: sim::room_team_choices of the room's player count (free for all only with two players: no cycler then)
+    std::vector<LocalTeams> host_team_choices() const;
+    /// The teams that Host asks for: the Teams choice when the room's choices offer it now, else free for all
+    LocalTeams host_teams() const;
+    /// What the Host panel's Teams cycler shows for a choice in a room of `players`: "Free for all", "Green + Red against Blue + Black"
+    static std::string host_teams_text(const LocalTeams& teams, int players);
     /// The panel that Join or Host started from (what a failure or a cancel returns to)
     MenuPanel connect_origin() const noexcept { return origin_; }
     bool copied() const noexcept { return copied_ms_ > 0.0; }
@@ -320,7 +338,7 @@ private:
     std::vector<MenuId> controls() const;                  // the selectable controls of the panel, in Tab order
     void add_title(std::vector<MenuElement>& out, const std::string& text) const;
     void add_hint(std::vector<MenuElement>& out, const std::string& text) const;
-    void add_message(std::vector<MenuElement>& out, int32_t y, int32_t h) const;
+    void add_message(std::vector<MenuElement>& out, int32_t y, int32_t h, FontSize font = FontSize::Px18) const;
     void add_server_line(std::vector<MenuElement>& out, int32_t y) const;
     MenuElement control(MenuId id, MenuKind kind, ButtonRect rect, const std::string& text, FontSize font = FontSize::Px24) const;
     void finish(std::vector<MenuElement>& out) const;       // selection, pressed and caret states
@@ -339,6 +357,7 @@ private:
     void notify(MenuSetting setting);
     void play(uint32_t sound_id);
     bool is_field(MenuId id) const noexcept { return id == MenuId::Name || id == MenuId::Code || id == MenuId::HostName || id == MenuId::SingleName; }
+    static bool is_cycler(MenuId id) noexcept;                // a control that Left and Right (and a click, and Enter) turn through its values
     std::string* field_text(MenuId id) noexcept;
     void edit(MenuId id, const std::string& typed);
     void name_changed();                                    // the name field changed: written later (flush)

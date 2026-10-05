@@ -1235,18 +1235,57 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         m.show_room(std::string(32, 'W'), 1, 4);
         menu_frame("screen.menu.room.longest_code", m);
     }
-    {   // the empty seats at START (network protocol 11): the choice on the Host panel, and what the room's panel says START will do
+    {   // the bots of the Host panel's seat rows (network protocol 13: a level for each seat): Medium in all three seats after the leader's, and what the room's panel says START will do (the
+        // sentence of protocol 11: this room panel is the one that it was)
         StartMenu m = make(0);
         key(m, SDLK_DOWN);
         key(m, SDLK_DOWN);
         key(m, SDLK_RETURN);
         key(m, SDLK_DOWN);
-        key(m, SDLK_DOWN);                                                                                       // map, players, then the empty seats
-        key(m, SDLK_RIGHT);
-        key(m, SDLK_RIGHT);
+        key(m, SDLK_DOWN);                                                                                       // map, players, then the Red seat
+        for (int seat = 0; seat < 3; ++seat) {
+            key(m, SDLK_RIGHT);
+            key(m, SDLK_RIGHT);                                                                                  // Medium bot
+            key(m, SDLK_DOWN);                                                                                   // the next seat
+        }
         menu_frame("screen.menu.host.fill_medium", m);
         m.show_room("demo-small-4p-b7x2qk", 1, 4);
         menu_frame("screen.menu.room.fill_medium", m);
+    }
+    {   // a level for each seat and the teams (protocol 13): Easy in the Red seat, nobody in the Blue seat, Hard in the Black seat, Green and Red against Blue and Black; the room's panel says both
+        StartMenu m = make(0);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RETURN);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);                                                                                       // map, players, then the Red seat
+        key(m, SDLK_RIGHT);                                                                                      // Easy bot
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);                                                                                       // (the Blue seat stays empty) the Black seat
+        for (int i = 0; i < 3; ++i) key(m, SDLK_RIGHT);                                                          // Hard bot
+        key(m, SDLK_DOWN);                                                                                       // the teams
+        key(m, SDLK_RIGHT);                                                                                      // Green + Red against Blue + Black
+        menu_frame("screen.menu.host.seats_and_teams", m);
+        m.show_room("demo-small-4p-b7x2qk", 1, 4);
+        menu_frame("screen.menu.room.seats_and_teams", m);
+    }
+    {   // a room of three players: two seat rows and the teams of three (Red + Blue against Green); the room of two (one seat row, no teams) is screen.menu.host.map_and_players
+        StartMenu m = make(0);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RETURN);
+        key(m, SDLK_DOWN);                                                                                       // the players
+        key(m, SDLK_LEFT);                                                                                       // 3 players
+        key(m, SDLK_DOWN);
+        key(m, SDLK_RIGHT);
+        key(m, SDLK_RIGHT);
+        key(m, SDLK_RIGHT);                                                                                      // the Red seat: Hard bot
+        key(m, SDLK_DOWN);
+        key(m, SDLK_DOWN);                                                                                       // (the Blue seat stays empty) the teams
+        for (int i = 0; i < 3; ++i) key(m, SDLK_RIGHT);                                                          // Red + Blue against Green
+        menu_frame("screen.menu.host.three_players", m);
+        m.show_room("demo-small-3p-b7x2qk", 1, 3);
+        menu_frame("screen.menu.room.three_players", m);
     }
 }
 
@@ -3972,15 +4011,21 @@ const Golden kGoldens[] = {
     {"screen.menu.join.name_refused", 0x654e9cdadc7be96a, 160},
     {"screen.menu.connecting", 0xa95f45bb91fe2012, 114},
     {"screen.menu.join.error", 0x902ef842457399e8, 158},
-    // The three host-panel rows below moved deliberately in B4-1 (v0.3.0): the line under the choice of the bots (start_menu.cpp kFillCaption) said "Bots gather food; they do not fight yet."
-    // and now says "Bots gather food, raid and fight back." (the standard bot of B4-1 fights and raids); nothing else on the panel changed (--dump shows the one string).
-    {"screen.menu.host.default", 0x855b6c9043a5d84f, 210},
-    {"screen.menu.host.map_and_players", 0xd6efb11c1b69b982, 210},
+    // The host-panel rows below moved deliberately in bot games part B (network protocol 13: the owner asked for a level for each bot and for teams chosen before the start): the panel has a row for
+    // each seat after the leader's (the bot that START puts there) and, with three or four players, the Teams row, in rows of 18 px text, with the caption under them (the line says what the standard bot
+    // does: "Bots gather food, raid and fight back."). screen.menu.room.fill_medium did NOT move: the room's panel for the same level in every seat is what it was; the rows with seats_and_teams and
+    // three_players are new.
+    {"screen.menu.host.default", 0x18b4d4169368ccd1, 282},
+    {"screen.menu.host.map_and_players", 0x3a08eeb197374920, 210},
     {"screen.menu.room.code", 0xb4b079b2a4d20074, 150},
     {"screen.menu.room.full", 0x4b46383209d2e157, 150},
     {"screen.menu.room.longest_code", 0x02e344112faca6ac, 150},
     {"screen.menu.room.fill_medium", 0xc27d15c0f5fe2c7f, 150},
-    {"screen.menu.host.fill_medium", 0x8e9303328d9422c2, 210},
+    {"screen.menu.host.fill_medium", 0x3a6b94fd4d05862f, 282},
+    {"screen.menu.host.seats_and_teams", 0x4f4c7690d7c20560, 282},
+    {"screen.menu.room.seats_and_teams", 0x343fb227f840655f, 151},
+    {"screen.menu.host.three_players", 0x30fe4a8bffb71fdf, 258},
+    {"screen.menu.room.three_players", 0x5ef9a57003c348f8, 151},
     // ---- the wide match screen (milestone M3, 960 x 540), computed at the commit that introduced it (the classic numbers above did not move); regenerate only deliberately, see the notes at the top.
     //      The review fixes of M3 moved 105 of these deliberately (all of the wide ones that draw the bottom strip or the options window and quick help, none of the classic): the score boxes are
     //      spread over the strip (seven draw calls for the strip instead of three, the boxes at x 213, 468 and 722), and the in-match options window and quick help are drawn over the map view
