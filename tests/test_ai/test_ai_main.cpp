@@ -21,6 +21,9 @@ int main() {
     run_b41_cost_tests();
     run_island_tests();
     run_island_task_tests();
+    run_island_expedition_tests();
+    run_island_ferry_tests();
+    run_island_small_tests();
     if (ai_test::g_test_count == 0) {
         std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite (a misspelt or forgotten filter must not turn the suite green)\n";
         ++ai_test::g_test_failures;

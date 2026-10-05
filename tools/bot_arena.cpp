@@ -657,6 +657,14 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         if (p.takes_thief && p.max_thief < 2) p.max_thief = 2;
         return true;
     }
+    if (key == "islands") return flag(p.islands);                                     // the island machinery as a whole (0: the standard bot as it was before it: the tournaments of docs/BOTS.md "Islands")
+    if (key == "expedition") return flag(p.island_expedition);
+    if (key == "ferry") return flag(p.island_ferry);
+    if (key == "iswim") { p.island_swimmers = static_cast<uint32_t>(v); return true; }
+    if (key == "ibuild") { p.island_builders = static_cast<uint32_t>(v); return true; }
+    if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
+    if (key == "iguard") return flag(p.island_guard);
+    if (key == "iferrypile") { p.island_ferry_per_pile = static_cast<uint32_t>(v); return true; }
     err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena.cpp, listed in docs/audit/B4_1_notes.md)";
     return false;
 }

@@ -219,3 +219,6 @@ void run_b41_offence_tests();
 void run_b41_cost_tests();
 void run_island_tests();
 void run_island_task_tests();
+void run_island_expedition_tests();
+void run_island_ferry_tests();
+void run_island_small_tests();

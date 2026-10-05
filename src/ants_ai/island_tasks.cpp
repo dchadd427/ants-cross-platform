@@ -266,6 +266,7 @@ std::vector<sim::TileCoord> IslandTask::chain() const { return builders_.empty()
 
 void IslandTask::adopt_builders(TaskContext& c) {
     const BotView& v = c.view;
+    const uint64_t now = v.tick();
     for (auto it = builders_.begin(); it != builders_.end();) {                                    // a swimmer that died (or that a task of a higher rank took) is no builder
         const AntView* a = find_ant(v.mine(), it->first);
         if (a == nullptr || c.ledger.owner(it->first) != id()) {
@@ -275,10 +276,35 @@ void IslandTask::adopt_builders(TaskContext& c) {
             ++it;
         }
     }
+    // a Swimmer digs while somebody needs a bridge (a worker stands idle with nowhere to go, or a bridge is being dug); with nobody to walk it the Swimmer is the ferry's (FerryTask)
+    bool work = !plan_.tiles.empty();
+    for (const auto& e : builders_) work = work || !e.second.chain.empty();
+    for (auto it = builders_.begin(); it != builders_.end();) {
+        Builder& b = it->second;
+        if (!b.chain.empty() || !plan_.tiles.empty() || tactics_.surplus > 0) {
+            b.idle_since = 0;
+        } else if (b.idle_since == 0) {
+            b.idle_since = now;
+        } else if (now >= b.idle_since + params_.builder_idle) {
+            c.ledger.release(it->first, id());
+            it = builders_.erase(it);
+            continue;
+        }
+        ++it;
+    }
+    if (!work && tactics_.surplus == 0) return;
+    // a bridge is for the workers that walk over it: with none at the hill's island (the expedition took them) the Swimmer carries food instead
+    uint32_t workers = 0;
+    for (const AntView& a : v.mine()) {
+        if (a.type != v.default_ant_type() || c.map.ant_component(c.seat, a.tile) != hill_comp_) continue;
+        const TaskId owner = c.ledger.owner(a.id);
+        workers += owner == kNoTask || c.ledger.rank(owner) < c.ledger.rank(id()) ? 1u : 0u;
+    }
+    if (workers < params_.min_workers) return;
     for (const AntView& a : v.mine()) {
         if (builders_.size() >= params_.builders) break;
         if (a.type != sim::AntType::Swimmer || builders_.count(a.id) != 0 || a.holding || a.carried_points > 0) continue;
-        if (!c.ledger.claim(a.id, id())) continue;
+        if (!c.ledger.take(a.id, id())) continue;                                                  // (from the ferry, which has the lower rank)
         builders_[a.id] = Builder{};
     }
 }
@@ -726,10 +752,34 @@ void IslandTask::guard(TaskContext& c) {
     // the ends of the hot bridges: an ant that walks towards one within `radius` tiles (it covers a tile in about 8 ticks, and the order takes `latency_` to work, and the ant may have
     // walked for a look interval since the last look) is stopped
     const int32_t radius = std::min<int32_t>(14, 2 + static_cast<int32_t>(latency_ / 8u + interval_ / 16u));
-    const auto hot_dist = [&](sim::TileCoord t) {
-        int32_t best = 1 << 20;
-        for (const int32_t e : hot_entries_) best = std::min(best, tile_at(grid, e).chebyshev_dist(t));
-        return best;
+    // (the steps of a walk over land from the nearest end of a hot bridge: the water between two banks is no way, an ant on the other bank is not near it)
+    std::vector<int16_t> hot_steps;
+    if (!hot_entries_.empty()) {
+        hot_steps.assign(cells.size(), -1);
+        std::vector<int32_t> queue;
+        for (const int32_t e : hot_entries_) {
+            if (hot_steps[static_cast<size_t>(e)] >= 0) continue;
+            hot_steps[static_cast<size_t>(e)] = 0;
+            queue.push_back(e);
+        }
+        for (size_t head = 0; head < queue.size(); ++head) {
+            const int32_t at = queue[head];
+            if (hot_steps[static_cast<size_t>(at)] > radius) continue;
+            const sim::TileCoord cur = tile_at(grid, at);
+            for (int k = 0; k < 8; ++k) {
+                const sim::TileCoord t{cur.x + kDx[k], cur.y + kDy[k]};
+                if (!grid.in_bounds(t)) continue;
+                const int32_t ti = index_of(grid, t);
+                if (hot_steps[static_cast<size_t>(ti)] >= 0 || cells[static_cast<size_t>(ti)].has_completed_bridge() || !MapInfo::walkable(grid, c.seat, t, v.walk_context())) continue;
+                hot_steps[static_cast<size_t>(ti)] = static_cast<int16_t>(hot_steps[static_cast<size_t>(at)] + 1);
+                queue.push_back(ti);
+            }
+        }
+    }
+    const auto hot_dist = [&](sim::TileCoord t) -> int32_t {
+        if (hot_steps.empty() || !grid.in_bounds(t)) return 1 << 20;
+        const int16_t steps = hot_steps[static_cast<size_t>(index_of(grid, t))];
+        return steps < 0 ? (1 << 20) : steps;
     };
     // where a held ant waits: the free land tile that is farthest from the ends of the hot bridges among those it can reach (the first one beyond `radius`, when there is one): an ant that
     // stands at the end of a bridge blocks the way off it for the ants on it. (-1: it stands as far from them as it can)
@@ -843,7 +893,7 @@ void IslandTask::guard(TaskContext& c) {
             gd.mode = toward_home ? Guarded::Mode::Home : Guarded::Mode::Escape;
             gd.target = toward_home ? home_tile(c, carrying) : best->exit;
             idle_since_.erase(a.id);
-            if (a.takes_orders() && (gd.ordered == 0 || still || now >= gd.ordered + latency_ + 40u)) {
+            if (a.takes_orders() && (gd.ordered == 0 || now >= gd.ordered + latency_ + (still ? 20u : 40u))) {   // (told again only when the order should have worked by now)
                 order_move(a.id, gd.target);
                 gd.ordered = now;
             }
@@ -861,6 +911,7 @@ void IslandTask::guard(TaskContext& c) {
         if (toward_hot && ours) {                                                                  // (an ant of the guard that walks home over a hot bridge: its way goes over it, whatever the map says)
             Guarded& gd = g->second;
             gd.mode = Guarded::Mode::Hold;
+            if (gd.ordered != 0 && now < gd.ordered + latency_ + 20u) continue;                    // (told already: the order has not worked yet, and a second one only spends the budget of the level)
             gd.ordered = now;
             const sim::TileCoord park = park_of(a.tile);
             if (park.x >= 0) {
@@ -916,15 +967,18 @@ void IslandTask::guard(TaskContext& c) {
         }
         if (!a.takes_orders() || !field_.valid || field_.cost[static_cast<size_t>(idx)] < 0) continue;   // (cut off: no bridge to walk onto)
         const bool closed = works && (shut(pile) || excess.count(a.id) != 0);
+        // an empty ant that stands idle by the end of a bridge that goes: the economy may send it to a pile over another bridge, and the engine takes the cheapest way from where the ant
+        // stands, which may lead over this one (the way from the hill is another). It waits farther off
+        const bool by_hot = !carrying && still && hot_dist(a.tile) <= radius;
         // an ant that carries food walks home by itself: it is stopped only when it would not get home before a bridge tile goes. An empty ant of the economy that works a closed pile: home
         // while the way lasts, else where it stands
-        if (!toward_hot && (carrying ? (home_ok(idx) || a.state != sim::UnitState::Walking) : !closed)) continue;
+        if (!toward_hot && !by_hot && (carrying ? (home_ok(idx) || a.state != sim::UnitState::Walking) : !closed)) continue;
         if (!c.ledger.take(a.id, id())) continue;
         Guarded gd;
         gd.since = now;
         gd.ordered = now;
         gd.pile = pile;
-        if (home_ok(idx) && !toward_hot) {                                                         // (an ant that walks to a hot end is kept where it is: its way goes over it, whatever the map says)
+        if (home_ok(idx) && !toward_hot && !by_hot) {                                              // (an ant that walks to a hot end is kept where it is: its way goes over it, whatever the map says)
             gd.mode = Guarded::Mode::Home;
             gd.target = home_tile(c, carrying);
             order_move(a.id, gd.target);

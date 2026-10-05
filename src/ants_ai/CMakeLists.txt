@@ -6,6 +6,8 @@ add_library(ants_ai STATIC
     map_info.cpp
     island_info.cpp
     island_tasks.cpp
+    island_expedition.cpp
+    island_ferry.cpp
     bot_controller.cpp
     tasks.cpp
     tactics.cpp

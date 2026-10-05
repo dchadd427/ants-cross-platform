@@ -14,8 +14,9 @@
 //                needs more bridges that do not touch: the planner digs the next one beside the first, not on it
 //   renewal      the next bridge is planned over the tiles that will last (a tile with less life than renew_life is not counted), so a parallel bridge is dug while the old one still carries
 //   hot bridges  the engine's paths are made when an ant starts walking, and a standing ant on the one-wide bridge sends the ants behind it round by another bridge, so the bot cannot know
-//                which bridge an ant will walk onto. A bridge with little life left (hot_life) is therefore watched at its ends: an ant that walks towards one is stopped, and an ant on one
-//                is sent off it. (Taking such a bridge down with the Swimmer was tried and left out: the Swimmer is far away when it is due, and the ants it drowns are its own)
+//                which bridge an ant will walk onto. A bridge with little life left (hot_life) is therefore watched at its ends (in steps over land: water is no way): an ant that walks
+//                towards one is stopped, an idle one waits farther off (the economy may send it over another bridge, and the engine takes the cheapest way from where the ant stands), and
+//                an ant on one is sent off it. (Taking such a bridge down with the Swimmer was tried and left out: the Swimmer is far away when it is due, and the ants it drowns are its own)
 //   wants        the Swimmers of the level (Tactics::wants): a Swimmer power-up that lies where a worker can walk to is taken by the power-up task
 //
 // Everything is read from the BotView (the grid is the map as it is now: bridges, bombs, ants); nothing is a promise, the next look checks it. The task is idle on every map where nothing lies
@@ -49,6 +50,8 @@ public:
         uint32_t blacklist_ticks{600};       // a tile that could not be dug is left alone this long
         uint32_t swimmers{1};                // the Swimmers the bot wants (the power-up task takes them from the map)
         uint32_t builders{1};                // Swimmers that dig at a time
+        uint32_t min_workers{1};             // no Swimmer digs while fewer workers than this are free at the hill's island (nobody would walk the bridge)
+        uint32_t builder_idle{300};          // a Swimmer that has had nothing to dig this long, with nobody idle that needs a bridge, goes back to the ferry
         uint32_t min_ticks_left{2400};       // no Swimmer is wanted and no bridge planned with less than this left on the clock
         uint32_t min_units{3};               // no bridge for a pile with fewer units than this
         uint32_t bridge_ants{1};             // ants that work piles over one bridge at a time (see "traffic" above)
@@ -128,6 +131,7 @@ private:
         uint64_t sent{kPending};             // ... and left at this tick
         bool parked{true};                   // the swimmer rests off the bridge
         sim::TileCoord park{-1, -1};
+        uint64_t idle_since{0};              // the first look at which it had nothing to dig (0: it has)
     };
     struct Plan {
         std::vector<sim::TileCoord> tiles;

@@ -34,6 +34,8 @@
 #include <tuple>
 
 #include "ants_ai/bot.hpp"
+#include "ants_ai/island_expedition.hpp"
+#include "ants_ai/island_ferry.hpp"
 #include "ants_ai/island_tasks.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
@@ -69,8 +71,11 @@ private:
           gate_(kGate, gate_params(plan)),
           harass_(kHarass, tactics_),
           sabotage_(kSabotage, tactics_),
-          island_(kIslands, tactics_, island_params(plan)) {
+          island_(kIslands, tactics_, island_params(plan)),
+          expedition_(kExpedition, tactics_),
+          ferry_(kFerry, ferry_params(plan)) {
         island_.attach(&harvest_);
+        expedition_.attach(&island_);
     }
 
 public:
@@ -94,6 +99,8 @@ public:
     const HarassTask& harass() const noexcept { return harass_; }
     const SabotageTask& sabotage() const noexcept { return sabotage_; }
     const IslandTask& islands() const noexcept { return island_; }
+    const ExpeditionTask& expedition() const noexcept { return expedition_; }
+    const FerryTask& ferry() const noexcept { return ferry_; }
     const Tactics& tactics() const noexcept { return tactics_; }
     /// The style that the bot plays (known once start() has run; Random for a bot with a plan of its own)
     Style style() const noexcept { return style_; }
@@ -126,6 +133,8 @@ public:
     static constexpr TaskId kHarass = 12;
     static constexpr TaskId kSabotage = 13;
     static constexpr TaskId kIslands = 14;
+    static constexpr TaskId kExpedition = 15;
+    static constexpr TaskId kFerry = 16;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -165,6 +174,11 @@ private:
                 p.max_bridges = 4;
                 break;
         }
+        return p;
+    }
+    static FerryTask::Params ferry_params(const LevelPlan& plan) {
+        FerryTask::Params p;
+        p.per_pile = plan.island_ferry_per_pile;
         return p;
     }
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
@@ -213,6 +227,8 @@ private:
     HarassTask harass_;
     SabotageTask sabotage_;
     IslandTask island_;
+    ExpeditionTask expedition_;
+    FerryTask ferry_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);

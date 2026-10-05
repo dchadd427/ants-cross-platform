@@ -258,4 +258,106 @@ void run_island_task_tests() {
         ASSERT_FALSE(off);
         ASSERT_TRUE(drowned >= 1);
     } TEST_END();
+
+    TEST_CASE("AI15.9 A Bridge Is Renewed Before It Collapses While Trips Still Use It: A Medium Bot With A Given Swimmer And Six Workers (ISLANDS, Seat 0, No Expedition) Finishes At Least Six Chains And Plans At Least Two Renewals In 9,000 Ticks (A Tile Lasts 3,600), Scores At Least 600, And Loses No Ant")
+    {
+        Match m;
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0x01);
+        m.run(9000);
+        ASSERT_TRUE(m.island(0).chains_finished() >= 6);
+        ASSERT_TRUE(m.island(0).renewals() >= 2);
+        ASSERT_TRUE(m.sim.get_player_score(0) >= 600);
+        ASSERT_EQ(m.total_unforced(), 0);
+    } TEST_END();
+
+    TEST_CASE("AI15.10 An Idle Worker At The End Of A Bridge That Is About To Go Is Moved Off Before The Economy Could Send It Over (The Engine Takes The Cheapest Way From Where An Ant Stands): A Worker Put At The South End Of The Chain With 640 Ticks Of Life Left Stands At Least Three Tiles From It When The Chain Is Gone (A Medium Bot, ISLANDS); Without The Guard It Has Not Moved")
+    {
+        const auto trial = [&](bool guard, int* moved, uint32_t* holds) {
+            Match m;
+            m.init("ISLANDS", 1, 0x01, Level::Medium, 0, [&](LevelPlan& p) { lone(p); p.island_guard = guard; p.island_bridge_ants = 0; });
+            const uint64_t middle = dig_north_chain(m.sim, [&] { m.tick(); });
+            m.run(static_cast<int>(middle + 3600 - 700 - m.sim.current_tick()));
+            const uint32_t ant = m.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{24, 19});
+            m.run(800);                                                                                                       // (the chain is gone by now)
+            *moved = -1;
+            for (const auto& a : m.sim.get_world_state().ants) {
+                if (a.id == ant) *moved = TileCoord{a.tile_x, a.tile_y}.chebyshev_dist(TileCoord{24, 19});
+            }
+            *holds = m.island(0).holds();
+            ASSERT_EQ(m.total_collapsed(), 0);
+        };
+        int moved = 0;
+        uint32_t holds = 0;
+        trial(true, &moved, &holds);
+        ASSERT_TRUE(moved >= 3);
+        ASSERT_TRUE(holds >= 1);
+        trial(false, &moved, &holds);
+        ASSERT_EQ(moved, 0);
+        ASSERT_EQ(holds, 0u);
+    } TEST_END();
+
+    TEST_CASE("AI15.11 The Guard Does Not Spend The Budget Of The Level On Orders That Are On Their Way: In A Whole Match Of Four Hard Bots On SMALL (Seed 3, 7,200 Ticks) No Ant Is Told To Stop Twice Within 20 Ticks (The Order Of A Bot Needs Its Reaction Time To Work, And A Second One Before That Only Queues Up Behind The First)")
+    {
+        Match m;
+        m.expedition = true;
+        m.ferry = true;
+        m.init("SMALL", 3, 0x0F, Level::Hard, 0);
+        m.run(7200);
+        std::map<uint32_t, uint64_t> last;
+        uint64_t least = ~uint64_t{0};
+        for (const auto& e : m.log()) {
+            if (e.second.type != CommandType::Stop) continue;
+            for (const uint32_t ant : e.second.ants) {
+                const auto it = last.find(ant);
+                if (it != last.end()) least = std::min(least, e.first - it->second);
+                last[ant] = e.first;
+            }
+        }
+        ASSERT_TRUE(least >= 20);
+    } TEST_END();
+
+    TEST_CASE("AI15.12 The Ends Of A Bridge That Is About To Go Are Counted In Steps Over Land, Not Across The Water: A Worker That Stands Eight Tiles By Air From The North End Of The Chain, On The Island West Of The North Island, Is Told Nothing By The Guard, While The Workers By The South End (On The Hill's Island) Are Held (A Medium Bot, ISLANDS)")
+    {
+        Match m;
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0, [&](LevelPlan& p) { lone(p); p.island_bridge_ants = 0; });
+        const uint64_t middle = dig_north_chain(m.sim, [&] { m.tick(); });
+        m.run(static_cast<int>(middle + 3600 - 700 - m.sim.current_tick()));
+        const uint32_t far = m.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{16, 14});
+        m.run(800);                                                                                                       // (the chain is gone by now)
+        int told = 0;
+        for (const auto& e : m.log()) {
+            for (const uint32_t ant : e.second.ants) told += ant == far ? 1 : 0;
+        }
+        ASSERT_EQ(told, 0);
+        ASSERT_TRUE(m.island(0).holds() >= 1);                                                                             // (the guard was at work: the ants by the south end are held)
+        ASSERT_EQ(m.total_collapsed(), 0);
+    } TEST_END();
+
+    TEST_CASE("AI15.13 A Worker Collects A Power-Up Across A Bridge, With The Tasks Of Every Bot (A Medium Bot, ISLANDS, Seat 0, The Chain Dug By A Swimmer That Stands Aside): A Swimmer Power-Up Put Down On The Island North Of The Hill's Island, Beyond The Chain, Is Taken Within 900 Ticks By A Worker That Walks Over It, And Nobody Drowns")
+    {
+        Match m;
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0, [&](LevelPlan& p) { lone(p); p.island_bridge_ants = 0; });
+        dig_north_chain(m.sim, [&] { m.tick(); });
+        const MapInfo& map = m.ctl->map();
+        const int32_t north = map.component(0, TileCoord{25, 13});
+        ASSERT_TRUE(north >= 0 && north != map.hill_component(0));
+        const auto swimmers = [&]() {
+            uint32_t n = 0;
+            for (const auto& a : m.sim.get_world_state().ants) n += (a.player_id == 0 && a.type == sim::AntType::Swimmer) ? 1u : 0u;
+            return n;
+        };
+        const uint32_t before = swimmers();                                                                      // (the Swimmer that dug the chain is still there)
+        m.sim.grid_mut().place_powerup(25, 14, 5);
+        bool crossed = false;
+        for (int t = 1; t <= 900 && swimmers() == before; ++t) {
+            m.tick();
+            for (const auto& a : m.sim.get_world_state().ants) {
+                crossed = crossed || (a.player_id == 0 && a.type != sim::AntType::Swimmer && map.ant_component(0, TileCoord{a.tile_x, a.tile_y}) == north);
+            }
+        }
+        ASSERT_TRUE(crossed);
+        ASSERT_EQ(swimmers(), before + 1);
+        ASSERT_FALSE(m.sim.grid().has_powerup_at(TileCoord{25, 14}));
+        ASSERT_EQ(m.total_unforced(), 0);
+    } TEST_END();
 }

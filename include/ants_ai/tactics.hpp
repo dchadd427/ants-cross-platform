@@ -158,6 +158,9 @@ struct LevelPlan {
     uint32_t island_builders{1};         // Swimmers that dig bridges at a time
     uint32_t island_bridge_ants{1};      // ants that work the piles over one bridge at a time (two that meet head-on on a one-wide bridge stop for good: IslandTask "traffic")
     bool island_guard{true};             // false: the ants on a bridge that goes, and the ants that walk to one, are left alone (the ablation that the tests of the guard use)
+    bool island_expedition{false};       // the expedition is on (ExpeditionTask: a crew is flown to the Swimmers that lie beyond water, bomb by bomb); the tests of the island task switch it off
+    bool island_ferry{false};            // the Swimmers that dig no bridge carry food across the water (FerryTask)
+    uint32_t island_ferry_per_pile{2};   // Swimmers of the ferry at one pile
     /// The order of the opening's power-up trips (PowerUpTask): the values of the owner's playbook, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
