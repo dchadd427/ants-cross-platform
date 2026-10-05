@@ -109,6 +109,29 @@ TcpConnection::TcpConnection(int fd, bool connecting, std::string peer)
 
 TcpConnection::~TcpConnection() { close(); }
 
+std::string pick_address(const std::vector<ResolvedAddress>& found) {
+    std::string first_v6;
+    for (const ResolvedAddress& a : found) {
+        if (a.text.empty()) continue;
+        if (!a.ipv6) return a.text;                                  // the first IPv4 one, wherever the system put it
+        if (first_v6.empty()) first_v6 = a.text;
+    }
+    return first_v6;
+}
+
+std::string address_with_scope(const std::string& numeric, uint32_t scope_id) {
+    return scope_id != 0 && !numeric.empty() ? numeric + "%" + std::to_string(scope_id) : numeric;
+}
+
+ResolvedAddress describe_address(const void* entry) {
+    ResolvedAddress out;
+    if (entry == nullptr) return out;
+    const auto* sa = static_cast<const sockaddr*>(entry);
+    out.ipv6 = sa->sa_family == AF_INET6;
+    out.text = out.ipv6 ? address_with_scope(host_text(sa), reinterpret_cast<const sockaddr_in6*>(sa)->sin6_scope_id) : host_text(sa);
+    return out;
+}
+
 std::string resolve_host(const std::string& host) {
     if (host.empty()) return std::string();
     ensure_sockets();
@@ -118,15 +141,15 @@ std::string resolve_host(const std::string& host) {
     hints.ai_socktype = SOCK_STREAM;
     addrinfo* res = nullptr;
     if (getaddrinfo(host.c_str(), nullptr, &hints, &res) != 0 || res == nullptr) return std::string();
-    std::string out;
-    for (addrinfo* ai = res; ai != nullptr && out.empty(); ai = ai->ai_next) {
+    std::vector<ResolvedAddress> found;
+    for (addrinfo* ai = res; ai != nullptr; ai = ai->ai_next) {
         const socket_t s = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);       // (as connect() does: an address that no socket can be made for is passed over)
         if (s == kBadSocket) continue;
         close_socket(s);
-        out = host_text(ai->ai_addr);
+        found.push_back(describe_address(ai->ai_addr));
     }
     freeaddrinfo(res);
-    return out;
+    return pick_address(found);
 }
 
 std::unique_ptr<TcpConnection> TcpConnection::connect(const std::string& host, uint16_t port) {

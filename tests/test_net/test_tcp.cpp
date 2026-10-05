@@ -697,6 +697,54 @@ int main() {
         ASSERT_EQ(got.size(), kBurst);
     } TEST_END();
 
+    TEST_CASE("N3.9 TCP: Which Address A Name Gives The Join (The Re-Check's N3): The First IPv4 One Wherever The System Put It (The Game Server Listens On IPv4 Only, As The Start Menu's Lookup Takes It), Else The First IPv6 One With Its Scope; An Address Is Its Own Answer, Nothing Resolves To Nothing") {
+        const auto v4 = [](const char* text) { return ResolvedAddress{text, false}; };
+        const auto v6 = [](const char* text) { return ResolvedAddress{text, true}; };
+        ASSERT_EQ(pick_address({}), std::string());
+        ASSERT_EQ(pick_address({v4("127.0.0.1")}), std::string("127.0.0.1"));
+        ASSERT_EQ(pick_address({v6("::1"), v4("127.0.0.1")}), std::string("127.0.0.1"));                    // "localhost" on a host that lists ::1 first: the server is on IPv4
+        ASSERT_EQ(pick_address({v6("2001:db8::1"), v6("::1"), v4("192.0.2.7"), v4("192.0.2.8")}), std::string("192.0.2.7"));      // the first IPv4 one, not the last
+        ASSERT_EQ(pick_address({v4("192.0.2.7"), v6("::1")}), std::string("192.0.2.7"));
+        ASSERT_EQ(pick_address({v6("fe80::1%2"), v6("::1")}), std::string("fe80::1%2"));                    // only IPv6: the first one, with its scope
+        ASSERT_EQ(pick_address({v6("2001:db8::1")}), std::string("2001:db8::1"));
+        ASSERT_EQ(pick_address({v6(""), v4("")}), std::string());                                           // (an entry that has no text is no address)
+        ASSERT_EQ(pick_address({v4(""), v4("192.0.2.9")}), std::string("192.0.2.9"));
+        ASSERT_EQ(address_with_scope("fe80::1", 2), std::string("fe80::1%2"));
+        ASSERT_EQ(address_with_scope("fe80::1", 0), std::string("fe80::1"));
+        ASSERT_EQ(address_with_scope("2001:db8::1", 0), std::string("2001:db8::1"));
+        ASSERT_EQ(address_with_scope("fe80::abcd", 17), std::string("fe80::abcd%17"));
+        ASSERT_EQ(resolve_host("127.0.0.1"), std::string("127.0.0.1"));
+        ASSERT_EQ(resolve_host(""), std::string());
+        ASSERT_EQ(resolve_host("localhost"), std::string("127.0.0.1"));                                     // the name that has both is answered with its IPv4 address (as HostLookup::system_resolve does)
+        if (resolve_host("::1") == "::1") {                                                                 // (a machine that can make an IPv6 socket: a link-local address keeps its scope through the lookup)
+            const std::string linked = resolve_host("fe80::1%1");
+            ASSERT_TRUE(linked.size() > 2 && linked.compare(0, 5, "fe80:") == 0 && linked.compare(linked.size() - 2, 2, "%1") == 0);
+        }
+#ifndef _WIN32
+        {   // the entries of a lookup's list, made by hand (a machine without IPv6 has none to look up): the family, the text, the scope id of a link-local address
+            sockaddr_in four{};
+            four.sin_family = AF_INET;
+            ASSERT_EQ(inet_pton(AF_INET, "192.0.2.7", &four.sin_addr), 1);
+            sockaddr_in6 linked{};
+            linked.sin6_family = AF_INET6;
+            ASSERT_EQ(inet_pton(AF_INET6, "fe80::1", &linked.sin6_addr), 1);
+            linked.sin6_scope_id = 2;
+            sockaddr_in6 global{};
+            global.sin6_family = AF_INET6;
+            ASSERT_EQ(inet_pton(AF_INET6, "2001:db8::1", &global.sin6_addr), 1);
+            sockaddr other{};
+            other.sa_family = AF_UNSPEC;
+            ASSERT_TRUE(!describe_address(&four).ipv6 && describe_address(&four).text == "192.0.2.7");
+            ASSERT_TRUE(describe_address(&linked).ipv6 && describe_address(&linked).text == "fe80::1%2");  // the scope stays with the address
+            ASSERT_TRUE(describe_address(&global).ipv6 && describe_address(&global).text == "2001:db8::1");
+            ASSERT_TRUE(describe_address(&other).text.empty() && describe_address(nullptr).text.empty());
+            ASSERT_EQ(pick_address({describe_address(&linked), describe_address(&four)}), std::string("192.0.2.7"));       // IPv6 first, IPv4 second: the IPv4 one
+            ASSERT_EQ(pick_address({describe_address(&linked), describe_address(&global)}), std::string("fe80::1%2"));    // IPv6 only: the first, with its scope
+            ASSERT_EQ(pick_address({describe_address(&other), describe_address(&global)}), std::string("2001:db8::1"));
+        }
+#endif
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;
