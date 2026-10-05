@@ -75,11 +75,34 @@ class TheFrontPageMarkup(PageCase):
         self.found(self.page, r'\.roster li\[hidden\] \{ display: none; \}')                          # (a row is a grid: hidden still hides it)
         # the invitations: a box that the script shows for the Friend seats and fills with a row for each (no markup is made of text), a note about changed links
         self.found(self.page, r'<div class="invites" id="invites" hidden>\s*<span class="lab" id="invites-label">Invite your friends: a link for each seat</span>\s*<div id="invite-list" role="group" aria-labelledby="invites-label"></div>\s*<p class="hint" id="links-note" role="status" hidden>')
-        # START: the original's own picture button (named for a screen reader, off with fewer than two players), the line under it
-        self.found(self.page, r'<button id="play" class="startbtn" type="button" aria-label="Start the match" aria-describedby="start-note"></button>')
+        # START: the page's own teal button (its text names it for a screen reader; off with fewer than two players), the line under it
+        self.found(self.page, r'<button id="play" class="btn startbtn" type="button" aria-describedby="start-note">START!</button>')
         self.found(self.page, r'<p class="note" id="start-note" aria-live="polite"></p>')
         self.found(self.page, r'\.startbtn:disabled \{[^}]*cursor: not-allowed')
-        self.found(self.page, r'\.startbtn:not\(:disabled\):hover \{ background-image: url\("front/btn_start2\.png"\); \}')           # (a button that is off does not answer the pointer)
+        self.found(self.page, r'\.startbtn:disabled:hover \{ background: var\(--teal\); \}')           # (a button that is off does not answer the pointer)
+
+    def test_start_is_the_pages_own_button_drawn_by_the_browser_at_a_modest_size(self):
+        # v0.8.0 showed the original's 98 x 27 picture as the button's background at three times its size (294 x 81 pixels, 196 x 54 on a phone) with image-rendering: pixelated, so its letters and edges were
+        # blocky and it was bigger than the rows above it. It is text on the page's own bevel (.btn) now: the browser draws it at the screen's resolution, and its size is a minimum that the text may outgrow.
+        self.not_found(self.page, r'btn_start')
+        rules = re.findall(r'(?m)^\s*\.startbtn \{([^}]*)\}', self.page)
+        self.assertEqual(len(rules), 2, "one rule for a wide page and one for a phone")
+        for rule in rules:
+            self.not_found(rule, r'background|image-rendering|(?<![-\w])(width|height):', "the size is a minimum of the text's button, never a picture or a fixed box: " + rule)
+
+        def px(rule, prop):
+            found = re.search(r"(?<![-\w])%s: (\d+)px" % prop, rule)
+            self.assertIsNotNone(found, "%s is a number of px in: %s" % (prop, rule))
+            return int(found.group(1))
+        wide, phone = rules
+        for prop, wide_most, phone_most in (("min-width", 240, 200), ("min-height", 64, 58), ("font-size", 30, 28)):         # (one assert each: a tuple would compare its first number alone)
+            self.assertLessEqual(px(wide, prop), wide_most, "wide " + prop)
+            self.assertLessEqual(px(phone, prop), phone_most, "phone " + prop)
+        self.assertGreaterEqual(px(phone, "min-height"), 44)                                             # (a finger's target: the base .btn is 44 px high at the least)
+        self.assertEqual(self.page.count('class="btn startbtn"'), 1)
+        at = self.page.index("@media (max-width: 700px)")
+        phone_block = self.page[at:self.page.index("@media", at + 1)]
+        self.assertEqual(len(re.findall(r"\.startbtn \{", phone_block)), 1, "the phone's rule is the one in the 700 px block")
 
     def test_the_card_has_a_line_to_join_a_match_that_somebody_else_made_with_the_old_ids(self):
         self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
