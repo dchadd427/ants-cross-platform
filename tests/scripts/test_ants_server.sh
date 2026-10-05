@@ -1085,9 +1085,9 @@ PY
 RR_WS="$(free_port)"
 RR_NEWROOM="E2E-NEW-$RANDOM"
 RR_PROTOCOL="$("$SERVER" --version 2> /dev/null | sed -n 's/.*(network protocol \([0-9][0-9]*\)).*/\1/p')"
-RR_T0="$(python3 -c 'import time; print(time.time())')"
-rr_launch --ws-port "$RR_WS" --max-rooms 1200
-RR_ANSWERS="$(python3 - "$RR_WS" "$RR_PORT" "$RR_CTL" "$SECRET" "$RR_NEWROOM" "$RR_PROTOCOL" "$RR_T0" <<'PY'
+# the program that asks, written to a file first: macOS ships bash 3.2, which cannot read a here-document inside a command substitution
+RR_ASK_PY="$WORK/restore_answers.py"
+cat > "$RR_ASK_PY" <<'PY'
 import json, socket, struct, sys, time, urllib.request
 ws, game, ctl, secret, room, protocol, launched = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5], int(sys.argv[6]), float(sys.argv[7])
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))       # (the server is on this machine: no proxy)
@@ -1132,7 +1132,9 @@ if made:
     welcome = len(received) >= 5 and received[4] == 2           # (a message of type Welcome: the room took the player)
 print('%.3f %.3f %.3f %s %d' % (busy_seconds, welcome_seconds, hello_seconds, 'yes' if welcome else 'no', (busy or {}).get('matches', -1)))
 PY
-)"
+RR_T0="$(python3 -c 'import time; print(time.time())')"
+rr_launch --ws-port "$RR_WS" --max-rooms 1200
+RR_ANSWERS="$(python3 "$RR_ASK_PY" "$RR_WS" "$RR_PORT" "$RR_CTL" "$SECRET" "$RR_NEWROOM" "$RR_PROTOCOL" "$RR_T0")"
 read -r RR_BUSY_S RR_WELCOME_S RR_HELLO_S RR_WELCOME RR_BUSY_MATCHES <<< "$RR_ANSWERS"
 check "while $RR_CLONES records wait for their replay GET /busy answers within 2 s of the server's launch (it did in $RR_BUSY_S s) and counts them (${RR_BUSY_MATCHES:-?} matches)" "$(python3 -c "print(0 if float('${RR_BUSY_S:-99}') < 2.0 and int('${RR_BUSY_MATCHES:--1}') >= 100 else 1)")"
 check "a room that is made then takes its player at once (the Welcome came $RR_HELLO_S s after the Hello and $RR_WELCOME_S s after the launch, while the records are replayed)" "$(python3 -c "print(0 if '${RR_WELCOME:-no}' == 'yes' and float('${RR_HELLO_S:-99}') < 1.0 and float('${RR_WELCOME_S:-99}') < 4.0 else 1)")"
