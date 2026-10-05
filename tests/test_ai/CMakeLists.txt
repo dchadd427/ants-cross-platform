@@ -18,6 +18,11 @@ add_executable(test_ai
     test_ai_b41_cost.cpp
     test_ai_race.cpp
     test_ai_contest.cpp
+    test_ai_islands.cpp
+    test_ai_island_task.cpp
+    test_ai_island_expedition.cpp
+    test_ai_island_ferry.cpp
+    test_ai_island_small.cpp
 )
 
 target_link_libraries(test_ai PRIVATE
@@ -35,6 +40,28 @@ target_include_directories(test_ai PRIVATE
 target_link_libraries(test_ai PRIVATE ants_test_paths)
 
 add_test(NAME test_ai COMMAND test_ai)
+
+# The island matches (run_tests.sh suite 2.28): whole matches of four standard bots on ISLANDS and SMALL at every level (the expedition, the bridges and the ferry). Kept apart from test_ai: it plays
+# about a minute of matches.
+add_executable(test_ai_islands
+    test_ai_islands_main.cpp
+    test_ai_island_matches.cpp
+)
+
+target_link_libraries(test_ai_islands PRIVATE
+    ants_ai
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_ai_islands PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools
+)
+
+target_link_libraries(test_ai_islands PRIVATE ants_test_paths)
+
+add_test(NAME test_ai_islands COMMAND test_ai_islands)
 
 # The worker bot suite (run_tests.sh suite 2.22): the economy on every shipped map (matches of the whole length), the pinned baselines (baselines.inc, written by
 # `bot_arena --write-baselines`), the task model. Kept apart from test_ai: it plays about a minute of matches, and the pinned procedure runs on a few threads.

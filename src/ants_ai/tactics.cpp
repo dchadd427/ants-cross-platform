@@ -42,6 +42,11 @@ LevelPlan plan_for(Level level) noexcept {
             p.hunt_reach = 6;
             p.hunt_wide = false;                 // Easy hunts what stands next to its ants and nothing else
             p.hunt_odds_percent = 150;
+            p.islands = true;
+            p.island_expedition = true;
+            p.island_ferry = true;
+            p.island_swimmers = 2;                                  // they carry food; no builder at any level (a Swimmer that ferries earns 700 to 850 points a match, a bridge carries one ant at a time: docs/BOTS.md)
+            p.island_builders = 0;
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -69,6 +74,11 @@ LevelPlan plan_for(Level level) noexcept {
             p.catchup_tier3 = 195;
             p.hunt_force = 3;
             p.hunt_reach = 10;                   // Medium hunts what is within the leash of its hill and at its piles as well
+            p.islands = true;
+            p.island_expedition = true;
+            p.island_ferry = true;
+            p.island_swimmers = 3;                                  // (the row has three Swimmers; with one more the bot scored a third more: docs/BOTS.md)
+            p.island_builders = 0;
             break;
         case Level::Hard:
             p.defenders = 3;
@@ -101,6 +111,11 @@ LevelPlan plan_for(Level level) noexcept {
             p.hunt_leader_carriers = true;       // Hard also hunts the carriers of the leading team wherever they are
             // (p.skirmish, the stronger force at a carrier or a worker at a pile, is built and OFF: against three bots of v0.5.0 on TREASURE a Hard bot with it won 14.1 percent of 96 matches and 28.6
             // without it, 25 being equal; it keeps three ants from the piles for up to 600 ticks at a time and the enemy's defenders come: docs/BOTS.md, "Fights of its own")
+            p.islands = true;
+            p.island_expedition = true;
+            p.island_ferry = true;
+            p.island_swimmers = 3;
+            p.island_builders = 0;
             break;
     }
     return p;
