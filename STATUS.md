@@ -1,16 +1,22 @@
 # Status
 
-_Updated 2026-10-04 19:11 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-04 22:19 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- Matches that survive a server restart, phase 2 (high priority): built and tested (the server restores in slices, the games rejoin by themselves, the screens of the way back, Rejoin in the start menu); now the switch for beta, Rejoin on the front page and a check in a real browser
-- Bot games online: a level for each bot and teams in a room (network protocol 13): built and tested, in review
+- Every page in the original game's look: the game page, the changelog pages and "Sprites and sounds" (release v0.5.1), and a way back from the page that a shared link opens
+- Matches that survive a server restart, phase 2 (high priority): built, checked in a real browser and reviewed; the review's fixes are in progress, then the release (v0.6.0)
+- One start card for every game, all online: your colour, a friend or a bot level for each other colour, invite links in the card; with online bot games and teams (network protocol 13; after v0.6.0)
+- Bots, stage 1: contested food first, finishing wounded ants (a bot sees every ant's health), fighting when behind, the endgame, the fire play (no lone fire ant, killing the fire ant)
+- Bots: getting off the island (Islands: bomb over, swimmers, bridges; Small: the swimmer ferry)
+- Bots: a power-up playbook (a draft for the owner to review), then the tactics built from it (fire a base in, a combat skirmish, fire ant with thief, bombs along the base's edges)
+- Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 
 ## On hold (not started; the owner decides when)
-- Bots, later steps: the island hop (Islands) and the swimmer ferry (Small), standing on power-ups (Hard), flower drops, the opening trips on a few community maps, tuning and a level ladder
+- Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
 - The original's stunned ant may be invulnerable: to check in the original program (a rules change)
+- Extinguishing a fire under an ant: does the original allow it for a person? (bots do not; a rules change if it does not)
 - Server: the server uses all cores; a load test for the VPS; watching other people's matches live
 - Touch: tap fixes, two-finger pan, pinch zoom
 - Dead-code cleanup, trimming the biggest documents, Docker hardening, short room codes, match API, an option to match the monitor's aspect
