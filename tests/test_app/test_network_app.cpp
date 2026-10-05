@@ -6105,6 +6105,17 @@ void run_one_card_tests() {
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_seat == seat && c.net_start_when == 3 && c.startup_error.empty());
         }
+        for (int people = 1; people <= 4; ++people) {                                                            // You and up to three friends: one to four people to wait for
+            const std::string text = std::to_string(people);
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "demo-small-4p-abc", "--start-when", text};
+            c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_TRUE(c.net_start_when == people && c.startup_error.empty());
+        }
+        for (const char* text : {"0", "5", "40", "-1", "x", ""}) {                                               // anything else is no hook (and no error: the page only ever passes 1 - 4)
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "demo-small-4p-abc", "--start-when", text};
+            c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_TRUE(c.net_start_when == 0 && c.startup_error.empty());
+        }
     } TEST_END();
 
     TEST_CASE("N5.84 One Card, Bots Only: A Leader Who Sits At Any Colour With --start-when 1 Starts The Match At Once, The Bots Of The Plan In Their Seats (A Bot At Green Too), The Nobody Seat Empty, The Room's Teams Made; The Plan's Word For The Leader's Own Seat Is Ignored") {

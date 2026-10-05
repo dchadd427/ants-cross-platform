@@ -33,7 +33,6 @@ import argparse
 import json
 import os
 import re
-import secrets
 import shutil
 import sys
 import tempfile
@@ -44,7 +43,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
 import web_rejoin_check as rejoin                                            # noqa: E402  (its Server: the site's game server of this tree; its Player: a person's own browser)
-from web_aspect_check import Browser, NotReachable, Tab, read_png            # noqa: E402,F401
+from web_aspect_check import Browser, NotReachable, Tab                    # noqa: E402
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
