@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 12:41 PDT · current release **v0.7.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 12:45 PDT · current release **v0.7.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -20,13 +20,14 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
+- The README is being split into short pages under docs/ and fact-checked against the game as built (docs only, so merging it does not change the site): the writing is under way, then a draft pull request, then the owner's yes to merge
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
 - The original's stunned ant may be invulnerable: to check in the original program (a rules change)
 - Extinguishing a fire under an ant: does the original allow it for a person? (bots do not; a rules change if it does not)
 - Server: the server uses all cores; a load test for the VPS; watching other people's matches live
-- Dead-code cleanup, trimming the biggest documents, Docker hardening, match API, an option to match the monitor's aspect
+- Dead-code cleanup, trimming the other big documents (the README is in progress), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
 - **The sanitizer test run builds on GCC 13 again** (task 16, PR #12, merged 2026-10-05 12:20 PDT): a false compiler warning is off in that build only; nothing changes for players
