@@ -59,7 +59,7 @@
         }
         .btn:hover { background: var(--teal-hi); }
         .btn:active { transform: translate(2px, 3px); box-shadow: inset 0 1px 0 #f4f4ff, inset 3px 0 0 #3d9a7d, inset 0 -4px 0 var(--teal-lo), 1px 1px 0 var(--shadow); }
-        a:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, .startbtn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+        a:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
         .btn.sm, .btn.small { min-height: 38px; padding: 6px 14px; font-size: 15px; }
         .btn.big { min-height: 54px; font-size: 20px; padding: 10px 26px; }
         .banner { display: block; text-align: center; font-size: 30px; line-height: 1.1; padding: 10px 18px; margin-bottom: 14px; font-weight: 500; }
@@ -173,10 +173,10 @@
         .roster .pair input:checked + label { box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16; }
         .teamrow { margin-bottom: 24px; }
         .playrow { display: flex; align-items: center; gap: 14px 20px; flex-wrap: wrap; }
-        .startbtn { width: 294px; height: 81px; max-width: 100%; border: 0; padding: 0; cursor: pointer; background: url("front/btn_start1.png") center / 100% 100% no-repeat; image-rendering: pixelated; }
-        .startbtn:not(:disabled):hover { background-image: url("front/btn_start2.png"); }
-        .startbtn:not(:disabled):active { background-image: url("front/btn_start3.png"); }
+        /* START!: the menus' bevelled teal button as a real button, so its letters and edges are drawn at the screen's own resolution (the original's 98 x 27 picture, blown up three times, broke up) */
+        .startbtn { min-width: 210px; min-height: 58px; padding: 10px 34px; font-size: 26px; letter-spacing: .05em; text-shadow: 0 2px 0 var(--teal-lo); }
         .startbtn:disabled { opacity: .5; cursor: not-allowed; filter: grayscale(.6); }
+        .startbtn:disabled:hover { background: var(--teal); }                       /* (a button that is off does not answer the pointer) */
         .note { max-width: 34ch; }
         .playrow .note { max-width: 40ch; }
 
@@ -345,7 +345,7 @@
             .rejoin { margin: 10px 0 0; align-items: stretch; }
             .rejoin .btn { width: 100%; }
             .playrow { gap: 14px; }
-            .startbtn { width: 196px; height: 54px; }
+            .startbtn { min-width: 180px; min-height: 54px; padding: 8px 28px; font-size: 24px; }
             .how-body .sheet { max-width: 100%; justify-self: center; }
             .how-body .sheet img { width: auto; max-width: 100%; image-rendering: auto; }
             .room-top { flex-direction: column; }
@@ -476,7 +476,7 @@
                             <p class="hint" id="links-note" role="status" hidden>Your choices changed the links (the map, the teams or the seats): copy them again.</p>
                         </div>
                         <div class="playrow">
-                            <button id="play" class="startbtn" type="button" aria-label="Start the match" aria-describedby="start-note"></button>
+                            <button id="play" class="btn startbtn" type="button" aria-describedby="start-note">START!</button>
                             <p class="note" id="start-note" aria-live="polite"></p>
                         </div>
                     </div>
