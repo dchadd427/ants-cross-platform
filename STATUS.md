@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 15:36 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 15:48 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -22,6 +22,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 - The README is split into short pages under docs/ and was fact-checked against the game as built (docs only, so merging it does not change the site): the draft pull request is up (PR #17)
 - Browser checks without Docker (draft pull request #13): a session that has no Docker can build the web pages and run the touch checks and the other browser checks; it changes no page (no redeploy), has main v0.8.0 in and merges once its five checks are green
+- Host moves a player's colour in the waiting room (tap a player's ant; network protocol 14, ships with v0.10.0 and the short room codes): being built, draft pull request to follow
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
@@ -31,7 +32,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is in progress), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
-- **v0.8.1** a sharp START! button and 48 demo rooms: START! on the front page is a teal button drawn by the browser instead of the original's small picture blown up three times, and the game server now allows 48 demo rooms at a time by default instead of 12, with a 4 MiB turn log per room (PR #18, merged 2026-10-05 15:30 PDT, live by 15:34 PDT)
+- **v0.8.1** a sharp START! button and 48 demo rooms: the front page's START! is a real button that your browser draws at your screen's own resolution (it was the original's small picture blown up three times, so it looked big and blocky), and the public game server makes up to 48 demo rooms at a time instead of 12, each with a turn log of at most 4 MiB (PR #18, merged 2026-10-05 15:30 PDT, live 15:34 PDT)
 - **v0.8.0** one card for every game: the front page's two cards are one "New match" card with four seats (you, Friends with an invitation link each, Easy, Medium or Hard bots, or Nobody), teams for three or four players and START! for every game; a game against the computer is now a room on the game server (network protocol 13; PR #11, merged 2026-10-05 13:52 PDT, live 13:56 PDT)
 - **The sanitizer test run builds on GCC 13 again** (task 16, PR #12, merged 2026-10-05 12:20 PDT): a false compiler warning is off in that build only; nothing changes for players
 - **v0.7.0** a phone can pan, zoom and right click: hold a finger for a right click (a ring closes first), two fingers move the map and pinch zooms, the page keeps the browser out of the way (made for Android Chrome; touch screens on desktops use it too)
