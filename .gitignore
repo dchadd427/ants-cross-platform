@@ -38,6 +38,8 @@ cmake-build-*/
 !web/favicon.png
 !asset_catalog/sprites/
 !asset_catalog/sprites/**
+!web/front/
+!web/front/**
 
 # Test artifacts and temporary captures
 tests/temp/

@@ -6,7 +6,7 @@ test_start_menu_app A4.6) and a LAN host's room (test_network_app N5.3b). What n
   - docker-compose.stack.yml: the map of a demo room whose code names none (`--demo-map ${ANTS_DEMO_MAP:-TREASURE.LVL}`), the six maps that a code may choose, and the comments that
     say what the default is; the commented example of docker-compose.server.yml. (A real server started with these options makes a Treasure room for a code that names no map:
     tests/scripts/test_ants_server.sh.) An ANTS_DEMO_MAP set in the environment of a stack replaces the default; the file's own default is what is read here.
-  - web/lobby.html (the front page): the New match form is preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),
+  - web/lobby.html (the front page): the maps of its two cards are preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),
     a remembered choice and ?map= still win, and every place that falls back to a map falls back to the default.
   - the defaults of the program and of the page name the same map.
 """
@@ -80,11 +80,12 @@ class PlayOnlinePage(unittest.TestCase):
         self.assertEqual(match.group(1), "treasure")
 
     def test_the_form_opens_on_treasure_and_a_remembered_choice_wins(self):
-        preselect = self.page.index("mapSelect.value = DEFAULT_MAP_KEY;")
+        preselect = self.page.index("mapSelects.forEach(function (select) { select.value = DEFAULT_MAP_KEY; });")         # (both cards: the one that plays against the computer and the one that hosts)
         recalled = self.page.index("recall('ants-four-map')")
-        remembered = self.page.index("mapSelect.value = last;")
+        remembered = self.page.index("mapSelects.forEach(function (select) { select.value = last; });")
         self.assertTrue(preselect < recalled < remembered, "the default must be set before the remembered choice is applied")
-        self.assertIn("if (last && mapByKey(last)) mapSelect.value = last;", self.page)
+        self.assertIn("if (last && mapByKey(last)) mapSelects.forEach(function (select) { select.value = last; });", self.page)
+        self.assertIn("var mapSelects = [mapSolo, mapHost];", self.page)
 
     def test_an_address_still_chooses_the_map(self):
         self.assertIn("var wantedMap = params.get('map');", self.page)
