@@ -119,7 +119,7 @@ void SiteStats::add(Series& series, int64_t now_hour) noexcept {
 }
 
 void SiteStats::count_ended(const RoomStatus& ended) {
-    if (ended.ticks > 0) count_online();
+    if (ended.ticks >= kMinTicks) count_online();
 }
 
 void SiteStats::count_online() {

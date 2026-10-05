@@ -323,11 +323,12 @@ check "the referee's clock runs for the two of them (ticks after the dialog: $TI
 check "neither client reported an error" "$(grep -qiE 'out of sync|failed|error' "$WORK/l1.log" "$WORK/l2.log"; [ $? -ne 0 ]; echo $?)"
 check "the room did not fail (no desync)" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | grep -q '"state":"running"'; echo $?)"
 ONLINE_BEFORE="$(stat_of online total)"
+LEAD_TICKS="$(ticks_of "$LEAD")"
 for p in $LEAD_PIDS; do kill "$p" 2> /dev/null; done
 for p in $LEAD_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" > /dev/null
 sleep 0.3
-check "the leader's room, whose match ran, ended (its players left, then the owner closed it): one online game, counted once (a match that ran and ended counts, whatever ended it)" "$([ "$(stat_of online total)" = "$((ONLINE_BEFORE + 1))" ] && [ "$(stat_of online day)" = "$((ONLINE_BEFORE + 1))" ]; echo $?)"
+check "the leader's room, whose match ran for seconds only ($LEAD_TICKS ticks, under 600), ended (its players left, then the owner closed it): it counts nothing (a start-and-quit loop cannot pad the number)" "$([ "${LEAD_TICKS:-0}" -gt 0 ] && [ "${LEAD_TICKS:-0}" -lt 600 ] && [ "$(stat_of online total)" = "$ONLINE_BEFORE" ] && [ "$(stat_of online day)" = "$ONLINE_BEFORE" ]; echo $?)"
 
 # bots fill the empty seats (protocol 11): a room for four whose leader (a headless client with --fill-bots medium, --start-when 1: a test hook that presses START once one player is
 # in) starts it ALONE: the server seats a "Bot (Medium)" in each of the three empty seats and runs them, the status lists them, the match runs and the client reports no error; two
@@ -501,9 +502,19 @@ for KIND in startreq ping; do
     code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FLOODROOM" > /dev/null
 done
 check "the match next to the floods is still running and its clients saw no error" "$([ "$(field_of "$VICTIM" state)" = "running" ] && ! grep -qiE 'out of sync|failed|error' "$WORK/v1.log" "$WORK/v2.log"; echo $?)"
+# a match is an online game when it has played 600 ticks (30 s) and ended: this one has been playing through the floods, and plays on until it has
+VICTIM_TICKS=0
+for _ in $(seq 1 400); do
+    VICTIM_TICKS="$(ticks_of "$VICTIM")"
+    [ "${VICTIM_TICKS:-0}" -ge 600 ] && break
+    sleep 0.25
+done
+ONLINE_BEFORE="$(stat_of online total)"
 for p in $VICTIM_PIDS; do kill "$p" 2> /dev/null; done
 for p in $VICTIM_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$VICTIM" > /dev/null
+sleep 0.3
+check "the match next to the floods played $VICTIM_TICKS ticks (600 are 30 s) and ended (its players left, then the owner closed it): one online game, counted once (a match that played that long counts, whatever ended it)" "$([ "${VICTIM_TICKS:-0}" -ge 600 ] && [ "$(stat_of online total)" = "$((ONLINE_BEFORE + 1))" ] && [ "$(stat_of online day)" = "$((ONLINE_BEFORE + 1))" ]; echo $?)"
 
 # closing the room writes its result; SIGTERM stops the server
 check "the owner closes the room: 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE")" = "200" ]; echo $?)"
@@ -524,7 +535,7 @@ d = json.load(open(sys.argv[1]))
 ok = sorted(d) == ["format", "local", "online", "since"] and d["format"] == 1 and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", d["since"]) is not None
 for k in ("online", "local"):
     ok = ok and sorted(d[k]) == ["hours", "total"] and isinstance(d[k]["total"], int) and all(len(h) == 2 and all(isinstance(x, int) for x in h) for h in d[k]["hours"])
-ok = ok and d["local"]["total"] == 120 and d["online"]["total"] == 4 and sum(h[1] for h in d["local"]["hours"]) == 120
+ok = ok and d["local"]["total"] == 120 and d["online"]["total"] == 1 and sum(h[1] for h in d["local"]["hours"]) == 120
 sys.exit(0 if ok else 1)' "$STATS_FILE"; echo $?)"
 check "the log of the first start says that the counters are new, the stop leaves no temporary file" "$(grep -q 'site statistics: .* is new, counting from' "$WORK/server.log" && [ ! -e "$STATS_FILE.tmp" ]; echo $?)"
 STATS_BEFORE="$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); print(d["since"], d["online"]["total"], d["local"]["total"])' "$STATS_FILE")"

@@ -1,6 +1,6 @@
 #pragma once
 
-// The numbers of the front page (docs/NETWORK_PORT.md "Site statistics"): online games (a match that ran and ended) and single-player games that browsers report, each for the last 24
+// The numbers of the front page (docs/NETWORK_PORT.md "Site statistics"): online games (a match that ran at least 30 seconds and ended) and single-player games that browsers report, each for the last 24
 // hours (24 buckets of an hour on the server's clock) and for all time, kept in one small file. Numbers only, never a code, name, address or key. Single threaded like the server's loop.
 
 #include <array>
@@ -24,6 +24,7 @@ struct SiteCount {
 class SiteStats {
 public:
     static constexpr size_t kHours = 24;                 // the window: the hour that runs and the 23 before it
+    static constexpr uint32_t kMinTicks = 600;           // an online game is a match that ran at least this long: 30 s at 20 ticks a second (a start-and-quit loop cannot pad the number)
     static constexpr size_t kLocalPerMinute = 120;       // the most reports of single-player games that count in any kLocalWindowS seconds
     static constexpr int64_t kLocalWindowS = 60;
     static constexpr int64_t kSaveEveryS = 10;           // the file is written at most this often while something changed
@@ -33,7 +34,7 @@ public:
     using Clock = std::function<int64_t()>;
     explicit SiteStats(Clock clock = Clock());
 
-    /// A room that ended (RoomManager::take_ended tells each once): an online game when its match ran (RoomStatus::ticks > 0), nothing otherwise
+    /// A room that ended (RoomManager::take_ended tells each once): an online game when its match ran at least kMinTicks (RoomStatus::ticks), nothing otherwise
     void count_ended(const RoomStatus& ended);
     /// One online game
     void count_online();

@@ -96,32 +96,44 @@ std::string http_exchange(net::WsListener& listener, const std::string& request)
 }  // namespace
 
 void run_site_stats_tests() {
-    TEST_CASE("S3.140 What counts online: a room whose match RAN (one tick is enough) and ended is one game, whatever ended it, demo rooms too; a room that never began is nothing; the day and the total agree and the local counter is not touched") {
+    TEST_CASE("S3.140 What counts online: a room whose match ran at least 600 ticks (30 s of play) and ended is one game, whatever ended it, demo rooms too; a shorter match and a room that never began are nothing (a start-and-quit loop cannot pad the number); the day and the total agree and the local counter is not touched") {
         StatsClock clock;
         SiteStats stats(clock.fn());
+        ASSERT_EQ(SiteStats::kMinTicks, 600u);                                                  // 30 seconds at 20 ticks a second
         ASSERT_TRUE(stats.online().day == 0 && stats.online().total == 0 && stats.local().day == 0 && stats.local().total == 0);
         stats.count_ended(ended_room("MATCH-1", RoomState::Finished, 1200));                  // a match that was played to its end
         ASSERT_TRUE(stats.online().day == 1 && stats.online().total == 1);
         stats.count_ended(ended_room("demo-small-2p-x7k2", RoomState::Finished, 5000));        // a demo room (every web match is one)
         ASSERT_TRUE(stats.online().day == 2 && stats.online().total == 2);
-        stats.count_ended(ended_room("MATCH-2", RoomState::Failed, 77));                       // it ran and then failed (closed by the owner, a desync, the room's limit): it was played
+        stats.count_ended(ended_room("MATCH-2", RoomState::Failed, 777));                      // it ran and then failed (closed by the owner, a desync, the room's limit): it was played
         ASSERT_TRUE(stats.online().day == 3 && stats.online().total == 3);
-        stats.count_ended(ended_room("MATCH-3", RoomState::Failed, 1));                        // one tick is a match that ran
+        stats.count_ended(ended_room("MATCH-3", RoomState::Failed, 600));                      // exactly 30 s is a game ...
         ASSERT_TRUE(stats.online().day == 4 && stats.online().total == 4);
+        stats.count_ended(ended_room("SHORT-1", RoomState::Finished, 599));                    // ... one tick less is not
+        stats.count_ended(ended_room("SHORT-2", RoomState::Failed, 1));                        // a match that was quit at once
+        stats.count_ended(ended_room("SHORT-3", RoomState::Finished, 77));
+        stats.count_ended(ended_room("demo-short", RoomState::Finished, 300));                 // a demo room quit after 15 s
         stats.count_ended(ended_room("NOBODY-1", RoomState::Failed, 0));                       // nobody came
         stats.count_ended(ended_room("demo-lonely", RoomState::Failed, 0));
         stats.count_ended(ended_room("SHUT-1", RoomState::Failed, 0));                         // closed while it waited, or during the dialog before the first tick
         stats.count_ended(ended_room("ODD-1", RoomState::Finished, 0));
         ASSERT_TRUE(stats.online().day == 4 && stats.online().total == 4);
         ASSERT_TRUE(stats.local().day == 0 && stats.local().total == 0);
-        stats.count_online();                                                                   // (the plain count is the same as an ended room that ran)
+        stats.count_online();                                                                   // (the plain count is one game, whatever it is told)
         ASSERT_TRUE(stats.online().day == 5 && stats.online().total == 5);
         // the numbers of a status are the only thing that decides: a name, a code or a map never does
-        RoomStatus named = ended_room("", RoomState::Finished, 20);
+        RoomStatus named = ended_room("", RoomState::Finished, 600);
         named.names[0] = "Ann";
         named.map = "TINY.LVL";
         stats.count_ended(named);
         ASSERT_EQ(stats.online().total, uint64_t{6});
+        RoomStatus unnamed = ended_room("", RoomState::Finished, 599);
+        unnamed.names[0] = "Ann";
+        unnamed.map = "TINY.LVL";
+        stats.count_ended(unnamed);
+        ASSERT_EQ(stats.online().total, uint64_t{6});
+        stats.count_ended(ended_room("LONG-1", RoomState::Finished, UINT32_MAX));              // the largest clock is a game too
+        ASSERT_EQ(stats.online().total, uint64_t{7});
     } TEST_END();
 
     TEST_CASE("S3.141 The last 24 hours are 24 buckets of an hour on the server's clock: the hour that runs and the 23 before it; a game leaves the window when its hour is 24 hours old, the total never forgets, a bucket is used again a day later, and a clock that goes back loses nothing") {
@@ -659,7 +671,7 @@ void run_site_stats_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.148 A real room manager: a demo room that ran and ended counts once (also when its code is asked for again before anybody looked), a room closed during the dialog or while it waited counts nothing, a match that ran and was closed by the owner counts, and nothing counts twice") {
+    TEST_CASE("S3.148 A real room manager: a demo room that played 30 s and ended counts once (also when its code is asked for again before anybody looked), a match that was quit sooner, a room closed during the dialog and one closed while it waited count nothing, a match that played 30 s and was closed by the owner counts, and nothing counts twice") {
         ServerLimits limits;
         limits.demo_rooms = 4;
         limits.demo_map = "TINY.LVL";
@@ -679,6 +691,9 @@ void run_site_stats_tests() {
             return ended;
         };
         const auto ticking = [&](const std::string& code) { return w.status(code).state == RoomState::Running && w.status(code).ticks > 20; };
+        const auto played = [&](const std::string& code) { return w.status(code).state == RoomState::Running && w.status(code).ticks >= SiteStats::kMinTicks; };   // 30 s of play
+        sim::Command quit;
+        quit.type = sim::CommandType::Quit;
         const auto play_until = [&](const std::function<bool()>& done, uint32_t max_ms) {
             for (uint32_t t = 0; t < max_ms && !done(); t += 250) w.run(250);
             return done();
@@ -689,18 +704,28 @@ void run_site_stats_tests() {
         ASSERT_TRUE(w.status("demo-lone").state == RoomState::Failed && w.status("demo-lone").ticks == 0);
         ASSERT_EQ(look(), size_t{1});
         ASSERT_TRUE(stats.online().total == 0);
-        // two players: the match runs; one quits and the match ends; counted when the end is looked at, once
+        // two players, and one quits after a few seconds of play: the match ends and is told, and it was too short to count
+        Client& sue = w.connect("Sue", "demo-short");
+        w.connect("Tom", "demo-short");
+        ASSERT_TRUE(play_until([&]() { return ticking("demo-short"); }, 30000));
+        quit.issuer = sue.lobby->my_seat();
+        ASSERT_TRUE(sue.session->submit(quit));
+        ASSERT_TRUE(play_until([&]() { return w.status("demo-short").state == RoomState::Finished; }, 20000));
+        ASSERT_TRUE(w.status("demo-short").ticks > 20 && w.status("demo-short").ticks < SiteStats::kMinTicks);
+        ASSERT_EQ(look(), size_t{1});
+        ASSERT_TRUE(stats.online().total == 0 && stats.online().day == 0);
+        // two players: the match runs 30 s; one quits and the match ends; counted when the end is looked at, once
         Client& ann = w.connect("Ann", "demo-ran");
         w.connect("Bob", "demo-ran");
         ASSERT_TRUE(play_until([&]() { return ticking("demo-ran"); }, 30000));
         ASSERT_EQ(look(), size_t{0});                                                            // (it runs: it has not ended)
+        ASSERT_TRUE(play_until([&]() { return played("demo-ran"); }, 60000));
+        ASSERT_EQ(look(), size_t{0});
         ASSERT_TRUE(stats.online().total == 0);
-        sim::Command quit;
-        quit.type = sim::CommandType::Quit;
         quit.issuer = ann.lobby->my_seat();
         ASSERT_TRUE(ann.session->submit(quit));
         ASSERT_TRUE(play_until([&]() { return w.status("demo-ran").state == RoomState::Finished; }, 20000));
-        ASSERT_TRUE(w.status("demo-ran").ticks > 20);
+        ASSERT_TRUE(w.status("demo-ran").ticks >= SiteStats::kMinTicks);
         ASSERT_EQ(look(), size_t{1});
         ASSERT_TRUE(stats.online().total == 1 && stats.online().day == 1);
         ASSERT_EQ(look(), size_t{0});                                                            // (told once: nothing more to count)
@@ -710,7 +735,7 @@ void run_site_stats_tests() {
         // a match that ended and whose code is asked for before anybody looked: the manager forgets the room at once and still tells its end, once
         w.connect("Cat", "demo-twice");
         Client& dan = w.connect("Dan", "demo-twice");
-        ASSERT_TRUE(play_until([&]() { return ticking("demo-twice"); }, 30000));
+        ASSERT_TRUE(play_until([&]() { return played("demo-twice"); }, 60000));
         quit.issuer = dan.lobby->my_seat();
         ASSERT_TRUE(dan.session->submit(quit));
         ASSERT_TRUE(play_until([&]() { return w.status("demo-twice").state == RoomState::Finished; }, 20000));
@@ -720,7 +745,7 @@ void run_site_stats_tests() {
         ASSERT_EQ(look(), size_t{1});                                                            // the end of the old one (and only that)
         ASSERT_TRUE(stats.online().total == 2);
         ASSERT_EQ(look(), size_t{0});
-        // a room that the control interface made, closed while it waits: nothing. Closed during the dialog before the first tick: nothing. Closed in the match: counted.
+        // a room that the control interface made, closed while it waits: nothing. Closed during the dialog before the first tick: nothing. Closed after a few seconds of play: nothing. Closed after 30 s: counted.
         ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-wait", 2), w.now).ok);
         ASSERT_TRUE(w.mgr.close_room("CTL-wait", w.now));
         ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-dialog", 2), w.now).ok);
@@ -733,9 +758,15 @@ void run_site_stats_tests() {
         w.connect("Hal", "CTL-play");
         w.connect("Ida", "CTL-play");
         ASSERT_TRUE(play_until([&]() { return ticking("CTL-play"); }, 30000));
-        ASSERT_TRUE(w.mgr.close_room("CTL-play", w.now));
-        ASSERT_TRUE(w.status("CTL-play").state == RoomState::Failed && w.status("CTL-play").ticks > 20);
-        ASSERT_MSG(look() == 4, seen);                                                           // four rooms ended (the new demo-twice, which nobody joined, failed meanwhile); only the one that played is a game
+        ASSERT_TRUE(w.mgr.close_room("CTL-play", w.now));                                        // closed after a few seconds of play: nothing
+        ASSERT_TRUE(w.status("CTL-play").state == RoomState::Failed && w.status("CTL-play").ticks > 20 && w.status("CTL-play").ticks < SiteStats::kMinTicks);
+        ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-long", 2), w.now).ok);                       // and one that is closed after 30 s of play: counted
+        w.connect("Jan", "CTL-long");
+        w.connect("Kim", "CTL-long");
+        ASSERT_TRUE(play_until([&]() { return played("CTL-long"); }, 60000));
+        ASSERT_TRUE(w.mgr.close_room("CTL-long", w.now));
+        ASSERT_TRUE(w.status("CTL-long").state == RoomState::Failed && w.status("CTL-long").ticks >= SiteStats::kMinTicks);
+        ASSERT_MSG(look() == 5, seen);                                                           // five rooms ended (the new demo-twice, which nobody joined, failed meanwhile); only the one that played 30 s is a game
         ASSERT_TRUE(stats.online().total == 3 && stats.online().day == 3);
         ASSERT_EQ(look(), size_t{0});
         ASSERT_TRUE(stats.local().total == 0);

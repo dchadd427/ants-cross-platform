@@ -470,7 +470,7 @@ int main(int argc, char** argv) {
         rooms.update(now);
         if (http) http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_control(rooms, request, now); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
-            stats.count_ended(s);                                  // (a match that ran counts, demo rooms too; a room that never began counts nothing)
+            stats.count_ended(s);                                  // (a match that ran 600 ticks counts, demo rooms too; a shorter one, or a room that never began, counts nothing)
             const bool demo = s.code.compare(0, std::strlen(ants::server::kDemoRoomPrefix), ants::server::kDemoRoomPrefix) == 0;
             if (demo && s.ticks == 0) continue;                    // a demo room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
             std::string held;                                      // a room that held seats says what came of it (never a key)

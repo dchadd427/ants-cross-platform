@@ -179,6 +179,15 @@ class TheLocations(unittest.TestCase):
         for needle in ("`GET /stats`", "`POST /stats/local`", "site-stats.json", "at most 120 count a minute"):
             self.assertIn(needle, readme)
 
+    def test_the_counting_rule_of_the_documents_is_the_one_of_the_code(self):
+        header = read("include", "ants_server", "site_stats.hpp")
+        ticks = re.search(r"kMinTicks\s*=\s*(\d+)\s*;", header)
+        self.assertIsNotNone(ticks)
+        self.assertEqual(ticks.group(1), "600")                                              # 30 seconds of play at 20 ticks a second
+        for name in (os.path.join("docs", "NETWORK_PORT.md"), "README.md", os.path.join("docs", "audit", "site_stats_notes.md")):
+            self.assertIn("at least 600 ticks (30 seconds of play)", read(name), name)
+
+
     def test_they_are_the_addresses_that_the_server_answers(self):
         main = read("src", "ants_server", "main.cpp")
         self.assertIn('ws->add_status("/stats"', main)
@@ -218,7 +227,7 @@ STUB = LOG_FORMAT + """server {
     location = /ready { return 200 'ready'; }
 }
 """
-# The stand-in of the cache's tests: the answer is a file, and a file "slow" next to it makes the server take two seconds to send it (a rate limit on the way out)
+# The stand-in of the cache's tests: the answer is a file, and a file "slow" next to it makes the server take three seconds to send it (a rate limit on the way out)
 SLOW_STUB = LOG_FORMAT + """server {
     listen 4002;
     access_log /dev/stdout stub;
@@ -241,9 +250,9 @@ PAGE = '<!DOCTYPE html><html><head><title>Ants (1998)</title></head><body><p>a s
 
 
 def stub_body(n):
-    """The stand-in's numbers number n: 3000 bytes of JSON (the padding is what makes a slow server take two seconds)"""
+    """The stand-in's numbers number n: 4000 bytes of JSON (the padding is what makes a slow server take three seconds)"""
     text = '{"stub":%d}' % n
-    return text + " " * (3000 - len(text) - 1) + "\n"
+    return text + " " * (4000 - len(text) - 1) + "\n"
 
 
 class Rig:
@@ -525,7 +534,7 @@ class TheBlocksRun(Rig, unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("docker"), "docker is not installed: the cache of /stats was NOT run (tests/scripts/test_nginx_stats.py)")
 class TheCacheRuns(Rig, unittest.TestCase):
-    """The cache of the numbers. Its time is real: five seconds. The stand-in answers from a file, and takes two seconds when the file `slow` is there."""
+    """The cache of the numbers. Its time is real: five seconds. The stand-in answers from a file, and takes three seconds when the file `slow` is there."""
     STUB = SLOW_STUB
     STUB_FILES = {"stats.json": stub_body(1)}
 
@@ -574,10 +583,10 @@ class TheCacheRuns(Rig, unittest.TestCase):
         self.assertEqual(self.ask("GET", "/stats?")[2], first)
         self.assertEqual(self.ask("GET", "/stats", headers={"Cache-Control": "no-cache", "Pragma": "no-cache"})[2], first)
         self.assertEqual(self.asked(), asked + 1)
-        self.sleep_until(filled, 3.0)
-        self.assertEqual(self.ask("GET", "/stats")[2], first)                                  # still the answer of three seconds ago
+        self.sleep_until(filled, 2.0)
+        self.assertEqual(self.ask("GET", "/stats")[2], first)                                  # still the answer of two seconds ago
         self.assertEqual(self.asked(), asked + 1)
-        self.sleep_until(filled, 5.8)                                                          # five seconds are over, and nobody has asked since: the answer is old
+        self.sleep_until(filled, 6.0)                                                          # five seconds are over, and nobody has asked since: the answer is old
         self.slow(True)
         with concurrent.futures.ThreadPoolExecutor(2) as pool:
             fetching = pool.submit(self.timed, "GET", "/stats")                                # this one goes to the (slow) server ...
@@ -586,10 +595,10 @@ class TheCacheRuns(Rig, unittest.TestCase):
             fresh = fetching.result()
         self.assertEqual(old[0], 200)
         self.assertIn(b'"stub":1', old[2])                                                     # the answer that it had
-        self.assertLess(old[3], 1.0, old[3])
+        self.assertLess(old[3], 1.2, old[3])
         self.assertEqual(fresh[0], 200)
         self.assertIn(b'"stub":2', fresh[2])                                                   # the one that the server gave: it was asked (once) when the five seconds were over
-        self.assertGreater(fresh[3], 1.5, fresh[3])
+        self.assertGreater(fresh[3], 2.0, fresh[3])
         self.assertEqual(self.asked(), asked + 2)
 
     def test_a_crowd_that_comes_at_once_is_one_request_to_the_server(self):
@@ -599,7 +608,7 @@ class TheCacheRuns(Rig, unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(20) as pool:
             answers = list(pool.map(lambda _: self.ask("GET", "/stats"), range(20)))
         took = time.monotonic() - started
-        self.assertGreater(took, 1.5)                                                          # (the stand-in is slow on purpose: a stand-in that was not would prove nothing)
+        self.assertGreater(took, 2.0)                                                          # (the stand-in is slow on purpose: a stand-in that was not would prove nothing)
         self.assertEqual({a[0] for a in answers}, {200})
         self.assertEqual(len({a[2] for a in answers}), 1)
         self.assertEqual(self.asked(), asked + 1)                                              # twenty waited for the one
@@ -619,7 +628,7 @@ class TheCacheRuns(Rig, unittest.TestCase):
         filled = time.monotonic()
         self.assertEqual(status, 200)
         self.assertIn(b'"stub":1', old)
-        self.sleep_until(filled, 5.8)                                                          # the answer is old now
+        self.sleep_until(filled, 6.0)                                                          # the answer is old now
         # a server that is stopped (its process is frozen: the connection is taken, nothing is said): five seconds of waiting, then the old answer
         self.assertEqual(subprocess.run(["docker", "pause", self.stub], capture_output=True).returncode, 0)
         try:
@@ -635,7 +644,7 @@ class TheCacheRuns(Rig, unittest.TestCase):
             self.wait_stub(False)
             status, _, body, took = self.timed("GET", "/stats")
             self.assertEqual((status, body), (200, old))
-            self.assertLess(took, 2.0, took)
+            self.assertLess(took, 4.0, took)                                                   # (at once: not the five seconds of a server that says nothing)
             # nothing old to serve: the error is the visitor's, and it is not kept (the next answer after the server is back is the server's)
             self.restart_front()
             self.assertEqual(self.ask("GET", "/stats")[0], 502)
@@ -773,7 +782,7 @@ class TheRealServerBehindTheFile(unittest.TestCase):
         counted = json.loads(self.direct("GET", "/stats")[2])
         self.assertEqual(counted["local"], {"day": 3, "total": 3})                             # the server counted the three, at its own door, at once
         self.assertEqual(json.loads(self.through("GET", "/stats")[2])["local"], {"day": 0, "total": 0})                   # the page's nginx shows the numbers of its last look
-        time.sleep(max(0.0, filled + 5.8 - time.monotonic()))
+        time.sleep(max(0.0, filled + 6.0 - time.monotonic()))
         self.assertEqual(json.loads(self.through("GET", "/stats")[2])["local"], {"day": 3, "total": 3})                   # and the new ones after five seconds
 
 
