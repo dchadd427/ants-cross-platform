@@ -274,6 +274,7 @@ struct Machine {
     std::vector<NetGame::Event> events;
     uint64_t ticks{0};
     bool orders{true};                            // it gives orders, as a person clicks
+    bool hung{false};                             // the window does not run: no frames at all (World::hold_until_app_saw_catching_up)
     uint32_t next_order_ms{0};
     uint32_t rng{1};
     uint32_t map_w{40};
@@ -306,6 +307,7 @@ struct Machine {
         net.report_loaded(ok);
     }
     void frame(uint32_t now) {
+        if (hung) return;
         net.update(now);
         for (const NetGame::Event& ev : net.take_events()) handle(ev);
         if (net.phase() != NetGame::Phase::Playing || sim.is_match_over()) return;
@@ -337,6 +339,7 @@ struct World {
     std::vector<std::unique_ptr<Machine>> machines;
     uint32_t now{1000};
     uint32_t steps_{0};
+    std::function<void()> between;                // called in every step after the server's pass and before the application's and the machines' frames: a test holds a machine back at the moment that the server has done something
     size_t app_wire{0};                           // the n-th link that the door accepted is the application's
     std::function<void(uint8_t)> seat_hook;       // given to every application that start_app makes (set_on_seat_known)
 
@@ -372,6 +375,9 @@ struct World {
         if (!app->init(cfg)) throw std::runtime_error("the application could not start");
         run_until([&]() { return server.accepted > before; }, 2000);
         app_wire = server.accepted > 0 ? server.accepted - 1 : 0;
+        if (server.door == Server::Door::Open && app->net() != nullptr) {      // (the machines that join after it are told after it: see join)
+            run_until([&]() { return app->net()->my_seat() < sim::MAX_PLAYERS || app->net()->phase() == NetGame::Phase::Failed || app->net()->phase() == NetGame::Phase::Over; }, 3000);
+        }
         return *app;
     }
     // An application with the start menu (no join arguments: it connects when the player presses a button)
@@ -406,17 +412,23 @@ struct World {
         if (!m.net.join("127.0.0.1", server.port(), name, want_seat, room)) throw std::runtime_error("join failed");
         const uint32_t before = server.accepted;
         run_until([&]() { return server.accepted > before; }, 2000);
+        if (server.door == Server::Door::Open) {                              // the next one is told after this one: the seats are given in the order in which the Hellos are read, and on a loopback that does not deliver within the pass that need not be the order of the joins
+            run_until([&]() { return m.net.my_seat() < sim::MAX_PLAYERS || m.net.phase() == NetGame::Phase::Failed || m.net.phase() == NetGame::Phase::Over; }, 3000);
+        }
         return m;
     }
     void pump(float dt) {
         server.pump(now);
+        if (between) between();
         if (app) {
             app->pump_network(dt);
             app->update_simulation(dt);
         }
         for (auto& m : machines) m->frame(now);
     }
-    // 10 ms of game time per step. The sockets are real and the clock is not: a loopback link delivers within the pass that wrote to it, but now and then the test gives the kernel a moment of real time
+    // 10 ms of game time per step. The sockets are real and the clock is not: a loopback link delivers within the pass that wrote to it on Linux, but not on every system (a Mac's loopback is handled by a kernel
+    // thread: a message can be read a pass or more later, and two messages that were sent in different passes can be read together), so a test that has to see a state between two messages holds the sender back
+    // (hold_until_app_saw_catching_up); now and then the test gives the kernel a moment of real time
     void run(uint32_t ms) {
         for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {
             now += 10;
@@ -424,6 +436,24 @@ struct World {
             if ((++steps_ & 15u) == 0) std::this_thread::sleep_for(std::chrono::microseconds(300));
             else std::this_thread::yield();
         }
+    }
+    // The machine `m` that comes back is held from the moment that the server has it catching up (in the room `room`) until the application has been shown that: the two Presence messages of a way
+    // back, "catching up" and "back", must not reach one frame together, as they can on a loopback that does not deliver within the pass (the countdown names the seat that was seen catching up).
+    // `release_held()` ends the hold
+    void hold_until_app_saw_catching_up(Machine& m, const std::string& room) {
+        between = [this, &m, room]() {
+            bool server_has_it = false;
+            for (const server::RoomStatus::Absent& e : status(room).absent) server_has_it = server_has_it || e.catching_up;
+            bool app_saw_it = false;
+            if (app && app->net() != nullptr) {
+                for (const net::PauseInfo::Seat& seat : app->net()->pause_info().missing) app_saw_it = app_saw_it || seat.catching_up;
+            }
+            m.hung = server_has_it && !app_saw_it;
+        };
+    }
+    void release_held(Machine& m) {
+        between = nullptr;
+        m.hung = false;
     }
     // The application alone runs for `ms` (the server and the machines stand still): a round trip that takes that long, however the system's loopback delivers
     void run_app_alone(uint32_t ms) {
@@ -1181,6 +1211,7 @@ void run_screen_tests() {
         ASSERT_TRUE(app.net_overlay_now().vote.count == "1 of 2 voted to continue" && w.status("RA-21").votes_continue == 1);
         ASSERT_EQ(app.hud().get_selected_ant_id(), mine[0]);
         // Cat votes too: two of two go on without Bob; the room drops the seat and the match goes on (no countdown in this room)
+        ASSERT_TRUE(w.run_until([&]() { return cat.net.pause_info().vote_open; }, 5000));      // (Cat is told that the vote is open on her own link, not when the application is)
         ASSERT_TRUE(cat.net.vote(false));
         ASSERT_TRUE(w.run_until([&]() { return w.status("RA-21").drops_by_vote == 1; }, 5000));
         ASSERT_TRUE(w.run_until([&]() { return !app.net()->paused() && app.net_overlay_now().lines.empty() && !app.net_overlay_now().vote.open; }, 5000));
@@ -1218,7 +1249,9 @@ void run_screen_tests() {
         w.run(4000);
         ASSERT_TRUE(begins(first_line(app), "Bob (Red) lost the connection, waiting 0:0"));
         bob.net.set_link_maker_for_test(nullptr);                                                // the network is back
+        w.hold_until_app_saw_catching_up(bob, "RA-31");
         ASSERT_TRUE(w.run_until([&]() { return first_line(app) == "Bob is back: the match goes on in 10"; }, 20000));
+        w.release_held(bob);
         std::vector<std::string> counted;
         for (int i = 0; i < 1300 && !app.net_overlay_now().lines.empty(); ++i) {
             const std::string t = first_line(app);
@@ -1251,6 +1284,7 @@ void run_screen_tests() {
         ASSERT_TRUE(w.server.cut_wire(1));
         ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.open; }, 12000));
         app.handle_key_down(key_event(SDLK_F3));
+        ASSERT_TRUE(w.run_until([&]() { return cat.net.pause_info().vote_open; }, 5000));      // (Cat is told that the vote is open on her own link, not when the application is)
         ASSERT_TRUE(cat.net.vote(false));
         ASSERT_TRUE(w.run_until([&]() { return w.status("RA-32").drops_by_vote == 1; }, 5000));
         ASSERT_TRUE(w.run_until([&]() { return first_line(app) == "The match goes on in 3"; }, 5000));
@@ -1323,6 +1357,7 @@ void run_overlay_table_tests() {
         ASSERT_TRUE(table("a vote", "Bob (Red) lost the connection, waiting 0:", true));
         // Ann and Cat go on without Bob: the countdown names nobody
         app.handle_key_down(key_event(SDLK_F3));
+        ASSERT_TRUE(w.run_until([&]() { return cat.net.pause_info().vote_open; }, 5000));      // (Cat is told that the vote is open on her own link, not when the application is)
         ASSERT_TRUE(cat.net.vote(false));
         ASSERT_TRUE(w.run_until([&]() { return first_line(app) == "The match goes on in 3"; }, 8000));
         ASSERT_TRUE(table("the countdown", "The match goes on in 3", false));
@@ -1393,7 +1428,9 @@ void run_overlay_table_tests() {
             ASSERT_TRUE(fit_check("vote, chosen"));
             // Bob comes back: the countdown names him, cut to fit
             bob.net.set_link_maker_for_test(nullptr);
+            w.hold_until_app_saw_catching_up(bob, "RA-82");
             ASSERT_TRUE(w.run_until([&]() { return first_line(app).find(" is back: the match goes on in ") != std::string::npos; }, 20000));
+            w.release_held(bob);
             ASSERT_TRUE(begins(first_line(app), "WWW") && (first_line(app).find("...") != std::string::npos) == (aspect == Aspect::Classic4x3));
             const std::string line = first_line(app);
             ASSERT_TRUE(app.renderer().get_text_width(line, FontSize::Px14) <= net_overlay_max_width(view));
@@ -1598,6 +1635,7 @@ void run_way_back_tests() {
         app.handle_key_down(key_event(SDLK_F3));                                                  // the keys reach the vote
         ASSERT_TRUE(w.run_until([&]() { return app.net_overlay_now().vote.go_on_pressed; }, 3000));
         ASSERT_TRUE(app.net_overlay_now().vote.count == "1 of 2 voted to continue" && w.status("RA-51").votes_continue == 1);
+        ASSERT_TRUE(w.run_until([&]() { return cat.net.pause_info().vote_open; }, 5000));      // (Cat is told that the vote is open on her own link, not when the application is)
         ASSERT_TRUE(cat.net.vote(false));
         ASSERT_TRUE(w.run_until([&]() { return w.status("RA-51").drops_by_vote == 1; }, 5000));
         ASSERT_TRUE(w.run_until([&]() { return !app.net()->paused() && app.net_overlay_now().lines.empty(); }, 5000));
