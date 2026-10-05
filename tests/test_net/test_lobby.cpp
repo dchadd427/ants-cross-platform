@@ -343,6 +343,7 @@ int main() {
         srv.leader = 0;
         ASSERT_TRUE(decode(encode(srv), r2) && r2.leader == 0 && r2.you == 1 && r2.slots[0].name == "Ann");
         const std::vector<uint8_t> request = encode(StartRequestMsg{});
+        StartRequestMsg ee0;
         // every strict prefix and one extra byte are rejected
         for (const auto& m : {encode(r), encode(s), encode(l), encode(c), encode(srv), request}) {
             for (size_t cut = 0; cut < m.size(); ++cut) {
@@ -356,7 +357,15 @@ int main() {
             ASSERT_FALSE(decode(lg, a) || decode(lg, bb) || decode(lg, cc) || decode(lg, dd));
         }
         Lcg rng(5);
-        const std::vector<std::vector<uint8_t>> seeds = {encode(r), encode(s), encode(l), encode(c), encode(srv), request};
+        StartRequestMsg leader_request;                                   // protocol 13: a level for each seat and a pair of seats as a team
+        leader_request.fill = {FillLevel::None, FillLevel::Hard, FillLevel::Easy, FillLevel::Medium};
+        leader_request.set_teams(sim::StartTeams{true, 0, 2});
+        StartMsg with_teams = s;
+        with_teams.roster = 0x0F;
+        with_teams.set_teams(sim::StartTeams{true, 1, 3});
+        ASSERT_TRUE(decode(encode(with_teams), s2) && s2.team_a == 1 && s2.team_b == 3 && s2.roster == 0x0F);
+        ASSERT_TRUE(decode(encode(leader_request), ee0) && ee0.team_a == 0 && ee0.team_b == 2 && ee0.fill == leader_request.fill);
+        const std::vector<std::vector<uint8_t>> seeds = {encode(r), encode(s), encode(l), encode(c), encode(srv), request, encode(leader_request), encode(with_teams)};
         size_t accepted = 0;
         for (int i = 0; i < 300000; ++i) {
             std::vector<uint8_t> buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
@@ -372,7 +381,12 @@ int main() {
             if (decode(buf, bb)) { ++accepted; ASSERT_TRUE(encode(bb) == buf); ASSERT_TRUE(valid_map_name(bb.map_name)); }
             if (decode(buf, cc)) { ++accepted; ASSERT_TRUE(encode(cc) == buf); }
             if (decode(buf, dd)) { ++accepted; ASSERT_TRUE(encode(dd) == buf); }
-            if (decode(buf, ee)) { ++accepted; ASSERT_TRUE(encode(ee) == buf && buf.size() == 2 && buf[1] <= kFillLevelLast); }       // (protocol 11: the type and one fill level, 0 .. 3)
+            if (decode(buf, ee)) {                                          // (protocol 13: the type, a level 0 .. 3 for each seat, two team bytes: none, or two different seats)
+                ++accepted;
+                ASSERT_TRUE(encode(ee) == buf && buf.size() == 7);
+                for (const FillLevel level : ee.fill) ASSERT_TRUE(static_cast<uint8_t>(level) <= kFillLevelLast);
+                ASSERT_TRUE((ee.team_a == kNoTeam && ee.team_b == kNoTeam) || (ee.team_a < sim::MAX_PLAYERS && ee.team_b < sim::MAX_PLAYERS && ee.team_a != ee.team_b));
+            }
         }
         ASSERT_TRUE(accepted > 3000);
     } TEST_END();
@@ -619,10 +633,11 @@ int main() {
         }
         // a Hello of this layout but another version number is "version mismatch" as well (protocols 8 and 9 with the new fields: nobody sends them, a stranger may), key and all; before the
         // keys, protocol 8 (v0.0.94) was the release whose Hello had exactly the layout of protocol 9 (the community-map rules): nothing but the number told them apart, and the number refuses them.
-        // The same is the whole of how protocol 11 (v0.1.0 and v0.1.1) is refused by a host of protocol 12: its Hello is byte for byte a Hello of 12, and a client of 11 would count its "Get ready"
-        // dialog in simulation ticks and be blocked for 100 ticks of the running match after the host's late first turn (the match clock waits for the dialog since 12)
-        ASSERT_EQ(kProtocolVersion, 12);
-        for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}}) {
+        // The same is the whole of how protocol 11 (v0.1.0 and v0.1.1) is refused by a host of protocol 12 and later: its Hello is byte for byte a Hello of 12, and a client of 11 would count its "Get ready"
+        // dialog in simulation ticks and be blocked for 100 ticks of the running match after the host's late first turn (the match clock waits for the dialog since 12). Protocol 12 (v0.2.0 to v0.4.0) is
+        // refused by a host of 13 the same way: its leader's StartRequest is two bytes and its Start has no team bytes, and the Hello does not tell.
+        ASSERT_EQ(kProtocolVersion, 13);
+        for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}, uint16_t{12}}) {
             Room r8;
             auto e8 = r8.net.connect({10, 0});
             r8.host.add_connection(e8.first, 0);
@@ -1116,19 +1131,38 @@ int main() {
             room.run(100);
             ASSERT_EQ(asked(room.host).size(), size_t{1});
         }
-        {   // a fill level out of range is garbage (protocol 11: a StartRequest is the type and one fill level, 0 .. 3), from the leader and from anybody: eight of them throw the sender out (a
-            // violation like any message that a guest may not send)
+        {   // a fill level out of range is garbage (a StartRequest is the type, a level 0 .. 3 for each of the four seats and the two team bytes: seven bytes), from the leader and from anybody: eight of them
+            // throw the sender out (a violation like any message that a guest may not send); the bad level is in each of the four places in turn
             Room room(hc);
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
-            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send({static_cast<uint8_t>(MsgType::StartRequest), static_cast<uint8_t>(4 + i)});
+            const auto bad_level = [](unsigned seat, unsigned level) {
+                std::vector<uint8_t> m = {static_cast<uint8_t>(MsgType::StartRequest), 0, 0, 0, 0, 255, 255};
+                m[1u + seat] = static_cast<uint8_t>(level);
+                return m;
+            };
+            for (unsigned i = 0; i < 7; ++i) room.guests[ann].client_end->send(bad_level(i % 4, 4 + i));
             room.run(200);
             ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));    // seven are not enough
-            room.guests[ann].client_end->send({static_cast<uint8_t>(MsgType::StartRequest), 9});
+            room.guests[ann].client_end->send(bad_level(3, 9));
             room.run(300);
             ASSERT_FALSE(room.host.occupied(room.guests[ann].lobby->my_seat()));   // the eighth
             ASSERT_EQ(room.host.leader(), room.guests[bob].lobby->my_seat());      // the leader that was thrown out is replaced
             ASSERT_EQ(room.host.ignored_start_requests(), 0u);                     // (garbage is no request)
+        }
+        {   // teams that are no teams are garbage as well (protocol 13): one seat twice, one of the two bytes only, a seat that no room has; the old two-byte request too
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            const std::vector<std::vector<uint8_t>> garbage = {
+                {24, 0, 0, 0, 0, 1, 1}, {24, 0, 0, 0, 0, 255, 1}, {24, 0, 0, 0, 0, 2, 255}, {24, 0, 0, 0, 0, 4, 0}, {24, 0, 0, 0, 0, 0, 200}, {24, 0, 0, 0, 0}, {24, 1}};
+            for (const auto& bad : garbage) room.guests[ann].client_end->send(bad);
+            room.run(200);
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));    // seven garbage messages are a violation each, below the eight that throw a guest out
+            room.guests[ann].client_end->send(garbage[0]);
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(room.guests[ann].lobby->my_seat()));   // the eighth
+            ASSERT_EQ(room.host.ignored_start_requests(), 0u);
         }
         {   // a room that wants more players than are in it: the leader's request is ignored; with a third player it is passed on
             HostLobby::Config three = hc;
@@ -1233,7 +1267,7 @@ int main() {
         step(20);
         const auto one = sent_requests();
         ASSERT_EQ(one.size(), size_t{1});
-        ASSERT_TRUE(one[0].size() == 2 && one[0][0] == static_cast<uint8_t>(MsgType::StartRequest) && one[0][1] == 0);   // the type and the fill level (none: the START of protocol 7)
+        ASSERT_TRUE(one[0] == (std::vector<uint8_t>{static_cast<uint8_t>(MsgType::StartRequest), 0, 0, 0, 0, 255, 255}));   // the type, no level in any seat, no teams (the START of protocol 7)
         r.leader = 0;                                                               // (leadership can move away only when this machine leaves, but the machine believes the room)
         ends.first->send(encode(r));
         step(40);
@@ -1998,8 +2032,8 @@ int main() {
     } TEST_END();
 
     TEST_CASE("N4.17 The Fill (Protocol 11): A Hello Of Protocol 10 Is Answered VersionMismatch; A Leader's StartRequest Carries A Fill Level (None, Easy, Medium, Hard); With One It Is Heard Although Only One Person Is In The Room (The Bots Make Up The Rest), With None It Is Ignored As Before; A Guest Who Is Not The Leader, A Room Without A Leader, A Room That Is Loading And A Host With A Seat Ignore It; A StartRequest Of Another Layout (Protocol 7's One Byte, A Level Above 3, Extra Bytes) Is Garbage") {
-        const auto asked = [](HostLobby& host) {                                    // the LeaderStart events: (seat, fill)
-            std::vector<std::pair<uint8_t, FillLevel>> out;
+        const auto asked = [](HostLobby& host) {                                    // the LeaderStart events: (seat, the level of each seat; the fill is the same level in every seat here: N4.17b has the levels one by one)
+            std::vector<std::pair<uint8_t, std::array<FillLevel, 4>>> out;
             for (const auto& e : host.take_events()) {
                 if (e.type == HostLobby::Event::Type::LeaderStart) out.emplace_back(e.seat, e.fill);
             }
@@ -2023,13 +2057,11 @@ int main() {
                 ASSERT_TRUE(room.guests[ann].lobby->request_start(level));
                 room.run(100);
                 const auto heard = asked(room.host);
-                ASSERT_TRUE(heard.size() == 1 && heard[0].first == room.guests[ann].lobby->my_seat() && heard[0].second == level);
+                ASSERT_TRUE(heard.size() == 1 && heard[0].first == room.guests[ann].lobby->my_seat() && heard[0].second == StartRequestMsg::all(level).fill);
             }
             ASSERT_EQ(room.host.ignored_start_requests(), 1u);                      // (the three with a level were heard, not ignored)
-            // the bytes on the wire: the type and the level
-            StartRequestMsg m;
-            m.fill = FillLevel::Hard;
-            ASSERT_TRUE(encode(m) == (std::vector<uint8_t>{static_cast<uint8_t>(MsgType::StartRequest), 3}));
+            // the bytes on the wire: the type, the level of each seat (protocol 13) and the two team bytes
+            ASSERT_TRUE(encode(StartRequestMsg::all(FillLevel::Hard)) == (std::vector<uint8_t>{static_cast<uint8_t>(MsgType::StartRequest), 3, 3, 3, 3, 255, 255}));
             // the owner seats the bots and starts: the lobby takes bots in the empty seats, names them, and the roster of the Start has them
             for (uint8_t seat = 0; seat < 4; ++seat) {
                 if (!room.host.occupied(seat)) ASSERT_TRUE(room.host.add_bot(seat, fill_bot_name(FillLevel::Medium)));
@@ -2047,17 +2079,17 @@ int main() {
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
             asked(room.host);
-            room.guests[bob].client_end->send(encode(StartRequestMsg{FillLevel::Hard}));      // Bob does not lead (a client that is not the game's)
+            room.guests[bob].client_end->send(encode(StartRequestMsg::all(FillLevel::Hard)));      // Bob does not lead (a client that is not the game's)
             room.run(100);
             ASSERT_TRUE(asked(room.host).empty());
             ASSERT_EQ(room.host.ignored_start_requests(), 1u);
             ASSERT_TRUE(room.guests[ann].lobby->request_start(FillLevel::Easy));
             room.run(100);
             const auto heard = asked(room.host);
-            ASSERT_TRUE(heard.size() == 1 && heard[0].second == FillLevel::Easy);
+            ASSERT_TRUE(heard.size() == 1 && heard[0].second == StartRequestMsg::all(FillLevel::Easy).fill);
             ASSERT_TRUE(room.host.start(1, 1, room.now));
             room.run(100);
-            room.guests[ann].client_end->send(encode(StartRequestMsg{FillLevel::Hard}));      // the click that crossed the Start
+            room.guests[ann].client_end->send(encode(StartRequestMsg::all(FillLevel::Hard)));      // the click that crossed the Start
             room.run(100);
             ASSERT_TRUE(asked(room.host).empty());
             ASSERT_EQ(room.host.ignored_start_requests(), 2u);
@@ -2069,7 +2101,7 @@ int main() {
             Room room(no_early);
             const size_t ann = room.join_seat("Ann");
             room.join_seat("Bob");
-            room.guests[ann].client_end->send(encode(StartRequestMsg{FillLevel::Medium}));
+            room.guests[ann].client_end->send(encode(StartRequestMsg::all(FillLevel::Medium)));
             room.run(100);
             ASSERT_TRUE(asked(room.host).empty());
             ASSERT_EQ(room.host.ignored_start_requests(), 1u);
@@ -2077,7 +2109,7 @@ int main() {
             lan.host_seat = 0;
             Room lan_room(lan);
             const size_t gus = lan_room.join_seat("Gus");
-            lan_room.guests[gus].client_end->send(encode(StartRequestMsg{FillLevel::Medium}));
+            lan_room.guests[gus].client_end->send(encode(StartRequestMsg::all(FillLevel::Medium)));
             lan_room.run(100);
             ASSERT_TRUE(asked(lan_room.host).empty());
             ASSERT_EQ(lan_room.host.ignored_start_requests(), 1u);
@@ -2092,16 +2124,16 @@ int main() {
             ASSERT_TRUE(asked(room.host).empty());
             ASSERT_EQ(room.host.ignored_start_requests(), 1u);
         }
-        {   // garbage: protocol 7's single byte, a level above 3, a payload of two bytes: each is a violation, eight throw the sender out and the lead moves on
+        {   // garbage: protocol 7's single byte, protocol 11's two bytes, a level above 3 in any seat, teams that are none: each is a violation, eight throw the sender out and the lead moves on
             Room room(hc);
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
             const uint8_t type = static_cast<uint8_t>(MsgType::StartRequest);
-            const std::vector<std::vector<uint8_t>> bad = {{type}, {type, 4}, {type, 255}, {type, 0, 0}, {type, 1, 2}, {type}, {type, 7}};
+            const std::vector<std::vector<uint8_t>> bad = {{type}, {type, 0}, {type, 4, 0, 0, 0, 255, 255}, {type, 0, 0, 0, 255, 255, 255}, {type, 1, 2}, {type, 0, 0, 0, 0, 1, 1}, {type, 7}};
             for (const auto& m : bad) room.guests[ann].client_end->send(m);
             room.run(200);
             ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));                // seven are not enough
-            room.guests[ann].client_end->send({type, 99});
+            room.guests[ann].client_end->send({type, 99, 0, 0, 0, 255, 255});
             room.run(300);
             ASSERT_FALSE(room.host.occupied(room.guests[ann].lobby->my_seat()));               // the eighth
             ASSERT_EQ(room.host.leader(), room.guests[bob].lobby->my_seat());
@@ -2147,6 +2179,150 @@ int main() {
             const size_t imposter = room.join_seat("Bot (Hard)");                              // a person who calls itself a bot is renamed: the marker belongs to bots
             ASSERT_TRUE(room.host.room().slots[room.guests[imposter].lobby->my_seat()].name.rfind("Bot (", 0) == std::string::npos);
         }
+    } TEST_END();
+
+    TEST_CASE("N4.17b The Fill And The Teams (Protocol 13): The Leader's StartRequest Reaches The Owner With A Level For Each Seat And The Teams; ClientLobby::request_start Sends Them; HostLobby::start Puts The Teams Into The Start That Every Guest Decodes, And Refuses Teams That The Seats Cannot Make") {
+        HostLobby::Config hc;
+        hc.host_seat = 255;
+        hc.min_players = 2;
+        hc.max_players = 4;
+        const auto leader_start = [](HostLobby& host, uint8_t& seat, std::array<FillLevel, 4>& fill, sim::StartTeams& teams) {
+            size_t n = 0;
+            for (const auto& e : host.take_events()) {
+                if (e.type != HostLobby::Event::Type::LeaderStart) continue;
+                seat = e.seat;
+                fill = e.fill;
+                teams = e.teams;
+                ++n;
+            }
+            return n;
+        };
+        {   // levels and teams, as the leader chose them: every one arrives as sent (a person's seat holds a level too: it is the owner that skips it)
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            uint8_t seat = 255;
+            std::array<FillLevel, 4> fill{};
+            sim::StartTeams teams;
+            leader_start(room.host, seat, fill, teams);
+            const std::array<FillLevel, 4> asked = {FillLevel::None, FillLevel::Hard, FillLevel::None, FillLevel::Easy};
+            ASSERT_TRUE(room.guests[ann].lobby->request_start(asked, sim::StartTeams{true, 0, 3}));
+            room.run(100);
+            ASSERT_EQ(leader_start(room.host, seat, fill, teams), size_t{1});
+            ASSERT_TRUE(seat == room.guests[ann].lobby->my_seat() && fill == asked && teams == sim::StartTeams({true, 0, 3}));
+            ASSERT_TRUE(room.guests[ann].lobby->request_start(StartRequestMsg::all(FillLevel::Medium).fill));     // no teams chosen: free for all
+            room.run(100);
+            ASSERT_EQ(leader_start(room.host, seat, fill, teams), size_t{1});
+            ASSERT_TRUE(fill == StartRequestMsg::all(FillLevel::Medium).fill && !teams.set);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start(FillLevel::Easy));                                    // protocol 11's one level: the same level in every seat
+            room.run(100);
+            ASSERT_EQ(leader_start(room.host, seat, fill, teams), size_t{1});
+            ASSERT_TRUE(fill == StartRequestMsg::all(FillLevel::Easy).fill && !teams.set);
+            // a level in an empty seat only, with one person alone: heard (the bots make up the rest); levels that are all none: the START of protocol 7, ignored while one person is alone
+            ASSERT_TRUE(room.guests[ann].lobby->request_start(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::None, FillLevel::Hard}));
+            room.run(100);
+            ASSERT_EQ(leader_start(room.host, seat, fill, teams), size_t{1});
+            ASSERT_TRUE(room.guests[ann].lobby->request_start(std::array<FillLevel, 4>{}, sim::StartTeams{true, 0, 1}));
+            room.run(100);
+            ASSERT_EQ(leader_start(room.host, seat, fill, teams), size_t{0});                                       // (teams alone are no bots: one person cannot start)
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+        }
+        {   // the owner's start with teams: the Start every guest decodes has them, and so has the owner's own start_info; a start without teams has none
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(100);
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                if (!room.host.occupied(seat)) ASSERT_TRUE(room.host.add_bot(seat, fill_bot_name(FillLevel::Easy)));
+            }
+            ASSERT_FALSE(room.host.start(1, 1, room.now, sim::StartTeams{true, 0, 0}));                             // one seat is no team: refused, the room is as it was
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Room);
+            ASSERT_TRUE(room.host.start(1, 1, room.now, sim::StartTeams{true, 1, 3}));
+            ASSERT_TRUE(room.host.start_info().team_a == 1 && room.host.start_info().team_b == 3 && room.host.start_info().roster == 0x0F);
+            room.run(100);
+            for (const size_t g : {ann, bob}) {
+                ASSERT_EQ(room.guests[g].lobby->phase(), ClientLobby::Phase::Loading);
+                ASSERT_TRUE(room.guests[g].lobby->start_info().team_a == 1 && room.guests[g].lobby->start_info().team_b == 3);
+                ASSERT_TRUE(room.guests[g].lobby->start_info().teams() == sim::StartTeams({true, 1, 3}));
+            }
+        }
+        {   // teams that the seats cannot make: a seat of the pair that does not play, or a team that would be the whole match, is refused by the lobby itself
+            Room room(hc);
+            room.join_seat("Ann");
+            room.join_seat("Bob");
+            room.run(100);
+            ASSERT_FALSE(room.host.start(1, 1, room.now, sim::StartTeams{true, 0, 1}));                             // two seats play: the team would be everybody
+            ASSERT_FALSE(room.host.start(1, 1, room.now, sim::StartTeams{true, 0, 3}));                             // seat 3 is empty
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Room);
+            ASSERT_TRUE(room.host.start(1, 1, room.now));                                                           // free for all: as ever
+            ASSERT_TRUE(room.host.start_info().team_a == kNoTeam && room.host.start_info().team_b == kNoTeam);
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.17c The Fill Plan (Protocol 13): One Level Or A Level For Each Seat (One Word Or Four Joined By Commas, In Any Case, Nothing Else), The Seats That A START Seats (Empty Seats With A Level, The Lowest First, Never More Than The Room's Players, A Taken Seat Skipped), The Words That Tell It") {
+        using Seats = std::vector<std::pair<uint8_t, FillLevel>>;
+        // one level converts to the plan that gives it to every seat; the plan knows when it asks for nothing and when it is one level
+        const FillPlan hard = FillLevel::Hard;
+        ASSERT_TRUE(hard.uniform() && hard.any() && hard.level[0] == FillLevel::Hard && hard.level[3] == FillLevel::Hard);
+        ASSERT_TRUE(FillPlan().uniform() && !FillPlan().any() && FillPlan() == FillLevel::None);
+        const FillPlan mixed(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::None, FillLevel::Hard});
+        ASSERT_TRUE(mixed.any() && !mixed.uniform() && mixed != hard && mixed == mixed && hard == FillLevel::Hard && hard != FillLevel::Easy);
+        // parse: one word is every seat, four are the seats 0 to 3; any case; nothing else (and the target is left alone)
+        FillPlan out = FillLevel::Medium;
+        std::string why;
+        for (const char* good : {"none", "easy", "Medium", "HARD", "none,none,easy,hard", "Easy,MEDIUM,hard,None", "hard,hard,hard,hard"}) {
+            out = FillLevel::Medium;
+            ASSERT_TRUE(parse_fill_plan(good, out, why));
+        }
+        ASSERT_TRUE(parse_fill_plan("Easy", out, why) && out == FillLevel::Easy);
+        ASSERT_TRUE(parse_fill_plan("none,easy,none,hard", out, why) && out == mixed);
+        ASSERT_TRUE(parse_fill_plan("NONE,Easy,NONE,Hard", out, why) && out == mixed);
+        ASSERT_TRUE(parse_fill_plan("none,none,easy,hard", out, why) && out == FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard}));      // (the order is the seats')
+        ASSERT_TRUE(parse_fill_plan("hard,hard,hard,hard", out, why) && out == hard && out.uniform());
+        for (const char* bad : {"", "harder", "none,easy", "none,none,easy", "none,none,easy,hard,hard", "none,,easy,hard", ",,,", "easy medium", "none, easy, medium, hard", "1", "easy,", ",easy", "none,none,easy,hardd", "none;none;easy;hard"}) {
+            out = FillLevel::Medium;
+            why.clear();
+            ASSERT_FALSE(parse_fill_plan(bad, out, why));
+            ASSERT_TRUE(out == FillLevel::Medium && !why.empty());
+        }
+        // the text reads back: one word for one level in every seat, four words otherwise
+        ASSERT_EQ(fill_plan_text(FillPlan()), std::string("none"));
+        ASSERT_EQ(fill_plan_text(hard), std::string("hard"));
+        ASSERT_EQ(fill_plan_text(mixed), std::string("none,easy,none,hard"));
+        const FillPlan same_start(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard});          // (the first seats alike, the later ones not: four words, not one)
+        const FillPlan same_three(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::Hard, FillLevel::Hard, FillLevel::Easy});
+        ASSERT_EQ(fill_plan_text(same_start), std::string("none,none,easy,hard"));
+        ASSERT_EQ(fill_plan_text(same_three), std::string("hard,hard,hard,easy"));
+        for (const FillPlan& plan : {FillPlan(), hard, mixed, same_start, same_three, FillPlan(FillLevel::Easy), FillPlan(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::Medium, FillLevel::Easy, FillLevel::None})}) {
+            FillPlan back = FillLevel::Medium;
+            ASSERT_TRUE(parse_fill_plan(fill_plan_text(plan), back, why) && back == plan);
+        }
+        // the seats that a START seats: the lowest empty seats that have a level, up to the room's players
+        RoomMsg room;
+        room.slots[0] = {SlotState::Client, "Ann", 10};
+        const auto seats_of = [&](const FillPlan& plan, uint8_t players) { return plan_fill_seats(plan, room, players); };
+        const FillPlan ems(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::Medium, FillLevel::Hard});
+        ASSERT_TRUE(seats_of(ems, 4) == (Seats{{1, FillLevel::Easy}, {2, FillLevel::Medium}, {3, FillLevel::Hard}}));
+        ASSERT_TRUE(seats_of(ems, 3) == (Seats{{1, FillLevel::Easy}, {2, FillLevel::Medium}}));              // (the room's players: one person and two bots)
+        ASSERT_TRUE(seats_of(ems, 2) == (Seats{{1, FillLevel::Easy}}));
+        ASSERT_TRUE(seats_of(ems, 1).empty());                                                               // (a room for one is full)
+        ASSERT_TRUE(seats_of(FillPlan(), 4).empty());
+        ASSERT_TRUE(seats_of(hard, 4) == (Seats{{1, FillLevel::Hard}, {2, FillLevel::Hard}, {3, FillLevel::Hard}}));   // (the person's own seat is never filled: it is taken)
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::None, FillLevel::None, FillLevel::None}), 4).empty());          // a level for the seat of a person asks for nothing
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::None, FillLevel::Hard}), 2) == (Seats{{3, FillLevel::Hard}}));    // the lowest seat WITH a level
+        room.slots[2] = {SlotState::Client, "Bob", 10};                                                      // a person took seat 2: its level is skipped, and it counts for the room's players
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::Hard, FillLevel::Medium}), 4) == (Seats{{1, FillLevel::Easy}, {3, FillLevel::Medium}}));
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::Hard, FillLevel::Medium}), 3) == (Seats{{1, FillLevel::Easy}}));
+        room.slots[1] = {SlotState::Bot, "Bot (Easy)", 0};                                                   // a bot of the room's own specification holds a seat too
+        ASSERT_TRUE(seats_of(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Hard, FillLevel::Hard, FillLevel::Medium}), 4) == (Seats{{3, FillLevel::Medium}}));
+        // the words (the colour words of the seats: 0 green, 1 red, 2 blue, 3 black)
+        ASSERT_EQ(fill_seats_sentence(Seats{{2, FillLevel::Easy}, {3, FillLevel::Hard}}), std::string("Blue gets an Easy bot, Black a Hard bot"));
+        ASSERT_EQ(fill_seats_sentence(Seats{{1, FillLevel::Medium}}), std::string("Red gets a Medium bot"));
+        ASSERT_EQ(fill_seats_sentence(Seats{{1, FillLevel::Medium}, {2, FillLevel::Hard}, {3, FillLevel::Easy}}), std::string("Red gets a Medium bot, Blue a Hard bot, Black an Easy bot"));
+        ASSERT_EQ(fill_seats_sentence(Seats{{0, FillLevel::Easy}}), std::string("Green gets an Easy bot"));
+        ASSERT_EQ(fill_seats_sentence(Seats{}), std::string());
+        ASSERT_EQ(fill_seats_short(Seats{{2, FillLevel::Easy}, {3, FillLevel::Hard}}), std::string("Blue Easy, Black Hard"));
+        ASSERT_EQ(fill_seats_short(Seats{{1, FillLevel::Medium}, {2, FillLevel::Hard}, {3, FillLevel::Easy}}), std::string("Red Medium, Blue Hard, Black Easy"));
+        ASSERT_EQ(fill_seats_short(Seats{}), std::string());
     } TEST_END();
 
     TEST_CASE("N4.18 Chat In The Waiting Room (Protocol 11): A Line Is Relayed To Everybody In The Room, The Sender Included, With The Seat Of The Connection (Not The Payload's) And The Name, No Team; A Late Joiner Hears Only What Is Said After It Came; Chat Works While The Map Loads; A Line That Does Not Decode (Too Long, Not Printable, A Wrong Flag) Is A Violation As In The Match; An Empty Line Is Ignored; The Lines Are Kept (The Last 200) And Handed On Once; The Room Can Speak To One Guest") {

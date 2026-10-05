@@ -71,6 +71,20 @@ const MapPreview* MapSelectScreen::preview_of(const MapSelectEntry& entry, int32
     return previews_.back().preview.valid() ? &previews_.back().preview : nullptr;
 }
 
+int32_t MapSelectScreen::footer_width() noexcept { return SetupLayout::kBoxInnerPlayersW - 2; }
+
+FontSize MapSelectScreen::footer_font(const IRenderer& renderer, const std::string& text) {
+    for (const FontSize size : {FontSize::Px18, FontSize::Px14}) {
+        if (renderer.get_text_width(text, size) <= footer_width()) return size;
+    }
+    return FontSize::Px12;
+}
+
+bool MapSelectScreen::prompt_fits(const IRenderer& renderer, const std::string& text) const {
+    const int32_t width = wide_ ? SetupLayout::of(setup_variant()).prompt_text.w : STATUS_W;
+    return wrap_label_text(renderer, text, width, FontSize::Px14).size() <= STATUS_LINES;
+}
+
 void MapSelectScreen::render_wide(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
     const SetupVariant variant = setup_variant();
     const SetupLayout& layout = SetupLayout::of(variant);
@@ -161,8 +175,13 @@ void MapSelectScreen::render_wide(IRenderer& renderer, const ants::assets::Asset
 
     // 6. The bot-fill footer of the leader's Players' Status box (the online rooms' choice; nothing until it is set)
     if (variant == SetupVariant::Online) {
-        if (!fill_footer_[0].empty()) renderer.draw_text(fill_footer_[0], layout.footer_x, layout.footer_y1, kLabelCream, FontSize::Px18);
-        if (!fill_footer_[1].empty()) renderer.draw_text(fill_footer_[1], layout.footer_x, layout.footer_y2, kLabelCream, FontSize::Px18);
+        const int32_t ys[2] = {layout.footer_y1, layout.footer_y2};
+        for (size_t line = 0; line < 2; ++line) {
+            if (fill_footer_[line].empty()) continue;
+            const FontSize size = footer_font(renderer, fill_footer_[line]);
+            const std::string text = size == FontSize::Px12 ? fit_text(renderer, fill_footer_[line], footer_width(), size) : fill_footer_[line];       // (no line leaves the box)
+            renderer.draw_text(text, layout.footer_x, ys[line], kLabelCream, size);
+        }
     }
 
     // 7. The map preview: the picture in the black box (centred), its caption under the box; a map that this machine does not have, or cannot read, has a "No preview" box

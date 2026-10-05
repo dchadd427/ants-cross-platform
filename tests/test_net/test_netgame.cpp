@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -95,6 +96,7 @@ struct Machine {
                 sim.set_fog_of_war_enabled(s.fog);
                 sim.init(level, s.seed, s.roster);
                 for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.set_player_name(p, s.names[p]);
+                sim::apply_start_teams(sim, s.teams());                   // (after the names, as the application does: the News Flash names the players)
                 ++loads;
             }
             if (hold_load && ok) return;
@@ -1152,7 +1154,7 @@ void run_room_chat_tests() {
 // Protocol 12: the first turn of a match is sealed kMatchStartDelayMs after the match began (the "Get ready to play!" dialog of every machine), on a game of the local network too
 void run_start_delay_tests() {
     TEST_CASE("N3.22 Protocol 12, The Start Of A Match On The Local Network: No Machine Runs A Tick For 5 s After The Match Began, Nobody Waits Or Is Told Anything Meanwhile (No Stall, No Lag, No Election, No Notice), Then Every Machine's First Tick Comes And The Match Is Identical; A Guest Of Protocol 11 Is Refused By The Host's Door") {
-        ASSERT_EQ(kProtocolVersion, 12);
+        ASSERT_EQ(kProtocolVersion, 13);                                  // (12 added the start delay: no message; 13 changed the StartRequest and the Start: N2.100, N3.34)
         Table t;
         ASSERT_TRUE(make_room(t, 2));
         Machine& host = *t.machines[0];
@@ -1296,6 +1298,332 @@ void burn_cpu(uint64_t ns) {
 // The prediction is OFF by default (opt-in): the tests of it ask for it, as the application does when it is told `--prediction on`
 void enable_prediction(Table& t) {
     for (auto& m : t.machines) m->net.set_prediction_enabled(true);
+}
+
+// Protocol 13: the bots of each seat's own level, and the teams of the host's START, on a game on the local network
+void run_team_tests() {
+    const auto allies_of = [](const sim::SimulationEngine& e) {
+        std::string out;
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) out += std::to_string(static_cast<unsigned>(e.alliance_of(seat)));
+        return out;                                                                                   // by seat: the ally's seat, 4 for none
+    };
+    const auto notices_of = [](const std::vector<ChatLine>& lines) {
+        std::vector<std::string> out;
+        for (const ChatLine& l : lines) {
+            if (l.notice()) out.push_back(l.text);
+        }
+        return out;
+    };
+    TEST_CASE("N3.34 Protocol 13, A Game On The Local Network: The Host's START Seats A Bot Of Each Seat's Own Level And Puts Its Teams Into The Start (Every Machine Makes Them Before Its First Tick: The Same State To The End); Teams That The Seats Cannot Make Start The Match Without Them And Tell The Host (Its Status Line) And Every Guest (A Notice) Why") {
+        {   // the host alone: seats 2 and 3 get bots of their own levels, seat 1 stays empty; Green + Blue (0 + 2) are a team, the Hard bot plays alone
+            Table t;
+            Machine& host = t.add("Alice");
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            t.run(200);
+            const FillPlan plan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard});
+            host.net.set_fill_bots(plan);
+            host.net.set_start_teams(sim::StartTeams{true, 0, 2});
+            ASSERT_TRUE(host.net.fill_bots() == plan && host.net.start_teams() == sim::StartTeams({true, 0, 2}));
+            std::vector<uint8_t> seats;
+            ASSERT_EQ(host.net.fill_bots(host.net.fill_bots(), &seats), size_t{2});
+            ASSERT_EQ(seats, (std::vector<uint8_t>{2, 3}));
+            ASSERT_TRUE(host.net.room().slots[1].state == SlotState::Empty);
+            ASSERT_TRUE(host.net.room().slots[2].state == SlotState::Bot && host.net.room().slots[2].name == "Bot (Easy)");
+            ASSERT_TRUE(host.net.room().slots[3].state == SlotState::Bot && host.net.room().slots[3].name == "Bot (Hard)");
+            uint64_t hash = 0;
+            ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(5, hash));
+            ASSERT_TRUE(host.net.start_info().roster == 0x0D && host.net.start_info().team_a == 0 && host.net.start_info().team_b == 2);
+            ASSERT_TRUE(t.run_until([&]() { return host.net.phase() == NetGame::Phase::Playing; }, 3000));
+            ASSERT_EQ(allies_of(host.sim), std::string("2404"));                                        // seats 0 and 2 are a team; seat 3 plays alone; seat 1 does not play
+            ASSERT_EQ(host.sim.current_tick(), uint64_t{0});                                           // (made before the first tick)
+            ASSERT_TRUE(notices_of(host.net.pregame_chat()).empty());                                   // nothing was refused
+        }
+        {   // two guests and a Hard bot in the last seat: Red + Blue (1 + 2, the two guests) against Green + Black (the host and the bot): every machine stands in the same state to the end of the test
+            Table t;
+            ASSERT_TRUE(make_room(t, 2));
+            Machine& host = *t.machines[0];
+            host.net.set_fill_bots(FillLevel::Hard);                                                   // one level: every empty seat
+            host.net.set_start_teams(sim::StartTeams{true, 1, 2});
+            ASSERT_EQ(host.net.fill_bots(host.net.fill_bots()), size_t{1});
+            ASSERT_TRUE(t.run_until([&]() { return t.machines[1]->net.room().slots[3].state == SlotState::Bot; }, 3000));
+            uint64_t hash = 0;
+            ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(8, hash));
+            ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+            for (auto& m : t.machines) {
+                ASSERT_TRUE(m->net.start_info().team_a == 1 && m->net.start_info().team_b == 2);      // every machine was told
+                ASSERT_EQ(allies_of(m->sim), std::string("3210"));
+                ASSERT_EQ(m->sim.current_tick(), uint64_t{0});
+                ASSERT_TRUE(notices_of(m->net.pregame_chat()).empty());
+            }
+            ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+            t.run(6000);
+            ASSERT_TRUE(all_equal(t));                                                                  // (the lock-step hashes agree: a machine that had not made the teams would have been named)
+            for (auto& m : t.machines) ASSERT_FALSE(m->net.desynced());
+            ASSERT_EQ(allies_of(t.machines[2]->sim), std::string("3210"));                             // (nobody broke them)
+        }
+        {   // teams that the seats cannot make: two people play, and a team would be both of them: the match starts without, and everybody is told why
+            Table t;
+            ASSERT_TRUE(make_room(t, 1));
+            Machine& host = *t.machines[0];
+            Machine& bob = *t.machines[1];
+            host.net.set_start_teams(sim::StartTeams{true, 0, 1});
+            uint64_t hash = 0;
+            ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(4, hash));
+            ASSERT_TRUE(host.net.start_info().team_a == net::kNoTeam && host.net.start_info().team_b == net::kNoTeam);
+            const std::string text = std::string(net::kNoticeNoTeams) + "only two seats play: a team of them would end the match at once.";
+            ASSERT_EQ(host.net.status_text(), text);                                                    // the host's own status line
+            ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t) && !notices_of(bob.net.pregame_chat()).empty(); }, 5000));
+            ASSERT_EQ(notices_of(bob.net.pregame_chat()), (std::vector<std::string>{text}));           // the guest was told, once
+            ASSERT_TRUE(bob.net.start_info().team_a == net::kNoTeam);
+            ASSERT_EQ(allies_of(host.sim), std::string("4444"));
+            ASSERT_EQ(allies_of(bob.sim), std::string("4444"));
+            ASSERT_TRUE(text.size() <= kMaxChatChars);
+        }
+        {   // a seat of the pair that does not play: the host and a guest play, the pair is 0 + 3
+            Table t;
+            ASSERT_TRUE(make_room(t, 2));
+            Machine& host = *t.machines[0];
+            host.net.set_start_teams(sim::StartTeams{true, 0, 3});
+            uint64_t hash = 0;
+            ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(4, hash));
+            const std::string text = std::string(net::kNoticeNoTeams) + "seat 3 does not play in this match.";
+            ASSERT_EQ(host.net.status_text(), text);                                                    // the host's own status line (until the match begins)
+            ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t) && !notices_of(t.machines[1]->net.pregame_chat()).empty() && !notices_of(t.machines[2]->net.pregame_chat()).empty(); }, 5000));
+            for (size_t g : {size_t{1}, size_t{2}}) ASSERT_EQ(notices_of(t.machines[g]->net.pregame_chat()), (std::vector<std::string>{text}));
+            for (auto& m : t.machines) ASSERT_EQ(allies_of(m->sim), std::string("4444"));
+        }
+        {   // a start that goes wrong takes nothing with it: the host that tries again gets what it chose (a guest that cannot load the map cancels the first start)
+            Table t;
+            ASSERT_TRUE(make_room(t, 2));
+            Machine& host = *t.machines[0];
+            t.machines[2]->corrupt_map = true;
+            host.net.set_fill_bots(FillLevel::Medium);
+            host.net.set_start_teams(sim::StartTeams{true, 0, 1});
+            std::vector<uint8_t> seats;
+            ASSERT_EQ(host.net.fill_bots(host.net.fill_bots(), &seats), size_t{1});
+            uint64_t hash = 0;
+            ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(9, hash));
+            ASSERT_TRUE(t.run_until([&]() { return host.net.phase() == NetGame::Phase::Room && host.saw(NetGame::Event::Type::Cancelled); }, 5000));
+            host.net.remove_bot(3);
+            t.machines[2]->corrupt_map = false;
+            t.run(300);
+            ASSERT_EQ(host.net.fill_bots(host.net.fill_bots()), size_t{1});
+            ASSERT_TRUE(host.net.start_match(10, hash));
+            ASSERT_TRUE(host.net.start_info().team_a == 0 && host.net.start_info().team_b == 1 && host.net.start_info().roster == 0x0F);
+            ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t); }, 5000));
+            for (auto& m : t.machines) ASSERT_EQ(allies_of(m->sim), std::string("1032"));
+        }
+    } TEST_END();
+
+    TEST_CASE("N3.35 Protocol 13, What The Leader And The Host Are Told: The Prompt Says What START Will Do (The One Level Of The Empty Seats As Before; Each Seat's Own Bot And The Teams In One Line With Shorter Ways To Say It), The Footer Of The 16:9 Screen Says It In Two Lines; Fog Of War Seats No Bots And The Teams Still Count; Nothing To Say Leaves The Original's Prompt") {
+        const auto room_with = [](std::initializer_list<uint8_t> people, std::initializer_list<uint8_t> bots = {}) {
+            RoomMsg r;
+            for (const uint8_t seat : people) r.slots[seat] = {SlotState::Client, "P" + std::to_string(seat), 10};
+            for (const uint8_t seat : bots) r.slots[seat] = {SlotState::Bot, "Bot (Easy)", 0};
+            return r;
+        };
+        const FillPlan none;
+        const sim::StartTeams ffa;
+        const FillPlan every_medium = FillLevel::Medium;
+        const FillPlan ehm(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Easy, FillLevel::Hard, FillLevel::Medium});
+        const FillPlan eh(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard});
+        const FillPlan medium_for_others(std::array<FillLevel, 4>{FillLevel::None, FillLevel::Medium, FillLevel::Medium, FillLevel::Medium});
+        // nothing to say: the original's prompt stands
+        ASSERT_TRUE(NetGame::start_prompt_texts(none, ffa, room_with({0}), false).empty());
+        ASSERT_TRUE(NetGame::start_footer(none, ffa, room_with({0}), false).empty());
+        ASSERT_TRUE(NetGame::start_prompt_texts(FillPlan(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::None, FillLevel::None, FillLevel::None}), ffa, room_with({0, 1, 2, 3}), false).empty());     // (a level for the seat of a person asks for nothing now)
+        // one level in every seat, as before: the sentence of protocol 11 and its footer
+        ASSERT_EQ(NetGame::start_prompt_texts(every_medium, ffa, room_with({0}), false).front(), std::string("Press START: the empty seats get Medium bots."));
+        ASSERT_EQ(NetGame::start_prompt_texts(medium_for_others, ffa, room_with({0}), false).front(), std::string("Press START: the empty seats get Medium bots."));     // (the host's own seat has no level: the same words, the empty seats are all that get one)
+        ASSERT_EQ(NetGame::start_prompt(FillLevel::Medium, false), std::string("Press START: the empty seats get Medium bots."));
+        {
+            const NetGame::FooterTexts f = NetGame::start_footer(every_medium, ffa, room_with({0}), false);
+            ASSERT_TRUE(f.line[0] == std::vector<std::string>{"Empty seats at START:"} && f.line[1] == std::vector<std::string>{"Medium bots"});
+        }
+        // a level for each seat: the seats that are empty, by their colours
+        ASSERT_EQ(NetGame::start_prompt_texts(eh, ffa, room_with({0, 1}), false).front(), std::string("Press START: Blue gets an Easy bot, Black a Hard bot."));
+        ASSERT_EQ(NetGame::start_prompt_texts(ehm, ffa, room_with({0}), false).front(), std::string("Press START: Red gets an Easy bot, Blue a Hard bot, Black a Medium bot."));
+        ASSERT_EQ(NetGame::start_prompt_texts(ehm, ffa, room_with({0, 2}), false).front(), std::string("Press START: Red gets an Easy bot, Black a Medium bot."));          // (a person took Blue: its Hard bot is not seated)
+        ASSERT_EQ(NetGame::start_prompt_texts(ehm, ffa, room_with({0, 1, 2}), false).front(), std::string("Press START: Black gets a Medium bot."));
+        {
+            const NetGame::FooterTexts f = NetGame::start_footer(eh, ffa, room_with({0, 1}), false);
+            ASSERT_TRUE(f.line[0] == std::vector<std::string>{"Empty seats at START:"} && f.line[1] == std::vector<std::string>{"Blue Easy, Black Hard"});
+        }
+        // the teams, with the seats that would play (the bots' too)
+        const std::vector<std::string> both = NetGame::start_prompt_texts(eh, sim::StartTeams{true, 0, 2}, room_with({0, 1}), false);
+        ASSERT_EQ(both.front(), std::string("Press START: Blue gets an Easy bot, Black a Hard bot; teams Green + Blue against Red + Black."));
+        ASSERT_TRUE(both.size() >= 4);
+        for (size_t i = 1; i < both.size(); ++i) ASSERT_TRUE(both[i].size() < both[i - 1].size());      // (the longest first, each one shorter than the one before)
+        ASSERT_EQ(both.back(), std::string("bots: Blue Easy, Black Hard; teams Green + Blue vs Red + Black."));
+        ASSERT_EQ(NetGame::start_prompt_texts(none, sim::StartTeams{true, 1, 2}, room_with({0, 1, 2}), false).front(), std::string("Press START: teams Red + Blue against Green."));
+        ASSERT_EQ(NetGame::start_prompt_texts(every_medium, sim::StartTeams{true, 0, 1}, room_with({0}), false).front(), std::string("Press START: the empty seats get Medium bots; teams Green + Red against Blue + Black."));
+        ASSERT_EQ(NetGame::start_prompt_texts(none, sim::StartTeams{true, 0, 3}, room_with({0, 1, 2}), false).front(), std::string("Press START: teams Green + Black (not with these seats)."));      // (no seat 3: they cannot be made as it stands)
+        {
+            const NetGame::FooterTexts f = NetGame::start_footer(eh, sim::StartTeams{true, 0, 2}, room_with({0, 1}), false);
+            ASSERT_EQ(f.line[0], (std::vector<std::string>{"Bots: Blue Easy, Black Hard", "Blue Easy, Black Hard"}));
+            ASSERT_EQ(f.line[1].front(), std::string("Teams: Green + Blue against Red + Black"));
+            const NetGame::FooterTexts g = NetGame::start_footer(every_medium, sim::StartTeams{true, 0, 1}, room_with({0}), false);
+            ASSERT_EQ(g.line[0], (std::vector<std::string>{"Empty seats: Medium bots"}));
+            ASSERT_EQ(g.line[1].front(), std::string("Teams: Green + Red against Blue + Black"));
+            const NetGame::FooterTexts h = NetGame::start_footer(none, sim::StartTeams{true, 1, 2}, room_with({0, 1, 2}), false);
+            ASSERT_TRUE(h.line[0] == std::vector<std::string>{"Teams at START:"} && h.line[1].front() == "Red + Blue against Green");
+        }
+        // Fog of War seats no bots and says so; the teams still count
+        ASSERT_EQ(NetGame::start_prompt_texts(every_medium, ffa, room_with({0}), true).front(), std::string("Fog of War is on, so START seats no bots."));
+        ASSERT_EQ(NetGame::start_prompt(FillLevel::Hard, true), std::string("Fog of War is on, so START seats no bots."));
+        ASSERT_EQ(NetGame::start_prompt_texts(every_medium, sim::StartTeams{true, 0, 1}, room_with({0, 1, 2}), true).front(), std::string("Fog of War is on, so START seats no bots; teams Green + Red against Blue."));
+        ASSERT_TRUE(NetGame::start_footer(every_medium, ffa, room_with({0}), true).empty());
+        ASSERT_TRUE(NetGame::start_prompt_texts(none, ffa, room_with({0}), true).empty());                  // (fog and no bots asked for: nothing to say)
+        {
+            const NetGame::FooterTexts f = NetGame::start_footer(every_medium, sim::StartTeams{true, 0, 1}, room_with({0, 1, 2}), true);
+            ASSERT_TRUE(f.line[0] == std::vector<std::string>{"Teams at START:"} && f.line[1].front() == "Green + Red against Blue");
+        }
+        // the status line of a machine follows: a leader / host with a plan shows it, a guest never
+        {
+            Table t;
+            ASSERT_TRUE(make_room(t, 1));
+            Machine& host = *t.machines[0];
+            Machine& bob = *t.machines[1];
+            host.net.set_fill_bots(FillPlan(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard}));
+            host.net.set_start_teams(sim::StartTeams{true, 0, 2});
+            t.run(100);
+            ASSERT_EQ(host.net.status_text(), std::string("Press START: Blue gets an Easy bot, Black a Hard bot; teams Green + Blue against Red + Black."));
+            ASSERT_TRUE(!host.net.prompt_texts().empty() && host.net.prompt_texts().front() == host.net.status_text());
+            bob.net.set_fill_bots(FillLevel::Hard);                                                      // a guest has no START
+            bob.net.set_start_teams(sim::StartTeams{true, 0, 2});
+            t.run(100);
+            ASSERT_EQ(bob.net.status_text(), std::string(sim::strings::text(sim::strings::kWaitingForHost)));
+            ASSERT_TRUE(bob.net.prompt_texts().empty());
+            host.net.set_fill_bots(FillPlan());
+            host.net.set_start_teams(sim::StartTeams{});
+            t.run(100);
+            ASSERT_EQ(host.net.status_text(), std::string(sim::strings::text(sim::strings::kPressStart)));      // nothing chosen: the original's prompt
+            ASSERT_TRUE(host.net.prompt_texts().empty());
+        }
+    } TEST_END();
+
+    TEST_CASE("N3.36 Protocol 13, The Room's Own Teams (Its Code Names Them): One Reading Of The Code For The Server And Every Game (Every Line Of tests/data/room_code_teams.tsv, The Table That The Web Page's Reading Is Tested Against), The Word Is Made And Read Back For Every Pair, A Client Of Such A Room Shows And Asks For The Room's Teams And Not Its Own (A Room Without Them Keeps Its Own, The Host Of A LAN Room Has None), And The Leader's Prompt And Footer Say That The Teams Are The Room's") {
+        // ---- the table: what each code names (the page's codeTeams is tested against the same lines) ----
+        {
+            std::ifstream in(std::string(TEST_DATA_DIR) + "/room_code_teams.tsv");
+            ASSERT_TRUE(in.is_open());
+            std::string line;
+            size_t lines = 0;
+            size_t named = 0;
+            while (std::getline(in, line)) {
+                if (!line.empty() && line.back() == '\r') line.pop_back();                            // (a checkout with CRLF line ends reads the same)
+                if (line.empty() || line[0] == '#') continue;
+                const size_t tab = line.find('\t');
+                ASSERT_TRUE(tab != std::string::npos);
+                const std::string code = line.substr(0, tab);
+                const std::string expected = line.substr(tab + 1);
+                ++lines;
+                named += expected != "ffa" ? 1u : 0u;
+                const sim::StartTeams got = room_code_teams(code);
+                if (sim::start_teams_text(got) != expected) {
+                    std::cout << "FAILED!\n    " << code << " names " << sim::start_teams_text(got) << ", the table says " << expected << "\n";
+                    ++g_test_failures;
+                    return;
+                }
+                ASSERT_TRUE(got.set ? (got.a < got.b && got.b < 4) : (!got.a && !got.b));
+            }
+            ASSERT_TRUE(lines >= 50 && named >= 15 && lines - named >= 30);                       // (a table that is cut short must not pass)
+        }
+        // ---- the word of a pair, and what it reads back as ----
+        for (unsigned a = 0; a < 6; ++a) {
+            for (unsigned b = 0; b < 6; ++b) {
+                const sim::StartTeams pair{true, static_cast<uint8_t>(a), static_cast<uint8_t>(b)};
+                const std::string word = room_code_team_word(pair);
+                if (a < b && b < 4) {
+                    ASSERT_EQ(word, std::string("t") + static_cast<char>('0' + a) + static_cast<char>('0' + b));
+                    ASSERT_TRUE(room_code_teams("demo-small-4p-" + word + "-abcdef") == pair);
+                    ASSERT_TRUE(room_code_teams("demo-small-4p-" + word) == pair);
+                } else {
+                    ASSERT_TRUE(word.empty());                                                    // (no pair that the code could not read back as itself)
+                }
+            }
+        }
+        ASSERT_TRUE(room_code_team_word(sim::StartTeams{}).empty());
+        ASSERT_TRUE(room_code_team_word(sim::StartTeams{false, 0, 1}).empty());                   // free for all is no word whatever the bytes say
+        for (const uint8_t players : {uint8_t{3}, uint8_t{4}}) {                                  // the choices of a room are all words
+            for (const sim::StartTeams& choice : sim::room_team_choices(players)) {
+                const std::string word = room_code_team_word(choice);
+                ASSERT_EQ(word.empty(), !choice.set);
+                ASSERT_TRUE(room_code_teams("demo-treasure-" + std::to_string(players) + "p-" + word + "-k7m2xq") == choice);
+            }
+        }
+        // ---- a client of such a room: the room's teams, else its own ----
+        {
+            Table t;
+            Machine& named = t.add("Zed");
+            ASSERT_TRUE(named.net.join("127.0.0.1", 1, "Zed", 255, "demo-tiny-4p-t01-abcdef"));
+            ASSERT_TRUE(named.net.room_teams() == sim::StartTeams({true, 0, 1}));
+            ASSERT_TRUE(named.net.effective_teams() == sim::StartTeams({true, 0, 1}));            // no choice of its own
+            named.net.set_start_teams(sim::StartTeams{true, 1, 2});
+            ASSERT_TRUE(named.net.start_teams() == sim::StartTeams({true, 1, 2}));                // (its own choice is kept, and does not count in this room)
+            ASSERT_TRUE(named.net.effective_teams() == sim::StartTeams({true, 0, 1}));
+            Machine& plain = t.add("Yan");
+            ASSERT_TRUE(plain.net.join("127.0.0.1", 1, "Yan", 255, "demo-tiny-4p-abcdef"));
+            plain.net.set_start_teams(sim::StartTeams{true, 1, 2});
+            ASSERT_FALSE(plain.net.room_teams().set);
+            ASSERT_TRUE(plain.net.effective_teams() == sim::StartTeams({true, 1, 2}));            // a room without teams of its own: the leader's choice
+            Machine& other = t.add("Xi");
+            ASSERT_TRUE(other.net.join("127.0.0.1", 1, "Xi", 255, "party-t01-abcdef"));          // not a demo code: the server reads no teams from it, and no game does
+            other.net.set_start_teams(sim::StartTeams{true, 2, 3});
+            ASSERT_FALSE(other.net.room_teams().set);
+            ASSERT_TRUE(other.net.effective_teams() == sim::StartTeams({true, 2, 3}));
+            Machine& lan = t.add("Alice");
+            ASSERT_TRUE(lan.net.host(0, "Alice", true));
+            lan.net.set_start_teams(sim::StartTeams{true, 0, 3});
+            ASSERT_FALSE(lan.net.room_teams().set);                                               // the host of a room on the local network has no code
+            ASSERT_TRUE(lan.net.effective_teams() == sim::StartTeams({true, 0, 3}));
+        }
+        // ---- the words: the teams are the room's ----
+        const auto room_with = [](std::initializer_list<uint8_t> people, std::initializer_list<uint8_t> bots = {}) {
+            RoomMsg r;
+            for (const uint8_t seat : people) r.slots[seat] = {SlotState::Client, "P" + std::to_string(seat), 10};
+            for (const uint8_t seat : bots) r.slots[seat] = {SlotState::Bot, "Bot (Easy)", 0};
+            return r;
+        };
+        const FillPlan none;
+        const FillPlan eh(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard});
+        const FillPlan every_medium = FillLevel::Medium;
+        ASSERT_EQ(NetGame::start_prompt_texts(none, sim::StartTeams{true, 1, 2}, room_with({0, 1, 2}), false, true).front(), std::string("Press START: the room's teams: Red + Blue against Green."));
+        ASSERT_EQ(NetGame::start_prompt_texts(none, sim::StartTeams{true, 1, 2}, room_with({0, 1, 2}), false, false).front(), std::string("Press START: teams Red + Blue against Green."));       // (a START's own choice: the words that it had)
+        ASSERT_EQ(NetGame::start_prompt_texts(none, sim::StartTeams{true, 1, 2}, room_with({0, 1, 2}), false).front(), std::string("Press START: teams Red + Blue against Green."));
+        const std::vector<std::string> both = NetGame::start_prompt_texts(eh, sim::StartTeams{true, 0, 2}, room_with({0, 1}), false, true);
+        ASSERT_EQ(both.front(), std::string("Press START: Blue gets an Easy bot, Black a Hard bot; the room's teams: Green + Blue against Red + Black."));
+        ASSERT_TRUE(both.size() >= 4);
+        for (size_t i = 1; i < both.size(); ++i) ASSERT_TRUE(both[i].size() < both[i - 1].size());      // (the longest first, each one shorter than the one before)
+        ASSERT_EQ(both.back(), std::string("bots: Blue Easy, Black Hard; teams Green + Blue vs Red + Black."));        // (the shortest way keeps the teams: the label is narrow)
+        ASSERT_EQ(NetGame::start_prompt_texts(every_medium, sim::StartTeams{true, 0, 1}, room_with({0}), false, true).front(),
+                  std::string("Press START: the empty seats get Medium bots; the room's teams: Green + Red against Blue + Black."));
+        ASSERT_EQ(NetGame::start_prompt_texts(none, sim::StartTeams{true, 0, 3}, room_with({0, 1, 2}), false, true).front(), std::string("Press START: the room's teams: Green + Black (not with these seats)."));
+        ASSERT_EQ(NetGame::start_prompt_texts(every_medium, sim::StartTeams{true, 0, 1}, room_with({0, 1, 2}), true, true).front(),
+                  std::string("Fog of War is on, so START seats no bots; the room's teams: Green + Red against Blue."));
+        ASSERT_TRUE(NetGame::start_prompt_texts(none, sim::StartTeams{}, room_with({0}), false, true).empty());          // (no teams: nothing to say, whoever owns them)
+        {
+            const NetGame::FooterTexts f = NetGame::start_footer(none, sim::StartTeams{true, 1, 2}, room_with({0, 1, 2}), false, true);
+            ASSERT_TRUE(f.line[0] == std::vector<std::string>{"Room teams:"} && f.line[1].front() == "Red + Blue against Green");
+            const NetGame::FooterTexts own = NetGame::start_footer(none, sim::StartTeams{true, 1, 2}, room_with({0, 1, 2}), false, false);
+            ASSERT_TRUE(own.line[0] == std::vector<std::string>{"Teams at START:"} && own.line[1] == f.line[1]);          // (the same teams, said as a choice of START)
+            const NetGame::FooterTexts g = NetGame::start_footer(eh, sim::StartTeams{true, 0, 2}, room_with({0, 1}), false, true);
+            ASSERT_EQ(g.line[0], (std::vector<std::string>{"Bots: Blue Easy, Black Hard", "Blue Easy, Black Hard"}));
+            ASSERT_EQ(g.line[1], (std::vector<std::string>{"Room teams: Green + Blue against Red + Black", "Room teams: Green + Blue vs Red + Black", "Teams: Green + Blue against Red + Black",
+                                                            "Green + Blue against Red + Black", "Teams: Green + Blue vs Red + Black", "Green + Blue vs Red + Black"}));
+            const NetGame::FooterTexts h = NetGame::start_footer(every_medium, sim::StartTeams{true, 0, 1}, room_with({0}), false, true);
+            ASSERT_EQ(h.line[0], (std::vector<std::string>{"Empty seats: Medium bots"}));
+            ASSERT_EQ(h.line[1].front(), std::string("Room teams: Green + Red against Blue + Black"));
+            const NetGame::FooterTexts k = NetGame::start_footer(every_medium, sim::StartTeams{}, room_with({0}), false, true);        // (no teams: the footer of protocol 11, whoever would own them)
+            ASSERT_TRUE(k.line[0] == std::vector<std::string>{"Empty seats at START:"} && k.line[1] == std::vector<std::string>{"Medium bots"});
+        }
+    } TEST_END();
 }
 
 void run_prediction_tests() {
@@ -1730,6 +2058,7 @@ int main() {
     run_reject_tests();
     run_room_chat_tests();
     run_start_delay_tests();
+    run_team_tests();
     run_prediction_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

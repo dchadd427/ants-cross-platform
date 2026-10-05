@@ -5,6 +5,7 @@
 #include "ants_sim/command.hpp"
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_sim/start_teams.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -13,6 +14,7 @@
 #include <iomanip>
 #include <limits>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1196,6 +1198,239 @@ void run_reset_tests() {
     } TEST_END();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The teams a match starts with (ants_sim/start_teams.hpp, protocol 13): one model for a game on this computer, a room on the local network and a server's room
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+void run_start_team_tests() {
+    TEST_CASE("N1.23 Start teams as a model: ffa | A+B (two different seats, any case of ffa, nothing else), what a match of a roster makes of them (the pair, then the two other seats when both play; nothing, with the reason, for a seat that does not play, a pair of one seat or when the teams would be the whole match), the choices of a game against bots and of a room, and the words of a choice") {
+        StartTeams t;
+        std::string why;
+        ASSERT_TRUE(parse_start_teams("0+1", t, why) && t.set && t.a == 0 && t.b == 1);
+        ASSERT_TRUE(parse_start_teams("3+2", t, why) && t.set && t.a == 3 && t.b == 2);
+        ASSERT_TRUE(parse_start_teams("ffa", t, why) && !t.set);
+        ASSERT_TRUE(parse_start_teams("FFA", t, why) && !t.set && parse_start_teams("Ffa", t, why) && !t.set);
+        for (const char* bad : {"", "0", "01", "0+", "+1", "0+0", "2+2", "0+4", "4+0", "9+1", "a+b", "0-1", "0 1", "0 + 1", " 0+1", "0+1 ", "0+1+2", "0+10", "ff", "ffaa", "free for all", "none", "-1+0"}) {
+            t = StartTeams{true, 1, 2};
+            why.clear();
+            ASSERT_FALSE(parse_start_teams(bad, t, why));
+            ASSERT_TRUE(t.set && t.a == 1 && t.b == 2);                                                    // (nothing changed)
+            ASSERT_FALSE(why.empty());
+        }
+        ASSERT_EQ(start_teams_text(StartTeams{}), std::string("ffa"));
+        ASSERT_EQ(start_teams_text(StartTeams{true, 0, 1}), std::string("0+1"));
+        ASSERT_EQ(start_teams_text(StartTeams{true, 3, 2}), std::string("3+2"));
+        ASSERT_TRUE(parse_start_teams(start_teams_text(StartTeams{true, 2, 0}), t, why) && t == StartTeams({true, 2, 0}));
+        ASSERT_TRUE(StartTeams{} == StartTeams({false, 3, 1}));                                            // (free for all has no pair to compare)
+        ASSERT_TRUE(StartTeams({true, 0, 1}) != StartTeams({true, 1, 0}));                                 // (the order of a pair is part of the choice: the first seat invites)
+
+        const auto plan_of = [](const StartTeams& teams, uint8_t roster) {
+            std::string out;
+            const StartTeamsPlan plan = plan_start_teams(teams, roster);
+            for (const auto& p : plan.pairs) out += std::to_string(p[0]) + "+" + std::to_string(p[1]) + " ";
+            return out + "[" + plan.why + "]";
+        };
+        for (unsigned roster = 0; roster < 16; ++roster) {                                                 // whatever the teams and the roster: a pair or a reason, never both and never neither
+            for (uint8_t a = 0; a < 6; ++a) {
+                for (uint8_t b = 0; b < 6; ++b) {
+                    const StartTeamsPlan plan = plan_start_teams(StartTeams{true, a, b}, static_cast<uint8_t>(roster));
+                    ASSERT_TRUE(plan.pairs.empty() != plan.why.empty());
+                    ASSERT_TRUE(plan.why.empty() == plan.short_why.empty());
+                    ASSERT_TRUE(10 + plan.short_why.size() <= 100);                                       // "No teams: " + the reason is one line of chat (net::kMaxChatChars = 100)
+                    ASSERT_TRUE(plan.pairs.empty() || (plan.pairs.size() <= 2 && plan.pairs[0][0] == a && plan.pairs[0][1] == b));
+                }
+            }
+        }
+        ASSERT_EQ(plan_of(StartTeams{}, 0x0F), std::string("[]"));
+        ASSERT_EQ(plan_of(StartTeams{true, 0, 1}, 0x0F), std::string("0+1 2+3 []"));
+        ASSERT_EQ(plan_of(StartTeams{true, 1, 0}, 0x0F), std::string("1+0 2+3 []"));
+        ASSERT_EQ(plan_of(StartTeams{true, 2, 3}, 0x0F), std::string("2+3 0+1 []"));
+        ASSERT_EQ(plan_of(StartTeams{true, 1, 3}, 0x0F), std::string("1+3 0+2 []"));
+        ASSERT_EQ(plan_of(StartTeams{true, 0, 1}, 0x07), std::string("0+1 []"));
+        ASSERT_EQ(plan_of(StartTeams{true, 1, 2}, 0x07), std::string("1+2 []"));
+        ASSERT_EQ(plan_of(StartTeams{true, 0, 3}, 0x0B), std::string("0+3 []"));
+        ASSERT_EQ(plan_of(StartTeams{true, 0, 3}, 0x07), std::string("[seat 3 does not play in this match.]"));
+        ASSERT_EQ(plan_of(StartTeams{true, 3, 0}, 0x07), std::string("[seat 3 does not play in this match.]"));
+        ASSERT_EQ(plan_of(StartTeams{true, 1, 2}, 0x0D), std::string("[seat 1 does not play in this match.]"));
+        ASSERT_EQ(plan_of(StartTeams{true, 0, 1}, 0x00), std::string("[seat 0 does not play in this match.]"));
+        ASSERT_EQ(plan_of(StartTeams{true, 0, 7}, 0xFF), std::string("[seat 7 does not play in this match.]"));      // (a seat that no match has)
+        ASSERT_EQ(plan_of(StartTeams{true, 2, 2}, 0x0F), std::string("[a team needs two different seats.]"));          // (what a message or a struct can say and parse never does)
+        ASSERT_EQ(plan_of(StartTeams{true, 0, 1}, 0x03), std::string("[these are the only two seats that play, and a match in which every team is allied ends at once.]"));
+        ASSERT_EQ(plan_of(StartTeams{true, 0, 2}, 0x05), std::string("[these are the only two seats that play, and a match in which every team is allied ends at once.]"));
+        ASSERT_EQ(plan_start_teams(StartTeams{true, 0, 1}, 0x03).short_why, std::string("only two seats play: a team of them would end the match at once."));
+        ASSERT_EQ(plan_start_teams(StartTeams{true, 0, 3}, 0x07).short_why, std::string("seat 3 does not play in this match."));
+
+        const auto choices_of = [](const std::vector<StartTeams>& choices) {
+            std::string out;
+            for (const StartTeams& c : choices) out += start_teams_text(c) + " ";
+            return out;
+        };
+        ASSERT_EQ(choices_of(local_team_choices(0, 0x0E)), std::string("ffa 0+1 0+2 0+3 "));
+        ASSERT_EQ(choices_of(local_team_choices(0, 0x06)), std::string("ffa 0+1 0+2 "));
+        ASSERT_EQ(choices_of(local_team_choices(0, 0x02)), std::string("ffa "));
+        ASSERT_EQ(choices_of(local_team_choices(2, 0x0B)), std::string("ffa 2+0 2+1 2+3 "));
+        ASSERT_EQ(choices_of(local_team_choices(7, 0x0F)), std::string("ffa "));
+        ASSERT_EQ(choices_of(room_team_choices(2)), std::string("ffa "));                                  // two players: only free for all
+        ASSERT_EQ(choices_of(room_team_choices(3)), std::string("ffa 0+1 0+2 1+2 "));
+        ASSERT_EQ(choices_of(room_team_choices(4)), std::string("ffa 0+1 0+2 0+3 "));
+        ASSERT_EQ(choices_of(room_team_choices(1)), std::string("ffa "));
+        ASSERT_EQ(choices_of(room_team_choices(0)), std::string("ffa "));
+        ASSERT_EQ(choices_of(room_team_choices(5)), std::string("ffa "));
+        for (uint8_t players = 2; players <= 4; ++players) {                                               // every choice that a room offers can be made by the seats it fills first
+            const uint8_t roster = static_cast<uint8_t>((1u << players) - 1u);
+            for (const StartTeams& c : room_team_choices(players)) ASSERT_TRUE(plan_start_teams(c, roster).why.empty());
+        }
+        for (uint8_t own = 0; own < 4; ++own) {
+            for (uint8_t filled = 0; filled < 16; ++filled) {
+                const uint8_t roster = static_cast<uint8_t>((filled & 0x0Fu) | (1u << own));
+                for (const StartTeams& c : local_team_choices(own, filled)) ASSERT_TRUE(plan_start_teams(c, roster).why.empty());
+            }
+        }
+
+        ASSERT_EQ(start_teams_title(StartTeams{}, 0x0F), std::string("Free for all"));
+        ASSERT_EQ(start_teams_title(StartTeams{true, 0, 1}, 0x0F), std::string("Green + Red against Blue + Black"));
+        ASSERT_EQ(start_teams_title(StartTeams{true, 0, 2}, 0x0F), std::string("Green + Blue against Red + Black"));
+        ASSERT_EQ(start_teams_title(StartTeams{true, 0, 3}, 0x0F), std::string("Green + Black against Red + Blue"));
+        ASSERT_EQ(start_teams_title(StartTeams{true, 0, 1}, 0x07), std::string("Green + Red against Blue"));
+        ASSERT_EQ(start_teams_title(StartTeams{true, 0, 2}, 0x07), std::string("Green + Blue against Red"));
+        ASSERT_EQ(start_teams_title(StartTeams{true, 1, 2}, 0x07), std::string("Red + Blue against Green"));
+        ASSERT_EQ(start_teams_title(StartTeams{true, 2, 3}, 0x0F), std::string("Blue + Black against Green + Red"));
+        ASSERT_EQ(start_teams_title(StartTeams{true, 0, 1}, 0x03), std::string("Green + Red"));              // (no other seat plays)
+        ASSERT_EQ(start_teams_title(StartTeams{true, 0, 3}, 0x07), std::string("Green + Black"));            // (a seat of the pair does not play)
+        for (uint8_t players = 3; players <= 4; ++players) {                                                // what a room's select shows fits a line of the setup screen's footer (see test_wide_setup)
+            for (const StartTeams& c : room_team_choices(players)) ASSERT_TRUE(start_teams_title(c, static_cast<uint8_t>((1u << players) - 1u)).size() <= 40);
+        }
+    } TEST_END();
+
+    TEST_CASE("N1.24 apply_start_teams: the pairs of the plan become teams with the original's own commands (the first seat invites, the second accepts: the News Flash once for a pair, no invitation stays open), exactly what the same commands by hand make; free for all, a seat that does not play and a team that would be the whole match change nothing; two engines with the same teams stay bit-identical and the teams are part of the hashed state") {
+        ants::assets::LevelData lvl;
+        ASSERT_TRUE(load_map_file("TREASURE.LVL", lvl));
+        const auto fresh = [&](uint8_t roster) {
+            auto sim = std::make_unique<SimulationEngine>();
+            sim->init(lvl, 7, roster);
+            return sim;
+        };
+        const auto allies = [](const SimulationEngine& sim) {
+            std::string out;
+            for (uint8_t p = 0; p < MAX_PLAYERS; ++p) out += std::to_string(sim.get_ally_id(p));
+            return out;                                                                                     // by seat: the ally's seat, 4 for none
+        };
+        const auto team_news = [](SimulationEngine& sim) {
+            std::vector<std::string> out;
+            for (const NewsEvent& n : sim.poll_news_events()) {
+                if (n.string_id == strings::kTeamNow) out.push_back(n.message_text);
+            }
+            return out;
+        };
+        {   // four seats: two teams, one News Flash for each, nobody left holding an invitation
+            auto sim = fresh(0x0F);
+            sim->poll_news_events();
+            apply_start_teams(*sim, StartTeams{true, 0, 1});
+            ASSERT_EQ(allies(*sim), std::string("1032"));
+            const std::vector<std::string> news = team_news(*sim);
+            ASSERT_EQ(news.size(), size_t{2});
+            ASSERT_EQ(news[0], std::string("Green (Green) and Red (Red) are a team now!"));                  // (the proposer first)
+            ASSERT_EQ(news[1], std::string("Blue (Blue) and Black (Black) are a team now!"));
+            for (uint8_t p = 0; p < MAX_PLAYERS; ++p) ASSERT_EQ(sim->get_world_state().pending_invite_from[p], 255);
+            ASSERT_EQ(sim->current_tick(), uint64_t{0});                                                    // before the first tick
+            for (int t = 0; t < 200; ++t) sim->tick();
+            ASSERT_FALSE(sim->is_match_over());                                                            // two teams of two: the match goes on
+            ASSERT_EQ(allies(*sim), std::string("1032"));
+        }
+        {   // the same by hand: the same state, to the bit
+            auto by_hand = fresh(0x0F);
+            auto by_call = fresh(0x0F);
+            by_hand->apply_command(make_command(CommandType::AllianceInvite, 0, 1));
+            by_hand->apply_command(make_command(CommandType::AllianceAccept, 1, 0));
+            by_hand->apply_command(make_command(CommandType::AllianceInvite, 2, 3));
+            by_hand->apply_command(make_command(CommandType::AllianceAccept, 3, 2));
+            apply_start_teams(*by_call, StartTeams{true, 0, 1});
+            ASSERT_TRUE(by_hand->state_hash() == by_call->state_hash());
+            auto reversed = fresh(0x0F);                                                                    // (1+0: the other seat invites; the teams are the same, the hash is not asked to be)
+            apply_start_teams(*reversed, StartTeams{true, 1, 0});
+            ASSERT_EQ(allies(*reversed), std::string("1032"));
+        }
+        {   // names set before the teams are in the News Flash (the order every engine uses: init, the names, the teams)
+            auto sim = fresh(0x0F);
+            sim->set_player_name(0, "Ann");
+            sim->set_player_name(1, "Bob");
+            sim->poll_news_events();
+            apply_start_teams(*sim, StartTeams{true, 0, 1});
+            const std::vector<std::string> news = team_news(*sim);
+            ASSERT_EQ(news.size(), size_t{2});
+            ASSERT_EQ(news[0], std::string("Ann (Green) and Bob (Red) are a team now!"));
+        }
+        {   // three seats: the pair is a team and the third seat plays alone
+            auto sim = fresh(0x07);
+            apply_start_teams(*sim, StartTeams{true, 1, 2});
+            ASSERT_EQ(allies(*sim), std::string("4214"));
+            ASSERT_EQ(team_news(*sim).size(), size_t{1});
+        }
+        {   // what cannot be made changes nothing at all: the hash is the plain engine's, no News Flash
+            const struct { uint8_t roster; StartTeams teams; } none[] = {
+                {0x0F, StartTeams{}}, {0x03, StartTeams{true, 0, 1}}, {0x05, StartTeams{true, 0, 2}}, {0x07, StartTeams{true, 0, 3}}, {0x0D, StartTeams{true, 1, 2}}, {0x0F, StartTeams{true, 2, 2}}, {0x0F, StartTeams{true, 0, 9}}};
+            for (const auto& c : none) {
+                auto plain = fresh(c.roster);
+                auto sim = fresh(c.roster);
+                sim->poll_news_events();
+                apply_start_teams(*sim, c.teams);
+                ASSERT_TRUE(sim->state_hash() == plain->state_hash());
+                ASSERT_EQ(team_news(*sim).size(), size_t{0});
+                ASSERT_EQ(allies(*sim), std::string("4444"));
+            }
+        }
+        {   // two engines with the same teams and the same commands: the same hash at every tick; the teams are in the hash (a different pair, or none, is a different state from the start)
+            auto a = fresh(0x0F);
+            auto b = fresh(0x0F);
+            auto other_pair = fresh(0x0F);
+            auto ffa = fresh(0x0F);
+            apply_start_teams(*a, StartTeams{true, 0, 2});
+            apply_start_teams(*b, StartTeams{true, 0, 2});
+            apply_start_teams(*other_pair, StartTeams{true, 0, 3});
+            ASSERT_TRUE(a->state_hash() == b->state_hash());
+            ASSERT_TRUE(a->state_hash() != other_pair->state_hash());
+            ASSERT_TRUE(a->state_hash() != ffa->state_hash());
+            for (int t = 0; t < 300; ++t) {
+                a->tick();
+                b->tick();
+                ASSERT_TRUE(a->state_hash() == b->state_hash());
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("N1.25 start_teams_for: Which Teams A Start Asks For (The Room's Own, Which Its Code Names, For Every Start; A Leader's Request Only When It Is What Starts The Match And Only In A Room That Has None Of Its Own), Over Every Combination") {
+        const StartTeams none;
+        const StartTeams own_a{true, 0, 1};
+        const StartTeams own_b{true, 2, 3};
+        const StartTeams asked_a{true, 1, 2};
+        const StartTeams asked_b{true, 0, 3};
+        const StartTeams impossible{true, 3, 3};                                                           // (no pair: the rule does not judge a pair, plan_start_teams does)
+        for (const StartTeams& own : {none, own_a, own_b, impossible}) {
+            for (const bool by_leader : {false, true}) {
+                for (const StartTeams& asked : {none, asked_a, asked_b, own_a}) {
+                    const StartTeams got = start_teams_for(own, by_leader, asked);
+                    if (own.set) {
+                        ASSERT_TRUE(got == own);                                                           // the room's own win, even over an equal request and over one that starts the match
+                    } else if (by_leader) {
+                        ASSERT_TRUE(got == asked);                                                         // a room without teams: the leader's request that starts the match
+                    } else {
+                        ASSERT_FALSE(got.set);                                                             // ... and nothing when the request is not what starts it (the asker left, the room fills up by itself)
+                    }
+                }
+            }
+        }
+        // the cases that matter by name
+        ASSERT_TRUE(start_teams_for(own_a, false, none) == own_a);                                          // a full room's automatic start: no request at all, the room's teams
+        ASSERT_TRUE(start_teams_for(own_a, true, asked_a) == own_a);                                        // a leader's START in a room that names others: the room's
+        ASSERT_TRUE(start_teams_for(none, true, asked_a) == asked_a);                                       // a room that names none: the leader's
+        ASSERT_FALSE(start_teams_for(none, false, asked_a).set);                                            // a request that does not start the match counts for nothing
+        ASSERT_FALSE(start_teams_for(none, false, none).set);
+        ASSERT_FALSE(start_teams_for(none, true, none).set);
+        // a room's teams that the seats cannot make stay the room's: the start is then without teams, never with the request's
+        ASSERT_FALSE(plan_start_teams(start_teams_for(StartTeams{true, 0, 3}, true, asked_a), 0x07).why.empty());
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -1209,6 +1444,7 @@ int main() {
     run_roster_tests();
     run_drop_tests();
     run_prediction_tests();
+    run_start_team_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

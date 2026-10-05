@@ -25,7 +25,7 @@ def read(path):
 
 
 class TheMarkup(unittest.TestCase):
-    def test_the_front_page_has_one_name_field_for_playing_hosting_and_joining(self):
+    def test_the_front_page_has_one_name_field_for_starting_inviting_and_joining(self):
         page = read(LOBBY)
         self.assertEqual(len(re.findall(r'<input[^>]*id="player-name"', page)), 1)
         self.assertNotIn('id="join-name"', page)                                           # (the field that only the Join form had)
@@ -34,9 +34,9 @@ class TheMarkup(unittest.TestCase):
         field = re.search(r'<input[^>]*id="player-name"[^>]*>', page).group(0)
         self.assertIn('maxlength="32"', field)
         self.assertIn('placeholder="Player"', field)
-        self.assertLess(page.index('id="who"'), page.index('id="cards"'))                   # near the top: before the two cards (a game against the computer, a match online) and the form of a join
+        self.assertLess(page.index('id="who"'), page.index('id="cards"'))                   # near the top: before the card (a match with its seats, its invitations and START) and the line of a join
         self.assertLess(page.index('id="who"'), page.index('id="join-code"'))
-        self.assertLess(page.index('id="who"'), page.index('id="map-solo"'))
+        self.assertLess(page.index('id="who"'), page.index('id="map-pick"'))
         self.assertRegex(page, r'<label class="lab" for="player-name">Your name</label>')      # (the field has a visible label)
 
     def test_the_page_makes_no_markup_from_text(self):

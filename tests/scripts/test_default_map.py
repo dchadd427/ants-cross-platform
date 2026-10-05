@@ -79,13 +79,12 @@ class PlayOnlinePage(unittest.TestCase):
         self.assertIsNotNone(match, "the page names no default map")
         self.assertEqual(match.group(1), "treasure")
 
-    def test_the_form_opens_on_treasure_and_a_remembered_choice_wins(self):
-        preselect = self.page.index("mapSelects.forEach(function (select) { select.value = DEFAULT_MAP_KEY; });")         # (both cards: the one that plays against the computer and the one that hosts)
-        recalled = self.page.index("recall('ants-four-map')")
-        remembered = self.page.index("mapSelects.forEach(function (select) { select.value = last; });")
-        self.assertTrue(preselect < recalled < remembered, "the default must be set before the remembered choice is applied")
-        self.assertIn("if (last && mapByKey(last)) mapSelects.forEach(function (select) { select.value = last; });", self.page)
-        self.assertIn("var mapSelects = [mapSolo, mapHost];", self.page)
+    def test_the_card_opens_on_treasure_and_a_remembered_choice_wins(self):
+        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0,", self.page)                                    # (a first visit)
+        self.assertIn("var state = cardNew(typeof o.map === 'string' && mapByKey(o.map) ? o.map : DEFAULT_MAP_KEY);", self.page)       # (the map that the earlier pages remembered, else the default)
+        self.assertEqual(len(re.findall(r"recall\('ants-four-map'\)", self.page)), 1)
+        self.assertIn("var card = cardParse(recall(CARD_KEY)) || cardFromOld({", self.page)                                              # (a choice of the card's own beats both)
+        self.assertIn("out.map = (mapByKey(out.map) || mapByKey(DEFAULT_MAP_KEY)).key;", self.page)                                     # (a map that is none of the six is the default)
 
     def test_an_address_still_chooses_the_map(self):
         self.assertIn("var wantedMap = params.get('map');", self.page)

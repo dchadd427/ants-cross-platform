@@ -190,7 +190,7 @@ void HostLobby::relay_chat(uint8_t sender, const std::string& text) {
     out.text = text;
     broadcast(encode(out));
     chat_.add(ChatLine{sender, room_.slots[sender].name, text});
-    events_.push_back(Event{Event::Type::Chat, sender, FillLevel::None});
+    events_.push_back(Event{Event::Type::Chat, sender});
 }
 
 bool HostLobby::chat(const std::string& text) {
@@ -260,10 +260,14 @@ void HostLobby::cancel() {
     if (phase_ == Phase::Loading) cancel_with(CancelMsg::Reason::HostCancelled, cfg_.host_seat);
 }
 
-bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms) {
+bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms, const sim::StartTeams& teams) {
     if (!can_start()) return false;
     if (room_.fog && has_bot()) return false;                    // (set_fog and add_bot keep this from happening: the last line of defence)
+    uint8_t roster = 0;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) roster = static_cast<uint8_t>(roster | (room_.slots[s].state != SlotState::Empty ? 1u << s : 0u));
+    if (teams.set && !sim::plan_start_teams(teams, roster).why.empty()) return false;          // (the owner checks them first and says why: this is the last line of defence, the Start would be refused by every decoder)
     start_ = StartMsg{};
+    start_.set_teams(teams);
     start_.seed = seed;
     start_.map_name = room_.map_name;
     start_.map_hash = map_hash;
@@ -439,9 +443,14 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             // enough). A request that cannot be honoured is no offence at first (the leader's second click on START arrives when the match is loading already; a host that holds a seat has
             // no leader; a player is told who leads): it is ignored and counted. A connection that sends more of them than a person ever could (kIgnoredStartRequestsAllowed) is flooding:
             // every one after those is a violation.
-            const bool could = m.fill == FillLevel::None ? can_start() : can_start_filled();
+            bool asks_bots = false;
+            for (const FillLevel level : m.fill) asks_bots = asks_bots || level != FillLevel::None;
+            const bool could = asks_bots ? can_start_filled() : can_start();
             if (phase_ == Phase::Room && seat == room_.leader && could) {
-                events_.push_back(Event{Event::Type::LeaderStart, seat, m.fill});
+                Event start{Event::Type::LeaderStart, seat};
+                start.fill = m.fill;
+                start.teams = m.teams();
+                events_.push_back(start);
             } else {
                 ++ignored_start_requests_;
                 if (++guests_[seat].ignored_start_requests > kIgnoredStartRequestsAllowed) violation(seat);
@@ -554,11 +563,16 @@ void ClientLobby::leave() {
     if (phase_ != Phase::Begun) phase_ = Phase::Closed;
 }
 
-bool ClientLobby::request_start(FillLevel fill) {
+bool ClientLobby::request_start(const std::array<FillLevel, sim::MAX_PLAYERS>& fill, const sim::StartTeams& teams) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !conn_->is_open()) return false;
     StartRequestMsg m;
     m.fill = fill;
+    m.set_teams(teams);
     return conn_->send(encode(m));
+}
+
+bool ClientLobby::request_start(FillLevel level) {
+    return request_start(StartRequestMsg::all(level).fill);
 }
 
 bool ClientLobby::chat(const std::string& text) {
