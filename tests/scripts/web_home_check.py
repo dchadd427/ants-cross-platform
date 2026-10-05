@@ -501,7 +501,8 @@ def main():
                 check(re.match(r"^demo-treasure-4p-[a-z2-9]{6}$", code) is not None and arg("--seat") == "0" and arg("--fill-bots") == "none,medium,medium,medium" and arg("--start-when") == "1" and arg("--name") == "Bob" and arg("--aspect") == "16:9",
                       "the game's arguments: the room (%s), seat 0, the plan none,medium,medium,medium, --start-when 1, the name and the shape (%s)" % (code, [x for x in a["args"] if x != "./this.program"]))
                 check("--map" not in a["args"] and "--play" not in a["args"] and "--bot" not in a["args"] and "--teams" not in a["args"], "... no local game's argument (no --map, --play, --bot) and no --teams (free for all)")
-                check(a["search"] == "?join=/ws&room=%s&seat=0&fill=none,medium,medium,medium&aspect=16:9&start=1" % code, "the address bar keeps START's room, seat, plan, shape and number of people but not the name (the game page takes it out) (%s)" % a["search"])
+                check(a["search"] == "?join=/ws&room=%s&fill=none,medium,medium,medium&aspect=16:9&start=1&seat=0" % code,
+                      "the address bar keeps START's room, plan, shape and number of people, and the seat that the room gave this window (the game tells the page: it stands at the end), but not the name (the game page takes it out) (%s)" % a["search"])
                 check(not tab.ev("document.getElementById('name-step') && !document.getElementById('name-step').hidden"), "the game does not ask for a name (the front page chose it)")
                 pressed = close_quick_help()
                 started = bool(wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 30))

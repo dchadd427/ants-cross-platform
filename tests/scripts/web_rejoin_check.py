@@ -688,7 +688,7 @@ def main():
                         return { button: go.textContent, note: note.textContent, bottom: r.bottom, cards: cards.top, enabled: !go.disabled }; })()""")
                     check(info["button"] == "Rejoin your match (%s)" % room, "its button says \"Rejoin your match (CODE)\" with the room's code (%r)" % info["button"])
                     check(info["note"] == "Your match in room %s is still running: go back to your seat." % room, "... and the line under it says that the match is still running (%r)" % info["note"])
-                    check(info["bottom"] <= info["cards"] and info["enabled"], "... above the two cards (the button ends at %.0f px, the cards begin at %.0f px)" % (info["bottom"], info["cards"]))
+                    check(info["bottom"] <= info["cards"] and info["enabled"], "... above the card (the button ends at %.0f px, the card begins at %.0f px)" % (info["bottom"], info["cards"]))
                     a.shot(args.shots, "rejoin_button")
                     pages = lambda: len([t for t in a.browser.devtools.call("Target.getTargets")["targetInfos"] if t["type"] == "page"])
                     before_pages = pages()

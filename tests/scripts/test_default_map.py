@@ -6,7 +6,7 @@ test_start_menu_app A4.6) and a LAN host's room (test_network_app N5.3b). What n
   - docker-compose.stack.yml: the map of a demo room whose code names none (`--demo-map ${ANTS_DEMO_MAP:-TREASURE.LVL}`), the six maps that a code may choose, and the comments that
     say what the default is; the commented example of docker-compose.server.yml. (A real server started with these options makes a Treasure room for a code that names no map:
     tests/scripts/test_ants_server.sh.) An ANTS_DEMO_MAP set in the environment of a stack replaces the default; the file's own default is what is read here.
-  - web/lobby.html (the front page): the maps of its two cards are preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),
+  - web/lobby.html (the front page): the map of its card is preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),
     a remembered choice and ?map= still win, and every place that falls back to a map falls back to the default.
   - the defaults of the program and of the page name the same map.
 """
