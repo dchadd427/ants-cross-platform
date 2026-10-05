@@ -185,6 +185,12 @@ class TheBrowserCheckAndTheGame(unittest.TestCase):
             self.assertIn("if (!window.isReadyToPlay || typeof Module === 'undefined'", body, name)
         self.assertEqual(len(re.findall(r"Module\._ants_\w+\(", self.check)), 4)                                   # (the four calls of the two scripts: nothing else reads the game)
 
+    def test_the_pages_own_timer_wakes_the_game_only_once_it_runs(self):
+        # (the same hazard as the probes', found with them: a page that loaded hidden over a slow connection called the pump while the program was still compiled, and the timer ended for good)
+        shell = read("web", "shell.html")
+        self.assertIn("if (document.hidden && isReadyToPlay && typeof Module !== 'undefined' && Module._ants_background_pump) Module._ants_background_pump();", shell)
+        self.assertEqual(len(re.findall(r"Module\._ants_background_pump\(\)", shell)), 1)                         # (the one place that calls it)
+
     def test_it_runs_the_server_as_the_stack_does_and_asks_the_site_for_the_servers_busy_answer(self):
         self.assertIn('"docker-compose.stack.yml"', self.check)                                                   # (the site's own options: the demo rooms)
         self.assertIn("stack_command.py", self.check)

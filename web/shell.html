@@ -1715,7 +1715,9 @@
         (function() {
             function wake() {
                 try {
-                    if (document.hidden && typeof Module !== 'undefined' && Module._ants_background_pump) Module._ants_background_pump();
+                    // (only once the game runs: index.js binds an export to the program at its first call, and a call while the program is still compiled leaves it undefined for good, which
+                    // ended this timer on a page that loaded hidden over a slow connection)
+                    if (document.hidden && isReadyToPlay && typeof Module !== 'undefined' && Module._ants_background_pump) Module._ants_background_pump();
                 } catch (e) {
                     stop();                                                 // the game has stopped (an abort): there is nothing more to wake
                 }
