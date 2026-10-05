@@ -46,7 +46,7 @@ Work that is not released yet is written in the same template under a heading th
 - A reload of the game page no longer asks for a name: it takes your seat back (the address carries your seat).
 - An online match that nobody comes back to gives its place up (it held a slot for as long as it was paused).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...010ce48), [the notes](docs/audit/persist_notes.md), [Network Port](docs/NETWORK_PORT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [the notes](docs/audit/persist_notes.md), [Network Port](docs/NETWORK_PORT.md)
 
 ## v0.5.1 - 2026-10-05 - Every page in the front page's look
 

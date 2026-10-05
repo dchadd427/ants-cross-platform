@@ -1221,6 +1221,9 @@ void NetGame::report_loaded(bool ok) {
             close_peer_links();
             set_notice(str::format(str::kMapFileMissing, start_.map_name));
             events_.push_back(Event{Event::Type::Cancelled, seat_});
+            refresh_status();
+            unannounce_start_key();                               // the lobby takes no Cancel of the server's after this: the key that the Start gave goes now (last: the function that is told may end the session)
+            return;
         }
     }
     refresh_status();                                             // the status line follows at once, not with the next update

@@ -285,6 +285,20 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         self.assertIn("kDemoAbandonedMs = 60u * 1000u;", constants)
         self.assertIn("kRejoinMaxAgeMs = int64_t{3} * 3600 * 1000;", read("include", "ants_app", "rejoin_store.hpp"))
 
+    def test_the_documents_say_what_the_re_check_of_the_fixes_changed(self):
+        """The re-check's N3 and N4 (docs/audit/persist_notes.md): the words of the documents are what the code does."""
+        doc = read("docs", "NETWORK_PORT.md")
+        readme = read("README.md")
+        for needle in ("a new player's key at the Start, a rejoin's at its Welcome", "a waiting room that another player's Hello made", "up to ten seconds (200) on a slow disk",
+                       "about **0.77 s of every second**", "the first IPv4 address, else the first IPv6 one with its scope", "N1 - N5"):
+            self.assertIn(needle, doc, needle)
+        self.assertIn("ten seconds on a slow disk", readme)
+        for stale in ("(every Welcome that hands one, a rejoin's included)", "(a demo room that the Hello made again)", "more than a second a second: not possible"):
+            self.assertNotIn(stale, doc, stale)
+        for stale in ("built; the switch is off", "a server with the switch off changes nothing"):
+            self.assertNotIn(stale, readme, stale)
+        self.assertIn("**The re-check of these fixes.**", read("docs", "audit", "persist_notes.md"))
+
     def test_the_network_document_names_the_parts_of_the_check_and_what_it_stands_on(self):
         doc = read("docs", "NETWORK_PORT.md")
         section = doc[doc.index("### The switch, the front page's Rejoin button and the check in a real browser (work package 4)"):]

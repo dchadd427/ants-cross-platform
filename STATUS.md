@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 02:44 PDT · current release **v0.6.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 05:08 PDT · current release **v0.6.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
 - One start card for every game, all online: your colour, a friend or a bot level for each other colour, invite links in the card; with online bot games and teams (network protocol 13): built and checked in a real browser, ships after v0.6.0 with the short room codes
