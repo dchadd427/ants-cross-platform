@@ -2275,7 +2275,7 @@ void Application::update_simulation(float dt) {
                 hud_.update(view_sim().get_world_state(), 1);
             }
         }
-    } else {
+    } else if (!network_active()) {                                  // (a game of the network that is not in a match, the second begin of a session while its NetGame starts again from nothing, has no tick of its own: its engine is the runner's)
         tick_accumulator_ += dt;
         while (tick_accumulator_ >= 0.050f) {
             if (hud_.is_match_start_modal_active()) {

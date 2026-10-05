@@ -508,6 +508,7 @@ struct World {
     std::vector<std::unique_ptr<Machine>> machines;
     uint32_t now{1000};
     uint32_t steps_{0};
+    std::function<void()> between;                // called in every step after the server's pass and before the machines' frames: a test holds a machine back at the moment that the server has done something
 
     explicit World(const char* tag = nullptr, ServerLimits limits = ServerLimits()) : server(tag, std::move(limits)) {}
 
@@ -523,13 +524,18 @@ struct World {
         if (!m.net.join("127.0.0.1", server.port(), name, want_seat, room, token)) throw std::runtime_error("join failed");
         const uint32_t before = server.accepted;
         run_until([&]() { return server.accepted > before; }, 2000);          // (the machine's link is the newest one that the door accepted: a test can cut it)
+        if (server.door == Server::Door::Open) {                              // the next one is told after this one: the room gives the seats in the order in which the Hellos are read, and on a loopback that does not deliver within the pass that need not be the order of the joins
+            run_until([&]() { return m.net.my_seat() < sim::MAX_PLAYERS || m.net.phase() == NetGame::Phase::Failed || m.net.phase() == NetGame::Phase::Over; }, 3000);
+        }
         return m;
     }
     void pump() {
         server.pump(now);
+        if (between) between();
         for (auto& m : machines) m->frame(now);
     }
-    // 10 ms of game time per step. The sockets are real and the clock is not: a loopback link delivers within the pass that wrote to it, but now and then (every 16th step) the test gives the kernel a moment
+    // 10 ms of game time per step. The sockets are real and the clock is not: a loopback link delivers within the pass that wrote to it on Linux, but not on every system (a Mac's loopback is handled by a kernel thread: a message can be read a pass or
+    // more later, and two messages that were sent in different passes can be read together), so a test that has to see a state between two messages holds the sender back (World::between); now and then (every 16th step) the test gives the kernel a moment
     // of real time, and the others yield (a test of many minutes of game time must not be paid for in sleeps: a sleep may cost a whole timer tick on some systems)
     void run(uint32_t ms) {
         for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {            // (counted, not compared with an end time: the clock of a test may wrap)
@@ -620,6 +626,11 @@ void run_way_back_tests() {
         bool a_paused_all_along = true;
         uint8_t b_percent = 0;
         bool consistent = true;                                                          // what the screens are told never contradicts itself
+        w.between = [&]() {                                                              // Bob's machine is held from the moment that the server has him catching up until Ann has been shown that: the two Presence messages (catching up, back) must not reach one of her frames together, as they can on a loopback that does not deliver within the pass
+            bool catching = false;
+            for (const RoomStatus::Absent& e : w.status("RJ-1").absent) catching = catching || (e.catching_up && e.seat == bob);
+            b.hung = catching && !a_missing_catching;
+        };
         ASSERT_TRUE(w.run_until([&]() {
             const RoomStatus st = w.status("RJ-1");
             for (const RoomStatus::Absent& e : st.absent) saw_catching_up = saw_catching_up || (e.catching_up && e.seat == bob);
@@ -642,6 +653,8 @@ void run_way_back_tests() {
             }
             return !st.paused;
         }, 15000));
+        w.between = nullptr;
+        b.hung = false;
         ASSERT_TRUE(saw_catching_up);                                                    // it was given the match again, not just let back in
         ASSERT_TRUE(consistent && b_linking && b_catching && a_missing && a_paused_all_along);        // Bob's screen showed the way back and the catch-up, Ann's the seat that was missing
         ASSERT_EQ(static_cast<unsigned>(b_percent), 100u);                               // the catch-up ended at its 100 percent, waiting for the server's word
@@ -1221,7 +1234,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(ai.missing.size() == 1 && ai.missing[0].seat == cat && ai.missing[0].away_s >= 5 && !ai.missing[0].catching_up);
         ASSERT_FALSE(c.net.vote(false));                                                 // the machine that is away follows no match: it cannot vote
         ASSERT_TRUE(b.net.vote(false));                                                  // Bob: go on without Cat. One of two voters is not more than half
-        ASSERT_TRUE(w.run_until([&]() { return a.net.pause_info().votes_continue == 1; }, 2000));
+        ASSERT_TRUE(w.run_until([&]() { return a.net.pause_info().votes_continue == 1 && b.net.pause_info().my_vote == net::PauseInfo::Choice::Continue; }, 2000));          // (what each machine is told reaches it on its own link)
         ASSERT_TRUE(b.net.pause_info().my_vote == net::PauseInfo::Choice::Continue && a.net.pause_info().my_vote == net::PauseInfo::Choice::None);
         w.run(500);
         ASSERT_TRUE(w.status("RJ-8").paused && w.status("RJ-8").drops_by_vote == 0 && a.net.paused());
@@ -1840,7 +1853,7 @@ void run_way_back_tests() {
         w.run(61000);                                                                    // the minute is over
         Machine& again = w.add_machine("Bob");
         ASSERT_TRUE(again.net.join("127.0.0.1", w.server.port(), "Bob", seat, "RJ-17", "", key));
-        ASSERT_TRUE(w.run_until([&]() { return again.net.phase() == NetGame::Phase::Playing && w.status("RJ-17").rejoins == 4 && !w.status("RJ-17").paused; }, 30000));
+        ASSERT_TRUE(w.run_until([&]() { return again.net.phase() == NetGame::Phase::Playing && again.count(NetGame::Event::Type::Rejoined) >= 1 && w.status("RJ-17").rejoins == 4 && !w.status("RJ-17").paused; }, 30000));       // (the machine has the server's word when the room says so only where a loopback delivers within the pass)
         ASSERT_TRUE(again.my_seat_is(seat) && again.count(NetGame::Event::Type::Rejoined) == 1);
         w.run(3000);
         a.quit();
@@ -1859,7 +1872,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.run_until([&]() { return a.net.phase() == NetGame::Phase::Playing && b.net.phase() == NetGame::Phase::Playing; }, 12000));
         ASSERT_TRUE(a.ticks == 0 && b.ticks == 0 && b.net.turns_executed() == 0);        // the dialog of the start: no turn was sealed
         ASSERT_TRUE(w.server.cut_newest());
-        ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-18").rejoins == 1 && !w.status("RJ-18").paused; }, 30000));
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-18").rejoins == 1 && !w.status("RJ-18").paused && b.count(NetGame::Event::Type::Rejoined) >= 1; }, 30000));
         ASSERT_TRUE(b.net.phase() == NetGame::Phase::Playing && b.count(NetGame::Event::Type::Rejoined) == 1);
         ASSERT_TRUE(b.count(NetGame::Event::Type::StartRequested) == 1 && !b.saw(NetGame::Event::Type::HostLeft) && !b.saw(NetGame::Event::Type::Failed));      // (it did not start from nothing: its engine was loaded)
         ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 20000 + kPre));
