@@ -127,6 +127,14 @@ class TheScript(PageCase):
         self.found(block, r"window\.addEventListener\('touchcancel'")
         self.assertIn("Module._ants_touch_cancel", block)
 
+    def test_a_touch_that_lands_alone_makes_the_game_forget_the_fingers_whose_lift_never_came(self):
+        block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
+        self.found(block, r"function othersOnTheBox\(e\)")
+        self.assertIn("var all = e && e.touches;", block)                               # (the browser's own list of touches: a lift that was never delivered cannot corrupt it)
+        handler = re.search(r"boxElement\.addEventListener\('touchstart', function \(e\) \{(.*?)\}, \{ capture: true, passive: true \}\);", block, re.S)
+        self.assertIsNotNone(handler, "the box's touchstart listener is there, passive, capture")
+        self.assertIsNotNone(re.search(r"if \(othersOnTheBox\(e\) === 0\) \{.*?live = \{\};.*?count = 0;.*?tellGame\(\);", handler.group(1), re.S), "a touch with no other touch of the game down starts the count again and tells the game")
+
     def test_the_context_menu_is_cancelled_over_the_game(self):
         block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
         self.found(block, r"boxElement\.addEventListener\('contextmenu', function \(e\) \{ e\.preventDefault\(\); \}\);")

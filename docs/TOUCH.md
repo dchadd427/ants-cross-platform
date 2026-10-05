@@ -44,6 +44,9 @@ player's cannot bring it back), so the page only keeps the browser out of the wa
   the quit dialog's Yes, START and Leave never fire from a cancel); a lost focus, a hidden page and a change of the window's or the box's size (a rotation, a fullscreen toggle, the address bar: the same
   spot of the glass is another pixel of the picture then) do the same. The page's cancel waits behind the finger events that SDL already holds (a user event), so a touch that is cancelled in the frame that
   it began in is no tap;
+- a touch that lands when the browser's own list (`touches`) says that no other touch of the game is down makes the page's count and the game's fingers start again: a lift that the browser never
+  delivered cannot keep a finger "down" and make the game ignore every finger after it (SDL's own finger list could not tell: it is made of the same events; the game's cancel waits behind what SDL
+  holds, so what came before the touch is still handled);
 - the sound's unlock stays on `touchend` (iOS and Chrome on Android grant their permission at the END of a touch), so a hold that ends in a right click still unlocks it;
 - `navigator.vibrate` is feature-detected and never required (Android's Chrome buzzes only after the page has had a first tap; iOS has none);
 - the Fullscreen button is as before: the browser's fullscreen where there is the API, the page's own (with a button to leave it) where there is none (Safari on an iPhone).
