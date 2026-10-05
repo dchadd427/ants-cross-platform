@@ -172,6 +172,7 @@ bool make_room(Table& t, uint8_t guests) {
     for (uint8_t i = 0; i < guests; ++i) {
         Machine& g = t.add(names[i]);
         if (!g.net.join("127.0.0.1", host.net.listen_port(), names[i])) return false;
+        if (!t.run_until([&]() { return g.net.phase() == NetGame::Phase::Room && g.net.my_seat() == i + 1; }, 3000)) return false;      // (the seats are given in the order in which the Hellos are read: the next guest joins after this one is in)
     }
     // everybody is in the room and every player's thumb has appeared (the host measured every guest and told everybody)
     return t.run_until(

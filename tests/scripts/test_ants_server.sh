@@ -6,9 +6,12 @@
 # dropped within seconds while a match in another room keeps its clock, the control interface answers, and the process neither grows nor stays busy; the server stops cleanly on
 # SIGTERM and writes the result file of a room that was closed. The last section is the server that HOLDS the seat of a player whose connection is lost (protocol 10, --reconnect):
 # a small TCP proxy (flaky_proxy.py) between a client and the server is cut, the room pauses and names the absent seat, nothing runs while it waits, and at the cap the seat is dropped
-# and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence and finds its link closed when it wakes up. The part ends with the RESTART RECORDS (docs/NETWORK_PORT.md): the server keeps
+# and the match goes on; a client that is stopped (kill -STOP) for 15 s pauses the room after 10 s of silence, and when it wakes up it finds its link closed and comes back by itself (the game's own
+# way back: a new link, a Hello with its key). The part ends with the RESTART RECORDS (docs/NETWORK_PORT.md): the server keeps
 # a record of a running match in a folder of its own (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of it and killed with SIGKILL, and started again over the same folder: the room
-# comes back with its code, paused, every seat held, and the record goes when the owner closes the room; the options of the records are refused or accepted in the options part.
+# comes back with its code, paused, every seat held, the two real games (stopped meanwhile, so that they do not come back before the room is looked at) wake up and find the room by themselves, and the
+# record goes when the owner closes the room; a thousand records of a long match are replayed while the server answers /busy within 2 s of its launch and takes a new room's player at once
+# (the restore does not block it); the options of the records are refused or accepted in the options part.
 # The sections below are PARTS: they run one after the other (the default), or alone with `--part NAME` (repeatable), each with its own server on its own ports and its own
 # scratch folder, so that ./run_tests.sh and the CI can run them at the same time. `--list-parts` prints the names.
 PART_NAMES="options rooms secret demo reconnect"
@@ -718,15 +721,44 @@ check "the stack: demo-n1 (no map in the code) is made on the default map, TREAS
 check "the stack: demo-tiny-n2 is made on TINY.LVL (a code that names a map still chooses it)" "$([ "$(stack_map_of_room demo-tiny-n2)" = "TINY.LVL" ]; echo $?)"
 check "the stack: demo-treasure-n3 is made on TREASURE.LVL" "$([ "$(stack_map_of_room demo-treasure-n3)" = "TREASURE.LVL" ]; echo $?)"
 check "the stack: demo-islands-2p-n4 is made on ISLANDS.LVL" "$([ "$(stack_map_of_room demo-islands-2p-n4)" = "ISLANDS.LVL" ]; echo $?)"
+# release B turned the switch on: the stack passes no reconnect option and its rooms hold the seat of a player whose connection is lost (the log says so; a demo room, and a room that the
+# control interface makes without a setting, say reconnect true)
+stack_reconnect_of_room() { curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$STACK_CTL/rooms/$1" | python3 -c 'import sys, json; print(str(json.load(sys.stdin).get("reconnect", "")).lower())' 2> /dev/null; }
+check "the stack passes no reconnect option (the default is what holds the seats)" "$(echo "$STACK_OPTS" | grep -q -e '--reconnect' -e '--no-reconnect'; [ "$?" -ne 0 ]; echo $?)"
+check "the stack: the log says that rooms hold seats, as the default" "$(grep -q 'rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off)' "$WORK/stack_demo.log"; echo $?)"
+check "the stack: its demo rooms hold seats (reconnect true in their status)" "$([ "$(stack_reconnect_of_room demo-n1)" = "true" ] && [ "$(stack_reconnect_of_room demo-islands-2p-n4)" = "true" ]; echo $?)"
+check "the stack: a room that the control interface makes without a setting holds seats, and one that says false does not" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-1"}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":true' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-2","reconnect":false}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":false'; echo $?)"
 for p in $STACK_PIDS; do kill "$p" 2> /dev/null; done
+stop_server
+
+# the off state stays covered: --no-reconnect, after the stack's own options, makes every room hold no seats (a demo room too, and the records say that none is kept), and a room's own "reconnect": true still holds them
+NOREC_PORT="$(free_port)"
+NOREC_CTL="$(free_port)"
+# shellcheck disable=SC2086
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$NOREC_PORT" --ctl-port "$NOREC_CTL" --results-dir "$WORK/norec_results" $STACK_OPTS --no-reconnect > "$WORK/norec.log" 2>&1 &
+SERVER_PID=$!
+NOREC_UP=1
+for _ in $(seq 1 50); do
+    if curl -s -m 1 "http://127.0.0.1:$NOREC_CTL/healthz" | grep -q '"ok"'; then NOREC_UP=0; break; fi
+    kill -0 "$SERVER_PID" 2> /dev/null || break
+    sleep 0.1
+done
+check "a server started with the stack's options and --no-reconnect runs" "$NOREC_UP"
+"$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$NOREC_PORT" --room demo-nr1 --frames 400 > "$WORK/norec_demo.log" 2>&1 &
+NOREC_PID=$!
+norec_reconnect_of_room() { for _ in $(seq 1 60); do R="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$NOREC_CTL/rooms/$1" | python3 -c 'import sys, json; print(str(json.load(sys.stdin).get("reconnect", "")).lower())' 2> /dev/null)"; [ -n "$R" ] && break; sleep 0.2; done; echo "$R"; }
+check "--no-reconnect: the log says that rooms hold no seats, and that no record is kept" "$(grep -q 'rooms hold no seats (--no-reconnect)' "$WORK/norec.log" && grep -q 'no room holds seats unless its specification says so (--no-reconnect), so none is kept now' "$WORK/norec.log"; echo $?)"
+check "--no-reconnect: a demo room holds no seats (reconnect false in its status)" "$([ "$(norec_reconnect_of_room demo-nr1)" = "false" ]; echo $?)"
+check "--no-reconnect: a room that the control interface makes without a setting holds none, and one that says true holds seats" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-1"}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":false' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-2","reconnect":true}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":true'; echo $?)"
+kill "$NOREC_PID" 2> /dev/null
 stop_server
 fi
 
 # ---- part reconnect: the server that holds the seat of a player whose connection is lost (protocol 10, --reconnect) -----------------------------------------------
 if part_enabled reconnect; then
-# The game's own clients do not come back yet (that is release B: a native client whose link is cut is lost, the message below says so). What is tested here is the SERVER, with
-# real programs: a client behind a proxy that is cut, a client that is stopped. The room pauses for everybody and names the seat, nothing runs while it waits, the cap (60 s here)
-# drops the seat and the match goes on for the others.
+# What is tested here is the SERVER, with real programs: a client behind a proxy that is cut (and that refuses it for an hour: its way back finds no door), a client that is stopped. The room
+# pauses for everybody and names the seat, nothing runs while it waits, the cap (60 s here) drops the seat and the match goes on for the others. The game's own way back is the clients' part: the
+# victim keeps trying (it does not leave the match), the stopped client comes back by itself when it wakes up.
 RC_PORT="$(free_port)"
 RC_CTL="$(free_port)"
 RC_PROXY_PORT="$(free_port)"
@@ -810,7 +842,7 @@ RC_TB="$(rc_field "$RC_CODE" ticks)"
 check "nothing advances while the room waits (ticks $RC_TA, $RC_TB six seconds later)" "$([ "$((RC_TB - RC_TA))" -le 2 ]; echo $?)"
 check "the others are still in the match, paused, not dropped: the room is running and still holds the seat" "$([ "$(rc_field "$RC_CODE" state)" = "running" ] && [ "$(rc_field "$RC_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_CODE" drops_by_cap)" = "0" ]; echo $?)"
 check "the paused time grows (paused_seconds at least 5)" "$([ "$(rc_field "$RC_CODE" paused_seconds)" -ge 5 ]; echo $?)"
-check "the victim's game says that the connection was lost (a native client does not rejoin yet: release B)" "$(grep -q 'connection to the other players was lost' "$WORK/hv.log"; echo $?)"
+check "the victim's game does not leave the match: it keeps trying to come back (no lost-connection message), though the proxy has refused it since the cut" "$(grep -q 'connection to the other players was lost' "$WORK/hv.log"; [ $? -ne 0 ]; echo $?)"
 
 # the second room: stop a client for 15 s
 kill -STOP "$RC_FROZEN_PID"
@@ -827,14 +859,22 @@ check "10 s of silence is a loss: the second room pauses, $RC_STOP_PAUSED_AFTER 
 check "... between 9.5 and 13 s after it (its last word, and the check every pass)" "$(python3 -c "print(0 if 9.5 <= $RC_STOP_PAUSED_AFTER <= 13 else 1)")"
 check "the absent seat is the stopped client (Frozen), absent and not lagging" "$(rc_field "$RC_STOP_CODE" absent | python3 -c 'import sys, json; a = json.load(sys.stdin); sys.exit(0 if len(a) == 1 and a[0]["name"] == "Frozen" and a[0]["state"] == "absent" else 1)'; echo $?)"
 sleep 5
+check "the second room holds the seat of the stopped client until it wakes up: paused, running, nobody dropped" "$([ "$(rc_field "$RC_STOP_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ] && [ "$(rc_field "$RC_STOP_CODE" rejoins)" = "0" ]; echo $?)"
 kill -CONT "$RC_FROZEN_PID"
-RC_FROZEN_LOST=1
-for _ in $(seq 1 100); do
-    grep -q 'connection to the other players was lost' "$WORK/sf.log" && { RC_FROZEN_LOST=0; break; }
+RC_FROZEN_BACK=1
+for _ in $(seq 1 150); do
+    [ "$(rc_field "$RC_STOP_CODE" rejoins)" = "1" ] && { RC_FROZEN_BACK=0; break; }
     sleep 0.2
 done
-check "the client that wakes up finds its old link closed and ends with the lost connection message (release B will make it rejoin)" "$RC_FROZEN_LOST"
-check "the second room is still paused and holds the seat" "$([ "$(rc_field "$RC_STOP_CODE" paused)" = "true" ] && [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ]; echo $?)"
+check "the client that wakes up finds its old link closed and comes back by itself with its key: the second room counts the rejoin" "$RC_FROZEN_BACK"
+check "... its game did not leave the match: no lost-connection message" "$(grep -q 'connection to the other players was lost' "$WORK/sf.log"; [ $? -ne 0 ]; echo $?)"
+RC_STOP_RESUMED=1
+for _ in $(seq 1 150); do
+    [ "$(rc_field "$RC_STOP_CODE" paused)" = "false" ] && { RC_STOP_RESUMED=0; break; }
+    sleep 0.2
+done
+check "the second room goes on after its resume countdown (8 s here): not paused, nobody absent, still running, nobody dropped" "$RC_STOP_RESUMED"
+check "... and its three players are in it again: nobody absent, no drop by the cap or a vote" "$([ "$(rc_field "$RC_STOP_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ] && [ "$(rc_field "$RC_STOP_CODE" drops_by_cap)" = "0" ] && [ "$(rc_field "$RC_STOP_CODE" drops_by_vote)" = "0" ]; echo $?)"
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RC_STOP_CODE" > /dev/null
 
 # the cap: 60 s after the cut the absent seat is dropped, the match goes on
@@ -882,9 +922,10 @@ check "the server's log names the rooms' ends with what the pause came to, and n
 
 # ---- restart records (docs/NETWORK_PORT.md "Restart records"): a match survives a restart of the server ---------------------------------------------------------------
 # The real program with real game clients. The server keeps a record of the running room (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of the match
-# (it exits at once and leaves the record), is started again over the same folder (the room is back, paused, every seat held: the clients' game cannot rejoin by itself yet, so they ended
-# with the lost-connection message), is killed with SIGKILL and started once more (the record that the restored room went on writing restores again), and when the owner closes the room
-# its record goes. The C++ test of the suite (S3.95, S3.96) does the same with two machines that DO find the room again; here the players are the real games.
+# (it exits at once and leaves the record), is started again over the same folder (the room is back, paused, every seat held), is killed with SIGKILL and started once more (the record that the
+# restored room went on writing restores again), and when the owner closes the room its record goes. The two games are stopped (kill -STOP) the moment the server is gone, so that they do not
+# come back before the restored room has been looked at; when they are let go (kill -CONT) they find the room by themselves, with their keys, and the match goes on (the game's own way back:
+# the C++ tests S3.95, S3.96 do the same with machines of the test, RJ1.2 with the NetGame).
 RR_PORT="$(free_port)"
 RR_CTL="$(free_port)"
 RR_CODE="E2E-KEEP-$RANDOM"
@@ -895,9 +936,12 @@ rr_field() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RR_URL/rooms/$1" 
 for part in sys.argv[1].split("."):
     v = v.get(part) if isinstance(v, dict) else None
 print(json.dumps(v) if isinstance(v, (dict, list)) or v is None else str(v).lower() if isinstance(v, bool) else v)' "$2" 2> /dev/null; }
-rr_start() {
-    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RR_PORT" --ctl-port "$RR_CTL" --results-dir "$RR_RESULTS" --reconnect --resume-countdown-seconds 0 >> "$WORK/rr_server.log" 2>&1 &
+rr_launch() {      # rr_launch [EXTRA ARGUMENTS]: starts the server of this section over the same folder and does not wait for it
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RR_PORT" --ctl-port "$RR_CTL" --results-dir "$RR_RESULTS" --reconnect --resume-countdown-seconds 0 "$@" >> "$WORK/rr_server.log" 2>&1 &
     SERVER_PID=$!
+}
+rr_start() {      # rr_start [EXTRA ARGUMENTS]: rr_launch, and it returns when the control interface answers (the restore of the records goes on after that: rr_wait_room)
+    rr_launch "$@"
     local up=1
     for _ in $(seq 1 100); do
         if curl -s -m 1 "$RR_URL/healthz" | grep -q '"ok"'; then up=0; break; fi
@@ -905,6 +949,14 @@ rr_start() {
         sleep 0.1
     done
     return $up
+}
+# The records are replayed in slices while the server serves (the restore does not block it): a room is back when its replay has ended, a moment after the server answers.
+rr_wait_room() {      # rr_wait_room CODE: waits (20 s at the most) until the room is running again; 0 when it is
+    for _ in $(seq 1 200); do
+        [ "$(rr_field "$1" state)" = "running" ] && return 0
+        sleep 0.1
+    done
+    return 1
 }
 rr_start
 check "the server of the restart section is up" "$?"
@@ -941,11 +993,13 @@ SERVER_PID=""
 check "SIGTERM stops the server with status 0, $RR_STOPPED_AFTER s after the signal (well inside docker's grace)" "$([ "$RR_STOP_RC" = "0" ] && python3 -c "import sys; sys.exit(0 if $RR_STOPPED_AFTER < 3 else 1)"; echo $?)"
 check "its log says that the record was made durable and kept" "$(grep -q 'stopped: 1 restart record(s) made durable and kept' "$WORK/rr_server.log"; echo $?)"
 check "the record is still there" "$([ "$(ls "$RR_DIR" | grep -c '\.restart$')" = "1" ]; echo $?)"
+for p in $RR_PIDS; do kill -STOP "$p" 2> /dev/null; done      # (the games look for the server every two seconds: stopped, they do not come back before the room is looked at)
 sleep 1
-check "the two games saw their connection lost and ended (they cannot rejoin by themselves yet: the next release)" "$(grep -q 'connection to the other players was lost' "$WORK/k1.log" && grep -q 'connection to the other players was lost' "$WORK/k2.log"; echo $?)"
+check "the two games did not leave the match when the server went (no lost-connection message): they are stopped here, waiting for it" "$(grep -q 'connection to the other players was lost' "$WORK/k1.log" "$WORK/k2.log"; [ $? -ne 0 ]; echo $?)"
 # started again over the same folder: the room is back, paused, both seats held
 rr_start
 check "the server started again over the same results folder is up" "$?"
+rr_wait_room "$RR_CODE"
 check "its log says that the room was restored, with its turns and its replay time and the seats that wait" "$(grep -qE "room $RR_CODE restored: [0-9]+ turns .*2 seat\(s\) waiting" "$WORK/rr_server.log"; echo $?)"
 check "the room has its code back: running, restored, paused, both seats absent" "$([ "$(rr_field "$RR_CODE" state)" = "running" ] && [ "$(rr_field "$RR_CODE" paused)" = "true" ] && [ "$(rr_field "$RR_CODE" restored.turns)" -ge "$RR_SEALED" ] && [ "$(rr_field "$RR_CODE" absent | python3 -c 'import sys, json; print(len(json.load(sys.stdin)))')" = "2" ]; echo $?)"
 check "... it has no turn that it did not have (the match is held until its players come back)" "$([ "$(rr_field "$RR_CODE" turns)" = "$(rr_field "$RR_CODE" restored.turns)" ]; echo $?)"
@@ -959,7 +1013,21 @@ wait "$SERVER_PID" 2> /dev/null
 SERVER_PID=""
 rr_start
 check "the server killed with SIGKILL and started again is up" "$?"
+rr_wait_room "$RR_CODE"
 check "the room is restored a second time from the same record, with the same turns" "$([ "$(rr_field "$RR_CODE" restored.turns)" = "$RR_RESTORED_TURNS" ] && [ "$(rr_field "$RR_CODE" paused)" = "true" ]; echo $?)"
+cp "$RR_DIR"/*.restart "$WORK/rr_source.restart"      # (the record of the room that was restored twice: the section at the end makes many of it)
+# the two games wake up: each finds its link closed, makes a new one and says Hello with its key; the restored room gives them the match and goes on
+for p in $RR_PIDS; do kill -CONT "$p" 2> /dev/null; done
+RR_BACK=1
+for _ in $(seq 1 200); do
+    [ "$(rr_field "$RR_CODE" rejoins)" = "2" ] && [ "$(rr_field "$RR_CODE" paused)" = "false" ] && { RR_BACK=0; break; }
+    sleep 0.2
+done
+check "the two games find the restored room by themselves with their keys: two rejoins, the room is not paused any more" "$RR_BACK"
+RR_TE="$(rr_field "$RR_CODE" turns)"
+sleep 2
+check "the match goes on after the restart: the room seals turns again ($RR_TE, then $(rr_field "$RR_CODE" turns) two seconds later)" "$([ "$(rr_field "$RR_CODE" turns)" -gt "$RR_TE" ]; echo $?)"
+check "neither game ended with the lost-connection message, nor reported an error" "$(grep -qiE 'connection to the other players was lost|out of sync|failed|error' "$WORK/k1.log" "$WORK/k2.log"; [ $? -ne 0 ]; echo $?)"
 # the owner closes the room: its record goes
 check "closing the room (DELETE) answers 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RR_URL/rooms/$RR_CODE")" = "200" ]; echo $?)"
 check "... and its record is gone" "$([ "$(ls "$RR_DIR" | grep -c '\.restart$')" = "0" ]; echo $?)"
@@ -971,8 +1039,121 @@ SERVER_PID=""
 check "no key is in the server's log (no run of 32 hex digits in it: a key is 16 bytes), and neither is the secret" "$(! grep -qE '[0-9a-f]{32}' "$WORK/rr_server.log" && ! grep -q "$SECRET" "$WORK/rr_server.log"; echo $?)"
 check "the result file of the closed room has no key either" "$([ -s "$RR_RESULTS/$RR_CODE.json" ] && ! grep -qE '[0-9a-f]{32}' "$RR_RESULTS/$RR_CODE.json"; echo $?)"
 
+# ---- the restore never blocks the server (docs/NETWORK_PORT.md "Restart records", "The server serves while it restores") ---------------------------------------------------------
+# A thousand records of one long match (the match of this section, made as long as TINY allows with turns that nobody played) are on disk when the server starts again: replaying all of them takes
+# seconds (about ten here), and a server that did it before its first answer would be silent that long. This one answers GET /busy within 2 s of its launch, counting the matches that wait, and takes
+# the Hello of a new room's player at once, while it restores (the clock of the measure starts at the launch, not when the control interface answers).
+RR_CLONES=1000
+python3 - "$RR_DIR" "$RR_CLONES" 5000 "$WORK/rr_source.restart" <<'PY'
+import os, struct, sys, zlib
+folder, count, total, source = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+data = open(source, 'rb').read()
+magic, pos, frames = data[:8], 8, []
+while pos + 9 <= len(data):                                     # (the whole frames: a torn tail goes)
+    kind, length = data[pos], struct.unpack_from('<I', data, pos + 1)[0]
+    end = pos + 5 + length + 4
+    if end > len(data):
+        break
+    frames.append((kind, data[pos + 5:pos + 5 + length]))
+    pos = end
+def make_frame(kind, payload):
+    body = bytes([kind]) + struct.pack('<I', len(payload)) + payload
+    return body + struct.pack('<I', zlib.crc32(body) & 0xFFFFFFFF)
+head = frames[0][1]                                             # u16 format, str8 game version, u16 protocol, str8 build id, str8 code, ...
+off = 2
+off += 1 + head[off]
+off += 2
+off += 1 + head[off]
+code_at, code_len = off, head[off]
+turns, rest = 0, b''
+for kind, payload in frames[1:]:
+    rest += make_frame(kind, payload)
+    if kind == 2:
+        turns = struct.unpack_from('<I', payload, 0)[0] + struct.unpack_from('<H', payload, 4)[0]
+while turns < total:                                            # empty turns after the last one (no checkpoint for them): the match goes on, nobody plays
+    n = min(4096, total - turns)
+    rest += make_frame(2, struct.pack('<IH', turns, n) + b'\x00\x00' * n)
+    turns += n
+for i in range(count):
+    code = ('CL%d' % i).encode()
+    new_head = head[:code_at] + bytes([len(code)]) + code + head[code_at + 1 + code_len:]
+    path = os.path.join(folder, 'room-CL%d-00000000.restart' % i)
+    with open(path, 'wb') as out:
+        out.write(magic + make_frame(1, new_head) + rest)
+    os.chmod(path, 0o600)
+PY
+RR_WS="$(free_port)"
+RR_NEWROOM="E2E-NEW-$RANDOM"
+RR_PROTOCOL="$("$SERVER" --version 2> /dev/null | sed -n 's/.*(network protocol \([0-9][0-9]*\)).*/\1/p')"
+# the program that asks, written to a file first: macOS ships bash 3.2, which cannot read a here-document inside a command substitution
+RR_ASK_PY="$WORK/restore_answers.py"
+cat > "$RR_ASK_PY" <<'PY'
+import json, socket, struct, sys, time, urllib.request
+ws, game, ctl, secret, room, protocol, launched = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5], int(sys.argv[6]), float(sys.argv[7])
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))       # (the server is on this machine: no proxy)
+def get(url, headers=None, data=None, method=None):
+    request = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    with opener.open(request, timeout=1.0) as r:
+        return r.status, json.loads(r.read().decode())
+def answered(url):                                                          # (asked again until it answers: the time that it took is counted from the launch)
+    while time.time() - launched < 40.0:
+        try:
+            return get(url)[1]
+        except Exception:
+            time.sleep(0.01)
+    return None
+busy = answered('http://127.0.0.1:%d/busy' % ws)
+busy_seconds = time.time() - launched
+answered('http://127.0.0.1:%d/healthz' % ctl)
+made = False
+try:
+    status, _ = get('http://127.0.0.1:%d/rooms' % ctl, {'Authorization': 'Bearer ' + secret, 'Content-Type': 'application/json'}, json.dumps({'map': 'TINY.LVL', 'players': 2, 'code': room, 'seed': 3}).encode(), 'POST')
+    made = status == 201
+except Exception:
+    pass
+def frame(p): return struct.pack('<I', len(p)) + p
+def str8(t):
+    b = t.encode()
+    return bytes([len(b)]) + b
+# a Hello (HelloMsg, include/ants_net/protocol.hpp): type 1, protocol, name, listen port 0, any seat (255), the room's code, no token, no key, no turns
+hello = bytes([1]) + struct.pack('<H', protocol) + str8('Newcomer') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0)
+hello_seconds, welcome_seconds, welcome = 99.0, 99.0, False
+if made:
+    asked = time.time()
+    sock = socket.create_connection(('127.0.0.1', game), timeout=2.0)
+    sock.sendall(frame(hello))
+    received = b''
+    while time.time() - asked < 3.0 and len(received) < 5:
+        try:
+            received += sock.recv(4096)
+        except Exception:
+            break
+    hello_seconds, welcome_seconds = time.time() - asked, time.time() - launched
+    welcome = len(received) >= 5 and received[4] == 2           # (a message of type Welcome: the room took the player)
+print('%.3f %.3f %.3f %s %d' % (busy_seconds, welcome_seconds, hello_seconds, 'yes' if welcome else 'no', (busy or {}).get('matches', -1)))
+PY
+RR_T0="$(python3 -c 'import time; print(time.time())')"
+rr_launch --ws-port "$RR_WS" --max-rooms 1200
+RR_ANSWERS="$(python3 "$RR_ASK_PY" "$RR_WS" "$RR_PORT" "$RR_CTL" "$SECRET" "$RR_NEWROOM" "$RR_PROTOCOL" "$RR_T0")"
+read -r RR_BUSY_S RR_WELCOME_S RR_HELLO_S RR_WELCOME RR_BUSY_MATCHES <<< "$RR_ANSWERS"
+check "while $RR_CLONES records wait for their replay GET /busy answers within 2 s of the server's launch (it did in $RR_BUSY_S s) and counts them (${RR_BUSY_MATCHES:-?} matches)" "$(python3 -c "print(0 if float('${RR_BUSY_S:-99}') < 2.0 and int('${RR_BUSY_MATCHES:--1}') >= 100 else 1)")"
+check "a room that is made then takes its player at once (the Welcome came $RR_HELLO_S s after the Hello and $RR_WELCOME_S s after the launch, while the records are replayed)" "$(python3 -c "print(0 if '${RR_WELCOME:-no}' == 'yes' and float('${RR_HELLO_S:-99}') < 1.0 and float('${RR_WELCOME_S:-99}') < 4.0 else 1)")"
+rr_running_rooms() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RR_URL/rooms" | python3 -c 'import sys, json; print(sum(1 for r in json.load(sys.stdin).get("rooms", []) if r.get("state") == "running"))' 2> /dev/null; }
+RR_BACK=1
+for _ in $(seq 1 900); do
+    [ "$(rr_running_rooms)" -ge "$RR_CLONES" ] 2> /dev/null && { RR_BACK=0; break; }
+    sleep 0.2
+done
+RR_RESTORE_S="$(python3 -c "import time; print(round(time.time() - $RR_T0, 1))")"
+check "all $RR_CLONES records are rooms again (running, restored) within three minutes" "$RR_BACK"
+check "the log says that the records wait for their replay and that their rooms were restored" "$(grep -q "restore: $RR_CLONES restart record(s) wait for their replay" "$WORK/rr_server.log" && [ "$(grep -c ' restored: ' "$WORK/rr_server.log")" -ge "$RR_CLONES" ]; echo $?)"
+kill -TERM "$SERVER_PID" 2> /dev/null
+wait "$SERVER_PID" 2> /dev/null
+SERVER_PID=""
+
 echo "  [reconnect e2e] the link cut: the room paused after $RC_PAUSED_AFTER s; the cap dropped the seat $RC_CAPPED_AFTER s after the cut (60 s of pause); a client stopped: the room paused $RC_STOP_PAUSED_AFTER s later"
-echo "  [restart e2e] SIGTERM $RR_STOPPED_AFTER s to exit with the record kept; the room came back with $RR_RESTORED_TURNS turns, held its two seats, and came back again after a SIGKILL"
+echo "  [restart e2e] SIGTERM $RR_STOPPED_AFTER s to exit with the record kept; the room came back with $RR_RESTORED_TURNS turns, held its two seats, and came back again after a SIGKILL; the two games found it by themselves"
+echo "  [restore e2e] $RR_CLONES records of a long match were replayed in $RR_RESTORE_S s of the server's launch; meanwhile /busy answered after $RR_BUSY_S s (${RR_BUSY_MATCHES:-?} matches waited) and a new room's player had its Welcome $RR_WELCOME_S s after the launch"
 fi
 
 echo "server e2e${PART_LABEL}: $CHECKS checks, $FAILS failures"

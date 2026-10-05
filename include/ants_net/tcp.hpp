@@ -58,6 +58,27 @@ private:
     size_t inbox_bytes_{0};                     // the payload bytes of messages_
 };
 
+/// One address that a name stands for, as the system's lookup gave it
+struct ResolvedAddress {
+    std::string text;                  // numeric, no port; an IPv6 address that has a scope keeps it ("fe80::1%2")
+    bool ipv6{false};
+};
+
+/// What one entry of a lookup's list says (`entry` is a `const sockaddr*`: this header stays free of the platform's socket headers): its numeric text, an IPv6 address with its scope id when it has one, and
+/// whether it is IPv6; no text for what is neither (or null)
+ResolvedAddress describe_address(const void* entry);
+
+/// The address that a join goes to out of what a name stands for, in the order that the system gave it: the first IPv4 one (the game server listens on IPv4 only, TcpListener, and the start menu's lookup
+/// takes the same one), else the first IPv6 one; empty when there is none.
+std::string pick_address(const std::vector<ResolvedAddress>& found);
+
+/// The text of a numeric address with its scope id (0: none), as getaddrinfo takes it back: "fe80::1" and 2 are "fe80::1%2" (a link-local address is no address without its interface)
+std::string address_with_scope(const std::string& numeric, uint32_t scope_id);
+
+/// The numeric address (as text, no port: "192.0.2.7", "2001:db8::1") that a host name or address stands for, by pick_address out of the addresses that a socket can be made for; empty when it does not
+/// resolve. The lookup itself may block briefly: a game that joins by a name does it once (NetGame::join) and makes its later links to the address.
+std::string resolve_host(const std::string& host);
+
 class TcpListener final {
 public:
     /// Listens on `port` (0 = any free port; see port()). `loopback_only` accepts only connections from this machine. nullptr on failure.

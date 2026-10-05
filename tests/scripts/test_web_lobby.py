@@ -159,6 +159,24 @@ class TheGamePage(PageCase):
         self.assertIn("Module._ants_match_running() === 1", block)
         self.assertIn("e.preventDefault()", block)
 
+    def test_a_yes_leaves_for_good_through_the_games_export_and_nothing_else_does(self):
+        # (the review's M2: a player who leaves on purpose through the Menu button, the footer's link or the picture selector dropped nothing: the seat was held for the pause cap and the others waited;
+        # a closed tab and a reload must stay held, so only a confirmed click calls it)
+        block = self.page[self.page.index("THE WAY BACK TO THE MENU"):]
+        block = block[:block.index("// The fullscreen mouse: Locked")]
+        self.assertIn("else if ((joined || playing) && !(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) antsLeaveMatch();", block)          # (a click that opens another tab leaves this one as it is)
+        self.assertEqual(len(re.findall(r"antsLeaveMatch\(\)", self.page)), 3)                                  # the function, the Menu handler, the selector's yes
+        selector = self.page[self.page.index("ANTS_SELECTOR_BEGIN"):self.page.index("// ANTS_SELECTOR_END")]
+        self.assertIn("function antsLeaveMatch() {", selector)                                                    # (inside the block that node runs)
+        self.assertIn("if (isReadyToPlay && typeof Module !== 'undefined' && Module._ants_leave_match) Module._ants_leave_match();", selector)
+        self.assertIn("if (joined || playing) antsLeaveMatch();", selector)
+        self.assertLess(selector.index("window.confirm('Leave the match to change the picture?')"), selector.index("antsLeaveMatch();                          //"))
+        self.assertEqual(len(re.findall(r"Module\._ants_leave_match\(\)", self.page)), 1)                         # (the one place that calls it: nothing on unload, pagehide or visibilitychange)
+        app = read("src", "ants_app", "application.cpp")
+        self.assertIn('extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {', app)
+        self.assertIn("if (g_web_app != nullptr) g_web_app->leave_network_match();", app)
+        self.assertIn("void Application::leave_network_match() {\n    if (net_) net_->leave();", app)
+
     def test_the_catalog_link_has_one_name_on_both_pages(self):
         for name in ("shell.html", "lobby.html"):
             page = read("web", name)

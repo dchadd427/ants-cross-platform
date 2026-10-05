@@ -23,6 +23,21 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.6.0 - 2026-10-05 - An online match waits for you
+
+**For players:**
+- **An online match waits for you:** if you reload the page, lose the network or your phone falls asleep, your seat is held and the match pauses for everybody ("Ann (Green) lost the connection, waiting 0:06"); when you come back the match goes on where it was. The page keeps a key for three hours and the front page shows **Rejoin your match (CODE)** while it holds one (the desktop game keeps it in a file and rejoins by itself). After 30 seconds the others may vote to go on without you; the pauses of a match are capped at 30 minutes (10 in the rooms the front page makes).
+- **Leaving on purpose is immediate:** Menu or the logo, then Yes, drops your seat at once: nobody waits for you. A closed tab or a reload still holds it.
+- **Matches survive a restart of the game server:** a running match is replayed from its record, and its players come back with their keys.
+
+**Rules / network:** the network protocol stays 12. The server holds seats by default now (`--no-reconnect` turns it off, a room's `"reconnect": false` too). Operators: on the native TCP door (port 4001) a seat's key travels in clear; close that port or use `--no-reconnect` if that matters (the browser's door is the WebSocket one).
+
+**Fixes:**
+- A reload of the game page no longer asks for a name: it takes your seat back (the address carries your seat).
+- An online match that nobody comes back to gives its place up (it held a slot for as long as it was paused).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [the notes](docs/audit/persist_notes.md), [Network Port](docs/NETWORK_PORT.md)
+
 ## v0.5.1 - 2026-10-05 - Every page in the front page's look
 
 **For players:**

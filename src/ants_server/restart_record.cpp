@@ -232,26 +232,34 @@ uint32_t restart_steady_ms() noexcept {
 
 namespace {
 
+// One turn of a TURNS frame, as `payload` (`length` bytes) holds it from `off` on (its command count, then its commands): `turn` is made of it as turn number `number` and `off` moves past it. Null when
+// it is good, else what is wrong with it. The parser and the RestartTurnReader decode with this one function.
+const char* decode_one_turn(const uint8_t* payload, size_t length, size_t& off, uint32_t number, net::TurnMsg& turn) {
+    if (length - off < 2) return "a turn is cut short";
+    const uint16_t commands = get_u16(payload + off);
+    off += 2;
+    if (commands > net::kMaxTurnCommands) return "a turn has more commands than a turn may";
+    turn.turn = number;
+    turn.commands.clear();
+    turn.commands.reserve(commands);
+    for (uint16_t c = 0; c < commands; ++c) {
+        sim::Command cmd;
+        size_t used = 0;
+        if (sim::decode(payload + off, length - off, cmd, &used) != sim::DecodeError::None || cmd.issuer >= sim::MAX_PLAYERS) return "a command of a turn is not one";
+        off += used;
+        turn.commands.push_back(std::move(cmd));
+    }
+    return nullptr;
+}
+
 // The turns of one TURNS frame (the caller has checked its first_turn and count): each is handed to `emit` as it is decoded, and `emit` says false to stop. Null when the frame is good (or `emit`
 // stopped: `stopped`), else what is wrong with it.
 template <class Emit>
 const char* decode_turns_frame(const uint8_t* payload, size_t length, uint32_t first, uint16_t count, Emit&& emit, bool& stopped) {
     size_t off = 6;
     for (uint32_t i = 0; i < count; ++i) {
-        if (length - off < 2) return "a turn is cut short";
-        const uint16_t commands = get_u16(payload + off);
-        off += 2;
-        if (commands > net::kMaxTurnCommands) return "a turn has more commands than a turn may";
         net::TurnMsg turn;
-        turn.turn = first + i;
-        turn.commands.reserve(commands);
-        for (uint16_t c = 0; c < commands; ++c) {
-            sim::Command cmd;
-            size_t used = 0;
-            if (sim::decode(payload + off, length - off, cmd, &used) != sim::DecodeError::None || cmd.issuer >= sim::MAX_PLAYERS) return "a command of a turn is not one";
-            off += used;
-            turn.commands.push_back(std::move(cmd));
-        }
+        if (const char* bad = decode_one_turn(payload, length, off, first + i, turn)) return bad;
         if (!emit(std::move(turn))) {
             stopped = true;
             return nullptr;
@@ -353,30 +361,78 @@ RestartLoaded parse_restart_record(const uint8_t* data, size_t size, bool keep_t
     return r;
 }
 
-bool for_each_restart_turn(const RestartLoaded& rec, const std::function<bool(const net::TurnMsg&)>& fn) {
-    if (rec.bytes.empty()) {                                                      // the turns were kept
-        for (const net::TurnMsg& turn : rec.turns) {
-            if (!fn(turn)) return false;
-        }
+RestartTurnReader::RestartTurnReader(const RestartLoaded& record) : rec_(record) {
+    if (!record.ok()) {
+        fail("the record was not read as a good one");
+        return;
+    }
+    kept_ = record.bytes.empty();                                                 // a Whole record keeps its turns; a Streaming one keeps its bytes
+    pos_ = sizeof(kRestartMagic);
+    end_ = static_cast<size_t>(std::min<uint64_t>(record.good_bytes, record.bytes.size()));
+}
+
+bool RestartTurnReader::fail(const char* why) {
+    failed_ = true;
+    why_ = why;
+    return false;
+}
+
+// The turns are all given: the record must have held as many as it was judged to (a Streaming record whose bytes were cut at the end of a frame has fewer)
+bool RestartTurnReader::finish() {
+    if (given_ != rec_.turn_count) return fail("the record's bytes hold fewer turns than the record was judged to");
+    done_ = true;
+    return false;
+}
+
+bool RestartTurnReader::next(net::TurnMsg& out) {
+    if (failed_ || done_) return false;
+    if (kept_) {
+        if (given_ >= rec_.turns.size()) return finish();
+        out = rec_.turns[given_++];
         return true;
     }
-    size_t pos = sizeof(kRestartMagic);                                           // Streaming: the frames again, as parse_restart_record checked them
-    const size_t end_of_good = static_cast<size_t>(std::min<uint64_t>(rec.good_bytes, rec.bytes.size()));
-    while (pos < end_of_good) {
-        if (end_of_good - pos < kRestartFrameOverhead) return false;
-        const uint8_t* frame = rec.bytes.data() + pos;
-        const uint32_t length = get_u32(frame + 1);
-        const uint64_t end = uint64_t{pos} + 5 + length + 4;
-        if (end > end_of_good) return false;
-        if (frame[0] == static_cast<uint8_t>(RestartFrame::Turns)) {
-            if (length < 6) return false;
-            bool stopped = false;
-            const char* bad = decode_turns_frame(frame + 5, length, get_u32(frame + 5), get_u16(frame + 9), [&fn](net::TurnMsg&& turn) { return fn(turn); }, stopped);
-            if (bad != nullptr || stopped) return false;
+    for (;;) {
+        if (frame_left_ > 0) {                                                    // a turn of the frame that is open
+            const uint8_t* payload = rec_.bytes.data() + frame_pos_ + 5;
+            if (const char* bad = decode_one_turn(payload, frame_length_, frame_off_, given_, out)) return fail(bad);
+            ++given_;
+            --frame_left_;
+            return true;
         }
-        pos = static_cast<size_t>(end);
+        if (in_frame_) {                                                          // its last turn was given: nothing may follow it in the frame
+            in_frame_ = false;
+            if (frame_off_ != frame_length_) return fail("a turns frame has bytes after its last turn");
+            pos_ = frame_end_;
+        }
+        if (pos_ >= end_) return finish();                                        // the end of the good frames (a torn tail after them is not read)
+        if (end_ - pos_ < kRestartFrameOverhead) return fail("the record's bytes end inside a frame");
+        const uint8_t* frame = rec_.bytes.data() + pos_;
+        const size_t length = get_u32(frame + 1);
+        const uint64_t end = uint64_t{pos_} + 5 + length + 4;
+        if (end > end_) return fail("the record's bytes end inside a frame");
+        if (frame[0] != static_cast<uint8_t>(RestartFrame::Turns)) {              // the head and the checkpoints hold no turns
+            pos_ = static_cast<size_t>(end);
+            continue;
+        }
+        if (length < 6) return fail("a turns frame is too short");
+        const uint32_t first = get_u32(frame + 5);
+        if (first != given_) return fail("the turns are not numbered one after the other");
+        frame_pos_ = pos_;
+        frame_end_ = static_cast<size_t>(end);
+        frame_length_ = length;
+        frame_off_ = 6;
+        frame_left_ = get_u16(frame + 9);
+        in_frame_ = true;
     }
-    return true;
+}
+
+bool for_each_restart_turn(const RestartLoaded& rec, const std::function<bool(const net::TurnMsg&)>& fn) {
+    RestartTurnReader reader(rec);
+    net::TurnMsg turn;
+    while (reader.next(turn)) {
+        if (!fn(turn)) return false;
+    }
+    return !reader.failed();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -727,6 +783,7 @@ uint32_t fnv1a32(const std::string& s) {
 
 constexpr const char* kRecordPrefix = "room-";
 constexpr const char* kTempSuffix = ".tmp";
+constexpr const char* kReplayingSuffix = ".replaying";
 constexpr const char* kLockName = ".lock";
 constexpr const char* kRefusedName = "refused";
 
@@ -919,18 +976,6 @@ std::string RestartStore::path_for(const std::string& code) const {
     return (fs::path(cfg_.dir) / (std::string(kRecordPrefix) + code + "-" + hex_digits(digest, 4) + kRestartExtension)).string();
 }
 
-bool RestartStore::code_of_path(const std::string& path, std::string& code) const {
-    const std::string name = fs::path(path).filename().string();
-    const size_t prefix = std::strlen(kRecordPrefix);
-    const std::string extension = kRestartExtension;
-    const size_t digest = 1 + 8;                                       // "-" and the 8 hex digits of the hash of the code
-    if (name.size() <= prefix + digest + extension.size() || name.compare(0, prefix, kRecordPrefix) != 0 || !has_suffix(name, extension)) return false;
-    const std::string candidate = name.substr(prefix, name.size() - prefix - digest - extension.size());
-    if (!net::valid_room_code(candidate) || fs::path(path_for(candidate)).filename().string() != name) return false;       // (a name that is not exactly what path_for makes of the code is nobody's record)
-    code = candidate;
-    return true;
-}
-
 bool RestartStore::prepare(std::string& why) {
     if (!enabled()) return true;
     std::error_code ec;
@@ -971,9 +1016,12 @@ bool RestartStore::prepare(std::string& why) {
         }
     }
     // the temporary files of a record whose making was cut short: ours (the name says so), and nothing can be using them: the lock says that no other server has this folder
+    // (and the markers of a record that is not there any more: a record of this name made later would be taken for one that crashed the server)
     for (fs::directory_iterator it(cfg_.dir, ec), end; !ec && it != end; it.increment(ec)) {
         const std::string name = it->path().filename().string();
-        if (name.compare(0, std::strlen(kRecordPrefix), kRecordPrefix) == 0 && has_suffix(name, kTempSuffix)) native_remove(it->path().string());
+        if (name.compare(0, std::strlen(kRecordPrefix), kRecordPrefix) != 0) continue;
+        if (has_suffix(name, kTempSuffix)) native_remove(it->path().string());
+        else if (has_suffix(name, kReplayingSuffix) && !still_there(it->path().string().substr(0, it->path().string().size() - std::strlen(kReplayingSuffix)))) native_remove(it->path().string());
     }
     purge_refused();                                                // (what was refused a day ago is not wanted any more)
     return true;
@@ -999,8 +1047,22 @@ size_t RestartStore::purge_refused() {
     return purged;
 }
 
+bool RestartStore::mark_replaying(const std::string& record_path) {
+    const std::string marker = record_path + kReplayingSuffix;
+    NativeFile f;
+    std::string why;
+    const bool made = native_create_exclusive(marker, f, why);
+    native_close(f);
+    return made || still_there(marker);                             // (one that is there is a marker as well)
+}
+
+void RestartStore::unmark_replaying(const std::string& record_path) { native_remove(record_path + kReplayingSuffix); }
+
+bool RestartStore::was_replaying(const std::string& record_path) const { return still_there(record_path + kReplayingSuffix); }
+
 bool RestartStore::refuse_file(const std::string& path) {
     const std::string name = fs::path(path).filename().string();
+    unmark_replaying(path);                                         // (the record is judged: whatever stopped the server is dealt with)
     const auto drop = [&](const std::string& why) {
         remove_file(path);
         note("restart record " + name + " was refused and could not be kept (" + why + "): it was deleted");

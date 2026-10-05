@@ -13,6 +13,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,14 @@ struct ServerAddress {
 bool parse_server(const std::string& text, ServerAddress& out, std::string& why);
 /// "host:port" ("[v6]:port" for an IPv6 address), what the screen shows and parse_server reads back
 std::string server_label(const ServerAddress& server);
+
+/// A match that this machine can take its seat in again: the first panel's "Rejoin your match (CODE)" (the newest key that the application's store holds for a server that the menu can reach: a
+/// room's code, the seat, and where the room is). The owner (Application::enter_start_menu) gives it; a menu that is given none has the panel it always had.
+struct RejoinOffer {
+    std::string room;
+    uint8_t seat{255};
+    ServerAddress server;
+};
 
 /// What a seat of the single-player panel holds: nobody (the original's single-player game), or a computer player of a level (docs/BOTS.md)
 enum class SeatChoice : uint8_t { Empty = 0, Easy, Medium, Hard };
@@ -144,7 +153,8 @@ enum class MenuId : uint8_t {
     Copy, EnterRoom,                                    // the room's code
     Back,                                               // every panel but the first (on the room's panel: leave the room)
     Teams,                                              // single player, only while two or more seats have a bot (last: the numbers above are in the golden fingerprints of the wide pages)
-    SingleName                                          // single player: the player's name (the same text as Name and HostName: one remembered name)
+    SingleName,                                         // single player: the player's name (the same text as Name and HostName: one remembered name)
+    Rejoin                                              // the first panel, only while the application offers a match to take the seat in again
 };
 
 enum class MenuKind : uint8_t {
@@ -184,10 +194,12 @@ struct MenuElement {
 
 /// What the menu asks the application to do (take_request)
 struct MenuRequest {
-    enum class Type : uint8_t { None, Quit, Single, Join, Host, Cancel, EnterRoom, LeaveRoom };
+    enum class Type : uint8_t { None, Quit, Single, Join, Host, Cancel, EnterRoom, LeaveRoom, Rejoin };
     Type type{Type::None};
     std::string name;                         // Join, Host, Single: the player's name (cleaned: the same rule for all three)
-    std::string room;                         // Join: the room code (cleaned)
+    std::string room;                         // Join: the room code (cleaned); Rejoin: the room's code of the offer
+    uint8_t seat{255};                        // Rejoin: the seat of the offer
+    ServerAddress server;                     // Rejoin: where the room is (the offer's: not necessarily the server that Join and Host use now)
     int map{0};                               // Host: the index of the map
     int players{4};                           // Host: 2 - 4
     net::FillLevel fill{net::FillLevel::None};   // Host: the bots that START seats in the empty seats (Application::set_fill_bots before the connection is made)
@@ -226,6 +238,9 @@ public:
     /// The server that Join and Host use, as the screen shows it
     void set_server(const ServerAddress& server) { server_ = server; }
     const ServerAddress& server() const noexcept { return server_; }
+    /// The match that the first panel offers to rejoin, or none (the panel is then the one it always was); the owner gives it whenever the first panel is shown
+    void set_rejoin(std::optional<RejoinOffer> offer);
+    const std::optional<RejoinOffer>& rejoin() const noexcept { return rejoin_; }
     /// Called with the value that just changed (the owner writes it to the store)
     void set_on_change(std::function<void(MenuSetting)> cb) { on_change_ = std::move(cb); }
     /// A UI sound (the click of a pressed button, the cue of a refusal): the owner plays it
@@ -334,6 +349,7 @@ private:
     void try_join();
     void try_host();
     void try_single();
+    void try_rejoin();
     void request(MenuRequest::Type type);
     void set_selected(MenuId id);
     void notify(MenuSetting setting);
@@ -354,6 +370,7 @@ private:
     uint8_t own_seat_{0};
     MenuSettings settings_{};
     ServerAddress server_{};
+    std::optional<RejoinOffer> rejoin_;                     // the first panel offers to rejoin this match (set_rejoin)
     std::string name_;
     std::string code_;
     std::string message_;

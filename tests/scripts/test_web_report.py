@@ -57,7 +57,7 @@ class TheGameSide(unittest.TestCase):
         tick = self.app.index("sim_.tick();", place)
         self.assertLess(place, tick)                                                        # it is told before the tick that it is told of ...
         self.assertLess(tick - place, 200)                                                  # ... in the branch that runs a local game's ticks
-        enter = self.app[self.app.index("void Application::enter_match()"):]
+        enter = self.app[re.search(r"void Application::enter_match\([^)]*\) \{", self.app).start():]       # (enter_match(bool rejoin) since the way back: the signature is not the point)
         enter = enter[:enter.index("\n}\n")]
         self.assertIn("local_match_reported_ = false;", enter)                              # every match starts with it not told
 

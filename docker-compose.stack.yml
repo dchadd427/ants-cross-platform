@@ -47,7 +47,7 @@ services:
     restart: unless-stopped
     # A stop (a redeploy recreates the container) gives the server this long before docker kills it. The server needs a moment only: on SIGTERM it makes the restart records of its running
     # rooms durable (one fsync a room, a few milliseconds) and exits; the records stay in /results/restart of the volume below, and the server that starts again brings the matches back
-    # (docs/NETWORK_PORT.md "Restart records"; only rooms that hold seats keep a record). 15 s is the default 10 s and room for a slow volume: 256 rooms at 30 ms for a flush are 7.7 s. KEEP THE
+    # (docs/NETWORK_PORT.md "Restart records"; only rooms that hold seats keep a record: every room of this server does, unless it is started with --no-reconnect). 15 s is the default 10 s and room for a slow volume: 256 rooms at 30 ms for a flush are 7.7 s. KEEP THE
     # VOLUME ants-server-results: a stack that is removed with its volumes loses the records.
     stop_grace_period: 15s
     # The page web/lobby.html (the front page) joins rooms named "demo-..." that it makes itself: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
