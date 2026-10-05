@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 15:48 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 15:53 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -32,6 +32,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is in progress), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **Sanitizer tier (PR #15)**: the four sanitizer suites that ended red without a bug now pass on a clean machine; merged 2026-10-05 15:48 PDT, no redeploy (tests and tools only).
 - **v0.8.1** a sharp START! button and 48 demo rooms: the front page's START! is a real button that your browser draws at your screen's own resolution (it was the original's small picture blown up three times, so it looked big and blocky), and the public game server makes up to 48 demo rooms at a time instead of 12, each with a turn log of at most 4 MiB (PR #18, merged 2026-10-05 15:30 PDT, live 15:34 PDT)
 - **v0.8.0** one card for every game: the front page's two cards are one "New match" card with four seats (you, Friends with an invitation link each, Easy, Medium or Hard bots, or Nobody), teams for three or four players and START! for every game; a game against the computer is now a room on the game server (network protocol 13; PR #11, merged 2026-10-05 13:52 PDT, live 13:56 PDT)
 - **The sanitizer test run builds on GCC 13 again** (task 16, PR #12, merged 2026-10-05 12:20 PDT): a false compiler warning is off in that build only; nothing changes for players
