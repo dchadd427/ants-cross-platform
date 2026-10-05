@@ -10,6 +10,8 @@
 //   AI10.6  a gate whose clicks onto the entrance deliver nothing (gate_user_fails in a row: the carriers are boxed in) stops for 900 ticks, the economy's rescue is on meanwhile
 //   AI10.7  a seat whose gate is answered by a world that cancels the walk of an ant and then fails (the loop of M2) banks next to nothing and burns its budget without the stall detector,
 //           and banks like the worker with it (the repeat rule, the rule of the clock, both with the gate's own stop)
+#include <cstdio>
+
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -528,5 +530,151 @@ void run_b41_gate_tests() {
         ASSERT_TRUE(shipped.stalls >= 1);
         ASSERT_TRUE(shipped.score * 2 >= worker.score);
         ASSERT_TRUE(shipped.released < loop.released / 2);
+    } TEST_END();
+
+    TEST_CASE("AI10.8 A Ring Of Fire Walls Round The Gate Shuts The Hill (Every Walk Into It Is Refused: \"Can't Go There.\"): The Gate Of A Hard Bot With Seven Carriers Outside Sends Nobody Onto A Queue Tile Or The Entrance While The Ring Stands (Before: 85 Ants Ordered In 1,500 Ticks, All Refused, 207 Reactions That Began), It Does Not Guide (The Economy's Rescue Is On), And It Guides And Banks Again After The Ring Burnt Out")
+    {
+        GateScene scene;
+        scene.build(7);
+        Rig rig(scene.sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+        CantGoTally tally;
+        rig.count_with(&tally);
+        rig.run(700);
+        ASSERT_TRUE(rig.as<StandardBot>().gate().usable());
+        ASSERT_TRUE(tally.seat(0).orders >= 20);                                                            // (the premise: the gate is at work)
+        const CantGoTally::Seat before = tally.seat(0);
+        const size_t sent_before = rig.sent.size();
+        const MapInfo m(scene.sim);
+        const HillInfo& h = m.hill(0);
+        for (const TileCoord& t : SabotageTask::ring_of(h)) scene.sim.set_fire_at(t, 3600);                  // the ring that a sabotage lights, from tick 700 for 3,600 ticks
+        rig.run(1500);
+        size_t into_hill = 0;
+        for (size_t i = sent_before; i < rig.sent.size(); ++i) {
+            const Command& c = rig.sent[i].second;
+            if (c.type != CommandType::GroupMove) continue;
+            const bool queue = c.tile_y == h.origin.y - 1 && c.tile_x >= h.origin.x && c.tile_x <= h.origin.x + 2;
+            const bool entrance = c.tile_x == h.entrance.x && c.tile_y == h.entrance.y;
+            if (queue || entrance) into_hill += c.ants.size();
+        }
+        const CantGoTally::Seat after = tally.seat(0);
+        ASSERT_TRUE(into_hill <= 2);                                                                        // (the orders of the last look before the ring was seen)
+        ASSERT_TRUE(after.refused - before.refused <= 2);
+        ASSERT_TRUE(after.began - before.began <= 6);                                                       // (the ants that stood on the queue row when the ring closed: their loop is the engine's)
+        ASSERT_FALSE(rig.as<StandardBot>().gate().usable());
+        const int32_t sealed_score = scene.sim.get_player_score(0);
+        rig.run(3600);                                                                                      // the ring burns out at tick 4300
+        ASSERT_TRUE(rig.as<StandardBot>().gate().usable());
+        ASSERT_TRUE(scene.sim.get_player_score(0) >= sealed_score + 200);
+    } TEST_END();
+
+    TEST_CASE("AI10.9 A Carrier That No Walk Joins To The Hill Is Not Ours To Place (The Hill Itself Is Open): One In A Pocket Of Rocks Far From The Gate Is Named In No Order; One That Walls Of Fire Shut In After The Last Look At The Map Is Ordered Until The Field Is Made Again (200 Ticks) And Never After; The Others Are Guided All Along")
+    {
+        const auto ring_of_fire_round = [](sim::SimulationEngine& sim, TileCoord t) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx != 0 || dy != 0) sim.set_fire_at(TileCoord{t.x + dx, t.y + dy}, 3600);
+                }
+            }
+        };
+        for (const bool rocks : {true, false}) {
+            GateScene scene;
+            scene.build(4);
+            if (rocks) {
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (dx != 0 || dy != 0) scene.sim.set_terrain(10 + dx, 12 + dy, sim::TERRAIN_OBSTACLE);
+                    }
+                }
+            }
+            const uint32_t shut = scene.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10, 12});
+            scene.sim.get_unit(shut).pick_up_food(1, 25);
+            Rig rig(scene.sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            if (rocks) {
+                rig.run(1500);
+            } else {
+                rig.run(3);                                                                                 // the first look (tick 1) made the field with the ant free ...
+                ring_of_fire_round(scene.sim, TileCoord{10, 12});                                            // ... and the walls come after it, before the first order leaves
+                rig.run(1497);
+            }
+            ASSERT_TRUE(rig.as<StandardBot>().gate().usable());
+            ASSERT_TRUE(rig.as<StandardBot>().gate().entrance_clicks() >= 3);                               // (the others are guided)
+            size_t early = 0;
+            size_t late = 0;
+            for (const auto& e : rig.sent) {
+                for (const uint32_t id : e.second.ants) {
+                    if (id != shut) continue;
+                    ++(e.first <= 260 ? early : late);
+                }
+            }
+            ASSERT_EQ(late, 0u);
+            if (rocks) ASSERT_EQ(early, 0u);                                                                // (the field of the first look already knows the rocks)
+            else ASSERT_TRUE(early >= 1);                                                                   // (the premise: the field was stale for 200 ticks and the gate used it)
+        }
+    } TEST_END();
+
+    TEST_CASE("AI10.10 The Economy's Rescue Sends No Carrier Into A Hill That A Ring Of Fire Walls Shut: A Carrier That Stands Idle With Its Food Far From The Hill Is Sent To The Entrance After 40 Ticks (Medium: No Gate), But Not While The Ring Stands (Before: Sent And Refused Again And Again); The Aid Of A Hit Carrier The Same")
+    {
+        for (const bool ring : {false, true}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 8);
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            LevelPlan plan = plan_for(Level::Medium);
+            plan.defenders = 0;
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            if (ring) {
+                const MapInfo m(sim);
+                for (const TileCoord& t : SabotageTask::ring_of(m.hill(0))) sim.set_fire_at(t, 3600);
+            }
+            rig.run(900);
+            const StandardBot& bot = rig.as<StandardBot>();
+            if (!ring) {
+                ASSERT_TRUE(bot.harvest().rescues() >= 1);                                                  // (it is sent, and banks)
+                ASSERT_TRUE(sim.get_player_score(0) > 0);
+            } else {
+                ASSERT_EQ(bot.harvest().rescues(), 0u);
+                ASSERT_EQ(tally.seat(0).refused, 0u);
+                ASSERT_TRUE(sim.get_unit(carrier).holding != 0);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI10.11 The Aid Of A Hit Carrier Sends It Home At Once, Unless A Ring Of Fire Walls Shut The Hill: The Blow Clears Its Walk And It Stands With Its Food; With The Ring Lit The Standard Bot Orders Nothing (Before: One Order Per Try, Refused)")
+    {
+        for (const bool ring : {false, true}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 8);
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 9});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{9, 11});
+            LevelPlan plan = plan_for(Level::Medium);
+            plan.defenders = 0;
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            if (ring) {
+                const MapInfo m(sim);
+                for (const TileCoord& t : SabotageTask::ring_of(m.hill(0))) sim.set_fire_at(t, 3600);
+            }
+            rig.run(3);
+            sim.apply_command(command_of(CommandType::GroupAttack, 1, {enemy}, 9, 9));
+            bool hit = false;
+            for (int t = 0; t < 500; ++t) {
+                rig.tick();
+                hit = hit || sim.get_unit(carrier).hp < 10;
+            }
+            ASSERT_TRUE(hit);
+            const StandardBot& bot = rig.as<StandardBot>();
+            if (!ring) {
+                ASSERT_TRUE(bot.aid().sent_home() >= 1);
+            } else {
+                ASSERT_EQ(bot.aid().sent_home(), 0u);
+                ASSERT_EQ(tally.seat(0).refused, 0u);
+            }
+        }
     } TEST_END();
 }

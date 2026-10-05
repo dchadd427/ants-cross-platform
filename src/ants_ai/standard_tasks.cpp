@@ -2408,6 +2408,30 @@ void GateTask::choose_slots(TaskContext& c, const Geometry& g) {
     while (n < 3) slot_order_[n++] = -1;
 }
 
+void GateTask::refresh_now(TaskContext& c) {
+    const BotView& v = c.view;
+    const HillInfo& hill = c.map.hill(c.seat);
+    const sim::Grid& grid = v.grid();
+    // which of the eleven tiles round and on the queue row can be walked on: when one of them changed (a wall of fire lit or burnt out, a bomb) the gate may have been shut or opened
+    uint32_t signature = 0;
+    uint32_t bit = 1;
+    for (const sim::TileCoord& t : SabotageTask::ring_of(hill)) {
+        signature |= grid.in_bounds(t) && MapInfo::walkable(grid, c.seat, t, v.walk_context()) ? bit : 0u;
+        bit <<= 1;
+    }
+    for (int32_t i = 0; i < 3; ++i) {
+        const sim::TileCoord t{hill.origin.x + i, hill.origin.y - 1};
+        signature |= grid.in_bounds(t) && MapInfo::walkable(grid, c.seat, t, v.walk_context()) ? bit : 0u;
+        bit <<= 1;
+    }
+    const uint64_t now = v.tick();
+    if (now_made_ && signature == now_signature_ && now < now_at_ + params_.field_ticks) return;
+    now_ = c.map.field_now(grid, c.seat, v.walk_context());
+    now_at_ = now;
+    now_signature_ = signature;
+    now_made_ = true;
+}
+
 void GateTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
@@ -2439,6 +2463,9 @@ void GateTask::step(TaskContext& c) {
         }
     }
     if (slots_walkable < 2 || !buffer_found || blocked(g.entrance, now)) return;       // no room at the doorstep, or no click onto the entrance is accepted: the engine's flow stays
+    // the doorstep must be joined to the hill as the map is NOW: a ring of fire walls round the gate (a sabotage) shuts the carriers out, and every click into the hill would be refused
+    refresh_now(c);
+    if (!c.map.reaches_hill(now_, g.buffer)) return;
     usable_ = true;
     track_exits(c, g);
 
@@ -2455,7 +2482,7 @@ void GateTask::step(TaskContext& c) {
                 pending_free_at_ = static_cast<int64_t>(now) + params_.clip_ticks + params_.exit_ticks;
             }
         }
-        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance) carriers.push_back(&a);          // (a thief with loot banks at the entrance too)
+        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.map.reaches_hill(now_, a.tile)) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
     }
     for (auto it = cmd_.begin(); it != cmd_.end();) {                                // only carriers are ours to place
         bool carrier = false;
@@ -2803,6 +2830,14 @@ void CarrierAidTask::step(TaskContext& c) {
             ++it->second.tries;
         }
         ++it;
+    }
+    if (!home.empty() && v.has_grid()) {                                                 // a carrier that no walk joins to the hill (a ring of fire walls round its gate) is not sent: it would be refused
+        const MapInfo::NowField joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
+        home.erase(std::remove_if(home.begin(), home.end(), [&](uint32_t id) {
+                       const AntView* a = find_ant(v.mine(), id);
+                       return a != nullptr && !c.map.reaches_hill(joined, a->tile);
+                   }),
+                   home.end());
     }
     if (!home.empty()) {
         c.orders.move(home, hill.entrance, Priority::Normal);

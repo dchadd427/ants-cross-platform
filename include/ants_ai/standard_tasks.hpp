@@ -581,6 +581,7 @@ public:
         uint32_t bite_wait_max{25};          // the entrance click waits at most this many looks for a bite that runs (a fresh carrier's own order claims the entrance until the takeover lands)
         uint32_t blocked_ticks{900};         // a tile that the controller refused a click onto (a power-up on it) is not chosen again this long
         uint32_t user_fail_limit{16};        // this many clicks onto the entrance in a row that delivered nothing (a healthy gate fails up to 10 in a row: measured on the shipped maps): it stops guiding for blocked_ticks (0: never)
+        uint32_t field_ticks{200};           // the walking field of the hill as it is now (MapInfo::field_now) is made again after this many ticks, and at once when a tile of the ring round the gate or of the queue row changed
         bool predictive{true};
         int32_t doorstep_dx0{-4};
         int32_t doorstep_dx1{6};
@@ -635,6 +636,7 @@ private:
     int cost_of(const Geometry& g, sim::TileCoord t) const noexcept;
     void track_exits(TaskContext& context, const Geometry& g);
     void choose_slots(TaskContext& context, const Geometry& g);
+    void refresh_now(TaskContext& context);
 
     Params params_;
     int slot_order_[3]{1, 0, 2};
@@ -657,6 +659,10 @@ private:
     uint32_t user_streak_{0};                     // clicks onto the entrance in a row that delivered nothing
     uint32_t pauses_{0};
     bool usable_{false};
+    MapInfo::NowField now_;                       // the walking field of the hill as it is now (refresh_now): a ring of fire walls round the gate shuts the doorstep off from the queue row
+    uint64_t now_at_{0};
+    uint32_t now_signature_{0};                   // which tiles of the ring and of the queue row could be walked on when the field was made
+    bool now_made_{false};
 };
 
 // ---- rank 2: the guard -------------------------------------------------------------------------------------------------------------------------------------
