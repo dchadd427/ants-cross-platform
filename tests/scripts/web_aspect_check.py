@@ -1068,11 +1068,20 @@ def main():
                     time.sleep(1.0)
                 return False
 
+            def exact_width():
+                """The width of a window whose box is exactly the canvas (960 CSS pixels): 960 plus the space that the page leaves at its sides plus the browser's scroll bar (none with overlay scroll
+                bars), both read from a window that is narrower than the box can be (there the stage fills the page's width)"""
+                tab.emulate(1000, 900, 1)
+                tab.open(web + "?aspect=16:9", settle=1.0)
+                narrow = tab.geometry()
+                return int(round(960 + narrow["inner"][0] - narrow["stage"][2]))
+
             # ---- the page: what is cancelled and what is not
-            tab.emulate(976, 900, 1)                                          # a window whose box is exactly the canvas: 960 x 540 at (8, 99), a scale of 1
+            exact_w = exact_width()
+            tab.emulate(exact_w, 900, 1)                                      # a window whose box is exactly the canvas: 960 x 540, a scale of 1
             tab.open(web + "?aspect=16:9", settle=1.5)
             g = tab.geometry()
-            check(abs(g["box"][2] - 960) < 0.01 and abs(g["box"][3] - 540) < 0.01 and g["dpr"] == 1 and g["scroll"][2] > g["scroll"][3], "the window of 976 x 900 gives the canvas exactly 960 x 540 CSS pixels and the page scrolls (box %s, scroll %s)" % (g["box"], g["scroll"]))
+            check(abs(g["box"][2] - 960) < 0.01 and abs(g["box"][3] - 540) < 0.01 and g["dpr"] == 1 and g["scroll"][2] > g["scroll"][3], "the window of %d x 900 (960, the page's side space and the scroll bar) gives the canvas exactly 960 x 540 CSS pixels and the page scrolls (box %s, scroll %s)" % (exact_w, g["box"], g["scroll"]))
             tab.ev("window.__w = []; window.addEventListener('wheel', function (e) { window.__w.push({dp: e.defaultPrevented, ctrl: e.ctrlKey, cancelable: e.cancelable}); }); 1")
             cx, cy = g["box"][0] + 400, g["box"][1] + 300
             title = (300, 30)
@@ -1149,7 +1158,7 @@ def main():
 
             # ---- one page with ?fill= and the wheel (v0.1.0: the two features met in this page): the address gives the game its arguments (the leader's fill among them) and the wheel is
             # cancelled over the canvas only, exactly as on the page without them; the chat input of the setup screen is drawn by the game on that canvas, nothing else of the page changes
-            tab.emulate(976, 900, 1)
+            tab.emulate(exact_w, 900, 1)
             tab.open(web + "?join=/ws&room=MEET-1&fill=HaRd&name=Zed&aspect=16:9", settle=1.5)
             joined = json.loads(tab.ev("JSON.stringify(window.ANTS_ARGS || null)") or "null")
             pairs = [(joined[i], joined[i + 1]) for i in range(len(joined) - 1)] if joined else []
@@ -1207,7 +1216,7 @@ def main():
                 return True
 
             for aspect, cw, ch_, view, label in (("16:9", 960, 540, (16, 21, 762, 500), "16:9"), ("4:3", 640, 480, (16, 21, 442, 440), "classic 4:3")):
-                tab.emulate(976, 900, 1)
+                tab.emulate(exact_w, 900, 1)
                 tab.open(web + "?aspect=" + aspect, settle=1.5)
                 g = tab.geometry()
                 exact = abs(g["box"][2] - cw) < 0.01 and abs(g["box"][3] - ch_) < 0.01      # (the classic picture's box here is 960 x 720: a canvas pixel is 1.5 screen pixels, so no 2 x 2 squares to count there)
