@@ -358,4 +358,31 @@ void run_cantgo_tests() {
             }
         }
     } TEST_END();
+
+    TEST_CASE("AI22.10 The Bot's Own Refused Orders Stay Under A Bound: Four Hard Standard Bots Play Whole Matches On TREASURE (Seeds 1 To 4, Four Matches): At Most 6 Of 1,000 Orders Are Refused (3.0 With The Fixes Of The Can't-Go Loop: 23 Of 7,635; 9.8 Without Them, cg=0: 83 Of 8,427); The Loops Themselves Are Reported, Not Bounded")
+    {
+        uint64_t orders = 0;
+        uint64_t refused = 0;
+        for (uint32_t seed = 1; seed <= 4; ++seed) {
+            ArenaSpec spec;
+            spec.level = &level_of("TREASURE");
+            spec.seed = seed;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.kind = "standard";
+                b.level = Level::Hard;
+                spec.bots.push_back(b);
+            }
+            const ArenaResult r = play_match(spec);
+            ASSERT_TRUE(r.error.empty());
+            ASSERT_TRUE(r.match_over);
+            for (const ArenaSeatResult& seat : r.seats) {
+                orders += seat.orders;
+                refused += seat.refused_orders;
+            }
+        }
+        ASSERT_TRUE(orders >= 6000);                                                  // the matches were played (7,635 orders when this was pinned)
+        ASSERT_TRUE(refused * 1000u <= orders * 6u);                                  // the bound, with twice the measured rate in hand
+    } TEST_END();
 }
