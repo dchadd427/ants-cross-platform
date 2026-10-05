@@ -9439,6 +9439,14 @@ void run_restore_tests() {
         w.start_server(500);
         ASSERT_TRUE(w.mgr->create_room(held_spec("FL-0", 2), w.server_now()).ok);
         ASSERT_EQ(w.status("FL-0").record_sync_ms, 0u);                                          // (no match, no record, no flush to time)
+        {   // the interval is set when the record is made, before any flush (the first is within a second of the match's start)
+            ASSERT_TRUE(w.mgr->create_room(held_spec("FL-2", 2), w.server_now()).ok);
+            w.connect("P0", "FL-2");
+            w.connect("P1", "FL-2");
+            ASSERT_TRUE(w.until([&]() { return w.status("FL-2").record_kept; }, 5000));
+            ASSERT_TRUE(w.status("FL-2").state == RoomState::Loading && w.status("FL-2").record_sync_ms == 1000u);
+            ASSERT_TRUE(w.mgr->close_room("FL-2", w.server_now()));                              // (it has made its point: its flushes are not to be counted below)
+        }
         std::vector<RClient*> m = play_room(w, held_spec("FL-1", 2), 3000);
         ASSERT_EQ(w.status("FL-1").record_sync_ms, 1000u);
         // quick flushes: one a second, and the interval stays
