@@ -643,6 +643,28 @@ void test_hold_timing() {
     hand.up(1, g);
     hand.frame();
     check(s.sink.commands.size() == 1, "a tap that lifts 399 ms after the down is a click");
+
+    // the events carry their times (a frame may come long after them): a lift that is stamped 300 ms after the down is a tap, though the frame that handles it comes 500 ms later, and a
+    // move that is stamped at 100 ms begins a drag, though the frame comes at 800 ms (the hold that is due by then is not made first)
+    {
+        const TouchControl::Stats before = app.touch().stats();
+        hand.down(1, g);
+        hand.wait(300);
+        hand.up(1, g);
+        hand.wait(500);
+        hand.frame();
+        const TouchControl::Stats after = app.touch().stats();
+        check(after.taps == before.taps + 1 && after.holds == before.holds && app.touch().fingers() == 0, "a lift stamped at 300 ms and handled at 800 ms is a tap, not the end of a hold");
+        hand.down(1, g);
+        hand.wait(100);
+        hand.move(1, Pt{g.x + 40, g.y});
+        hand.wait(700);
+        hand.frame();
+        const TouchControl::Stats dragging = app.touch().stats();
+        check(dragging.drags == after.drags + 1 && dragging.holds == after.holds && app.touch().mode() == TouchControl::Mode::Left, "a move stamped at 100 ms and handled at 800 ms is a drag, not a hold that was due first");
+        hand.up(1, Pt{g.x + 40, g.y});
+        hand.frame();
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1178,6 +1200,23 @@ void test_gates() {
         }
     }
 
+    // the second finger lands AFTER something opened under the first: the first finger began on the map, then the results came up (the match ended): no pair
+    {
+        hand.down(1, a);
+        hand.frame();
+        check(app.touch().mode() == TouchControl::Mode::Waiting, "(a finger waits on the map)");
+        const uint32_t pairs = app.touch().stats().two_finger;
+        app.scorecard().show(app.sim().get_world_state().match_result, 0);
+        hand.down(2, b);
+        hand.frame();
+        check(app.touch().mode() == TouchControl::Mode::Waiting && app.touch().ignored() == 1 && app.touch().stats().two_finger == pairs, "a second finger that lands after the results came up under the first one is ignored: no pair");
+        hand.up(2, b);
+        hand.up(1, a);
+        hand.frame();
+        app.scorecard().hide();
+        check(app.touch().fingers() == 0, "(both fingers are gone)");
+    }
+
     // taps are still clicks where two fingers do nothing: the quit dialog's No, the options window's Return
     {
         app.hud().open_quit_dialog();
@@ -1441,6 +1480,16 @@ void test_other_screens() {
             // a tap that the screen answers with another screen leaves nothing behind: the next tap on the new screen works
             hand.tap(down);
             check(app.map_select().get_selected_index() == (before + 2) % maps, "the next tap, on the new screen, works");
+            // a finger that rests on a button for longer than a hold takes is still a press of that button: this screen is not the map (no hold, no right click)
+            const uint32_t holds = app.touch().stats().holds;
+            hand.down(1, down);
+            hand.frame();
+            hand.wait(touch::kHoldMs + 150);
+            hand.frame();
+            check(app.touch().stats().holds == holds && app.touch().mode() == TouchControl::Mode::Left, "a finger that rests on Down for 0.6 s is no hold: the button is held");
+            hand.up(1, down);
+            hand.frame();
+            check(app.map_select().get_selected_index() == (before + 3) % maps && app.touch().stats().holds == holds, "and its lift presses the button: the selection moves");
         }
     }
     {   // the desktop start menu
