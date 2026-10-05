@@ -1,13 +1,16 @@
 # Status
 
-_Updated 2026-10-05 08:19 PDT · current release **v0.7.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 08:20 PDT · current release **v0.7.0** · details: [CHANGELOG](CHANGELOG.md)_
 
-## Release schedule (the next releases in order; times are targets, Pacific)
-- **v0.7.0** a phone can pan, zoom and right click: the last review fixes are being made, then the checks and the deploy (Mon 2026-10-05, late morning)
-- **v0.8.0** one start card for every game: "New match", all online, a friend or a bot level for each colour (network protocol 13); the owner's priority, being assembled and tested (Mon 2026-10-05, early afternoon)
-- **v0.9.0** the bots: race for contested food, health-aware fights, the safe fire-in, and the island and swimmer play; two finished batches are being merged and re-tested (Mon or Tue)
-- **v0.10.0** short room codes (8 letters and numbers, no "demo") and the platform and operating system icons beside the names (network protocol 14)
-- After that: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path; recordings and replays (version numbers may move)
+## Release schedule (the next releases in order; targets in Pacific time)
+| Release | Progress | Target | Now |
+|---|---|---|---|
+| **v0.7.0** a phone can pan, zoom and right click | ████░░░░░░ 43% | Mon 2026-10-05, late morning | the second review's fixes, then the checks and the deploy |
+| **v0.8.0** one start card for every game (network protocol 13) | █░░░░░░░░░ 14% | Mon 2026-10-05, early afternoon | the owner's priority: being merged onto v0.6.0 and tested |
+| **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ███░░░░░░░ 29% | Mon or Tue | the two finished batches are being merged and re-tested |
+| **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the one card |
+
+A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
 - One start card (v0.8.0): the card and the bot-games work (a fill level for each seat, teams) are being merged onto v0.6.0 and tested in a real browser
