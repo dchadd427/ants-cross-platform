@@ -105,9 +105,8 @@ option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 if(ENABLE_ASAN)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address,undefined)
-    # GCC 13.3, with -fsanitize=shift (part of undefined): -Wsign-conversion reports `(mask >> n) & 1u` as a conversion from int when the uint8_t mask is not const, though the value is never
-    # negative (clean without the sanitizer, and in clang). It failed ./run_tests.sh --asan (-DANTS_WERROR=ON) at many places, with new ones in every batch, so GCC's sanitizer build has the warning
-    # off; every other build has it on, and CI's Linux (GCC) job checks the same sources with it.
+    # GCC 13.3 with -fsanitize=shift (part of undefined): -Wsign-conversion reports `(mask >> n) & 1u` on a non-const uint8_t as a conversion from int, though it is never negative (clean without
+    # the sanitizer and in clang). It failed ./run_tests.sh --asan (-DANTS_WERROR=ON) in many places, with new ones in every batch, so GCC's sanitizer build has it off; every other build has it on.
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         add_compile_options(-Wno-sign-conversion)
     endif()
