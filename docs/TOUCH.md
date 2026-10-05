@@ -16,7 +16,9 @@ guide on the game page (Touch & Mobile) says it to the player. A touch screen on
 
 A lift between 400 and 450 ms is neither a click nor a right click (the finger lingered). Two fingers act only where the wheel zooms: the map view of a match, no dialog, no results, not the catch-up
 screen of a network match (a finger there is a plain press that the screen swallows: no ring, no buzz), no press held but the first finger's own on the map (the second finger ends that one with no selection and no order). Elsewhere a second finger does nothing and a tap is still a click. A third finger, and the finger that
-stays after the other lifts, are ignored until they lift. The pair is judged once per frame (a pinch's two moves arrive as two events, and between them the distance is wrong by a whole step).
+stays after the other lifts, are ignored until they lift, and a finger that lands meanwhile starts nothing: BY DESIGN, so that taking a pinch up again with one finger is not a tap, a hold or a drag.
+A first finger whose press held nothing (the frame, a blank part of the panel, where no control took it) is not one of these: the next finger takes its place at once (that press ends with no act, and the
+finger is ignored until it lifts), so a thumb that rests on the panel never blocks the taps on the map. The pair is judged once per frame (a pinch's two moves arrive as two events, and between them the distance is wrong by a whole step).
 
 **A stall cannot make a touch long.** SDL stamps an event when it sees it (the browser's dispatch, the game's read of the queue), so a stall makes the stamp late. An event is judged no later than 100 ms
 (`touch::kStallMs`) after the last frame (or the first finger's arrival): a stalled 100 ms tap is still a click, a stalled first move still a drag. A frame knows that the finger is down, so a hold fires

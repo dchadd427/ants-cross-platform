@@ -9,7 +9,9 @@
 // a finger that holds still on the minimap turns that press into a right click there ("send the selected ants there").
 // TWO fingers on the map view PAN (the middle point's movement scrolls the map by the same distance) and ZOOM (the fingers' distance picks a level, with hysteresis) together. The pair is
 // judged once per frame (update), never after one finger's event: two fingers that move together arrive as two events, and between them the distance is wrong by the whole step of one.
-// A second finger that lands where that is not allowed does nothing, and neither does a third; a finger that stays after the other lifts is ignored until it lifts.
+// A second finger that lands where that is not allowed does nothing, and neither does a third; a finger that stays after the other lifts is ignored until it lifts (BY DESIGN: a pinch that
+// lets go with one finger and is taken up again must not become a tap, a hold or a drag of the finger that comes back; the first finger of a plain press that holds nothing is not one
+// of these: the next finger takes its place, press_held()).
 
 #include <cstddef>
 #include <cstdint>
@@ -94,6 +96,9 @@ public:
     /// The map's zoom now, and the levels on offer (from the most zoomed in to the most zoomed out: Application::zoom_levels)
     virtual float zoom() const = 0;
     virtual std::vector<float> zoom_levels() const = 0;
+    /// Does the press that the first finger made hold anything (a button, the minimap, the chat log, a control of a dialog or of another screen)? Asked when another finger lands while the first is
+    /// a plain press away from the map view: a press that holds nothing (the frame, a blank part of the panel) must not block the new finger. A model alone knows no better: it holds.
+    virtual bool press_held() const { return true; }
 };
 
 class TouchControl {
@@ -163,6 +168,7 @@ private:
         Role role{Role::Primary};
         double x{0.0};
         double y{0.0};
+        bool spent{false};                  // its press held nothing and ended (press_held): it is ignored until it lifts, and it does not block the fingers that come after it
     };
     Finger* find(int64_t touch, int64_t id) noexcept;
     Finger* primary() noexcept;

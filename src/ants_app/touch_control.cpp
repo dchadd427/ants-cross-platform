@@ -259,7 +259,8 @@ TouchControl::Actions TouchControl::finger_down(int64_t touch, int64_t finger, d
     arrived.id = finger;
     arrived.x = x;
     arrived.y = y;
-    if (fingers_.empty()) {
+    const bool alone = std::all_of(fingers_.begin(), fingers_.end(), [](const Finger& g) { return g.spent; });      // (a finger whose press held nothing and ended does not count)
+    if (alone) {
         arrived.role = Role::Primary;
         fingers_.push_back(arrived);
         known_ = clock_;                                                // (the first finger's arrival is a moment that the model knows)
@@ -267,6 +268,19 @@ TouchControl::Actions TouchControl::finger_down(int64_t touch, int64_t finger, d
         return out;
     }
     const Finger* first = primary();
+    if (first != nullptr && !on_map_ && mode_ == Mode::Left && !env_->press_held()) {         // the first finger's press holds nothing (the frame, a blank part of the panel): it must not block this one
+        emit(out, Kind::Cancel, first->x, first->y, clock_);                                  // (what it did ends with no act; it is ignored until it lifts, and this finger is the first)
+        for (Finger& g : fingers_) {
+            if (g.role != Role::Primary) continue;
+            g.role = Role::Ignored;
+            g.spent = true;
+        }
+        arrived.role = Role::Primary;
+        fingers_.push_back(arrived);
+        known_ = clock_;
+        start(fingers_.back(), clock_, out);
+        return out;
+    }
     const bool can_pair = first != nullptr && on_map_ && (mode_ == Mode::Waiting || mode_ == Mode::Left || mode_ == Mode::Right);       // (in a pair the mode is Two: a third finger is none of these)
     if (can_pair && env_->two_fingers_allowed((first->x + x) / 2.0, (first->y + y) / 2.0)) {
         fingers_.push_back(arrived);

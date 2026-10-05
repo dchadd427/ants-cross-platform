@@ -535,10 +535,12 @@ private:
         bool two_fingers_allowed(double x, double y) const override { return app.touch_two_fingers_allowed(x, y); }
         float zoom() const override { return app.zoom(); }
         std::vector<float> zoom_levels() const override { return app.zoom_levels(); }
+        bool press_held() const override { return app.touch_press_held(); }
         Application& app;
     };
     TouchZone touch_zone_at(double x, double y) const;
     bool touch_two_fingers_allowed(double x, double y) const;
+    bool touch_press_held() const;                         // the press that the first finger made holds a control (a button, the minimap, the chat log; anything on a dialog or another screen)
     static Uint32 touch_cancel_event_type() noexcept;       // the type of the event that carries a queued cancel through SDL's queue (registered once; (Uint32)-1 when SDL has none)
     bool touch_match_screen() const;                       // a match with no dialog or results over it (its catch-up picture too): the HUD's presses are what a cancel ends
     bool touch_view_open() const;                          // a match's map view with nothing over it, and not the catch-up picture: what a pan or a zoom needs, at every move

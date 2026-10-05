@@ -1416,6 +1416,40 @@ void test_gates() {
         }
     }
 
+    // A FIRST FINGER WHOSE PRESS HOLDS NOTHING (the frame, a blank part of the panel) does not block the next one (review L4): a tap on the map works while a thumb rests there. (A press that holds
+    // something, a button, the minimap, the chat log, blocks as above.)
+    {
+        s.look();                                                           // (the view over the scene: the worker is on the screen)
+        app.set_zoom(1.0f, 100, 100);
+        const Pt g_ground = s.ground(3, 3);
+        const std::vector<Pt> thumbs = {Pt{6, view.y + 150}, Pt{app.picture().w - 8, view.y + 300}};
+        for (const Pt& thumb : thumbs) {
+            s.clear();
+            hand.down(1, thumb);
+            hand.frame();
+            check(app.touch().mode() == TouchControl::Mode::Left && !app.hud().is_input_captured() && !app.hud().chat_dragging() && !app.hud().is_modal_open(),
+                  "(a thumb rests at " + show(thumb) + ": a plain press that holds nothing)");
+            const Pt on = s.on_ant(s.worker);
+            hand.down(2, on);
+            hand.wait(60);
+            hand.up(2, on);
+            hand.frame();
+            check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker} && app.touch().fingers() == 1 && app.touch().ignored() == 1,
+                  "a tap on the map while a thumb rests at " + show(thumb) + ": it selects the worker (the thumb's press holds nothing, so it does not block)");
+            const uint32_t holds = app.touch().stats().holds;
+            hand.down(2, g_ground);
+            hand.frame();
+            hand.rest(touch::kHoldMs + 40);
+            check(app.touch().stats().holds == holds + 1 && app.touch().mode() == TouchControl::Mode::Right, "a hold of the second finger works too, the thumb still resting");
+            hand.up(2, g_ground);
+            hand.frame();
+            hand.up(1, thumb);
+            hand.frame();
+            check(app.touch().fingers() == 0 && !app.hud().is_input_captured(), "(both fingers are gone)");
+            s.clear();
+        }
+    }
+
     // the second finger lands AFTER something opened under the first: the first finger began on the map, then the results came up (the match ended): no pair
     {
         hand.down(1, a);
@@ -1499,7 +1533,17 @@ void test_gates() {
         hand.up(1, Pt{modal.x + no.x + no.w / 2, modal.y + no.y + no.h / 2});     // (the first finger slid to No before it lifted: nothing is pressed on it)
         hand.frame();
         check(app.hud().is_quit_dialog_open(), "a finger that pressed Yes and lifted on No does not close the dialog (a captured button, as for the mouse)");
-        app.hud().close_quit_dialog();
+        // a press on a dialog's button is that dialog's own: a second finger that lands meanwhile does not take it away (only a press that holds nothing on the match screen is let go of)
+        hand.down(1, Pt{modal.x + no.x + no.w / 2, modal.y + no.y + no.h / 2});
+        hand.frame();
+        hand.down(2, a);
+        hand.wait(60);
+        hand.up(2, a);
+        hand.frame();
+        check(app.hud().is_quit_dialog_open() && app.hud().quit_no_button().is_pressed, "(No is pressed, and a second finger came and went on the map under the dialog)");
+        hand.up(1, Pt{modal.x + no.x + no.w / 2, modal.y + no.y + no.h / 2});
+        hand.frame();
+        check(!app.hud().is_quit_dialog_open(), "the first finger's lift on No still closes the dialog: its press was not taken away");
         app.hud().open_options();
         const LayoutPoint page = app.layout().options_offset();
         hand.tap(Pt{page.x + OptionsScreen::RETURN_X + OptionsScreen::RETURN_W / 2, page.y + OptionsScreen::RETURN_Y + OptionsScreen::RETURN_H / 2});

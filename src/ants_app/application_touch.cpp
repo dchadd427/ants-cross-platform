@@ -44,6 +44,13 @@ bool Application::touch_match_screen() const {
     return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !hud_.is_modal_open();
 }
 
+// Does the press that a finger made hold something? On the match screen the HUD says: a button, the minimap or the chat log took it, or nothing did (the frame, a blank part of the panel: the
+// press goes nowhere). On a dialog or another screen it is that screen's own, and whatever it is it counts as held.
+bool Application::touch_press_held() const {
+    if (!touch_match_screen()) return true;
+    return hud_.is_input_captured() || hud_.chat_dragging();
+}
+
 // The map view is open to touches: the match screen, and not its catch-up picture (every mouse path is shut there as well: nothing may pan, zoom, wait for a hold or buzz over it)
 bool Application::touch_view_open() const {
     return touch_match_screen() && !catch_up_screen_active();

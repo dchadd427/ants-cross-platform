@@ -158,6 +158,8 @@ struct Env : TouchEnvironment {
     }
     float zoom() const override { return level; }
     std::vector<float> zoom_levels() const override { return list; }
+    bool press_held() const override { return press_is_held; }
+    bool press_is_held{true};                               // what the first finger's press holds (the model alone: it holds); false: the frame, a blank part of the panel
 };
 
 constexpr uint32_t T0 = 1000;
@@ -522,6 +524,97 @@ void test_stall() {
         s.tick(T0 + 16);
         s.down(1, 300, 200, T0 + 1000);
         expect(s.up(1, 300, 200, T0 + 1050), click_at(300, 200, T0 + 1050), "a finger that is down again begins afresh");
+    }
+}
+
+void test_nothing_held() {
+    group("nothing", "a first finger whose press holds nothing (the frame, a blank part of the panel) does not block the next: its press ends, it is ignored until it lifts, and the new finger is the first");
+    {
+        Rig r;                                                  // a thumb on the panel where no control took the press, then a finger on the map
+        r.env.press_is_held = false;
+        expect(r.down(1, 850, 300, T0), {act(Kind::Motion, 850, 300, T0), act(Kind::LeftDown, 850, 300, T0)}, "the thumb: a plain press at once");
+        check(r.touch.mode() == TouchControl::Mode::Left, "(a left press)");
+        const auto landed = r.down(2, 300, 200, T0 + 50);
+        expect(landed, {act(Kind::Cancel, 850, 300, T0 + 50)}, "a finger lands on the map: the thumb's press ends with no act, and the new finger waits (nothing is sent for it yet)");
+        check(landed.size() == 1 && !landed[0].right, "(the left button's)");
+        check(r.touch.mode() == TouchControl::Mode::Waiting && r.touch.fingers() == 2 && r.touch.ignored() == 1, "the thumb is ignored, the new finger is the first and waits");
+        double x = 0.0;
+        double y = 0.0;
+        check(r.touch.primary_point(x, y) && x == 300.0 && y == 200.0, "(the first finger is the one on the map)");
+        expect_none(r.move(1, 860, 310, T0 + 70), "the thumb moves: nothing");
+        expect(r.up(2, 300, 200, T0 + 120), click_at(300, 200, T0 + 120), "the new finger's tap is a click at its own point");
+        expect_none(r.up(1, 860, 310, T0 + 200), "the thumb's lift: nothing (no release is sent twice)");
+        check(idle(r), "all gone");
+    }
+    {
+        Rig r;                                                  // the thumb goes on resting through every touch that follows: each of them is a first finger, none is blocked by it
+        r.env.press_is_held = false;
+        r.down(1, 850, 300, T0);
+        expect(r.down(2, 300, 200, T0 + 100), {act(Kind::Cancel, 850, 300, T0 + 100)}, "the first touch with the thumb resting: the thumb's press ends");
+        expect(r.up(2, 300, 200, T0 + 180), click_at(300, 200, T0 + 180), "and the tap is a click");
+        expect(tap(r, 3, 320, 220, T0 + 300), {act(Kind::Motion, 320, 220, T0 + 380), act(Kind::LeftDown, 320, 220, T0 + 380), act(Kind::LeftUp, 320, 220, T0 + 380)}, "a second tap with the thumb still resting: a click");
+        expect(tap(r, 2, 340, 240, T0 + 500), {act(Kind::Motion, 340, 240, T0 + 580), act(Kind::LeftDown, 340, 240, T0 + 580), act(Kind::LeftUp, 340, 240, T0 + 580)}, "and a third, with the id of the first tap's finger again");
+        check(r.touch.fingers() == 1 && r.touch.ignored() == 1 && r.touch.stats().taps == 3, "(only the thumb is left, and it is ignored)");
+        expect_none(r.up(1, 850, 300, T0 + 700), "its lift: nothing");
+        check(idle(r), "gone");
+        Rig b;                                                  // a finger that is left after a pair still blocks, by design (it is not spent)
+        b.env.press_is_held = false;
+        b.down(1, 300, 200, T0);
+        b.down(2, 400, 200, T0 + 10);
+        b.up(2, 400, 200, T0 + 100);
+        expect_none(b.down(3, 500, 200, T0 + 200), "after a pair the finger that is left is ignored, and so is every finger that lands while it rests: re-gripping a pinch does nothing");
+        check(b.touch.ignored() == 2, "(two ignored fingers)");
+    }
+    {
+        Rig r;                                                  // the press holds something (the default, and a button): it blocks, as it always did
+        expect(r.down(1, 850, 300, T0), {act(Kind::Motion, 850, 300, T0), act(Kind::LeftDown, 850, 300, T0)}, "a press on a control");
+        expect_none(r.down(2, 300, 200, T0 + 50), "a finger on the map while the press holds something: ignored");
+        check(r.touch.mode() == TouchControl::Mode::Left && r.touch.ignored() == 1, "the press goes on");
+    }
+    {
+        Rig r;                                                  // the new finger holds on the map: the hold fires from a frame, with the thumb still resting
+        r.env.press_is_held = false;
+        r.down(1, 850, 300, T0);
+        r.down(2, 300, 200, T0 + 50);
+        expect(r.tick(T0 + 50 + touch::kHoldMs), {act(Kind::Motion, 300, 200, T0 + 50 + touch::kHoldMs), act(Kind::RightDown, 300, 200, T0 + 50 + touch::kHoldMs), act(Kind::HoldFired, 300, 200, T0 + 50 + touch::kHoldMs)},
+               "a hold of the new finger, the thumb resting");
+        expect(r.up(2, 305, 205, T0 + 700), {act(Kind::RightUp, 305, 205, T0 + 700)}, "and its release");
+        expect_none(r.up(1, 850, 300, T0 + 800), "(the thumb's lift: nothing)");
+        check(idle(r), "gone");
+    }
+    {
+        Rig r;                                                  // two fingers on the map with the thumb resting: they pan (the thumb is no third finger that blocks)
+        r.env.press_is_held = false;
+        r.down(1, 850, 300, T0);
+        r.down(2, 300, 200, T0 + 50);
+        r.down(3, 400, 200, T0 + 60);
+        check(r.touch.mode() == TouchControl::Mode::Two && r.touch.ignored() == 1, "a second finger on the map makes a pair with the first, the thumb stays ignored");
+        const auto moved = framed_move(r, 3, 420, 200, T0 + 80);
+        bool panned = false;
+        for (const TouchAction& a : moved) panned = panned || a.kind == Kind::Pan;
+        check(panned, "and the pair pans: " + show(moved));
+    }
+    {
+        Rig r;                                                  // a finger on the HUD too: the new press is made at once, and the first is let go of
+        r.env.press_is_held = false;
+        r.down(1, 850, 300, T0);
+        expect(r.down(2, 855, 305, T0 + 50), {act(Kind::Cancel, 850, 300, T0 + 50), act(Kind::Motion, 855, 305, T0 + 50), act(Kind::LeftDown, 855, 305, T0 + 50)},
+               "a second finger on the panel: the first press ends, the second is a press at once");
+        expect(r.up(2, 855, 305, T0 + 90), {act(Kind::LeftUp, 855, 305, T0 + 90)}, "its release");
+        check(r.touch.fingers() == 1 && r.touch.ignored() == 1, "(the first finger is still ignored)");
+    }
+    {
+        Rig r;                                                  // never for a finger that began on the map (a drag), nor for the minimap's press, whatever the environment says
+        r.env.press_is_held = false;
+        r.down(1, 300, 200, T0);
+        r.move(1, 340, 200, T0 + 40);
+        const auto landed = r.down(2, 450, 200, T0 + 80);
+        check(landed.size() == 1 && landed[0].kind == Kind::Cancel && r.touch.mode() == TouchControl::Mode::Two, "a drag on the map and a second finger: the pair, as before: " + show(landed));
+        Rig m;
+        m.env.press_is_held = false;
+        m.down(1, 800, 50, T0);
+        expect_none(m.down(2, 300, 200, T0 + 50), "a finger on the map while the first rests on the minimap: ignored, whatever the environment says");
+        check(m.touch.mode() == TouchControl::Mode::MinimapWait && m.touch.ignored() == 1, "(the minimap press goes on)");
     }
 }
 
@@ -1836,6 +1929,7 @@ int main(int argc, char* argv[]) {
     test_tap();
     test_hold();
     test_stall();
+    test_nothing_held();
     test_late();
     test_primary_point();
     test_ring();
