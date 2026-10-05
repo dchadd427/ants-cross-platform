@@ -1,9 +1,8 @@
 # Status
 
-_Updated 2026-10-05 00:57 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 01:58 PDT · current release **v0.5.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- Every page in the original game's look (release v0.5.1): the changelog pages, "Sprites and sounds" and the way back from a shared link's page are done; the game page is finishing its checks
 - Matches that survive a server restart, phase 2 (high priority): built, checked in a real browser and reviewed; the review's fixes are in progress, then the release (v0.6.0)
 - One start card for every game, all online: your colour, a friend or a bot level for each other colour, invite links in the card; with online bot games and teams (network protocol 13): built and checked in a real browser, ships after v0.6.0 with the short room codes
 - Short room codes: 8 random letters and numbers instead of the long code, a mistyped code says "no such match", and the word "demo" is gone from the codes, the server settings and the docs (planned: starts when the one card and the reconnect fixes are merged; same release, v0.7.0)
@@ -24,6 +23,7 @@ _Updated 2026-10-05 00:57 PDT · current release **v0.5.0** · details: [CHANGEL
 - Dead-code cleanup, trimming the biggest documents, Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **v0.5.1** every page in the front page's look: the game page, the changelog pages and "Sprites and sounds" (with fixes for phones); a way back to the front page from the page that a shared link opens
 - **v0.5.0** a new front page in the original game's style (two cards, one-click bot levels, "How it works"); game statistics on it: matches being played, players online, games played
 - **v0.4.0** many zoom levels, down to the whole map, in online matches too; a level for each bot and teams before a game against bots; your name in single player on the desktop; your own orders show at once in online matches (opt-in: `?prediction=on`); the start scripts open one game with the menu
 - **v0.3.0** computer players that gather food, raid and fight back (Easy, Medium, Hard, four styles; a stuck bot backs off); the front page is the lobby, with single player against bots in the same tab; the map keeps scrolling just past the game's edge in a browser window; the ants behind the start dialog again; restart records on the server (off by default)

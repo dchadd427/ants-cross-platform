@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.5.1 - 2026-10-05 - Every page in the front page's look
 
 **For players:**
 - **Every page in the front page's look:** the game page, the changelog pages and "Sprites and sounds" now have the front page's clay, thin green frame, teal buttons and black boxes, the "ants!" logo (a link back to the front page; on the game page it asks first while a match runs, as Menu does) and a Play button. The game page's loading screen shows the logo and a teal bar, and on a phone its header is one row (the logo, Menu, Fullscreen and a More button). Nothing about the game, its keys or its addresses changed; the picture is 3 to 7 percent smaller at common window sizes, because of the frame's room.
