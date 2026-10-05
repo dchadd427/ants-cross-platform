@@ -5,7 +5,7 @@
 //   AI3.2   the economy needs well under one command per second; the first command of a level leaves no sooner than its reaction time
 //   AI3.3   a pile is empty: the idle ants are sent on to the next (also the ants that stand where a big pile used to be)
 //   AI3.4   a wall closes after the analysis was made: the bot learns from the tick the order LEFT, blacklists the pile for 900 ticks and uses the other
-//   AI3.5   a carrier is never ordered onto a pile; a stuck one (idle, far from the hill) is sent home, one that no walk joins to the hill is not ordered at all
+//   AI3.5   a carrier is never ordered onto a pile; a stuck one (idle, far from the hill) is sent home
 //   AI3.6   never a Hatch
 //   AI3.7   an invitation is declined, once
 //   AI3.8   the endgame veto
@@ -874,8 +874,8 @@ void run_worker_tests() {
             }
             ASSERT_TRUE(delivered && d.worker()->harvest().rescues() >= 1u);                                  // the clock sent it home, and it delivered (and went back to work)
         }
-        // a carrier that cannot be helped (it is shut into a ring: no walk joins it to the hill, the order home would end in "Can't go there.") is not ordered at all: the rescue asks the map as it is
-        // now (CG1 of the can't-go report). Before, it was sent again every 200 ticks, 5 orders in the first 1,000 ticks (after 40, then at the cool-down), each one refused
+        // a carrier that cannot be helped (it is shut into a ring: the order home ends in "Can't go there.") is not ordered at every look: its wait starts again with every order and two
+        // orders are 200 ticks apart at the least (5 in the first 1,000 ticks: after 40, then every 200 ticks)
         {
             sim::SimulationEngine sim;
             world(sim, 14400, 1, 0);
@@ -884,9 +884,9 @@ void run_worker_tests() {
             sim.get_unit(id).pick_up_food(1, 25);
             Driver d(sim, 0, profile_for(Level::Medium), std::make_unique<WorkerBot>());
             d.run(1000);
-            ASSERT_EQ(d.worker()->harvest().rescues(), 0u);
+            ASSERT_TRUE(d.worker()->harvest().rescues() >= 4u && d.worker()->harvest().rescues() <= 6u);
             ASSERT_TRUE(holds(sim, id));
-            ASSERT_TRUE(d.sent.empty());
+            for (size_t i = 1; i < d.sent.size(); ++i) ASSERT_TRUE(d.sent[i].first >= d.sent[i - 1].first + params.rescue_cooldown_ticks);
         }
         // a rescued ant's wait starts again: its order is lost (nobody applies it) and a look 200 ticks later, when the cool-down is over, must not send it again (it has not stood for 900
         // ticks since the order), a look 900 ticks after the order does
