@@ -4,6 +4,7 @@ add_library(ants_ai STATIC
     bot.cpp
     bot_view.cpp
     map_info.cpp
+    island_info.cpp
     bot_controller.cpp
     tasks.cpp
     tactics.cpp
