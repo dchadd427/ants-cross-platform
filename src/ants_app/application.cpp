@@ -460,6 +460,9 @@ bool Application::init(const ApplicationConfig& config) {
     // Several games on one screen: the click that activates a window is also a click in it (the first click on a background window is not lost)
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
+    // A touch screen's fingers are the touch model's (application_touch.cpp): SDL's own emulation, which made the first finger a left mouse button, is off so that nothing reaches the game twice
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+
     if (SDL_Init(sdl_flags) != 0) {
         std::cerr << "[Application] SDL_Init Error: " << SDL_GetError() << std::endl;
         return false;
@@ -1454,6 +1457,7 @@ void Application::run_frame() {
 void Application::set_page_hidden(bool hidden) {
     if (hidden == page_hidden_) return;
     if (hidden) {
+        cancel_touch();                                      // (the browser may never say that a finger lifted while the page was away)
         page_hidden_ = true;                                 // from now on the wake-ups may drive a network match: the first one counts the time since the last frame
         last_frame_run_ = 0;                                 // (only a frame that runs from now on shows that the browser still delivers frames)
         hidden_since_ = now_counter();
@@ -1586,6 +1590,12 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
     if (g_web_app != nullptr) g_web_app->background_pump();
 }
 
+// For the page (web/shell.html): the browser took the touch away (touchcancel: a system gesture, a call, the lock screen) or the page lost it: no finger is tracked any more and a press that a finger
+// held ends with no act. SDL turns a touchcancel into the finger's lift as well, which the touch model finds unknown by then and ignores.
+extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel() {
+    if (g_web_app != nullptr) g_web_app->cancel_touch();
+}
+
 // For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The selector of the picture under the game restarts the game
 // (the picture is made when the game starts), so it asks the player first when this says 1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
@@ -1598,7 +1608,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the corner's "delay" in ms as the player reads it (the felt delay while the prediction is on, the
 // network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 cooling down after its budget; 10: the
 // orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
-// 15: reads 0 and starts again).
+// 15: reads 0 and starts again). The touch model, for the page's browser check: 16: the taps, 17: the holds, 18: the drags, 19: the two-finger gestures, 20: the fingers that are tracked, 21: what the model
+// is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 22: the slop in picture pixels times 100.
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
     if (g_web_app == nullptr) return -1;
@@ -1642,6 +1653,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             g_frame_work_max_ms = 0.0;
             g_frame_work_frames = 0;
             return 0;
+        case 16: return static_cast<int>(g_web_app->touch().stats().taps);
+        case 17: return static_cast<int>(g_web_app->touch().stats().holds);
+        case 18: return static_cast<int>(g_web_app->touch().stats().drags);
+        case 19: return static_cast<int>(g_web_app->touch().stats().two_finger);
+        case 20: return static_cast<int>(g_web_app->touch().fingers());
+        case 21: return static_cast<int>(g_web_app->touch().mode());
+        case 22: return static_cast<int>(g_web_app->touch_slop() * 100.0 + 0.5);
         default: return -1;
     }
 }
@@ -1710,7 +1728,22 @@ void Application::handle_events() {
         screen_before = now_screen;
         left_event = false;
     };
-    while (SDL_PollEvent(&event)) {
+    bool touch_timers_run = false;                           // the touch model's clock runs once per call, after the events (a finger that rests makes a hold due without any event)
+    for (;;) {
+        if (!touch_queue_.empty()) {
+            if (!take_touch_event(event)) continue;          // (a pan, a zoom, the end of a press: done there; a mouse event is handled below like any that SDL sends)
+        } else if (SDL_PollEvent(&event)) {
+            if (event.type == SDL_FINGERDOWN || event.type == SDL_FINGERMOTION || event.type == SDL_FINGERUP) {
+                feed_touch(event.tfinger);                   // (what the model says is queued and comes first, before the next event of SDL's)
+                continue;
+            }
+        } else if (!touch_timers_run) {
+            touch_timers_run = true;
+            queue_touch(touch_.update(touch_now()));
+            continue;
+        } else {
+            break;
+        }
         watch_screen();
         left_event = (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) && event.button.button == SDL_BUTTON_LEFT;
         left_event_ms = left_event ? event.button.timestamp : 0u;
@@ -1871,6 +1904,7 @@ bool Application::button_outside_window(const SDL_MouseButtonEvent& button) cons
 
 void Application::handle_window_event(const SDL_WindowEvent& we) {
     if (we.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+        cancel_touch();                                                        // (a finger whose lift will never be heard of must not hold a press, nor block the next ones)
         set_app_active(false);
         if (!config_.headless) SDL_ShowCursor(SDL_ENABLE);                     // not ours to hide while another window has the input
     }
@@ -1887,6 +1921,7 @@ void Application::handle_window_event(const SDL_WindowEvent& we) {
         if (!config_.headless) SDL_ShowCursor(SDL_ENABLE);
     }
     if (we.event == SDL_WINDOWEVENT_MINIMIZED || we.event == SDL_WINDOWEVENT_HIDDEN) {
+        cancel_touch();
         is_paused_ = true;
         midi_player_.pause();
     }

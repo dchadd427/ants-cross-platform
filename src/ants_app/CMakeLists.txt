@@ -60,6 +60,7 @@ add_library(ants_app STATIC
     host_lookup.cpp
     application.cpp
     application_menu.cpp
+    application_touch.cpp
 )
 
 if(NOT EMSCRIPTEN)

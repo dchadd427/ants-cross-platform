@@ -237,6 +237,15 @@ public:
     /// the mouse (a rubber band, the minimap, a button, the right button, the chat log's drag): a zoom in the middle of a drag would move the world under it. The position is the
     /// caller's (over_map: the pointer must be over the map view, not over a panel).
     bool view_zoom_allowed() const noexcept { return !is_modal_open() && !is_input_captured() && !chat_dragging_; }
+    /// May a touch screen's two fingers move and zoom the view now? As view_zoom_allowed, except that the press that the first finger holds on the map view itself (a rubber band, the right
+    /// button's press there) is no reason to refuse: the gesture ends it (cancel_press). Any other press (a button, the minimap, the chat log) still is.
+    bool view_gesture_allowed() const noexcept {
+        return !is_modal_open() && !chat_dragging_ && !is_radar_dragging_ && right_capture_ != 2 && !help_button_.is_pressed && !options_button_.is_pressed && !quit_button_.is_pressed &&
+               !send_to_button_.is_pressed && !team_button_.is_pressed;
+    }
+    /// Every press that is in progress ends with no act: the rubber band (no selection), the minimap's and the right button's press (no order), the chat log's drag and the pressed buttons
+    /// (nothing fires). For a touch that the browser took away, or that a second finger turned into a gesture. A dialog's or a page's own press is not touched (it ends as a release).
+    void cancel_press() noexcept;
 
     // Status line (Ants.exe PostStatus): one slot, 5 s life, flash flag; see status_line.hpp
     void post_status(const std::string& text, bool flash = false) { status_line_.post(text, flash); }

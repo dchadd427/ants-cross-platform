@@ -784,3 +784,38 @@ endif()
 
 add_test(NAME test_touch_model COMMAND test_touch_model)
 set_tests_properties(test_touch_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Touch controls in the application: synthetic finger events through the real event loop of a headless application (tap, drag and hold against the mouse's click, band and right click, the pan and the
+# pinch, the places where two fingers do nothing, cancels, the late press, the other screens, the window's letterbox, the slop's size)
+add_executable(test_touch_app
+    test_touch_app.cpp
+)
+
+target_include_directories(test_touch_app PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_touch_app PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_touch_app PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_touch_app PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_touch_app PRIVATE ants_test_paths)
+
+add_test(NAME test_touch_app COMMAND test_touch_app)
+set_tests_properties(test_touch_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

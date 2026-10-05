@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <ctime>
+#include <deque>
 #include <functional>
 #include <string>
 #include <memory>
@@ -42,6 +43,7 @@
 #include "ants_app/net_overlay.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
+#include "ants_app/touch_control.hpp"
 #include "ants_app/room_chat.hpp"
 #include "ants_app/setup_layout.hpp"
 #include "ants_app/screen_layout.hpp"
@@ -284,6 +286,25 @@ public:
     /// The level that the player chose last (what the next match starts with: the nearest level that its map offers); the match's own level is `zoom()`
     float remembered_zoom() const noexcept { return zoom_wanted_; }
 
+    /// TOUCH CONTROLS (touch_control.hpp): a touch screen's fingers (SDL_FINGERDOWN, SDL_FINGERMOTION, SDL_FINGERUP: SDL's own touch-to-mouse emulation is switched off, so that nothing reaches the game
+    /// twice) go to the model, which says what to do: the same mouse events that SDL's emulation made for the first finger (a tap, a drag), the right button for a hold, and for two fingers on the map view a pan
+    /// (`pan_view`) and a zoom (`set_zoom`). Nothing here is a command that a mouse cannot give, and the simulation never sees any of it. Only the touch screens (SDL_TOUCH_DEVICE_DIRECT) count: a trackpad's
+    /// touches are not positions on the picture. The model and its clock are public for the tests; the clock is SDL's millisecond ticks (the events' own), which a test replaces.
+    const TouchControl& touch() const noexcept { return touch_; }
+    void set_touch_clock(std::function<uint32_t()> clock) { touch_clock_ = std::move(clock); }
+    uint32_t touch_now() const { return touch_clock_ ? touch_clock_() : SDL_GetTicks(); }
+    /// The size of a finger's wobble that is still a tap or a hold, in picture pixels: 8 CSS pixels of the game box (touch::slop_pixels), whatever the window or the page's box makes of the picture
+    double touch_slop() const;
+    /// Scrolls the map view by (dx, dy) screen pixels of the picture, the way fingers that drag the world do: the world follows them, so the view moves the opposite way, by the same distance on the screen
+    /// at every zoom (as the minimap and the edge scroll move it), held inside the map. True when the view moved.
+    bool pan_view(int32_t dx, int32_t dy);
+    /// The browser took the touch away, the window lost the focus, the page was hidden: no finger is tracked any more and a press that a finger held ends with no act (the next frame hands it to the HUD)
+    void cancel_touch();
+    /// Is a touch device's finger one of the model's? Not a platform's own touch made from the mouse, and not a trackpad's (a touch screen counts, and so does a device that SDL does not know: a test's)
+    static bool counts_as_finger(SDL_TouchID device, SDL_TouchDeviceType kind) noexcept;
+    /// How many holds have fired their feedback (the buzz of the web build): for the tests
+    uint32_t touch_feedbacks() const noexcept { return touch_feedbacks_; }
+
     /// Alt+Enter (native builds): the window leaves fullscreen or enters it (SDL's desktop fullscreen, the same as --fullscreen); true when it is fullscreen afterwards. The web
     /// build has the page's own button and never does; a macOS fullscreen Space (the green button) is left with the operating system's own controls.
     bool toggle_fullscreen();
@@ -474,6 +495,24 @@ private:
         ~OrdersNoted() { app.note_orders(); }
     };
     uint32_t frame_ms() const { return static_cast<uint32_t>(static_cast<double>(now_counter()) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency())); }   // ... in milliseconds
+    // Touch controls (application_touch.cpp)
+    struct TouchEnv final : TouchEnvironment {
+        explicit TouchEnv(Application& application) : app(application) {}
+        TouchZone zone_at(double x, double y) const override { return app.touch_zone_at(x, y); }
+        bool two_fingers_allowed(double x, double y) const override { return app.touch_two_fingers_allowed(x, y); }
+        float zoom() const override { return app.zoom(); }
+        std::vector<float> zoom_levels() const override { return app.zoom_levels(); }
+        Application& app;
+    };
+    TouchZone touch_zone_at(double x, double y) const;
+    bool touch_two_fingers_allowed(double x, double y) const;
+    bool touch_view_open() const;                          // a match's map view with nothing over it: what a pan or a zoom needs, at every move
+    void feed_touch(const SDL_TouchFingerEvent& finger);   // a finger's event: the model, and what it says is queued
+    void queue_touch(const TouchControl::Actions& actions);
+    bool take_touch_event(SDL_Event& event);                // the next queued action as the mouse event that it is; the others (pan, zoom, cancel, feedback) are done here, and false is returned
+    void run_touch_action(const TouchAction& action);
+    bool touch_late_press_still_fits(const TouchAction& action) const;
+    void touch_feedback();                                   // the hold's feedback (a buzz where the browser has one)
     void apply_pending_music();                           // what a hidden page's steps left for the ears: the music of a match that began, ended or was lost meanwhile
     void note_hidden_period();                            // the page is shown again: the console's line about the period
     void play_effect(uint32_t sound_id, uint32_t owner = 0);   // a sound effect that no tick makes: none in a background step
@@ -562,6 +601,11 @@ private:
         int map{0};                                       // hosting: the index of the map that the player chose (menu_map)
         double elapsed_ms{0.0};                           // how long the attempt has taken (its time limit, menu_connect_timeout_ms)
     } menu_conn_;
+    TouchEnv touch_env_{*this};
+    TouchControl touch_{touch_env_};                       // what one finger or two do on the match screen
+    std::deque<TouchAction> touch_queue_;                  // what the model said and the event loop has not done yet (always the actions of one finger event, and what a cancel adds)
+    std::function<uint32_t()> touch_clock_;                // set_touch_clock: a test's clock (empty: SDL's ticks)
+    uint32_t touch_feedbacks_{0};
     int32_t mouse_screen_x_{320};
     int32_t mouse_screen_y_{240};
     bool mouse_has_moved_{false};
