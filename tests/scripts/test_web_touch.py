@@ -178,7 +178,7 @@ class TheGame(PageCase):
     def test_the_game_exports_what_the_page_and_the_browser_check_use(self):
         source = read(APPLICATION)
         self.found(source, r'extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel\(\)')
-        for case in range(16, 23):
+        for case in range(30, 37):
             self.found(source, r"case %d: return " % case, "ants_probe has no case %d for the touch model" % case)
         self.assertIn('SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");', source)
 
@@ -206,7 +206,7 @@ class TheBrowserCheck(PageCase):
     def test_it_reads_only_what_the_game_exports(self):
         game = read(APPLICATION)
         wanted = set(int(n) for n in re.findall(r"(?:probe|\bp)\((\d+)\)", self.source))
-        self.assertTrue({3, 4, 5, 6, 16, 17, 18, 19, 20, 21, 22} <= wanted, "the check reads the view, the zoom and the touch model: %s" % sorted(wanted))
+        self.assertTrue({3, 4, 5, 6, 30, 31, 32, 33, 34, 35, 36} <= wanted, "the check reads the view, the zoom and the touch model: %s" % sorted(wanted))
         for n in sorted(wanted):
             self.found(game, r"case %d: return " % n, "the check reads ants_probe(%d), which the game does not answer" % n)
         for name in ("_ants_touch_cancel", "_ants_match_running"):
