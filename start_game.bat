@@ -11,9 +11,9 @@ rem                                  red, blue in the first three cells of the g
 rem                                  --players 1 is the plain game
 rem   start_game.bat --single        the plain game (the default; the same as --players 1)
 rem   start_game.bat --dry-run ...   print the command line of every window and stop (nothing is built or started)
-rem   every other argument goes to every window (the game's own options, see README.md)
+rem   every other argument goes to every window (the game's own options, see docs/COMMAND_LINE.md)
 rem   --host, --join, --bot, --lan-list, --headless, --screenshot and --map are options of one game: given without --players they make this a single game,
-rem   so that `start_game.bat --host --name Alice` and `start_game.bat --join 192.168.1.20` still do what the README says. --bot cannot be combined with
+rem   so that `start_game.bat --host --name Alice` and `start_game.bat --join 192.168.1.20` still do what docs/COMMAND_LINE.md says. --bot cannot be combined with
 rem   --players (the other windows are guests, and a guest runs no bots: a game against bots is one window; use --host --bot and let others join it)
 rem
 rem Environment: ANTS_PORT (the room's TCP port, default 4001).

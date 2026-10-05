@@ -5,7 +5,7 @@ the game instead of random", and "when joining a link from somebody else, it sho
   - the pages' own code is RUN (node, when it is installed): the rules of a name (the desktop start menu's), the name step, the gate that holds the game of a shared link back until the name
     is chosen, and the whole of web/lobby.html with a small fake of the browser's DOM: the shared field is remembered and filled in, its name goes to the seat that this person plays, bad
     names start nothing, a name with < > & is only ever text, an empty field falls back to the random names, a shared link asks first (tests/scripts/web_name_check.js);
-  - what needs no browser is read from the files: the old join-only field is gone, the one field is there, the README and docs/NETWORK_PORT.md say what the page does.
+  - what needs no browser is read from the files: the old join-only field is gone, the one field is there, docs/PLAY_IN_BROWSER.md and docs/NETWORK_PORT.md say what the page does.
 """
 import os
 import re
@@ -53,10 +53,10 @@ class TheMarkup(unittest.TestCase):
 
 
 class TheDocuments(unittest.TestCase):
-    def test_the_readme_and_the_network_notes_say_what_the_pages_do(self):
-        readme = read(os.path.join(REPO, "README.md"))
-        self.assertIn("`ants.name`", readme)
-        self.assertIn("asks for your name first, every time", readme)
+    def test_the_browser_page_and_the_network_notes_say_what_the_pages_do(self):
+        page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
+        self.assertIn("`ants.name`", page)
+        self.assertIn("asks for your name first, every time", page)
         notes = read(os.path.join(REPO, "docs", "NETWORK_PORT.md"))
         self.assertIn("asksForName", notes)
         self.assertIn("no `name` parameter at all", notes)
