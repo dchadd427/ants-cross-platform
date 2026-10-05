@@ -103,3 +103,14 @@ Counted by replaying recorded matches with the locomotion trace (every ant that 
 - **Who gets to a dropped Fire power-up first** (a refinement of the safe fire-in on maps with droppers, see "Known limits").
 - **A forward guard**: before the escorts waited for a Fire Ant, two Combat Ants parked at the best opponent's entrance and punched what came in and out. It was worth about 8 points of win rate to the Hard aggressive style on TREASURE (26.7 against 18.1 percent, 144 matches) and to Hard on GAUNTLET (32.8 against 25.0, 64 matches), and it was an accident of the rule, not a design; a bot that waits at an enemy's gate with no purpose is the owner's to decide, and it is left to stage 2.
 - **Stage 2** (bombers, power-ups, the specials, the flower droppers, the rush of the enemy's Fire power-up before the fire-in): not built; nothing here makes it harder (`can_put_out` of the fire-in is the rule that the rush would satisfy).
+
+## What the owner decided about the calls of this batch (2026-10-05, Pacific morning)
+
+The hand-back of the batch marked four things as the owner's to decide, each with what the batch had built; he approved all four as built.
+
+- **Hunts** stay (two blows; `hunt=0` is the plan without them): half a kill a match more, and 6 points of win rate on Hard GAUNTLET.
+- **The safe fire-in** stays as built, with its cost of about 4 points of win rate on SMALL at Hard (the flowers there drop Fire power-ups); `sabsafe=0` is the old fire-in. A fire-in that also works where this one refuses (take or deny the Fire power-ups first) is stage 2.
+- **A forward guard** (two Combat Ants parked at the best opponent's entrance) stays out; stage 2 may build one on purpose.
+- **MEDIUM at Hard, near 23 percent against three bots of v0.5.0**, is accepted as it is (noise, or no single rule); nothing in the batch moves it.
+
+Nothing in the code changed for these decisions: the bot is what the batch built.
