@@ -111,7 +111,8 @@ class TheStyle(unittest.TestCase):
     def test_the_page_scrolls_as_a_document_on_a_phone_and_keeps_its_own_responsive_rules(self):
         phone = STYLE[STYLE.index("@media (max-width: 768px)"):]
         for needle in ("overflow-y: auto !important;", "height: auto !important;", ".table-wrapper {\n      overflow-x: auto;", "#anims-split-container { flex-direction: column;",
-                       ".sprites-grid {\n      grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));", ".meta-grid {\n      grid-template-columns: 1fr;", ".search-input-wrapper { flex: 1 1 100%; }"):
+                       ".sprites-grid {\n      grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));", ".meta-grid {\n      grid-template-columns: 1fr;", ".search-input-wrapper { flex: 1 1 100%; }",
+                       ".stage-hint-pill { display: none; }"):
             self.assertIn(needle, phone, needle)
         self.assertIn(".header-actions { grid-column: 2; grid-row: 1; justify-content: flex-end; gap: 8px 10px; }", phone)         # (Play stays on a phone: the old rules hid every button)
         self.assertNotRegex(phone, r"\.header-actions \{\s*display: none;")

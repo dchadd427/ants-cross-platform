@@ -1,6 +1,6 @@
 /* The Classic look of the 1998 game's own menus, for the pages that link this file (the changelog pages, Sprites and sounds): the orange clay, the thin green frame with its red shadow,
    teal bevelled buttons, black inset boxes, gold titles. The pictures and the font (the game's own Libre Franklin, SIL OFL) are beside it, made by tools/front_page_art/make_art.py;
-   nothing is loaded from another site. web/lobby.html and web/shell.html keep inline copies of the colours; tests/scripts/test_web_pages_classic.py keeps all of them the same. */
+   nothing is loaded from another site. web/lobby.html keeps an inline copy of the colours (a page may carry them inline instead of linking this file); tests/scripts/test_web_pages_classic.py keeps them the same. */
 @font-face { font-family: "Libre Franklin"; src: url("LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
 :root {
     --clay: #db4b13;        /* the orange of every menu screen */
