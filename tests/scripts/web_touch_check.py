@@ -23,8 +23,10 @@ What is checked, for each profile:
     close with their own button, not Esc) with the game's own model counting the taps, a HOLD (the right click: counted at 450 ms, its feedback is the buzz where the browser has one,
     nothing where it has not), a hold that moves becomes a drag (counted as one), a DRAG, TWO FINGERS that pan the map by the distance they move (the picture follows them: the view's
     origin moves by the distance in picture pixels) and pinch it a level at a time (200 % when the fingers spread to twice, 50 % back), nothing pans or zooms under a dialog, a cancel
-    leaves nothing held. Only the clear cases of time are tried (80 ms is a tap, 800 ms a hold): the boundaries (a lift between 400 and 450 ms is neither) are the model's tests', because a
-    real browser stamps a lift when its thread gets to it, and a loaded machine is late by tens of milliseconds. Every part starts from a clean state (no finger down, no window open),
+    leaves nothing held. A touch is timed by the game's clock, not by our sleeps (the DevTools call that sends a touch returns when the page has acknowledged it, which takes hundreds of milliseconds on a loaded machine
+    or at a phone's device ratio of 3): a check that depends on the hold time is made only when our wall clock proves what the game's must say (a tap, a drag or a cancel is tried again unless the whole
+    touch took under 360 ms; the first look at a resting finger says "waiting" only if it can have been down at the most 400 ms, and "fired" only if at least 600), and a note says what was seen when it
+    does not. The boundaries (a lift between 400 and 450 ms is neither) are the model's tests'. Every part starts from a clean state (no finger down, no window open),
     so that one failure cannot make the next parts fail;
   * the same in the page's FULLSCREEN (the browser's own on a Pixel; the page's own where there is no Fullscreen API: an iPhone), where the box is another size.
 What headless Chrome cannot show, and the owner's phone must: that the first touch of a page grants the sound (the autoplay policy is switched off for the check), the system's own gestures
@@ -71,6 +73,26 @@ def options_return_button():
     offset_x = vx + vw // 2 - (cx + cw // 2)                                 # (integer divisions, as the layout's)
     offset_y = vy + vh // 2 - (cy + ch // 2)
     return offset_x + x + w / 2, offset_y + y + h / 2
+
+
+# TIME. The game stamps a touch when the page hands it over, and the DevTools call that sends a touch returns when the page has acknowledged it, which on a loaded machine (the game at 13 frames a
+# second, a phone's device ratio of 3) takes hundreds of milliseconds: so our sleeps say little about how long the game thinks a finger has been down. What can be said for sure is a pair of
+# bounds on the game's clock for a finger: it has run at the most from before the touch was sent to the end of the look at the game, and at the least from the end of the sending to the start of
+# the look. A check is made only where the bounds decide it; else it is not made and a note says what was seen (the boundaries themselves are the model's tests').
+HOLD_SECONDS = 0.45                 # touch::kHoldMs
+SURELY_NOT_YET = 0.40               # a finger whose hold clock has run at the most this long cannot have fired its hold
+SURELY_BY_NOW = 0.60                # one whose clock has run at least this long has (a frame later: the margin is the frame)
+QUICK = 0.36                        # a tap or a drag that is timed is tried again unless the whole touch (sent, held, lifted) took less than this by our clock (a tap is up before 400 ms)
+
+
+def hold_expectation(latest, earliest):
+    """What the game must say of a finger that rests on the map: "waiting" (no hold yet), "fired" (the hold has fired: mode 3, one more hold), or None when our clock cannot tell.
+    `latest` is the most that the finger's hold clock can have run, `earliest` the least (seconds)."""
+    if latest < SURELY_NOT_YET:
+        return "waiting"
+    if earliest > SURELY_BY_NOW:
+        return "fired"
+    return None
 
 
 PROFILES = {
@@ -172,10 +194,11 @@ class Game:
         return self.tab.ev("Module._ants_probe(%d)" % what)
 
     def counters(self):
-        return {"taps": self.probe(16), "holds": self.probe(17), "drags": self.probe(18), "two": self.probe(19), "fingers": self.probe(20), "mode": self.probe(21)}
+        """The touch model's state, read in ONE round trip (a look at the game that takes six is not a look at one moment)"""
+        return self.tab.ev("(function () { var p = Module._ants_probe; return {taps: p(16), holds: p(17), drags: p(18), two: p(19), fingers: p(20), mode: p(21)}; })()")
 
     def view(self):
-        return {"x": self.probe(3), "y": self.probe(4), "zoom": self.probe(6), "modal": self.probe(5)}
+        return self.tab.ev("(function () { var p = Module._ants_probe; return {x: p(3), y: p(4), zoom: p(6), modal: p(5)}; })()")
 
     def open(self, query="?aspect=16:9"):
         p = self.profile
@@ -429,18 +452,42 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             print("[web touch] %s: %s" % (label, part))
             game.clean(g)
 
+        def note(text):
+            print("  note: %s: %s" % (label, text))
+
+        def sample(run, tries=5):
+            """`run()` makes a gesture and returns (the most that its timed part can have lasted by the game's clock = our wall time from before the first touch was sent to after the last one,
+            what it saw). The sample is used when that is under QUICK; else it is tried again (the DevTools call that sends a touch was slow: see TIME above). (None, the last time) when no try
+            was quick enough."""
+            lasted = 0.0
+            for _ in range(tries):
+                game.clean(g)
+                lasted, seen = run()
+                if lasted < QUICK:
+                    return seen, lasted
+            return None, lasted
+
         mid = game.at(g, 400, 270)                                          # (a point of the map view that no button covers)
         if wanted("taps"):
             begin("taps")
-            before = game.counters()
-            fingers.down(1, mid[0], mid[1])
-            time.sleep(0.08)
-            fingers.up(1)
-            settle()
-            after = game.counters()
-            check(after["taps"] == before["taps"] + 1 and after["holds"] == before["holds"] and after["drags"] == before["drags"], "%s: a tap on the map is a tap, and only a tap (%s -> %s)" % (label, before, after))
-            # (the boundary between a tap and a hold, and the finger that lingers between them, is not for a browser: the page's thread stamps a lift when it gets to it, and a loaded machine
-            # takes tens of milliseconds more; the model's tests pin it. Here only the clear cases: a touch of 80 ms is a tap, one of 800 ms is a hold)
+            def tapped():
+                before = game.counters()
+                t0 = time.monotonic()
+                fingers.down(1, mid[0], mid[1])
+                time.sleep(0.03)
+                fingers.up(1)
+                lasted = time.monotonic() - t0
+                settle()
+                return lasted, (before, game.counters())
+
+            seen, lasted = sample(tapped)
+            if seen is None:
+                note("no tap could be timed: sending a touch took more than %d ms each time (the machine is loaded); the tap is the model's tests'" % (lasted * 1000))
+            else:
+                before, after = seen
+                check(after["taps"] == before["taps"] + 1 and after["holds"] == before["holds"] and after["drags"] == before["drags"],
+                      "%s: a tap on the map (a touch of at most %d ms) is a tap, and only a tap (%s -> %s)" % (label, lasted * 1000, before, after))
+            # (the boundary between a tap and a hold, and the finger that lingers between them, is not for a browser: see TIME above; the model's tests pin it)
             # a tap on a HUD button: the Options button opens its window, a tap on the window's Return button closes it (a tap works on a window too)
             bx, by = game.at(g, *OPTIONS_BUTTON)
             game.tap(bx, by)
@@ -471,45 +518,78 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             begin("hold")
             buzzes = tab.ev("window.__buzz.length")
             before = game.counters()
+            t_sent = time.monotonic()
             fingers.down(1, mid[0], mid[1])
+            t_down = time.monotonic()
             time.sleep(0.15)
+            t_look = time.monotonic()
             mid_state = game.counters()
-            time.sleep(0.65)                                               # 800 ms in all
+            t_seen = time.monotonic()
+            time.sleep(0.65)                                               # 800 ms in all (by our clock: the game's has run at least that, from the end of the sending)
             held = game.counters()
             fingers.up(1)
             settle()
             after = game.counters()
-            check(mid_state["holds"] == before["holds"] and mid_state["mode"] == 1, "%s: at 150 ms the finger still waits (nothing is held: mode %s)" % (label, mid_state["mode"]))
+            latency = "sending the touch took %d ms, the look %d ms" % ((t_down - t_sent) * 1000, (t_seen - t_look) * 1000)
+            expected = hold_expectation(t_seen - t_sent, t_look - t_down)
+            if expected == "waiting":
+                check(mid_state["holds"] == before["holds"] and mid_state["mode"] == 1, "%s: a finger that went down at most %d ms ago still waits (nothing is held: mode %s) (%s)" % (label, (t_seen - t_sent) * 1000, mid_state["mode"], latency))
+            elif expected == "fired":
+                check(mid_state["holds"] == before["holds"] + 1 and mid_state["mode"] == 3, "%s: a finger that went down at least %d ms ago has fired its hold (mode %s) (%s)" % (label, (t_look - t_down) * 1000, mid_state["mode"], latency))
+            else:
+                note("the first look at the hold (mode %s, holds %s -> %s) is not judged: our clock cannot tell if 450 ms had passed (%s)" % (mid_state["mode"], before["holds"], mid_state["holds"], latency))
             check(held["holds"] == before["holds"] + 1 and held["mode"] == 3, "%s: at 800 ms the hold has fired (counted once) and the right button is held (mode %s)" % (label, held["mode"]))
             check(after["holds"] == before["holds"] + 1 and after["taps"] == before["taps"] and after["fingers"] == 0 and after["mode"] == 0, "%s: the lift ends it: one hold, no tap, nothing held (%s -> %s)" % (label, before, after))
             if profile["vibrate"]:
                 check(tab.ev("window.__buzz.length") == buzzes + 1 and tab.ev("window.__buzz[window.__buzz.length - 1]") == 12, "%s: the hold buzzed once for 12 ms (%s)" % (label, tab.ev("JSON.stringify(window.__buzz)")))
             else:
                 check(tab.ev("window.__buzz.length") == buzzes and not tab.ev("window.__errors.length"), "%s: the hold needed no buzz and raised no error where the browser has none (%s)" % (label, tab.ev("JSON.stringify(window.__errors)")))
-            # a hold that moves away before its time is a drag
-            before = game.counters()
-            fingers.down(1, mid[0], mid[1])
-            time.sleep(0.12)                                                # (well before the hold time: a loaded machine delays the events too)
-            for i in range(1, 7):
-                fingers.move(a=(mid[0] + 9 * i, mid[1] + 3 * i))
-                time.sleep(0.02)
-            time.sleep(0.3)
-            fingers.up(1)
-            settle()
-            after = game.counters()
-            check(after["drags"] == before["drags"] + 1 and after["holds"] == before["holds"], "%s: a finger that moves away within the hold time is a drag, never a hold (%s -> %s)" % (label, before, after))
+            # a hold that moves away before its time is a drag (the first move comes at once after the touch: the game has the finger's down stamp and the move's, and decides by them)
+            def moved_away():
+                before = game.counters()
+                t0 = time.monotonic()
+                fingers.down(1, mid[0], mid[1])
+                time.sleep(0.05)
+                fingers.move(a=(mid[0] + 12, mid[1] + 4))
+                lasted = time.monotonic() - t0
+                for i in range(2, 7):
+                    time.sleep(0.02)
+                    fingers.move(a=(mid[0] + 9 * i, mid[1] + 3 * i))
+                time.sleep(0.3)
+                fingers.up(1)
+                settle()
+                return lasted, (before, game.counters())
+
+            seen, lasted = sample(moved_away)
+            if seen is None:
+                note("no hold-then-drag could be timed: sending the touch and its first move took more than %d ms each time (the machine is loaded)" % (lasted * 1000))
+            else:
+                before, after = seen
+                check(after["drags"] == before["drags"] + 1 and after["holds"] == before["holds"],
+                      "%s: a finger that moves away at most %d ms after it went down is a drag, never a hold (%s -> %s)" % (label, lasted * 1000, before, after))
         if wanted("drag"):
             begin("drag")
-            before = game.counters()
             start = game.at(g, 300, 200)
-            fingers.down(1, start[0], start[1])
-            for i in range(1, 11):
-                fingers.move(a=(start[0] + 8 * i, start[1] + 5 * i))
-                time.sleep(0.02)
-            fingers.up(1)
-            settle()
-            after = game.counters()
-            check(after["drags"] == before["drags"] + 1 and after["taps"] == before["taps"] and after["holds"] == before["holds"], "%s: a drag on the map is a drag (%s -> %s)" % (label, before, after))
+
+            def dragged():
+                before = game.counters()
+                t0 = time.monotonic()
+                fingers.down(1, start[0], start[1])
+                fingers.move(a=(start[0] + 12, start[1] + 7))
+                lasted = time.monotonic() - t0
+                for i in range(2, 11):
+                    time.sleep(0.02)
+                    fingers.move(a=(start[0] + 8 * i, start[1] + 5 * i))
+                fingers.up(1)
+                settle()
+                return lasted, (before, game.counters())
+
+            seen, lasted = sample(dragged)
+            if seen is None:
+                note("no drag could be timed: sending the touch and its first move took more than %d ms each time (the machine is loaded)" % (lasted * 1000))
+            else:
+                before, after = seen
+                check(after["drags"] == before["drags"] + 1 and after["taps"] == before["taps"] and after["holds"] == before["holds"], "%s: a drag on the map is a drag (%s -> %s)" % (label, before, after))
         if wanted("pan"):
             begin("two fingers pan the map")
             view = game.view()
@@ -583,20 +663,30 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             tab.ev("(function () { var orig = Module._ants_touch_cancel; window.__cancelled = 0; Module._ants_touch_cancel = function () { window.__cancelled++; return orig.apply(this, arguments); }; })(); 1")
             before = game.counters()
             fingers.down(1, mid[0], mid[1])
-            time.sleep(0.6)                                                 # the hold has fired: the right button is held
+            time.sleep(0.9)                                                 # the hold has fired (by the game's clock too: it is at least this long since the sending ended): the right button is held
             held = game.counters()
             fingers.cancel()
             settle()
             after = game.counters()
             check(held["mode"] == 3 and after["fingers"] == 0 and after["mode"] == 0, "%s: a touchcancel while a hold is held leaves no finger and nothing held (mode %s -> %s)" % (label, held["mode"], after["mode"]))
             check(tab.ev("window.__cancelled") >= 1, "%s: the page told the game of the touchcancel (%s calls of Module._ants_touch_cancel)" % (label, tab.ev("window.__cancelled")))
-            before = game.counters()
-            fingers.down(1, mid[0], mid[1])
-            time.sleep(0.1)
-            fingers.cancel()
-            time.sleep(0.7)                                                 # (the time a hold would have taken)
-            after = game.counters()
-            check(after["holds"] == before["holds"] and after["fingers"] == 0, "%s: a cancelled finger never becomes a hold (%s -> %s)" % (label, before, after))
+
+            def cancelled():
+                before = game.counters()
+                t0 = time.monotonic()
+                fingers.down(1, mid[0], mid[1])
+                time.sleep(0.05)
+                fingers.cancel()
+                lasted = time.monotonic() - t0
+                time.sleep(0.8)                                             # (longer than a hold takes)
+                return lasted, (before, game.counters())
+
+            seen, lasted = sample(cancelled)
+            if seen is None:
+                note("no cancel could be timed: sending the touch and its cancel took more than %d ms each time (the machine is loaded)" % (lasted * 1000))
+            else:
+                before, after = seen
+                check(after["holds"] == before["holds"] and after["fingers"] == 0, "%s: a finger that was cancelled at most %d ms after it went down never becomes a hold (%s -> %s)" % (label, lasted * 1000, before, after))
 
     if wanted("taps") or wanted("hold") or wanted("drag") or wanted("pan") or wanted("pinch") or wanted("cancel") or wanted("gates"):
         gestures(name, game.scroll_to_box())

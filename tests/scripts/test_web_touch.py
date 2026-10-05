@@ -205,7 +205,7 @@ class TheBrowserCheck(PageCase):
 
     def test_it_reads_only_what_the_game_exports(self):
         game = read(APPLICATION)
-        wanted = set(int(n) for n in re.findall(r"probe\((\d+)\)", self.source))
+        wanted = set(int(n) for n in re.findall(r"(?:probe|\bp)\((\d+)\)", self.source))
         self.assertTrue({3, 4, 5, 6, 16, 17, 18, 19, 20, 21, 22} <= wanted, "the check reads the view, the zoom and the touch model: %s" % sorted(wanted))
         for n in sorted(wanted):
             self.found(game, r"case %d: return " % n, "the check reads ants_probe(%d), which the game does not answer" % n)
@@ -275,6 +275,35 @@ class TheBrowserCheck(PageCase):
         self.assertIn("close_options", self.source)
         self.assertGreaterEqual(len(re.findall(r'begin\("', self.source)), 6, "every part of the gestures starts from a clean state")
         self.assertEqual([line for line in self.source.splitlines() if "check(" in line and "linger" in line], [], "no real-browser check of the 400 - 450 ms boundary (a loaded machine is late by more than its margin)")
+
+    def test_the_hold_is_judged_only_where_our_clock_decides_it(self):
+        # (the first run on a loaded machine found that the DevTools call that sends a touch takes hundreds of milliseconds to return, so sleeps say little of the game's own clock)
+        judge = self.module.hold_expectation
+        self.assertEqual(judge(0.20, 0.10), "waiting", "a finger that went down at the most 200 ms ago cannot have fired")
+        self.assertEqual(judge(0.399, 0.0), "waiting")
+        self.assertIsNone(judge(0.40, 0.0), "at 400 ms by the longest reckoning it may or may not have fired: no judgement")
+        self.assertIsNone(judge(0.80, 0.15), "a touch that took 650 ms to send and was looked at 150 ms later: the same finger may be 150 or 800 ms old")
+        self.assertIsNone(judge(0.80, 0.60), "at the least 600 ms is not yet 'surely fired' (the margin is the frame)")
+        self.assertEqual(judge(0.90, 0.601), "fired")
+        self.assertEqual(judge(1.5, 1.2), "fired")
+        self.assertLess(self.module.SURELY_NOT_YET, self.module.HOLD_SECONDS)
+        self.assertLess(self.module.HOLD_SECONDS, self.module.SURELY_BY_NOW)
+        self.assertLessEqual(self.module.QUICK, 0.40, "a timed tap or drag must have been up or begun by the game's clock before the tap time (400 ms)")
+
+    def test_the_counters_are_read_in_one_round_trip(self):
+        calls = []
+
+        class FakeTab:
+            def ev(self, expression):
+                calls.append(expression)
+                return {}
+
+        game = self.module.Game(FakeTab(), "http://example.invalid/", self.module.PROFILES["pixel"])
+        game.counters()
+        game.view()
+        self.assertEqual(len(calls), 2, "one evaluation for each look (six of them were not a look at one moment)")
+        for expression in calls:
+            self.assertEqual(expression.count("_ants_probe"), 1)
 
     def test_a_bad_command_line_is_status_2_and_asks_for_no_browser(self):
         done = subprocess.run([sys.executable, BROWSER_CHECK, "--web", "http://127.0.0.1:9/", "--profile", "android-tablet"], capture_output=True, text=True, timeout=60)
