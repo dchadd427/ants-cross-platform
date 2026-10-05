@@ -77,8 +77,8 @@ COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py
 RUN cd /src/changelog && \
     GAME_VERSION="v$(head -n 1 /src/VERSION | tr -d '[:space:]')" && \
     BUILD_ID="$(cat /src/build_id.txt)" && \
-    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog_archive.html --other-label "Detailed history" && \
-    python3 changelog_to_html.py CHANGELOG_ARCHIVE.md changelog_archive.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog.html --other-label "Short changelog"
+    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog_archive.html --other-label "Detailed history" --page-link docs/CHANGELOG_ARCHIVE.md=changelog_archive.html && \
+    python3 changelog_to_html.py CHANGELOG_ARCHIVE.md changelog_archive.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog.html --other-label "Short changelog" --page-link CHANGELOG.md=changelog.html --link-base docs
 
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server

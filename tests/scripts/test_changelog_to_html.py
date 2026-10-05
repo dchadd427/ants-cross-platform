@@ -409,5 +409,29 @@ class RealFiles(unittest.TestCase):
             self.assertNotRegex(entry, r"\b[0-9,]+ (assertions|test cases)\b", head)             # no test counts in the short changelog
 
 
+class DockerfileBuildsThePages(unittest.TestCase):
+    """The Dockerfile must build the two pages with the cross links that the commands above carry (without them the short page's 13 links to the detailed history and the archive's link
+    back went to GitHub's file view instead of the site's other page)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dockerfile = read_text(os.path.join(REPO, "Dockerfile"))
+
+    def command(self, input_name):
+        found = [line for line in self.dockerfile.splitlines() if "changelog_to_html.py %s " % input_name in line]
+        self.assertEqual(len(found), 1, "one command builds %s" % input_name)
+        return found[0]
+
+    def test_the_short_page_points_its_links_at_the_detailed_history(self):
+        line = self.command("CHANGELOG.md")
+        self.assertIn("--page-link docs/CHANGELOG_ARCHIVE.md=changelog_archive.html", line)
+        self.assertNotIn("--link-base", line)
+
+    def test_the_detailed_history_points_its_links_at_the_short_page_and_resolves_from_docs(self):
+        line = self.command("CHANGELOG_ARCHIVE.md")
+        self.assertIn("--page-link CHANGELOG.md=changelog.html", line)
+        self.assertIn("--link-base docs", line)
+
+
 if __name__ == "__main__":
     unittest.main()
