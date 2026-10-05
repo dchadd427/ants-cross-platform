@@ -267,10 +267,28 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
                 self.assertNotIn(stale, text, "/".join(parts))
         self.assertIn("kReconnectByDefault = true", read("include", "ants_server", "room_manager.hpp"))
 
+    def test_the_documents_say_what_the_review_of_phase_2_changed(self):
+        """The fixes of the independent review (docs/audit/persist_notes.md): what is said in the network document and the README is what the code does."""
+        doc = read("docs", "NETWORK_PORT.md")
+        readme = read("README.md")
+        for needle in ("kDemoMaxPauseMs", "kDemoAbandonedMs", "`ants_leave_match()`", "`kRejoinMaxAgeMs`", "never makes a room and never replaces an ended one", "`window.antsSeatKnown(seat)`",
+                       "`ANTS_PAGE.cancelsBrowserKey`", "`resolve_host`", "**The crash-loop guard**", "`record_sync_ms`", "**A native player's key travels in clear**", "**The review of phase 2**", "L8 and L9 in the known limits"):
+            self.assertIn(needle, doc, needle)
+        for needle in ("for three hours", "none older than three hours", "`--no-reconnect` has no keys", "(10 in a demo room)", "leaving through the web page's Menu button"):
+            self.assertIn(needle, readme, needle)
+        for stale in ("none older than 24 hours", "(24 hours, removed when read)", "not older than 24 hours or more than a minute ahead", "An entry older than a day is removed", "the next is told `Full`;"):
+            self.assertNotIn(stale, doc, stale)
+        for stale in ("for 24 hours, and lets go of it", "none older than 24 hours", "the 24 hours, the eight entries", "the switch stays off until the web page and a real browser have been checked"):
+            self.assertNotIn(stale, readme, stale)
+        constants = read("include", "ants_server", "room_manager.hpp")
+        self.assertIn("kDemoMaxPauseMs = 10u * 60u * 1000u;", constants)
+        self.assertIn("kDemoAbandonedMs = 60u * 1000u;", constants)
+        self.assertIn("kRejoinMaxAgeMs = int64_t{3} * 3600 * 1000;", read("include", "ants_app", "rejoin_store.hpp"))
+
     def test_the_network_document_names_the_parts_of_the_check_and_what_it_stands_on(self):
         doc = read("docs", "NETWORK_PORT.md")
         section = doc[doc.index("### The switch, the front page's Rejoin button and the check in a real browser (work package 4)"):]
-        for part in ("reload", "restart", "rejoin", "none"):
+        for part in ("reload", "restart", "rejoin", "leave", "none"):
             self.assertIn("| `%s` |" % part, section, part)
         for needle in ("tests/scripts/web_rejoin_check.py", "tests/scripts/test_web_rejoin.sh", "`ants_probe(16)`", "`holdsThisSeat`", "`REJOINKEY`", "`--no-reconnect`", "Known limits"):
             self.assertIn(needle, section, needle)
