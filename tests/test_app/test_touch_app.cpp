@@ -329,6 +329,18 @@ struct Match {
 
 void test_setup_of_sdl() {
     group("sdl", "SDL's touch-to-mouse emulation is off, and only a touch screen's fingers count");
+    {   // an environment variable of the player's (SDL_TOUCH_MOUSE_EVENTS=1) must not bring the emulation back (review L8): the game sets the hint at SDL's highest priority. An ordinary
+        // SDL_SetHint is refused while the variable is set (SDL then answers the variable's value) and the fingers would reach the game twice.
+        SDL_ClearHints();
+        SDL_setenv("SDL_TOUCH_MOUSE_EVENTS", "1", 1);
+        {
+            AppRig other;
+            check(other.ok, "(an application is made with SDL_TOUCH_MOUSE_EVENTS=1 in the environment)");
+            const char* with_env = SDL_GetHint(SDL_HINT_TOUCH_MOUSE_EVENTS);
+            check(with_env != nullptr && std::string(with_env) == "0", "the environment's SDL_TOUCH_MOUSE_EVENTS=1 does not bring SDL's emulation back: the hint is 0");
+        }
+        SDL_setenv("SDL_TOUCH_MOUSE_EVENTS", "0", 1);                       // (what the game wants anyway: the variable is left at 0 for the rest of the process)
+    }
     Match m;
     check(m.ok, "the match is up");
     if (!m.ok) return;

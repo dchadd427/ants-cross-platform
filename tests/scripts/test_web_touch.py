@@ -180,7 +180,7 @@ class TheGame(PageCase):
         self.found(source, r'extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel\(\)')
         for case in range(30, 37):
             self.found(source, r"case %d: return " % case, "ants_probe has no case %d for the touch model" % case)
-        self.assertIn('SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");', source)
+        self.assertIn('SDL_SetHintWithPriority(SDL_HINT_TOUCH_MOUSE_EVENTS, "0", SDL_HINT_OVERRIDE);', source)       # (an environment variable of the player's must not bring the emulation back)
 
     def test_the_buzz_is_never_required(self):
         source = read(APPLICATION_TOUCH)

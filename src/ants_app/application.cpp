@@ -461,8 +461,9 @@ bool Application::init(const ApplicationConfig& config) {
     // Several games on one screen: the click that activates a window is also a click in it (the first click on a background window is not lost)
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
-    // A touch screen's fingers are the touch model's (application_touch.cpp): SDL's own emulation, which made the first finger a left mouse button, is off so that nothing reaches the game twice
-    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+    // A touch screen's fingers are the touch model's (application_touch.cpp): SDL's own emulation, which made the first finger a left mouse button, is off so that nothing reaches the game twice. At
+    // SDL's highest priority: an environment variable SDL_TOUCH_MOUSE_EVENTS=1 would beat an ordinary SDL_SetHint, and the fingers would reach the game twice.
+    SDL_SetHintWithPriority(SDL_HINT_TOUCH_MOUSE_EVENTS, "0", SDL_HINT_OVERRIDE);
 
     if (SDL_Init(sdl_flags) != 0) {
         std::cerr << "[Application] SDL_Init Error: " << SDL_GetError() << std::endl;

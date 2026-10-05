@@ -30,7 +30,8 @@ be tuned from the owner's phone (`touch::kTapMs`, `touch::kHoldMs`, and `touch::
 
 ## The page (`web/shell.html`, the block ANTS_TOUCH_BEGIN ... END)
 
-SDL's Emscripten backend reads the canvas's touches itself, and SDL's own touch-to-mouse emulation is off (`SDL_HINT_TOUCH_MOUSE_EVENTS`), so the page only keeps the browser out of the way:
+SDL's Emscripten backend reads the canvas's touches itself, and SDL's own touch-to-mouse emulation is off (`SDL_HINT_TOUCH_MOUSE_EVENTS`, set at SDL's highest priority: an environment variable of the
+player's cannot bring it back), so the page only keeps the browser out of the way:
 
 - the canvas has `touch-action: none` and the page `touch-action: manipulation` (panning and pinch stay, double-tap zoom goes), every control outside the canvas too;
 - `overscroll-behavior: none` on html and body (a swipe past the end of the page does not reload it), without stopping the page's own scrolling;
