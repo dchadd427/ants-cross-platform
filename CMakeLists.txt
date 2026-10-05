@@ -46,7 +46,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
         -Wnon-virtual-dtor
     )
     # (GCC 13 and later: -Wdangling-reference has one known false positive in this project, in tests/test_ai/test_ai_worker.cpp: it is switched off for that one source file in
-    # tests/test_ai/CMakeLists.txt, so that the product code and every other file keep the warning.)
+    # tests/test_ai/CMakeLists.txt, so that the product code and every other file keep the warning. -Wsign-conversion is off in GCC's sanitizer build only: see ENABLE_ASAN below.)
     if(ANTS_WERROR)
         add_compile_options(-Werror)
     endif()
@@ -105,6 +105,12 @@ option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 if(ENABLE_ASAN)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address,undefined)
+    # GCC 13.3: with -fsanitize=shift (part of undefined) -Wsign-conversion calls `(mask >> n) & 1u` on a uint8_t that is not const a conversion from int, although the value is never negative
+    # (without the sanitizer, and in clang, the same code is clean). That failed ./run_tests.sh --asan (-DANTS_WERROR=ON) at many places, and new ones come with every batch: GCC's sanitizer build
+    # has the warning off; every other build has it on, and CI's Linux (GCC) job checks the same sources with it.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options(-Wno-sign-conversion)
+    endif()
 endif()
 
 # Global Include Directories
