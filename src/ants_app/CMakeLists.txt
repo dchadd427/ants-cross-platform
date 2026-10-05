@@ -55,6 +55,7 @@ add_library(ants_app STATIC
     local_teams.cpp
     start_menu.cpp
     start_menu_view.cpp
+    touch_control.cpp
     room_chat.cpp
     host_lookup.cpp
     application.cpp
