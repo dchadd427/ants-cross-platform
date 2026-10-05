@@ -1,11 +1,11 @@
 # Status
 
-_Updated 2026-10-05 16:36 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 16:52 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.8.2** rounder, less flat buttons (8 px corners, a bevel on every edge) | ███░░░░░░░ 29% | Mon | built and tested here after the owner's two notes; the browser checks and the review are running again, then the pull request |
+| **v0.8.2** rounder, less flat buttons (8 px corners, a bevel on every edge) | ██████░░░░ 57% | Mon | reviewed with every fix done; the pull request is up (PR #21) and its five checks are running, then the merge |
 | **v0.8.3** a game for one on this computer, Friend as the default seat, a dirtier orange background | █░░░░░░░░░ 14% | Mon or Tue | built here; waits for v0.8.2 to merge, then its own checks and review |
 | **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ████░░░░░░ 43% | Mon or Tue | PR #14 (both batches joined, main v0.8.0 in) has all five checks green; two independent code reviews are running, then the release steps and the merge |
 | **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the bots (v0.9.0) |
@@ -13,7 +13,7 @@ _Updated 2026-10-05 16:36 PDT · current release **v0.8.1** · details: [CHANGEL
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- v0.8.2: rounder buttons (8 px corners) with a bevel on every edge and soft top-to-bottom shading, so they look less flat (the owner's asks); a patch release, built, with its review and browser checks running again
+- v0.8.2: rounder buttons (8 px corners) with a bevel on every edge and soft top-to-bottom shading, so they look less flat (the owner's asks); a patch release, reviewed, with pull request #21 up and its five checks running
 - v0.8.3: START with every other seat on Nobody begins a game for one on this computer (the original's single player; a room on the game server needs two people), Friend is the default seat of the New match card, and the orange background gets a little noise and dirt (the owner's asks); a patch release right after v0.8.2, built here
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in draft PR #14, the v0.9.0 candidate (all five checks green with main v0.8.0 in; two independent code reviews running, then the release steps)
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
@@ -31,7 +31,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - The original's stunned ant may be invulnerable: to check in the original program (a rules change)
 - Extinguishing a fire under an ant: does the original allow it for a person? (bots do not; a rules change if it does not)
 - Server: the server uses all cores; a load test for the VPS; watching other people's matches live
-- Dead-code cleanup, trimming the other big documents (the README is in progress), Docker hardening, match API, an option to match the monitor's aspect
+- Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
 - **README split** (no release): the README is a 63-line front page and each topic has its own page under docs/; every statement of the old README was checked against the game as built (PR #17, merged 2026-10-05 16:29 PDT, docs only).
