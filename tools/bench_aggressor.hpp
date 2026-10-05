@@ -437,6 +437,11 @@ public:
                      "DIAG label=%s seat=%u style=%s attack_cmds=%u attack_ants=%u harass=%u fight=%u raids=%u walls=%u sabwalls=%u strikes=%u hatches=%u pickups=%u gate=%u squad_end=%zu recruited=%u\n",
                      label_.c_str(), static_cast<unsigned>(seat_), style_name(b.style()), attack_cmds_, attack_ants_, b.harass().attacks_ordered(), b.fight().attacks_ordered(), b.raids().raids_ordered(), b.walls().walls_ordered(),
                      b.sabotage().walls_ordered(), b.strike().strikes_started(), b.hatch().hatches_ordered(), b.powerups().taken(), b.gate().entrance_clicks(), b.harass().squad(), b.harass().recruited());
+        // v0.6: the fights of its own, the hunts (kills available / hunted / made), the fire-in and the tiers of the pressure (looks at each tier; guard: looks of the last minute with the lead)
+        std::fprintf(stderr,
+                     "DIAG2 label=%s seat=%u fights=%u offence=%u aborted=%u hunt_available=%u hunts=%u hunts_killed=%u fire_hunts=%u sab_walls=%u sab_refused=%u sab_put_out=%u tier_looks=%u/%u/%u/%u guard_looks=%u\n",
+                     label_.c_str(), static_cast<unsigned>(seat_), b.fight().fights_started(), b.fight().offence_started(), b.fight().offence_aborted(), b.fight().hunt_available(), b.fight().hunts_started(), b.fight().hunts_killed(),
+                     b.fight().fire_hunts(), b.sabotage().walls_ordered(), b.sabotage().refused_safe(), b.sabotage().put_out(), tier_looks_[0], tier_looks_[1], tier_looks_[2], tier_looks_[3], guard_looks_);
     }
     const char* kind() const noexcept override { return inner_->kind(); }
     void start(const BotContext& context) override {
@@ -446,6 +451,8 @@ public:
     void think(const BotView& view, Orders& orders) override {
         const size_t before = orders.intents().size();
         inner_->think(view, orders);
+        ++tier_looks_[std::min<size_t>(inner_->tactics().standing.tier, 3u)];
+        if (inner_->tactics().standing.guard) ++guard_looks_;
         for (size_t i = before; i < orders.intents().size(); ++i) {
             if (orders.intents()[i].command.type == sim::CommandType::GroupAttack) {
                 ++attack_cmds_;
@@ -461,6 +468,8 @@ private:
     uint8_t seat_{0};
     uint32_t attack_cmds_{0};
     uint32_t attack_ants_{0};
+    uint32_t tier_looks_[4]{0, 0, 0, 0};
+    uint32_t guard_looks_{0};
 };
 
 }  // namespace ants::ai::bench

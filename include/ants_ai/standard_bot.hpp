@@ -152,7 +152,17 @@ private:
         p.rank_by_remaining = plan.rank_by_remaining;
         p.contest_one_first = plan.contest_one_first;
         p.contest_reactive = plan.contest_reactive;
+        p.race = plan.race;
+        p.race_gap_ticks = plan.race_gap_ticks;
+        p.race_slack_percent = plan.race_slack_percent;
+        p.race_floor = plan.race_floor;
+        p.race_one = plan.race_one;
+        p.race_ants = plan.race_ants;
+        p.race_ticks = plan.race_ticks;
+        p.race_army_weight = plan.race_army_weight;
+        p.race_army_percent = plan.race_army_percent;
         p.contest_opening_ants = plan.contest_opening_ants;
+        p.contest_opening_ticks = plan.contest_opening_ticks;
         p.contest_opening_min_ants = plan.contest_opening_min_ants;
         return p;
     }

@@ -70,6 +70,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.wants.fill(0);
     tactics_.surplus = harvest_.unplaced();
     tactics_.standing = standing_of(plan, view, *map);
+    tactics_.guard_stance = tactics_.standing.guard;
+    const Standing& st = tactics_.standing;
+    const bool escalating = plan.catchup && st.tier >= 1;                                    // behind the leader enough to escalate (the tiers: tactics.hpp, Standing)
     tactics_.wall_demand = wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
     if (plan.secure_side) {                                       // the power-ups of the own side are taken early (the owner's playbook): an enemy that steals the Fire can wall the piles in, the Bomber can mine the base, the Thief can raid twice
@@ -91,16 +94,17 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         const Memory& m = tactics_.memory;
         // (or when the economy has workers that stand idle with nothing to harvest: they cost nothing)
         const bool fists = plan.fists_strict ? (m.last_attacked() != 0 && now <= m.last_attacked() + 2400u)
-                                             : (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0 || (plan.strikes && tactics_.standing.behind);
+                                             : (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0 || (plan.strikes && st.behind) || escalating;
         const bool free_ants = plan.combat_when_idle && tactics_.surplus > 0;
         const bool attacked = m.last_attacked() != 0 && now <= m.last_attacked() + 2400u;
         if (plan.takes_combat && (fists || free_ants || !plan.combat_when_attacked)) {
             tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(plan.max_combat + (attacked ? plan.combat_extra : 0u));
         }
-        // behind the leader, a strike needs its Combat Ants: as many as the force is
-        if (plan.takes_combat && plan.strikes && !plan.strike_workers && tactics_.standing.behind) {
-            tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(std::max<uint32_t>(plan.max_combat, plan.strike_force));
+        // behind the leader, a strike needs its Combat Ants: as many as the force is (from the lift tier on a level that does not take them otherwise takes them too, and a Thief for the raids)
+        if ((plan.takes_combat || st.tier >= plan.catchup_lift_tier) && ((plan.strikes && !plan.strike_workers && st.behind) || (escalating && plan.catchup_wants))) {
+            tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(std::max<uint32_t>(std::max<uint32_t>(plan.max_combat, plan.strike_force), tactics_.wants[static_cast<size_t>(sim::AntType::Combat)]));
         }
+        if (!plan.takes_thief && st.tier >= plan.catchup_lift_tier && plan.catchup_wants) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = 1;
     }
 
     // 3. the tasks, the one that takes ants from the others first
@@ -108,9 +112,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     walls_.step(context);
     powerups_.step(context);
     bombs_.step(context);
-    if (plan.raids && !fallback) raids_.step(context);
+    if ((plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier)) && !fallback) raids_.step(context);
     if (plan.guards) guard_.step(context);
-    if (plan.strikes || plan.wipe_focus) strike_.step(context);
+    if (plan.strikes || plan.wipe_focus || plan.catchup) strike_.step(context);
     if (plan.harass) harass_.step(context);
     if (plan.sabotage) sabotage_.step(context);
     if (plan.hatches) hatch_.step(context);

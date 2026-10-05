@@ -3,9 +3,9 @@
 // What the tasks of the standard bot (standard_tasks.hpp) share: the switches and numbers of a level (LevelPlan), the geometry of a hill's thief hole (the three tiles in front of
 // it), and the bot's soft MEMORY of the last looks (who was hit, which enemy ants moved, which thieves were seen).
 //
-// Everything in here is something a person of the seat could know: the memory is built from the BotView alone (the hit points of the seat's OWN ants, the tile, type and drawn state of
-// every ant, the grid), and the geometry is the hill's. Nothing here reads another team's hit points, carried points, orders, eggs or timers, and nothing is a fact that the next look
-// could not give back: a bot that is started in the middle of a match has an empty memory and plays on (a hit that it did not see is a hit that it does not answer).
+// Everything in here is something a person of the seat could know: the memory is built from the BotView alone (the hit points, the tile, type and drawn state of every ant,
+// the grid), and the geometry is the hill's. Nothing here reads another team's carried points, orders, eggs or timers (the hit points of every ant are on the view by the owner's decision,
+// BotView), and nothing is a fact that the next look could not give back: a bot that is started in the middle of a match has an empty memory and plays on (a hit that it did not see is a hit that it does not answer).
 
 #include <array>
 #include <cstddef>
@@ -51,6 +51,17 @@ struct LevelPlan {
     bool contest_reactive{false};        // the tournaments' experiment: a contested pile first only while an enemy ant is at it
     uint32_t contest_opening_ants{0};    // the opening: this many ants go to the contested centre of the map at the start (Medium 1, Hard 2), the rest harvest by value per trip (the owner's
                                          // playbook: strong players contest the centre first; a whole-match duel against the plain order is a tie, docs/BOTS.md); 0: none (Easy)
+    // the race: contested food first for the ants that the gate cannot use (HarvestTask::Params::race)
+    bool race{false};
+    uint32_t race_gap_ticks{100};
+    uint32_t race_slack_percent{100};    // the ants that the gate can use (about one deposit per race_gap_ticks) harvest in the plain order, the ants beyond that race (0: every ant races: measured worse)
+    uint32_t race_floor{0};              // at least this many ants of the pool go to the piles where a race is open, whatever the gate can use (the owner's playbook: the centre is the starting food)
+    bool race_one{false};
+    uint32_t race_ants{0};
+    uint32_t race_ticks{1200};           // the first minute of the match
+    uint32_t race_army_weight{8};
+    uint32_t race_army_percent{150};
+    uint32_t contest_opening_ticks{1200};  // the opening of v0.5.0 (race off) lasts this long
     uint32_t contest_opening_min_ants{6};  // ... only with at least this many ants at the start (TINY has 3, SMALL 4: there the contest of the middle costs and loses; MEDIUM, GAUNTLET and TREASURE have 6 or more)
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating", the owner's playbook): 55 to 65 ticks per deposit instead of 93 to 116
@@ -114,6 +125,19 @@ struct LevelPlan {
     uint32_t sabotage_min_score{100};    // ... a team whose box shows at least this many points
     bool sabotage_spare_keeper{true};    // ... with a Fire Ant that is not the keeper of the own thief hole's walls (false: any Fire Ant that is free; the measurements' first version)
     uint32_t sabotage_after{600};        // ... not before this tick (the opening's own power-ups and walls come first)
+    bool sabotage_safe{false};           // (v0.6) no lone Fire Ant fires in a hill whose owner can simply put the fire out (an enemy Fire Ant of the team or its ally in sight, or a Fire power-up that it can
+                                         // still take): only with sabotage_escort Combat Ants that stay at the entrance and kill what comes; and a team whose walls were put out sabotage_putout_limit
+                                         // times is left alone for sabotage_giveup_ticks
+    uint32_t sabotage_escort{2};
+    uint32_t sabotage_putout_limit{2};
+    uint32_t sabotage_giveup_ticks{3600};
+    uint32_t sabotage_escort_ticks{900};  // the escorts leave this long after the ring stands
+    // the defence against being fired in (v0.6): fire walls on the ring round the own gate send the fighters at the Fire Ant that lights them, and the walls are put out only when no enemy ant
+    // stands on the tile, no enemy Fire Ant is near to light them again and the enemy's force near them is not stronger than the own
+    bool fire_defence{false};
+    int32_t fire_defence_radius{14};     // an enemy Fire Ant within this many tiles of the own hill is the one that fires it in
+    uint32_t fire_defence_extra{1};      // fighters more than the level's defenders go after it
+    int32_t fire_defence_wait{10};       // a wall on the ring is not put out while an enemy Fire Ant is within this many tiles of it (it would light it again)
     bool harass{false};                  // (Hard) the squad hunts the carriers of the other teams from the start of the match, whatever the score (HarassTask)
     uint32_t harass_workers{0};          // workers that join the Combat Ants of the squad (an ant less at the piles while a target lasts)
     uint32_t harass_reserve{4};          // ants that never join (the economy: four carriers fill a gate)
@@ -136,6 +160,52 @@ struct LevelPlan {
     bool harass_station{true};           // a Combat Ant without a target waits in the middle between the enemy hills (its reflex punches what passes within three tiles)
     uint32_t bench_idle_ticks{0};        // TOURNAMENTS ONLY (bot_arena --tune idle=N): the bot does nothing until this tick, so that it falls behind on purpose (a handicap); 0 in every level
     uint32_t fight_reserve{2};           // no ant is sent to fight while the bot has no more than this many (one more when no egg is left): the last ants stay out of it
+    // the bot's own fights (v0.6; docs/BOTS.md, "Fights of its own"): it reads the hit points that the view gives for every ant and plays for the kill ratio, and at Hard it does not wait to be hit
+    bool health_aware{false};            // (every level) a fight reads the hit points: the target that dies soonest first, a wounded target is finished (the fight lingers on), an own ant that would
+                                         // die before its target is relieved by another, and the blows are counted in the real numbers (10 hit points, a blow takes 1, a Combat Ant's punch 2)
+    bool skirmish{false};                // (Hard) with the stronger force at a place it cares about (a carrier on its way, a worker at a pile) enemy ants are attacked without waiting for a blow (FightTask)
+    uint32_t skirmish_force{3};          // ants at most in one skirmish
+    uint32_t skirmish_min_force{2};      // ... and never fewer: one ant alone is a duel, not a force
+    uint32_t skirmish_odds_percent{150}; // the own strength (hit points times damage of the force) against the enemy's near the target, in percent, to start one (100: an even trade)
+    uint32_t skirmish_abort_percent{80}; // a skirmish is called off when the own strength falls below this percentage of the enemy's
+    int32_t skirmish_reach{9};           // own ants within this many tiles of the target are called
+    int32_t skirmish_near{5};            // the enemy ants within this many tiles of the target count against the force (at most skirmish_enemy_cap of them, the strongest)
+    uint32_t skirmish_enemy_cap{3};      // ... the ants that answer a blow: the standard bot of Hard sends three
+    int32_t skirmish_chase{14};          // the target is not followed further than this from where it was first met
+    uint32_t skirmish_ticks{600};        // a skirmish lasts at most this long (a target is chosen again at the next look)
+    uint32_t skirmish_pause_ticks{600};  // after a skirmish that cost more ants than it took, none for this long
+    // hunting the kill (v0.6, the owner: "I saw lots of opportunities where it could have killed an ant, the ant was 4 HP and it just didn't kill it"): at every look the free ants go for a visible enemy
+    // ant that they can kill before help arrives, whether or not it hit anybody first
+    bool hunt{false};                    // (every level, scaled) a kill that is available is attacked at once, kept until it is done and the ants are released afterwards (FightTask)
+    uint32_t hunt_blows{2};              // a kill is available when the real blows (kill_plan: one lands per hit clip of about 22 ticks, a Combat Ant's punch takes 2 hit points, an ant that is left with one
+                                         // walks home) can take the target's hit points in this many blows: 2 is a target of at most 4 hit points with a Combat Ant in the force (1 or 2 without one).
+                                         // Hunts of 3 or 4 blows (5 to 8 hit points) mostly chase an ant that walks on (a Hard bot started 8.9 hunts a match on TREASURE, 0.5 ended with the target dead) and
+                                         // cost win rate: 28.5 percent with 4 blows, 36.7 with 2 and 35.5 with no hunts (TREASURE, 128 matches each, docs/BOTS.md)
+    uint32_t hunt_force{3};              // ants at most
+    uint32_t hunt_odds_percent{120};     // the force's strength (hit points times damage) against what answers near the target, in percent: a clear local advantage
+    int32_t hunt_reach{10};              // free ants within this many tiles of the target are called
+    int32_t hunt_next{3};                // the scope of Easy: an enemy within this many tiles of one of its free ants
+    bool hunt_wide{true};                // (Medium, Hard) the scope also holds what is within the leash of the own hill and what is at a pile that the own ants work
+    bool hunt_leader_carriers{false};    // (Hard) ... and the carriers of the leading team wherever they are
+    uint32_t hunt_ticks{400};            // a hunt lasts at most this long
+    // behind the leader and the endgame (v0.6; docs/BOTS.md, "Behind the leader and the endgame"): the bot that is behind escalates, scaled by level; in the last minute the leader guards and the bot
+    // behind goes all-in. The pressure is the deficit (the leader's box above the own) in percent of what can still be earned (the food on the field in points or the time left at catchup_earn_milli,
+    // the less of the two): a pressure from catchup_tier1 / 2 / 3 is a tier 1 / 2 / 3 (Hard 40, 80, 130 percent; Medium 1.5 times those, Easy 2.5 times: the weaker the level, the later it escalates)
+    bool catchup{false};                 // (every level, scaled) the tiers: 1 a strike force of Combat Ants (and raids for a smaller loot), 2 a hill with a guard is raided, a plan that does not raid (Easy)
+                                         // raids and wants a Thief and Combat Ants (catchup_lift_tier); 3 all-in: no stop for the strike in the last minutes, the lowest odds. Workers never join the strike
+                                         // (catchup_workers_tier)
+    uint32_t catchup_tier1{40};
+    uint32_t catchup_tier2{80};
+    uint32_t catchup_tier3{130};
+    uint8_t catchup_workers_tier{4};     // from this tier on workers join the strike and the skirmish opens for every level; 4: never. A worker's blow takes one hit point and one blow lands per hit clip, so workers
+                                         // kill nothing above two hit points: with them from tier 2 a bot 2,000 ticks late in TREASURE scored 1,720 points against 1,836 with no catch-up, from tier 3 1,756,
+                                         // with Combat Ants only 1,823 (Hard, 96 matches each, docs/BOTS.md)
+    uint8_t catchup_lift_tier{2};        // from this tier on a plan that does not raid, take a Thief or take Combat Ants (Easy) does
+    bool catchup_wants{true};            // from tier 1 on more Combat Ants (and from tier 2 a Thief) are wanted: more trips for power-ups
+    uint32_t catchup_min_leader{300};    // the leader holds at least this many points (below that a fight is not worth the trip)
+    uint32_t catchup_earn_milli{160};    // thousandths of a point per tick that a team can earn at most (the best bots bank about 2,200 points in 14,400 ticks)
+    bool endgame{false};                 // (every level) in the last endgame_ticks the leader guards (no offence, one defender more) and the bot behind is at tier 3
+    uint32_t endgame_ticks{1200};        // the last minute
     bool avoids_guarded_hills{false};    // a raid does not go to a hill that has an enemy Combat Ant near it
     bool ambush{false};                  // (Hard) a thief that finds every hill shut waits near the thief hole of the leading team, outside the reach of anybody's fists, and raids as soon as the hole is open (a wall that burned out
                                          // or is being renewed): a hole stands open for 5 to 15 percent of a match (RaidTask)
@@ -316,6 +386,10 @@ struct Standing {
     int32_t leader_score{0};
     bool behind{false};                  // the leader's box is above the own by strike_margin points and by strike_margin_percent of itself, and holds strike_min_leader at least
     bool ahead{false};                   // the own box is not below the leader's
+    int32_t deficit{0};                  // (v0.6) the leader's box above the own, 0 when not behind
+    uint32_t pressure{0};                // the deficit in percent of what can still be earned (plan.catchup_earn_milli, the food on the field), 0 when not behind
+    uint8_t tier{0};                     // 0 not behind enough, 1 .. 3 the escalation (plan.catchup_tier1 / 2 / 3; the last minute puts a bot that is behind at 3: plan.endgame)
+    bool guard{false};                   // the last minute and the bot leads: it guards (plan.endgame)
 };
 
 Standing standing_of(const LevelPlan& plan, const BotView& view, const MapInfo& map);
@@ -333,6 +407,7 @@ struct Tactics {
     /// cost nothing to use otherwise
     size_t surplus{0};
     Standing standing;                   // where the bot stands at this look
+    bool guard_stance{false};            // (v0.6, the endgame) the bot leads in the last minute (Standing::guard): no offence (hunt, skirmish, harassment, sabotage, strike) and one defender more answers a blow
     bool strike_active{false};           // the strike force is out (set by the StrikeTask at its last step)
     bool harass_active{false};           // the squad has a target (set by the HarassTask at its last step)
     uint32_t wall_keeper{0};             // the Fire Ant that keeps the walls of the own thief hole (set by the WallTask at its last step; 0: none): the sabotage uses another one

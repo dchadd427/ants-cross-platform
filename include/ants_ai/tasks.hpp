@@ -199,6 +199,20 @@ public:
         /// rest harvest by value per trip as before; 0: off
         uint32_t contest_opening_ants{0};
         uint64_t contest_opening_ticks{1200};
+        /// The race (the standard bot; v0.6): CONTESTED FOOD FIRST FOR THE ANTS THAT THE GATE CANNOT USE. The hill's gate banks about one deposit per race_gap_ticks whatever the number of ants, so
+        /// the economy is gate-limited: the ants that already work the best piles by points per trip fill it (the plain order), and every further ant is SURPLUS: it costs the gate nothing,
+        /// and goes where a race is open first, the piles that several enemies (Multi) or one enemy (One) reach about as soon as this seat does (the classes of tier_for), before the piles
+        /// that are the seat's own. The race is won by arriving first, so nobody has to be at the pile yet. With the gate full of long trips (everything near is eaten) nobody is surplus
+        /// and the order is the plain one. A pile that an enemy ARMY holds (race_army) or that an enemy is far nearer to (Hopeless) is no race. Needs contest_opening_min_ants ants at the start.
+        bool race{false};
+        uint32_t race_gap_ticks{100};        // the gate's gap for the count of ants that fill it (the engine's queue: 93 to 116; the measured income of a seat is about 10 deposits a minute)
+        uint32_t race_slack_percent{100};    // surplus ants only above this percentage of what fills the gate
+        uint32_t race_floor{0};              // ... except that at least this many ants work the piles where a race is open (the first of the pool go there, the gate or not)
+        bool race_one{true};                 // the piles that ONE enemy competes for are races too
+        uint32_t race_ants{0};               // at most this many ants work a pile that is a race (0: the pile's own limit)
+        uint32_t race_ticks{0};              // the race only lasts this long from the start of the match (0: the whole match)
+        uint32_t race_army_weight{0};        // a pile with enemy fighters near it (Combat Ant 8, an ant drawn attacking 4) of at least this weight is held by an army (0: the check is off)
+        uint32_t race_army_percent{150};     // ... unless the own strength near it is at least this percentage of the enemy's
         /// ... and only when the seat has at least this many ants at its first look: a team of three or four ants cannot spare one for a trip across the map (TINY, 3 ants: the contest
         /// of the middle cost 4 percent of the score against workers and lost the duels, docs/BOTS.md, "Aggression"); 0: no minimum
         uint32_t contest_opening_min_ants{0};
@@ -268,6 +282,8 @@ private:
         uint16_t units{0};                   // its units now
         bool shut_at_start{false};           // the analysis of the start could not reach it: the walker components of the start say nothing about it
         uint8_t tier{0};                     // contest-aware: the PileClass (always 0 when the option is off)
+        uint8_t cls{static_cast<uint8_t>(PileClass::Safe)};   // the race: the pile's class
+        bool race{false};                    // the race: a race is open at this pile (see Params::race)
     };
     struct Watch {
         sim::TileCoord tile{};               // where an ordered ant that walks (or waits for a path) stood at the last look ...
@@ -279,7 +295,9 @@ private:
     /// Asks the map as it is now again (see "candidates"): the piles that were shut off at the start and the hill's walking field for the ants that were shut in
     void reask(const TaskContext& context);
     /// The class of a pile for the seat (the contest-aware option), from the start analysis' cost of every team's hill to it
-    uint8_t tier_for(const TaskContext& context, const PileInfo& pile, int32_t own_cost) const;
+    uint8_t tier_for(const TaskContext& context, const PileInfo& pile, int32_t own_cost, bool first_wins = false) const;
+    /// The race: enemy fighters near the pile (Params::race_army_weight) that the own strength there does not match
+    bool held_by_army(const TaskContext& context, sim::TileCoord anchor) const;
     /// Whether an ant standing on `tile` can walk to the hill now (the field of the last reask)
     bool connected_now(const MapInfo& map, sim::TileCoord tile) const noexcept;
 

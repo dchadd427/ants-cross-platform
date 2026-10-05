@@ -64,7 +64,7 @@ Command move_of(uint8_t issuer, std::vector<uint32_t> ants, int16_t x, int16_t y
 }  // namespace
 
 void run_view_tests() {
-    TEST_CASE("AI1.1 Ants In The View: Own And Others Apart And By Id, Gone Ants Not Listed, Hit Points And Carried Points Only Of Own Ants, The Crumb Is Visible, No Order Or Target Anywhere") {
+    TEST_CASE("AI1.1 Ants In The View: Own And Others Apart And By Id, Gone Ants Not Listed, The Hit Points Of Every Ant (The Owner's Decision: 1 To 10, Equal To The Engine's), Carried Points Only Of Own Ants, The Crumb Is Visible, No Order Or Target Anywhere") {
         sim::SimulationEngine sim;
         build_world(sim, 21);
         const std::vector<uint32_t> mine = ants_of(sim, 0);
@@ -102,10 +102,16 @@ void run_view_tests() {
         const AntView* them = find_ant(v.others(), foes[0]);
         ASSERT_TRUE(them != nullptr);
         ASSERT_TRUE(them->holding);                                                    // the sprite shows the crumb
-        ASSERT_EQ(them->hp, 0);                                                        // but not the health bar
-        ASSERT_EQ(them->carried_points, 0);                                            // nor what the crumb is worth
+        ASSERT_EQ(them->hp, 3);                                                        // and the health: every ant's hit points are on the view, an enemy's too (the owner's decision)
+        ASSERT_EQ(them->carried_points, 0);                                            // but not what the crumb is worth
         for (const AntView& a : v.mine()) ASSERT_TRUE(a.team == 0 && a.hp > 0);
-        for (const AntView& a : v.others()) ASSERT_TRUE(a.team != 0 && a.hp == 0 && a.carried_points == 0);
+        for (const AntView& a : v.others()) ASSERT_TRUE(a.team != 0 && a.hp > 0 && a.hp <= sim::AntUnit::MAX_HP && a.carried_points == 0);
+        // every visible ant's hit points equal the engine's, whoever owns it; an ant that is not listed (dead, drowning) gives nothing
+        for (const sim::AntSnapshot& snap : ws.ants) {
+            const AntView* seen = find_ant(snap.player_id == 0 ? v.mine() : v.others(), snap.id);
+            if (seen == nullptr) continue;
+            ASSERT_EQ(seen->hp, snap.hp);
+        }
         // what the view says of an ant that another team has ordered is only what is on the screen: it walks
         const AntView* walker = find_ant(v.others(), foes[1]);
         ASSERT_TRUE(walker != nullptr && (walker->state == sim::UnitState::Walking || walker->state == sim::UnitState::Idle));
@@ -113,7 +119,7 @@ void run_view_tests() {
         const BotView w = BotView::build(sim, 1);
         const AntView* foe_self = find_ant(w.mine(), foes[0]);
         ASSERT_TRUE(foe_self != nullptr && foe_self->hp == 3 && foe_self->carried_points == 50);
-        ASSERT_TRUE(find_ant(w.others(), mine[0]) != nullptr && find_ant(w.others(), mine[0])->hp == 0);
+        ASSERT_TRUE(find_ant(w.others(), mine[0]) != nullptr && find_ant(w.others(), mine[0])->hp == 6);
         // the type is visible, and so are positions
         sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{20, 20});
         sim.tick();
@@ -125,6 +131,61 @@ void run_view_tests() {
         ASSERT_FALSE(AntHasOrder<AntView>::value);
         ASSERT_FALSE(AntHasTarget<AntView>::value);
         ASSERT_FALSE(AntHasHarvestOrigin<AntView>::value);
+    } TEST_END();
+
+    TEST_CASE("AI1.1b The Hit Points Of Every Ant (The Owner's Decision On What Players Know: 10 Is Full, 1 Is One Hit Point Left, 0 Is Dead): For Every Seat Every Ant That The View Lists, Its Own And The Other Teams', Has The Hit Points Of The Engine's Ant (Several Different Values At Once); An Ant That Is Dead Or Drowning, Or Whose Team Dropped Out, Gives Nothing; The Number Follows A Hit From One Look To The Next; The Carried Points Of Another Team's Ant Are Still Hidden") {
+        sim::SimulationEngine sim;
+        build_world(sim, 22, 8);
+        std::vector<uint32_t> all;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            for (const uint32_t id : ants_of(sim, t)) all.push_back(id);
+        }
+        // every ant gets a health of its own (1 .. 10); the carried points of the others stay hidden
+        for (size_t i = 0; i < all.size(); ++i) {
+            sim::AntUnit& u = sim.get_unit(all[i]);
+            u.hp = static_cast<uint16_t>(1 + i % 10);
+            u.carried_points = 40;
+        }
+        const uint32_t dead = ants_of(sim, 1)[0];
+        const uint32_t drowning = ants_of(sim, 2)[0];
+        sim.get_unit(dead).state = sim::UnitState::Dead;
+        sim.get_unit(drowning).state = sim::UnitState::Drowning;
+        sim.tick();
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            const BotView v = BotView::build(sim, seat);
+            size_t checked = 0;
+            for (const sim::AntSnapshot& snap : sim.get_world_state().ants) {
+                const AntView* seen = find_ant(snap.player_id == seat ? v.mine() : v.others(), snap.id);
+                if (snap.id == dead || snap.id == drowning) {
+                    ASSERT_TRUE(seen == nullptr);                                            // an ant that is dying gives nothing
+                    continue;
+                }
+                ASSERT_TRUE(seen != nullptr);
+                ASSERT_EQ(seen->hp, snap.hp);                                                // the engine's own number, whoever the ant belongs to
+                ASSERT_TRUE(seen->hp >= 1 && seen->hp <= sim::AntUnit::MAX_HP);
+                ASSERT_EQ(seen->carried_points, snap.player_id == seat ? snap.carried_points : 0);   // the points in the crumb are the owner's business
+                ++checked;
+            }
+            ASSERT_EQ(checked, all.size() - 2u);
+            std::set<int> values;
+            for (const AntView& a : v.others()) values.insert(a.hp);
+            ASSERT_TRUE(values.size() >= 8);                                                 // many different health values at once, not one default
+        }
+        // a hit shows from one look to the next: the victim's number falls by what the blow took
+        const uint32_t victim = ants_of(sim, 3)[3];
+        const uint16_t before = sim.get_unit(victim).hp;
+        ASSERT_TRUE(before >= 2);
+        const BotView first = BotView::build(sim, 0);
+        sim.get_unit(victim).hp = static_cast<uint16_t>(before - 2);
+        sim.tick();
+        const BotView second = BotView::build(sim, 0);
+        ASSERT_EQ(find_ant(first.others(), victim)->hp, before);
+        ASSERT_EQ(find_ant(second.others(), victim)->hp, before - 2);
+        // a team that dropped out has no ants on any screen
+        sim.drop_player(3);
+        sim.tick();
+        const BotView after = BotView::build(sim, 0);
+        for (const AntView& a : after.others()) ASSERT_TRUE(a.team != 3);
     } TEST_END();
 
     TEST_CASE("AI1.2 Eggs And The Incubator: Only The Seat's Own, And The View Has No Way To Ask For Another Team's") {

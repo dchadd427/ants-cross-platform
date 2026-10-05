@@ -938,7 +938,9 @@ void run_b41_tests() {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             sim::SimulationEngine sim;
             const uint32_t thief = build(sim, 14400, 300, 500, 100);
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+            LevelPlan plan = plan_for(level);
+            plan.catchup = false;                                                                     // (no food on this field: the pressure of 500 points behind would open the raids of Easy, tier 2; AI14.9 has the tiers)
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(30);
             if (level == Level::Easy) {
                 ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
@@ -1047,6 +1049,7 @@ void run_b41_tests() {
                 sim.spawn_unit(2, sim::AntType::Combat, TileCoord{raid.x + 2, raid.y});
                 LevelPlan plan = plan_for(level);
                 plan.avoids_guarded_hills = avoids;
+                plan.catchup = false;                                                                       // (no food on this field: 500 points behind would be tier 3, which raids guarded hills too: AI14.9)
                 Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(30);
                 ASSERT_EQ(rig.as<StandardBot>().raids().last_target(), avoids ? 1 : 2);
