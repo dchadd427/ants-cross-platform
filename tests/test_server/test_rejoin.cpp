@@ -406,6 +406,7 @@ struct Machine {
     size_t leave_on_key{0};                       // the n-th time that the machine is given its key it leaves, from inside that very call (0: never)
     bool leave_on_forget{false};                  // the first time that it is told to let go of the key it leaves, from inside that very call
     bool fail_load{false};                        // the machine cannot load the map of a Start (the file is missing on its computer)
+    std::string status_at_start;                  // the status line when the last Start arrived (a room that fills up starts at once: the waiting room is a few frames long)
 
     explicit Machine(std::string n, uint32_t seed = 1) : name(std::move(n)), rng(seed) {
         net.set_discovery(0);
@@ -443,6 +444,7 @@ struct Machine {
     void handle(const NetGame::Event& ev) {
         events.push_back(ev);
         if (ev.type == NetGame::Event::Type::StartRequested) {
+            status_at_start = net.status_text();
             const net::StartMsg& s = net.start_info();
             assets::LevelData level;
             uint64_t hash = 0;
@@ -2036,7 +2038,7 @@ void run_way_back_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RJ1.21 A Keyed Hello To A Demo Room That Ended Does Not Replace It (The Review's M3): A Match Ended By The Cap While Its Players Were Away; Their Key Is Told NoSuchRoom (\"The match is over.\"), The Key Is Let Go Of, And The Room Stays As It Ended; A Hello Without A Key Makes A New Room, As It Always Did (A Late Friend, A Rematch With The Same Link)") {
+    TEST_CASE("RJ1.21 A Keyed Hello To A Demo Room That Ended Does Not Replace It (The Review's M3): A Match Ended By The Cap While Its Players Were Away; Their Key Is Told NoSuchRoom (\"The match is over.\"), The Key Is Let Go Of, And The Room Stays As It Ended; A Hello Without A Key Makes A New Room, As It Always Did (A Late Friend, A Rematch With The Same Link); A Stale Key That Meets Another Player's New Waiting Room Of The Same Code Is A New Player's (The Re-Check's N5)") {
         ServerLimits limits;
         limits.demo_rooms = 2;
         limits.demo_map = "TINY.LVL";
@@ -2066,6 +2068,20 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.status(code).state == RoomState::Waiting && w.status(code).joined == 1 && w.server.mgr->rooms_created() == 2);
         w.run(500);
         ASSERT_TRUE(c.keys_given.empty());                                               // (a waiting room keeps no key)
+        // the stale key meets that NEW waiting room of the same code, which another player's Hello made (the re-check's N5: what the first RJ1.6 reached with the real server): the lobby takes the
+        // Hello for a new player's, the machine says so and lets the old key go, and its new key is kept when the match starts (the room is full with him: that is at once)
+        Machine& b3 = w.add_machine("Bob");
+        ASSERT_TRUE(b3.net.join("127.0.0.1", w.server.port(), "Bob", bob_key.seat, code, "", bob_key.key));
+        ASSERT_TRUE(w.run_until([&]() { return b3.saw(NetGame::Event::Type::StartRequested); }, 14000 + kPre));
+        ASSERT_EQ(b3.status_at_start, std::string("Your match has ended. This is a new room."));
+        ASSERT_TRUE(b3.status_at_start.size() <= NetGame::kStatusNoticeChars);           // (the notice fits the line that shows it)
+        ASSERT_TRUE(b3.keys_forgotten.size() == 1 && net::key_matches(b3.keys_forgotten[0].key, bob_key.key) && b3.keys_forgotten[0].room == code);
+        ASSERT_FALSE(b3.saw(NetGame::Event::Type::Failed) || b3.saw(NetGame::Event::Type::HostLeft));
+        ASSERT_TRUE(b3.net.my_seat() < sim::MAX_PLAYERS && b3.net.room().slots[b3.net.my_seat()].name == "Bob");
+        ASSERT_TRUE(w.status(code).joined == 2 && w.server.mgr->rooms_created() == 2);
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&c, &b3}); }, 14000 + kPre));
+        ASSERT_TRUE(b3.keys_given.size() == 1 && !net::key_matches(b3.keys_given[0].key, bob_key.key) && !net::key_is_zero(b3.keys_given[0].key) && b3.keys_forgotten.size() == 1);
+        for (const NetGame::Event& e : b3.events) ASSERT_FALSE(e.rejoin);               // it is no rejoin
     } TEST_END();
 
     TEST_CASE("RJ1.22 A Start That Is Cancelled Takes The Key Back (The Review's M3): The Key Of A New Player Is Kept When The Start Arrives, Let Go Of When The Start Is Cancelled (The Room Waits Again And Keeps None), Kept Again At The Next Start; The Function That Is Told May End The Session From Inside The Call") {
