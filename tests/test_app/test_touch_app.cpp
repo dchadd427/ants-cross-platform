@@ -1217,6 +1217,31 @@ void test_gates() {
         check(app.touch().fingers() == 0, "(both fingers are gone)");
     }
 
+    // a window comes up in the middle of a gesture: the pair began while the view was open, the next move finds a quit dialog over it: the gesture is over (no pan, no zoom), the fingers are dropped
+    {
+        camera.set_origin(500.0, 500.0, map_w, map_h);
+        camera.zoom = 1.0f;
+        const float x0 = camera.x;
+        const float y0 = camera.y;
+        const float z0 = app.zoom();
+        hand.down(1, a);
+        hand.down(2, b);
+        hand.frame();
+        check(app.touch().mode() == TouchControl::Mode::Two, "(the pair is on)");
+        app.hud().open_quit_dialog();
+        hand.wait(16);
+        hand.move(1, Pt{a.x - 40, a.y + 20});
+        hand.move(2, Pt{b.x + 40, b.y + 20});
+        hand.frame();
+        check(camera.x == x0 && camera.y == y0 && app.zoom() == z0 && app.touch().fingers() == 0, "a window that opens over a pair ends the gesture: no pan, no zoom, no finger is tracked");
+        app.hud().close_quit_dialog();
+        hand.up(2, Pt{b.x + 40, b.y + 20});
+        hand.up(1, Pt{a.x - 40, a.y + 20});
+        hand.frame();
+        camera.zoom = 1.0f;
+        app.set_zoom(1.0f, 100, 100);
+    }
+
     // taps are still clicks where two fingers do nothing: the quit dialog's No, the options window's Return
     {
         app.hud().open_quit_dialog();
@@ -1341,6 +1366,21 @@ void test_cancel() {
     hand.frame();
     check(!app.hud().is_input_captured() && app.touch().fingers() == 0, "a hidden page: the same");
     app.set_page_hidden(false);
+    // the window is minimised or hidden (and brought back)
+    for (const auto& [gone, back] : std::vector<std::pair<SDL_WindowEventID, SDL_WindowEventID>>{{SDL_WINDOWEVENT_MINIMIZED, SDL_WINDOWEVENT_RESTORED}, {SDL_WINDOWEVENT_HIDDEN, SDL_WINDOWEVENT_SHOWN}}) {
+        begin_band();
+        check(app.hud().is_input_captured(), "(the band is held)");
+        SDL_WindowEvent away{};
+        away.type = SDL_WINDOWEVENT;
+        away.event = static_cast<Uint8>(gone);
+        app.handle_window_event(away);
+        hand.frame();
+        check(!app.hud().is_input_captured() && app.touch().fingers() == 0, std::string("a window that is ") + (gone == SDL_WINDOWEVENT_MINIMIZED ? "minimised" : "hidden") + ": the band is dropped and no finger is tracked");
+        SDL_WindowEvent returned{};
+        returned.type = SDL_WINDOWEVENT;
+        returned.event = static_cast<Uint8>(back);
+        app.handle_window_event(returned);
+    }
     // a hold's right press
     s.clear();
     s.select({s.worker});
@@ -1490,6 +1530,12 @@ void test_other_screens() {
             hand.up(1, down);
             hand.frame();
             check(app.map_select().get_selected_index() == (before + 3) % maps && app.touch().stats().holds == holds, "and its lift presses the button: the selection moves");
+            // the browser takes the touch away while a finger presses a button of this screen: the press ends as the lift of the finger, where it is (what SDL's emulation made of a cancelled touch)
+            hand.down(1, down);
+            hand.frame();
+            app.cancel_touch();
+            hand.frame();
+            check(app.touch().fingers() == 0 && app.map_select().get_selected_index() == (before + 4) % maps, "a touch that is cancelled on a button of this screen ends as the lift where the finger is: the button acts");
         }
     }
     {   // the desktop start menu
