@@ -19,11 +19,13 @@ What is checked, for each profile:
     swipe on the guide does); nothing zooms (no page zoom by a pinch or a double tap); the browser's pinch (gesturestart / gesturechange / gestureend) and the context menu are cancelled
     over the game and left alone elsewhere; a touchcancel reaches the game (Module._ants_touch_cancel) and the game drops its fingers; the slop the game uses is 8 CSS pixels of the box
     in picture pixels (never under 6 device pixels);
-  * the GAME's gestures through the page: a TAP on the map (a click), on a HUD button (the Options button opens its window, a tap on it, with the game's own model counting a
-    tap), a finger that lingers between the tap time and the hold time (neither), a HOLD (the right click: counted at 450 ms, its feedback is the buzz where the browser has one,
+  * the GAME's gestures through the page: a TAP on the map (a click), on a HUD button (the Options button opens its window; a tap on its Return button closes it: the original's windows
+    close with their own button, not Esc) with the game's own model counting the taps, a HOLD (the right click: counted at 450 ms, its feedback is the buzz where the browser has one,
     nothing where it has not), a hold that moves becomes a drag (counted as one), a DRAG, TWO FINGERS that pan the map by the distance they move (the picture follows them: the view's
     origin moves by the distance in picture pixels) and pinch it a level at a time (200 % when the fingers spread to twice, 50 % back), nothing pans or zooms under a dialog, a cancel
-    leaves nothing held;
+    leaves nothing held. Only the clear cases of time are tried (80 ms is a tap, 800 ms a hold): the boundaries (a lift between 400 and 450 ms is neither) are the model's tests', because a
+    real browser stamps a lift when its thread gets to it, and a loaded machine is late by tens of milliseconds. Every part starts from a clean state (no finger down, no window open),
+    so that one failure cannot make the next parts fail;
   * the same in the page's FULLSCREEN (the browser's own on a Pixel; the page's own where there is no Fullscreen API: an iPhone), where the box is another size.
 What headless Chrome cannot show, and the owner's phone must: that the first touch of a page grants the sound (the autoplay policy is switched off for the check), the system's own gestures
 (Android's back swipe from an edge, iOS's swipe from the left edge, pull to refresh: the page's overscroll-behavior only asks for none), a finger's real width (a thumb's resting
@@ -36,6 +38,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import time
 
@@ -47,6 +50,28 @@ from web_hidden_check import find_browser                                    # n
 CANVAS_W, CANVAS_H = 960, 540                                                # the game's canvas (?aspect=16:9)
 OPTIONS_BUTTON = (845 + 26, 7 + 11)                                          # the Options button of the 16:9 picture, its middle
 MAP_VIEW = (16, 21, 762, 500)                                                # the map view of the 16:9 picture: x, y, width, height
+
+
+
+def options_return_button():
+    """Where a person taps the Return button of the options window, in the canvas's own pixels (the middle of its rectangle), for the 16:9 picture: the window is the original's 442 x 440 card
+    centred in the map view (ScreenLayout::options_offset), and it closes by that button and by nothing else (not Esc: the original's windows close with their own button). The numbers are read
+    from the headers, so that a change of the layout moves the check with it."""
+    include = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "include", "ants_app")
+    with open(os.path.join(include, "options_screen.hpp"), encoding="utf-8") as f:
+        button = re.search(r"RETURN_X = (\d+), RETURN_Y = (\d+), RETURN_W = (\d+), RETURN_H = (\d+);", f.read())
+    with open(os.path.join(include, "screen_layout.hpp"), encoding="utf-8") as f:
+        layout = f.read()
+    card = [re.search(r"kClassicView%s = (\d+);" % axis, layout) for axis in "XYWH"]
+    if button is None or None in card:
+        raise RuntimeError("the options window's Return button or its card is not in include/ants_app any more: the check cannot find where to tap")
+    cx, cy, cw, ch = (int(m.group(1)) for m in card)
+    x, y, w, h = (int(v) for v in button.groups())
+    vx, vy, vw, vh = MAP_VIEW
+    offset_x = vx + vw // 2 - (cx + cw // 2)                                 # (integer divisions, as the layout's)
+    offset_y = vy + vh // 2 - (cy + ch // 2)
+    return offset_x + x + w / 2, offset_y + y + h / 2
+
 
 PROFILES = {
     "pixel": {
@@ -191,9 +216,24 @@ class Game:
         """Where a point of the canvas (the picture's pixel) is in the window (CSS pixels)"""
         return screen_of_canvas(g, lx, ly, CANVAS_W, CANVAS_H)
 
-    def key(self, name, code, vk):
-        for kind in ("keyDown", "keyUp"):
-            self.tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": code, "windowsVirtualKeyCode": vk})
+    def tap(self, x, y, hold=0.08):
+        self.fingers.down(1, x, y)
+        time.sleep(hold)
+        self.fingers.up(1)
+
+    def close_options(self, g):
+        """Close the options window the way the game does: a tap on its Return button. True when the game says that no window is open any more."""
+        x, y = self.at(g, *options_return_button())
+        self.tap(x, y)
+        return bool(wait_for(lambda: self.probe(5) == 0, 3.0))
+
+    def clean(self, g):
+        """Nothing is down and no window is open: a part that failed must not leave the next one under a window that refuses its fingers."""
+        if self.fingers.points:
+            self.fingers.cancel()
+        if self.probe(5) == 1:
+            self.close_options(g)
+        wait_for(lambda: self.probe(20) == 0 and self.probe(21) == 0, 3.0, 0.05)
 
 
 def main():
@@ -385,9 +425,13 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
         def settle():
             return wait_for(lambda: game.probe(20) == 0 and game.probe(21) == 0, 3.0, 0.05)
 
+        def begin(part):
+            print("[web touch] %s: %s" % (label, part))
+            game.clean(g)
+
         mid = game.at(g, 400, 270)                                          # (a point of the map view that no button covers)
         if wanted("taps"):
-            print("[web touch] %s: taps" % label)
+            begin("taps")
             before = game.counters()
             fingers.down(1, mid[0], mid[1])
             time.sleep(0.08)
@@ -395,51 +439,47 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             settle()
             after = game.counters()
             check(after["taps"] == before["taps"] + 1 and after["holds"] == before["holds"] and after["drags"] == before["drags"], "%s: a tap on the map is a tap, and only a tap (%s -> %s)" % (label, before, after))
-            # a finger that lingers between the tap time and the hold time does nothing
-            before = game.counters()
-            fingers.down(1, mid[0], mid[1])
-            time.sleep(0.425)
-            fingers.up(1)
-            settle()
-            after = game.counters()
-            check(after["taps"] == before["taps"] and after["holds"] == before["holds"] and after["drags"] == before["drags"], "%s: a finger that lingers 425 ms and lifts is neither a tap nor a hold (%s -> %s)" % (label, before, after))
-            # a tap on a HUD button: the Options button
+            # (the boundary between a tap and a hold, and the finger that lingers between them, is not for a browser: the page's thread stamps a lift when it gets to it, and a loaded machine
+            # takes tens of milliseconds more; the model's tests pin it. Here only the clear cases: a touch of 80 ms is a tap, one of 800 ms is a hold)
+            # a tap on a HUD button: the Options button opens its window, a tap on the window's Return button closes it (a tap works on a window too)
             bx, by = game.at(g, *OPTIONS_BUTTON)
-            before = game.counters()
-            fingers.down(1, bx, by)
-            time.sleep(0.08)
-            fingers.up(1)
+            game.tap(bx, by)
             check(wait_for(lambda: game.probe(5) == 1, 3.0), "%s: a tap on the Options button opens the options window (the game says %s)" % (label, game.probe(5)))
             settle()
-            # nothing pans or zooms under the window: two fingers on the map do nothing, and a tap there is not a click on the map
-            if wanted("gates"):
-                view = game.view()
-                two = game.counters()["two"]
-                fingers.down(1, mid[0] - 30, mid[1])
-                fingers.down(2, mid[0] + 30, mid[1])
-                for i in range(1, 7):
-                    fingers.move(a=(mid[0] - 30 - 12 * i, mid[1] + 6 * i), b=(mid[0] + 30 + 12 * i, mid[1] + 6 * i))
-                    time.sleep(0.03)
-                fingers.up_all()
-                settle()
-                now = game.view()
-                check(now["x"] == view["x"] and now["y"] == view["y"] and now["zoom"] == view["zoom"] and game.counters()["two"] == two, "%s: two fingers under the options window do not pan or zoom (%s -> %s)" % (label, view, now))
-            game.key("Escape", "Escape", 27)
-            check(wait_for(lambda: game.probe(5) == 0, 3.0), "%s: the window closes (Escape)" % label)
+            check(game.close_options(g), "%s: a tap on the options window's Return button closes it (the game says %s)" % (label, game.probe(5)))
+            settle()
+        if wanted("gates"):
+            begin("two fingers under a window do nothing")
+            bx, by = game.at(g, *OPTIONS_BUTTON)
+            game.tap(bx, by)
+            check(wait_for(lambda: game.probe(5) == 1, 3.0), "%s: (the options window is open: the game says %s)" % (label, game.probe(5)))
+            settle()
+            view = game.view()
+            two = game.counters()["two"]
+            fingers.down(1, mid[0] - 30, mid[1])
+            fingers.down(2, mid[0] + 30, mid[1])
+            for i in range(1, 7):
+                fingers.move(a=(mid[0] - 30 - 12 * i, mid[1] + 6 * i), b=(mid[0] + 30 + 12 * i, mid[1] + 6 * i))
+                time.sleep(0.03)
+            fingers.up_all()
+            settle()
+            now = game.view()
+            check(now["x"] == view["x"] and now["y"] == view["y"] and now["zoom"] == view["zoom"] and game.counters()["two"] == two, "%s: two fingers under the options window do not pan or zoom (%s -> %s)" % (label, view, now))
+            check(game.close_options(g), "%s: and a tap on its Return button closes it (the game says %s)" % (label, game.probe(5)))
             settle()
         if wanted("hold"):
-            print("[web touch] %s: hold" % label)
+            begin("hold")
             buzzes = tab.ev("window.__buzz.length")
             before = game.counters()
             fingers.down(1, mid[0], mid[1])
-            time.sleep(0.25)
+            time.sleep(0.15)
             mid_state = game.counters()
-            time.sleep(0.55)                                               # 800 ms in all
+            time.sleep(0.65)                                               # 800 ms in all
             held = game.counters()
             fingers.up(1)
             settle()
             after = game.counters()
-            check(mid_state["holds"] == before["holds"] and mid_state["mode"] == 1, "%s: at 250 ms the finger still waits (nothing is held: mode %s)" % (label, mid_state["mode"]))
+            check(mid_state["holds"] == before["holds"] and mid_state["mode"] == 1, "%s: at 150 ms the finger still waits (nothing is held: mode %s)" % (label, mid_state["mode"]))
             check(held["holds"] == before["holds"] + 1 and held["mode"] == 3, "%s: at 800 ms the hold has fired (counted once) and the right button is held (mode %s)" % (label, held["mode"]))
             check(after["holds"] == before["holds"] + 1 and after["taps"] == before["taps"] and after["fingers"] == 0 and after["mode"] == 0, "%s: the lift ends it: one hold, no tap, nothing held (%s -> %s)" % (label, before, after))
             if profile["vibrate"]:
@@ -449,7 +489,7 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             # a hold that moves away before its time is a drag
             before = game.counters()
             fingers.down(1, mid[0], mid[1])
-            time.sleep(0.3)
+            time.sleep(0.12)                                                # (well before the hold time: a loaded machine delays the events too)
             for i in range(1, 7):
                 fingers.move(a=(mid[0] + 9 * i, mid[1] + 3 * i))
                 time.sleep(0.02)
@@ -459,7 +499,7 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             after = game.counters()
             check(after["drags"] == before["drags"] + 1 and after["holds"] == before["holds"], "%s: a finger that moves away within the hold time is a drag, never a hold (%s -> %s)" % (label, before, after))
         if wanted("drag"):
-            print("[web touch] %s: drag" % label)
+            begin("drag")
             before = game.counters()
             start = game.at(g, 300, 200)
             fingers.down(1, start[0], start[1])
@@ -471,7 +511,7 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             after = game.counters()
             check(after["drags"] == before["drags"] + 1 and after["taps"] == before["taps"] and after["holds"] == before["holds"], "%s: a drag on the map is a drag (%s -> %s)" % (label, before, after))
         if wanted("pan"):
-            print("[web touch] %s: two fingers pan the map" % label)
+            begin("two fingers pan the map")
             view = game.view()
             two = game.counters()["two"]
             scroll_before = tab.ev("window.scrollY")
@@ -502,7 +542,7 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             check(counters["two"] == two + 1 and counters["taps"] == game.counters()["taps"] and counters["fingers"] == 0 and counters["mode"] == 0, "%s: it is one two-finger gesture and nothing is left held (%s)" % (label, counters))
             check(tab.ev("window.scrollY") == scroll_before and tab.ev("window.visualViewport.scale") == 1, "%s: the page neither scrolled nor zoomed under the fingers (scroll %s, scale %s)" % (label, tab.ev("window.scrollY"), tab.ev("window.visualViewport.scale")))
         if wanted("pinch"):
-            print("[web touch] %s: two fingers pinch the map" % label)
+            begin("two fingers pinch the map")
             view = game.view()
             two = game.counters()["two"]
 
@@ -539,7 +579,7 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
                 pinch(40, 70)
             check(game.view()["zoom"] >= 100, "%s: spreading goes back up (%s %%)" % (label, game.view()["zoom"]))
         if wanted("cancel"):
-            print("[web touch] %s: the browser takes the touch away" % label)
+            begin("the browser takes the touch away")
             tab.ev("(function () { var orig = Module._ants_touch_cancel; window.__cancelled = 0; Module._ants_touch_cancel = function () { window.__cancelled++; return orig.apply(this, arguments); }; })(); 1")
             before = game.counters()
             fingers.down(1, mid[0], mid[1])
@@ -568,6 +608,7 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
     if wanted("fullscreen"):
         print("[web touch] %s: the Fullscreen button, by touch" % name)
         g = game.scroll_to_box()
+        game.clean(g)
         button = json.loads(tab.ev("JSON.stringify((function () { var b = document.getElementById('fullscreen-btn').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2, b.width, b.height]; })())"))
         check(button[2] >= 24 and button[3] >= 24, "%s: the Fullscreen button is big enough for a finger (%.0f x %.0f CSS pixels)" % (name, button[2], button[3]))
         fingers.down(1, button[0], button[1])

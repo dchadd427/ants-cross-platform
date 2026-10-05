@@ -264,6 +264,18 @@ class TheBrowserCheck(PageCase):
         self.assertIn("SKIP", done.stdout)
         self.assertIn("ANTS_WEB_URL", done.stdout)
 
+    def test_the_options_window_is_closed_by_its_return_button_and_not_by_esc(self):
+        # (the original's windows close with their own button: the first run of this check on the real game found that Esc does nothing there)
+        x, y = self.module.options_return_button()
+        self.assertEqual((x, y), (560.0, 468.0), "the card (16, 21, 442, 440) is centred in the 16:9 map view (16, 21, 762, 500): moved by (160, 30); the button is (351, 425, 98, 26) in it")
+        card_x, card_y = 160 + 17, 30 + 20                                    # (the card at the window's own (17, 20), 442 x 440)
+        self.assertTrue(card_x < x < card_x + 442 and card_y < y < card_y + 440, "the Return button is inside the options card")
+        code = without_comments(self.source)
+        self.not_found(code, r"Escape", "the check never leaves a window with Esc")
+        self.assertIn("close_options", self.source)
+        self.assertGreaterEqual(len(re.findall(r'begin\("', self.source)), 6, "every part of the gestures starts from a clean state")
+        self.assertEqual([line for line in self.source.splitlines() if "check(" in line and "linger" in line], [], "no real-browser check of the 400 - 450 ms boundary (a loaded machine is late by more than its margin)")
+
     def test_a_bad_command_line_is_status_2_and_asks_for_no_browser(self):
         done = subprocess.run([sys.executable, BROWSER_CHECK, "--web", "http://127.0.0.1:9/", "--profile", "android-tablet"], capture_output=True, text=True, timeout=60)
         self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
