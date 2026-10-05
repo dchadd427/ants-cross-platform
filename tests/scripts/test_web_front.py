@@ -126,6 +126,11 @@ class TheSharedStylesheet(unittest.TestCase):
     def token(self, name):
         return re.search(r"--%s: (#[0-9a-f]{6});" % name, self.css).group(1)
 
+    @staticmethod
+    def ratio(one, other):
+        high, low = sorted((TheColours.luminance(one), TheColours.luminance(other)), reverse=True)
+        return (high + 0.05) / (low + 0.05)
+
     def test_the_font_and_the_clay_tile_it_names_are_in_the_folder_beside_it(self):
         self.assertRegex(self.css, r'@font-face \{ font-family: "Libre Franklin"; src: url\("LibreFranklin-Medium\.ttf"\) format\("truetype"\);')       # (relative: it resolves next to the sheet)
         self.assertIn('url("clay.png")', self.css)
@@ -145,20 +150,19 @@ class TheSharedStylesheet(unittest.TestCase):
         self.assertRegex(self.css, r"button:focus-visible[^{]*\{ outline: 3px solid var\(--gold\);")                    # (a focused control shows it, on every page)
 
     def test_the_text_that_its_components_pair_is_at_least_4_5_to_1(self):
-        ratio, tone = TheColours.ratio, self.token
+        tone = self.token
         pairs = (("cream on a button or a banner", "cream", "teal"), ("gold on a banner", "gold", "teal"), ("cream on a hovered button", "cream", "teal-hi"),
                  ("a chosen button", "pressed-ink", "pressed"), ("cream in a black box", "cream", "inset"), ("gold in a black box", "gold", "inset"),
                  ("a link in a black box", "mint", "inset"), ("small print in a black box", "muted", "inset"), ("a refused entry", "bad-ink", "bad-bg"))
-        probe = TheColours("test_the_banners_buttons_and_hovered_buttons_keep_their_text_readable")
         for what, text, background in pairs:
-            self.assertGreaterEqual(probe.ratio(tone(text), tone(background)), 4.5, "%s: %s on %s" % (what, text, background))
+            self.assertGreaterEqual(self.ratio(tone(text), tone(background)), 4.5, "%s: %s on %s" % (what, text, background))
         placeholder = re.search(r"::placeholder \{ color: (#[0-9a-f]{6}); \}", self.css).group(1)
-        self.assertGreaterEqual(probe.ratio(placeholder, tone("inset")), 4.5)
+        self.assertGreaterEqual(self.ratio(placeholder, tone("inset")), 4.5)
         for end in re.findall(r"linear-gradient\(180deg, (#[0-9a-f]{6}), (#[0-9a-f]{6})\)", self.css)[0]:                  # (the footer bar's two ends)
-            self.assertGreaterEqual(probe.ratio(tone("cream"), end), 4.5, "cream on the footer bar " + end)
-            self.assertGreaterEqual(probe.ratio("#ffffff", end), 4.5, "the version on the footer bar " + end)
+            self.assertGreaterEqual(self.ratio(tone("cream"), end), 4.5, "cream on the footer bar " + end)
+            self.assertGreaterEqual(self.ratio("#ffffff", end), 4.5, "the version on the footer bar " + end)
         for clay in (tone("clay"), "#fb335b"):                                                                          # (the two colours of the clay tile: the text that sits on the bare page)
-            self.assertGreaterEqual(probe.ratio(tone("ink"), clay), 4.5, "ink on the clay " + clay)
+            self.assertGreaterEqual(self.ratio(tone("ink"), clay), 4.5, "ink on the clay " + clay)
 
 
 class TheTool(unittest.TestCase):

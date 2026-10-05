@@ -7,9 +7,9 @@ Usage: changelog_to_html.py IN.md OUT.html [REPO_BLOB_URL]
            [--other-page FILE.html --other-label TEXT]
            [--page-link MD_PATH=PAGE.html ...] [--link-base DIR]
 
-  --version, --build-id   shown under the title of the page ("v0.1.0 - build abc1234"): which build of the site this is
+  --version, --build-id   shown in the footer of the page ("v0.1.0 - build abc1234"): which build of the site this is
   --other-page, --other-label
-                          a link in the header to the page's counterpart (the short page links to the detailed history and the other way round)
+                          a button in the header for the page's counterpart (the short page links to the detailed history and the other way round)
   --page-link             a relative link of the Markdown that names this file (docs/CHANGELOG_ARCHIVE.md) is pointed at that page of the site
                           instead of the repository; repeatable
   --link-base             the folder of the Markdown file inside the repository (docs for docs/CHANGELOG_ARCHIVE.md): a relative link is resolved from it,
