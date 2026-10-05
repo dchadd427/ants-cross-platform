@@ -933,11 +933,16 @@ void run_map_tests() {
                 if (dx != 0 || dy != 0) sim.set_terrain(40 + dx, 30 + dy, sim::TERRAIN_OBSTACLE);
             }
         }
+        place_crackers(sim, 20, 30);
         const MapInfo m(sim);
         const HillInfo& h = m.hill(0);
         const MapInfo::NowField open = m.field_now(sim.grid(), 0);
         ASSERT_TRUE(open.valid());
         ASSERT_TRUE(m.reaches_hill(open, TileCoord{30, 30}));
+        ASSERT_FALSE(m.pile(0)->cells.empty());
+        const TileCoord on_pile = m.pile(0)->cells[0];
+        ASSERT_FALSE(MapInfo::walkable(sim.grid(), 0, on_pile));
+        ASSERT_TRUE(m.reaches_hill(open, on_pile));                                                      // a harvesting ant stands on a cell of its pile, which is no walkable tile: the tile next to it counts
         ASSERT_TRUE(m.reaches_hill(open, h.queue));
         ASSERT_TRUE(m.reaches_hill(open, h.mouth));                                                      // the ramp and the hole are no walkable tiles, and the hill's own tiles count
         ASSERT_TRUE(m.reaches_hill(open, h.entrance));
