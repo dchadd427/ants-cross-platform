@@ -4,8 +4,11 @@
   CHANGELOG.md               the short changelog: one entry per release in a fixed template  -> changelog.html (the default page)
   docs/CHANGELOG_ARCHIVE.md  the detailed history up to v0.1.0, frozen                       -> changelog_archive.html
 
-The Docker image builds both pages with the commands below (Dockerfile); this test runs the same commands on the real files and on small made-up ones.
+The Docker image builds both pages with the commands below (Dockerfile); this test runs the same commands on the real files and on small made-up ones. The pages are in the Classic look of
+the front page (they link the site's /front/classic.css, show the logo, and carry the version and the build in the footer): what is pinned here is their structure, not their colours
+(web/front/classic.css and tests/scripts/test_web_front.py own those).
 """
+import html.parser
 import os
 import re
 import subprocess
@@ -69,6 +72,60 @@ def read_text(path):
         return f.read()
 
 
+GITHUB = "https://github.com/dchadd427/ants-cross-platform"
+VOID = {"meta", "link", "img", "br", "hr", "input"}
+
+
+class Structure(html.parser.HTMLParser):
+    """Walks a page: the elements are balanced, and the head's links, the images, the scripts and the anchors are collected."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack, self.errors = [], []
+        self.links, self.imgs, self.scripts, self.anchors, self.ids, self.text = [], [], [], [], [], []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if "id" in a:
+            self.ids.append(a["id"])
+        if tag == "link":
+            self.links.append(a)
+        elif tag == "img":
+            self.imgs.append(a)
+        elif tag in ("script", "iframe", "object", "embed"):
+            self.scripts.append(tag)
+        elif tag == "a":
+            self.anchors.append(a)
+        if tag not in VOID:
+            self.stack.append(tag)
+
+    def handle_endtag(self, tag):
+        if tag in VOID:
+            return
+        if not self.stack or self.stack[-1] != tag:
+            self.errors.append("</%s> closes %s" % (tag, self.stack[-1] if self.stack else "nothing"))
+            if tag in self.stack:
+                while self.stack and self.stack.pop() != tag:
+                    pass
+        else:
+            self.stack.pop()
+
+    def handle_data(self, data):
+        self.text.append(data)
+
+
+def walk(page):
+    parser = Structure()
+    parser.feed(page)
+    parser.close()
+    return parser
+
+
+def part(page, tag, attrs=""):
+    """The first <tag ...> ... </tag> of a page (the markup between the tags, the tags included)."""
+    return re.search(r"<%s%s[^>]*>.*?</%s>" % (tag, attrs, tag), page, re.S).group(0)
+
+
 def run_tool(md_path, out_path, *extra):
     return subprocess.run([sys.executable, TOOL, md_path, out_path, *extra], capture_output=True, text=True)
 
@@ -111,33 +168,50 @@ class MadeUpFiles(unittest.TestCase):
         self.assertTrue(self.short_text.startswith("<!DOCTYPE html>"))
         self.assertTrue(self.archive_text.startswith("<!DOCTYPE html>"))
 
-    def test_the_two_pages_link_to_each_other_from_the_header(self):
-        header = re.search(r"<header>.*?</header>", self.short_text, re.S).group(0)
-        self.assertIn('<a href="changelog_archive.html">Detailed history</a>', header)
-        self.assertIn('href="/"', header)                                  # back to the game, as before
-        header = re.search(r"<header>.*?</header>", self.archive_text, re.S).group(0)
-        self.assertIn('<a href="changelog.html">Short changelog</a>', header)
+    def test_the_two_pages_link_to_each_other_from_the_header_with_play_and_github_beside_them(self):
+        header = part(self.short_text, "header")
+        self.assertRegex(header, r'<a class="btn sm" href="changelog_archive\.html">Detailed history</a>')
+        self.assertRegex(header, r'<a class="btn sm" href="/">Play</a>')                         # back to the game: the front page
+        self.assertRegex(header, r'<a class="btn sm" href="%s" target="_blank" rel="noopener noreferrer">GitHub</a>' % re.escape(GITHUB))
+        self.assertEqual(re.findall(r'class="btn sm" href="([^"]*)"', header), ["/", "changelog_archive.html", GITHUB])         # the three buttons, in this order
+        self.assertIn('<a class="logo" href="/"', header)                                          # and the logo goes to the front page too
+        header = part(self.archive_text, "header")
+        self.assertRegex(header, r'<a class="btn sm" href="changelog\.html">Short changelog</a>')
 
-    def test_version_and_build_id_are_in_the_header(self):
+    def test_version_and_build_id_are_in_the_footer_with_the_front_pages_ids(self):
         for text in (self.short_text, self.archive_text):
-            header = re.search(r"<header>.*?</header>", text, re.S).group(0)
-            self.assertIn("v1.2.0 - build abc1234", header)
+            footer = part(text, "footer")
+            pill = re.search(r'<span class="ver" id="game-version-line">(.*?)</span></span>\n', footer, re.S).group(0)
+            self.assertEqual(re.sub(r"<[^>]*>", "", pill).strip(), "v1.2.0 - build abc1234")          # the text that the header used to carry
+            self.assertIn('<span id="game-version">v1.2.0</span>', pill)
+            self.assertIn('<span id="game-build-id">abc1234</span>', pill)
+            self.assertNotIn("build abc1234", part(text, "header"))                                   # (one place: the footer)
 
-    def test_without_version_and_build_the_header_has_no_build_line(self):
+    def test_without_version_and_build_the_footer_has_no_version_line(self):
         out = os.path.join(self.tmp.name, "plain.html")
         result = run_tool(self.short_md, out)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn("buildline\">", read_text(out))
+        page = read_text(out)
+        for needle in ("game-version-line", "game-version", "game-build", "build "):
+            self.assertNotIn(needle, page, needle)
+
+    def test_the_version_and_the_build_may_be_given_alone(self):
+        only = {}
+        for flag, value in (("--version", "v3.4.5"), ("--build-id", "f00ba12")):
+            out = os.path.join(self.tmp.name, "only%s.html" % flag.strip("-"))
+            self.assertEqual(run_tool(self.short_md, out, flag, value).returncode, 0)
+            only[flag] = re.sub(r"<[^>]*>", "", re.search(r'<span class="ver" id="game-version-line">.*?</span></span>', read_text(out), re.S).group(0))
+        self.assertEqual(only, {"--version": "v3.4.5", "--build-id": "build f00ba12"})
 
     def test_every_version_heading_is_a_section_with_a_nav_entry(self):
         for anchor in ("v1-2-0", "v1-1-0"):
-            self.assertIn('<section id="%s">' % anchor, self.short_text)
+            self.assertIn('<section id="%s" class="panel">' % anchor, self.short_text)
             self.assertIn('<a href="#%s">' % anchor, self.short_text)
         self.assertEqual(self.short_text.count("<section "), 4)             # Unreleased, v1.2.0, v1.1.0, Older versions
         self.assertEqual(self.archive_text.count("<section "), 1)
 
     def test_the_template_labels_and_bullets_render(self):
-        section = re.search(r'<section id="v1-2-0">.*?</section>', self.short_text, re.S).group(0)
+        section = re.search(r'<section id="v1-2-0" class="panel">.*?</section>', self.short_text, re.S).group(0)
         for label in ("For players:", "Rules / network:", "Fixes:", "Details:"):
             self.assertIn("<strong>%s</strong>" % label, section)
         self.assertEqual(section.count("<li>"), 3)                          # two player bullets and one fix
@@ -160,12 +234,76 @@ class MadeUpFiles(unittest.TestCase):
         self.assertIn("&lt;angle&gt; brackets &amp; an ampersand", self.short_text)
         self.assertIn("<code>code</code>", self.short_text)
 
+    def test_bullets_that_a_blank_line_separates_are_one_list_and_the_markup_is_balanced(self):
+        out = os.path.join(self.tmp.name, "loose.html")
+        md = os.path.join(self.tmp.name, "loose.md")
+        with open(md, "w", encoding="utf-8") as f:
+            f.write("# Changelog\n\n## v1.0.0 - 2026-01-01 - Loose\n\n- one\n\n- two\n\n\n- three\n\nA paragraph.\n\n- four\n")
+        self.assertEqual(run_tool(md, out).returncode, 0)
+        page = read_text(out)
+        lists = re.findall(r"<ul>.*?</ul>", page, re.S)
+        self.assertEqual([l.count("<li>") for l in lists], [3, 1])                              # one, two and three are a list; a paragraph ends it
+        self.assertNotIn("</ul><li>", page)
+        self.assertNotIn("</ul></ul>", page)
+        result = walk(page)
+        self.assertEqual((result.errors, result.stack), ([], []))
+
     def test_a_continuation_line_belongs_to_its_bullet(self):
         self.assertIn("<li>A long detailed bullet that continues on a second line.</li>", self.archive_text)
 
     def test_the_footer_names_the_source_file(self):
         self.assertIn("Generated from CHANGELOG.md when the site image is built", self.short_text)
         self.assertIn("Generated from CHANGELOG_ARCHIVE.md when the site image is built", self.archive_text)
+
+    def test_the_pages_are_in_the_classic_look_and_load_only_the_logo_the_font_and_the_one_stylesheet(self):
+        for text in (self.short_text, self.archive_text):
+            page = walk(text)
+            self.assertEqual(page.errors, [])
+            self.assertEqual(page.stack, [])
+            self.assertEqual([(l.get("rel"), l.get("href")) for l in page.links],
+                             [("icon", "/favicon.png"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css")])
+            self.assertEqual([i.get("src") for i in page.imgs], ["/front/logo.png"])
+            self.assertEqual(page.scripts, [])
+            style = re.search(r"<style>(.*?)</style>", text, re.S).group(1)
+            self.assertNotIn("@import", style)
+            self.assertNotIn("url(", style)
+            self.assertNotRegex(style, r"--(?:clay|teal|gold|inset|frame|edge|shadow|cream)\s*:")      # (the tokens are the stylesheet's: the page does not make its own)
+            self.assertLess(len(style), 4000)
+            for needle in ('<div class="screen">', '<h1 class="banner gold">', '<footer class="bar">', '<nav class="versions panel" aria-label="Versions">'):
+                self.assertIn(needle, text)
+            self.assertEqual(text.count("<h1"), 1)
+            self.assertEqual(text.count("<main>"), 1)
+
+    def test_every_place_that_shows_a_text_escapes_it(self):
+        out = os.path.join(self.tmp.name, "escape.html")
+        md = os.path.join(self.tmp.name, "escape.md")
+        with open(md, "w", encoding="utf-8") as f:
+            f.write('# A <b>title</b> & more\n\n## v1.0.0 - 2026-01-01 - <i>x</i> & "y"\n\n- a bullet\n')
+        result = run_tool(md, out, "https://example.com/a\"b/blob/main/", "--version", "<v>", "--build-id", "x&y", "--other-page", 'o"ther.html', "--other-label", "<o> & co")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        page = read_text(out)
+        for needle in ('<h1 class="banner gold">A &lt;b&gt;title&lt;/b&gt; &amp; more</h1>', '&lt;i&gt;x&lt;/i&gt; &amp; "y"', '<span id="game-version">&lt;v&gt;</span>', '<span id="game-build-id">x&amp;y</span>',
+                       '>&lt;o&gt; &amp; co</a>', 'href="o&quot;ther.html"', 'href="https://example.com/a&quot;b"', "Generated from escape.md when"):
+            self.assertIn(needle, page, needle)
+        self.assertEqual(walk(page).errors, [])
+        self.assertNotIn("<b>", page)
+        self.assertNotIn("<i>", page)
+
+    def test_the_github_buttons_go_to_the_repository_and_its_issues(self):
+        for text in (self.short_text, self.archive_text):
+            self.assertEqual(text.count('href="%s"' % GITHUB), 2)                                       # the header button and the footer link
+            self.assertIn('href="%s/issues"' % GITHUB, part(text, "footer"))
+
+    def test_a_long_word_cannot_widen_the_page(self):
+        out = os.path.join(self.tmp.name, "long.html")
+        md = os.path.join(self.tmp.name, "long.md")
+        with open(md, "w", encoding="utf-8") as f:
+            f.write("# Changelog\n\n## v1.0.0 - 2026-01-01 - Long\n\n- `" + "a" * 400 + "` and " + "b" * 400 + "\n")
+        self.assertEqual(run_tool(md, out).returncode, 0)
+        style = re.search(r"<style>(.*?)</style>", read_text(out), re.S).group(1)
+        panel = re.search(r"\.panel \{([^}]*)\}", style).group(1)
+        self.assertIn("overflow-x: auto", panel)                                                        # a line that cannot break scrolls inside its panel
+        self.assertIn("overflow-wrap: anywhere", panel)                                                 # and one that can, wraps
 
     def test_a_bad_page_link_is_refused(self):
         out = os.path.join(self.tmp.name, "bad.html")
@@ -199,6 +337,46 @@ class RealFiles(unittest.TestCase):
             page = read_text(html_path)
             self.assertEqual(page.count("<section "), headings)
             self.assertGreaterEqual(headings, 2)
+
+    def pages(self):
+        return ((self.short_md, self.short_html, "changelog_archive.html", "Detailed history", "CHANGELOG.md"),
+                (self.archive_md, self.archive_html, "changelog.html", "Short changelog", "CHANGELOG_ARCHIVE.md"))
+
+    def test_the_structure_of_the_real_pages_header_nav_sections_and_footer(self):
+        for md, path, other, label, source in self.pages():
+            text = read_text(path)
+            page = walk(text)
+            self.assertEqual((page.errors, page.stack), ([], []), source)
+            body = re.sub(r"<!--.*?-->", "", md, flags=re.S)
+            versions = re.findall(r"^## (v\d+(?:\.\d+)*)", body, re.M)
+            sections = re.findall(r'<section id="([^"]+)" class="panel">', text)
+            self.assertEqual(len(sections), len(re.findall(r"^## ", body, re.M)), source)
+            self.assertEqual(len(set(sections)), len(sections), source + ": every section has an id of its own")
+            self.assertEqual(len(set(page.ids)), len(page.ids), source + ": no id twice on the page")
+            nav = part(text, "nav", r' class="versions panel"')
+            self.assertEqual(re.findall(r'<a href="#([^"]+)">', nav), sections, source + ": the list of releases is the sections, in order")
+            self.assertEqual(len(re.findall(r'<span class="rel">v', text)), len(versions), source + ": every release heading has its version plate")
+            header = part(text, "header")
+            self.assertEqual(re.findall(r'<a class="btn sm" href="([^"]*)"[^>]*>([^<]*)</a>', header), [("/", "Play"), (other, label), (GITHUB, "GitHub")], source)
+            self.assertEqual(re.search(r"<h1 [^>]*>(.*?)</h1>", text).group(1), re.search(r"^# (.*)$", md, re.M).group(1), source)
+            footer = part(text, "footer")
+            self.assertIn("Generated from %s when the site image is built" % source, footer)
+            self.assertIn('id="game-version">v1.2.0<', footer)
+            self.assertIn('id="game-build-id">abc1234<', footer)
+
+    def test_every_link_of_the_real_pages_leads_somewhere_that_exists(self):
+        for md, path, other, label, source in self.pages():
+            text = read_text(path)
+            page = walk(text)
+            anchors = set(re.findall(r'<section id="([^"]+)"', text))
+            for a in page.anchors:
+                href = a["href"]
+                if href.startswith("#"):
+                    self.assertIn(href[1:], anchors, "%s: %s" % (source, href))
+                elif href.startswith("https://"):
+                    self.assertNotIn(" ", href, source)
+                else:
+                    self.assertIn(href, ("/", other), "%s: a link that is neither the site, nor the other page, nor an address: %s" % (source, href))     # (a path of the repository is an address, not a file of the site)
 
     def test_the_archive_is_the_whole_old_changelog(self):
         self.assertTrue(self.archive_md.startswith("# Detailed history up to v0.1.0\n"))

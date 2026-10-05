@@ -105,7 +105,8 @@ COPY web/front/ /usr/share/nginx/html/front/
 # with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
 COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 
-# The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other)
+# The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other); they are in the Classic look of the front page: they link
+# /front/classic.css and show /front/logo.png, which the web/front/ copy above puts in the image
 COPY --from=builder /src/changelog/changelog.html /src/changelog/changelog_archive.html /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site

@@ -17,6 +17,9 @@ Usage: changelog_to_html.py IN.md OUT.html [REPO_BLOB_URL]
 
 An HTML comment (<!-- ... -->, the template at the top of CHANGELOG.md) is dropped.
 
+The page is in the Classic look of the front page: it links the site's /front/classic.css (the tokens, the buttons, the frame, the footer), preloads the font and shows the logo
+from /front/, and adds only the rules of its own panels here. Nothing else is loaded; a long line scrolls inside its panel. The footer names the version and the build.
+
 No dependencies (the Emscripten build image only has the standard library). It understands exactly the Markdown subset the changelog
 uses: one `#` title, paragraphs, `##` version headings, `- ` bullets with indented continuation lines, `code`, **bold** and [links](url).
 Relative links (README.md, docs/...) are pointed at the repository, because those files are not part of the site.
@@ -29,6 +32,33 @@ import sys
 
 DEFAULT_REPO_BLOB = "https://github.com/dchadd427/ants-cross-platform/blob/main/"
 
+# The page's own rules (the look itself is /front/classic.css): the panels of the intro, the list of releases and each release; a release's heading, its text, links and code
+STYLE = """main { margin-top: 26px; }
+.panel { margin: 0 0 22px; padding: 16px 22px; overflow-x: auto; overflow-wrap: anywhere; }
+.panel > :last-child { margin-bottom: 0; }
+.panel p, .panel li { font-size: 15px; line-height: 1.55; }
+.panel p { margin: 0 0 10px; }
+.panel ul { margin: 0 0 12px; padding-left: 22px; }
+.panel li { margin: 0 0 8px; }
+.panel li:last-child { margin-bottom: 0; }
+.panel li::marker { color: var(--gold); }
+.panel strong { font-weight: 500; color: #fff; -webkit-text-stroke: .5px currentColor; }
+.panel p > strong:first-child { color: var(--gold); }
+.panel a { color: var(--mint); text-underline-offset: 2px; }
+.panel a:hover { color: #fff; }
+.panel code { color: #d7f3e5; background: #0d1a16; border: 1px solid #1d4a3a; border-radius: 3px; padding: 0 4px; }
+nav.versions { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 12px 22px; font-size: 14px; line-height: 1.8; }
+section h2 { margin: 0 0 12px; font-size: 20px; font-weight: 500; line-height: 1.7; color: var(--gold); }
+section h2 a { color: var(--gold); }
+.rel { display: inline-block; margin-right: 12px; padding: 0 12px; line-height: 1.4; background: var(--teal); border: 2px solid var(--edge); border-radius: 2px; box-shadow: var(--btn-shadow-sm); }
+section:target { border-color: var(--gold); }
+@media (max-width: 700px) {
+    main { margin-top: 16px; }
+    .panel { padding: 14px 14px; }
+    nav.versions { padding: 10px 14px; max-height: 9.5em; overflow-y: auto; }
+    section h2 { font-size: 18px; }
+}"""
+
 PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -36,41 +66,31 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ants (1998) - Changelog</title>
 <link rel="icon" type="image/png" href="/favicon.png">
+<link rel="preload" href="/front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="/front/classic.css">
 <style>
-:root {{ --bg:#121513; --panel:#1c231e; --border:#384d3e; --green:#48b870; --gold:#e6b830; --text:#d0e0d4; --dim:#849688; }}
-* {{ box-sizing: border-box; }}
-body {{ margin:0; background:var(--bg); color:var(--text); font:15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }}
-header {{ max-width:900px; margin:0 auto; padding:14px 16px 0; display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }}
-header h1 {{ margin:0; font-size:1.4rem; color:var(--gold); }}
-header .buildline {{ color:var(--dim); font-size:.8rem; margin-top:2px; }}
-header .links {{ display:flex; gap:16px; flex-wrap:wrap; }}
-header a {{ color:var(--green); text-decoration:none; }}
-header a:hover, .intro a:hover, section a:hover {{ text-decoration:underline; }}
-main {{ max-width:900px; margin:0 auto; padding:8px 16px 40px; }}
-.intro {{ color:var(--dim); }}
-.intro a, section a {{ color:var(--green); }}
-nav.versions {{ margin:14px 0 18px; padding:10px 12px; background:var(--panel); border:1px solid var(--border); border-radius:6px; font-size:.85rem; line-height:1.9; }}
-nav.versions a {{ display:inline-block; margin:0 8px 0 0; color:var(--green); text-decoration:none; }}
-nav.versions a:hover {{ text-decoration:underline; }}
-section {{ margin:0 0 14px; padding:10px 14px 4px; background:var(--panel); border:1px solid var(--border); border-radius:6px; }}
-section:target {{ border-color:var(--gold); }}
-section h2 {{ margin:2px 0 8px; font-size:1.05rem; color:var(--gold); }}
-section h2 .ver {{ color:var(--green); margin-right:6px; }}
-section ul {{ margin:0 0 8px; padding-left:20px; }}
-section li {{ margin:0 0 6px; }}
-section p {{ margin:0 0 8px; }}
-code {{ font:0.88em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#0f1411; border:1px solid #2a3a2f; border-radius:3px; padding:0 4px; }}
-footer {{ max-width:900px; margin:0 auto; padding:0 16px 24px; color:var(--dim); font-size:.8rem; }}
+{style}
 </style>
 </head>
 <body>
-<header><div><h1>{title}</h1>{buildline}</div><div class="links">{other}<a href="/">&larr; Back to the game</a></div></header>
+<div class="screen">
+<div class="wrap narrow">
+<header class="site-head">
+<a class="logo" href="/" aria-label="ants! - the front page"><img src="/front/logo.png" alt="ants!" width="581" height="218"></a>
+<div><h1 class="banner gold">{title}</h1>
+<nav class="links" aria-label="Pages"><a class="btn sm" href="/">Play</a>{other}<a class="btn sm" href="{github}" target="_blank" rel="noopener noreferrer">GitHub</a></nav></div>
+</header>
 <main>
 {intro}
-<nav class="versions" aria-label="Versions">{nav}</nav>
+<nav class="versions panel" aria-label="Versions">{nav}</nav>
 {sections}
 </main>
-<footer>Generated from {source} when the site image is built, so this page always matches the running build.</footer>
+</div>
+<footer class="bar"><div class="bar-in">
+{versionline}<span class="grow">Generated from {source} when the site image is built, so this page always matches the running build.</span>
+<nav aria-label="Footer links"><a href="/">Play</a><a href="{github}" target="_blank" rel="noopener noreferrer">GitHub</a><a href="{github}/issues" target="_blank" rel="noopener noreferrer">Feedback</a></nav>
+</div></footer>
+</div>
 </body>
 </html>
 """
@@ -114,6 +134,21 @@ def inline(text, repo_blob, page_links=None, link_base=""):
     return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], text)
 
 
+def repo_home(repo_blob):
+    """The repository's own page from the address that relative links go to (.../blob/main/ becomes ...); any other address stays as it is."""
+    return re.sub(r"/blob/[^/]+/?$", "", repo_blob.rstrip("/") + "/").rstrip("/")
+
+
+def version_line(version, build_id):
+    """The footer's pill: "v0.5.0 - build abc1234" (the same ids as the front page's footer), only the part that is known, nothing when neither is."""
+    parts = []
+    if version:
+        parts.append('<span id="game-version">%s</span>' % html.escape(version))
+    if build_id:
+        parts.append('<span id="game-build">%sbuild <span id="game-build-id">%s</span></span>' % (" - " if version else "", html.escape(build_id)))
+    return '<span class="ver" id="game-version-line">%s</span>\n' % "".join(parts) if parts else ""
+
+
 def slug(heading):
     m = re.match(r"^(v\d+(?:\.\d+)*)", heading)
     base = m.group(1) if m else heading.split("(")[0]
@@ -141,6 +176,8 @@ def convert(md, repo_blob, version="", build_id="", other_page="", other_label="
             target = current[2] if current else intro
             if not target or not target[-1].startswith("<ul>"):
                 target.append("<ul>")
+            elif target[-1].endswith("</ul>"):
+                target[-1] = target[-1][:-len("</ul>")]                  # a bullet after a blank line goes on with the list (it was left outside it, with a stray </ul> at the end)
             target[-1] += "<li>" + inline(" ".join(item), repo_blob, page_links, link_base) + "</li>"
             item = None
 
@@ -163,7 +200,7 @@ def convert(md, repo_blob, version="", build_id="", other_page="", other_label="
             m = re.match(r"^(v\d+(?:\.\d+)*)\s*(.*)$", heading)
             if m:
                 rest = re.sub(r"^[-\s]+", "", m.group(2))
-                head_html = '<span class="ver">%s</span>%s' % (html.escape(m.group(1)), (" &middot; " + inline(rest, repo_blob, page_links, link_base)) if rest else "")
+                head_html = '<span class="rel">%s</span>%s' % (html.escape(m.group(1)), (" " + inline(rest, repo_blob, page_links, link_base)) if rest else "")
                 short = m.group(1)
             else:
                 head_html = inline(heading, repo_blob, page_links, link_base)
@@ -179,7 +216,7 @@ def convert(md, repo_blob, version="", build_id="", other_page="", other_label="
         elif not line.strip():
             flush_paragraph()
             flush_item()
-            if current and current[2] and current[2][-1].startswith("<ul>"):
+            if current and current[2] and current[2][-1].startswith("<ul>") and not current[2][-1].endswith("</ul>"):
                 current[2][-1] += "</ul>"
         else:
             flush_item()
@@ -193,16 +230,13 @@ def convert(md, repo_blob, version="", build_id="", other_page="", other_label="
         sections.append(current)
     intro = close_lists(intro)
 
-    body = "\n".join('<section id="%s"><h2>%s</h2>\n%s\n</section>' % (sid, head, "\n".join(blocks)) for sid, head, blocks in sections)
-    intro_html = '<div class="intro">%s</div>' % "\n".join(intro)
-    buildline = ""
-    if version or build_id:
-        text = " - ".join(part for part in (version, ("build " + build_id) if build_id else "") if part)
-        buildline = '<div class="buildline">%s</div>' % html.escape(text)
+    body = "\n".join('<section id="%s" class="panel"><h2>%s</h2>\n%s\n</section>' % (sid, head, "\n".join(blocks)) for sid, head, blocks in sections)
+    intro_html = '<div class="intro panel">%s</div>' % "\n".join(intro)
     other = ""
     if other_page:
-        other = '<a href="%s">%s</a>' % (html.escape(other_page, quote=True), html.escape(other_label or other_page))
-    return PAGE.format(title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, buildline=buildline, other=other, source=html.escape(source))
+        other = '<a class="btn sm" href="%s">%s</a>' % (html.escape(other_page, quote=True), html.escape(other_label or other_page))
+    return PAGE.format(style=STYLE, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, versionline=version_line(version, build_id), other=other,
+                       github=html.escape(repo_home(repo_blob), quote=True), source=html.escape(source))
 
 
 def main(argv):
