@@ -465,7 +465,7 @@ void run_b41_offence_tests() {
                       sim.set_fire_at(east[0], 3600);
                       sim.set_fire_at(east[2], 3600);
                   }, reactions, 300, false, 2u), 0u);
-        // (m) a minimum of 0 is a minimum of 1: a hole with no free tile is never raided
+        // (m) a minimum of 0 is a minimum of 1: no walk leads into a hole with no free tile, so nothing is ordered
         ASSERT_EQ(raids([&](sim::SimulationEngine& sim) {
                       for (const TileCoord& e : east) sim.set_fire_at(e, 3600);
                   }, reactions, 300, true, 0u), 0u);

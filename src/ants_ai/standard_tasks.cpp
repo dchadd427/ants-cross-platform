@@ -1337,7 +1337,7 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
         teams.push_back(t);
     }
     // the cheap checks first: a hill that is not there, or whose hole is shut, is no target, and a thief that looks at the world every few ticks must not search the map for nothing (a full
-    // search per look and thief was the most expensive thing that the bot did). A hole is raided only when raid_min_free (at least one) of the three tiles in front of it are free (a thief can
+    // search per look and thief was the most expensive thing that the bot did). A hole is raided only when at least raid_min_free of the three tiles in front of it are free (a thief can
     // step onto them: nothing lit, bombed or solid, and with the can't-go fixes no ant standing on them) and, with the fixes, no ant stands on the raid tile: an ant that holds the last free
     // tile or the raid tile shuts the hole, and the order ends in "Can't go there." (CG2 of the can't-go report)
     teams.erase(std::remove_if(teams.begin(), teams.end(),
@@ -1349,7 +1349,7 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
                                        const EastTile k = classify_tile(grid, e);
                                        free_tiles += (k == EastTile::Open || k == EastTile::Bare) && !(plan.cantgo_aware && held_by_standing_ant(v, e)) ? 1u : 0u;
                                    }
-                                   return free_tiles < std::max<uint32_t>(plan.raid_min_free, 1u) || (plan.cantgo_aware && held_by_standing_ant(v, h.raid));
+                                   return free_tiles < plan.raid_min_free || (plan.cantgo_aware && held_by_standing_ant(v, h.raid));
                                }),
                 teams.end());
     if (teams.empty()) return false;
