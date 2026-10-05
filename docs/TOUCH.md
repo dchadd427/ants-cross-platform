@@ -36,7 +36,8 @@ SDL's Emscripten backend reads the canvas's touches itself, and SDL's own touch-
 - `overscroll-behavior: none` on html and body (a swipe past the end of the page does not reload it), without stopping the page's own scrolling;
 - no callout, selection or tap highlight over the game (`-webkit-touch-callout`, `user-select`), the context menu cancelled over the game's box;
 - the browser's pinch (`gesturestart`, `gesturechange`, `gestureend`) cancelled on the canvas and, while a game finger is down, on the document; a trackpad's pinch still zooms the game through the wheel;
-- a `touchcancel` tells the game (`Module._ants_touch_cancel`): no finger is tracked any more and a held press ends with no act; a lost focus and a hidden page do the same;
+- a `touchcancel` tells the game (`Module._ants_touch_cancel`): no finger is tracked any more and a held press ends with no act (on a dialog or a screen it is let go of where no control is, so that
+  the quit dialog's Yes, START and Leave never fire from a cancel); a lost focus and a hidden page do the same;
 - the sound's unlock stays on `touchend` (iOS and Chrome on Android grant their permission at the END of a touch), so a hold that ends in a right click still unlocks it;
 - `navigator.vibrate` is feature-detected and never required (Android's Chrome buzzes only after the page has had a first tap; iOS has none);
 - the Fullscreen button is as before: the browser's fullscreen where there is the API, the page's own (with a button to leave it) where there is none (Safari on an iPhone).

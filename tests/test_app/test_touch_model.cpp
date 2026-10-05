@@ -1031,7 +1031,9 @@ void test_second_finger() {
         Rig r;                                                  // a drag: the band is cancelled, with no selection (the release is never sent)
         r.down(1, 300, 200, T0);
         r.move(1, 340, 210, T0 + 50);
-        expect(r.down(2, 450, 210, T0 + 80), {act(Kind::Cancel, 340, 210, T0 + 80)}, "the second finger lands during a drag: the press is cancelled, where the first finger is");
+        const auto landed = r.down(2, 450, 210, T0 + 80);
+        expect(landed, {act(Kind::Cancel, 340, 210, T0 + 80)}, "the second finger lands during a drag: the press is cancelled, where the first finger is");
+        check(landed.size() == 1 && !landed[0].right, "it is the left button's press that ends");
         expect_none(r.up(1, 340, 210, T0 + 400), "the lift of the first finger sends no release");
         expect_none(r.up(2, 450, 210, T0 + 410), "nor does the second");
     }
@@ -1039,7 +1041,9 @@ void test_second_finger() {
         Rig r;                                                  // a hold: the right button's press is cancelled, with no order
         r.down(1, 300, 200, T0);
         r.tick(T0 + 450);
-        expect(r.down(2, 450, 210, T0 + 700), {act(Kind::Cancel, 300, 200, T0 + 700)}, "the second finger lands during a hold: the press is cancelled");
+        const auto landed = r.down(2, 450, 210, T0 + 700);
+        expect(landed, {act(Kind::Cancel, 300, 200, T0 + 700)}, "the second finger lands during a hold: the press is cancelled");
+        check(landed.size() == 1 && landed[0].right, "it is the right button's press that ends");
         expect_none(r.up(1, 300, 200, T0 + 900), "the lift sends no RightUp (no order)");
         expect_none(r.up(2, 450, 210, T0 + 910), "nor the second");
     }
@@ -1566,7 +1570,9 @@ void test_cancel() {
         Rig r;
         r.down(1, 100, 100, T0);
         r.move(1, 160, 110, T0 + 40);
-        expect(r.touch.cancel(), {act(Kind::Cancel, 160, 110, T0 + 40)}, "a drag: the press ends where the finger is");
+        const auto ended = r.touch.cancel();
+        expect(ended, {act(Kind::Cancel, 160, 110, T0 + 40)}, "a drag: the press ends where the finger is");
+        check(ended.size() == 1 && !ended[0].right, "the left button's");
         check(idle(r), "gone");
         expect_none(r.up(1, 160, 110, T0 + 50), "the lift that SDL sends for the cancel: nothing (no selection)");
         expect_none(r.move(1, 170, 110, T0 + 60), "a move of it: nothing");
@@ -1577,18 +1583,19 @@ void test_cancel() {
         r.tick(T0 + 450);
         const auto out = r.touch.cancel();
         check(out.size() == 1 && out[0].kind == Kind::Cancel && out[0].x == 100 && out[0].y == 100, "a hold: the right press ends: " + show(out));
+        check(out.size() == 1 && out[0].right, "and it says that it is the right button's (the application lets that one go as a right release)");
         expect_none(r.up(1, 100, 100, T0 + 800), "the lift: no RightUp, no order");
     }
     {
         Rig r;
         r.down(1, 800, 50, T0);
         const auto out = r.touch.cancel();
-        check(out.size() == 1 && out[0].kind == Kind::Cancel && out[0].x == 800 && out[0].y == 50, "a minimap press ends: " + show(out));
+        check(out.size() == 1 && out[0].kind == Kind::Cancel && out[0].x == 800 && out[0].y == 50 && !out[0].right, "a minimap press ends (the left button's): " + show(out));
         Rig h;
         h.down(1, 850, 300, T0);
         h.move(1, 855, 305, T0 + 10);
         const auto ended = h.touch.cancel();
-        check(ended.size() == 1 && ended[0].kind == Kind::Cancel && ended[0].x == 855 && ended[0].y == 305, "a press on a control ends where the finger is: " + show(ended));
+        check(ended.size() == 1 && ended[0].kind == Kind::Cancel && ended[0].x == 855 && ended[0].y == 305 && !ended[0].right, "a press on a control ends where the finger is (the left button's): " + show(ended));
     }
     {
         Rig r;

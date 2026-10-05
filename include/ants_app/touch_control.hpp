@@ -63,7 +63,7 @@ struct TouchAction {
         RightUp,
         Pan,            // dx, dy: how far the fingers' middle point moved; the map moves with it (the view scrolls the other way)
         Zoom,           // level: the zoom to go to; x, y: the point of the picture that keeps its world point (the middle point)
-        Cancel,         // the press that the finger holds ends with no act (no selection, no order, nothing fires); x, y: where the finger is
+        Cancel,         // the press that the finger holds ends with no act (no selection, no order, nothing fires: a release where no control is); x, y: where the finger is; `right`: it was the right button's
         HoldFired,      // the hold's time is up: the feedback (a pulse, a buzz); the right button's press comes with it
     };
     Kind kind{Kind::Motion};
@@ -74,8 +74,9 @@ struct TouchAction {
     float level{1.0f};
     uint32_t at{0};             // when it happened (the caller's ms: a hold fires at down + kHoldMs, whenever the model got to hear of it)
     bool late{false};           // the first action of a press that WAITED on the map view: the game hears of the finger only now, and the screen may have changed since (a dialog opened over the map)
+    bool right{false};          // a Cancel of the right button's press (a hold); the left button's otherwise
 
-    /// (what an action does; `late` says where it comes from and is not part of it)
+    /// (what an action does; `late` and `right` say where it comes from and which button a Cancel ends, and are not part of it)
     bool operator==(const TouchAction& o) const noexcept { return kind == o.kind && x == o.x && y == o.y && dx == o.dx && dy == o.dy && level == o.level && at == o.at; }
     bool operator!=(const TouchAction& o) const noexcept { return !(*this == o); }
 };

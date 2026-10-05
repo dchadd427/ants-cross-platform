@@ -1597,6 +1597,84 @@ void test_cancel() {
     s.clear();
     hand.tap(s.on_ant(s.worker), 6);
     check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "after a cancel the next finger is the first one: a tap selects");
+    // THE DIALOGS OF THE MATCH: a cancel never fires the control under the finger (review L3). SDL's emulation made a cancelled touch the lift of the finger, where it is: the quit dialog's Yes left
+    // the match. Now the press is let go of where no control is, whatever the cause: the page's touchcancel, a lost focus, a hidden page, a minimised window.
+    {
+        struct Cause {
+            const char* name;
+            std::function<void()> act;
+        };
+        const std::vector<Cause> causes = {
+            {"the page's touchcancel", [&] { app.cancel_touch(); }},
+            {"a lost focus", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }()); }},
+            {"a hidden page", [&] { app.set_page_hidden(true); }},
+            {"a minimised window", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_MINIMIZED; return we; }()); }},
+        };
+        const LayoutPoint modal = app.layout().modal_offset();
+        for (const Cause& cause : causes) {
+            app.hud().open_quit_dialog();
+            const UIButton yes = app.hud().quit_yes_button();
+            const Pt on_yes{modal.x + yes.x + yes.w / 2, modal.y + yes.y + yes.h / 2};
+            hand.down(1, on_yes);
+            hand.frame();
+            check(app.hud().quit_yes_button().is_pressed && app.touch().mode() == TouchControl::Mode::Left, std::string("(Yes of the quit dialog is pressed by the finger, ") + cause.name + " follows)");
+            cause.act();
+            hand.frame();
+            check(app.is_running() && app.hud().is_quit_dialog_open() && !app.hud().quit_yes_button().is_pressed && app.touch().fingers() == 0,
+                  std::string("Yes of the quit dialog under a finger that ") + cause.name + " cancels: it does not fire, and it is let go of");
+            hand.up(1, on_yes);                                            // (SDL's own lift for a touchcancel: unknown by now)
+            hand.frame();
+            check(app.is_running() && app.hud().is_quit_dialog_open(), "and the lift that follows does nothing either");
+            app.set_page_hidden(false);
+            app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_RESTORED; return we; }());
+            app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_GAINED; return we; }());
+            app.hud().close_quit_dialog();
+        }
+        // a HUD button that the finger holds when a dialog opens over it (a message, a key: opening a dialog lets go of the drags but not of a pressed button): the cancel lets that go too
+        {
+            const UIButton help = app.hud().help_button();
+            const Pt on_help{help.x + help.w / 2, help.y + help.h / 2};
+            hand.down(1, on_help);
+            hand.frame();
+            check(app.hud().help_button().is_pressed, "(the Help button is pressed by the finger)");
+            app.hud().open_quit_dialog();
+            app.cancel_touch();
+            hand.frame();
+            check(!app.hud().help_button().is_pressed && app.hud().is_quit_dialog_open() && app.is_running(), "a cancel under a dialog that opened over a held button lets the button go (the HUD's own press)");
+            app.hud().close_quit_dialog();
+            hand.up(1, on_help);
+            hand.frame();
+            check(!app.hud().is_quick_help_open(), "(and the lift that follows opens nothing)");
+        }
+        // the options window's Return, and a hold whose dialog opened under it: a held right press ends with no act (no order, nothing held)
+        app.hud().open_options();
+        const LayoutPoint page = app.layout().options_offset();
+        const Pt on_return{page.x + OptionsScreen::RETURN_X + OptionsScreen::RETURN_W / 2, page.y + OptionsScreen::RETURN_Y + OptionsScreen::RETURN_H / 2};
+        hand.down(1, on_return);
+        hand.frame();
+        app.cancel_touch();
+        hand.frame();
+        hand.up(1, on_return);
+        hand.frame();
+        check(app.hud().is_modal_open() && app.touch().fingers() == 0, "Return of the options window under a finger that is cancelled does not close it");
+        hand.tap(on_return);
+        check(!app.hud().is_modal_open(), "(a tap on it does)");
+        s.clear();
+        s.select({s.worker});
+        hand.down(1, g);
+        hand.frame();
+        hand.rest(touch::kHoldMs + 40);
+        check(app.hud().is_input_captured() && app.touch().mode() == TouchControl::Mode::Right, "(the right button is held)");
+        app.hud().open_quit_dialog();                                      // (a message, a key: a dialog opens over the held press)
+        app.cancel_touch();
+        hand.frame();
+        check(s.sink.commands.empty() && !app.hud().is_input_captured() && app.hud().is_quit_dialog_open() && !app.hud().quit_yes_button().is_pressed && !app.hud().quit_no_button().is_pressed,
+              "a held right press under a dialog that opened ends with no act: no order, nothing held, no button of the dialog pressed");
+        hand.up(1, g);
+        hand.frame();
+        app.hud().close_quit_dialog();
+        check(s.sink.commands.empty() && app.is_running(), "(and its lift orders nothing)");
+    }
     // a cancel with a button held by the first finger: the button is let go of and does not fire
     {
         const UIButton help = app.hud().help_button();
@@ -1708,6 +1786,13 @@ void test_other_screens() {
             // the quick help
             app.finish_loading();
             check(app.state() == AppState::QuickHelp, "(the quick help is up)");
+            hand.down(1, Pt{580, 450});                                    // a finger on START! whose touch is cancelled: the page stays (START! acts at a release inside it)
+            hand.frame();
+            app.cancel_touch();
+            hand.frame();
+            hand.up(1, Pt{580, 450});
+            hand.frame();
+            check(app.state() == AppState::QuickHelp && app.touch().fingers() == 0, "a finger on START! of the quick help whose touch is cancelled does not close the page");
             hand.tap(Pt{580, 450});
             check(app.state() == AppState::MapSelect, "a tap on START! of the quick help closes it");
             check(app.touch().fingers() == 0, "and the finger is gone");
@@ -1724,12 +1809,35 @@ void test_other_screens() {
             hand.up(1, down);
             hand.frame();
             check(app.map_select().get_selected_index() == (before + 3) % maps && app.touch().stats().holds == holds, "and its lift presses the button: the selection moves");
-            // the browser takes the touch away while a finger presses a button of this screen: the press ends as the lift of the finger, where it is (what SDL's emulation made of a cancelled touch)
+            // the browser takes the touch away while a finger presses a button of this screen: the press is let go of where no button is, and nothing fires. (This block used to pin the opposite, what
+            // SDL's emulation made of a cancelled touch: "ends as the lift where the finger is: the button acts"; the review found that this made START, Leave and the quit dialog's Yes fire.)
             hand.down(1, down);
             hand.frame();
             app.cancel_touch();
             hand.frame();
-            check(app.touch().fingers() == 0 && app.map_select().get_selected_index() == (before + 4) % maps, "a touch that is cancelled on a button of this screen ends as the lift where the finger is: the button acts");
+            check(app.touch().fingers() == 0 && app.map_select().get_selected_index() == (before + 3) % maps, "a touch that is cancelled on a button of this screen fires nothing: the selection does not move");
+            hand.up(1, down);                                              // (the lift that SDL sends for a touchcancel: unknown by then)
+            hand.frame();
+            check(app.map_select().get_selected_index() == (before + 3) % maps, "and the lift that follows does nothing");
+            // START and Quit (Leave) of the setup screen: the buttons that do the most harm
+            const Pt start{MapSelectScreen::BTN_START_X + MapSelectScreen::BTN_START_W / 2, MapSelectScreen::BTN_START_Y + MapSelectScreen::BTN_START_H / 2};
+            const Pt quit{MapSelectScreen::BTN_QUIT_X + MapSelectScreen::BTN_QUIT_W / 2, MapSelectScreen::BTN_QUIT_Y + MapSelectScreen::BTN_QUIT_H / 2};
+            for (int cause = 0; cause < 2; ++cause) {
+                for (const Pt& on : {start, quit}) {
+                    hand.down(1, on);
+                    hand.frame();
+                    if (cause == 0) app.cancel_touch();
+                    else app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }());
+                    hand.frame();
+                    hand.up(1, on);
+                    hand.frame();
+                    check(app.state() == AppState::MapSelect && app.is_running() && app.touch().fingers() == 0,
+                          std::string(on.x == start.x ? "START" : "Leave") + " of the setup screen under a finger that is cancelled by " + (cause == 0 ? "the page" : "a lost focus") + ": it does not fire");
+                    app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_GAINED; return we; }());
+                }
+            }
+            hand.tap(down);                                                // (the screen works as before afterwards)
+            check(app.map_select().get_selected_index() == (before + 4) % maps, "(and the next tap on the screen works)");
         }
     }
     {   // the desktop start menu

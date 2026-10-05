@@ -196,15 +196,14 @@ void Application::run_touch_action(const TouchAction& action) {
             else set_zoom(action.level, action.x, action.y);
             break;
         case Kind::Cancel:
-            if (touch_match_screen()) {
-                hud_.cancel_press();
-            } else {                                                        // a screen, a dialog or a page holds the press: it ends as the lift of the finger, where it is (what SDL's emulation made of a cancelled touch)
-                TouchAction lift;
-                lift.kind = Kind::LeftUp;
-                lift.x = action.x;
-                lift.y = action.y;
-                lift.at = action.at;
-                touch_queue_.push_front(lift);
+            hud_.cancel_press();                                            // (the match's own presses end with no act; where the HUD holds none this changes nothing)
+            if (!touch_match_screen()) {                                    // a screen, a dialog or a page holds the press: it is let go of where no control is, so that no button fires (a button acts at a release inside it)
+                TouchAction release;
+                release.kind = action.right ? Kind::RightUp : Kind::LeftUp;
+                release.x = 0;
+                release.y = 0;
+                release.at = action.at;
+                touch_queue_.push_front(release);
             }
             pointer_outside_ = true;                                        // (no finger is the pointer now: no cursor, no edge scroll from where it was)
             break;

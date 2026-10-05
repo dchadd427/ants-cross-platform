@@ -189,7 +189,10 @@ void TouchControl::start(const Finger& finger, uint32_t now_ms, Actions& out) {
 void TouchControl::begin_two(Finger& second, uint32_t now_ms, Actions& out) {
     const Finger* first = primary();
     if (first == nullptr) return;
-    if (mode_ == Mode::Left || mode_ == Mode::Right) emit(out, Kind::Cancel, first->x, first->y, now_ms);
+    if (mode_ == Mode::Left || mode_ == Mode::Right) {
+        emit(out, Kind::Cancel, first->x, first->y, now_ms);
+        out.back().right = mode_ == Mode::Right;
+    }
     second.role = Role::Secondary;
     mode_ = Mode::Two;
     pair_moved_ = false;
@@ -382,7 +385,10 @@ TouchControl::Actions TouchControl::cancel() {
         return out;
     }
     if (mode_ == Mode::Left || mode_ == Mode::Right || mode_ == Mode::MinimapWait) {
-        if (const Finger* first = primary()) emit(out, Kind::Cancel, first->x, first->y, clock_);
+        if (const Finger* first = primary()) {
+            emit(out, Kind::Cancel, first->x, first->y, clock_);
+            out.back().right = mode_ == Mode::Right;
+        }
     }
     fingers_.clear();
     mode_ = Mode::Idle;
