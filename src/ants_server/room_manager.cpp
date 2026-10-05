@@ -272,8 +272,8 @@ bool RoomManager::restoring_has(const std::string& code) const {
     return false;
 }
 
-// A Hello for a room whose record waits for its replay: the connection and the Hello wait (bounded: by the door's number of connections that wait: the next is dropped, and by the room's own number of
-// connections, which is what the room would take of them: the next is told Full), and go through the door when the room is restored
+// A Hello for a room whose record waits for its replay: the connection and the Hello wait (bounded: by the door's number of connections that wait, and by the room's own number of connections, which is
+// what the room would take of them: the next link of either is dropped without an answer), and go through the door when the room is restored
 void RoomManager::park(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, const Restoring& job, uint32_t now_ms) {
     if (parked_.size() >= limits_.max_pending) {                  // the door's bound: the link is dropped without an answer (a Reject is final for a client, a dropped link is tried again: many rooms come back at once after a restart)
         ++refused_;
@@ -282,8 +282,9 @@ void RoomManager::park(std::unique_ptr<net::Connection> connection, const std::s
     }
     size_t of_this_room = 0;
     for (const Parked& p : parked_) of_this_room += p.code == job.code ? 1u : 0u;
-    if (of_this_room >= std::max<size_t>(1, job.head.max_connections)) {      // the room's own bound: what the room would keep (it answers Full beyond it, restored or not)
-        reject(std::move(connection), net::RejectReason::Full, now_ms);
+    if (of_this_room >= std::max<size_t>(1, job.head.max_connections)) {      // the room's own bound (what the room would keep): dropped without an answer too, not told Full (final for a client: its key goes),
+        ++refused_;                                                            // and silent Hellos of anybody who knows the code can hold these places: a dropped link is tried again
+        if (connection->is_open()) connection->close();
         return;
     }
     auto link = std::make_unique<ParkedLink>(std::move(connection));
@@ -473,6 +474,20 @@ std::string hex16(uint64_t v) {
     return out;
 }
 
+// The crash-loop guard: while a piece of a record's replay runs, its marker is on disk (RestartStore::mark_replaying); a piece that returns takes it off. A server that stops in the middle of one (a crash of the
+// engine on the match's turns: they were written before they were played, so the replay meets them again) leaves the marker, and the next start does not replay that record.
+class ReplayMark {
+public:
+    ReplayMark(RestartStore* store, std::string path) : store_(store), path_(std::move(path)) { store_->mark_replaying(path_); }
+    ~ReplayMark() { store_->unmark_replaying(path_); }
+    ReplayMark(const ReplayMark&) = delete;
+    ReplayMark& operator=(const ReplayMark&) = delete;
+
+private:
+    RestartStore* store_;
+    std::string path_;
+};
+
 const char* read_status_name(RestartLoaded::Status status) {
     switch (status) {
         case RestartLoaded::Status::Ok: return "ok";
@@ -515,6 +530,14 @@ void RoomManager::judge_record(const std::string& path, uint32_t now_ms) {
     const RestartConfig& cfg = restart_->config();
     RestoreItem item;
     item.file = fs::path(path).filename().string();
+    if (restart_->was_replaying(path)) {                                // the last run stopped in the middle of this record's replay: it is put by unread and not replayed again
+        item.outcome = RestoreItem::Outcome::Unreadable;
+        item.note = "the server stopped in the middle of this record's replay (a crash or a kill): it is not replayed again";
+        restart_->refuse_file(path);
+        restart_->note("restart record " + item.file + " was not restored: " + item.note);
+        report_.items.push_back(std::move(item));
+        return;
+    }
     RestartLoaded rec = read_restart_record(path, cfg.max_record_bytes, RestartRead::Streaming);       // (checked and counted: the turns are decoded again, one at a time, when the replay runs)
     if (!rec.ok()) {
         item.outcome = RestoreItem::Outcome::Unreadable;
@@ -625,6 +648,7 @@ RoomManager::JobEnd RoomManager::end_job(Restoring& job, const std::string& refu
 // is restored, or refused with the reason) is decided here; the caller takes it out of the queue.
 RoomManager::JobEnd RoomManager::advance(Restoring& job, uint32_t slice_ms, const std::function<uint32_t()>& clock, uint32_t now_ms) {
     const RestartConfig& cfg = restart_->config();
+    const ReplayMark mark(restart_.get(), job.path);                    // (on disk while this piece of work runs)
     std::string why;
     try {
         if (job.room == nullptr) {

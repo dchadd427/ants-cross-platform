@@ -783,6 +783,7 @@ uint32_t fnv1a32(const std::string& s) {
 
 constexpr const char* kRecordPrefix = "room-";
 constexpr const char* kTempSuffix = ".tmp";
+constexpr const char* kReplayingSuffix = ".replaying";
 constexpr const char* kLockName = ".lock";
 constexpr const char* kRefusedName = "refused";
 
@@ -1015,9 +1016,12 @@ bool RestartStore::prepare(std::string& why) {
         }
     }
     // the temporary files of a record whose making was cut short: ours (the name says so), and nothing can be using them: the lock says that no other server has this folder
+    // (and the markers of a record that is not there any more: a record of this name made later would be taken for one that crashed the server)
     for (fs::directory_iterator it(cfg_.dir, ec), end; !ec && it != end; it.increment(ec)) {
         const std::string name = it->path().filename().string();
-        if (name.compare(0, std::strlen(kRecordPrefix), kRecordPrefix) == 0 && has_suffix(name, kTempSuffix)) native_remove(it->path().string());
+        if (name.compare(0, std::strlen(kRecordPrefix), kRecordPrefix) != 0) continue;
+        if (has_suffix(name, kTempSuffix)) native_remove(it->path().string());
+        else if (has_suffix(name, kReplayingSuffix) && !still_there(it->path().string().substr(0, it->path().string().size() - std::strlen(kReplayingSuffix)))) native_remove(it->path().string());
     }
     purge_refused();                                                // (what was refused a day ago is not wanted any more)
     return true;
@@ -1043,8 +1047,22 @@ size_t RestartStore::purge_refused() {
     return purged;
 }
 
+bool RestartStore::mark_replaying(const std::string& record_path) {
+    const std::string marker = record_path + kReplayingSuffix;
+    NativeFile f;
+    std::string why;
+    const bool made = native_create_exclusive(marker, f, why);
+    native_close(f);
+    return made || still_there(marker);                             // (one that is there is a marker as well)
+}
+
+void RestartStore::unmark_replaying(const std::string& record_path) { native_remove(record_path + kReplayingSuffix); }
+
+bool RestartStore::was_replaying(const std::string& record_path) const { return still_there(record_path + kReplayingSuffix); }
+
 bool RestartStore::refuse_file(const std::string& path) {
     const std::string name = fs::path(path).filename().string();
+    unmark_replaying(path);                                         // (the record is judged: whatever stopped the server is dealt with)
     const auto drop = [&](const std::string& why) {
         remove_file(path);
         note("restart record " + name + " was refused and could not be kept (" + why + "): it was deleted");

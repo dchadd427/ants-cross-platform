@@ -198,6 +198,7 @@ struct RoomStatus {
     bool record_stale{false};               // the room is over (or its record ended) and the file of the record could not be deleted yet: the server tries again every 10 s, and a restart before that would bring the room back
     std::string record_note;                // when it is not: why (the server keeps none, the room holds no seats, the turn log passed its limit, the disk refused ...); "" while it is kept
     uint64_t record_bytes{0};               // the size of the record
+    uint32_t record_sync_ms{0};             // the interval to the record's next flush: RestartConfig::sync_every_ms, longer while a flush is slow (0: no record, or not yet flushed)
     bool restored{false};                   // the room came back from a record after a restart of the server
     uint32_t restored_turns{0};             // ... holding this many turns
     uint32_t restore_ms{0};                 // ... which the replay took this long to run (real time)
@@ -292,6 +293,7 @@ private:
     void record_stop(const std::string& note);               // the record can no longer be kept: delete it, say why, go on
     void record_discard();                                   // the room is over (or the start was cancelled): delete the record
     void drop_record();                                      // delete the record and let the writer go; a delete that fails is remembered (stale_path_)
+    void sync_record(uint32_t now_ms);                       // the timed flush, and its pace (RestartConfig::slow_sync_ms)
     void end_replay() noexcept;                              // the replay is over (it is rebuilt or refused): the record is not read any more
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
     void build_session(uint32_t restart_vote_after_ms);      // the session of the match, as begin_match and restore both make it (the engine is made already)
@@ -340,6 +342,7 @@ private:
     std::string record_note_;                // why there is no record (the status says it)
     std::string stale_path_;                 // the file of a record that could not be deleted: the status says kept and stale until the store has deleted it
     uint32_t next_sync_ms_{0};
+    uint32_t sync_every_ms_{0};              // the interval to the next flush of the record: the configured one, doubled (to a limit) by every slow flush
     uint8_t roster_{0};                      // the seats of the match (a restored room has no lobby that knows them)
     bool from_record_{false};                // the room has no lobby that knows its players: it was made from a restart record (restored, or refused)
     bool restored_{false};

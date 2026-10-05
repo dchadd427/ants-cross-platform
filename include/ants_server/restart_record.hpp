@@ -206,6 +206,8 @@ struct RestartConfig {
     std::function<uint32_t()> clock_ms;                     // the clock that the cap and the slice are measured with, in real milliseconds (empty: restart_steady_ms): the tests give one of their own
     uint32_t refused_keep_ms{24u * 60u * 60u * 1000u};      // a record that was read and refused is kept this long in the folder `refused` (the owner may want it back); the folder is held under budget_bytes
     uint32_t sync_every_ms{1000};                           // a room's record is made durable this often while it is written
+    uint32_t slow_sync_ms{20};                              // a flush that takes longer than this, in real time (clock_ms), doubles the room's interval to its next flush ...
+    uint32_t max_sync_every_ms{10u * 1000u};                // ... up to this one; a quicker flush brings the interval back to sync_every_ms (a slow disk holds up the loop of every room: one room's flushes, not all)
 };
 
 /// Real milliseconds from a steady clock (they mean something only as differences, and wrap after 49 days): the clock of the restore's cap and slices unless RestartConfig::clock_ms is set
@@ -292,6 +294,11 @@ public:
     bool refuse_file(const std::string& path);
     /// Deletes what is older than refused_keep_ms in the folder `refused` (prepare() does it when the server starts); how many files
     size_t purge_refused();
+    /// The crash-loop guard. A record is marked (the empty file `<record>.replaying` next to it) before every piece of its replay and unmarked when that piece has returned (refuse_file
+    /// unmarks as well): a marker that a start finds says that the last run of the server stopped in the middle of the replay (a crash, a kill), so the record is not replayed again.
+    bool mark_replaying(const std::string& record_path);
+    void unmark_replaying(const std::string& record_path);
+    bool was_replaying(const std::string& record_path) const;
     bool is_stale(const std::string& path) const;
     size_t stale_count() const noexcept { return stale_.size(); }
 

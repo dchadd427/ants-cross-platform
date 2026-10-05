@@ -378,10 +378,7 @@ void Room::update(uint32_t now_ms) {
             const net::Attendance::State st = session_->attendance().state(seat);
             if (st == net::Attendance::State::Present || st == net::Attendance::State::CatchingUp) last_person_ms_ = now_ms;
         }
-        if (record_ != nullptr && restart_store_ != nullptr && net::time_reached(now_ms, next_sync_ms_)) {       // the record is made durable once a second (what write() leaves to the operating system)
-            next_sync_ms_ = now_ms + restart_store_->config().sync_every_ms;
-            if (record_->dirty() && !record_->sync()) record_stop("the disk refused a flush: " + record_->error());
-        }
+        if (record_ != nullptr && restart_store_ != nullptr && net::time_reached(now_ms, next_sync_ms_)) sync_record(now_ms);       // the record is made durable once a second (what write() leaves to the operating system)
         last_turns_ = session_->turns_sealed();
         if (sim_) {
             last_ticks_ = static_cast<uint32_t>(sim_->current_tick());
@@ -459,6 +456,7 @@ void Room::record_open(uint32_t now_ms) {
         return;
     }
     const uint32_t every = std::max<uint32_t>(1, restart_store_->config().sync_every_ms);
+    sync_every_ms_ = every;
     next_sync_ms_ = now_ms + static_cast<uint32_t>(std::hash<std::string>{}(spec_.code) % every);      // (the rooms' syncs are spread over the second, not made all at once)
 }
 
@@ -498,6 +496,22 @@ void Room::drop_record() {
     record_->discard();
     record_.reset();
     stale_path_ = restart_store_ != nullptr && restart_store_->is_stale(path) ? path : std::string();
+}
+
+// The timed flush. It is measured in real time: a slow or busy disk makes the whole loop wait, and every room flushes once a second. A flush that takes more than slow_sync_ms doubles this room's interval to the
+// next one (to max_sync_every_ms at the most), a quicker one brings it back to sync_every_ms: a longer interval only leaves a longer tail to a crash (the record is made durable when the server stops).
+void Room::sync_record(uint32_t now_ms) {
+    const RestartConfig& cfg = restart_store_->config();
+    const uint32_t base = std::max<uint32_t>(1, cfg.sync_every_ms);
+    if (record_->dirty()) {
+        const uint32_t began = cfg.clock_ms ? cfg.clock_ms() : restart_steady_ms();
+        const bool synced = record_->sync();
+        const uint32_t took = (cfg.clock_ms ? cfg.clock_ms() : restart_steady_ms()) - began;
+        if (!synced) return record_stop("the disk refused a flush: " + record_->error());
+        const uint64_t longest = std::max<uint32_t>(base, cfg.max_sync_every_ms);
+        sync_every_ms_ = took > cfg.slow_sync_ms ? static_cast<uint32_t>(std::min<uint64_t>(longest, uint64_t{sync_every_ms_} * 2)) : base;
+    }
+    next_sync_ms_ = now_ms + sync_every_ms_;
 }
 
 void Room::flush_record() {
@@ -716,6 +730,7 @@ bool Room::begin_restored(uint32_t now_ms, std::string& why) {
     } else {
         record_hook_up();
         const uint32_t every = std::max<uint32_t>(1, restart_store_->config().sync_every_ms);
+        sync_every_ms_ = every;
         next_sync_ms_ = now_ms + static_cast<uint32_t>(std::hash<std::string>{}(spec_.code) % every);
     }
     if (!start_bots(seed_, why)) return false;                   // (the bots start again at the restored tick: their tasks are soft, docs/BOTS.md; a bot that was running goes on from what it sees)
@@ -814,6 +829,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.record_kept = record_ != nullptr || stale;                // (a file that is still there is a record that a restart would use: never "not kept" while it is)
     s.record_stale = stale;
     s.record_bytes = record_ != nullptr ? record_->bytes() : 0u;
+    s.record_sync_ms = record_ != nullptr ? sync_every_ms_ : 0u;
     if (stale) {
         std::error_code size_ec;
         s.record_bytes = static_cast<uint64_t>(std::filesystem::file_size(stale_path_, size_ec));

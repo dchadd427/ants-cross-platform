@@ -9058,7 +9058,7 @@ void run_restore_tests() {
         ASSERT_EQ(for_b.sim.state_hash().total, w.status("OR-B").restored_hash);
     } TEST_END();
 
-    TEST_CASE("S3.118 What Waits For A Room Is Bounded And Does Not Pile Up: A Room Takes As Many Parked Connections As It Would Keep (The Fourth Hello For A Room Of Three Is Told Full) And The Door As Many As It Lets Wait For A Hello (max_pending: The Next Link Is Dropped Without An Answer, A Reject Being Final For A Client); A Parked Connection That Closes Is Dropped At Once; One That Sends More Than A Client Does While It Waits Is Dropped As A Flood; One That Has Waited For park_timeout_ms Is Dropped (The Limit Is A Minute); What The Peer Sends After Its Hello Is Kept And Reaches The Room: A Ping That Was Sent While The Hello Waited Is Answered When The Room Is Back") {
+    TEST_CASE("S3.118 What Waits For A Room Is Bounded And Does Not Pile Up: A Room Takes As Many Parked Connections As It Would Keep (The Fourth Hello For A Room Of Three Is Dropped Without An Answer, Not Told Full: A Reject Is Final For A Client, Whose Key Goes With It) And The Door As Many As It Lets Wait For A Hello (max_pending: The Next Link Is Dropped Without An Answer As Well); A Parked Connection That Closes Is Dropped At Once; One That Sends More Than A Client Does While It Waits Is Dropped As A Flood; One That Has Waited For park_timeout_ms Is Dropped (The Limit Is A Minute); What The Peer Sends After Its Hello Is Kept And Reaches The Room: A Ping That Was Sent While The Hello Waited Is Answered When The Room Is Back") {
         {   // the bounds and the drops
             PWorld w("restore-118");
             w.limits.park_timeout_ms = 3000;                                                  // (a minute by default: asserted in S3.106)
@@ -9074,8 +9074,9 @@ void run_restore_tests() {
             std::vector<net::Connection*> a;
             for (int i = 0; i < 4; ++i) a.push_back(say_hello(w, "BD-1"));
             w.run(300);
-            ASSERT_EQ(w.mgr->parked_count(), size_t{3});                                      // the room's own bound
-            ASSERT_EQ(reject_on(a[3]), static_cast<int>(net::RejectReason::Full));
+            ASSERT_EQ(w.mgr->parked_count(), size_t{3});                                      // the room's own bound: the fourth link is dropped without an answer (a Full is final for a client: its key goes), and counted as refused
+            ASSERT_TRUE(!a[3]->is_open() && reject_on(a[3]) == 0);
+            ASSERT_EQ(w.mgr->connections_refused(), refused_before + 1);
             std::vector<net::Connection*> b;
             for (int i = 0; i < 3; ++i) b.push_back(say_hello(w, "BD-2"));
             w.run(300);
@@ -9425,6 +9426,140 @@ void run_restore_tests() {
         ASSERT_TRUE(w.status("CK-1").vote_seat != 255 && w.status("CK-2").vote_seat == 255);
         while (w.now - back2 < 90000 + 700) w.run(100);
         ASSERT_TRUE(w.status("CK-1").vote_seat != 255 && w.status("CK-2").vote_seat != 255);
+    } TEST_END();
+
+    TEST_CASE("S3.123 The Record's Flush Keeps Its Pace By Its Own Time (L6 Of The Review Of Reconnect On For Every Room): A Flush That Takes More Than slow_sync_ms (20 ms Of Real Time) Doubles The Room's Interval To The Next One, To max_sync_every_ms (10 s) At The Most, So That A Slow Disk Is Asked Less Often; A Flush That Takes 20 ms Or Less Brings The Interval Back To sync_every_ms (A Second); The Status Says The Interval, And A Room Without A Record Has None") {
+        const RestartConfig defaults;
+        ASSERT_TRUE(defaults.sync_every_ms == 1000 && defaults.slow_sync_ms == 20 && defaults.max_sync_every_ms == 10000);
+        PWorld w("restore-123");
+        uint32_t fake = 0;
+        uint32_t step = 1;
+        uint32_t readings = 0;
+        w.restart.clock_ms = [&]() { ++readings; fake += step; return fake; };                // every reading costs `step` ms: a flush of the record "takes" that long (it reads the clock twice)
+        w.start_server(500);
+        ASSERT_TRUE(w.mgr->create_room(held_spec("FL-0", 2), w.server_now()).ok);
+        ASSERT_EQ(w.status("FL-0").record_sync_ms, 0u);                                          // (no match, no record, no flush to time)
+        std::vector<RClient*> m = play_room(w, held_spec("FL-1", 2), 3000);
+        ASSERT_EQ(w.status("FL-1").record_sync_ms, 1000u);
+        // quick flushes: one a second, and the interval stays
+        readings = 0;
+        w.run(10000);
+        ASSERT_TRUE(readings >= 18 && readings <= 22);
+        ASSERT_EQ(w.status("FL-1").record_sync_ms, 1000u);
+        // a flush of exactly slow_sync_ms is not slow
+        step = 20;
+        w.run(5000);
+        ASSERT_EQ(w.status("FL-1").record_sync_ms, 1000u);
+        // slow flushes: the interval doubles at every one, to the limit and no further; the room is flushed far less often than once a second
+        step = 30;
+        readings = 0;
+        std::vector<uint32_t> seen;
+        uint32_t last = 1000;
+        for (uint32_t t = 0; t < 40000; t += 10) {
+            w.run(10);
+            const uint32_t now_interval = w.status("FL-1").record_sync_ms;
+            if (now_interval != last) seen.push_back(now_interval);
+            last = now_interval;
+        }
+        ASSERT_TRUE(seen == std::vector<uint32_t>({2000u, 4000u, 8000u, 10000u}));
+        ASSERT_TRUE(readings >= 11 && readings <= 13);                                           // (6 flushes in 40 s, not 40)
+        // a flush of 21 ms is slow, one of 20 ms is not: right at the edge
+        step = 1;
+        ASSERT_TRUE(w.until([&]() { return w.status("FL-1").record_sync_ms == 1000; }, 10500)); // the next flush is quick: back to a second at once, not by halves
+        step = 21;
+        ASSERT_TRUE(w.until([&]() { return w.status("FL-1").record_sync_ms == 2000; }, 1500));
+        step = 20;
+        ASSERT_TRUE(w.until([&]() { return w.status("FL-1").record_sync_ms == 1000; }, 2500));
+        step = 1;
+        readings = 0;
+        w.run(5000);
+        ASSERT_TRUE(readings >= 8);                                                              // (a flush a second again)
+        ASSERT_TRUE(w.status("FL-1").state == RoomState::Running && w.status("FL-1").record_kept && w.status("FL-1").record_note.empty());
+        (void)m;
+    } TEST_END();
+
+    TEST_CASE("S3.124 A Record That The Server Stopped In The Middle Of Replaying Is Not Replayed Again (L10 Of The Review: The Crash-Loop Guard): Its Marker Is On Disk While A Piece Of Its Replay Runs And Gone When The Replay Has Ended, Restored Or Refused; A Marker That A Start Finds Puts The Record By In The Folder Refused, Unread, With A Line In The Log And An Item In The Report, And The Records Next To It Are Restored As Always; The Marker Of A Record That Is Not There Is Removed When The Folder Is Prepared") {
+        {   // the marker is on disk while the replay's pieces run, and gone when it has ended: restored, and refused in its replay
+            PWorld w("restore-124a");
+            w.start_server(500);
+            crash_with_record_of(w, "CL-1", 12000, 2);
+            copy_record_as(w, "CL-1", "CL-2", std::chrono::seconds(0));
+            tamper_checkpoint(w, "CL-2", 2);                                                       // (CL-2's replay is refused at its second checkpoint)
+            const std::string marker_1 = w.record_path("CL-1") + ".replaying";
+            const std::string marker_2 = w.record_path("CL-2") + ".replaying";
+            uint32_t fake = 0;
+            uint32_t readings = 0;
+            uint32_t marked = 0;
+            w.restart.clock_ms = [&]() {
+                ++readings;
+                if (fs::exists(marker_1) != fs::exists(marker_2)) ++marked;                       // (one record at a time is worked on: one of the two markers is there)
+                return fake += 6;
+            };
+            w.start_server(500, false);
+            ASSERT_TRUE(!fs::exists(marker_1) && !fs::exists(marker_2));                           // (judged, not replayed: no piece of work yet)
+            w.finish_restore();
+            ASSERT_TRUE(marked > 6 && marked < readings);                                           // (the pieces read the clock with the marker there; the pass between them does not)
+            ASSERT_TRUE(!fs::exists(marker_1) && !fs::exists(marker_2));
+            ASSERT_TRUE(w.status("CL-1").restored && w.status("CL-1").state == RoomState::Running);
+            ASSERT_EQ(w.report.count(RestoreItem::Outcome::Restored), size_t{1});
+            ASSERT_EQ(w.report.count(RestoreItem::Outcome::Ended), size_t{1});
+        }
+        {   // a marker that the last run left: the record is put by unread and not replayed; the others are restored
+            PWorld w("restore-124b");
+            w.start_server(500);
+            crash_with_record_of(w, "CL-1", 8000, 2);
+            copy_record_as(w, "CL-1", "CL-2", std::chrono::seconds(0));
+            const std::vector<uint8_t> bytes_1 = read_all_bytes(w.record_path("CL-1"));
+            const std::string file_1 = fs::path(w.record_path("CL-1")).filename().string();
+            const std::string marker_1 = w.record_path("CL-1") + ".replaying";
+            {
+                RestartStore store(w.restart);
+                ASSERT_FALSE(store.was_replaying(w.record_path("CL-1")));
+                ASSERT_TRUE(store.mark_replaying(w.record_path("CL-1")));                          // what a crash in the middle of CL-1's replay leaves
+                ASSERT_TRUE(store.was_replaying(w.record_path("CL-1")) && !store.was_replaying(w.record_path("CL-2")));
+                ASSERT_TRUE(store.mark_replaying(w.record_path("CL-1")));                          // (marking a record that is marked is no failure)
+                store.unmark_replaying(w.record_path("CL-2"));                                     // (nor is taking off a marker that is not there)
+                ASSERT_TRUE(fs::exists(marker_1));
+            }
+            w.start_server(500);
+            ASSERT_EQ(w.report.items.size(), size_t{2});
+            const RestoreItem* skipped = nullptr;
+            for (const RestoreItem& i : w.report.items) skipped = i.file == file_1 ? &i : skipped;
+            ASSERT_TRUE(skipped != nullptr && skipped->outcome == RestoreItem::Outcome::Unreadable && skipped->code.empty());
+            ASSERT_TRUE(skipped->note.find("stopped in the middle") != std::string::npos && skipped->note.find("not replayed again") != std::string::npos);
+            RoomStatus none;
+            ASSERT_FALSE(w.mgr->status("CL-1", none, w.server_now()));                              // no room, no failed room
+            ASSERT_TRUE(w.status("CL-2").restored && w.status("CL-2").state == RoomState::Running);   // the record next to it came back
+            ASSERT_FALSE(fs::exists(w.record_path("CL-1")));
+            ASSERT_FALSE(fs::exists(marker_1));
+            const fs::path kept = fs::path(w.restart.dir) / "refused" / file_1;
+            ASSERT_TRUE(fs::exists(kept) && read_all_bytes(kept.string()) == bytes_1);              // (kept as it was: the owner may want it)
+            bool said = false;
+            for (const std::string& line : w.notices) said = said || (line.find(file_1) != std::string::npos && line.find("was not restored: the server stopped in the middle of this record's replay") != std::string::npos);
+            ASSERT_TRUE(said);
+            // and it stays so: the next start has nothing of it to replay
+            w.stop_server(false);
+            w.start_server(500);
+            ASSERT_EQ(w.report.items.size(), size_t{1});
+            ASSERT_TRUE(w.status("CL-2").restored);
+        }
+        {   // the marker of a record that is not there is removed when the folder is prepared: a record of that name made later is not taken for one that stopped the server
+            PWorld w("restore-124c");
+            w.start_server(500);
+            const std::string path = w.record_path("OR-1");
+            {
+                RestartStore store(w.restart);
+                ASSERT_TRUE(store.mark_replaying(path));
+            }
+            ASSERT_TRUE(fs::exists(path + ".replaying") && !fs::exists(path));
+            w.stop_server(false);
+            w.start_server(500);
+            ASSERT_FALSE(fs::exists(path + ".replaying"));
+            crash_with_record_of(w, "OR-1", 6000, 2);
+            w.start_server(500);
+            ASSERT_TRUE(w.report.items.size() == 1 && w.report.items[0].outcome == RestoreItem::Outcome::Restored);
+            ASSERT_TRUE(w.status("OR-1").restored);
+        }
     } TEST_END();
 }
 
