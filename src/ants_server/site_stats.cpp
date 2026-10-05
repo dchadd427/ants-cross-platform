@@ -1,10 +1,19 @@
 #include "ants_server/site_stats.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <climits>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <system_error>
+
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "ants_ctl/json.hpp"
 #include "ants_server/room_manager.hpp"
@@ -186,6 +195,19 @@ ctl::JsonValue series_json(uint64_t total, const std::array<int64_t, SiteStats::
     return v;
 }
 
+// Has what the stream holds on the disk: flushed, then fsync'ed (_commit on Windows). The rename that follows must not give a file its name before its data is there.
+bool flush_to_disk(std::FILE* f) {
+    if (std::fflush(f) != 0) return false;
+#ifdef _WIN32
+    return _commit(_fileno(f)) == 0;
+#else
+    for (;;) {
+        if (::fsync(::fileno(f)) == 0) return true;
+        if (errno != EINTR) return false;
+    }
+#endif
+}
+
 }  // namespace
 
 bool SiteStats::write_file(std::string& why) {
@@ -197,21 +219,28 @@ bool SiteStats::write_file(std::string& why) {
     root.set("local", series_json(local_.total, local_.hour, local_.count, now_hour));
     const std::string text = ctl::to_json(root) + "\n";
     const std::string tmp = path_ + ".tmp";
-    {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-        out << text;
-        out.flush();
-        if (!out) {
-            why = "cannot write " + tmp;
-            return false;
-        }
+    std::FILE* f = std::fopen(tmp.c_str(), "wb");                          // (mode 0666 less the umask, as the file always had)
+    if (f == nullptr) {
+        why = "cannot write " + tmp + " (" + std::error_code(errno, std::generic_category()).message() + ")";
+        return false;
     }
+    bool ok = std::fwrite(text.data(), 1, text.size(), f) == text.size();
+    int err = ok ? 0 : errno;                                              // (errno of the first thing that went wrong)
+    if (ok && !flush_to_disk(f)) {
+        ok = false;
+        err = errno;
+    }
+    if (std::fclose(f) != 0 && ok) {
+        ok = false;
+        err = errno;
+    }
+    if (!ok && err == 0) err = EIO;
     std::error_code ec;
-    fs::rename(tmp, path_, ec);                                            // (whole file or the old one: never half)
-    if (ec) {
+    if (ok) fs::rename(tmp, path_, ec);                                    // (whole file or the old one: never half)
+    if (!ok || ec) {
         std::error_code ignored;
-        fs::remove(tmp, ignored);
-        why = "cannot rename " + tmp + ": " + ec.message();
+        fs::remove(tmp, ignored);                                          // (a file that this call made, never left behind on any failure)
+        why = ok ? "cannot rename " + tmp + ": " + ec.message() : "cannot write " + tmp + " (" + std::error_code(err, std::generic_category()).message() + ")";
         return false;
     }
     return true;

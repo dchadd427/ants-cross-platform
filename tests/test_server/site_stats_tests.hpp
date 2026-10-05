@@ -95,6 +95,52 @@ std::string http_exchange(net::WsListener& listener, const std::string& request)
 
 }  // namespace
 
+// The program's own fsync, for the tests that want to see it called: every call goes on to the real one (the system call); while a test has armed the spy, a call for the watched file is
+// recorded (what that file and the one beside it held at that moment) and can be made to fail. Linux only, and not under a sanitizer (which has an fsync of its own).
+#if defined(__linux__)
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#elif defined(__has_feature)
+#if !__has_feature(address_sanitizer) && !__has_feature(thread_sanitizer)
+#define ANTS_FSYNC_SPY 1
+#endif
+#else
+#define ANTS_FSYNC_SPY 1
+#endif
+#endif
+
+#ifdef ANTS_FSYNC_SPY
+#include <sys/syscall.h>
+
+struct FsyncSpy {
+    static inline std::atomic<bool> armed{false};
+    static inline std::string watch;                // the real path of the file whose sync is recorded
+    static inline std::string beside;               // a file whose text is read at the same moment
+    static inline int calls = 0;
+    static inline std::string watched_text;
+    static inline std::string beside_text;
+    static inline bool fail = false;                // the sync of the watched file fails (EIO)
+};
+
+extern "C" int fsync(int fd) {
+    if (FsyncSpy::armed.load()) {
+        char link[64];
+        std::snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
+        char target[4096];
+        const ssize_t n = ::readlink(link, target, sizeof(target) - 1);
+        if (n > 0 && std::string(target, static_cast<size_t>(n)) == FsyncSpy::watch) {
+            ++FsyncSpy::calls;
+            FsyncSpy::watched_text = stats_slurp(FsyncSpy::watch);
+            FsyncSpy::beside_text = stats_slurp(FsyncSpy::beside);
+            if (FsyncSpy::fail) {
+                errno = EIO;
+                return -1;
+            }
+        }
+    }
+    return static_cast<int>(::syscall(SYS_fsync, fd));
+}
+#endif
+
 void run_site_stats_tests() {
     TEST_CASE("S3.140 What counts online: a room whose match ran at least 600 ticks (30 s of play) and ended is one game, whatever ended it, demo rooms too; a shorter match and a room that never began are nothing (a start-and-quit loop cannot pad the number); the day and the total agree and the local counter is not touched") {
         StatsClock clock;
@@ -670,6 +716,100 @@ void run_site_stats_tests() {
             ASSERT_TRUE(fs::exists(dir / "no-such-folder" / SiteStats::kFileName));
         }
     } TEST_END();
+
+#ifdef ANTS_FSYNC_SPY
+    TEST_CASE("S3.150 The counters' file is on the disk before it has its name: the temporary file holds the whole new text and is fsync'ed (once), and only then renamed; a sync that fails removes the temporary file, leaves the old file whole and is said, and the next try saves") {
+        const fs::path dir = fs::canonical(temp_dir_for("stats-sync"));
+        const std::string path = (dir / SiteStats::kFileName).string();
+        StatsClock clock;
+        SiteStats stats(clock.fn());
+        stats.open(path);
+        ASSERT_TRUE(stats.save());
+        const std::string first = stats_slurp(path);
+        stats.take_notices();
+        stats.count_online();
+        FsyncSpy::calls = 0;
+        FsyncSpy::fail = false;
+        FsyncSpy::watch = path + ".tmp";
+        FsyncSpy::beside = path;
+        FsyncSpy::armed = true;
+        const bool saved = stats.save();
+        FsyncSpy::armed = false;
+        ASSERT_TRUE(saved);
+        ASSERT_EQ(FsyncSpy::calls, 1);
+        const std::string second = stats_slurp(path);
+        ASSERT_TRUE(!second.empty() && second != first);
+        ASSERT_TRUE(FsyncSpy::watched_text == second);                                          // when it was synced the temporary file held the whole new text (written and flushed first) ...
+        ASSERT_TRUE(FsyncSpy::beside_text == first);                                            // ... and the file still had its old text: the rename came after the sync
+        ASSERT_TRUE(!fs::exists(path + ".tmp") && !stats.dirty());
+        // a sync that fails: nothing is renamed, the temporary file is removed, the old file is whole, the counters stay unsaved, the log says so
+        stats.count_online();
+        FsyncSpy::calls = 0;
+        FsyncSpy::fail = true;
+        FsyncSpy::armed = true;
+        const bool failed = stats.save();
+        FsyncSpy::armed = false;
+        ASSERT_FALSE(failed);
+        ASSERT_EQ(FsyncSpy::calls, 1);
+        ASSERT_TRUE(stats_slurp(path) == second && !fs::exists(path + ".tmp") && stats.dirty());
+        ASSERT_TRUE(notice_has(stats.take_notices(), "could not be saved"));
+        FsyncSpy::fail = false;
+        ASSERT_TRUE(stats.save() && !stats.dirty() && stats_slurp(path) != second && !fs::exists(path + ".tmp"));
+        ASSERT_TRUE(notice_has(stats.take_notices(), "saved again"));
+    } TEST_END();
+#endif
+
+#ifndef _WIN32
+    TEST_CASE("S3.151 A write that fails (a full disk: here the process may write no file) removes the temporary file, leaves the old file whole and is said; a folder in the place of the temporary file is not ours to remove; the file is made with the umask's mode") {
+        const fs::path dir = temp_dir_for("stats-full");
+        const std::string path = (dir / SiteStats::kFileName).string();
+        StatsClock clock;
+        SiteStats stats(clock.fn());
+        stats.open(path);
+        ASSERT_TRUE(stats.save());
+        const std::string first = stats_slurp(path);
+        stats.take_notices();
+        stats.count_online();
+        struct rlimit before_limit;
+        ASSERT_EQ(::getrlimit(RLIMIT_FSIZE, &before_limit), 0);
+        struct sigaction ignore;
+        std::memset(&ignore, 0, sizeof(ignore));
+        ignore.sa_handler = SIG_IGN;
+        struct sigaction before_action;
+        ASSERT_EQ(::sigaction(SIGXFSZ, &ignore, &before_action), 0);                              // (a write past the limit is a signal, which ends a process that does not ignore it)
+        struct rlimit none = before_limit;
+        none.rlim_cur = 0;
+        ASSERT_EQ(::setrlimit(RLIMIT_FSIZE, &none), 0);
+        const bool saved = stats.save();
+        ::setrlimit(RLIMIT_FSIZE, &before_limit);
+        ::sigaction(SIGXFSZ, &before_action, nullptr);
+        ASSERT_FALSE(saved);
+        ASSERT_TRUE(!fs::exists(path + ".tmp") && stats_slurp(path) == first && stats.dirty());   // nothing half written is left, under any name
+        ASSERT_TRUE(notice_has(stats.take_notices(), "could not be saved"));
+        ASSERT_TRUE(stats.save() && stats_slurp(path) != first && !fs::exists(path + ".tmp"));    // the disk is well again
+        // a folder where the temporary file goes cannot be opened: it is not removed (it is not what this program made)
+        fs::create_directories(path + ".tmp");
+        stats.count_online();
+        ASSERT_FALSE(stats.save());
+        ASSERT_TRUE(fs::is_directory(path + ".tmp"));
+        fs::remove_all(path + ".tmp");
+        // the mode is that of any new file: 0666 less the umask
+        const mode_t old_mask = ::umask(022);
+        fs::remove(path);
+        ASSERT_TRUE(stats.save());
+        struct stat st;
+        ASSERT_EQ(::stat(path.c_str(), &st), 0);
+        const mode_t mode_022 = st.st_mode & 0777;
+        ::umask(077);
+        fs::remove(path);
+        stats.count_online();
+        ASSERT_TRUE(stats.save());
+        ASSERT_EQ(::stat(path.c_str(), &st), 0);
+        const mode_t mode_077 = st.st_mode & 0777;
+        ::umask(old_mask);
+        ASSERT_TRUE(mode_022 == 0644 && mode_077 == 0600);
+    } TEST_END();
+#endif
 
     TEST_CASE("S3.148 A real room manager: a demo room that played 30 s and ended counts once (also when its code is asked for again before anybody looked), a match that was quit sooner, a room closed during the dialog and one closed while it waited count nothing, a match that played 30 s and was closed by the owner counts, and nothing counts twice") {
         ServerLimits limits;
