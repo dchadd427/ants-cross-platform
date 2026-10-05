@@ -340,7 +340,7 @@ jobs:
       - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html index.js index.wasm index.data changelog.html changelog_archive.html front/logo.png front/LibreFranklin-Medium.ttf && cmp index.html play.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html index.js index.wasm index.data changelog.html changelog_archive.html front/logo.png front/LibreFranklin-Medium.ttf front/classic.css && cmp index.html play.html'
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
 
       # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=, ?embed=1), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has
