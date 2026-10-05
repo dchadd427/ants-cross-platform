@@ -1,18 +1,20 @@
 # Status
 
-_Updated 2026-10-05 15:53 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 16:32 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.8.2** rounder, less flat buttons, and Friend as the default seat | ░░░░░░░░░░ 0% | Mon or Tue | the owner's asks; being built |
+| **v0.8.2** rounder, less flat buttons (8 px corners, a bevel on every edge) | ███░░░░░░░ 29% | Mon | built and tested here after the owner's two notes; the browser checks and the review are running again, then the pull request |
+| **v0.8.3** a game for one on this computer, Friend as the default seat, a dirtier orange background | █░░░░░░░░░ 14% | Mon or Tue | built here; waits for v0.8.2 to merge, then its own checks and review |
 | **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ████░░░░░░ 43% | Mon or Tue | PR #14 (both batches joined, main v0.8.0 in) has all five checks green; two independent code reviews are running, then the release steps and the merge |
 | **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the bots (v0.9.0) |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- v0.8.2: rounder buttons with soft top-to-bottom shading so they look less flat, and Friend instead of Medium bot as the New match card's default seat (the owner's asks); a patch release, being built
+- v0.8.2: rounder buttons (8 px corners) with a bevel on every edge and soft top-to-bottom shading, so they look less flat (the owner's asks); a patch release, built, with its review and browser checks running again
+- v0.8.3: START with every other seat on Nobody begins a game for one on this computer (the original's single player; a room on the game server needs two people), Friend is the default seat of the New match card, and the orange background gets a little noise and dirt (the owner's asks); a patch release right after v0.8.2, built here
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in draft PR #14, the v0.9.0 candidate (all five checks green with main v0.8.0 in; two independent code reviews running, then the release steps)
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. PR #14 (the v0.9.0 candidate) no longer orders special actions onto an ant (-95% on Small); draft PR #16, stacked on it, adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 68% on Small Hard and 35 to 45% on Treasure, scores unchanged within noise. The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
@@ -23,6 +25,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - The README is split into short pages under docs/ and was fact-checked against the game as built (docs only, so merging it does not change the site): the draft pull request is up (PR #17)
 - Browser checks without Docker (draft pull request #13): a session that has no Docker can build the web pages and run the touch checks and the other browser checks; it changes no page (no redeploy), has main v0.8.0 in and merges once its five checks are green
 - Host moves a player's colour in the waiting room (tap a player's ant; network protocol 14, ships with v0.10.0 and the short room codes): being built, draft pull request to follow
+- **Windows prediction-budget test flake** (draft pull request #20): diagnostic first, then the fix; merges once its five checks are green and it has been reviewed.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
