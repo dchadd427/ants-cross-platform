@@ -4,7 +4,7 @@ fingers move and zoom the map: src/ants_app/application_touch.cpp, include/ants_
 here, so everything that the page can say about it without one is checked:
 
   - the style: the canvas has touch-action none, the page has manipulation (no double-tap zoom) and every control too, a pull down or a swipe past the end of the page does not reload it or
-    chain to another scroller (overscroll-behavior: none, which does not stop the page's own scrolling), a long press makes no callout or selection over the game, the viewport still
+    chain to another scroller (overscroll-behavior-y: none, which does not stop the page's own scrolling), a long press makes no callout or selection over the game, the viewport still
     forbids scaling (Chrome on Android obeys it; iOS Safari does not, which is what the gesture listeners are for);
   - the script: the block of the guards exists once and is RUN with fakes for the page (node, when it is installed: tests/scripts/web_touch_check.js): the listeners that it registers and how
     (the browser's pinch on the canvas AND the document, not passive; the touch listeners passive: the page never cancels, stops or delays a touch), the cancel of the context menu, the
@@ -72,12 +72,14 @@ class TheStyle(PageCase):
         root = css_rule(self.page, r"html")
         self.assertIsNotNone(root)
         self.assertIn("touch-action: manipulation;", root)           # the whole page: panning and pinch stay, double-tap zoom goes (iOS Safari honours it from iOS 13)
-        self.assertIn("overscroll-behavior: none;", root)
+        self.assertIn("overscroll-behavior-y: none;", root)
 
     def test_a_swipe_past_the_end_of_the_page_does_not_reload_it(self):
         body = css_rule(self.page, r"body")
         self.assertIsNotNone(body)
-        self.assertIn("overscroll-behavior: none;", body)
+        self.assertIn("overscroll-behavior-y: none;", body)
+        self.not_found(css_rule(self.page, r"html") or "", r"overscroll-behavior(?!-y)", "only the vertical axis (no shorthand, no -x): a desktop trackpad's horizontal swipe (back, forward) stays as it was")
+        self.not_found(body, r"overscroll-behavior(?!-y)", "only the vertical axis (no shorthand, no -x): a desktop trackpad's horizontal swipe (back, forward) stays as it was")
         self.not_found(css_rule(self.page, r"html") or "", r"overflow\s*:\s*hidden", "the page itself must scroll: the guide is below the game")
 
     def test_a_long_press_on_the_game_is_no_callout_no_selection_no_flash(self):
@@ -124,6 +126,14 @@ class TheScript(PageCase):
         block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
         self.found(block, r"window\.addEventListener\('touchcancel'")
         self.assertIn("Module._ants_touch_cancel", block)
+
+    def test_a_touch_that_lands_alone_makes_the_game_forget_the_fingers_whose_lift_never_came(self):
+        block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
+        self.found(block, r"function othersOnTheBox\(e\)")
+        self.assertIn("var all = e && e.touches;", block)                               # (the browser's own list of touches: a lift that was never delivered cannot corrupt it)
+        handler = re.search(r"boxElement\.addEventListener\('touchstart', function \(e\) \{(.*?)\}, \{ capture: true, passive: true \}\);", block, re.S)
+        self.assertIsNotNone(handler, "the box's touchstart listener is there, passive, capture")
+        self.assertIsNotNone(re.search(r"if \(othersOnTheBox\(e\) === 0\) \{.*?live = \{\};.*?count = 0;.*?tellGame\(\);", handler.group(1), re.S), "a touch with no other touch of the game down starts the count again and tells the game")
 
     def test_the_context_menu_is_cancelled_over_the_game(self):
         block = self.page[self.page.index("// ANTS_TOUCH_BEGIN"):self.page.index("// ANTS_TOUCH_END")]
@@ -180,7 +190,7 @@ class TheGame(PageCase):
         self.found(source, r'extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel\(\)')
         for case in range(30, 37):
             self.found(source, r"case %d: return " % case, "ants_probe has no case %d for the touch model" % case)
-        self.assertIn('SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");', source)
+        self.assertIn('SDL_SetHintWithPriority(SDL_HINT_TOUCH_MOUSE_EVENTS, "0", SDL_HINT_OVERRIDE);', source)       # (an environment variable of the player's must not bring the emulation back)
 
     def test_the_buzz_is_never_required(self):
         source = read(APPLICATION_TOUCH)

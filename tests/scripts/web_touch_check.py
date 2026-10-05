@@ -30,7 +30,7 @@ What is checked, for each profile:
     so that one failure cannot make the next parts fail;
   * the same in the page's FULLSCREEN (the browser's own on a Pixel; the page's own where there is no Fullscreen API: an iPhone), where the box is another size.
 What headless Chrome cannot show, and the owner's phone must: that the first touch of a page grants the sound (the autoplay policy is switched off for the check), the system's own gestures
-(Android's back swipe from an edge, iOS's swipe from the left edge, pull to refresh: the page's overscroll-behavior only asks for none), a finger's real width (a thumb's resting
+(Android's back swipe from an edge, iOS's swipe from the left edge, pull to refresh: the page's overscroll-behavior-y only asks for none), a finger's real width (a thumb's resting
 touch that holds, a palm), the real multi-touch glass (a finger's jitter within the slop), Safari and Firefox (WebKit's gesture events and callout), the vibration motor.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down during the check (a page that came up and then misbehaved is a failure, never a skip); 3: the
@@ -349,11 +349,13 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             var cs = function (e) { return getComputedStyle(e); };
             var canvas = document.getElementById('canvas'), stage = document.getElementById('game-stage');
             return { canvas: cs(canvas).touchAction, html: cs(document.documentElement).touchAction, htmlOver: cs(document.documentElement).overscrollBehaviorY, bodyOver: cs(document.body).overscrollBehaviorY,
+                     htmlOverX: cs(document.documentElement).overscrollBehaviorX, bodyOverX: cs(document.body).overscrollBehaviorX,
                      stageSelect: cs(stage).userSelect, stageTap: cs(stage).webkitTapHighlightColor, scale: window.visualViewport.scale };
         })())"""))
         check(styles["canvas"] == "none", "%s: the canvas has touch-action: none (%s)" % (name, styles["canvas"]))
         check(styles["html"] == "manipulation", "%s: the page has touch-action: manipulation (panning and pinch stay, double-tap zoom goes: %s)" % (name, styles["html"]))
-        check(styles["htmlOver"] == "none" and styles["bodyOver"] == "none", "%s: overscroll-behavior is none on the page (%s, %s)" % (name, styles["htmlOver"], styles["bodyOver"]))
+        check(styles["htmlOver"] == "none" and styles["bodyOver"] == "none", "%s: overscroll-behavior-y is none on the page (%s, %s)" % (name, styles["htmlOver"], styles["bodyOver"]))
+        check(styles["htmlOverX"] == "auto" and styles["bodyOverX"] == "auto", "%s: the horizontal axis is left as it was (a desktop trackpad's swipe back and forward: %s, %s)" % (name, styles["htmlOverX"], styles["bodyOverX"]))
         check(styles["stageSelect"] == "none", "%s: the game's stage is not selectable (%s)" % (name, styles["stageSelect"]))
         check(styles["scale"] == 1, "%s: the page is not scaled (%s)" % (name, styles["scale"]))
         buttons = json.loads(tab.ev("""JSON.stringify(Array.prototype.map.call(document.querySelectorAll('button'), function (b) { return [b.id || b.className || b.textContent.slice(0, 20), getComputedStyle(b).touchAction, b.offsetParent !== null]; }))"""))

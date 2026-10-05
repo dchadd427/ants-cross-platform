@@ -101,8 +101,27 @@ struct Hand {
     void down(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERDOWN, finger, at, fx, fy); }
     void move(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERMOTION, finger, at, fx, fy); }
     void up(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERUP, finger, at, fx, fy); }
+    /// A window event in SDL's queue, in its place among the finger events
+    void window(SDL_WindowEventID what) {
+        SDL_Event e;
+        SDL_zero(e);
+        e.type = SDL_WINDOWEVENT;
+        e.window.type = SDL_WINDOWEVENT;
+        e.window.timestamp = now;
+        e.window.event = static_cast<Uint8>(what);
+        SDL_PeepEvents(&e, 1, SDL_ADDEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT);
+    }
     void wait(uint32_t ms) { now += ms; }
     void frame() { app.run_frame_with_delta(0.016f); }
+    /// The time passes with the application's frames running (one every `step` ms): the model knows that the finger is down all the while. wait() alone is a stall.
+    void rest(uint32_t ms, uint32_t step = 20) {
+        while (ms > 0) {
+            const uint32_t d = std::min(step, ms);
+            wait(d);
+            frame();
+            ms -= d;
+        }
+    }
     /// A tap: down, 80 ms, up, a frame
     void tap(Pt at, int64_t finger = 1) {
         down(finger, at);
@@ -310,6 +329,18 @@ struct Match {
 
 void test_setup_of_sdl() {
     group("sdl", "SDL's touch-to-mouse emulation is off, and only a touch screen's fingers count");
+    {   // an environment variable of the player's (SDL_TOUCH_MOUSE_EVENTS=1) must not bring the emulation back (review L8): the game sets the hint at SDL's highest priority. An ordinary
+        // SDL_SetHint is refused while the variable is set (SDL then answers the variable's value) and the fingers would reach the game twice.
+        SDL_ClearHints();
+        SDL_setenv("SDL_TOUCH_MOUSE_EVENTS", "1", 1);
+        {
+            AppRig other;
+            check(other.ok, "(an application is made with SDL_TOUCH_MOUSE_EVENTS=1 in the environment)");
+            const char* with_env = SDL_GetHint(SDL_HINT_TOUCH_MOUSE_EVENTS);
+            check(with_env != nullptr && std::string(with_env) == "0", "the environment's SDL_TOUCH_MOUSE_EVENTS=1 does not bring SDL's emulation back: the hint is 0");
+        }
+        SDL_setenv("SDL_TOUCH_MOUSE_EVENTS", "0", 1);                       // (what the game wants anyway: the variable is left at 0 for the rest of the process)
+    }
     Match m;
     check(m.ok, "the match is up");
     if (!m.ok) return;
@@ -618,28 +649,109 @@ void test_hold_timing() {
     hand.frame();
     check(s.sink.commands.size() == 1 && !app.hud().is_input_captured(), "the lift is the order");
 
-    // no frame between the down and a late lift: the events carry the times, so the hold is still made, then released
-    s.clear();
-    s.select({s.worker});
-    hand.down(1, g);
-    hand.wait(700);
-    hand.up(1, g);
-    hand.frame();
-    check(s.sink.commands.size() == 1 && app.touch().stats().holds == 2 && app.touch_feedbacks() == 2, "a lift 700 ms after the down, with no frame between: the hold was made at its time, then released: one order, one more feedback");
+    // no frame between the down and a lift that is stamped 700 ms later (a stall: SDL stamps an event when it SEES it, so a stall makes a short touch look long): nothing says that the finger was
+    // down all that time, so the lift is judged 100 ms after the down, a tap. (This block used to pin the opposite: "the hold was made at its time, then released: one order, one more
+    // feedback"; the review found that a short tap or the start of a drag turned into a right click that way. The order is still one, a left click on the ground moves the worker.)
+    {
+        s.clear();
+        s.select({s.worker});
+        const TouchControl::Stats before = app.touch().stats();
+        const uint32_t buzzes = app.touch_feedbacks();
+        hand.down(1, g);
+        hand.wait(700);
+        hand.up(1, g);
+        hand.frame();
+        check(s.sink.commands.size() == 1 && app.touch().stats().taps == before.taps + 1 && app.touch().stats().holds == before.holds && app.touch_feedbacks() == buzzes,
+              "a lift stamped 700 ms after the down, with no frame between: a tap (the one order is the left click's), no hold, no feedback");
+    }
+
+    // A STALLED tap: the finger leaves 100 ms after it went down, a 400 ms stall stamps the lift 500 ms after the down. It is a click (it selects the worker), never the right click (which
+    // selects nothing and buzzes). A stalled first move begins a drag, never a hold. A slow tap (300 ms) with a 150 ms stall is a tap (it was lost in the dead zone, 438 ms).
+    {
+        const Pt on = s.on_ant(s.worker);
+        s.clear();
+        TouchControl::Stats before = app.touch().stats();
+        uint32_t buzzes = app.touch_feedbacks();
+        hand.down(1, on);
+        hand.frame();
+        hand.wait(30);
+        hand.frame();
+        hand.wait(470);
+        hand.up(1, on);
+        hand.frame();
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker} && app.touch().stats().taps == before.taps + 1 && app.touch().stats().holds == before.holds &&
+                  app.touch_feedbacks() == buzzes && app.touch().fingers() == 0,
+              "a tap whose lift a 400 ms stall stamped 500 ms after the down: a click on the worker (it is selected), no hold, no buzz");
+
+        s.clear();
+        before = app.touch().stats();
+        hand.down(1, g);
+        hand.frame();
+        hand.wait(30);
+        hand.frame();
+        hand.wait(470);
+        hand.move(1, Pt{g.x + 40, g.y});
+        hand.frame();
+        check(app.touch().stats().drags == before.drags + 1 && app.touch().stats().holds == before.holds && app.touch().mode() == TouchControl::Mode::Left && app.hud().is_input_captured(),
+              "a first move stamped 500 ms after the down, the frame before it at 30 ms: a drag (the band), not a hold");
+        hand.up(1, Pt{g.x + 40, g.y});
+        hand.frame();
+        check(app.touch().fingers() == 0 && !app.hud().is_input_captured() && app.touch_feedbacks() == buzzes, "... which ends with the lift, and nothing buzzed");
+
+        s.clear();
+        before = app.touch().stats();
+        hand.down(1, on);
+        hand.frame();
+        for (int i = 0; i < 18; ++i) {
+            hand.wait(16);
+            hand.frame();
+        }
+        hand.wait(150);
+        hand.up(1, on);
+        hand.frame();
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker} && app.touch().stats().taps == before.taps + 1 && app.touch().stats().holds == before.holds,
+              "a slow tap (the finger leaves at 300 ms) whose lift a 150 ms stall stamped at 438 ms: a click (it was a lost tap in the dead zone)");
+    }
+
+    // REAL holds at slow frame rates (16 ms, 100 ms, 250 ms between frames): the ring is seen while the hold is coming, the hold is made by the frame that first reaches its time and the
+    // feedback is given once, and the lift is the order, as the mouse's right click gives it
+    for (const uint32_t gap : {16u, 100u, 250u}) {
+        const std::string rate = "frames every " + std::to_string(gap) + " ms: ";
+        s.clear();
+        s.select({s.worker});
+        const TouchControl::Stats before = app.touch().stats();
+        const uint32_t buzzes = app.touch_feedbacks();
+        hand.down(1, g);
+        hand.frame();
+        bool ring_seen = false;
+        for (uint32_t t = gap; t <= 700; t += gap) {
+            hand.wait(gap);
+            hand.frame();
+            ring_seen = ring_seen || (t < touch::kHoldMs && app.touch().ring(hand.now).has_value());
+        }
+        check(ring_seen, rate + "the ring was seen while the hold was coming");
+        check(app.hud().is_input_captured() && app.touch().mode() == TouchControl::Mode::Right && app.touch().stats().holds == before.holds + 1 && app.touch_feedbacks() == buzzes + 1,
+              rate + "the right button is held, the hold counted and the feedback given once");
+        check(s.sink.commands.empty(), rate + "nothing is ordered before the lift");
+        hand.wait(20);
+        hand.up(1, g);
+        hand.frame();
+        check(s.sink.commands.size() == 1 && s.sink.commands[0].type == sim::CommandType::GroupMove && !app.hud().is_input_captured() && app.touch().fingers() == 0, rate + "the lift is the order");
+    }
 
     // the dead zone between the tap time and the hold time: a lift there does nothing
     s.clear();
     s.select({s.worker});
     hand.down(1, g);
     hand.frame();
-    hand.wait(touch::kTapMs + 20);
+    hand.rest(touch::kTapMs + 20);
     hand.up(1, g);
     hand.frame();
     check(s.sink.commands.empty() && app.touch().fingers() == 0, "a finger that lingers 420 ms and lifts: neither a click nor a right click");
     // a tap at the last millisecond before the tap time is a click
     hand.down(1, g);
     hand.frame();
-    hand.wait(touch::kTapMs - 1);
+    hand.rest(touch::kTapMs - 1);
     hand.up(1, g);
     hand.frame();
     check(s.sink.commands.size() == 1, "a tap that lifts 399 ms after the down is a click");
@@ -1029,6 +1141,31 @@ void test_pinch() {
     notch(app, -1);
     const float one_out = app.zoom();
     check(one_out == levels[5] && pinched <= one_out, "the wheel's levels are the pinch's: a notch out of 1 is " + zoom::level_name(one_out));
+    // two fingers that land closer than the floor (3 slops): a jitter and a spread under it change nothing, and the zoom does not run backwards (review L1)
+    {
+        app.set_zoom(1.0f, mid.x, mid.y);
+        const int floor = static_cast<int>(std::lround(touch::kMinSpanSlops * app.touch_slop()));
+        const int close = std::max(4, floor / 3);
+        hand.down(1, Pt{mid.x - close / 2, mid.y});
+        hand.down(2, Pt{mid.x - close / 2 + close, mid.y});
+        hand.frame();
+        for (const int spread : {close + 1, close - 1, close + 1, 2 * close, floor - 2}) {
+            hand.wait(16);
+            hand.move(2, Pt{mid.x - close / 2 + spread, mid.y});
+            hand.frame();
+            check(app.zoom() == 1.0f, "fingers that landed " + std::to_string(close) + " px apart, now " + std::to_string(spread) + " (the floor is " + std::to_string(floor) + "): the zoom stays 1");
+        }
+        for (int i = 1; i <= 8; ++i) {
+            hand.wait(16);
+            hand.move(2, Pt{mid.x - close / 2 + floor + i * floor / 4, mid.y});
+            hand.frame();
+        }
+        check(app.zoom() > 1.0f, "spread to three floors it zooms in: " + zoom::level_name(app.zoom()));
+        hand.up(1, Pt{mid.x, mid.y});
+        hand.up(2, Pt{mid.x + 10, mid.y});
+        hand.frame();
+        app.set_zoom(1.0f, mid.x, mid.y);
+    }
     // the renderer cannot make its offscreen target: only the level 1 is offered, and a pinch changes nothing (as the wheel)
     app.renderer().set_fail_world_target(true);
     app.run_frame_with_delta(0.016f);
@@ -1098,6 +1235,7 @@ void test_gates() {
         {"the quit dialog", [&] { app.hud().open_quit_dialog(); }, [&] { app.hud().close_quit_dialog(); }},
         {"the get ready dialog", [&] { app.hud().start_match_modal(); }, [&] { app.hud().dismiss_match_start_modal(); }},
         {"the results", [&] { app.scorecard().show(app.sim().get_world_state().match_result, 0); }, [&] { app.scorecard().hide(); }},
+        {"the catch-up screen of a network match", [&] { app.force_catch_up_screen_for_test(true); }, [&] { app.force_catch_up_screen_for_test(false); }},
     };
     for (const Case& c : cases) {
         c.open();
@@ -1109,6 +1247,84 @@ void test_gates() {
     check(attempt(), "after all of them: two fingers move the view again");
     camera.zoom = 1.0f;
     app.set_zoom(1.0f, 100, 100);
+
+    // THE CATCH-UP SCREEN of a network match (connecting, loading, catching up: the loading picture is on the screen and the match is not; every mouse path of the game is shut then). The
+    // view is not open to touches: two fingers would pan the hidden camera and pinch the remembered zoom, and a resting finger would draw a ring and a pulse over the picture and buzz.
+    {
+        app.force_catch_up_screen_for_test(true);
+        const float remembered = app.remembered_zoom();
+        check(!attempt() && app.remembered_zoom() == remembered, "the catch-up screen: two fingers pan and pinch nothing, and the remembered zoom is not touched");
+        const uint32_t holds = app.touch().stats().holds;
+        const uint32_t buzzes = app.touch_feedbacks();
+        hand.down(1, a);
+        hand.frame();
+        hand.rest(touch::kHoldMs + 100);
+        check(app.touch().stats().holds == holds && app.touch_feedbacks() == buzzes && app.touch().mode() == TouchControl::Mode::Left, "a finger that rests on the catch-up screen is no hold: no buzz, a plain press that the screen swallows");
+        check(!app.touch().ring(hand.now).has_value() && !app.touch().pulse(hand.now).has_value(), "... and has no ring and no pulse");
+        hand.up(1, a);
+        hand.frame();
+        s.clear();
+        hand.tap(s.on_ant(s.worker));
+        check(app.hud().get_selected_ant_ids().empty() && app.touch().fingers() == 0, "a tap on an ant of the hidden match selects nothing (the mouse's click does not either)");
+        // a finger that holds a HUD button when the screen comes up: a cancel still lets the button go, and it does not fire (the match's own presses end with no act)
+        app.force_catch_up_screen_for_test(false);
+        const UIButton help = app.hud().help_button();
+        const Pt on_help{help.x + help.w / 2, help.y + help.h / 2};
+        hand.down(1, on_help);
+        hand.frame();
+        check(app.hud().help_button().is_pressed, "(the Help button is held by the finger)");
+        app.force_catch_up_screen_for_test(true);
+        app.cancel_touch();
+        hand.frame();
+        check(!app.hud().help_button().is_pressed && !app.hud().is_quick_help_open() && app.touch().fingers() == 0, "a cancel on the catch-up screen still lets the button go, and it does not fire");
+        app.force_catch_up_screen_for_test(false);
+        hand.up(1, on_help);
+        hand.frame();
+        // a finger that began on the map and waits when the screen comes up: no ring is drawn over the picture, and a second finger that lands then is no pair
+        {
+            hand.down(1, a);
+            hand.frame();
+            hand.wait(300);
+            app.force_catch_up_screen_for_test(true);
+            const Picture over = still_frame(app);
+            check(app.touch().mode() == TouchControl::Mode::Waiting, "(the finger still waits when the catch-up screen comes up)");
+            const uint32_t pairs = app.touch().stats().two_finger;
+            hand.down(2, b);
+            hand.frame();
+            check(app.touch().mode() == TouchControl::Mode::Waiting && app.touch().ignored() == 1 && app.touch().stats().two_finger == pairs,
+                  "a second finger that lands after the catch-up screen came up under the first one is ignored: no pair");
+            hand.up(2, b);
+            hand.frame();
+            app.cancel_touch();
+            const Picture alone = still_frame(app);
+            check(app.touch().fingers() == 0 && same_view(app, over, alone), "no ring over the catch-up screen: the picture with the waiting finger is the picture without it");
+            hand.up(1, a);
+            hand.frame();
+            app.force_catch_up_screen_for_test(false);
+        }
+        // the screen comes up in the middle of a pinch (the link drops): the gesture is over, no pan, no zoom, no finger tracked
+        camera.set_origin(500.0, 500.0, map_w, map_h);
+        const float x0 = camera.x;
+        const float y0 = camera.y;
+        const float z0 = app.zoom();
+        hand.down(1, a);
+        hand.down(2, b);
+        hand.frame();
+        check(app.touch().mode() == TouchControl::Mode::Two, "(the pair is on)");
+        app.force_catch_up_screen_for_test(true);
+        hand.wait(16);
+        hand.move(1, Pt{a.x - 40, a.y + 20});
+        hand.move(2, Pt{b.x + 40, b.y + 20});
+        hand.frame();
+        check(camera.x == x0 && camera.y == y0 && app.zoom() == z0 && app.touch().fingers() == 0, "the catch-up screen that comes up over a pair ends the gesture: no pan, no zoom, no finger is tracked");
+        app.force_catch_up_screen_for_test(false);
+        hand.up(2, Pt{b.x + 40, b.y + 20});
+        hand.up(1, Pt{a.x - 40, a.y + 20});
+        hand.frame();
+        check(attempt(), "(and when the screen is gone, two fingers move the view again)");
+        camera.zoom = 1.0f;
+        app.set_zoom(1.0f, 100, 100);
+    }
 
     // a held press: the first finger holds a button, the minimap, the chat log: the second finger is ignored (and the first finger's press goes on)
     {
@@ -1200,6 +1416,56 @@ void test_gates() {
         }
     }
 
+    // A FIRST FINGER WHOSE PRESS HOLDS NOTHING (the frame, a blank part of the panel) does not block the next one (review L4): a tap on the map works while a thumb rests there. (A press that holds
+    // something, a button, the minimap, the chat log, blocks as above.)
+    {
+        s.look();                                                           // (the view over the scene: the worker is on the screen)
+        app.set_zoom(1.0f, 100, 100);
+        const Pt g_ground = s.ground(3, 3);
+        const std::vector<Pt> thumbs = {Pt{6, view.y + 150}, Pt{app.picture().w - 8, view.y + 300}};
+        for (const Pt& thumb : thumbs) {
+            s.clear();
+            hand.down(1, thumb);
+            hand.frame();
+            check(app.touch().mode() == TouchControl::Mode::Left && !app.hud().is_input_captured() && !app.hud().chat_dragging() && !app.hud().is_modal_open(),
+                  "(a thumb rests at " + show(thumb) + ": a plain press that holds nothing)");
+            const Pt on = s.on_ant(s.worker);
+            hand.down(2, on);
+            hand.wait(60);
+            hand.up(2, on);
+            hand.frame();
+            check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker} && app.touch().fingers() == 1 && app.touch().ignored() == 1,
+                  "a tap on the map while a thumb rests at " + show(thumb) + ": it selects the worker (the thumb's press holds nothing, so it does not block)");
+            const uint32_t holds = app.touch().stats().holds;
+            hand.down(2, g_ground);
+            hand.frame();
+            hand.rest(touch::kHoldMs + 40);
+            check(app.touch().stats().holds == holds + 1 && app.touch().mode() == TouchControl::Mode::Right, "a hold of the second finger works too, the thumb still resting");
+            hand.up(2, g_ground);
+            hand.frame();
+            hand.up(1, thumb);
+            hand.frame();
+            check(app.touch().fingers() == 0 && !app.hud().is_input_captured(), "(both fingers are gone)");
+            s.clear();
+        }
+        // the chat log's drag is a held press too: the finger that lands next does not take it away
+        const LayoutRect chat = app.layout().chat_view();
+        const Pt in_chat{chat.x + chat.w / 2, chat.y + chat.h / 2};
+        hand.down(1, in_chat);
+        hand.frame();
+        check(app.hud().chat_dragging() && app.touch().mode() == TouchControl::Mode::Left, "(a finger drags the chat log)");
+        const Pt on_worker = s.on_ant(s.worker);
+        hand.down(2, on_worker);
+        hand.wait(60);
+        hand.up(2, on_worker);
+        hand.frame();
+        check(app.hud().chat_dragging() && app.hud().get_selected_ant_ids().empty() && app.touch().fingers() == 1 && app.touch().mode() == TouchControl::Mode::Left,
+              "a finger that taps the map while another drags the chat log is ignored (nothing is selected): the drag goes on");
+        hand.up(1, in_chat);
+        hand.frame();
+        check(!app.hud().chat_dragging() && app.touch().fingers() == 0, "(the drag ends with its finger)");
+    }
+
     // the second finger lands AFTER something opened under the first: the first finger began on the map, then the results came up (the match ended): no pair
     {
         hand.down(1, a);
@@ -1283,7 +1549,17 @@ void test_gates() {
         hand.up(1, Pt{modal.x + no.x + no.w / 2, modal.y + no.y + no.h / 2});     // (the first finger slid to No before it lifted: nothing is pressed on it)
         hand.frame();
         check(app.hud().is_quit_dialog_open(), "a finger that pressed Yes and lifted on No does not close the dialog (a captured button, as for the mouse)");
-        app.hud().close_quit_dialog();
+        // a press on a dialog's button is that dialog's own: a second finger that lands meanwhile does not take it away (only a press that holds nothing on the match screen is let go of)
+        hand.down(1, Pt{modal.x + no.x + no.w / 2, modal.y + no.y + no.h / 2});
+        hand.frame();
+        hand.down(2, a);
+        hand.wait(60);
+        hand.up(2, a);
+        hand.frame();
+        check(app.hud().is_quit_dialog_open() && app.hud().quit_no_button().is_pressed, "(No is pressed, and a second finger came and went on the map under the dialog)");
+        hand.up(1, Pt{modal.x + no.x + no.w / 2, modal.y + no.y + no.h / 2});
+        hand.frame();
+        check(!app.hud().is_quit_dialog_open(), "the first finger's lift on No still closes the dialog: its press was not taken away");
         app.hud().open_options();
         const LayoutPoint page = app.layout().options_offset();
         hand.tap(Pt{page.x + OptionsScreen::RETURN_X + OptionsScreen::RETURN_W / 2, page.y + OptionsScreen::RETURN_Y + OptionsScreen::RETURN_H / 2});
@@ -1406,6 +1682,47 @@ void test_cancel() {
         returned.event = static_cast<Uint8>(back);
         app.handle_window_event(returned);
     }
+    // THE WINDOW OR THE CANVAS CHANGES SIZE (a rotation, a fullscreen toggle, the address bar): the same spot of the glass is another pixel of the picture now, so what the fingers held ends (review L5)
+    {
+        begin_band();
+        check(app.hud().is_input_captured(), "(the band is held)");
+        app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_SIZE_CHANGED; return we; }());
+        hand.frame();
+        check(!app.hud().is_input_captured() && app.touch().fingers() == 0, "a size change: the band is dropped and no finger is tracked");
+        hand.up(1, q);
+        hand.frame();
+        check(app.hud().get_selected_ant_ids().empty(), "(and the lift that follows selects nothing)");
+        // in the order of the events: a finger waits, the size changes, the finger moves far and lifts: no band, no click (the finger that was there is not the one that moves now)
+        s.clear();
+        const TouchControl::Stats before = app.touch().stats();
+        hand.down(1, p);
+        hand.wait(30);
+        hand.window(SDL_WINDOWEVENT_SIZE_CHANGED);
+        hand.wait(30);
+        hand.move(1, q);
+        hand.wait(30);
+        hand.up(1, q);
+        hand.frame();
+        check(app.touch().stats().drags == before.drags && app.touch().stats().taps == before.taps && app.hud().get_selected_ant_ids().empty() && app.touch().fingers() == 0,
+              "a finger that waits when the size changes and moves far afterwards makes no band and no tap");
+        // a size change is no cancel for fingers that come after it
+        hand.tap(s.on_ant(s.worker));
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "(the next tap works)");
+        s.clear();
+        // and the other window events are not a size change: a finger that rests goes on resting
+        hand.down(1, p);
+        hand.frame();
+        for (const SDL_WindowEventID other : {SDL_WINDOWEVENT_EXPOSED, SDL_WINDOWEVENT_MOVED, SDL_WINDOWEVENT_ENTER, SDL_WINDOWEVENT_FOCUS_GAINED, SDL_WINDOWEVENT_SHOWN, SDL_WINDOWEVENT_TAKE_FOCUS}) {
+            SDL_WindowEvent we{};
+            we.type = SDL_WINDOWEVENT;
+            we.event = static_cast<Uint8>(other);
+            app.handle_window_event(we);
+            check(app.touch().fingers() == 1 && app.touch().mode() == TouchControl::Mode::Waiting, "window event " + std::to_string(static_cast<int>(other)) + " does not cancel the finger that waits");
+        }
+        hand.up(1, p);
+        hand.frame();
+        s.clear();
+    }
     // a hold's right press
     s.clear();
     s.select({s.worker});
@@ -1428,6 +1745,141 @@ void test_cancel() {
     s.clear();
     hand.tap(s.on_ant(s.worker), 6);
     check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "after a cancel the next finger is the first one: a tap selects");
+    // A touchcancel in the SAME frame as its touchstart (review L2): the page's cancel waits behind the finger events that SDL already holds, so the finger begins and is cancelled in order, and the
+    // lift that SDL makes of a cancel finds it unknown. (A cancel that clears the model at once leaves the finger behind it in the queue: it would begin, and the lift would end it as a tap.)
+    {
+        const auto page_cancels = [&] { app.cancel_touch_queued(); };
+        s.clear();
+        const Pt on = s.on_ant(s.worker);
+        const TouchControl::Stats before = app.touch().stats();
+        hand.down(1, on);
+        page_cancels();
+        hand.wait(30);
+        hand.up(1, on);                                                    // (SDL's own lift for the touchcancel)
+        hand.frame();
+        check(app.hud().get_selected_ant_ids().empty() && app.touch().stats().taps == before.taps && app.touch().fingers() == 0, "a touch cancelled in the frame that it began in is no tap: nothing is selected");
+        const UIButton help = app.hud().help_button();
+        const Pt on_help{help.x + help.w / 2, help.y + help.h / 2};
+        hand.down(1, on_help);
+        page_cancels();
+        hand.wait(30);
+        hand.up(1, on_help);
+        hand.frame();
+        check(!app.hud().is_quick_help_open() && !app.hud().help_button().is_pressed && app.touch().fingers() == 0, "... nor the press of a button: the Help button neither opens its page nor stays pressed");
+        hand.down(1, on);                                                  // a finger that is tracked already (a band is held): the queued cancel ends it in its order
+        hand.frame();
+        hand.wait(30);
+        hand.move(1, q);
+        hand.frame();
+        check(app.hud().is_input_captured(), "(a band is held)");
+        page_cancels();
+        hand.frame();
+        check(!app.hud().is_input_captured() && app.touch().fingers() == 0 && app.hud().get_selected_ant_ids().empty(), "a queued cancel ends a press that is held already, with no act");
+        hand.up(1, q);
+        hand.frame();
+        page_cancels();                                                    // the next touch, in the same frame as the cancel but after it, is a first finger
+        hand.down(2, on);
+        hand.wait(60);
+        hand.up(2, on);
+        hand.frame();
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "a finger that lands after the cancel in the same frame is not swallowed: its tap selects");
+        // the order is kept the other way too: a finger that lifted BEFORE the cancel made its tap (the lift came first)
+        s.clear();
+        hand.down(1, on);
+        hand.frame();
+        hand.wait(60);
+        hand.up(1, on);
+        page_cancels();
+        hand.frame();
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker}, "a finger that lifted before the cancel (in the same frame) is a tap: the events are handled in the order that they came");
+        // a page that goes hidden in the frame that a finger began in: the same
+        s.clear();
+        hand.down(1, on);
+        app.set_page_hidden(true);
+        hand.wait(30);
+        hand.up(1, on);
+        hand.frame();
+        app.set_page_hidden(false);
+        check(app.hud().get_selected_ant_ids().empty() && app.touch().fingers() == 0, "a page that is hidden in the frame that a finger went down in: no tap either");
+    }
+    // THE DIALOGS OF THE MATCH: a cancel never fires the control under the finger (review L3). SDL's emulation made a cancelled touch the lift of the finger, where it is: the quit dialog's Yes left
+    // the match. Now the press is let go of where no control is, whatever the cause: the page's touchcancel, a lost focus, a hidden page, a minimised window.
+    {
+        struct Cause {
+            const char* name;
+            std::function<void()> act;
+        };
+        const std::vector<Cause> causes = {
+            {"the page's touchcancel", [&] { app.cancel_touch(); }},
+            {"a lost focus", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }()); }},
+            {"a hidden page", [&] { app.set_page_hidden(true); }},
+            {"a minimised window", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_MINIMIZED; return we; }()); }},
+        };
+        const LayoutPoint modal = app.layout().modal_offset();
+        for (const Cause& cause : causes) {
+            app.hud().open_quit_dialog();
+            const UIButton yes = app.hud().quit_yes_button();
+            const Pt on_yes{modal.x + yes.x + yes.w / 2, modal.y + yes.y + yes.h / 2};
+            hand.down(1, on_yes);
+            hand.frame();
+            check(app.hud().quit_yes_button().is_pressed && app.touch().mode() == TouchControl::Mode::Left, std::string("(Yes of the quit dialog is pressed by the finger, ") + cause.name + " follows)");
+            cause.act();
+            hand.frame();
+            check(app.is_running() && app.hud().is_quit_dialog_open() && !app.hud().quit_yes_button().is_pressed && app.touch().fingers() == 0,
+                  std::string("Yes of the quit dialog under a finger that ") + cause.name + " cancels: it does not fire, and it is let go of");
+            hand.up(1, on_yes);                                            // (SDL's own lift for a touchcancel: unknown by now)
+            hand.frame();
+            check(app.is_running() && app.hud().is_quit_dialog_open(), "and the lift that follows does nothing either");
+            app.set_page_hidden(false);
+            app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_RESTORED; return we; }());
+            app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_GAINED; return we; }());
+            app.hud().close_quit_dialog();
+        }
+        // a HUD button that the finger holds when a dialog opens over it (a message, a key: opening a dialog lets go of the drags but not of a pressed button): the cancel lets that go too
+        {
+            const UIButton help = app.hud().help_button();
+            const Pt on_help{help.x + help.w / 2, help.y + help.h / 2};
+            hand.down(1, on_help);
+            hand.frame();
+            check(app.hud().help_button().is_pressed, "(the Help button is pressed by the finger)");
+            app.hud().open_quit_dialog();
+            app.cancel_touch();
+            hand.frame();
+            check(!app.hud().help_button().is_pressed && app.hud().is_quit_dialog_open() && app.is_running(), "a cancel under a dialog that opened over a held button lets the button go (the HUD's own press)");
+            app.hud().close_quit_dialog();
+            hand.up(1, on_help);
+            hand.frame();
+            check(!app.hud().is_quick_help_open(), "(and the lift that follows opens nothing)");
+        }
+        // the options window's Return, and a hold whose dialog opened under it: a held right press ends with no act (no order, nothing held)
+        app.hud().open_options();
+        const LayoutPoint page = app.layout().options_offset();
+        const Pt on_return{page.x + OptionsScreen::RETURN_X + OptionsScreen::RETURN_W / 2, page.y + OptionsScreen::RETURN_Y + OptionsScreen::RETURN_H / 2};
+        hand.down(1, on_return);
+        hand.frame();
+        app.cancel_touch();
+        hand.frame();
+        hand.up(1, on_return);
+        hand.frame();
+        check(app.hud().is_modal_open() && app.touch().fingers() == 0, "Return of the options window under a finger that is cancelled does not close it");
+        hand.tap(on_return);
+        check(!app.hud().is_modal_open(), "(a tap on it does)");
+        s.clear();
+        s.select({s.worker});
+        hand.down(1, g);
+        hand.frame();
+        hand.rest(touch::kHoldMs + 40);
+        check(app.hud().is_input_captured() && app.touch().mode() == TouchControl::Mode::Right, "(the right button is held)");
+        app.hud().open_quit_dialog();                                      // (a message, a key: a dialog opens over the held press)
+        app.cancel_touch();
+        hand.frame();
+        check(s.sink.commands.empty() && !app.hud().is_input_captured() && app.hud().is_quit_dialog_open() && !app.hud().quit_yes_button().is_pressed && !app.hud().quit_no_button().is_pressed,
+              "a held right press under a dialog that opened ends with no act: no order, nothing held, no button of the dialog pressed");
+        hand.up(1, g);
+        hand.frame();
+        app.hud().close_quit_dialog();
+        check(s.sink.commands.empty() && app.is_running(), "(and its lift orders nothing)");
+    }
     // a cancel with a button held by the first finger: the button is let go of and does not fire
     {
         const UIButton help = app.hud().help_button();
@@ -1483,21 +1935,50 @@ void test_pointer_gone() {
     Hand hand(app);
     ViewportCamera& camera = app.renderer().camera();
     const LayoutRect view = app.layout().view();
-    camera.set_origin(500.0, 500.0, app.sim().grid().width(), app.sim().grid().height());
-    // a tap in the edge strip of the view's right side (the mouse there would scroll the map east for as long as it stays)
-    const Pt edge{view.right() - 2, view.y + view.h / 2};
-    hand.tap(edge);
-    check(app.pointer_outside(), "after the tap the pointer is outside");
+    const uint32_t map_w = app.sim().grid().width();
+    const uint32_t map_h = app.sim().grid().height();
+    const auto home = [&]() { camera.set_origin(500.0, 500.0, map_w, map_h); };
+    const auto frames = [&](int n) {
+        for (int i = 0; i < n; ++i) app.run_frame_with_delta(0.1f);
+    };
+    home();
+    // The place: the inner strip of the PICTURE's east edge (the last 5 columns, edge_scroll.hpp), over the HUD's panel. A mouse that rests there scrolls the map east for as long as it stays; a point
+    // of the map view's own right side is inside the quiet area, where nothing scrolls whatever the code does (the review found that this group used to tap there, so that it could not fail).
+    const Pt strip{app.picture().w - 3, view.y + view.h / 2};
+    {
+        app.handle_mouse_motion(motion_event(strip));
+        const float before = camera.x;
+        frames(12);
+        check(camera.x > before, "(the place has teeth: a mouse that rests in the east strip scrolls the map: " + std::to_string(before) + " to " + std::to_string(camera.x) + ")");
+        forget_pointer(app);
+        home();
+    }
+    hand.tap(strip);
+    check(app.pointer_outside(), "after the tap in the strip the pointer is outside");
     const float x0 = camera.x;
-    for (int i = 0; i < 12; ++i) app.run_frame_with_delta(0.1f);
-    check(camera.x == x0, "the map does not scroll from a finger that has lifted");
-    // a finger that rests in the strip is a pointer there: the strip scrolls the view as it did for the emulated mouse
-    hand.down(1, edge);
+    frames(12);
+    check(camera.x == x0, "the map does not scroll from a finger that has lifted (in a place where a mouse would scroll it)");
+    // a finger that rests in the strip is a pointer there: the strip scrolls the view as it did for the emulated mouse, for as long as it rests
+    hand.down(1, strip);
     hand.frame();
-    hand.wait(touch::kHoldMs + 5);
-    for (int i = 0; i < 3; ++i) app.run_frame_with_delta(0.1f);
-    check(camera.x == x0, "a resting finger in the strip: the hold's right press is made there and a captured press does not scroll (as for a held right button)");
-    hand.up(1, edge);
+    frames(4);
+    check(camera.x > x0, "a finger that rests in the strip scrolls the map, as the emulated mouse did");
+    hand.up(1, strip);
+    hand.frame();
+    check(app.pointer_outside(), "its lift takes the pointer away");
+    const float x1 = camera.x;
+    frames(12);
+    check(camera.x == x1, "and the scrolling stops with it");
+    // a finger whose touch is cancelled takes the pointer away too
+    home();
+    hand.down(1, strip);
+    hand.frame();
+    app.cancel_touch();
+    hand.frame();
+    const float x2 = camera.x;
+    frames(12);
+    check(app.pointer_outside() && camera.x == x2, "a cancel takes the pointer away: the map stops scrolling");
+    hand.up(1, strip);
     hand.frame();
 }
 
@@ -1539,6 +2020,13 @@ void test_other_screens() {
             // the quick help
             app.finish_loading();
             check(app.state() == AppState::QuickHelp, "(the quick help is up)");
+            hand.down(1, Pt{580, 450});                                    // a finger on START! whose touch is cancelled: the page stays (START! acts at a release inside it)
+            hand.frame();
+            app.cancel_touch();
+            hand.frame();
+            hand.up(1, Pt{580, 450});
+            hand.frame();
+            check(app.state() == AppState::QuickHelp && app.touch().fingers() == 0, "a finger on START! of the quick help whose touch is cancelled does not close the page");
             hand.tap(Pt{580, 450});
             check(app.state() == AppState::MapSelect, "a tap on START! of the quick help closes it");
             check(app.touch().fingers() == 0, "and the finger is gone");
@@ -1555,12 +2043,36 @@ void test_other_screens() {
             hand.up(1, down);
             hand.frame();
             check(app.map_select().get_selected_index() == (before + 3) % maps && app.touch().stats().holds == holds, "and its lift presses the button: the selection moves");
-            // the browser takes the touch away while a finger presses a button of this screen: the press ends as the lift of the finger, where it is (what SDL's emulation made of a cancelled touch)
+            // the browser takes the touch away while a finger presses a button of this screen: the press is let go of where no button is, and nothing fires. (This block used to pin the opposite, what
+            // SDL's emulation made of a cancelled touch: "ends as the lift where the finger is: the button acts"; the review found that this made START, Leave and the quit dialog's Yes fire.)
             hand.down(1, down);
             hand.frame();
             app.cancel_touch();
             hand.frame();
-            check(app.touch().fingers() == 0 && app.map_select().get_selected_index() == (before + 4) % maps, "a touch that is cancelled on a button of this screen ends as the lift where the finger is: the button acts");
+            check(app.touch().fingers() == 0 && app.map_select().get_selected_index() == (before + 3) % maps, "a touch that is cancelled on a button of this screen fires nothing: the selection does not move");
+            hand.up(1, down);                                              // (the lift that SDL sends for a touchcancel: unknown by then)
+            hand.frame();
+            check(app.map_select().get_selected_index() == (before + 3) % maps, "and the lift that follows does nothing");
+            // START and Quit (Leave) of the setup screen: the buttons that do the most harm
+            const Pt start{MapSelectScreen::BTN_START_X + MapSelectScreen::BTN_START_W / 2, MapSelectScreen::BTN_START_Y + MapSelectScreen::BTN_START_H / 2};
+            const Pt quit{MapSelectScreen::BTN_QUIT_X + MapSelectScreen::BTN_QUIT_W / 2, MapSelectScreen::BTN_QUIT_Y + MapSelectScreen::BTN_QUIT_H / 2};
+            for (int cause = 0; cause < 3; ++cause) {
+                for (const Pt& on : {start, quit}) {
+                    hand.down(1, on);
+                    hand.frame();
+                    if (cause == 0) app.cancel_touch();
+                    else if (cause == 1) app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }());
+                    else app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_SIZE_CHANGED; return we; }());
+                    hand.frame();
+                    hand.up(1, on);
+                    hand.frame();
+                    check(app.state() == AppState::MapSelect && app.is_running() && app.touch().fingers() == 0,
+                          std::string(on.x == start.x ? "START" : "Leave") + " of the setup screen under a finger that is cancelled by " + (cause == 0 ? "the page" : cause == 1 ? "a lost focus" : "a size change") + ": it does not fire");
+                    app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_GAINED; return we; }());
+                }
+            }
+            hand.tap(down);                                                // (the screen works as before afterwards)
+            check(app.map_select().get_selected_index() == (before + 4) % maps, "(and the next tap on the screen works)");
         }
     }
     {   // the desktop start menu

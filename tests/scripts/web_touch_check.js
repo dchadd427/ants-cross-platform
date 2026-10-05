@@ -154,26 +154,31 @@ try {
         expect('a finger that began outside the box is not counted', count(), 0);
     }
 
-    // ---- touchcancel: the game is told when a finger of the game was cancelled, and only then
+    // ---- touchcancel: the game is told when a finger of the game was cancelled, and only then (a touch that lands with no other touch of the game down tells it as well: see below, so the
+    // counts here are the ones that the touchcancel adds)
     {
         const p = page('running');
         const count = load(text, p);
         fire(p.box, 'touchstart', event('touchstart', { changedTouches: [touch(3)], touches: [touch(3)] }));
+        let told = p.calls.cancels;
         fire(p.win, 'touchcancel', event('touchcancel', { changedTouches: [touch(3)], touches: [] }));
-        expect('a cancelled finger of the game: the game is told once', p.calls.cancels, 1);
+        expect('a cancelled finger of the game: the game is told once', p.calls.cancels - told, 1);
         expect('... and it is no longer counted', count(), 0);
+        told = p.calls.cancels;
         fire(p.win, 'touchcancel', event('touchcancel', { changedTouches: [touch(3)], touches: [] }));
-        expect('the same cancel again (or SDL\'s lift after it): nothing more', p.calls.cancels, 1);
+        expect('the same cancel again (or SDL\'s lift after it): nothing more', p.calls.cancels - told, 0);
         fire(p.win, 'touchcancel', event('touchcancel', { changedTouches: [touch(4)], touches: [] }));
-        expect('a cancelled finger that was never the game\'s: the game is not told', p.calls.cancels, 1);
+        expect('a cancelled finger that was never the game\'s: the game is not told', p.calls.cancels - told, 0);
         fire(p.box, 'touchstart', event('touchstart', { changedTouches: [touch(5)], touches: [touch(5)] }));
         fire(p.win, 'touchend', event('touchend', { changedTouches: [touch(5)], touches: [] }));
+        told = p.calls.cancels;
         fire(p.win, 'touchcancel', event('touchcancel', { changedTouches: [touch(5)], touches: [] }));
-        expect('a finger that lifted and is then reported cancelled: nothing', p.calls.cancels, 1);
+        expect('a finger that lifted and is then reported cancelled: nothing', p.calls.cancels - told, 0);
         // two fingers, one cancelled: the game is told (it forgets every finger: the model has no half measures)
         fire(p.box, 'touchstart', event('touchstart', { changedTouches: [touch(10), touch(11)], touches: [touch(10), touch(11)] }));
+        told = p.calls.cancels;
         fire(p.win, 'touchcancel', event('touchcancel', { changedTouches: [touch(10)], touches: [touch(11)] }));
-        expect('one of two fingers cancelled: the game is told', p.calls.cancels, 2);
+        expect('one of two fingers cancelled: the game is told', p.calls.cancels - told, 1);
         expect('... and the other is still counted (it lifts as itself)', count(), 1);
     }
     {
@@ -189,6 +194,42 @@ try {
         threw = false;
         try { fire(broken.win, 'touchcancel', event('touchcancel', { changedTouches: [touch(1)], touches: [] })); } catch (e) { threw = true; }
         expect('a game that has stopped does not make the page throw', threw, false);
+    }
+
+    // ---- a lift that is never delivered (the browser's own list is the truth): a touch that lands with no other touch of the game down starts the page's count and the game's fingers again
+    {
+        const p = page('running');
+        const count = load(text, p);
+        fire(p.box, 'touchstart', event('touchstart', { changedTouches: [touch(1)], touches: [touch(1)] }));
+        expect('the first touch of the game: the game is told that no other finger can be down (its cancel waits behind what SDL holds)', p.calls.cancels, 1);
+        expect('(and it is counted)', count(), 1);
+        // its touchend never comes. The next touch lands alone (the browser's list has this one only): the stale finger is forgotten by the page and the game
+        fire(p.box, 'touchstart', event('touchstart', { changedTouches: [touch(2)], touches: [touch(2)] }));
+        expect('a touch that lands when the browser lists no other touch: the game is told again', p.calls.cancels, 2);
+        expect('... and the stale finger is not counted any more (the page\'s own gesture guards must not stay on)', count(), 1);
+        // a second finger lands while the first is down (the browser lists both): nobody is told, nothing is forgotten
+        fire(p.box, 'touchstart', event('touchstart', { changedTouches: [touch(3)], touches: [touch(2), touch(3)] }));
+        expect('a second finger of the game: the game is not told', p.calls.cancels, 2);
+        expect('... two are counted', count(), 2);
+        // a finger of the page outside the box does not make this one a second finger
+        fire(p.win, 'touchend', event('touchend', { changedTouches: [touch(2), touch(3)], touches: [] }));
+        fire(p.box, 'touchstart', event('touchstart', { changedTouches: [touch(4)], touches: [touch(9, outside), touch(4)] }));
+        expect('a touch of the game while another finger rests on the guide: it is the game\'s first', p.calls.cancels, 3);
+        // two touches that land in one event: both are new, none was down before
+        fire(p.win, 'touchend', event('touchend', { changedTouches: [touch(4)], touches: [touch(9, outside)] }));
+        fire(p.box, 'touchstart', event('touchstart', { changedTouches: [touch(5), touch(6)], touches: [touch(5), touch(6)] }));
+        expect('two touches that land together: told once, both counted', [p.calls.cancels, count()], [4, 2]);
+        // a game that is not there, or that has stopped, does not make the page throw
+        const none = page('none');
+        load(text, none);
+        let threw = false;
+        try { fire(none.box, 'touchstart', event('touchstart', { changedTouches: [touch(1)], touches: [touch(1)] })); } catch (e) { threw = true; }
+        expect('a first touch before the game runs is nothing', threw, false);
+        const broken = page('stopped');
+        load(text, broken);
+        threw = false;
+        try { fire(broken.box, 'touchstart', event('touchstart', { changedTouches: [touch(1)], touches: [touch(1)] })); } catch (e) { threw = true; }
+        expect('a game that has stopped does not make the page throw at a first touch', threw, false);
     }
 
     // ---- a lift that was missed cannot keep the count up

@@ -9,7 +9,9 @@
 // a finger that holds still on the minimap turns that press into a right click there ("send the selected ants there").
 // TWO fingers on the map view PAN (the middle point's movement scrolls the map by the same distance) and ZOOM (the fingers' distance picks a level, with hysteresis) together. The pair is
 // judged once per frame (update), never after one finger's event: two fingers that move together arrive as two events, and between them the distance is wrong by the whole step of one.
-// A second finger that lands where that is not allowed does nothing, and neither does a third; a finger that stays after the other lifts is ignored until it lifts.
+// A second finger that lands where that is not allowed does nothing, and neither does a third; a finger that stays after the other lifts is ignored until it lifts (BY DESIGN: a pinch that
+// lets go with one finger and is taken up again must not become a tap, a hold or a drag of the finger that comes back; the first finger of a plain press that holds nothing is not one
+// of these: the next finger takes its place, press_held()).
 
 #include <cstddef>
 #include <cstdint>
@@ -33,8 +35,13 @@ inline constexpr double kSlopFloorDevicePx = 6.0;
 /// A level changes when the fingers have gone this far past the middle of the step to the next one (a fraction of the step in ratio): 0.15 leaves a dead band of 0.3 of a step
 /// around the middle, so a pinch that rests at a level does not flutter between two
 inline constexpr double kHysteresis = 0.15;
-/// Two fingers that land closer than this many slops are measured from this distance (a pinch that starts from touching fingers would otherwise zoom by hundreds)
+/// Two fingers closer than this many slops are measured as this far apart, at the start and afterwards (a pinch that starts from touching fingers would otherwise zoom by hundreds, and a
+/// spread from 10 to 20 pixels would zoom OUT)
 inline constexpr double kMinSpanSlops = 3.0;
+/// An event is stamped when SDL SAW it, which a stall makes late (the web: when the browser handed it to the page; native: when the game read the queue). It is judged no later than this
+/// long after the last moment the model knew what the finger did (a frame, or the first finger's arrival): a frame every 100 ms or faster loses nothing, a stall of any length cannot
+/// make a short touch long. 100 ms is also the exactness of the hold at 10 frames per second.
+inline constexpr uint32_t kStallMs = 100;
 
 /// The slop in picture pixels, from how many picture pixels one CSS pixel (one point of the window, on a desktop) and one device pixel of the game box cover. A scale that is
 /// not a positive number counts for nothing; the result is between 1 and 64 picture pixels.
@@ -59,7 +66,7 @@ struct TouchAction {
         RightUp,
         Pan,            // dx, dy: how far the fingers' middle point moved; the map moves with it (the view scrolls the other way)
         Zoom,           // level: the zoom to go to; x, y: the point of the picture that keeps its world point (the middle point)
-        Cancel,         // the press that the finger holds ends with no act (no selection, no order, nothing fires); x, y: where the finger is
+        Cancel,         // the press that the finger holds ends with no act (no selection, no order, nothing fires: a release where no control is); x, y: where the finger is; `right`: it was the right button's
         HoldFired,      // the hold's time is up: the feedback (a pulse, a buzz); the right button's press comes with it
     };
     Kind kind{Kind::Motion};
@@ -70,8 +77,9 @@ struct TouchAction {
     float level{1.0f};
     uint32_t at{0};             // when it happened (the caller's ms: a hold fires at down + kHoldMs, whenever the model got to hear of it)
     bool late{false};           // the first action of a press that WAITED on the map view: the game hears of the finger only now, and the screen may have changed since (a dialog opened over the map)
+    bool right{false};          // a Cancel of the right button's press (a hold); the left button's otherwise
 
-    /// (what an action does; `late` says where it comes from and is not part of it)
+    /// (what an action does; `late` and `right` say where it comes from and which button a Cancel ends, and are not part of it)
     bool operator==(const TouchAction& o) const noexcept { return kind == o.kind && x == o.x && y == o.y && dx == o.dx && dy == o.dy && level == o.level && at == o.at; }
     bool operator!=(const TouchAction& o) const noexcept { return !(*this == o); }
 };
@@ -88,6 +96,9 @@ public:
     /// The map's zoom now, and the levels on offer (from the most zoomed in to the most zoomed out: Application::zoom_levels)
     virtual float zoom() const = 0;
     virtual std::vector<float> zoom_levels() const = 0;
+    /// Does the press that the first finger made hold anything (a button, the minimap, the chat log, a control of a dialog or of another screen)? Asked when another finger lands while the first is
+    /// a plain press away from the map view: a press that holds nothing (the frame, a blank part of the panel) must not block the new finger. A model alone knows no better: it holds.
+    virtual bool press_held() const { return true; }
 };
 
 class TouchControl {
@@ -101,12 +112,15 @@ public:
     double slop() const noexcept { return slop_; }
 
     /// A finger is identified by the touch device and its own id. Positions are picture pixels, with fractions (the glass is finer than the picture). Every call first brings the
-    /// clock to `now_ms` (a hold that is due fires before what the call does); a time that goes backwards is taken as the last one. The moves of a PAIR say nothing: update() does
-    /// (the pan and the zoom of everything that moved since the last one), and so does the next lift, landing or cancel of a finger, before it acts.
+    /// clock to `now_ms` (a hold that is due fires before what the call does); a time that goes backwards is taken as the last one. An EVENT's time is believed only up to
+    /// touch::kStallMs after the last frame (update) or the first finger's arrival: SDL stamps an event when it sees it, so a stall must not turn a short touch into a hold.
+    /// The moves of a PAIR say nothing: update() does (the pan and the zoom of everything that moved since the last one), and so does the next lift, landing or cancel of a finger,
+    /// before it acts.
     Actions finger_down(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms);
     Actions finger_motion(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms);
     Actions finger_up(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms);
-    /// The clock, and the pair: a hold that is due fires, and two fingers that moved pan and zoom (call it once per frame, after the frame's events)
+    /// The clock, and the pair: a hold that is due fires (a frame knows that the finger is down now, whatever stalled before it), and two fingers that moved pan and zoom (call it
+    /// once per frame, after the frame's events)
     Actions update(uint32_t now_ms);
     /// The browser took the touch away, the window lost the focus, the page was hidden, a screen changed under the fingers: nothing is tracked any more (a finger that never lifts
     /// must not block the next ones) and a press that was held ends with no act. The clock does not run first: nothing fires.
@@ -154,12 +168,13 @@ private:
         Role role{Role::Primary};
         double x{0.0};
         double y{0.0};
+        bool spent{false};                  // its press held nothing and ended (press_held): it is ignored until it lifts, and it does not block the fingers that come after it
     };
     Finger* find(int64_t touch, int64_t id) noexcept;
     Finger* primary() noexcept;
     Finger* secondary() noexcept;
     const Finger* primary() const noexcept;
-    void advance(uint32_t now_ms, Actions& out);
+    void advance(uint32_t now_ms, bool frame, Actions& out);
     void flush_pair(Actions& out);
     void fire_hold(Actions& out);
     void start(const Finger& finger, uint32_t now_ms, Actions& out);
@@ -173,6 +188,7 @@ private:
     Mode mode_{Mode::Idle};
     uint32_t clock_{0};
     bool clock_set_{false};
+    uint32_t known_{0};                     // the last moment that the model knew what the finger did: a frame, or the first finger's arrival (an event is judged within kStallMs of it)
 
     // the primary finger's gesture
     double down_x_{0.0};

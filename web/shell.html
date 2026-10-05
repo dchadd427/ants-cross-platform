@@ -45,16 +45,16 @@
 
         /* A TOUCH SCREEN. The game reads its fingers itself (SDL's touch events, Application::feed_touch: a tap is a left click, a hold a right click, two fingers move and zoom the map): the browser
            must leave them alone. The canvas has touch-action none (below); everything else on the page keeps its panning and its pinch but no double-tap zoom (manipulation: iOS Safari ignores
-           user-scalable=no); and a pull down or a swipe past the end of the page neither reloads it (Android's Chrome) nor passes to another scroller (overscroll-behavior: none does not stop
-           the page's own scrolling, the guide below the game scrolls as ever). */
+           user-scalable=no); and a pull down past the top of the page does not reload it (Android's Chrome) nor does a swipe past the end pass to another scroller (overscroll-behavior-y: none, the
+           vertical axis only: it does not stop the page's own scrolling, the guide below the game scrolls as ever, and a desktop trackpad's horizontal swipe, back and forward, is as it was). */
         html {
             touch-action: manipulation;
-            overscroll-behavior: none;
+            overscroll-behavior-y: none;
         }
 
         body {
             position: relative;
-            overscroll-behavior: none;
+            overscroll-behavior-y: none;
             background: var(--clay) url("front/clay.png");
             color: var(--ink);
             font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif;
@@ -2561,7 +2561,8 @@
         //     guide below the game keeps the browser's own pinch);
         //   * a long press is no context menu: contextmenu is cancelled over the game's box (CSS takes the callout and the selection away);
         //   * touchcancel (a system gesture, a call, the lock screen took the touch away) tells the game, which ends what its fingers held, with no act: SDL makes a lift of a cancel, which the
-        //     game would take for the player's own, and it finds that lift unknown by then and ignores it;
+        //     game would take for the player's own, and it finds that lift unknown by then and ignores it. So does a touch that lands when the browser's own list says that no other touch of the
+        //     game is down: a lift that was never delivered must not make the game ignore every finger after it (and must not keep this page's count up);
         //   * Safari's pinch on a TRACKPAD (gesture events, no fingers) still zooms the game through the wheel (a pinch of 25 % is one notch); with fingers on the game their own pinch zooms it and
         //     the gesture events are only cancelled.
         // The page never cancels, stops or delays touchstart, touchmove or touchend (the sound's unlock on touchend needs them: a hold that ends in a right click still unlocks it), and adds no
@@ -2584,7 +2585,25 @@
             function tellGame() {
                 try { if (typeof Module !== 'undefined' && Module._ants_touch_cancel) Module._ants_touch_cancel(); } catch (err) { /* the game is not running: nothing is held */ }
             }
+            function othersOnTheBox(e) {                                    // the touches of the game's box that were down BEFORE this event, by the browser's own list (touches), which a lift that was never delivered cannot corrupt
+                var all = e && e.touches;
+                var fresh = e && e.changedTouches;
+                var n = 0;
+                for (var i = 0; all && i < all.length; ++i) {
+                    var isNew = false;
+                    for (var j = 0; fresh && j < fresh.length; ++j) {
+                        if (fresh[j].identifier === all[i].identifier) isNew = true;
+                    }
+                    if (!isNew && inside(all[i].target)) ++n;
+                }
+                return n;
+            }
             boxElement.addEventListener('touchstart', function (e) {
+                if (othersOnTheBox(e) === 0) {                              // a touch lands and no other touch of the game is down: whatever the page and the game still count lost its lift (never delivered): start again.
+                    live = {};                                              // The game's cancel waits behind the events that SDL already holds (Application::cancel_touch_queued), so what came before this touch is still handled
+                    count = 0;
+                    tellGame();
+                }
                 eachTouch(e, function (t) {
                     if (inside(t.target) && !live[t.identifier]) {
                         live[t.identifier] = true;

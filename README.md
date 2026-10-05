@@ -466,7 +466,7 @@ The options are remembered between runs, as the original keeps them in the regis
 | **Zoom** | Pinch with two fingers | The wheel (the same levels, towards the fingers' middle point) |
 | **Buttons, dialogs, other screens** | Tap | Left click (a finger there is a mouse until it lifts) |
 
-Two fingers do nothing where the wheel does nothing (a dialog, the results, a held press); a tap is still a click there. [docs/TOUCH.md](docs/TOUCH.md) has the numbers and what is not verified.
+Two fingers do nothing where the wheel does nothing (a dialog, the results, the catch-up screen of a network match, a held press); a tap is still a click there. A thumb that rests where no control took the touch (the frame, a blank part of the panel) never blocks the other finger. [docs/TOUCH.md](docs/TOUCH.md) has the numbers and what is not verified.
 
 ### No extra shortcuts
 The game has exactly the original's keys (next section). Since v0.0.51 there are no shortcuts that the original did not have: no team switching (you play the team `-pnum=` gives you, or your seat in a network match; in a local game the other teams stand idle because the original has no computer players), no tile grid or music mute key, no screenshot key. The one key that belongs to the window and not to the game is **Alt+Enter** (native builds): fullscreen on and off, as `--fullscreen` starts it (no screen sees that key: Enter alone is still START and the chat's send; a held key toggles once; the web page has its own button; the macOS green button, a fullscreen Space, is left with the operating system's own controls; the fullscreen toggle of a Linux window manager is not detected).

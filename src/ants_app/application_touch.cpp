@@ -39,8 +39,21 @@ bool Application::touch_two_fingers_allowed(double x, double y) const {
     return hud_.over_map(static_cast<int32_t>(std::floor(std::clamp(x, -1.0e6, 1.0e6))), static_cast<int32_t>(std::floor(std::clamp(y, -1.0e6, 1.0e6))));
 }
 
-bool Application::touch_view_open() const {
+// The match is on the screen with nothing over it (no results, no dialog): its HUD holds the presses that a cancel ends. A network match's catch-up screen is this too, though no match is drawn.
+bool Application::touch_match_screen() const {
     return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !hud_.is_modal_open();
+}
+
+// Does the press that a finger made hold something? On the match screen the HUD says: a button, the minimap or the chat log took it, or nothing did (the frame, a blank part of the panel: the
+// press goes nowhere). On a dialog or another screen it is that screen's own, and whatever it is it counts as held.
+bool Application::touch_press_held() const {
+    if (!touch_match_screen()) return true;
+    return hud_.is_input_captured() || hud_.chat_dragging();
+}
+
+// The map view is open to touches: the match screen, and not its catch-up picture (every mouse path is shut there as well: nothing may pan, zoom, wait for a hold or buzz over it)
+bool Application::touch_view_open() const {
+    return touch_match_screen() && !catch_up_screen_active();
 }
 
 // 8 CSS pixels of the game box on the glass (Android's own touch slop is 8 dp), at least 6 device pixels, in picture pixels. The page's box is what the browser shows the canvas in (its CSS size, which
@@ -88,6 +101,23 @@ bool Application::pan_view(int32_t dx, int32_t dy) {
 
 void Application::cancel_touch() {
     queue_touch(touch_.cancel());
+}
+
+Uint32 Application::touch_cancel_event_type() noexcept {
+    static const Uint32 type = SDL_RegisterEvents(1);
+    return type;
+}
+
+// An event of its own type waits in SDL's queue behind the finger events that are already there; the event loop cancels when it comes out of it (handle_events)
+void Application::cancel_touch_queued() {
+    const Uint32 type = touch_cancel_event_type();
+    if (type != static_cast<Uint32>(-1)) {
+        SDL_Event event;
+        SDL_zero(event);
+        event.type = type;
+        if (SDL_PushEvent(&event) == 1) return;
+    }
+    cancel_touch();
 }
 
 void Application::queue_touch(const TouchControl::Actions& actions) {
@@ -190,15 +220,14 @@ void Application::run_touch_action(const TouchAction& action) {
             else set_zoom(action.level, action.x, action.y);
             break;
         case Kind::Cancel:
-            if (touch_view_open()) {
-                hud_.cancel_press();
-            } else {                                                        // a screen, a dialog or a page holds the press: it ends as the lift of the finger, where it is (what SDL's emulation made of a cancelled touch)
-                TouchAction lift;
-                lift.kind = Kind::LeftUp;
-                lift.x = action.x;
-                lift.y = action.y;
-                lift.at = action.at;
-                touch_queue_.push_front(lift);
+            hud_.cancel_press();                                            // (the match's own presses end with no act; where the HUD holds none this changes nothing)
+            if (!touch_match_screen()) {                                    // a screen, a dialog or a page holds the press: it is let go of where no control is, so that no button fires (a button acts at a release inside it)
+                TouchAction release;
+                release.kind = action.right ? Kind::RightUp : Kind::LeftUp;
+                release.x = 0;
+                release.y = 0;
+                release.at = action.at;
+                touch_queue_.push_front(release);
             }
             pointer_outside_ = true;                                        // (no finger is the pointer now: no cursor, no edge scroll from where it was)
             break;
