@@ -23,6 +23,7 @@ add_executable(test_ai
     test_ai_island_expedition.cpp
     test_ai_island_ferry.cpp
     test_ai_island_small.cpp
+    test_ai_merge.cpp
 )
 
 target_link_libraries(test_ai PRIVATE
