@@ -2463,6 +2463,8 @@ int main(int argc, char** argv) {
                 app.run_frame_with_delta(0.016f);
                 ASSERT_EQ(app.start_menu().panel(), host ? MenuPanel::Host : MenuPanel::Join);   // not the first panel, not a new attempt
                 ASSERT_TRUE(app.net() == nullptr);
+                for (int waited = 0; waited < 2000 && slow->calls.load() < (host ? 2 : 1); ++waited) std::this_thread::sleep_for(std::chrono::milliseconds(1));   // (the worker thread of the lookup counts when the system starts it: a busy machine starts it late)
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));                        // (a lookup that should not be there has had its time too)
                 ASSERT_EQ(slow->calls.load(), host ? 2 : 1);                                       // (the lookups of this run so far: the Join one, then the Host one; no third)
             }
             slow->release = true;
