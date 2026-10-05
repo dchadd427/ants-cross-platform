@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 16:32 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 16:36 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -22,7 +22,6 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- The README is split into short pages under docs/ and was fact-checked against the game as built (docs only, so merging it does not change the site): the draft pull request is up (PR #17)
 - Browser checks without Docker (draft pull request #13): a session that has no Docker can build the web pages and run the touch checks and the other browser checks; it changes no page (no redeploy), has main v0.8.0 in and merges once its five checks are green
 - Host moves a player's colour in the waiting room (tap a player's ant; network protocol 14, ships with v0.10.0 and the short room codes): being built, draft pull request to follow
 - **Windows prediction-budget test flake** (draft pull request #20): diagnostic first, then the fix; merges once its five checks are green and it has been reviewed.
@@ -35,6 +34,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is in progress), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **README split** (no release): the README is a 63-line front page and each topic has its own page under docs/; every statement of the old README was checked against the game as built (PR #17, merged 2026-10-05 16:29 PDT, docs only).
 - **Sanitizer tier (PR #15)**: the four sanitizer suites that ended red without a bug now pass on a clean machine; merged 2026-10-05 15:48 PDT, no redeploy (tests and tools only).
 - **v0.8.1** a sharp START! button and 48 demo rooms: the front page's START! is a real button that your browser draws at your screen's own resolution (it was the original's small picture blown up three times, so it looked big and blocky), and the public game server makes up to 48 demo rooms at a time instead of 12, each with a turn log of at most 4 MiB (PR #18, merged 2026-10-05 15:30 PDT, live 15:34 PDT)
 - **v0.8.0** one card for every game: the front page's two cards are one "New match" card with four seats (you, Friends with an invitation link each, Easy, Medium or Hard bots, or Nobody), teams for three or four players and START! for every game; a game against the computer is now a room on the game server (network protocol 13; PR #11, merged 2026-10-05 13:52 PDT, live 13:56 PDT)
