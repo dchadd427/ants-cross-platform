@@ -247,7 +247,8 @@ public:
                !send_to_button_.is_pressed && !team_button_.is_pressed;
     }
     /// Every press that is in progress ends with no act: the rubber band (no selection), the minimap's and the right button's press (no order), the chat log's drag and the pressed buttons
-    /// (nothing fires). For a touch that the browser took away, or that a second finger turned into a gesture. A dialog's or a page's own press is not touched (it ends as a release).
+    /// (nothing fires). For a touch that the browser took away, or that a second finger turned into a gesture. The options window's own press ends here too (a slider's drag, with no value written);
+    /// the other dialogs' and pages' buttons end as a release away from them.
     void cancel_press() noexcept;
 
     // Status line (Ants.exe PostStatus): one slot, 5 s life, flash flag; see status_line.hpp

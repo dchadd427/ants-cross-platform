@@ -616,6 +616,66 @@ void test_nothing_held() {
         expect_none(m.down(2, 300, 200, T0 + 50), "a finger on the map while the first rests on the minimap: ignored, whatever the environment says");
         check(m.touch.mode() == TouchControl::Mode::MinimapWait && m.touch.ignored() == 1, "(the minimap press goes on)");
     }
+    {
+        // THE STALL RULE WITH A THUMB RESTING (second review, NEW-1). A spent thumb is not a finger that counts: only the fingers that count are held to the tolerance after the last frame, and a
+        // finger that lands is at its own stamp. The thumb used to make the clock early (the landing was taken 100 ms after the last frame), so that a touch after a stall looked LONGER than it
+        // was and a tap became a hold: the opposite of what the rule is for
+        const auto after_a_stall = [](bool thumb, bool spent_first) {
+            Rig r(false);
+            r.env.press_is_held = false;
+            if (thumb) r.down(1, 850, 300, T0);
+            uint32_t from = T0;
+            if (thumb && spent_first) {                         // the first finger lands and taps: the thumb is spent from then on
+                r.down(2, 300, 200, T0 + 40);
+                r.up(2, 300, 200, T0 + 120);
+                from = T0 + 120;
+            }
+            frames(r, from, T0 + 1000);                         // (the frames of a game that runs, 16 ms apart)
+            const uint32_t landed = T0 + 1400;                  // a stall of 400 ms: the touch is stamped late
+            TouchControl::Actions seen;
+            const auto note = [&seen](const TouchControl::Actions& a) { seen.insert(seen.end(), a.begin(), a.end()); };
+            note(r.down(3, 320, 220, landed));
+            note(frames(r, landed, landed + 200));              // (the game runs again)
+            note(r.up(3, 320, 220, landed + 200));
+            return seen;
+        };
+        const TouchControl::Actions want = click_at(320, 220, T0 + 1600);
+        expect(after_a_stall(false, false), want, "no thumb: a finger that lands after a stall and taps for 200 ms: a click at its own times");
+        expect(after_a_stall(true, true), want, "a thumb that is spent already (a first finger tapped before): the same, a click, not a hold");
+        TouchControl::Actions handed = after_a_stall(true, false);
+        check(!handed.empty() && handed[0].kind == Kind::Cancel, "a thumb that is handed over at the landing: its press ends as the finger lands");
+        if (!handed.empty()) handed.erase(handed.begin());
+        expect(handed, want, "... and the finger's tap is a click, not a hold: the new finger starts at its own stamp");
+        // the same at 4 frames per second with no stall at all: the frames are 250 ms apart and a 350 ms tap lands at every phase between two frames. The thumb changes nothing
+        int different = 0;
+        std::string first_difference;
+        for (uint32_t phase = 0; phase < 250; phase += 5) {
+            const auto run = [phase](bool thumb) {
+                Rig r(false);
+                r.env.press_is_held = false;
+                if (thumb) r.down(1, 850, 300, T0);
+                for (uint32_t f = 250; f <= 1000; f += 250) r.tick(T0 + f);
+                const uint32_t landed = T0 + 1000 + phase;
+                const uint32_t lifted = landed + 350;
+                TouchControl::Actions seen;
+                const auto note = [&seen](const TouchControl::Actions& a) { seen.insert(seen.end(), a.begin(), a.end()); };
+                note(r.down(2, 320, 220, landed));
+                uint32_t f = T0 + 1250;
+                for (; static_cast<int32_t>(lifted - f) > 0; f += 250) note(r.tick(f));
+                note(r.up(2, 320, 220, lifted));
+                note(r.tick(f));
+                return seen;
+            };
+            TouchControl::Actions with = run(true);
+            const TouchControl::Actions without = run(false);
+            if (!with.empty() && with[0].kind == Kind::Cancel) with.erase(with.begin());
+            if (show(with) != show(without)) {
+                if (first_difference.empty()) first_difference = "phase " + std::to_string(phase) + ": " + show(with) + " against " + show(without);
+                ++different;
+            }
+        }
+        check(different == 0, "at 4 frames per second a 350 ms tap is the same with a thumb resting and without it, at every phase of the frames (" + std::to_string(different) + " of 50 differ: " + first_difference + ")");
+    }
 }
 
 void test_late() {
