@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-04 22:56 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-04 23:00 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
 - Every page in the original game's look: the game page, the changelog pages and "Sprites and sounds" (release v0.5.1), and a way back from the page that a shared link opens
@@ -12,6 +12,7 @@ _Updated 2026-10-04 22:56 PDT · current release **v0.5.0** · details: [CHANGEL
 - Bots: a power-up playbook (a draft for the owner to review) that also covers the random power-up flowers on Small, Medium, Gauntlet and Islands, then the tactics built from it (fire a base in, a combat skirmish, fire ant with thief, bombs along the base's edges, holding a flower)
 - Bots: why their ants keep saying "Can't go there.": measuring which orders the game refuses (no code change yet), then fixing the bots' orders
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
+- Touch controls on a phone: two-finger pan and pinch zoom, hold for a right click (started; its own release)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 
@@ -20,7 +21,6 @@ _Updated 2026-10-04 22:56 PDT · current release **v0.5.0** · details: [CHANGEL
 - The original's stunned ant may be invulnerable: to check in the original program (a rules change)
 - Extinguishing a fire under an ant: does the original allow it for a person? (bots do not; a rules change if it does not)
 - Server: the server uses all cores; a load test for the VPS; watching other people's matches live
-- Touch: tap fixes, two-finger pan, pinch zoom
 - Dead-code cleanup, trimming the biggest documents, Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
