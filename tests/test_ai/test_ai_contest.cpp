@@ -280,6 +280,17 @@ void run_contest_tests() {
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
             }
         }
+        {   // (c2) a plan that takes any number of blows (9) still leaves a fresh enemy to the fights that a blow begins: a hunt is of a WOUNDED ant
+            sim::SimulationEngine sim;
+            world(sim, 10, 2, 2, 32);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{34, 30});                           // (an own worker next to it puts it in the scope; the Combat Ants stand four tiles away: no reflex)
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.hunt_blows = 9;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(120);
+            ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 0u);
+        }
         {   // (d) the kills are made, with the orders of the hunt (the Combat Ant alone while the number of hit points is even, one worker once when it is odd): ants of 2, 3 and 4 hit points die with the
             //     plan as it ships (two blows); ants of 5 and 6 are nobody's hunt then, and die when the plan takes three blows
             for (const uint16_t hp : {uint16_t{2}, uint16_t{3}, uint16_t{4}, uint16_t{5}, uint16_t{6}}) {
@@ -331,6 +342,21 @@ void run_contest_tests() {
                 ASSERT_TRUE(attacks.front().second.ants.size() == 1 && attacks.front().second.ants[0] != own[0]);                     // (the opener: a worker, not the Combat Ant)
                 ASSERT_TRUE(!alive(sim, hurt) || sim.get_unit(hurt).hp < 3);
             }
+        }
+        {   // (a2) the same number of blows (three, set by hand), the more wounded enemy (5 hit points) a tile further from the Combat Ant than the other (6), in the scope of an own worker next to it: the
+            //      wounded one first (a tile of distance is worth less than a hit point)
+            sim::SimulationEngine sim;
+            world(sim, 2, 1);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{33, 31});
+            enemy_at(sim, 31, 30, 6);
+            enemy_at(sim, 32, 30, 5, 2);
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.hunt_blows = 3;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(40);
+            const auto attacks = attacks_of(rig);
+            ASSERT_TRUE(!attacks.empty());
+            ASSERT_TRUE(attacks.front().second.tile_x == 32 && attacks.front().second.tile_y == 30);
         }
         {   // (b) a kill that is made: the enemy dies, the ants are free again and the counters say one kill was available, hunted and made
             sim::SimulationEngine sim;
@@ -388,6 +414,7 @@ void run_contest_tests() {
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
                 rig.run(120);
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
+                ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 0u);                                                           // (not even begun)
             }
             {
                 sim::SimulationEngine sim;
@@ -397,6 +424,7 @@ void run_contest_tests() {
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
                 rig.run(120);
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
+                ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 0u);
             }
         }
         {   // (e0) the plan of the blows, as a table: (hit points, Combat Ants, other ants) -> a kill is possible, the blows it takes, whether an other ant opens
@@ -916,9 +944,11 @@ void run_contest_tests() {
                 tick_all(sim, 7200);
                 sim.set_player_score(0, 100);
                 sim.set_player_score(1, 100 + deficit);
+                sim.apply_command(command_of(CommandType::GroupMove, 1, {ants_of(sim, 1)[0]}, 40, 40));                                 // (the leader plays: an ant of it is seen walking, which is when a bot wants a Thief)
                 Rig rig(sim, 0, Level::Easy, std::make_unique<StandardBot>(plan_for(Level::Easy)), 4, 4);
                 rig.run(60);
                 ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered() >= 1u, deficit == 2500);
+                ASSERT_EQ(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Thief)], deficit == 2500 ? 1u : 0u);      // (and a Thief is wanted for them)
             }
         }
         {   // (f) the last minute (a match of 2,000 ticks, the last 1,200 begin at tick 800): the bot that leads guards, the one that is behind is at tier 3 and its strike does not stop (the old stop is
@@ -964,6 +994,28 @@ void run_contest_tests() {
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
                 rig.run(60);
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack) >= 1, !last_minute);
+                ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started() >= 1u, !last_minute);                                          // (not even begun)
+            }
+        }
+        {   // (h) one defender more answers a blow in the last minute of a leader (Hard: 4 against 3)
+            for (const bool last_minute : {false, true}) {
+                sim::SimulationEngine sim;
+                build(sim, 500, 300, 2000, last_minute ? 900 : 0);
+                std::vector<uint32_t> mine;
+                for (int i = 0; i < 9; ++i) mine.push_back(sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26 + i % 3, 29 + i / 3}));
+                const uint32_t enemy = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{31, 29});
+                sim.set_player_score(0, 500);
+                sim.set_player_score(1, 300);
+                LevelPlan plan = plan_for(Level::Hard);
+                plan.hunt = false;                                                                                                     // (the fight that a blow begins, nothing else)
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(3);
+                for (int t = 0; t < 60; ++t) {
+                    keep_attacking(sim, 2, enemy, mine[0]);
+                    rig.tick();
+                }
+                ASSERT_TRUE(rig.as<StandardBot>().fight().fights_started() >= 1u);
+                ASSERT_EQ(rig.as<StandardBot>().fight().defenders_of(enemy).size(), last_minute ? 4u : 3u);
             }
         }
     } TEST_END();

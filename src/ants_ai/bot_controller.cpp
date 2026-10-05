@@ -148,12 +148,11 @@ bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, con
         if (powerup && !in.pickup) return false;                                            // a click on a power-up takes it: only a planned pick-up may name one (and no special order, no attack)
         if (c.type == CommandType::GroupSpecial) {
             // A special order (extinguish, defuse, plant, ignite, bridge, a thief's raid) is a click that shows the target cursor, and the cursor shows it only where NO ant is under the pointer: a
-            // click on an ant selects it or attacks it (src/ants_app/hud_input.cpp, evaluate_cursor). So no special order names a tile that a visible ant of any team stands on, the seat's own
-            // included (the engine itself refuses fire and bombs on a tile with a living ant and says nothing about putting a fire out; the simulation is not changed for it).
+            // click on an ant selects it or attacks it (src/ants_app/hud_input.cpp, evaluate_cursor, whose pick lists every ant that is not removed: one that dies on its clip is still there). So no
+            // special order names a tile that an ant of any team stands on, the seat's own included (the engine itself refuses fire and bombs on a tile with a living ant and says nothing about
+            // putting a fire out; the simulation is not changed for it).
             for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
-                if (a.tile_x != c.tile_x || a.tile_y != c.tile_y) continue;
-                if (a.hp == 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning) continue;      // not an ant on the screen any more
-                return false;
+                if (a.tile_x == c.tile_x && a.tile_y == c.tile_y) return false;
             }
         }
         if (c.type == CommandType::GroupAttack) {

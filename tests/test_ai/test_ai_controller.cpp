@@ -1225,7 +1225,7 @@ void run_controller_tests() {
         ASSERT_TRUE(sink.log[0].second.tile_x == 22 && sink.log[0].second.ants.size() == 1 && sink.log[0].second.ants[0] == mine[2]);
     } TEST_END();
 
-    TEST_CASE("AI2.22 A Special Order Never Names A Tile That A Living Ant Stands On, Whatever Team It Is (The Seat's Own, Its Ally, Either Enemy): The HUD's Target Cursor Shows Only Where No Ant Is Under The Pointer, So The Click Is Refused (Fate::Filtered) And Counted; The Same Order At A Free Tile Or At A Tile Where An Ant Has Died Passes; The Simulation Is Not Changed By It") {
+    TEST_CASE("AI2.22 A Special Order Never Names A Tile That A Living Ant Stands On, Whatever Team It Is (The Seat's Own, Its Ally, Either Enemy): The HUD's Target Cursor Shows Only Where No Ant Is Under The Pointer, So The Click Is Refused (Fate::Filtered) And Counted; The Same Order At A Free Tile Or At A Tile Where An Ant Has Died And Is Gone Passes, One That Is Still Dying Does Not (The HUD's Pick Lists It); The Simulation Is Not Changed By It") {
         sim::SimulationEngine sim;
         build_world(sim, 7, 4);
         sim.form_alliance(0, 3);
@@ -1262,5 +1262,41 @@ void run_controller_tests() {
         ASSERT_EQ(bot->count(Bot::Fate::Sent), 2u);
         for (const auto& e : sink.log) ASSERT_TRUE(e.second.type == CommandType::GroupSpecial && e.second.tile_x >= 24);
         ASSERT_EQ(sink.log.size(), 2u);                                                           // nothing refused left
+
+        {   // (b) an ant that dies on its clip (about 42 ticks) is still under the pointer: the order of the first look, released while it dies, is refused; the same order after the clip passes
+            sim::SimulationEngine sim2;
+            build_world(sim2, 7, 4);
+            const uint32_t sender = ants_of(sim2, 0)[0];
+            const uint32_t dying = sim2.spawn_unit(1, sim::AntType::Worker, tc(22, 20));
+            sim2.get_unit(dying).hp = 1;
+            const uint32_t striker = sim2.spawn_unit(0, sim::AntType::Worker, tc(21, 20));
+            sim2.execute_melee_attack(striker, dying);                                            // (the blow kills it: it dies on its clip, which lists it for about 42 ticks)
+            for (int i = 0; i < 2; ++i) sim2.tick();
+            {   // (it is dying, and the world lists it)
+                size_t n = 0;
+                for (const sim::AntSnapshot& a : sim2.get_world_state().ants) n += a.tile_x == 22 && a.tile_y == 20 && a.hp == 0 ? 1u : 0u;
+                ASSERT_EQ(n, 1u);
+            }
+            RecordingSink sink2(sim2);
+            BotController c2(sim2, 3);
+            c2.set_start_hold(0);
+            bool first = false;
+            bool second = false;
+            ScriptBot* bot2 = seat_script(c2, sim2, spec_of(0, Level::Hard), sink2, [&](const BotView& v, Orders& o) {
+                if (!first) {
+                    first = true;
+                    o.special(sender, tc(22, 20));
+                } else if (v.tick() >= 90 && !second) {
+                    second = true;
+                    o.special(sender, tc(22, 20));
+                }
+            });
+            ASSERT_TRUE(bot2 != nullptr);
+            run_ticks(sim2, c2, 200);
+            ASSERT_TRUE(first && second);
+            ASSERT_EQ(bot2->count(Bot::Fate::Filtered), 1u);
+            ASSERT_EQ(bot2->count(Bot::Fate::Sent), 1u);
+            ASSERT_EQ(sink2.log.size(), 1u);
+        }
     } TEST_END();
 }
