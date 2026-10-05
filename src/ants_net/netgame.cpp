@@ -86,19 +86,30 @@ constexpr bool kInBrowser = true;          // the game runs in a web page (the p
 constexpr bool kInBrowser = false;
 #endif
 
+// A code that begins "demo-" (and has more) is one that the server makes the room of when somebody comes (the front page's card makes such codes): the server answers NoSuchRoom when it cannot,
+// so it is a place that is missing (the cap of demo rooms, the server's limit, a room of that code that has just ended), never a room that does not exist
+bool is_demo_room_code(const std::string& room) {
+    const size_t n = std::char_traits<char>::length(kDemoRoomPrefix);
+    return room.size() > n && room.compare(0, n, kDemoRoomPrefix) == 0;
+}
+constexpr const char* kTextNoPlace = "The server cannot make a room for this match now. Try again in a few minutes.";
+
+// "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
+std::string seat_colour(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(str::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
+
 }  // namespace
 
 // Why a join failed: the original's words where it has them (dropped from the game, unable to connect), the remake's for the rest. In a web page the refusal for another version says what a player
 // can do about it: the game that is open is the one that was loaded when the tab was opened, and after an update of the server only a reload fetches the current one (the desktop game has its own
 // text for this, the start menu's: "Update the game, or wait until the server is updated").
-std::string NetGame::reject_text(RejectReason r, bool in_browser) {
+std::string NetGame::reject_text(RejectReason r, bool in_browser, const std::string& room) {
     switch (r) {
         case RejectReason::Full: return "The room is full.";
         case RejectReason::VersionMismatch:
             return in_browser ? "This version cannot play with the host's version. Reload the page to update." : "This version cannot play with the host's version.";
         case RejectReason::MatchRunning: return "The match has already started.";
         case RejectReason::Kicked: return str::text(str::kDroppedFromGame);
-        case RejectReason::NoSuchRoom: return "There is no such room on this server.";
+        case RejectReason::NoSuchRoom: return is_demo_room_code(room) ? kTextNoPlace : "There is no such room on this server.";
         case RejectReason::Dropped: return str::text(str::kDroppedFromGame);                       // (protocol 10) a seat that was dropped while its player was away: the original's one text for a dropped machine, string 94
         case RejectReason::RejoinFailed: return "The game could not be rejoined.";                // (protocol 10; the remake's own: the original has no way back)
         case RejectReason::Superseded: return "This game was taken over by another window.";      // (protocol 10; the remake's own)
@@ -695,7 +706,7 @@ void NetGame::update_client() {
                         status_ = way_back_text(reject_reason_);
                         if (way_back_forgets(reject_reason_)) forget_key();
                     } else {
-                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser);
+                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser, target_.room);
                     }
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
@@ -845,10 +856,15 @@ void NetGame::note_lobby_welcome() {
     if (welcomed_ || !client_lobby_ || client_lobby_->my_seat() >= sim::MAX_PLAYERS) return;
     welcomed_ = true;
     const SeatKey key = client_lobby_->key();
-    if (!key_is_zero(join_key_) && !client_lobby_->rejoined() && !key_matches(key, join_key_)) {
+    const bool showed_key = !key_is_zero(join_key_);
+    if (showed_key && !client_lobby_->rejoined() && !key_matches(key, join_key_)) {
         forget_key();
         set_notice(kTextNewRoom);
     }
+    // The colour that this player asked for (a link of the front page names one) was taken, so the room gave the first free seat (see join): it says so, once, in colour words. A machine that
+    // shows a key sits where the key says and is told nothing of the kind.
+    const uint8_t given = client_lobby_->my_seat();
+    if (!showed_key && target_.want_seat < sim::MAX_PLAYERS && given != target_.want_seat) set_notice(seat_colour(target_.want_seat) + " was taken: you play " + seat_colour(given) + ".");
     if (client_lobby_->rejoined()) announce_key(key, client_lobby_->my_seat());
     else pending_key_ = key;                                    // (zero for a room that gives none: nothing to announce then)
 }

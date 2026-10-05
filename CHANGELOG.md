@@ -30,6 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 - **An invitation for each Friend**, shown in the card with its colour, **Copy link** and, where the browser has it, **Share**. The links carry no name and no key; a friend is asked for a name first, and can go back to the front page from that step.
 - **A level for every bot seat, at any colour** (a bot may sit at Green too), and the room's teams: in the desktop game's Host panel as well.
 - A game against the computer from the front page is now a room on the game server; an old address with `&players=1` still plays on your computer.
+- **Clearer messages in the waiting room:** when a friend's colour was taken the game says which colour you play instead; when the server has no room left for a new match it says so (try again in a few minutes) instead of "no such room"; and a seat that does not play is named by its colour.
 
 **Rules / network:** network protocol 13: a start carries a bot level for each seat and the teams, so a v0.6.x game cannot join (reload the page once after the update). A room's teams are a word of its code (`demo-treasure-4p-t01-k7m2xq`).
 

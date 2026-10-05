@@ -708,6 +708,32 @@ void run_seat_tests() {
         }
         ASSERT_TRUE(all_equal(t));
     } TEST_END();
+
+    TEST_CASE("N3.37 Seats: A Guest Whose Colour Was Taken Is Told Which Colour It Plays (A Notice Of Five Seconds, The Colour Words); A Guest That Got The Colour It Asked For Or Asked For None Is Told Nothing") {
+        Table t;
+        Machine& host = t.add("Alice");
+        ASSERT_TRUE(host.net.host(0, "Alice", true));
+        host.net.set_map("TINY.LVL");
+        Machine& bob = t.add("Bob");
+        Machine& carl = t.add("Carl");
+        Machine& dora = t.add("Dora");
+        ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob", 0));            // green: the host's own seat, which is taken
+        ASSERT_TRUE(t.run_until([&]() { return bob.net.phase() == NetGame::Phase::Room && bob.net.my_seat() < 4; }, 3000));
+        ASSERT_EQ(bob.net.my_seat(), 1);                                                      // the first free seat
+        ASSERT_EQ(bob.net.status_text(), std::string("Green was taken: you play Red."));
+        ASSERT_TRUE(carl.net.join("127.0.0.1", host.net.listen_port(), "Carl", 3));          // black: free
+        ASSERT_TRUE(t.run_until([&]() { return carl.net.phase() == NetGame::Phase::Room && carl.net.my_seat() < 4; }, 3000));
+        ASSERT_EQ(carl.net.my_seat(), 3);
+        ASSERT_TRUE(carl.net.status_text().find("taken") == std::string::npos);
+        ASSERT_TRUE(dora.net.join("127.0.0.1", host.net.listen_port(), "Dora"));             // no colour asked for: the first free seat, and nothing to explain
+        ASSERT_TRUE(t.run_until([&]() { return dora.net.phase() == NetGame::Phase::Room && dora.net.my_seat() < 4; }, 3000));
+        ASSERT_EQ(dora.net.my_seat(), 2);
+        ASSERT_TRUE(dora.net.status_text().find("taken") == std::string::npos);
+        ASSERT_TRUE(host.net.status_text().find("taken") == std::string::npos);               // (the host and the guests who were already in are told nothing)
+        t.run(6000);                                                                          // the notice is for five seconds: the line of the waiting room is back
+        ASSERT_TRUE(bob.net.status_text().find("taken") == std::string::npos);
+        ASSERT_FALSE(bob.net.status_text().empty());
+    } TEST_END();
 }
 
 void run_migration_tests() {
@@ -894,13 +920,17 @@ void run_reject_tests() {
             {RejectReason::Superseded, "This game was taken over by another window."},
         };
         ASSERT_EQ(sim::strings::text(sim::strings::kDroppedFromGame), std::string("Sorry, you have been dropped from the game.  Hit OK to exit the program."));
-        for (const Case& c : cases) {
+        // A code that begins "demo-" is one that the server makes the room of when somebody comes: NoSuchRoom for it is the place that is missing (the cap of demo rooms), not a room that does not
+        // exist, and it is told so; every other refusal, and NoSuchRoom for any other code, is as it was
+        const std::string no_place = "The server cannot make a room for this match now. Try again in a few minutes.";
+        for (const Case& c : cases) for (const std::string& room : {std::string("ROOM-1"), std::string("demo-tiny-4p-abcdef")}) {
+            const bool demo = room.compare(0, 5, "demo-") == 0;
             auto listener = TcpListener::listen(0, true);
             ASSERT_TRUE(listener != nullptr);
             sim::SimulationEngine sim;
             NetGame net(sim);
             net.set_discovery(0);
-            ASSERT_TRUE(net.join("127.0.0.1", listener->port(), "Bob", 255, "ROOM-1"));
+            ASSERT_TRUE(net.join("127.0.0.1", listener->port(), "Bob", 255, room));
             std::unique_ptr<TcpConnection> server;
             bool replied = false;
             uint32_t now = 1000;
@@ -912,7 +942,7 @@ void run_reject_tests() {
                     std::vector<uint8_t> m;
                     if (server->poll(m)) {
                         HelloMsg h;
-                        ASSERT_TRUE(decode(m, h) && h.room == "ROOM-1" && h.version == kProtocolVersion && key_is_zero(h.key) && h.have_turns == 0);      // (a new player: no key)
+                        ASSERT_TRUE(decode(m, h) && h.room == room && h.version == kProtocolVersion && key_is_zero(h.key) && h.have_turns == 0);      // (a new player: no key)
                         server->send(encode(RejectMsg{c.reason}));
                         replied = true;
                     }
@@ -921,7 +951,7 @@ void run_reject_tests() {
             }
             ASSERT_TRUE(replied);
             ASSERT_EQ(net.phase(), NetGame::Phase::Failed);
-            ASSERT_EQ(net.status_text(), c.text);
+            ASSERT_EQ(net.status_text(), demo && c.reason == RejectReason::NoSuchRoom ? no_place : c.text);
             bool failed = false;
             for (const NetGame::Event& e : net.take_events()) failed = failed || e.type == NetGame::Event::Type::Failed;
             ASSERT_TRUE(failed);
@@ -1391,7 +1421,7 @@ void run_team_tests() {
             uint64_t hash = 0;
             ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
             ASSERT_TRUE(host.net.start_match(4, hash));
-            const std::string text = std::string(net::kNoticeNoTeams) + "seat 3 does not play in this match.";
+            const std::string text = std::string(net::kNoticeNoTeams) + "Black does not play in this match.";
             ASSERT_EQ(host.net.status_text(), text);                                                    // the host's own status line (until the match begins)
             ASSERT_TRUE(t.run_until([&]() { return everybody_playing(t) && !notices_of(t.machines[1]->net.pregame_chat()).empty() && !notices_of(t.machines[2]->net.pregame_chat()).empty(); }, 5000));
             for (size_t g : {size_t{1}, size_t{2}}) ASSERT_EQ(notices_of(t.machines[g]->net.pregame_chat()), (std::vector<std::string>{text}));

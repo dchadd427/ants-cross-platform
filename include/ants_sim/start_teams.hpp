@@ -30,7 +30,8 @@ std::string start_teams_text(const StartTeams& teams);
 
 /// What a match of `roster` (bit s: seat s plays) makes of the teams: the pairs in the order they are made (the chosen pair, then the two other seats when both play), or `why` (and no pair) when a
 /// seat of the pair does not play or the teams would be the whole match (the original ends a match at once in which every live team is allied). Free for all makes nothing and says nothing.
-/// `short_why` is the same reason in a form that fits a line of chat with the prefix "No teams: " (the room's notice, at most kMaxChatChars in all): the seat's reason is short already.
+/// `short_why` is the same reason in a form that fits a line of chat with the prefix "No teams: " (the room's notice, at most kMaxChatChars in all): the seat's reason is short already, and
+/// names the seat by its colour as the pages do ("Black does not play in this match."), where `why` has the digit that the command line takes ("seat 3 does not play in this match.").
 struct StartTeamsPlan {
     std::vector<std::array<uint8_t, 2>> pairs;
     std::string why;

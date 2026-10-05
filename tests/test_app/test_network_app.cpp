@@ -2007,7 +2007,7 @@ void run_leader_tests() {
         ASSERT_TRUE(hall.identical(app.sim(), cat.sim));
     } TEST_END();
 
-    TEST_CASE("N5.22 Leader: --start-when N Is A Test Hook That Presses START For The Leader Of A Server's Room Once N Players Are In (1 To 4 Only: 1 Is For A Leader With --fill-bots; 2 To 4 Only Before Protocol 11); A Game That Does Not Say It Never Does") {
+    TEST_CASE("N5.22 Leader: --start-when N (The Front Page's Card And The Headless Test Clients Give It) Presses START For The Leader Of A Server's Room Once N Players Are In (1 To 4 Only: 1 Is For A Leader With --fill-bots; 2 To 4 Only Before Protocol 11); A Game That Does Not Say It Never Does") {
         {   // the command line
             std::vector<std::string> args = {"ants", "--join", "127.0.0.1:4001", "--room", "R-1", "--start-when", "2"};
             std::vector<char*> storage;
@@ -5059,6 +5059,43 @@ void run_room_chat_ui_tests() {
         ASSERT_EQ(joined, web);                                                                           // not cut: no "..." and every word of it is on the screen
         const SetupLayout& wide = SetupLayout::of(SetupVariant::Guest);                                   // the 16:9 page (the web page's default): its label is wrapped at 363 px without a limit of lines
         ASSERT_TRUE(wrap_label_text(r, web, wide.prompt_text.w, FontSize::Px14).size() <= MS::STATUS_LINES);
+        app.quit();
+    } TEST_END();
+
+    TEST_CASE("N5.76b The Refusal For A Room That The Server Cannot Make (A Code That Begins demo-, NoSuchRoom: The Cap Of Demo Rooms Is Full) Says So And What To Do, Not That There Is No Such Room, In Words That Fit The Setup Screen's Status Box In Two Lines On Both Pages; Any Other Code Is Told As Before") {
+        using net::NetGame;
+        using net::RejectReason;
+        const std::string no_place = "The server cannot make a room for this match now. Try again in a few minutes.";
+        const std::string no_room = "There is no such room on this server.";
+        for (const bool browser : {false, true}) {
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "demo-treasure-4p-t01-k7m2xq"), no_place);
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "demo-x"), no_place);
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "demo-"), no_room);              // (a prefix alone is no code that a server makes a room of)
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "DEMO-1"), no_room);             // (the prefix is exactly demo-, as the server reads it)
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "ROOM-1"), no_room);
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, ""), no_room);
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser), no_room);
+            for (const RejectReason other : {RejectReason::Full, RejectReason::MatchRunning, RejectReason::Kicked, RejectReason::BadRequest, RejectReason::Dropped, RejectReason::RejoinFailed, RejectReason::Superseded}) {
+                ASSERT_EQ(NetGame::reject_text(other, browser, "demo-treasure-4p-t01-k7m2xq"), NetGame::reject_text(other, browser));      // (nothing else changes with the code)
+            }
+        }
+        Application app;
+        ASSERT_TRUE(app.init(headless_config()));
+        Renderer& r = app.renderer();
+        using MS = MapSelectScreen;
+        MS::RoomView v;                                                                                   // the classic page: 293 px, two lines of 14 px
+        v.networked = true;
+        v.status = no_place;
+        const std::vector<std::string> place_lines = MS::status_lines(r, v);
+        ASSERT_TRUE(!place_lines.empty() && place_lines.size() <= MS::STATUS_LINES);
+        std::string joined;
+        for (const std::string& l : place_lines) {
+            ASSERT_TRUE(r.get_text_width(l, FontSize::Px14) <= MS::STATUS_W);
+            joined += (joined.empty() ? "" : " ") + l;
+        }
+        ASSERT_EQ(joined, no_place);                                                                      // not cut: no "..." and every word of it is on the screen
+        const SetupLayout& wide = SetupLayout::of(SetupVariant::Guest);                                   // the 16:9 page
+        ASSERT_TRUE(wrap_label_text(r, no_place, wide.prompt_text.w, FontSize::Px14).size() <= MS::STATUS_LINES);
         app.quit();
     } TEST_END();
 }

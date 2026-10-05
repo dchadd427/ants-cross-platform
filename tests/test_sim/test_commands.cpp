@@ -1258,7 +1258,13 @@ void run_start_team_tests() {
         ASSERT_EQ(plan_of(StartTeams{true, 0, 1}, 0x03), std::string("[these are the only two seats that play, and a match in which every team is allied ends at once.]"));
         ASSERT_EQ(plan_of(StartTeams{true, 0, 2}, 0x05), std::string("[these are the only two seats that play, and a match in which every team is allied ends at once.]"));
         ASSERT_EQ(plan_start_teams(StartTeams{true, 0, 1}, 0x03).short_why, std::string("only two seats play: a team of them would end the match at once."));
-        ASSERT_EQ(plan_start_teams(StartTeams{true, 0, 3}, 0x07).short_why, std::string("seat 3 does not play in this match."));
+        // the line of chat says the seat as the pages do, by its colour (the long reason is for the command line, where the seats are digits)
+        ASSERT_EQ(plan_start_teams(StartTeams{true, 0, 3}, 0x07).short_why, std::string("Black does not play in this match."));
+        ASSERT_EQ(plan_start_teams(StartTeams{true, 3, 0}, 0x07).short_why, std::string("Black does not play in this match."));
+        ASSERT_EQ(plan_start_teams(StartTeams{true, 1, 2}, 0x0D).short_why, std::string("Red does not play in this match."));
+        ASSERT_EQ(plan_start_teams(StartTeams{true, 2, 0}, 0x0B).short_why, std::string("Blue does not play in this match."));
+        ASSERT_EQ(plan_start_teams(StartTeams{true, 1, 0}, 0x00).short_why, std::string("Red does not play in this match."));              // (the first of the pair that does not play)
+        ASSERT_EQ(plan_start_teams(StartTeams{true, 0, 7}, 0xFF).short_why, std::string("seat 7 does not play in this match."));          // (a seat that no match has has no colour)
 
         const auto choices_of = [](const std::vector<StartTeams>& choices) {
             std::string out;

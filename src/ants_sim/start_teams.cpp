@@ -49,8 +49,9 @@ StartTeamsPlan plan_start_teams(const StartTeams& teams, uint8_t roster) {
     const auto plays = [roster](uint8_t seat) { return seat < 4 && ((roster >> seat) & 1u) != 0; };
     for (const uint8_t seat : {teams.a, teams.b}) {
         if (!plays(seat)) {
-            plan.why = "seat " + std::to_string(static_cast<unsigned>(seat)) + " does not play in this match.";
-            plan.short_why = plan.why;
+            const std::string digit = "seat " + std::to_string(static_cast<unsigned>(seat));                 // (the command line's word: --teams takes digits)
+            plan.why = digit + " does not play in this match.";
+            plan.short_why = (seat < MAX_PLAYERS ? seat_word(seat) : digit) + " does not play in this match.";      // (the pages show colours: a seat that no match has has none)
             return plan;
         }
     }

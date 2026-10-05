@@ -4754,7 +4754,7 @@ void run_bot_tests() {
             w.run(2500);
             RoomStatus s = w.status("TM-4");
             ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.teams == "ffa" && allies_text(s.allies) == "4444");
-            const std::string notice = std::string("255||") + net::kNoticeNoTeams + "seat 3 does not play in this match.";
+            const std::string notice = std::string("255||") + net::kNoticeNoTeams + "Black does not play in this match.";
             for (Client* c : {&ann, &bob, &cat}) ASSERT_EQ(said(c->room_chat), (std::vector<std::string>{notice}));
             World v;
             ASSERT_TRUE(v.mgr.create_room(spec_of("TM-5", 4), v.now).ok);
@@ -4968,7 +4968,7 @@ void run_bot_tests() {
             w.run(2500);
             const RoomStatus s = w.status(code);
             ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.teams == "ffa" && s.room_teams == "0+3" && allies_text(s.allies) == "4444");
-            const std::string notice = std::string("255||") + net::kNoticeNoTeams + "seat 3 does not play in this match.";
+            const std::string notice = std::string("255||") + net::kNoticeNoTeams + "Black does not play in this match.";
             for (Client* c : {&ann, &bob, &cat}) {
                 ASSERT_EQ(said(c->room_chat), (std::vector<std::string>{notice}));                // everybody, once
                 ASSERT_TRUE(c->room_chat[0].notice());
@@ -4984,7 +4984,7 @@ void run_bot_tests() {
             w.run(3500);
             RoomStatus s = w.status(three);
             ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.teams == "ffa" && s.room_teams == "0+3" && allies_text(s.allies) == "4444");
-            for (Client* c : people) ASSERT_EQ(said(c->room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeNoTeams + "seat 3 does not play in this match."}));
+            for (Client* c : people) ASSERT_EQ(said(c->room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeNoTeams + "Black does not play in this match."}));
             const std::string two = "demo-tiny-2p-t01-llllll";
             Client& dan = w.connect("Dan", two);
             Client& eve = w.connect("Eve", two);
