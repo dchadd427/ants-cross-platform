@@ -131,11 +131,18 @@ void TouchControl::emit(Actions& out, Kind kind, double x, double y, uint32_t at
     out.push_back(a);
 }
 
-// The clock: a hold that is due fires at its own time, before whatever the call does
-void TouchControl::advance(uint32_t now_ms, Actions& out) {
+// The clock: a hold that is due fires at its own time, before whatever the call does. An event's stamp is when SDL saw it, which a stall makes late, so while a finger is tracked an event
+// is judged no later than kStallMs after the last moment the model knew what the finger did (known_: a frame, or the first finger's arrival). A frame (update) is that knowledge itself: the
+// finger is down now, so a hold that is due fires from it; from an event it fires only when the event, so judged, is past the hold's time.
+void TouchControl::advance(uint32_t now_ms, bool frame, Actions& out) {
+    if (!frame && !fingers_.empty()) {
+        const uint32_t limit = known_ + touch::kStallMs;
+        if (static_cast<int32_t>(now_ms - limit) > 0) now_ms = limit;
+    }
     if (clock_set_ && static_cast<int32_t>(now_ms - clock_) < 0) now_ms = clock_;
     clock_ = now_ms;
     clock_set_ = true;
+    if (frame) known_ = clock_;
     if (!fingers_.empty() && (mode_ == Mode::Waiting || mode_ == Mode::MinimapWait) && since(clock_, down_at_) >= touch::kHoldMs) fire_hold(out);
 }
 
@@ -236,11 +243,12 @@ void TouchControl::move_two(uint32_t now_ms, Actions& out) {
 TouchControl::Actions TouchControl::finger_down(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms) {
     Actions out;
     if (!finite(x, y)) return out;
-    advance(now_ms, out);
+    advance(now_ms, false, out);
     flush_pair(out);                                                    // (what the pair did so far counts before the structure changes)
     if (find(touch, finger) != nullptr) {                               // down again: its lift was lost, so nothing that was held can be trusted
         const Actions ended = cancel();
         out.insert(out.end(), ended.begin(), ended.end());
+        advance(now_ms, false, out);                                    // (the new finger is a new gesture, nothing is tracked that could hold its time back: it is at its stamp)
     }
     Finger arrived;
     arrived.touch = touch;
@@ -250,6 +258,7 @@ TouchControl::Actions TouchControl::finger_down(int64_t touch, int64_t finger, d
     if (fingers_.empty()) {
         arrived.role = Role::Primary;
         fingers_.push_back(arrived);
+        known_ = clock_;                                                // (the first finger's arrival is a moment that the model knows)
         start(fingers_.back(), clock_, out);
         return out;
     }
@@ -268,7 +277,7 @@ TouchControl::Actions TouchControl::finger_down(int64_t touch, int64_t finger, d
 TouchControl::Actions TouchControl::finger_motion(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms) {
     Actions out;
     if (!finite(x, y)) return out;
-    advance(now_ms, out);
+    advance(now_ms, false, out);
     Finger* f = find(touch, finger);
     if (f == nullptr) return out;
     f->x = x;
@@ -305,7 +314,7 @@ TouchControl::Actions TouchControl::finger_motion(int64_t touch, int64_t finger,
 
 TouchControl::Actions TouchControl::finger_up(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms) {
     Actions out;
-    advance(now_ms, out);
+    advance(now_ms, false, out);
     flush_pair(out);                                                    // (the last moves of the pair count before a finger leaves it)
     Finger* f = find(touch, finger);
     if (f == nullptr) return out;
@@ -361,7 +370,7 @@ TouchControl::Actions TouchControl::finger_up(int64_t touch, int64_t finger, dou
 
 TouchControl::Actions TouchControl::update(uint32_t now_ms) {
     Actions out;
-    advance(now_ms, out);
+    advance(now_ms, true, out);
     flush_pair(out);
     return out;
 }

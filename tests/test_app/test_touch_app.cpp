@@ -103,6 +103,15 @@ struct Hand {
     void up(int64_t finger, Pt at, double fx = 0.5, double fy = 0.5) { send(SDL_FINGERUP, finger, at, fx, fy); }
     void wait(uint32_t ms) { now += ms; }
     void frame() { app.run_frame_with_delta(0.016f); }
+    /// The time passes with the application's frames running (one every `step` ms): the model knows that the finger is down all the while. wait() alone is a stall.
+    void rest(uint32_t ms, uint32_t step = 20) {
+        while (ms > 0) {
+            const uint32_t d = std::min(step, ms);
+            wait(d);
+            frame();
+            ms -= d;
+        }
+    }
     /// A tap: down, 80 ms, up, a frame
     void tap(Pt at, int64_t finger = 1) {
         down(finger, at);
@@ -618,28 +627,109 @@ void test_hold_timing() {
     hand.frame();
     check(s.sink.commands.size() == 1 && !app.hud().is_input_captured(), "the lift is the order");
 
-    // no frame between the down and a late lift: the events carry the times, so the hold is still made, then released
-    s.clear();
-    s.select({s.worker});
-    hand.down(1, g);
-    hand.wait(700);
-    hand.up(1, g);
-    hand.frame();
-    check(s.sink.commands.size() == 1 && app.touch().stats().holds == 2 && app.touch_feedbacks() == 2, "a lift 700 ms after the down, with no frame between: the hold was made at its time, then released: one order, one more feedback");
+    // no frame between the down and a lift that is stamped 700 ms later (a stall: SDL stamps an event when it SEES it, so a stall makes a short touch look long): nothing says that the finger was
+    // down all that time, so the lift is judged 100 ms after the down, a tap. (This block used to pin the opposite: "the hold was made at its time, then released: one order, one more
+    // feedback"; the review found that a short tap or the start of a drag turned into a right click that way. The order is still one, a left click on the ground moves the worker.)
+    {
+        s.clear();
+        s.select({s.worker});
+        const TouchControl::Stats before = app.touch().stats();
+        const uint32_t buzzes = app.touch_feedbacks();
+        hand.down(1, g);
+        hand.wait(700);
+        hand.up(1, g);
+        hand.frame();
+        check(s.sink.commands.size() == 1 && app.touch().stats().taps == before.taps + 1 && app.touch().stats().holds == before.holds && app.touch_feedbacks() == buzzes,
+              "a lift stamped 700 ms after the down, with no frame between: a tap (the one order is the left click's), no hold, no feedback");
+    }
+
+    // A STALLED tap: the finger leaves 100 ms after it went down, a 400 ms stall stamps the lift 500 ms after the down. It is a click (it selects the worker), never the right click (which
+    // selects nothing and buzzes). A stalled first move begins a drag, never a hold. A slow tap (300 ms) with a 150 ms stall is a tap (it was lost in the dead zone, 438 ms).
+    {
+        const Pt on = s.on_ant(s.worker);
+        s.clear();
+        TouchControl::Stats before = app.touch().stats();
+        uint32_t buzzes = app.touch_feedbacks();
+        hand.down(1, on);
+        hand.frame();
+        hand.wait(30);
+        hand.frame();
+        hand.wait(470);
+        hand.up(1, on);
+        hand.frame();
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker} && app.touch().stats().taps == before.taps + 1 && app.touch().stats().holds == before.holds &&
+                  app.touch_feedbacks() == buzzes && app.touch().fingers() == 0,
+              "a tap whose lift a 400 ms stall stamped 500 ms after the down: a click on the worker (it is selected), no hold, no buzz");
+
+        s.clear();
+        before = app.touch().stats();
+        hand.down(1, g);
+        hand.frame();
+        hand.wait(30);
+        hand.frame();
+        hand.wait(470);
+        hand.move(1, Pt{g.x + 40, g.y});
+        hand.frame();
+        check(app.touch().stats().drags == before.drags + 1 && app.touch().stats().holds == before.holds && app.touch().mode() == TouchControl::Mode::Left && app.hud().is_input_captured(),
+              "a first move stamped 500 ms after the down, the frame before it at 30 ms: a drag (the band), not a hold");
+        hand.up(1, Pt{g.x + 40, g.y});
+        hand.frame();
+        check(app.touch().fingers() == 0 && !app.hud().is_input_captured() && app.touch_feedbacks() == buzzes, "... which ends with the lift, and nothing buzzed");
+
+        s.clear();
+        before = app.touch().stats();
+        hand.down(1, on);
+        hand.frame();
+        for (int i = 0; i < 18; ++i) {
+            hand.wait(16);
+            hand.frame();
+        }
+        hand.wait(150);
+        hand.up(1, on);
+        hand.frame();
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.worker} && app.touch().stats().taps == before.taps + 1 && app.touch().stats().holds == before.holds,
+              "a slow tap (the finger leaves at 300 ms) whose lift a 150 ms stall stamped at 438 ms: a click (it was a lost tap in the dead zone)");
+    }
+
+    // REAL holds at slow frame rates (16 ms, 100 ms, 250 ms between frames): the ring is seen while the hold is coming, the hold is made by the frame that first reaches its time and the
+    // feedback is given once, and the lift is the order, as the mouse's right click gives it
+    for (const uint32_t gap : {16u, 100u, 250u}) {
+        const std::string rate = "frames every " + std::to_string(gap) + " ms: ";
+        s.clear();
+        s.select({s.worker});
+        const TouchControl::Stats before = app.touch().stats();
+        const uint32_t buzzes = app.touch_feedbacks();
+        hand.down(1, g);
+        hand.frame();
+        bool ring_seen = false;
+        for (uint32_t t = gap; t <= 700; t += gap) {
+            hand.wait(gap);
+            hand.frame();
+            ring_seen = ring_seen || (t < touch::kHoldMs && app.touch().ring(hand.now).has_value());
+        }
+        check(ring_seen, rate + "the ring was seen while the hold was coming");
+        check(app.hud().is_input_captured() && app.touch().mode() == TouchControl::Mode::Right && app.touch().stats().holds == before.holds + 1 && app.touch_feedbacks() == buzzes + 1,
+              rate + "the right button is held, the hold counted and the feedback given once");
+        check(s.sink.commands.empty(), rate + "nothing is ordered before the lift");
+        hand.wait(20);
+        hand.up(1, g);
+        hand.frame();
+        check(s.sink.commands.size() == 1 && s.sink.commands[0].type == sim::CommandType::GroupMove && !app.hud().is_input_captured() && app.touch().fingers() == 0, rate + "the lift is the order");
+    }
 
     // the dead zone between the tap time and the hold time: a lift there does nothing
     s.clear();
     s.select({s.worker});
     hand.down(1, g);
     hand.frame();
-    hand.wait(touch::kTapMs + 20);
+    hand.rest(touch::kTapMs + 20);
     hand.up(1, g);
     hand.frame();
     check(s.sink.commands.empty() && app.touch().fingers() == 0, "a finger that lingers 420 ms and lifts: neither a click nor a right click");
     // a tap at the last millisecond before the tap time is a click
     hand.down(1, g);
     hand.frame();
-    hand.wait(touch::kTapMs - 1);
+    hand.rest(touch::kTapMs - 1);
     hand.up(1, g);
     hand.frame();
     check(s.sink.commands.size() == 1, "a tap that lifts 399 ms after the down is a click");

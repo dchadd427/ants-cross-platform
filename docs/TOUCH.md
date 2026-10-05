@@ -2,7 +2,7 @@
 
 A touch screen (a phone, a tablet, a laptop's) plays the whole game. Nothing here is a command that a mouse cannot give: a pure model (`include/ants_app/touch_control.hpp`, no SDL) turns fingers into the
 mouse's events, a pan and a zoom; the game runs them through the code that the mouse uses (`src/ants_app/application_touch.cpp`); the simulation, the network and every hash never see any of it. The
-guide on the game page (Touch & Mobile) says it to the player.
+guide on the game page (Touch & Mobile) says it to the player. A touch screen on a desktop (Windows, Linux, a laptop's) takes the same path; a mouse, a trackpad and a pen are unchanged.
 
 ## The gestures, and why these numbers
 
@@ -17,6 +17,11 @@ guide on the game page (Touch & Mobile) says it to the player.
 A lift between 400 and 450 ms is neither a click nor a right click (the finger lingered). Two fingers act only where the wheel zooms: the map view of a match, no dialog, no results, no press held but the
 first finger's own on the map (the second finger ends that one with no selection and no order). Elsewhere a second finger does nothing and a tap is still a click. A third finger, and the finger that
 stays after the other lifts, are ignored until they lift. The pair is judged once per frame (a pinch's two moves arrive as two events, and between them the distance is wrong by a whole step).
+
+**A stall cannot make a touch long.** SDL stamps an event when it sees it (the browser's dispatch, the game's read of the queue), so a stall makes the stamp late. An event is judged no later than 100 ms
+(`touch::kStallMs`) after the last frame (or the first finger's arrival): a stalled 100 ms tap is still a click, a stalled first move still a drag. A frame knows that the finger is down, so a hold fires
+from it at its own time at any frame rate; a lift after the hold's time is a hold only if a frame saw the finger down within 100 ms before that time (every frame does at 10 per second or more; at 4 a
+lift just after the time may count as a tap).
 
 **The slop** (how far a finger may wobble and still be a tap or a hold) is a size on the glass: 8 CSS pixels of the game box (Android's own touch slop is 8 dp), never under 6 device pixels, in picture
 pixels (`touch::slop_pixels`): in the browser the box's CSS size and the device ratio, on a desktop the window's size in points and the output's size in pixels. It is 18 - 20 picture pixels in a phone held

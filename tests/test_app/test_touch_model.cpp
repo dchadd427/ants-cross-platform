@@ -2,7 +2,8 @@
 // (test_touch_app) check what is done with the actions; this program checks every rule of the model against expectations that are written out here, not read from the header:
 //   * one finger on the map view: the TAP (both halves of the click at the DOWN point, also with a wobble up to the slop, at the last millisecond before the tap time, never after it),
 //     the HOLD (one millisecond before the hold time nothing, at the hold time the right button goes down exactly once, up at the lift; a move after it), the DRAG (the press at the
-//     origin first, then the motion; the slop is exact), what a finger that lingers between the tap time and the hold time does (nothing), a hold that is due when the next event arrives;
+//     origin first, then the motion; the slop is exact), what a finger that lingers between the tap time and the hold time does (nothing), a hold that is due when the next event arrives,
+//     an event that a stall stamped late (judged within 100 ms of the last frame: a short touch never becomes a hold, a real hold at 16, 100 and 250 ms frames still fires);
 //   * the minimap (the press at once, a scroll, a hold that makes a right click there) and every other place (the press at once, a mouse until it lifts);
 //   * the second finger landing in each state (a waiting finger: silent; a drag or a hold: the press is cancelled), where it is refused (nothing happens, the first finger goes on),
 //     the pan (whole pixels, nothing lost), the pinch (the ratio to levels, the anchor at the middle point, the hysteresis, the ends of the list, fingers that touch);
@@ -161,14 +162,38 @@ struct Env : TouchEnvironment {
 
 constexpr uint32_t T0 = 1000;
 
+/// The model with the application's loop around it. The application runs a frame (update) between its events, so an event is never judged late (touch_control.hpp: an event's time is
+/// believed only up to touch::kStallMs after the last frame). Most tests are about the other rules and give their events as the application would: the rig runs the frame at the event's own
+/// time first (what it does, a hold that falls due, comes first in the actions that the call returns). The moves of a pair are left pending for the frame that judges them. Rig(false) is the
+/// model alone, its events raw: test_stall.
 struct Rig {
     Env env;
     TouchControl touch{env};
-    Rig() { touch.set_slop(10.0); }
+    bool with_frames{true};
+    explicit Rig(bool app_frames = true) : with_frames(app_frames) { touch.set_slop(10.0); }
 
-    TouchControl::Actions down(int64_t id, double x, double y, uint32_t t, int64_t device = 1) { return touch.finger_down(device, id, x, y, t); }
-    TouchControl::Actions move(int64_t id, double x, double y, uint32_t t, int64_t device = 1) { return touch.finger_motion(device, id, x, y, t); }
-    TouchControl::Actions up(int64_t id, double x, double y, uint32_t t, int64_t device = 1) { return touch.finger_up(device, id, x, y, t); }
+    TouchControl::Actions lead(uint32_t t, bool pair_moves_wait = false) {
+        if (!with_frames || (pair_moves_wait && touch.mode() == TouchControl::Mode::Two)) return {};
+        return touch.update(t);
+    }
+    TouchControl::Actions down(int64_t id, double x, double y, uint32_t t, int64_t device = 1) {
+        TouchControl::Actions out = lead(t);
+        const TouchControl::Actions own = touch.finger_down(device, id, x, y, t);
+        out.insert(out.end(), own.begin(), own.end());
+        return out;
+    }
+    TouchControl::Actions move(int64_t id, double x, double y, uint32_t t, int64_t device = 1) {
+        TouchControl::Actions out = lead(t, true);
+        const TouchControl::Actions own = touch.finger_motion(device, id, x, y, t);
+        out.insert(out.end(), own.begin(), own.end());
+        return out;
+    }
+    TouchControl::Actions up(int64_t id, double x, double y, uint32_t t, int64_t device = 1) {
+        TouchControl::Actions out = lead(t);
+        const TouchControl::Actions own = touch.finger_up(device, id, x, y, t);
+        out.insert(out.end(), own.begin(), own.end());
+        return out;
+    }
     TouchControl::Actions tick(uint32_t t) { return touch.update(t); }
 };
 
@@ -186,6 +211,16 @@ TouchControl::Actions framed_move(Rig& r, int64_t id, double x, double y, uint32
 TouchControl::Actions tap(Rig& r, int64_t id, double x, double y, uint32_t t, uint32_t ms = 80) {
     r.down(id, x, y, t);
     return r.up(id, x, y, t + ms);
+}
+
+/// The application's frames: update() every `step` ms after `from`, the last one at or before `to`; what they did together
+TouchControl::Actions frames(Rig& r, uint32_t from, uint32_t to, uint32_t step = 16) {
+    TouchControl::Actions out;
+    for (uint32_t t = from + step; static_cast<int32_t>(to - t) >= 0; t += step) {
+        const TouchControl::Actions a = r.tick(t);
+        out.insert(out.end(), a.begin(), a.end());
+    }
+    return out;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -244,10 +279,11 @@ void test_hold() {
         check(idle(r), "afterwards nothing is tracked");
     }
     {
-        Rig r;                                                  // a hold that is due when the next event arrives fires first, at its own time
+        Rig r;                                                  // a hold that is due when the next event arrives fires first, at its own time (the rig runs the application's frame at the event's time first:
+                                                                // this used to be the lift with NO frame before it, which "stall" now judges within 100 ms of the down: a tap)
         r.down(1, 200, 150, T0);
         expect(r.up(1, 200, 150, T0 + 520), {act(Kind::Motion, 200, 150, T0 + 450), act(Kind::RightDown, 200, 150, T0 + 450), act(Kind::HoldFired, 200, 150, T0 + 450), act(Kind::RightUp, 200, 150, T0 + 520)},
-               "a lift at 520 ms that no frame saw coming: the hold fired at 450, then the right button goes up");
+               "a lift at 520 ms: the hold fired at 450, then the right button goes up");
         Rig m;
         m.down(1, 200, 150, T0);
         expect(m.move(1, 202, 151, T0 + 500), {act(Kind::Motion, 200, 150, T0 + 450), act(Kind::RightDown, 200, 150, T0 + 450), act(Kind::HoldFired, 200, 150, T0 + 450), act(Kind::Motion, 202, 151, T0 + 500)},
@@ -274,6 +310,218 @@ void test_hold() {
         r.move(1, 207, 156, T0 + 200);
         const auto fired = r.tick(T0 + 460);
         check(fired.size() == 3 && fired[1].kind == Kind::RightDown && fired[1].x == 200 && fired[1].y == 150, "RightDown at (200, 150): " + show(fired));
+    }
+}
+
+/// A tap at (x, y) judged at `at`: the pointer, the press, the release
+TouchControl::Actions click_at(int x, int y, uint32_t at) {
+    return {act(Kind::Motion, x, y, at), act(Kind::LeftDown, x, y, at), act(Kind::LeftUp, x, y, at)};
+}
+
+/// The hold's actions, at its own time
+TouchControl::Actions hold_at(int x, int y, uint32_t down) {
+    return {act(Kind::Motion, x, y, down + touch::kHoldMs), act(Kind::RightDown, x, y, down + touch::kHoldMs), act(Kind::HoldFired, x, y, down + touch::kHoldMs)};
+}
+
+void test_stall() {
+    group("stall", "an event that a stall stamped late is judged within 100 ms of the last time the finger was known to be down (a frame is one): a short touch never becomes a hold, a real hold still fires");
+    check(touch::kStallMs == 100, "the tolerance is 100 ms");
+    {
+        Rig r(false);                                                  // a tap whose lift was stamped 400 ms late (the finger left the glass at about 100 ms): still a tap
+        r.down(1, 200, 150, T0);
+        expect_none(frames(r, T0, T0 + 32), "two frames");
+        expect(r.up(1, 200, 150, T0 + 500), click_at(200, 150, T0 + 132), "a lift stamped 468 ms after the last frame: a tap, judged 100 ms after that frame");
+        check(idle(r) && r.touch.stats().taps == 1 && r.touch.stats().holds == 0, "one tap and no hold");
+    }
+    {
+        Rig r(false);                                                  // a first move that was stamped late begins a drag (a box), not a hold that was due first
+        r.down(1, 200, 150, T0);
+        frames(r, T0, T0 + 32);
+        expect(r.move(1, 260, 150, T0 + 600), {act(Kind::Motion, 200, 150, T0 + 132), act(Kind::LeftDown, 200, 150, T0 + 132), act(Kind::Motion, 260, 150, T0 + 132)},
+               "a move stamped 568 ms after the last frame: the drag begins at the down point");
+        check(r.touch.mode() == TouchControl::Mode::Left && r.touch.stats().drags == 1 && r.touch.stats().holds == 0, "a drag and no hold");
+        expect(r.up(1, 260, 150, T0 + 900), {act(Kind::LeftUp, 260, 150, T0 + 132)}, "its lift, stamped later still, ends it");
+    }
+    {
+        Rig r(false);                                                  // a slow tap (the finger leaves at 300 ms) and a 150 ms stall: the lift is stamped 438, in the dead zone: it was a lost tap
+        r.down(1, 200, 150, T0);
+        frames(r, T0, T0 + 288);
+        expect(r.up(1, 200, 150, T0 + 438), click_at(200, 150, T0 + 388), "stamped 438: judged at 388, a tap");
+        Rig s(false);                                                  // without the stall nothing changes: the lift keeps its own time
+        s.down(1, 200, 150, T0);
+        frames(s, T0, T0 + 288);
+        expect(s.up(1, 200, 150, T0 + 300), click_at(200, 150, T0 + 300), "stamped 300, 12 ms after a frame: a tap at its own time");
+    }
+    {
+        // what a lift that is stamped far too late (2 s) is judged to be, by the last time the finger was known to be down: a tap below 400 ms, nothing from 400 to 449, a hold from 450
+        struct Case {
+            uint32_t last_known;
+            int kind;           // 0 tap, 1 nothing, 2 hold
+        };
+        const Case cases[] = {{0, 0}, {30, 0}, {250, 0}, {299, 0}, {300, 1}, {349, 1}, {350, 2}, {400, 2}};
+        for (const Case& c : cases) {
+            Rig r(false);
+            r.down(1, 200, 150, T0);
+            if (c.last_known > 0) r.tick(T0 + c.last_known);
+            const uint32_t judged = c.last_known + touch::kStallMs;
+            const TouchControl::Actions got = r.up(1, 200, 150, T0 + 2000);
+            const std::string what = "the last frame " + std::to_string(c.last_known) + " ms after the down, the lift stamped at 2000: judged at " + std::to_string(judged) + " ms";
+            if (c.kind == 0) {
+                expect(got, click_at(200, 150, T0 + judged), what + ": a tap");
+            } else if (c.kind == 1) {
+                expect_none(got, what + ": the finger lingered");
+            } else {
+                TouchControl::Actions want = hold_at(200, 150, T0);
+                want.push_back(act(Kind::RightUp, 200, 150, T0 + judged));
+                expect(got, want, what + ": the hold, then its release");
+            }
+            check(idle(r), "the finger is gone");
+        }
+        Rig r(false);                                                  // the first finger's arrival is a known moment too: no frame at all, the lift 500 ms later is judged at 100 ms
+        r.down(1, 200, 150, T0);
+        expect(r.up(1, 200, 150, T0 + 500), click_at(200, 150, T0 + 100), "no frame between the down and a lift stamped 500 ms later: a tap at 100 ms");
+    }
+    {
+        Rig r(false);                                                  // the tolerance is exact: 100 ms after the last frame is believed, 101 is judged at 100
+        r.down(1, 200, 150, T0);
+        r.tick(T0 + 32);
+        expect(r.up(1, 200, 150, T0 + 132), click_at(200, 150, T0 + 132), "a lift stamped 100 ms after the last frame keeps its time");
+        Rig s(false);
+        s.down(1, 200, 150, T0);
+        s.tick(T0 + 32);
+        expect(s.up(1, 200, 150, T0 + 133), click_at(200, 150, T0 + 132), "one millisecond more is judged at 100");
+    }
+    for (const uint32_t gap : {16u, 100u, 250u}) {
+        // a REAL hold at a slow frame rate: the ring is seen, the hold fires from the frame that first reaches its time (at its own time, once), the lift ends it
+        const std::string rate = "frames every " + std::to_string(gap) + " ms: ";
+        Rig r(false);
+        r.down(1, 200, 150, T0);
+        TouchControl::Actions fired;
+        bool ring_seen = false;
+        uint32_t last = T0;
+        for (uint32_t t = T0 + gap; t <= T0 + 700; t += gap) {
+            const TouchControl::Actions a = r.tick(t);
+            fired.insert(fired.end(), a.begin(), a.end());
+            ring_seen = ring_seen || (t < T0 + touch::kHoldMs && r.touch.ring(t).has_value());
+            last = t;
+        }
+        check(ring_seen, rate + "the ring was seen while the hold was coming");
+        expect(fired, hold_at(200, 150, T0), rate + "the hold fired from a frame, at its own time, once");
+        check(r.touch.mode() == TouchControl::Mode::Right && r.touch.stats().holds == 1, rate + "the right button is held");
+        expect(r.up(1, 203, 152, last + 20), {act(Kind::RightUp, 203, 152, last + 20)}, rate + "a lift 20 ms after a frame lets it go there");
+        check(idle(r), rate + "afterwards nothing is tracked");
+    }
+    {
+        Rig r(false);                                                  // at 4 frames per second a lift 220 ms after the last frame is believed 100 ms after it: after the hold, so the release at that time
+        r.down(1, 200, 150, T0);
+        r.tick(T0 + 250);
+        r.tick(T0 + 500);
+        expect(r.up(1, 203, 152, T0 + 720), {act(Kind::RightUp, 203, 152, T0 + 600)}, "the hold had fired from its frame; the lift is judged 100 ms after the last one");
+    }
+    {
+        Rig r(false);                                                  // at 10 frames per second a lift 20 ms after the hold's time is still a hold; the frame before it was 50 ms before the time
+        r.down(1, 200, 150, T0);
+        frames(r, T0, T0 + 400, 100);
+        TouchControl::Actions want = hold_at(200, 150, T0);
+        want.push_back(act(Kind::RightUp, 200, 150, T0 + 470));
+        expect(r.up(1, 200, 150, T0 + 470), want, "a real hold of 470 ms at 10 frames per second: the hold at its time, then its release");
+        Rig s(false);                                                  // ... and at 4 frames per second the same lift is a tap: the model cannot tell it from a stalled one (documented: below 10 fps a touch that ends within a frame of the hold's time is judged by the tolerance)
+        s.down(1, 200, 150, T0);
+        s.tick(T0 + 250);
+        expect(s.up(1, 200, 150, T0 + 470), click_at(200, 150, T0 + 350), "at 4 frames per second a lift 220 ms after the last frame is judged at 350 ms: a tap");
+    }
+    {
+        Rig r(false);                                                  // a hold that is due when the next event arrives, a frame having come within the tolerance of its time: the event is believed
+        r.down(1, 200, 150, T0);
+        frames(r, T0, T0 + 440);
+        TouchControl::Actions want = hold_at(200, 150, T0);
+        want.push_back(act(Kind::RightUp, 200, 150, T0 + 520));
+        expect(r.up(1, 200, 150, T0 + 520), want, "a lift at 520 ms, the last frame at 432: the hold at 450, then the right button goes up");
+        Rig m(false);
+        m.down(1, 200, 150, T0);
+        frames(m, T0, T0 + 440);
+        want = hold_at(200, 150, T0);
+        want.push_back(act(Kind::Motion, 202, 151, T0 + 500));
+        expect(m.move(1, 202, 151, T0 + 500), want, "a small move at 500 ms: the hold first, then the move");
+    }
+    {
+        Rig r(false);                                                  // a frame that comes after a stall, the finger still down (no event came): a real hold, at its own time
+        r.down(1, 200, 150, T0);
+        r.tick(T0 + 16);
+        expect(r.tick(T0 + 600), hold_at(200, 150, T0), "the finger is known to be down at the frame: the hold at 450");
+    }
+    {
+        Rig r(false);                                                  // a second finger that lands late (stamped 570 ms after the last frame): the pair, never a hold that was due first
+        r.down(1, 200, 150, T0);
+        frames(r, T0, T0 + 32);
+        expect_none(r.down(2, 300, 150, T0 + 600), "the pair begins, nothing is sent (no hold, so no press to cancel)");
+        check(r.touch.mode() == TouchControl::Mode::Two && r.touch.stats().holds == 0, "two fingers, no hold");
+    }
+    {
+        Rig r(false);                                                  // the minimap: the left press is made at once; a lift that was stamped late is a plain release, not a hold's right click
+        expect(r.down(1, 800, 50, T0), {act(Kind::Motion, 800, 50, T0), act(Kind::LeftDown, 800, 50, T0)}, "the press at once");
+        frames(r, T0, T0 + 32);
+        expect(r.up(1, 800, 50, T0 + 600), {act(Kind::LeftUp, 800, 50, T0 + 132)}, "a lift stamped 568 ms after the last frame: the left release");
+        check(idle(r) && r.touch.stats().holds == 0, "no hold");
+    }
+    {
+        Rig r(false);                                                  // late events do not carry the model forward: three of them, and the lift is still judged at 100 ms after the frame
+        r.down(1, 200, 150, T0);
+        frames(r, T0, T0 + 32);
+        expect_none(r.move(1, 203, 150, T0 + 300), "a late move within the slop");
+        expect_none(r.move(1, 204, 151, T0 + 700), "another");
+        expect_none(r.move(1, 205, 150, T0 + 1100), "and another");
+        check(r.touch.mode() == TouchControl::Mode::Waiting && r.touch.stats().holds == 0, "still waiting");
+        expect(r.up(1, 205, 150, T0 + 1500), click_at(200, 150, T0 + 132), "the lift is a tap at 132");
+    }
+    {
+        Rig r(false);                                                  // a late event and then a frame with the finger still down: the frame is the evidence, and the hold fires
+        r.down(1, 200, 150, T0);
+        frames(r, T0, T0 + 32);
+        expect_none(r.move(1, 203, 150, T0 + 700), "a late move: judged at 132, nothing");
+        expect(r.tick(T0 + 716), hold_at(200, 150, T0), "the frame that follows it sees the finger down: the hold");
+    }
+    {
+        Rig r(false);                                                  // across the wrap of the 32-bit clock
+        const uint32_t t = 0xFFFFFFF0u;
+        r.down(1, 200, 150, t);
+        frames(r, t, t + 32);
+        expect(r.up(1, 200, 150, t + 500), click_at(200, 150, t + 132), "a stalled tap across the wrap");
+        Rig h(false);
+        h.down(1, 200, 150, t);
+        expect(frames(h, t, t + 500), hold_at(200, 150, t), "a real hold across the wrap");
+        Rig w(false);                                                  // the last frame before the wrap, the lift after it, within the tolerance: believed
+        w.down(1, 200, 150, t);
+        w.tick(t + 10);
+        expect(w.up(1, 200, 150, t + 80), click_at(200, 150, t + 80), "80 ms after a frame, over the wrap: the lift keeps its time");
+        Rig p(false);                                           // the end of the tolerance falls after the wrap and the lift before it: believed (a comparison that ignores the wrap judges it at the end)
+        const uint32_t u = 0xFFFFFFA0u;
+        p.down(1, 200, 150, u);
+        p.tick(u + 32);
+        expect(p.up(1, 200, 150, u + 90), click_at(200, 150, u + 90), "a lift 58 ms after a frame, just before the wrap, the tolerance ending after it: it keeps its time");
+    }
+    {
+        Rig r(false);                                                  // a clock that steps back does not pull the last known moment back
+        r.down(1, 200, 150, T0 + 100);
+        r.tick(T0);
+        expect(r.up(1, 200, 150, T0 + 600), click_at(200, 150, T0 + 200), "an update that went back changed nothing: the lift is judged at 100 + 100");
+        Rig s(false);
+        s.down(1, 200, 150, T0);
+        s.tick(T0 + 80);
+        expect(s.up(1, 200, 150, T0 + 50), click_at(200, 150, T0 + 80), "a lift stamped before the last frame is at it");
+    }
+    {
+        Rig r(false);                                                  // a new gesture has its own last known moment, not the cancelled one's
+        r.down(1, 200, 150, T0);
+        r.tick(T0 + 16);
+        r.touch.cancel();
+        r.down(1, 300, 200, T0 + 1000);
+        expect(r.up(1, 300, 200, T0 + 1050), click_at(300, 200, T0 + 1050), "the tap of the next finger keeps its time");
+        Rig s(false);                                                  // the same when the finger went down again without a lift in between
+        s.down(1, 200, 150, T0);
+        s.tick(T0 + 16);
+        s.down(1, 300, 200, T0 + 1000);
+        expect(s.up(1, 300, 200, T0 + 1050), click_at(300, 200, T0 + 1050), "a finger that is down again begins afresh");
     }
 }
 
@@ -1496,7 +1744,7 @@ void test_soak() {
     int sessions = 0;
     int bad = 0;
     for (int round = 0; round < 300; ++round) {
-        Rig r;
+        Rig r(rnd(2) == 0);                                     // (half of the sessions have the application's frames between the events, half the raw events of a stalled one)
         r.env.allow_two = rnd(4) != 0;
         r.touch.set_slop(4.0 + static_cast<double>(rnd(12)));
         uint32_t t = 1000u + rnd(100000u);
@@ -1546,6 +1794,7 @@ int main(int argc, char* argv[]) {
     (void)argc; (void)argv;                                     // SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one
     test_tap();
     test_hold();
+    test_stall();
     test_late();
     test_primary_point();
     test_ring();

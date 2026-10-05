@@ -35,6 +35,10 @@ inline constexpr double kSlopFloorDevicePx = 6.0;
 inline constexpr double kHysteresis = 0.15;
 /// Two fingers that land closer than this many slops are measured from this distance (a pinch that starts from touching fingers would otherwise zoom by hundreds)
 inline constexpr double kMinSpanSlops = 3.0;
+/// An event is stamped when SDL SAW it, which a stall makes late (the web: when the browser handed it to the page; native: when the game read the queue). It is judged no later than this
+/// long after the last moment the model knew what the finger did (a frame, or the first finger's arrival): a frame every 100 ms or faster loses nothing, a stall of any length cannot
+/// make a short touch long. 100 ms is also the exactness of the hold at 10 frames per second.
+inline constexpr uint32_t kStallMs = 100;
 
 /// The slop in picture pixels, from how many picture pixels one CSS pixel (one point of the window, on a desktop) and one device pixel of the game box cover. A scale that is
 /// not a positive number counts for nothing; the result is between 1 and 64 picture pixels.
@@ -101,12 +105,15 @@ public:
     double slop() const noexcept { return slop_; }
 
     /// A finger is identified by the touch device and its own id. Positions are picture pixels, with fractions (the glass is finer than the picture). Every call first brings the
-    /// clock to `now_ms` (a hold that is due fires before what the call does); a time that goes backwards is taken as the last one. The moves of a PAIR say nothing: update() does
-    /// (the pan and the zoom of everything that moved since the last one), and so does the next lift, landing or cancel of a finger, before it acts.
+    /// clock to `now_ms` (a hold that is due fires before what the call does); a time that goes backwards is taken as the last one. An EVENT's time is believed only up to
+    /// touch::kStallMs after the last frame (update) or the first finger's arrival: SDL stamps an event when it sees it, so a stall must not turn a short touch into a hold.
+    /// The moves of a PAIR say nothing: update() does (the pan and the zoom of everything that moved since the last one), and so does the next lift, landing or cancel of a finger,
+    /// before it acts.
     Actions finger_down(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms);
     Actions finger_motion(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms);
     Actions finger_up(int64_t touch, int64_t finger, double x, double y, uint32_t now_ms);
-    /// The clock, and the pair: a hold that is due fires, and two fingers that moved pan and zoom (call it once per frame, after the frame's events)
+    /// The clock, and the pair: a hold that is due fires (a frame knows that the finger is down now, whatever stalled before it), and two fingers that moved pan and zoom (call it
+    /// once per frame, after the frame's events)
     Actions update(uint32_t now_ms);
     /// The browser took the touch away, the window lost the focus, the page was hidden, a screen changed under the fingers: nothing is tracked any more (a finger that never lifts
     /// must not block the next ones) and a press that was held ends with no act. The clock does not run first: nothing fires.
@@ -159,7 +166,7 @@ private:
     Finger* primary() noexcept;
     Finger* secondary() noexcept;
     const Finger* primary() const noexcept;
-    void advance(uint32_t now_ms, Actions& out);
+    void advance(uint32_t now_ms, bool frame, Actions& out);
     void flush_pair(Actions& out);
     void fire_hold(Actions& out);
     void start(const Finger& finger, uint32_t now_ms, Actions& out);
@@ -173,6 +180,7 @@ private:
     Mode mode_{Mode::Idle};
     uint32_t clock_{0};
     bool clock_set_{false};
+    uint32_t known_{0};                     // the last moment that the model knew what the finger did: a frame, or the first finger's arrival (an event is judged within kStallMs of it)
 
     // the primary finger's gesture
     double down_x_{0.0};
