@@ -1,18 +1,18 @@
 # Status
 
-_Updated 2026-10-05 15:03 PDT · current release **v0.8.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 15:36 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.8.1** a sharp START! button, and 48 demo rooms instead of 12 | ██████░░░░ 57% | Mon | built, tested here, reviewed and fixed; PR #18 is open and its five checks are running |
+| **v0.8.2** rounder, less flat buttons, and Friend as the default seat | ░░░░░░░░░░ 0% | Mon or Tue | the owner's asks; being built |
 | **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ████░░░░░░ 43% | Mon or Tue | PR #14 (both batches joined, main v0.8.0 in) has all five checks green; two independent code reviews are running, then the release steps and the merge |
 | **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the bots (v0.9.0) |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- v0.8.1: the front page's START! button is drawn by the browser instead of the original's small picture blown up three times (the owner's report: too big and blocky), and the game server's demo rooms go from 12 to 48 with a 4 MiB turn log per room (the owner's choice of 48); a patch release, in PR #18 with its five checks running
+- v0.8.2: rounder buttons with soft top-to-bottom shading so they look less flat, and Friend instead of Medium bot as the New match card's default seat (the owner's asks); a patch release, being built
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in draft PR #14, the v0.9.0 candidate (all five checks green with main v0.8.0 in; two independent code reviews running, then the release steps)
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. PR #14 (the v0.9.0 candidate) no longer orders special actions onto an ant (-95% on Small); draft PR #16, stacked on it, adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 68% on Small Hard and 35 to 45% on Treasure, scores unchanged within noise. The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
@@ -31,6 +31,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is in progress), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **v0.8.1** a sharp START! button and 48 demo rooms: START! on the front page is a teal button drawn by the browser instead of the original's small picture blown up three times, and the game server now allows 48 demo rooms at a time by default instead of 12, with a 4 MiB turn log per room (PR #18, merged 2026-10-05 15:30 PDT, live by 15:34 PDT)
 - **v0.8.0** one card for every game: the front page's two cards are one "New match" card with four seats (you, Friends with an invitation link each, Easy, Medium or Hard bots, or Nobody), teams for three or four players and START! for every game; a game against the computer is now a room on the game server (network protocol 13; PR #11, merged 2026-10-05 13:52 PDT, live 13:56 PDT)
 - **The sanitizer test run builds on GCC 13 again** (task 16, PR #12, merged 2026-10-05 12:20 PDT): a false compiler warning is off in that build only; nothing changes for players
 - **v0.7.0** a phone can pan, zoom and right click: hold a finger for a right click (a ring closes first), two fingers move the map and pinch zooms, the page keeps the browser out of the way (made for Android Chrome; touch screens on desktops use it too)
