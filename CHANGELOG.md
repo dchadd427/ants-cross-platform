@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **The leader of a room can change a player's colour:** press a player's row in the Players' Status box, and that player moves to the next colour that nobody has (Green, Red, Blue, Black, round again). The player is told in the room's chat ("Ann moved you to Red."), nobody is ever moved out of a colour, and the bots of the leader's plan stay where the match needs them. The leader's own row works too. Only the leader's screen has it (the first player who joined), on the classic page and the 16:9 one; when the first friend is in, the status line says how for five seconds.
+
+**Rules / network:** network protocol 14: one new message (SeatMove: the leader puts a player in an empty colour), so a game of an earlier release cannot join (reload the page once after the update). The server's room status shows `seat_moves` and `ignored_seat_moves`.
+
+**Details:** [detailed notes](docs/NETWORK_PORT.md#protocol-14-the-leader-of-a-room-moves-a-player-to-another-colour)
+
 ## v0.8.1 - 2026-10-05 - A sharp START! button and 48 demo rooms
 
 **For players:**

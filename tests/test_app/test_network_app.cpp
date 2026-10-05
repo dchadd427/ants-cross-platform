@@ -1903,6 +1903,8 @@ void run_leader_tests() {
         ASSERT_FALSE(bob.net.request_start());                                              // a guest sends nothing
         ASSERT_EQ(bob.net.room().leader, 0);
         ASSERT_EQ(bob.net.status_text(), std::string(sim::strings::text(sim::strings::kWaitingForHost)));
+        ASSERT_EQ(app.map_select().room().status, std::string("Tap a player to change their colour."));            // (the leader's first company: how to change a colour, for five seconds)
+        hall.step(5000);
         ASSERT_EQ(app.map_select().room().status, std::string(sim::strings::text(sim::strings::kPressStart)));
         ASSERT_TRUE(app.map_select().room().seats[1].occupied && app.map_select().room().seats[1].name == "Bob");
         ASSERT_TRUE(MapSelectScreen::row_seats(app.map_select().room()) == Rows({0, 1, -1, -1}));
@@ -2298,6 +2300,226 @@ void run_leader_tests() {
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
         ASSERT_TRUE(server.status("LEAD-WIDE").state == server::RoomState::Running && server.status("LEAD-WIDE").joined == 2);
         app.quit();
+    } TEST_END();
+
+    // Protocol 14: the leader of a server's room puts a player in another colour by pressing the player's row of the Players' Status box (the classic page and the 16:9 one)
+    TEST_CASE("N5.91 Leader, The Colours (Protocol 14): A Press On A Player's Row Moves That Player To The Next Free Colour, On The Classic Page And On The 16:9 One; The Plan's Bots Follow, The Player Is Told By The Room, The Leader's Own Row Moves The Leader, A Quick Second Press Waits For The Room's Answer; A Release Off The Row, The Right Button, A Row Of Nobody, A Screen That Has Not Shown Its Players, A Guest's Screen And A Locked One Do Nothing; The Match Starts With The Colours As They Are") {
+        using L = net::FillLevel;
+        const auto row_centre = [](Application& app, size_t row) {
+            const LayoutRect r = app.map_select().player_row_rect(row);
+            return std::pair<int32_t, int32_t>(r.x + r.w / 2, r.y + r.h / 2);
+        };
+        const auto press_row = [&](Application& app, size_t row) {
+            const std::pair<int32_t, int32_t> at = row_centre(app, row);
+            app.map_select().handle_mouse_motion(at.first, at.second);
+            app.map_select().handle_mouse_down(at.first, at.second, 1);
+            app.map_select().handle_mouse_up(at.first, at.second, 1);
+        };
+        const auto settle = [](Application& app) {                                           // the screen shows its players 500 ms after it was made: on its own clock, the frames'
+            for (int i = 0; i < 6; ++i) app.run_frame_with_delta(0.1f);
+        };
+        const auto notices_of = [](Application& app) {
+            std::vector<std::string> out;
+            for (const net::ChatLine& line : app.net()->pregame_chat()) {
+                if (line.notice()) out.push_back(line.text);
+            }
+            return out;
+        };
+        const auto plan = [](L green, L red, L blue, L black) { return net::FillPlan(std::array<L, 4>{green, red, blue, black}); };
+        const std::string hint = "Tap a player to change their colour.";
+
+        for (const bool wide : {false, true}) {
+            Server server;
+            const std::string code = wide ? "MOVE-WIDE" : "MOVE-CLASSIC";
+            ASSERT_TRUE(server.make_room(code, 4));
+            ApplicationConfig cfg = join_config(server, code, "Ann");
+            cfg.fill_bots = plan(L::None, L::None, L::Hard, L::None);                       // a Hard bot for Blue: START seats it there while Blue is empty
+            if (wide) {
+                cfg.aspect = Aspect::Wide16x9;
+                cfg.aspect_given = true;
+                cfg.has_window_size = true;
+                cfg.window_w = 960;
+                cfg.window_h = 540;
+            }
+            Application leader;
+            ASSERT_TRUE(leader.init(cfg));
+            Hall hall{server, &leader, {}};
+            ASSERT_TRUE(hall.until([&]() { return leader.net()->phase() == net::NetGame::Phase::Room && leader.net()->is_leader(); }, 8000));
+            leader.run_frame_with_delta(0.001f);
+            ASSERT_EQ(leader.state(), AppState::MapSelect);
+            ASSERT_EQ(leader.map_select().wide_layout(), wide);
+            // the screen shows its players 500 ms after it was made: until then there are no rows to press
+            ASSERT_TRUE(!leader.map_select().refreshed() && !leader.map_select().can_move_players());
+            press_row(leader, 0);
+            ASSERT_TRUE(leader.map_select().pressed_row() == -1 && leader.map_select().hovered_row() == -1);
+            hall.step(300);
+            ASSERT_TRUE(leader.net()->my_seat() == 0 && server.status(code).seat_moves == 0 && server.status(code).ignored_seat_moves == 0);
+            settle(leader);
+            ASSERT_TRUE(leader.map_select().refreshed() && leader.map_select().can_move_players());
+            ASSERT_TRUE(leader.map_select().room().status != hint);                                    // (alone: nobody to move yet, and nothing is said about it)
+
+            // Gus is the second player: the leader's first company, and the line says how to change a colour (for the five seconds that a notice is shown)
+            Application guest;
+            ASSERT_TRUE(guest.init(join_config(server, code, "Gus")));
+            hall.second = &guest;
+            ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room && leader.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
+            hall.step(30);
+            ASSERT_EQ(guest.net()->my_seat(), 1);
+            ASSERT_EQ(leader.map_select().room().status, hint);
+            ASSERT_EQ(guest.map_select().room().status, std::string(sim::strings::text(sim::strings::kWaitingForHost)));      // (a guest is not told: it cannot move anybody)
+            hall.step(5200);
+            ASSERT_TRUE(leader.map_select().room().status.find("Blue") != std::string::npos && leader.map_select().room().status.find("Hard") != std::string::npos);        // the START prompt is back
+            settle(guest);
+            ASSERT_FALSE(guest.map_select().can_move_players());
+            ASSERT_TRUE(MapSelectScreen::row_seats(leader.map_select().room()) == Rows({0, 1, -1, -1}));
+
+            // the rows: one box wide and one row high, row after row; a row of nobody and the points around the rows are no rows
+            {
+                const LayoutRect r0 = leader.map_select().player_row_rect(0);
+                const LayoutRect r1 = leader.map_select().player_row_rect(1);
+                ASSERT_TRUE(r0.w > 100 && r0.h > 20 && r1.x == r0.x && r1.w == r0.w && r1.h == r0.h && r1.y == r0.bottom());
+                ASSERT_TRUE(leader.map_select().player_row_rect(3).bottom() == r0.y + 4 * r0.h);
+                const auto at = [&](size_t row) { return row_centre(leader, row); };
+                ASSERT_EQ(leader.map_select().player_row_at(at(0).first, at(0).second), 0);
+                ASSERT_EQ(leader.map_select().player_row_at(at(1).first, at(1).second), 1);
+                ASSERT_EQ(leader.map_select().player_row_at(at(2).first, at(2).second), -1);               // (nobody is there)
+                ASSERT_EQ(leader.map_select().player_row_at(at(3).first, at(3).second), -1);
+                ASSERT_EQ(leader.map_select().player_row_at(r0.x, r0.y), 0);                               // (the corners that count)
+                ASSERT_EQ(leader.map_select().player_row_at(r1.right() - 1, r1.bottom() - 1), 1);
+                ASSERT_EQ(leader.map_select().player_row_at(r0.x - 1, at(0).second), -1);
+                ASSERT_EQ(leader.map_select().player_row_at(r0.right(), at(0).second), -1);
+                ASSERT_EQ(leader.map_select().player_row_at(at(0).first, r0.y - 1), -1);
+                // the pointer lights the row it is over: nobody's row and the space around are not lit
+                leader.map_select().handle_mouse_motion(at(1).first, at(1).second);
+                ASSERT_EQ(leader.map_select().hovered_row(), 1);
+                leader.map_select().handle_mouse_motion(at(2).first, at(2).second);
+                ASSERT_EQ(leader.map_select().hovered_row(), -1);
+                leader.map_select().handle_mouse_motion(at(0).first, at(0).second);
+                ASSERT_EQ(leader.map_select().hovered_row(), 0);
+                leader.map_select().handle_mouse_motion(r0.x - 5, r0.y - 5);
+                ASSERT_EQ(leader.map_select().hovered_row(), -1);
+                // the guest's screen has the same rows and none of them can be pressed
+                const std::pair<int32_t, int32_t> g = row_centre(guest, 1);
+                ASSERT_EQ(guest.map_select().player_row_at(g.first, g.second), -1);
+            }
+
+            // presses that move nobody: the right button, a release on another row, a row of nobody, a guest's rows (it asks nothing: a guest's request would be counted as ignored)
+            {
+                const std::pair<int32_t, int32_t> gus_row = row_centre(leader, 1);
+                leader.map_select().handle_mouse_motion(gus_row.first, gus_row.second);
+                leader.map_select().handle_mouse_down(gus_row.first, gus_row.second, 3);
+                ASSERT_EQ(leader.map_select().pressed_row(), -1);
+                leader.map_select().handle_mouse_up(gus_row.first, gus_row.second, 3);
+                leader.map_select().handle_mouse_down(gus_row.first, gus_row.second, 1);
+                ASSERT_EQ(leader.map_select().pressed_row(), 1);                                            // (the press holds the row lit)
+                const std::pair<int32_t, int32_t> ann_row = row_centre(leader, 0);
+                leader.map_select().handle_mouse_motion(ann_row.first, ann_row.second);
+                leader.map_select().handle_mouse_up(ann_row.first, ann_row.second, 1);                      // (let go on Ann's row)
+                ASSERT_EQ(leader.map_select().pressed_row(), -1);
+                press_row(leader, 2);
+                press_row(leader, 3);
+                ASSERT_EQ(leader.map_select().pressed_row(), -1);
+                press_row(guest, 0);
+                press_row(guest, 1);
+                ASSERT_TRUE(guest.map_select().pressed_row() == -1 && guest.map_select().hovered_row() == -1);
+                ASSERT_FALSE(guest.net()->request_move_seat(2));                                             // (a guest sends nothing, whoever it asks for)
+                hall.step(400);
+                const server::RoomStatus s = server.status(code);
+                ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Gus" && s.seat_moves == 0 && s.ignored_seat_moves == 0);
+                ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::None, L::Hard, L::None));
+            }
+
+            // a press on Gus's row: the click of the buttons, and with the release Gus is put in the next free colour, Blue
+            const std::vector<std::string> guest_notices = notices_of(guest);
+            {
+                const size_t channels = leader.audio_mixer().active_channel_count();
+                const std::pair<int32_t, int32_t> at = row_centre(leader, 1);
+                leader.map_select().handle_mouse_motion(at.first, at.second);
+                leader.map_select().handle_mouse_down(at.first, at.second, 1);
+                ASSERT_EQ(leader.audio_mixer().active_channel_count(), channels + 1);
+                ASSERT_EQ(leader.map_select().pressed_row(), 1);
+                leader.map_select().handle_mouse_up(at.first, at.second, 1);
+                ASSERT_EQ(leader.map_select().pressed_row(), -1);
+            }
+            ASSERT_TRUE(hall.until([&]() { return leader.net()->room().slots[2].state == net::SlotState::Client && guest.net()->my_seat() == 2; }, 8000));
+            hall.step(30);
+            ASSERT_TRUE(leader.net()->room().slots[2].name == "Gus" && leader.net()->room().slots[1].state == net::SlotState::Empty && leader.net()->room().slots[0].name == "Ann");
+            ASSERT_TRUE(leader.net()->my_seat() == 0 && leader.net()->is_leader() && guest.net()->room().leader == 0);
+            ASSERT_TRUE(MapSelectScreen::row_seats(leader.map_select().room()) == Rows({0, 2, -1, -1}));         // (Gus's row is the second row still)
+            ASSERT_TRUE(MapSelectScreen::row_seats(guest.map_select().room()) == Rows({2, 0, -1, -1}));
+            ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::Hard, L::None, L::None) && leader.net()->fill_bots() == leader.fill_bots());      // the bot that was for Blue is for Red now: START seats the same bots as before
+            ASSERT_TRUE(leader.net()->prompt_texts().front().find("Red gets a Hard bot") != std::string::npos);
+            ASSERT_TRUE(leader.map_select().room().status != hint);                                                // (the hint came once)
+            {
+                const std::vector<std::string> told = notices_of(guest);
+                ASSERT_TRUE(told.size() == guest_notices.size() + 1 && told.back() == "Ann moved you to Blue.");   // Gus is told by the room
+            }
+            {
+                const server::RoomStatus s = server.status(code);
+                ASSERT_TRUE(s.names[0] == "Ann" && s.names[1].empty() && s.names[2] == "Gus" && s.seat_moves == 1 && s.ignored_seat_moves == 0 && s.leader == 0);
+            }
+
+            // two quick presses (a double click): the second waits for the room's answer, and Gus goes on by one colour only (to Black)
+            press_row(leader, 1);
+            press_row(leader, 1);
+            ASSERT_TRUE(hall.until([&]() { return leader.net()->room().slots[3].state == net::SlotState::Client && guest.net()->my_seat() == 3; }, 8000));
+            hall.step(500);
+            ASSERT_TRUE(leader.net()->room().slots[2].state == net::SlotState::Empty && leader.net()->room().slots[3].name == "Gus");
+            {
+                const server::RoomStatus s = server.status(code);
+                ASSERT_TRUE(s.seat_moves == 2 && s.ignored_seat_moves == 0);                                       // (a second request would have found Blue empty: ignored, and counted)
+            }
+            ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::Hard, L::None, L::None));                           // (two colours that no bot is for: the plan stays)
+
+            // Gus at Black goes on to the next free colour round the table: Green is Ann's, so Red; the bot of Red goes to the colour that Gus leaves
+            press_row(leader, 1);
+            ASSERT_TRUE(hall.until([&]() { return leader.net()->room().slots[1].state == net::SlotState::Client && guest.net()->my_seat() == 1; }, 8000));
+            hall.step(30);
+            ASSERT_TRUE(leader.net()->room().slots[1].name == "Gus" && leader.net()->room().slots[3].state == net::SlotState::Empty);
+            ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::None, L::None, L::Hard));
+            ASSERT_TRUE(leader.net()->prompt_texts().front().find("Black gets a Hard bot") != std::string::npos);
+            ASSERT_TRUE(server.status(code).seat_moves == 3 && server.status(code).ignored_seat_moves == 0);
+
+            // the leader's own row moves the leader (to Blue: Red is Gus's); it is the leader still and the room does not tell it of its own move
+            const size_t leader_notices = notices_of(leader).size();
+            press_row(leader, 0);
+            ASSERT_TRUE(hall.until([&]() { return leader.net()->my_seat() == 2 && guest.net()->room().leader == 2; }, 8000));
+            hall.step(30);
+            ASSERT_TRUE(leader.net()->is_leader() && leader.map_select().leads_server_room() && leader.map_select().room().my_seat == 2);
+            ASSERT_TRUE(leader.net()->room().slots[0].state == net::SlotState::Empty && leader.net()->room().slots[2].name == "Ann" && leader.net()->room().slots[1].name == "Gus");
+            ASSERT_TRUE(MapSelectScreen::row_seats(leader.map_select().room()) == Rows({2, 1, -1, -1}));          // (the leader's own seat first)
+            ASSERT_EQ(notices_of(leader).size(), leader_notices);
+            ASSERT_TRUE(server.status(code).seat_moves == 4 && server.status(code).leader == 2);
+            ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::None, L::None, L::Hard));
+
+            // START: the match is made with the colours as they are now, Gus plays Red, Ann Blue, and the Hard bot Black
+            {
+                const server::RoomStatus before = server.status(code);
+                ASSERT_TRUE(before.state == server::RoomState::Waiting && before.joined == 2 && before.ignored_start_requests == 0);
+            }
+            leader.map_select().handle_key_down(SDLK_RETURN);
+            ASSERT_TRUE(hall.until([&]() { return leader.state() == AppState::Playing && guest.state() == AppState::Playing; }, 15000));
+            {
+                const server::RoomStatus s = server.status(code);
+                ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 1 && s.expected == 4);
+                ASSERT_TRUE(s.bots[0].seat == 3 && s.bots[0].level == "hard" && s.bots[0].name == "Bot (Hard)" && s.bots[0].fill);
+                ASSERT_TRUE(s.names[0].empty() && s.names[1] == "Gus" && s.names[2] == "Ann" && s.names[3] == "Bot (Hard)");
+            }
+            ASSERT_TRUE(leader.local_player_id() == 2 && guest.local_player_id() == 1);
+            ASSERT_TRUE(leader.sim().roster_mask() == 0x0E && guest.sim().roster_mask() == 0x0E);
+            // the screen is locked now, and a press on a row asks nothing more of the room
+            ASSERT_FALSE(leader.map_select().can_move_players());
+            press_row(leader, 1);
+            hall.step(kDialogMs + 1500);
+            ASSERT_TRUE(hall.identical(leader.sim(), guest.sim()));
+            ASSERT_FALSE(leader.net()->desynced() || guest.net()->desynced());
+            {
+                const server::RoomStatus s = server.status(code);
+                ASSERT_TRUE(s.state == server::RoomState::Running && s.seat_moves == 4 && s.ignored_seat_moves == 0 && s.ticks > 20);
+            }
+            leader.quit();
+            guest.quit();
+        }
     } TEST_END();
 
     TEST_CASE("N5.75 The \"Get Ready\" Dialog In A Server's Room (Protocol 12): A Leader Who Starts A Room With Bots Sees The Dialog For The 5 s Before The Referee's First Turn, Up Exactly While No Tick Has Run And Gone The Step The First One Ran; The Referee Seals Nothing And Runs Nothing Meanwhile, The Screen Says Nothing, The Bots Look And Send Nothing; A Click Selects Nothing Until It Is Gone") {
@@ -3901,7 +4123,7 @@ void run_room_bot_tests() {
         ASSERT_TRUE(guest.init(join_config(server, "TEAMS-APP", "Guest")));
         hall.second = &guest;
         ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room && leader.net()->room().slots[1].state == net::SlotState::Client && leader.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
-        hall.step(300);
+        hall.step(5300);                                                                                  // (the first five seconds of company say how to change a colour: the plan's line is back after them)
         // what the leader is told before START: the longest way of saying it that fits the label
         const std::vector<std::string>& prompts = leader.net()->prompt_texts();
         ASSERT_TRUE(prompts.size() >= 4 && prompts.front() == "Press START: Blue gets an Easy bot, Black a Hard bot; teams Green + Blue against Red + Black.");
@@ -4124,7 +4346,7 @@ void run_room_bot_tests() {
             ASSERT_TRUE(guest.init(join_config(server, code, "Guest")));
             hall.second = &guest;
             ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room && leader.net()->room().slots[1].state == net::SlotState::Client && leader.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
-            hall.step(300);
+            hall.step(5300);                                                                              // (the first five seconds of company say how to change a colour: the plan's line is back after them)
             ASSERT_TRUE(server.status(code).room_teams == "0+1" && server.status(code).state == server::RoomState::Waiting);
             ASSERT_TRUE(leader.net()->room_teams() == sim::StartTeams({true, 0, 1}) && leader.net()->effective_teams() == sim::StartTeams({true, 0, 1}));
             ASSERT_TRUE(leader.net()->start_teams() == sim::StartTeams({true, 1, 2}));                    // (its own choice is kept, and is not what the screens show or the room makes)
@@ -5198,6 +5420,7 @@ void run_room_chat_box_tests() {
         ASSERT_TRUE(app.room_chat_box() == &SL::of(SetupVariant::Online).chat);
         ASSERT_TRUE(app.map_select().chat_panel().visible);                                     // (the box is drawn from the first frame of the room: its frame and label)
         ASSERT_TRUE(app.map_select().chat_panel().lines.empty() && app.map_select().chat_panel().typed.empty() && !app.map_select().chat_panel().caret);
+        d.hall.step(5000);                                                                      // (the first five seconds of company say how to change a colour: the START prompt is back after them)
         const std::string prompt = app.map_select().room().status;
         ASSERT_EQ(prompt, std::string(sim::strings::text(sim::strings::kPressStart)));
         // Bob speaks: the line is in the box with his name; the status line is not changed by it

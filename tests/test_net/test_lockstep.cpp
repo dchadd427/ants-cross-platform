@@ -928,10 +928,10 @@ struct LoneSession {
 
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
-        ASSERT_EQ(kProtocolVersion, 13);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes)
+        ASSERT_EQ(kProtocolVersion, 14);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colours (SeatMove, type 31, three bytes)
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
-        ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::CaughtUp));
+        ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::SeatMove));
         LagMsg lag;
         lag.seat = 2;
         lag.behind_ms = 12345;
@@ -1170,8 +1170,8 @@ void run_protocol_tests() {
         ASSERT_FALSE(decode(encode(bad_lag), lag2));
         bad_lag.seat = 255;
         ASSERT_FALSE(decode(encode(bad_lag), lag2));
-        // unknown types (24 was one until protocol 7 gave it to StartRequest, 25 until protocol 8 gave it to Lag, and 26 - 30 until protocol 10 gave them to Presence, Vote, CatchUp, TurnBatch, CaughtUp)
-        for (uint8_t type : std::vector<uint8_t>{0, 31, 100, 255}) {
+        // unknown types (24 was one until protocol 7 gave it to StartRequest, 25 until protocol 8 gave it to Lag, 26 - 30 until protocol 10 gave them to Presence, Vote, CatchUp, TurnBatch, CaughtUp, and 31 until protocol 14 gave it to SeatMove)
+        for (uint8_t type : std::vector<uint8_t>{0, 32, 100, 255}) {
             const std::vector<uint8_t> m = {type, 0, 0, 0, 0};
             ASSERT_EQ(peek_type(m), MsgType::None);
         }
@@ -1179,7 +1179,8 @@ void run_protocol_tests() {
         ASSERT_EQ(peek_type(std::vector<uint8_t>{25}), MsgType::Lag);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{26}), MsgType::Presence);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{30}), MsgType::CaughtUp);
-        ASSERT_EQ(static_cast<int>(MsgType::Last), 30);
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{31}), MsgType::SeatMove);
+        ASSERT_EQ(static_cast<int>(MsgType::Last), 31);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{}), MsgType::None);
     } TEST_END();
 
@@ -1235,14 +1236,14 @@ void run_protocol_tests() {
                                                          encode(ResumeMsg{1, 2, 500}), encode(RequestMsg{40}), encode(PeerHelloMsg{3}),
                                                          encode(server_room_of(0)), encode(server_room_of(255)), encode(StartRequestMsg{}), encode(LagMsg{2, 7000}), seed_hello,
                                                          seed_welcome, encode(RejectMsg{RejectReason::Superseded}), seed_presence, encode(VoteMsg{2, true}), encode(CatchUpMsg{100, 4000}),
-                                                         seed_batch, encode(CaughtUpMsg{4000, {1, 2, 3, 4, 5, 6, 7, 8}}), seed_request13, seed_start13};
+                                                         seed_batch, encode(CaughtUpMsg{4000, {1, 2, 3, 4, 5, 6, 7, 8}}), seed_request13, seed_start13, encode(SeatMoveMsg{1, 3})};
         size_t accepted = 0;
         for (int i = 0; i < 400000; ++i) {
             std::vector<uint8_t> buf;
             if (i % 3 == 0) {
                 buf.resize(rng.below(80));
                 for (auto& x : buf) x = static_cast<uint8_t>(rng.below(256));
-                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(30));    // a plausible type byte
+                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(31));    // a plausible type byte
             } else {
                 buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
                 for (uint32_t m = 1 + rng.below(3); m > 0; --m) buf[rng.below(static_cast<uint32_t>(buf.size()))] = static_cast<uint8_t>(rng.below(256));
@@ -1263,6 +1264,7 @@ void run_protocol_tests() {
             RoomMsg room;
             StartRequestMsg sreq;
             StartMsg smsg;
+            SeatMoveMsg smove;
             LagMsg lg;
             RejectMsg rj;
             PresenceMsg pres;
@@ -1313,6 +1315,10 @@ void run_protocol_tests() {
                 ASSERT_TRUE(encode(sreq) == buf && buf.size() == 7);
                 for (const FillLevel level : sreq.fill) ASSERT_TRUE(static_cast<uint8_t>(level) <= kFillLevelLast);
                 ASSERT_TRUE((sreq.team_a == kNoTeam && sreq.team_b == kNoTeam) || (sreq.team_a < sim::MAX_PLAYERS && sreq.team_b < sim::MAX_PLAYERS && sreq.team_a != sreq.team_b));
+            }
+            if (decode(buf, smove)) {                  // (protocol 14: the type and two different seats of the room)
+                ++accepted;
+                ASSERT_TRUE(encode(smove) == buf && buf.size() == 3 && smove.from < sim::MAX_PLAYERS && smove.to < sim::MAX_PLAYERS && smove.from != smove.to);
             }
             if (decode(buf, smsg)) {                   // a Start that gets through has teams that its own roster can make, and encodes back to the same bytes
                 ++accepted;
@@ -1428,15 +1434,15 @@ void run_protocol_tests() {
 
     TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence (With The Resume Countdown), Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
         // ---- the numbers ----
-        ASSERT_EQ(kProtocolVersion, 13);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 13: 11 and 13 changed the StartRequest (13 the Start too), 12 no message)
+        ASSERT_EQ(kProtocolVersion, 14);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 14: 11 and 13 changed the StartRequest (13 the Start too), 12 no message, 14 added the SeatMove)
         ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
-                    static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::Last) == 30);
+                    static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 31);
         ASSERT_TRUE(static_cast<int>(RejectReason::Dropped) == 7 && static_cast<int>(RejectReason::RejoinFailed) == 8 && static_cast<int>(RejectReason::Superseded) == 9);
         ASSERT_TRUE(kKeyBytes == 16 && kMaxBatchTurns == 4096 && kBatchBytes == 48 * 1024 && kBatchHeaderBytes == 7 && kWelcomeRejoin == 1 && kCapSecondsMore == 0xFFFF);
         for (const MsgType t : {MsgType::Presence, MsgType::Vote, MsgType::CatchUp, MsgType::TurnBatch, MsgType::CaughtUp}) {
             ASSERT_EQ(peek_type(std::vector<uint8_t>{static_cast<uint8_t>(t)}), t);
         }
-        ASSERT_EQ(peek_type(std::vector<uint8_t>{31}), MsgType::None);
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{32}), MsgType::None);                  // (31 is the SeatMove of protocol 14, N2.101)
 
         // ---- the keys: zero is no key, a key matches only itself, and never "no key" ----
         {
@@ -4650,6 +4656,41 @@ void run_failure_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("S2.5b Dedicated Server: A SeatMove That Reaches A Running Match (The Leader's Press Crossed The Start, Protocol 14) Is Ignored And Costs Nothing (Up To The 16 That A Person Could Send, S2.6 Has The Flood); A SeatMove That Is Garbage Is A Violation; A Host That Holds A Seat Has No Leader And Counts It As One; The Match Does Not Change") {
+        {
+            ServerMatch m(1, 3, {20, 5});
+            m.run(1000);
+            for (uint32_t i = 0; i < kIgnoredSeatMovesAllowed; ++i) m.client_ends[0]->send(encode(SeatMoveMsg{1, 3}));              // sixteen late presses: more than the eight violations that throw a client out
+            m.run(500);
+            ASSERT_TRUE(m.host->client_present(0));
+            ASSERT_EQ(m.host->violations(0), 0u);
+            ASSERT_EQ(m.host->ignored_seat_moves(), kIgnoredSeatMovesAllowed);
+            ASSERT_EQ(m.host->ignored_start_requests(), 0u);                                         // (each message has its own count)
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 2, 2});                // the same seat twice: garbage like any other
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 0, 4});                // a seat that no room has
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 0});                   // a byte short
+            m.run(300);
+            ASSERT_EQ(m.host->violations(1), 3u);
+            ASSERT_TRUE(m.host->client_present(1));
+            ASSERT_EQ(m.host->ignored_seat_moves(), kIgnoredSeatMovesAllowed);                       // (garbage is no request: it is not counted as one)
+            m.settle();
+            ASSERT_TRUE(m.all_equal());                                                              // nothing changed in the match
+            ASSERT_TRUE(m.host->desyncs().empty());
+        }
+        {   // a host that plays a seat: nobody in its room leads, so the message is a violation like any other that a guest may not send
+            Match m(1, 3, {20, 0});
+            m.run(1000);
+            m.client_ends[2]->send(encode(SeatMoveMsg{1, 2}));
+            m.run(300);
+            ASSERT_EQ(m.host->violations(2), 1u);
+            for (int i = 0; i < 10; ++i) m.client_ends[2]->send(encode(SeatMoveMsg{1, 2}));
+            m.run(300);
+            ASSERT_FALSE(m.host->client_present(2));                                                 // thrown out after eight
+            ASSERT_TRUE(m.host->client_present(1));
+            ASSERT_EQ(m.host->ignored_seat_moves(), 0u);
+        }
+    } TEST_END();
+
     TEST_CASE("S2.6 Dedicated Server: Flood Control In The Running Match: A Client That Floods Valid Messages (Acknowledgements, Hashes Of Turns That Were Never Sealed, Pings, Chat Lines, Late StartRequests) Is Thrown Out After About A Second's Worth And Cannot Hurt The Others; At Most 256 Messages Of A Client Are Taken Per Update; Honest Rates Never Meet A Limit") {
         const auto message_of = [](const std::string& kind, uint32_t i) -> std::vector<uint8_t> {
             if (kind == "ack") return encode(AckMsg{0});
@@ -4664,9 +4705,10 @@ void run_failure_tests() {
                 c.text = "spam";
                 return encode(c);
             }
+            if (kind == "seatmove") return encode(SeatMoveMsg{1, 2});                   // (protocol 14: a leader's press that crossed the Start, repeated)
             return encode(StartRequestMsg{});                                           // "startreq"
         };
-        for (const std::string kind : {"ack", "hash", "ping", "chat", "startreq"}) {
+        for (const std::string kind : {"ack", "hash", "ping", "chat", "startreq", "seatmove"}) {
             ServerMatch m(1, 3, {20, 5});
             uint32_t chats = 0;
             m.clients[1]->set_on_chat([&](const ChatMsg&) { ++chats; });
@@ -4677,6 +4719,7 @@ void run_failure_tests() {
             ASSERT_EQ(m.host->violations(0), 8u);
             ASSERT_FALSE(m.client_ends[0]->is_open());
             if (kind == "startreq") ASSERT_EQ(m.host->ignored_start_requests(), kIgnoredStartRequestsAllowed + 8u);      // the 24th is the eighth violation: the rest is never looked at
+            if (kind == "seatmove") ASSERT_EQ(m.host->ignored_seat_moves(), kIgnoredSeatMovesAllowed + 8u);              // the same ladder: the 24th is the eighth violation
             if (kind == "chat") ASSERT_EQ(chats, kChatBurst);                                                              // the chat budget's burst was relayed (S2.10), not a second's worth of messages, not 3000 lines
             ASSERT_TRUE(m.host->client_present(1) && m.host->client_present(2));         // nobody else notices
             m.settle();
@@ -9144,7 +9187,7 @@ void run_reconnect_session_tests() {
 
 void run_protocol11_tests() {
     TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
-        ASSERT_EQ(kProtocolVersion, 13);                                 // (the Chat of protocol 11 is the Chat of protocol 13; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
+        ASSERT_EQ(kProtocolVersion, 14);                                 // (the Chat of protocol 11 is the Chat of protocol 14; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
         const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
@@ -9759,7 +9802,7 @@ StartMsg start_of_hold(const HoldMatch& m) {
 
 void run_protocol13_tests() {
     TEST_CASE("N2.100 Protocol 13, The Messages: StartRequest Is The Type, A Level For Each Seat (0 .. 3) And Two Team Bytes (None Both, Or Two Different Seats 0 .. 3), Seven Bytes And Nothing Else; Start Ends With The Same Two Bytes And Its Decoder Takes Only Teams That Its Own Roster Can Make; The Notice Fits A Line Of Chat") {
-        ASSERT_EQ(kProtocolVersion, 13);
+        ASSERT_EQ(kProtocolVersion, 14);                                                       // (the messages of protocol 13 are the messages of protocol 14: 14 added the SeatMove, N2.101)
         ASSERT_TRUE(kNoTeam == 255 && kFillLevelLast == 3);
         StartRequestMsg out;
         // the layout, byte by byte: the type, the levels of seats 0 to 3, team_a, team_b
@@ -9936,6 +9979,68 @@ void run_protocol13_tests() {
                 }
             }
         }
+    } TEST_END();
+
+    TEST_CASE("N2.101 Protocol 14, The Message: SeatMove Is The Type 31 And Two Different Seats 0 .. 3, Three Bytes And Nothing Else; Every Other Pair Of Bytes, Every Truncation, Every Extra Byte And Every Other Type Is Refused, A Refused Message Leaves Its Target Alone, And No Other Message Is Taken For It") {
+        ASSERT_EQ(kProtocolVersion, 14);
+        ASSERT_TRUE(static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 31);
+        // the layout, byte by byte: the type, the seat of the player that moves, the seat that it takes
+        ASSERT_TRUE(encode(SeatMoveMsg{0, 1}) == (std::vector<uint8_t>{31, 0, 1}));
+        ASSERT_TRUE(encode(SeatMoveMsg{3, 2}) == (std::vector<uint8_t>{31, 3, 2}));
+        ASSERT_EQ(peek_type(encode(SeatMoveMsg{2, 0})), MsgType::SeatMove);
+        SeatMoveMsg out;
+        ASSERT_TRUE(decode(std::vector<uint8_t>{31, 2, 0}, out) && out.from == 2 && out.to == 0);
+        // every pair of byte values: the 12 ordered pairs of two different seats of the room are messages, nothing else
+        size_t accepted = 0;
+        for (unsigned from = 0; from < 256; ++from) {
+            for (unsigned to = 0; to < 256; ++to) {
+                const std::vector<uint8_t> bytes = {31, static_cast<uint8_t>(from), static_cast<uint8_t>(to)};
+                SeatMoveMsg keep{7, 9};
+                const bool should = from < 4 && to < 4 && from != to;
+                const bool ok = decode(bytes, keep);
+                ASSERT_EQ(ok, should);
+                if (ok) {
+                    ASSERT_TRUE(keep.from == from && keep.to == to && encode(keep) == bytes);
+                    ++accepted;
+                } else {
+                    ASSERT_TRUE(keep.from == 7 && keep.to == 9);                                     // (the target is left alone)
+                }
+            }
+        }
+        ASSERT_EQ(accepted, size_t{12});
+        // every strict prefix and every extra byte of a message is refused; no other type byte takes it, and no pointer without bytes
+        const std::vector<uint8_t> full = encode(SeatMoveMsg{1, 3});
+        for (size_t cut = 0; cut < full.size(); ++cut) ASSERT_FALSE(decode(std::vector<uint8_t>(full.begin(), full.begin() + static_cast<std::ptrdiff_t>(cut)), out));
+        for (unsigned extra = 0; extra < 256; ++extra) {
+            std::vector<uint8_t> longer = full;
+            longer.push_back(static_cast<uint8_t>(extra));
+            ASSERT_FALSE(decode(longer, out));
+        }
+        for (unsigned type = 0; type < 256; ++type) {
+            if (type == 31) continue;
+            std::vector<uint8_t> other = full;
+            other[0] = static_cast<uint8_t>(type);
+            ASSERT_FALSE(decode(other, out));
+        }
+        ASSERT_FALSE(decode(static_cast<const uint8_t*>(nullptr), 3, out));
+        // no other message is a SeatMove, and a SeatMove is no other message (the three bytes of a Vote are the nearest, and a Pong, a Lag or a StartRequest have a shape of their own)
+        {
+            VoteMsg vote;
+            ChatMsg chat;
+            StartRequestMsg request;
+            LagMsg lag;
+            RequestMsg ask;
+            ASSERT_FALSE(decode(encode(VoteMsg{2, true}), out));
+            ASSERT_FALSE(decode(encode(StartRequestMsg{}), out));
+            ASSERT_FALSE(decode(encode(ChatMsg{1, true, "hi"}), out));
+            ASSERT_FALSE(decode(encode(LagMsg{2, 7000}), out));
+            const std::vector<uint8_t> move = encode(SeatMoveMsg{1, 2});
+            ASSERT_FALSE(decode(move, vote) || decode(move, chat) || decode(move, request) || decode(move, lag) || decode(move, ask));
+        }
+        // the room's Room message and the host's Start are not touched: what a SeatMove asks for is shown with the Room message that exists already (docs/NETWORK_PORT.md "Protocol 14")
+        RoomMsg room = server_room_of(0);
+        RoomMsg back;
+        ASSERT_TRUE(decode(encode(room), back) && encode(back) == encode(room));
     } TEST_END();
 }
 

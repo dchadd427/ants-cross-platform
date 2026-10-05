@@ -30,6 +30,10 @@
 // and start (Event::LeaderStart carries the levels and the teams; HostLobby::can_start_filled says whether the room could start with them: one person is enough), and start() puts the teams into the
 // Start message that every machine starts its match from.
 //
+// The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"). A SeatMove of the leader of a server's room, while the room is open, puts the guest of seat `from` in the empty seat `to`
+// (HostLobby::move_seat). Everything that is a guest's own goes with it (its key, its name, its place in the order of the Welcomes, so that the leader stays the leader, its violations and its budgets);
+// every guest is sent the Room message (each with its own `you`), and a guest whose colour changed is told so with a notice of the room ("Ann moved you to Red.").
+//
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
 
@@ -120,6 +124,18 @@ public:
     /// from a room that cannot start (too few players). A request is no offence (the leader's second click on START arrives after the Start) as long as a guest does not send more
     /// than kIgnoredStartRequestsAllowed of them: each one after those is a violation. A malformed one is a violation at once.
     uint32_t ignored_start_requests() const noexcept { return ignored_start_requests_; }
+    /// How many SeatMove messages were heard and not acted on (protocol 14): from a guest that is not the leader (every guest of a host that holds a seat), after the room started loading, for a
+    /// player that is not there or a seat that anyone holds. No offence as long as a guest does not send more than kIgnoredSeatMovesAllowed of them: each one after those is a
+    /// violation. A malformed one is a violation at once; one beyond the budget of a leader's presses (kSeatMoveBurst ...) is dropped and counted by nobody.
+    uint32_t ignored_seat_moves() const noexcept { return ignored_seat_moves_; }
+    /// How many colour moves were made (move_seat that returned true)
+    uint32_t seat_moves() const noexcept { return seat_moves_; }
+    /// The colour of a guest changes (protocol 14): the guest of seat `from` takes the empty seat `to`. Everything that is a guest's own goes with it (its connection, key, name, thumb, place in the
+    /// order of the Welcomes, violations and budgets); the leader is elected again (it is a guest, whose seat may have been this one), the Room message goes to everybody and the guest, unless it is
+    /// the leader, gets the room's notice "<leader's name> moved you to <colour>.". False (nothing changes) unless the room is open (Phase::Room), both seats are 0 - 3 and different, the seat `from`
+    /// holds a guest and the seat `to` is empty (a colour that a guest, a bot or the host holds is not taken from them). This is the rule; who may ask for it is the lobby's business (the leader's
+    /// SeatMove) and a host that holds a seat has no leader to ask.
+    bool move_seat(uint8_t from, uint8_t to);
 
     /// A connection that the listener accepted; it becomes a seat when its Hello is accepted. `address` is where the connection came from (the host
     /// part only): with the port the guest announces it tells the other guests where to reach it during the match (host migration).
@@ -203,6 +219,8 @@ private:
         MessageBudget talk;                      // flood control: every message that the guest sends takes one from it
         ChatBudget chat;                         // ... and every line of chat takes one from this one as well (flood.hpp: a burst of 5, then one a second; a line beyond it is dropped)
         uint32_t ignored_start_requests{0};      // the StartRequests of this guest that were ignored (the first kIgnoredStartRequestsAllowed are free)
+        ChatBudget moves;                        // the SeatMoves of this guest that could be done (flood.hpp: a burst of kSeatMoveBurst, then kSeatMovesPerSecond a second; the budget of chat, with these numbers)
+        uint32_t ignored_seat_moves{0};          // the SeatMoves of this guest that were ignored (the first kIgnoredSeatMovesAllowed are free)
     };
     struct Pending {
         Connection* conn;
@@ -238,6 +256,8 @@ private:
     std::vector<Event> events_;
     uint32_t joins_{0};                      // the Welcomes sent so far (Guest::join_order)
     uint32_t ignored_start_requests_{0};
+    uint32_t ignored_seat_moves_{0};
+    uint32_t seat_moves_{0};
     uint32_t takeovers_{0};
     ChatLog chat_;
     std::function<void(const StartMsg&, uint32_t)> before_start_;
@@ -284,6 +304,10 @@ public:
     bool request_start(const std::array<FillLevel, sim::MAX_PLAYERS>& fill = {}, const sim::StartTeams& teams = sim::StartTeams{});
     /// The same level in every seat (protocol 11's single choice)
     bool request_start(FillLevel level);
+    /// The leader asks the server to put the player of seat `from` in the empty seat `to` (SeatMove, protocol 14). False (nothing is sent) unless this machine leads an open room (InRoom) and the
+    /// seats are two different ones of 0 - 3. True means the request was sent, not that the server did it: it answers with the Room message that shows the new seats, and says nothing to a request
+    /// that it cannot honour (the player left, somebody took the colour, the room started meanwhile).
+    bool request_seat_move(uint8_t from, uint8_t to);
     /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
     /// (a longer line is cut), not empty. The room relays it to everybody, this machine included: the line comes back through take_chat(). False when nothing was sent.
     bool chat(const std::string& text);

@@ -18,7 +18,7 @@
 //   GET    /stats          -> 200 {"rooms": n, "pending": n, "created": n, "refused": n, "log_bytes": n, "log_budget_bytes": n}
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "expected", "joined", "early_start", "leader": seat | null (while the room waits or
-// loads), "ignored_start_requests", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
+// loads), "ignored_start_requests", "seat_moves" (the colours the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
 // "reconnect": bool, "hold_vote_seconds", "max_pause_seconds", "max_catch_up_seconds", "resume_countdown_seconds", "paused": bool (the match is held: a seat is missing, or the countdown
 // after a pause runs), "resume_seconds" (the seconds that are left of that countdown, 0: none), "absent": [{"seat", "name", "state": "absent|catching_up", "away_seconds",
 // "progress"}] (the seats that are missing, longest away first), "vote": {"seat", "continue", "voters"} | null, "paused_seconds" (the match's total pause so far), "rejoins",

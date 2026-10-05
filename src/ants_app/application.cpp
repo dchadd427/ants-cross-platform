@@ -666,6 +666,7 @@ bool Application::init(const ApplicationConfig& config) {
         }
     });
     map_select_.set_on_request_start([this]() { net_request_start(); });
+    map_select_.set_on_move_seat([this](uint8_t seat) { net_move_seat(seat); });
     map_select_.set_on_quit([this]() {
         leave_game();                                         // (a network game that the start menu led to: back to the menu)
     });
@@ -2663,6 +2664,12 @@ bool Application::room_mouse_up(int32_t /*x*/, int32_t /*y*/, uint8_t button) {
 // answer is the host's: the can't-go cue (and nothing else: no message, no change of the screen); the room of the server has no thumbs to wait for.
 void Application::net_request_start() {
     if (!net_ || !net_->request_start()) play_effect(sim::SoundID::CantGo);
+}
+
+// A press on a player's row of the leader's screen (protocol 14): the player goes to the next colour (NetGame::request_move_seat decides, and says nothing when the request is held back for the room's answer).
+// NetGame swaps the levels of the two seats in its plan when the player takes a free colour: the application's copy of the plan, which the screens' footer shows, follows.
+void Application::net_move_seat(uint8_t seat) {
+    if (net_ && net_->request_move_seat(seat)) config_.fill_bots = net_->fill_bots();
 }
 
 // START on the setup screen of a room (host only): the map file's hash goes with the Start message so that every machine checks its own copy.

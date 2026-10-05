@@ -3,6 +3,7 @@
 #include "ants_net/clock.hpp"
 
 #include <algorithm>
+#include <utility>
 
 namespace ants::net {
 
@@ -240,6 +241,29 @@ void HostLobby::kick(uint8_t seat) {
     remove_guest(seat, true, RejectReason::Kicked);
 }
 
+// Protocol 14. A guest and its slot are one thing that changes seats: the whole Guest goes (its connection, key, thumb, place in the order of the Welcomes, violations, budgets), so a key still
+// finds its guest and the leader is still the earliest guest. The seat that it goes to must be empty: a colour that anyone holds (a guest, a bot, the host) is not taken from them, so a move that
+// crossed a newcomer's Hello on the wire does nothing to the newcomer, and two players change places in three moves through the empty colour (a room that waits for players has one: it starts
+// when the fourth comes).
+bool HostLobby::move_seat(uint8_t from, uint8_t to) {
+    if (phase_ != Phase::Room || from >= sim::MAX_PLAYERS || to >= sim::MAX_PLAYERS || from == to) return false;
+    if (room_.slots[from].state != SlotState::Client) return false;                                       // an empty seat, the host's and a bot's do not move
+    if (room_.slots[to].state != SlotState::Empty) return false;                                          // the colour has to be free
+    std::swap(guests_[from], guests_[to]);                                                                // (an empty seat is a Guest{} and a Slot{}: the swap is the move)
+    std::swap(room_.slots[from], room_.slots[to]);
+    ++seat_moves_;
+    for (Event& ev : events_) {                                                                           // a START that was heard earlier in this pass names the seat that its leader holds now (the
+        if (ev.type == Event::Type::LeaderStart && ev.seat == from) ev.seat = to;                         // owner compares it with leader()): the lead goes with the guest, not with the seat
+    }
+    elect_leader();                                                                                       // (the leader is a guest like the others: its seat may be this one)
+    broadcast_room();
+    if (to != room_.leader) {                                                                             // the player is told by the room (the leader sees its own move)
+        const std::string who = room_.leader < sim::MAX_PLAYERS ? room_.slots[room_.leader].name : std::string("The room");
+        notify(to, who + " moved you to " + seat_colour_word(to) + ".");
+    }
+    return true;
+}
+
 void HostLobby::violation(uint8_t seat) {
     if (++guests_[seat].violations >= cfg_.violation_limit) remove_guest(seat, true, RejectReason::BadRequest);
 }
@@ -457,6 +481,25 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             }
             return;
         }
+        case MsgType::SeatMove: {                                         // (protocol 14) the leader puts a player in another colour
+            SeatMoveMsg m;
+            if (!decode(msg, m)) return violation(seat);                  // exactly the type and two different seats 0 - 3: anything else is garbage
+            // Only the leader of a server's room is heard, and only while the room is open. A request that cannot be done is no offence at first (the leader's press crossed the Start; the player that it
+            // meant has left meanwhile; a guest was told that it leads, and the lead has moved on): it is ignored and counted, and every one after kIgnoredSeatMovesAllowed is a violation. One that can be
+            // done is shown to the whole room, so it has the budget of a person's presses: one beyond it is dropped, and a connection that goes on beyond it is flooding.
+            if (phase_ == Phase::Room && seat == room_.leader) {
+                switch (guests_[seat].moves.take(now_ms, kSeatMoveBurst, kSeatMovesPerSecond, kSeatMoveExcessBurst)) {
+                    case ChatBudget::Verdict::Relay:
+                        if (move_seat(m.from, m.to)) return;              // (the guests may have changed seats: nothing of the sender's is touched after this)
+                        break;
+                    case ChatBudget::Verdict::Drop: return;
+                    case ChatBudget::Verdict::Offence: return violation(seat);
+                }
+            }
+            ++ignored_seat_moves_;
+            if (++guests_[seat].ignored_seat_moves > kIgnoredSeatMovesAllowed) violation(seat);
+            return;
+        }
         case MsgType::Chat: {                                             // (protocol 11) a line for the room: in the waiting room and while the map loads
             ChatMsg m;
             if (!decode(msg, m)) return violation(seat);                  // the match's rules: at most kMaxChatChars printable characters, a flag that is 0 or 1
@@ -573,6 +616,12 @@ bool ClientLobby::request_start(const std::array<FillLevel, sim::MAX_PLAYERS>& f
 
 bool ClientLobby::request_start(FillLevel level) {
     return request_start(StartRequestMsg::all(level).fill);
+}
+
+bool ClientLobby::request_seat_move(uint8_t from, uint8_t to) {
+    if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !conn_->is_open()) return false;
+    if (from >= sim::MAX_PLAYERS || to >= sim::MAX_PLAYERS || from == to) return false;
+    return conn_->send(encode(SeatMoveMsg{from, to}));
 }
 
 bool ClientLobby::chat(const std::string& text) {
