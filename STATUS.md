@@ -1,12 +1,12 @@
 # Status
 
-_Updated 2026-10-04 22:41 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-04 22:45 PDT · current release **v0.5.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
 - Every page in the original game's look: the game page, the changelog pages and "Sprites and sounds" (release v0.5.1), and a way back from the page that a shared link opens
 - Matches that survive a server restart, phase 2 (high priority): built, checked in a real browser and reviewed; the review's fixes are in progress, then the release (v0.6.0)
 - One start card for every game, all online: your colour, a friend or a bot level for each other colour, invite links in the card; with online bot games and teams (network protocol 13; after v0.6.0)
-- Short room codes: 8 random digits instead of the long code, and a mistyped code says "no such match" (planned: starts when the one card and the reconnect fixes are merged; same release, v0.7.0)
+- Short room codes: 8 random digits instead of the long code, a mistyped code says "no such match", and the word "demo" is gone from the codes, the server settings and the docs (planned: starts when the one card and the reconnect fixes are merged; same release, v0.7.0)
 - Bots, stage 1: contested food first, finishing wounded ants (a bot sees every ant's health), fighting when behind, the endgame, the fire play (no lone fire ant, killing the fire ant)
 - Bots: getting off the island (Islands: bomb over, swimmers, bridges; Small: the swimmer ferry)
 - Bots: a power-up playbook (a draft for the owner to review), then the tactics built from it (fire a base in, a combat skirmish, fire ant with thief, bombs along the base's edges)
