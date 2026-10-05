@@ -1,0 +1,102 @@
+/* The Classic look of the 1998 game's own menus, for the pages that link this file (the changelog pages, Sprites and sounds): the orange clay, the thin green frame with its red shadow,
+   teal bevelled buttons, black inset boxes, gold titles. The pictures and the font (the game's own Libre Franklin, SIL OFL) are beside it, made by tools/front_page_art/make_art.py;
+   nothing is loaded from another site. web/lobby.html and web/shell.html keep inline copies of the colours; tests/scripts/test_web_pages_classic.py keeps all of them the same. */
+@font-face { font-family: "Libre Franklin"; src: url("LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
+:root {
+    --clay: #db4b13;        /* the orange of every menu screen */
+    --ink: #0c0805;
+    --teal: #2b6357;        /* the menu buttons */
+    --teal-hi: #31765f;     /* the hovered button */
+    --teal-lo: #17382f;
+    --edge: #050a08;
+    --cream: #f4ece2;
+    --inset: #070b0f;       /* the black boxes of the setup screen */
+    --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b;
+    --shadow: #9d0d17;      /* the red shadow under every picture */
+    --gold: #f6d058;
+    --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b;
+    /* more of the same palette, for text in the black boxes */
+    --mint: #9ff0c4;        /* links */
+    --muted: #8fb3a6;       /* small print */
+    --rule: #16352c;        /* the line between two rows */
+    --pressed: #102b25; --pressed-ink: #f6dc86;      /* a chosen button */
+    /* what a framed box and a button are made of */
+    --frame-bevel: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi);
+    --box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow);
+    --bevel: inset 0 1px 0 #f4f4ff, inset 3px 0 0 #3d9a7d, inset 0 -4px 0 var(--teal-lo);
+    --bevel-sm: inset 0 1px 0 #f4f4ff, inset 2px 0 0 #3d9a7d, inset 0 -3px 0 var(--teal-lo);
+    --btn-shadow: var(--bevel), 3px 4px 0 var(--shadow);
+    --btn-shadow-down: var(--bevel), 1px 1px 0 var(--shadow);
+    --btn-shadow-sm: var(--bevel-sm), 2px 3px 0 var(--shadow);
+    --btn-shadow-chosen: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16, 1px 1px 0 var(--shadow);
+    --screen-frame: inset 0 0 0 5px #2b5f43, inset 0 0 0 7px var(--frame-lo), inset 0 0 0 10px rgba(157, 13, 23, .9);
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Crect x='1' y='1' width='20' height='20' rx='2' fill='%232b6357' stroke='%23050a08' stroke-width='2'/%3E%3Cpath d='M6 9l5 5 5-5' fill='none' stroke='%23f4ece2' stroke-width='2.4'/%3E%3C/svg%3E");
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--clay); }
+body {
+    background: var(--clay) url("clay.png");
+    color: var(--ink);
+    font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif;
+    font-synthesis: none;
+    -webkit-text-size-adjust: 100%;
+}
+a { color: inherit; }
+img { display: block; max-width: 100%; height: auto; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* the thin green frame around the whole screen, with its red shadow, as on every screen of the game */
+.screen { position: relative; min-height: 100vh; display: flex; flex-direction: column; }
+.screen::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 20; box-shadow: var(--screen-frame); }
+.wrap { width: 100%; max-width: 1280px; margin: 0 auto; padding: 22px 30px 0; flex: 1; }
+.wrap.narrow { max-width: 980px; }
+
+/* the bevelled teal button of the game's menus, and the banner that looks like one */
+.btn, .banner { background: var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 2px; box-shadow: var(--btn-shadow); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 18px; font: inherit; font-size: 16px; line-height: 1.1; text-decoration: none; cursor: pointer; }
+.btn:hover { background: var(--teal-hi); }
+.btn:active { transform: translate(2px, 3px); box-shadow: var(--btn-shadow-down); }
+.btn.sm { min-height: 38px; padding: 6px 14px; font-size: 15px; }
+.btn.big { min-height: 54px; font-size: 20px; padding: 10px 26px; }
+.btn.on { background: var(--pressed); color: var(--pressed-ink); transform: translate(1px, 2px); box-shadow: var(--btn-shadow-chosen); }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.banner { display: block; text-align: center; font-size: 30px; line-height: 1.1; padding: 10px 18px; margin-bottom: 14px; font-weight: 500; }
+.banner.gold { color: var(--gold); text-shadow: 0 2px 0 #0b2a22, 0 0 1px #0b2a22; }
+
+/* the black boxes of the setup screen: a panel, and the field that is one */
+.panel { background: var(--inset); color: var(--cream); border: 3px solid var(--frame); border-color: var(--frame-bevel); border-radius: 4px; box-shadow: var(--box-shadow); }
+select, input[type=text], input[type=search] {
+    appearance: none; -webkit-appearance: none; width: 100%; min-height: 44px; padding: 8px 14px; font: inherit; font-size: 16px; color: var(--cream);
+    background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-bevel); border-radius: 4px; box-shadow: var(--box-shadow);
+}
+select { padding-right: 44px; cursor: pointer; background-image: var(--select-arrow); background-repeat: no-repeat; background-position: right 8px center; }
+input::placeholder { color: #7f9c92; }
+option { background: #0b1612; color: var(--cream); }
+
+/* the header: the logo (a link to the front page), the page's banner and its row of buttons */
+.site-head { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 30px; align-items: center; }
+.logo { display: block; }
+.logo img { width: 230px; }
+.site-head .banner { margin: 0 0 14px; }
+.links { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+
+/* the footer: the emerald bar of the match screen, with the version and the build */
+.bar { margin: 24px 0 0; padding: 16px 30px 18px; color: var(--cream); font-size: 14px; background: linear-gradient(180deg, #2b685f, #2b6b4f); border-top: 3px solid var(--frame-hi); box-shadow: inset 0 3px 0 var(--frame-lo); }
+.bar-in { max-width: 1280px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
+.bar .ver { font-variant-numeric: tabular-nums; background: var(--edge); padding: 3px 12px; border-radius: 2px; color: #fff; }
+.bar .grow { flex: 1 1 280px; }
+.bar a { text-decoration: none; padding: 2px 4px; }
+.bar a:hover { text-decoration: underline; }
+.bar nav { display: flex; gap: 6px 18px; flex-wrap: wrap; }
+
+@media (max-width: 700px) {
+    .wrap { padding: 18px 18px 0; }
+    .site-head { grid-template-columns: minmax(0, 1fr); gap: 8px; justify-items: center; text-align: center; }
+    .logo img { width: 150px; }
+    .site-head .banner { width: 100%; margin-bottom: 6px; font-size: 22px; padding: 7px 14px; }
+    .links { justify-content: center; }
+    .bar { padding: 16px 18px 20px; }
+    .bar nav { gap: 4px 10px; }
+}
