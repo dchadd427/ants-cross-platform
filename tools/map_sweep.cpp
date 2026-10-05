@@ -1024,7 +1024,10 @@ void sleep_forever() {
 void commit_fault(const Fault& f) {
     if (f.kind == "abort") std::abort();
 #ifndef _WIN32
-    if (f.kind == "segv") std::raise(SIGSEGV);
+    if (f.kind == "segv") {
+        std::signal(SIGSEGV, SIG_DFL);                               // (a sanitizer's own handler would turn the deliberate crash into an exit code)
+        std::raise(SIGSEGV);
+    }
 #else
     if (f.kind == "segv") std::abort();
 #endif

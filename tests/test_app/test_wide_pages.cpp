@@ -95,8 +95,8 @@ std::string hex64(uint64_t v) {
 }
 
 void ensure_sdl() {
-    SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");
-    SDL_SetHint(SDL_HINT_AUDIODRIVER, "dummy");
+    SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);                      // (the environment survives SDL_Quit, which the end of an application calls; a hint does not): nothing is shown or heard
+    SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     if (SDL_WasInit(SDL_INIT_VIDEO) == 0) SDL_Init(SDL_INIT_VIDEO);
 }
 

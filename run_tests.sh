@@ -46,7 +46,7 @@ print_usage() {
     echo "  --app            Run only application integration tests (test_app_integration)"
     echo "  --e2e            Run only opaque-box E2E test suites (e2e_runner)"
     echo "  --tools          Run only the repository checks (tools/check_version_consistency.py, the python tests of tests/scripts)"
-    echo "  --asan           Build and run with AddressSanitizer (build_asan)"
+    echo "  --asan           Build and run with AddressSanitizer and UBSan (build_asan); the restore section of the server script gets four times the time and records four times shorter (ANTS_E2E_TIME_SCALE)"
     echo "  --clean          Remove build directories and rebuild before testing"
     echo "  --list           Print the suites that the other options select (id, tier, quick or full) and exit; nothing is built or run"
     echo "  -j, --jobs N     Run up to N suites at the same time (default: the number of cores)"
@@ -164,6 +164,8 @@ NCPU=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 BUILD_DIR="build"
 if [ "$RUN_ASAN" -eq 1 ]; then
     BUILD_DIR="build_asan"
+    # a sanitized build is far slower: the restore section of the server script (suite 3.9.4) gets four times the time and records four times shorter (a value that is set stays)
+    export ANTS_E2E_TIME_SCALE="${ANTS_E2E_TIME_SCALE:-4}"
 fi
 E2E_ARGS="--all"
 if [ "$VERBOSE" -eq 1 ]; then

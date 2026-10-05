@@ -285,7 +285,7 @@ The service joins the external network `proxy-network`, which must exist: for a 
 
 In Portainer: Stacks, Add stack, Repository, this repository, reference `refs/heads/main`, compose path `docker-compose.stack.yml`. Let the stack's webhook do the updates and leave the stack's own Git polling off, or it deploys by itself: the deploy job of CI calls the webhook after the tests pass and the server is idle ([`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site), "Deploy from CI and the staging site"). The first deployment builds both images and takes several minutes.
 
-Nothing else has to be set. The server uses the maps of the image (a volume `ants-maps`, filled the first time), makes its control secret, and allows the demo rooms of `web/lobby.html`: 12 at a time, each waiting up to ten minutes for its players. The page chooses the map among the six of the original, and every match that its card starts takes a demo room, a game against bots only too (since v0.8.0). Whoever reaches a game port, the site or TCP port 4001, can fill them.
+Nothing else has to be set. The server uses the maps of the image (a volume `ants-maps`, filled the first time), makes its control secret, and allows the demo rooms of `web/lobby.html`: 48 at a time, each waiting up to ten minutes for its players and each with a turn log of at most 4 MiB (`--log-mb 4`, so that the rooms cannot use up the 256 MiB that all the logs share). The page chooses the map among the six of the original, and every match that its card starts takes a demo room, a game against bots only too (since v0.8.0). Whoever reaches a game port, the site or TCP port 4001, can fill them.
 
 Optional environment variables, set in the stack's "Environment variables" (they are not part of the repository):
 
@@ -293,7 +293,7 @@ Optional environment variables, set in the stack's "Environment variables" (they
 |---|---|---|
 | `ANTS_SERVER_SECRET` | the server makes one | The control secret ("The control secret"). |
 | `ANTS_MAPS_DIR` | the volume `ants-maps` | A host folder instead of the maps of the image. It must hold the demo map and every map of `ANTS_DEMO_MAPS`, or the server stops at startup. To refresh the volume after an update that adds maps, remove it; to add maps, copy them into it. |
-| `ANTS_DEMO_ROOMS` | 12 | How many demo rooms the page may make at a time: 1 to 255. **0, or 256 and more, make the server exit at startup, and with `restart: unless-stopped` that is a restart loop.** No variable switches the demo rooms off: delete the three demo options from the `command` in your copy of `docker-compose.stack.yml`. |
+| `ANTS_DEMO_ROOMS` | 48 | How many demo rooms the page may make at a time: 1 to 255. **0, or 256 and more, make the server exit at startup, and with `restart: unless-stopped` that is a restart loop.** Keep the number times the stack's `--log-mb` (4) under 256, the MiB that all the turn logs share. No variable switches the demo rooms off: delete the three demo options from the `command` in your copy of `docker-compose.stack.yml`. |
 | `ANTS_DEMO_MAP` | `TREASURE.LVL` | The map of a room whose code names none. |
 | `ANTS_DEMO_MAPS` | the six maps of the original | The maps a room code may choose: file names separated by commas, blanks around a name are dropped. The page offers the six maps of the original, so list them all: a page code with a map the server does not allow gets the default map, with the players the page asked for. |
 | `ANTS_PORT` | 19980 | The host port of the web page. |

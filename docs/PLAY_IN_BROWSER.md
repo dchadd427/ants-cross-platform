@@ -4,7 +4,7 @@ The game runs in a modern web browser, as WebAssembly, with nothing to install: 
 
 ## The front page: one card for every game
 
-**[beta.playants.org](https://beta.playants.org)** is the front page, the lobby (`web/lobby.html`, served at `/`). It used to be a separate Play online page; that page's address, `/four.html`, now redirects here with its query. The page is built like the game's own menus: the "ants!" logo, the black boxes and teal buttons of the setup screen, the original's help sheets and its **START!** button. The pictures are in `web/front/`, made from the game's assets by `tools/front_page_art/`; the font is Libre Franklin, under the SIL OFL.
+**[beta.playants.org](https://beta.playants.org)** is the front page, the lobby (`web/lobby.html`, served at `/`). It used to be a separate Play online page; that page's address, `/four.html`, now redirects here with its query. The page is built like the game's own menus: the "ants!" logo, the black boxes and teal buttons of the setup screen and the original's help sheets. The pictures are in `web/front/`, made from the game's assets by `tools/front_page_art/`. **START!** is not a picture but a real button in the same teal, drawn by the browser so that it stays sharp at any size; the font is Libre Franklin, under the SIL OFL.
 
 From top to bottom it shows:
 

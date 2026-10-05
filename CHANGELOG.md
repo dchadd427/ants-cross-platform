@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.8.1 - 2026-10-05 - A sharp START! button and 48 demo rooms
+
+**For players:**
+- **A sharp START! button:** the front page's START! was the original's small picture (98 x 27 pixels) shown three times larger, so its letters and edges were blocky. It is now a real button in the same teal, drawn by your browser at your screen's own resolution, so it is crisp at any zoom, and smaller: 210 x 58 pixels on a computer (it was 294 x 81), 180 x 54 on a phone.
+- **Room for more matches at once:** the public game server makes up to 48 demo rooms at a time (it was 12), so a busy evening is less likely to hear "try again in a few minutes". Each room's turn log is capped at 4 MiB (a busy 30-minute match logs 0.65 MB) so that the demo rooms cannot use up the memory that all the logs share. A stack that sets `ANTS_DEMO_ROOMS` itself keeps its number.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/828ec71...99aa55f), [what a room costs](docs/NETWORK_PORT.md)
+
 ## v0.8.0 - 2026-10-05 - One card for every game: friends, bots and teams in one match
 
 **For players:**
