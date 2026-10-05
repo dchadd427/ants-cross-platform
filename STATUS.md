@@ -1,16 +1,18 @@
 # Status
 
-_Updated 2026-10-05 14:07 PDT · current release **v0.8.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 14:35 PDT · current release **v0.8.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
+| **v0.8.1** a sharp START! button, and 48 demo rooms instead of 12 | █░░░░░░░░░ 14% | Mon | built here; being tested and reviewed |
 | **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ███░░░░░░░ 29% | Mon or Tue | PR #14 is a draft with both batches joined, built and tested here, its checks being driven to green; not a release yet, it needs a review first |
 | **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the bots (v0.9.0) |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
+- v0.8.1: the front page's START! button is drawn by the browser instead of the original's small picture blown up three times (the owner's report: too big and blocky), and the game server's demo rooms go from 12 to 48 (the owner's choice); a patch release, built here, being tested and reviewed
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in draft PR #14, the v0.9.0 candidate (built and tested here, not reviewed yet)
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls (not illegal orders); the batch being merged no longer orders special actions onto an ant (-95% on Small); a counter and the rest follow
