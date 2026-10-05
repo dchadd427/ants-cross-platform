@@ -425,6 +425,17 @@ struct World {
             else std::this_thread::yield();
         }
     }
+    // The application alone runs for `ms` (the server and the machines stand still): a round trip that takes that long, however the system's loopback delivers
+    void run_app_alone(uint32_t ms) {
+        for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {
+            now += 10;
+            if (app) {
+                app->pump_network(0.010f);
+                app->update_simulation(0.010f);
+            }
+            std::this_thread::yield();
+        }
+    }
     bool run_until(const std::function<bool()>& cond, uint32_t max_ms) {
         for (uint32_t elapsed = 0; elapsed < max_ms; elapsed += 10) {
             if (cond()) return true;
@@ -1884,6 +1895,7 @@ void run_way_back_tests() {
         w.server.door = Server::Door::Open;
         std::vector<Look> looks;
         bool reloaded = false;
+        bool slow_begin = false;
         uint64_t last_catching_tick = 0;
         for (uint32_t elapsed = 0; elapsed < 60000; elapsed += 10) {
             w.run(10);
@@ -1892,8 +1904,15 @@ void run_way_back_tests() {
             reloaded = reloaded || now.phase == NetGame::Phase::Connecting || now.phase == NetGame::Phase::Loading;
             if (now.catching) last_catching_tick = now.tick;
             if (reloaded && now.phase == NetGame::Phase::Playing && !now.catching && !w.status("RA-9").paused && now.tick > last_catching_tick) break;
+            if (!slow_begin && now.phase == NetGame::Phase::Loading) {            // the map is loaded and the Begin is a round trip away (here: half a second, as a Mac under load or a far server make it)
+                slow_begin = true;
+                const uint64_t tick_at_load = now.tick;
+                w.run_app_alone(500);
+                looks.push_back(look_at(app));
+                ASSERT_EQ(app.sim().current_tick(), tick_at_load);               // no tick of its own meanwhile: the match is the runner's (the first begin's screen was a local game's, ticking at 20 a second, and a tick here is a state that the replay does not reach: the server refused the machine)
+            }
         }
-        ASSERT_TRUE(reloaded);
+        ASSERT_TRUE(reloaded && slow_begin);
         for (const Look& l : looks) {
             ASSERT_EQ(l.state, AppState::Playing);
             ASSERT_FALSE(l.dialog);                                                               // no dialog at any moment
