@@ -143,6 +143,16 @@ void OptionsScreen::choose_quick_help(bool on) {
     notify(OptionSetting::QuickHelp);
 }
 
+void OptionsScreen::cancel_press() noexcept {
+    if (!open_) return;
+    return_.reset();
+    const int32_t values[3] = {state_.sound_volume, state_.music_volume, state_.scroll_speed};
+    for (size_t i = 0; i < sliders_.size(); ++i) {
+        if (sliders_[i].dragging()) sliders_[i] = ScreenSlider(SLIDER_X, SLIDER_Y[i], values[i]);        // (the thumb where the window put it when it opened: the value in effect)
+    }
+    for (ScreenToggle* toggle : {&chat_on_, &chat_off_, &help_on_, &help_off_}) toggle->cancel_press();
+}
+
 void OptionsScreen::on_release(int32_t x, int32_t y) {
     if (!open_) return;
     on_move(x, y);

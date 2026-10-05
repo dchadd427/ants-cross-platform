@@ -43,8 +43,18 @@
 
         .sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+        /* A TOUCH SCREEN. The game reads its fingers itself (SDL's touch events, Application::feed_touch: a tap is a left click, a hold a right click, two fingers move and zoom the map): the browser
+           must leave them alone. The canvas has touch-action none (below); everything else on the page keeps its panning and its pinch but no double-tap zoom (manipulation: iOS Safari ignores
+           user-scalable=no); and a pull down past the top of the page does not reload it (Android's Chrome) nor does a swipe past the end pass to another scroller (overscroll-behavior-y: none, the
+           vertical axis only: it does not stop the page's own scrolling, the guide below the game scrolls as ever, and a desktop trackpad's horizontal swipe, back and forward, is as it was). */
+        html {
+            touch-action: manipulation;
+            overscroll-behavior-y: none;
+        }
+
         body {
             position: relative;
+            overscroll-behavior-y: none;
             background: var(--clay) url("front/clay.png");
             color: var(--ink);
             font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif;
@@ -180,6 +190,7 @@
             display: inline-flex;
             list-style: none;
             cursor: pointer;
+            touch-action: manipulation;
         }
 
         .more summary::-webkit-details-marker {
@@ -230,6 +241,11 @@
             --ar-h: 9;
             --stage-max: 1280px;
             position: relative;
+            /* a long press on the game is no callout, no magnifier, no text selection and no grey flash */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
             width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));
             width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));
             min-width: min(100%, 320px);
@@ -329,7 +345,9 @@
             image-rendering: pixelated;
             image-rendering: crisp-edges;
             outline: none;
-            touch-action: none;
+            touch-action: none;                         /* the game's own fingers (see "A TOUCH SCREEN" above): the browser neither scrolls nor zooms for a finger on the canvas */
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /* The picture's shape, under the game: the selector of "16:9 / Classic 4:3" (it reloads the page with ?aspect= and is remembered by the browser) and the fullscreen mouse.
@@ -1111,7 +1129,10 @@
                 <div class="info-content">
                     <ul>
                         <li><strong>Tap</strong>&#8197;acts like a left click: select, move, harvest, attack.</li>
-                        <li><strong>Special powers:</strong>&#8197;tap the special power button, then tap the target (there is no right click on a touch screen).</li>
+                        <li><strong>Hold</strong>&#8197;one finger still on the map until the ring closes acts like a right click: a move for groups, workers and combat ants, the special power of a single powered ant. It acts when you lift the finger. Hold on the minimap to send your selected ants there.</li>
+                        <li><strong>Drag</strong>&#8197;one finger on the map draws the selection box.</li>
+                        <li><strong>Move the map:</strong>&#8197;drag with two fingers. <strong>Zoom:</strong>&#8197;pinch with two fingers. Both work in a match, over the map, with nothing open over it.</li>
+                        <li><strong>Special powers:</strong>&#8197;hold on the target, or tap the special power button and then the target.</li>
                         <li><strong>Minimap:</strong>&#8197;press and drag on it to scroll the map.</li>
                         <li><strong>Fullscreen:</strong>&#8197;tap Fullscreen in the header; landscape works best.</li>
                         <li class="note">The keyboard shortcuts need a keyboard.</li>
@@ -2523,28 +2544,115 @@
         // browser reserves (Ctrl+N, Ctrl+T, Ctrl+W) cannot be reached.
         // The wheel and a trackpad's pinch (the browser's ctrl + wheel) over the game zoom the GAME and never scroll or zoom the page. SDL's own listener takes the wheel for the game (the
         // deltas arrive as its notches); this one is not passive, so it can cancel the page's own reaction (the scroll, and the browser's page zoom of ctrl + wheel) in every browser. Only over
-        // the game's canvas: elsewhere on the page the browser behaves as usual. Safari reports a pinch as gesture events: they are turned into wheel events (a pinch of 25 % is one notch,
-        // the unit of the zoom's levels) for the game, and cancelled for the page.
+        // the game's canvas: elsewhere on the page the browser behaves as usual. Safari reports a TRACKPAD's pinch as gesture events: they are turned into wheel events (a pinch of 25 % is one
+        // notch, the unit of the zoom's levels) for the game, and cancelled for the page (the touch block below; with fingers on the game it is their own pinch that zooms it).
         // The middle button (back to the zoom 1) too: an unprevented middle press over a page that scrolls starts the browser's autoscroll (Windows: Chrome, Edge and Firefox), which would
         // swallow the press and scroll the page instead. SDL cancels the `mouseup` only, so the press (`mousedown`) and the click that follows (`auxclick`) are cancelled here, for the
         // canvas and the middle button only: the rest of the page keeps its middle button (autoscroll, a link opened in a new tab).
         canvas.addEventListener('mousedown', function(e) { if (e.button === 1) e.preventDefault(); }, {passive: false});
         canvas.addEventListener('auxclick', function(e) { if (e.button === 1) e.preventDefault(); }, {passive: false});
         canvas.addEventListener('wheel', function(e) { e.preventDefault(); }, {passive: false});
-        (function() {
+
+        // ANTS_TOUCH_BEGIN (tests/scripts/web_touch_check.js runs everything from here to ANTS_TOUCH_END with fakes for the page)
+        // A TOUCH SCREEN. The game reads its fingers itself (SDL's touch events, Application::feed_touch: a tap is a left click, a hold a right click, two fingers move and zoom the map); the page
+        // keeps the browser out of the way, and nothing else:
+        //   * a finger on the canvas neither scrolls nor zooms the page (touch-action: none on the canvas, and SDL cancels touchstart). iOS Safari ignores user-scalable=no and reports a pinch as
+        //     gesture events too: they are cancelled on the canvas and on the document (not passive) while a finger of the game is down or the gesture is over the game, and only then (the
+        //     guide below the game keeps the browser's own pinch);
+        //   * a long press is no context menu: contextmenu is cancelled over the game's box (CSS takes the callout and the selection away);
+        //   * touchcancel (a system gesture, a call, the lock screen took the touch away) tells the game, which ends what its fingers held, with no act: SDL makes a lift of a cancel, which the
+        //     game would take for the player's own, and it finds that lift unknown by then and ignores it. So does a touch that lands when the browser's own list says that no other touch of the
+        //     game is down: a lift that was never delivered must not make the game ignore every finger after it (and must not keep this page's count up);
+        //   * Safari's pinch on a TRACKPAD (gesture events, no fingers) still zooms the game through the wheel (a pinch of 25 % is one notch); with fingers on the game their own pinch zooms it and
+        //     the gesture events are only cancelled.
+        // The page never cancels, stops or delays touchstart, touchmove or touchend (the sound's unlock on touchend needs them: a hold that ends in a right click still unlocks it), and adds no
+        // touchmove listener.
+        var antsGameTouches = function () { return 0; };
+        (function () {
+            var live = {};                                                  // the touches that began on the game's box and have not ended, by identifier
+            var count = 0;
+            function inside(target) { return !!target && (target === boxElement || (typeof boxElement.contains === 'function' && boxElement.contains(target))); }
+            function eachTouch(e, fn) {
+                var list = e && e.changedTouches;
+                for (var i = 0; list && i < list.length; ++i) fn(list[i]);
+            }
+            function nothingLeft(e) {                                       // no finger on the page at all: a lift that was missed cannot keep the count up
+                if (e && e.touches && e.touches.length === 0) {
+                    live = {};
+                    count = 0;
+                }
+            }
+            function tellGame() {
+                try { if (typeof Module !== 'undefined' && Module._ants_touch_cancel) Module._ants_touch_cancel(); } catch (err) { /* the game is not running: nothing is held */ }
+            }
+            function othersOnTheBox(e) {                                    // the touches of the game's box that were down BEFORE this event, by the browser's own list (touches), which a lift that was never delivered cannot corrupt
+                var all = e && e.touches;
+                var fresh = e && e.changedTouches;
+                var n = 0;
+                for (var i = 0; all && i < all.length; ++i) {
+                    var isNew = false;
+                    for (var j = 0; fresh && j < fresh.length; ++j) {
+                        if (fresh[j].identifier === all[i].identifier) isNew = true;
+                    }
+                    if (!isNew && inside(all[i].target)) ++n;
+                }
+                return n;
+            }
+            boxElement.addEventListener('touchstart', function (e) {
+                if (othersOnTheBox(e) === 0) {                              // a touch lands and no other touch of the game is down: whatever the page and the game still count lost its lift (never delivered): start again.
+                    live = {};                                              // The game's cancel waits behind the events that SDL already holds (Application::cancel_touch_queued), so what came before this touch is still handled
+                    count = 0;
+                    tellGame();
+                }
+                eachTouch(e, function (t) {
+                    if (inside(t.target) && !live[t.identifier]) {
+                        live[t.identifier] = true;
+                        ++count;
+                    }
+                });
+            }, { capture: true, passive: true });
+            window.addEventListener('touchend', function (e) {
+                eachTouch(e, function (t) {
+                    if (live[t.identifier]) {
+                        delete live[t.identifier];
+                        --count;
+                    }
+                });
+                nothingLeft(e);
+            }, { capture: true, passive: true });
+            window.addEventListener('touchcancel', function (e) {
+                var held = false;
+                eachTouch(e, function (t) {
+                    if (live[t.identifier]) {
+                        held = true;
+                        delete live[t.identifier];
+                        --count;
+                    }
+                });
+                nothingLeft(e);
+                if (held) tellGame();
+            }, { capture: true, passive: true });
+            antsGameTouches = function () { return count; };
+            boxElement.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
             var lastScale = 1;
-            canvas.addEventListener('gesturestart', function(e) { e.preventDefault(); lastScale = e.scale || 1; }, {passive: false});
-            canvas.addEventListener('gesturechange', function(e) {
+            ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
+                document.addEventListener(name, function (e) { if (count > 0 || inside(e.target)) e.preventDefault(); }, { passive: false });
+            });
+            canvas.addEventListener('gesturestart', function (e) { e.preventDefault(); lastScale = e.scale || 1; }, { passive: false });
+            canvas.addEventListener('gesturechange', function (e) {
                 e.preventDefault();
                 var scale = e.scale || 1;
                 var notches = Math.log(scale / lastScale) / Math.log(1.25);
                 lastScale = scale;
+                if (count > 0) return;                                      // fingers on the game: their own pinch zooms it, not the wheel
                 if (notches && typeof WheelEvent === 'function') {
-                    canvas.dispatchEvent(new WheelEvent('wheel', {deltaY: -notches * 100, deltaMode: 0, ctrlKey: true, clientX: e.clientX, clientY: e.clientY, bubbles: true, cancelable: true}));
+                    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -notches * 100, deltaMode: 0, ctrlKey: true, clientX: e.clientX, clientY: e.clientY, bubbles: true, cancelable: true }));
                 }
-            }, {passive: false});
-            canvas.addEventListener('gestureend', function(e) { e.preventDefault(); }, {passive: false});
+            }, { passive: false });
+            canvas.addEventListener('gestureend', function (e) { e.preventDefault(); }, { passive: false });
         })();
+        // ANTS_TOUCH_END
 
         window.addEventListener('keydown', function(e) {
             if (!isReadyToPlay) return;                                      // before the game is ready the page behaves as usual

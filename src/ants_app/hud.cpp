@@ -1563,6 +1563,14 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
     return false;
 }
 
+void HUD::cancel_press() noexcept {
+    release_capture();
+    options_.cancel_press();                                // (a slider's drag of the options window ends with no act: nothing is written)
+    for (UIButton* b : {&help_button_, &options_button_, &quit_button_, &send_to_button_, &team_button_, &move_pedestal_button_, &ability_pedestal_button_, &stop_button_, &hatch_button_, &team_up_button_}) {
+        b->is_pressed = false;
+    }
+}
+
 bool HUD::is_input_captured() const noexcept {
     // [5534] != 0: the map, the minimap (left or right button) or a button holds the mouse; the pedestals do not capture
     return is_dragging_ || is_radar_dragging_ || right_capture_ != 0 || help_button_.is_pressed || options_button_.is_pressed ||
