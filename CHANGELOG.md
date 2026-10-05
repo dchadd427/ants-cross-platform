@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.8.0 - 2026-10-05 - One card for every game: friends, bots and teams in one match
 
 **For players:**
 - **One card, New match:** the front page's two cards (a game against the computer, and Play online) are one. Pick the map and your colour (**Sit here** moves you), then make every other seat a **Friend** (a person you invite), a bot at **Easy**, **Medium** or **Hard**, or **Nobody**; with three or four players **Teams** pairs two of them. **START!** takes you in: against bots the match begins at once, with Friends it begins when they are in. The card remembers its choices.
@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** network protocol 13: a start carries a bot level for each seat and the teams, so a v0.6.x game cannot join (reload the page once after the update). A room's teams are a word of its code (`demo-treasure-4p-t01-k7m2xq`).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW), [the front page](docs/NETWORK_PORT.md), [bot games](docs/BOTS.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/8591392...7947eb2), [the front page](docs/NETWORK_PORT.md), [bot games](docs/BOTS.md)
 
 ## v0.7.0 - 2026-10-05 - A phone can pan, zoom and right click
 
