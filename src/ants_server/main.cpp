@@ -22,7 +22,8 @@
 //   --demo-map NAME    the map of the demo rooms (a file name of the maps folder; required with --demo-rooms)
 //   --demo-maps LIST   the maps a demo room may be made on, file names of the maps folder separated by commas (blanks around a name are dropped). The code of a
 //                      demo room chooses: "demo-[<map>-][<n>p-]<anything>": <map> one of these names without its extension (any case), <n>p 2 to 4 players;
-//                      what it does not choose is 4 players on --demo-map (needs --demo-rooms). A demo room waits ten minutes for its players.
+//                      what it does not choose is 4 players on --demo-map (needs --demo-rooms). A word t01 (t and two seats 0 - 3, the lower first) after the first word names the room's
+//                      teams, which it makes for every start. A demo room waits ten minutes for its players.
 //   --reconnect, --no-reconnect
 //                      a room holds the seat of a player whose connection is lost (protocol 10): the match is paused for everybody, the seat comes back with its key, the others
 //                      may vote to go on without it, the match's total pause is capped. ON by default (the game's own clients come back by themselves: release B); --no-reconnect turns it

@@ -1241,6 +1241,47 @@ void test_state(const assets::AssetArchive& arc) {
         check(f2 != nullptr && f2->x == l.footer_x && f2->y == l.footer_y2 && f2->size == FontSize::Px18, "its second line at (691, 314)");
     }
     {
+        // protocol 13: the footer says a level for each seat and the teams, in longer lines than "Medium bots": each line is drawn as big as fits the box (18 px, as the footer of protocol 11 always was; else 14 px,
+        // else 12 px) at the same two places (the geometry is the pinned one: nothing moves), and what fits at no size is cut at the box. The Spy measures 6 pixels a character at every size, so the box
+        // (the Players' Status box's 200 px less 2) holds 33 characters.
+        check(MapSelectScreen::footer_width() == 198, "the footer's lines are cut at 198 pixels: the Players' Status box's inner width less the text's margin");
+        const SetupLayout& l = SetupLayout::of(SetupVariant::Online);
+        struct Case {
+            std::string first;
+            std::string second;
+            FontSize first_size;
+            FontSize second_size;
+        };
+        const Case cases[] = {
+            {"Empty seats at START:", "Blue Easy, Black Hard", FontSize::Px18, FontSize::Px18},                                     // a level for each seat: both lines fit at 18 px
+            {"Empty seats: Medium bots", "Teams: Green + Red", FontSize::Px18, FontSize::Px18},
+            {"Bots: Red Medium, Blue Hard, Black Easy", "Teams: Green + Blue against Red + Black", FontSize::Px12, FontSize::Px12},   // 39 characters: 234 pixels at every size: cut at 12 px
+            {"Teams at START:", "Green + Red against Blue + Black", FontSize::Px18, FontSize::Px18},                                 // 32 characters: 192 pixels, fits
+        };
+        for (const Case& c : cases) {
+            ScreenState state(kIslands);
+            state.online(true);
+            state.screen.set_fill_footer(c.first, c.second);
+            state.screen.update(0.0f);
+            Spy spy(arc);
+            state.screen.render(spy, arc);
+            const Spy::Ev* e1 = nullptr;
+            const Spy::Ev* e2 = nullptr;
+            for (const Spy::Ev& e : spy.events) {
+                if (e.kind != Spy::Kind::Text) continue;
+                if (e.x == l.footer_x && e.y == l.footer_y1) e1 = &e;
+                if (e.x == l.footer_x && e.y == l.footer_y2) e2 = &e;
+            }
+            check(e1 != nullptr && e2 != nullptr && e1->size == c.first_size && e2->size == c.second_size, "the footer \"" + c.first + "\" / \"" + c.second + "\": the sizes of its two lines");
+            check(e1 != nullptr && e2 != nullptr && spy.get_text_width(e1->name) <= MapSelectScreen::footer_width() && spy.get_text_width(e2->name) <= MapSelectScreen::footer_width(),
+                  "... and neither line leaves the box");
+            check(e1 != nullptr && e2 != nullptr && c.first.compare(0, e1->name.size(), e1->name) == 0 && c.second.compare(0, e2->name.size(), e2->name) == 0, "... a line that is cut keeps its beginning");
+        }
+        Spy sizes(arc);
+        check(MapSelectScreen::footer_font(sizes, "Empty seats at START:") == FontSize::Px18 && MapSelectScreen::footer_font(sizes, std::string(33, 'x')) == FontSize::Px18 &&
+              MapSelectScreen::footer_font(sizes, std::string(34, 'x')) == FontSize::Px12, "footer_font: 18 px up to the box's width, 12 px beyond it (the Spy's text is as wide at every size)");
+    }
+    {
         // the chat panel's lines wrap and the oldest drop off the top: many long lines, only what fits (bottom row 488) stays
         ScreenState state(kIslands);
         state.online(true);

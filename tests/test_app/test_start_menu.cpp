@@ -303,6 +303,42 @@ std::vector<Variant> all_variants() {
         r.menu.take_request();
         r.menu.connection_failed(long_message());
     }});
+    v.push_back({"host, four players with a bot in each seat, teams and a long error", [](Rig& r) {
+        r.to_panel(MenuId::HostOnline);
+        for (MenuId id : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+            r.click(id);
+            r.click(id);
+            r.click(id);
+        }
+        r.click(MenuId::HostTeams);
+        r.click(MenuId::Host);
+        r.menu.take_request();
+        r.menu.connection_failed(long_message());
+    }});
+    v.push_back({"host, three players with teams", [](Rig& r) {
+        r.to_panel(MenuId::HostOnline);
+        r.click(MenuId::HostPlayers);
+        r.click(MenuId::HostPlayers);
+        r.click(MenuId::HostSeat2);
+        r.click(MenuId::HostTeams);
+        r.click(MenuId::HostTeams);
+    }});
+    v.push_back({"host, two players", [](Rig& r) {
+        r.to_panel(MenuId::HostOnline);
+        r.click(MenuId::HostPlayers);
+        r.click(MenuId::HostSeat1);
+    }});
+    v.push_back({"the room with three bots of three levels and the teams", [](Rig& r) {
+        r.to_panel(MenuId::HostOnline);
+        r.click(MenuId::HostSeat1);
+        r.click(MenuId::HostSeat2);
+        r.click(MenuId::HostSeat2);
+        r.click(MenuId::HostSeat3);
+        r.click(MenuId::HostSeat3);
+        r.click(MenuId::HostSeat3);
+        r.click(MenuId::HostTeams);
+        r.menu.show_room("demo-small-4p-abcdef", 1, 4);
+    }});
     v.push_back({"connecting, a long server", [](Rig& r) {
         r.menu.set_server(ServerAddress{std::string(60, 'h') + ".example.org", 4001});
         r.to_panel(MenuId::JoinWithCode);
@@ -1088,9 +1124,13 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(r.element(MenuId::HostPlayers).value, std::string("4 players"));
         r.key(SDLK_LEFT);
         ASSERT_EQ(r.element(MenuId::HostPlayers).value, std::string("3 players"));
-        r.key(SDLK_DOWN);                                                                  // the empty seats at START (protocol 11: M4.3)
-        ASSERT_EQ(r.menu.selected(), MenuId::HostFill);
-        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Leave empty"));
+        r.key(SDLK_DOWN);                                                                  // the Red seat's bot at START (protocol 13: M4.3)
+        ASSERT_EQ(r.menu.selected(), MenuId::HostSeat1);
+        ASSERT_EQ(r.element(MenuId::HostSeat1).value, std::string("Leave empty"));
+        r.key(SDLK_DOWN);                                                                  // the Blue seat (a room of three has it)
+        ASSERT_EQ(r.menu.selected(), MenuId::HostSeat2);
+        r.key(SDLK_DOWN);                                                                  // the teams (three players have the choice: M4.5)
+        ASSERT_EQ(r.menu.selected(), MenuId::HostTeams);
         r.key(SDLK_DOWN);                                                                  // the name
         ASSERT_EQ(r.menu.selected(), MenuId::HostName);
         ASSERT_TRUE(r.element(MenuId::HostName).all_selected);
@@ -1101,7 +1141,7 @@ int main(int argc, char* argv[]) {
         r.key(SDLK_RETURN);
         const MenuRequest request = r.take();
         ASSERT_TRUE(request.type == MenuRequest::Type::Host);
-        ASSERT_TRUE(request.map == 0 && request.players == 3 && request.name == "Maya" && request.fill == net::FillLevel::None);
+        ASSERT_TRUE(request.map == 0 && request.players == 3 && request.name == "Maya" && request.fill == net::FillLevel::None && !request.teams.set);
         ASSERT_EQ(r.menu.panel(), MenuPanel::Connecting);
         ASSERT_EQ(r.menu.connect_origin(), MenuPanel::Host);
         r.menu.connection_failed("The server is busy.");
@@ -1182,121 +1222,424 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(none.copied());
     } TEST_END();
 
-    TEST_CASE("M4.3 Host: \"Empty seats at START\" goes round Leave empty, Easy bots, Medium bots, Hard bots (Left, Right, Enter, click) and is remembered; the request of Host carries it; the room's panel says what START will do; every control of both panels lies inside the screen and no two overlap") {
-        // the choice and its words
-        ASSERT_EQ(std::string(fill_choice_text(net::FillLevel::None)), std::string("Leave empty"));
-        ASSERT_EQ(std::string(fill_choice_text(net::FillLevel::Easy)), std::string("Easy bots"));
-        ASSERT_EQ(std::string(fill_choice_text(net::FillLevel::Medium)), std::string("Medium bots"));
-        ASSERT_EQ(std::string(fill_choice_text(net::FillLevel::Hard)), std::string("Hard bots"));
-        ASSERT_EQ(fill_choice_sentence(net::FillLevel::Medium), std::string("Empty seats will be Medium bots."));
-        ASSERT_EQ(fill_choice_sentence(net::FillLevel::Easy), std::string("Empty seats will be Easy bots."));
-        ASSERT_EQ(fill_choice_sentence(net::FillLevel::Hard), std::string("Empty seats will be Hard bots."));
-        ASSERT_EQ(fill_choice_sentence(net::FillLevel::None), std::string("Empty seats stay empty."));
+    TEST_CASE("M4.3 Host: a row for each seat after the leader's (Red, Blue and Black, as many as the room has) goes round Leave empty, Easy bot, Medium bot, Hard bot (Left, Right, Enter, click), each on its own, and is remembered; the request of Host carries the levels of the seats that the room has; the room's panel says what START will do; every control of both panels lies inside the screen and no two overlap") {
+        using L = net::FillLevel;
+        // the words of a seat's choice
+        ASSERT_EQ(std::string(fill_seat_text(L::None)), std::string("Leave empty"));
+        ASSERT_EQ(std::string(fill_seat_text(L::Easy)), std::string("Easy bot"));
+        ASSERT_EQ(std::string(fill_seat_text(L::Medium)), std::string("Medium bot"));
+        ASSERT_EQ(std::string(fill_seat_text(L::Hard)), std::string("Hard bot"));
+        // what the room's panel says START will do: the same level in every seat of the room keeps the one sentence of protocol 11, any other plan names its seats (the short form when the long one is
+        // longer than the line), the seats beyond the room and the leader's own seat are nobody's business
+        ASSERT_EQ(fill_choice_sentence(L::Medium), std::string("Empty seats will be Medium bots."));
+        ASSERT_EQ(fill_choice_sentence(L::Easy), std::string("Empty seats will be Easy bots."));
+        ASSERT_EQ(fill_choice_sentence(L::Hard), std::string("Empty seats will be Hard bots."));
+        ASSERT_EQ(fill_choice_sentence(L::None), std::string("Empty seats stay empty."));
+        const auto plan = [](L red, L blue, L black) {
+            net::FillPlan p;
+            p.level[1] = red;
+            p.level[2] = blue;
+            p.level[3] = black;
+            return p;
+        };
+        ASSERT_EQ(fill_choice_sentence(plan(L::Easy, L::None, L::Hard)), std::string("At START: Red gets an Easy bot, Black a Hard bot."));
+        ASSERT_EQ(fill_choice_sentence(plan(L::None, L::Medium, L::None)), std::string("At START: Blue gets a Medium bot."));
+        ASSERT_EQ(fill_choice_sentence(plan(L::Medium, L::Medium, L::Medium)), std::string("Empty seats will be Medium bots."));
+        ASSERT_EQ(fill_choice_sentence(plan(L::Easy, L::Medium, L::Hard)), std::string("At START: Red Easy, Blue Medium, Black Hard."));
+        ASSERT_EQ(fill_choice_sentence(plan(L::Hard, L::Easy, L::Easy), 2), std::string("Empty seats will be Hard bots."));            // (a room of two has the Red seat only)
+        ASSERT_EQ(fill_choice_sentence(plan(L::None, L::Easy, L::Easy), 2), std::string("Empty seats stay empty."));
+        ASSERT_EQ(fill_choice_sentence(plan(L::Easy, L::Hard, L::Hard), 3), std::string("At START: Red gets an Easy bot, Blue a Hard bot."));
+        net::FillPlan own;
+        own.level[0] = L::Hard;
+        ASSERT_EQ(fill_choice_sentence(own), std::string("Empty seats stay empty."));
+        for (size_t i = 0; i < 64; ++i) {                                                  // every plan: one line of the room's panel (520 px: the estimate of Recorder is 9 px a character at 18 px)
+            const net::FillPlan p = plan(static_cast<L>(i % 4), static_cast<L>((i / 4) % 4), static_cast<L>(i / 16));
+            for (int players = 2; players <= 4; ++players) ASSERT_TRUE(fill_choice_sentence(p, players).size() * 9 <= 520);
+        }
         Rig r;
         r.to_panel(MenuId::HostOnline);
-        ASSERT_TRUE(has_text(r.menu.elements(), "Empty seats at START"));                 // the label of the choice
+        // the rows: a label and a cycler for each seat after the leader's, in the order of the keys; the old single choice is gone
+        const std::vector<MenuId> four = {MenuId::HostMap, MenuId::HostPlayers, MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3, MenuId::HostTeams, MenuId::HostName, MenuId::Host, MenuId::Back};
+        ASSERT_TRUE(control_ids(r.menu) == four);
+        for (const char* label : {"Red at START", "Blue at START", "Black at START", "Teams", "Map", "Players", "Your name"}) ASSERT_TRUE(has_text(r.menu.elements(), label));
+        ASSERT_FALSE(has_text(r.menu.elements(), "Empty seats at START"));
+        for (const MenuId id : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+            ASSERT_EQ(r.element(id).kind, MenuKind::Cycler);
+            ASSERT_EQ(r.element(id).value, std::string("Leave empty"));                    // nothing is seated unless the player chose it
+        }
+        // a room of three has two seat rows after the leader's and a room of two has one (the Teams row needs three)
+        {
+            Rig three;
+            three.to_panel(MenuId::HostOnline);
+            three.click(MenuId::HostPlayers);                                              // 4 -> 2
+            const std::vector<MenuId> two_players = {MenuId::HostMap, MenuId::HostPlayers, MenuId::HostSeat1, MenuId::HostName, MenuId::Host, MenuId::Back};
+            ASSERT_TRUE(control_ids(three.menu) == two_players);
+            ASSERT_TRUE(has_text(three.menu.elements(), "Red at START") && !has_text(three.menu.elements(), "Blue at START") && !has_text(three.menu.elements(), "Black at START"));
+            three.click(MenuId::HostPlayers);                                              // 2 -> 3
+            const std::vector<MenuId> three_players = {MenuId::HostMap, MenuId::HostPlayers, MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostTeams, MenuId::HostName, MenuId::Host, MenuId::Back};
+            ASSERT_TRUE(control_ids(three.menu) == three_players);
+            ASSERT_TRUE(has_text(three.menu.elements(), "Blue at START") && !has_text(three.menu.elements(), "Black at START"));
+        }
         r.key(SDLK_DOWN);
         r.key(SDLK_DOWN);
-        ASSERT_EQ(r.menu.selected(), MenuId::HostFill);
-        ASSERT_EQ(r.element(MenuId::HostFill).kind, MenuKind::Cycler);
-        const char* const words[4] = {"Leave empty", "Easy bots", "Medium bots", "Hard bots"};
+        ASSERT_EQ(r.menu.selected(), MenuId::HostSeat1);
+        const char* const words[4] = {"Leave empty", "Easy bot", "Medium bot", "Hard bot"};
         for (int lap = 0; lap < 2; ++lap) {
             for (const char* word : words) {
-                ASSERT_EQ(r.element(MenuId::HostFill).value, std::string(word));
+                ASSERT_EQ(r.element(MenuId::HostSeat1).value, std::string(word));
                 r.key(SDLK_RIGHT);
             }
         }
         r.key(SDLK_LEFT);
-        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Hard bots"));            // Left from the first goes to the last
+        ASSERT_EQ(r.element(MenuId::HostSeat1).value, std::string("Hard bot"));            // Left from the first goes to the last
         r.key(SDLK_RETURN);
-        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Leave empty"));          // Enter goes on, round
-        r.click(MenuId::HostFill);
-        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Easy bots"));
+        ASSERT_EQ(r.element(MenuId::HostSeat1).value, std::string("Leave empty"));         // Enter goes on, round
+        r.click(MenuId::HostSeat1);
+        ASSERT_EQ(r.element(MenuId::HostSeat1).value, std::string("Easy bot"));
+        ASSERT_EQ(r.element(MenuId::HostSeat2).value, std::string("Leave empty"));         // each row is its own
+        ASSERT_EQ(r.element(MenuId::HostSeat3).value, std::string("Leave empty"));
         ASSERT_TRUE(std::count(r.changes.begin(), r.changes.end(), MenuSetting::HostFill) >= 11);       // every change is reported for the settings file
-        r.key(SDLK_RIGHT);                                                                 // Medium bots
-        ASSERT_EQ(r.menu.settings().host_fill, net::FillLevel::Medium);
-        // the request carries it, and a failed attempt keeps it
+        r.key(SDLK_RIGHT);                                                                 // Red: Medium bot
+        r.key(SDLK_DOWN);
+        ASSERT_EQ(r.menu.selected(), MenuId::HostSeat2);
+        for (int i = 0; i < 3; ++i) r.key(SDLK_RIGHT);                                     // Blue: Hard bot
+        r.key(SDLK_DOWN);
+        ASSERT_EQ(r.menu.selected(), MenuId::HostSeat3);
+        r.click(MenuId::HostSeat3);                                                        // Black: Easy bot
+        ASSERT_TRUE(r.menu.settings().host_fill.level[0] == L::None && r.menu.settings().host_fill.level[1] == L::Medium && r.menu.settings().host_fill.level[2] == L::Hard &&
+                    r.menu.settings().host_fill.level[3] == L::Easy);
+        // the request carries the levels of the seats that the room has (never the leader's seat, never a seat beyond the room), and a failed attempt keeps them
+        r.key(SDLK_DOWN);                                                                  // the teams
         r.key(SDLK_DOWN);                                                                  // the name
         r.key(SDLK_RETURN);
         const MenuRequest request = r.take();
-        ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.fill == net::FillLevel::Medium);
+        ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.players == 4 && request.fill == plan(L::Medium, L::Hard, L::Easy));
         r.menu.connection_failed("The server is busy.");
-        ASSERT_EQ(r.element(MenuId::HostFill).value, std::string("Medium bots"));
+        ASSERT_EQ(r.element(MenuId::HostSeat1).value, std::string("Medium bot"));
+        ASSERT_EQ(r.element(MenuId::HostSeat2).value, std::string("Hard bot"));
+        ASSERT_EQ(r.element(MenuId::HostSeat3).value, std::string("Easy bot"));
+        r.click(MenuId::HostPlayers);                                                      // 2 players: the Red seat only
+        r.click(MenuId::Host);
+        const MenuRequest two = r.take();
+        ASSERT_TRUE(two.type == MenuRequest::Type::Host && two.players == 2 && two.fill == plan(L::Medium, L::None, L::None));
+        r.menu.connection_failed("The server is busy.");
+        r.click(MenuId::HostPlayers);                                                      // 3 players
+        r.click(MenuId::Host);
+        const MenuRequest three = r.take();
+        ASSERT_TRUE(three.type == MenuRequest::Type::Host && three.players == 3 && three.fill == plan(L::Medium, L::Hard, L::None));
+        r.menu.connection_failed("The server is busy.");
+        r.click(MenuId::HostPlayers);                                                      // back to 4: the Black seat's choice was kept all along
+        ASSERT_EQ(r.element(MenuId::HostSeat3).value, std::string("Easy bot"));
         // the room's panel says what START will do
         r.menu.show_room("demo-tiny-4p-abc234", 1, 4);
-        ASSERT_TRUE(has_text(r.menu.elements(), "Empty seats will be Medium bots."));
+        ASSERT_TRUE(has_text(r.menu.elements(), "At START: Red Medium, Blue Hard, Black Easy."));
         ASSERT_FALSE(has_text(r.menu.elements(), "Empty seats stay empty."));
+        r.menu.show_room("demo-tiny-2p-abc234", 1, 2);
+        ASSERT_TRUE(has_text(r.menu.elements(), "Empty seats will be Medium bots."));      // (the room of two has the Red seat only)
+        Rig uniform;
+        uniform.to_panel(MenuId::HostOnline);
+        for (const MenuId id : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+            uniform.click(id);
+            uniform.click(id);
+        }
+        uniform.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        ASSERT_TRUE(has_text(uniform.menu.elements(), "Empty seats will be Medium bots."));
         Rig none;
         none.menu.show_room("demo-tiny-4p-abc234", 1, 4);
         ASSERT_TRUE(has_text(none.menu.elements(), "Empty seats stay empty.") && !has_text(none.menu.elements(), "bots."));
-        // the settings file: written under `host_fill`, read back, and anything else is the default
+        // the settings file: written under `host_fill` (one word when every seat is the same, else four), read back; an old file's one word is every seat after the leader's; anything else is the default
         {
             TempDir temp;
             ConfigStore store;
             store.set_location(temp.file("settings.ini"));
             MenuSettings s;
-            s.host_fill = net::FillLevel::Hard;
+            s.host_fill = plan(L::Easy, L::None, L::Hard);
             s.write(store, MenuSetting::HostFill);
-            ASSERT_EQ(store.get_string("host_fill", "", 99), std::string("hard"));
+            ASSERT_EQ(store.get_string("host_fill", "", 99), std::string("none,easy,none,hard"));
             MenuSettings back;
             back.load(store);
-            ASSERT_EQ(back.host_fill, net::FillLevel::Hard);
+            ASSERT_TRUE(back.host_fill == s.host_fill);
+            MenuSettings same;
+            same.host_fill = net::FillPlan(L::Hard);
+            same.write(store, MenuSetting::HostFill);
+            ASSERT_EQ(store.get_string("host_fill", "", 99), std::string("hard"));
+            back.load(store);
+            ASSERT_TRUE(back.host_fill == plan(L::Hard, L::Hard, L::Hard));                // (the leader's seat gets nothing)
             store.set_string("host_fill", "  MEDIUM ");
             back.load(store);
-            ASSERT_EQ(back.host_fill, net::FillLevel::Medium);                             // (any case, blanks cut)
-            store.set_string("host_fill", "loud");
+            ASSERT_TRUE(back.host_fill == plan(L::Medium, L::Medium, L::Medium));          // (any case, blanks cut)
+            store.set_string("host_fill", " Easy , none ,HARD, none");
             back.load(store);
-            ASSERT_EQ(back.host_fill, net::FillLevel::None);
-            store.set_string("host_fill", "");
-            back.load(store);
-            ASSERT_EQ(back.host_fill, net::FillLevel::None);
+            ASSERT_TRUE(back.host_fill == plan(L::None, L::Hard, L::None));                // (four words: the first is the leader's seat and counts for nothing)
+            for (const char* bad : {"loud", "easy,hard", "easy,easy,easy,easy,easy", "easy,,easy,easy", "none,none,none,loud", ""}) {
+                store.set_string("host_fill", bad);
+                back.load(store);
+                ASSERT_FALSE(back.host_fill.any());
+            }
             MenuSettings fresh;
-            ASSERT_EQ(fresh.host_fill, net::FillLevel::None);                              // nothing is seated unless the player chose it
+            ASSERT_FALSE(fresh.host_fill.any());                                           // nothing is seated unless the player chose it
         }
-        // the geometry: every control and every line inside the screen, no two controls over each other, the label of the choice beside its control
-        for (const MenuPanel panel : {MenuPanel::Host, MenuPanel::Room}) {
-            Rig g;
-            if (panel == MenuPanel::Host) g.to_panel(MenuId::HostOnline);
-            else g.menu.show_room("demo-tiny-4p-abc234", 1, 4);
-            const std::vector<MenuElement> all = g.menu.elements();
-            for (size_t i = 0; i < all.size(); ++i) {
-                ASSERT_TRUE(all[i].rect.x >= 16 && all[i].rect.y >= 16 && all[i].rect.x + all[i].rect.w <= 624 && all[i].rect.y + all[i].rect.h <= 464);
-                for (size_t j = i + 1; j < all.size(); ++j) {
-                    if (all[i].id != MenuId::None && all[j].id != MenuId::None) ASSERT_FALSE(intersects(all[i].rect, all[j].rect));
+        // the geometry, in every state: every control and every line inside the screen, no two controls over each other, the label of each row beside its control and the caption under the last
+        // of the rows
+        for (int players = 2; players <= 4; ++players) {
+            for (const MenuPanel panel : {MenuPanel::Host, MenuPanel::Room}) {
+                Rig g;
+                g.to_panel(MenuId::HostOnline);
+                while (g.menu.settings().host_players != players) g.click(MenuId::HostPlayers);
+                for (const MenuId id : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+                    if (g.exists(id)) g.click(id);
+                }
+                if (g.exists(MenuId::HostTeams)) g.click(MenuId::HostTeams);
+                if (panel == MenuPanel::Room) g.menu.show_room("demo-tiny-4p-abc234", 1, players);
+                const std::vector<MenuElement> all = g.menu.elements();
+                for (size_t i = 0; i < all.size(); ++i) {
+                    ASSERT_TRUE(all[i].rect.x >= 16 && all[i].rect.y >= 16 && all[i].rect.x + all[i].rect.w <= 624 && all[i].rect.y + all[i].rect.h <= 464);
+                    for (size_t j = i + 1; j < all.size(); ++j) {
+                        if (all[i].id != MenuId::None && all[j].id != MenuId::None) ASSERT_FALSE(intersects(all[i].rect, all[j].rect));
+                    }
                 }
             }
         }
-        Rig g;
-        g.to_panel(MenuId::HostOnline);
-        MenuElement label;
-        for (const MenuElement& e : g.menu.elements()) {
-            if (e.text == "Empty seats at START") label = e;
+        for (int players = 2; players <= 4; ++players) {
+            Rig g;
+            g.to_panel(MenuId::HostOnline);
+            while (g.menu.settings().host_players != players) g.click(MenuId::HostPlayers);
+            const std::vector<MenuElement> all = g.menu.elements();
+            const struct { const char* label; MenuId id; } rows[] = {{"Map", MenuId::HostMap},         {"Players", MenuId::HostPlayers}, {"Red at START", MenuId::HostSeat1},
+                                                                    {"Blue at START", MenuId::HostSeat2}, {"Black at START", MenuId::HostSeat3}, {"Teams", MenuId::HostTeams},
+                                                                    {"Your name", MenuId::HostName}};
+            MenuElement last;                                                              // the last row of the choices (the name is no choice)
+            for (const auto& row : rows) {
+                if (!g.exists(row.id)) continue;
+                MenuElement label;
+                for (const MenuElement& e : all) {
+                    if (e.text == row.label && e.id == MenuId::None) label = e;
+                }
+                const MenuElement control = g.element(row.id);
+                ASSERT_EQ(label.text, std::string(row.label));
+                ASSERT_TRUE(label.rect.x + label.rect.w <= control.rect.x && label.rect.y < control.rect.y + control.rect.h && control.rect.y < label.rect.y + label.rect.h);
+                if (row.id != MenuId::HostName) last = control;
+            }
+            Recorder rec;                                                                  // every label is drawn whole (a text that is cut would lose its end)
+            render_start_menu(rec, archive(), g.menu);
+            for (const auto& row : rows) {
+                if (!g.exists(row.id)) continue;
+                bool whole = false;
+                for (const Recorder::Text& t : rec.texts) whole = whole || t.text == row.label;
+                ASSERT_TRUE(whole);
+            }
+            // the caption under the rows (the panel says what the standard bot does, it gathers food, raids and fights back, and must not promise more): exact words, dim, between the last row and the name,
+            // drawn whole and 14 px
+            ASSERT_EQ(std::string(fill_choice_caption()), std::string("Bots gather food, raid and fight back."));
+            MenuElement caption;
+            MenuElement name_label;
+            for (const MenuElement& e : all) {
+                if (e.text == fill_choice_caption()) caption = e;
+                if (e.text == "Your name") name_label = e;
+            }
+            ASSERT_EQ(caption.text, std::string(fill_choice_caption()));
+            ASSERT_TRUE(caption.id == MenuId::None && caption.tone == MenuTone::Dim && caption.font == FontSize::Px14 && caption.centered);
+            ASSERT_TRUE(caption.rect.y >= last.rect.y + last.rect.h && caption.rect.y + caption.rect.h <= name_label.rect.y);                    // under the last row, above the name
+            ASSERT_TRUE(caption.rect.x <= last.rect.x && caption.rect.x + caption.rect.w >= last.rect.x + last.rect.w);                            // centred under the whole control
+            bool caption_drawn = false;
+            for (const Recorder::Text& t : rec.texts) caption_drawn = caption_drawn || (t.text == fill_choice_caption() && t.size == FontSize::Px14);
+            ASSERT_TRUE(caption_drawn);
         }
-        const MenuElement fill = g.element(MenuId::HostFill);
-        ASSERT_TRUE(label.rect.x + label.rect.w <= fill.rect.x && label.rect.y < fill.rect.y + fill.rect.h && fill.rect.y < label.rect.y + label.rect.h);
-        Recorder rec;                                                                      // the label is drawn whole (a text that is cut would lose its end)
-        render_start_menu(rec, archive(), g.menu);
-        bool whole = false;
-        for (const Recorder::Text& t : rec.texts) whole = whole || t.text == "Empty seats at START";
-        ASSERT_TRUE(whole);
-        // the caption under the choice (the panel says what the standard bot does, it gathers food, raids and fights back, and must not promise more): exact words, dim, between the choice and the name, drawn whole and 14 px
-        ASSERT_EQ(std::string(fill_choice_caption()), std::string("Bots gather food, raid and fight back."));
-        MenuElement caption;
-        MenuElement name_label;
-        for (const MenuElement& e : g.menu.elements()) {
-            if (e.text == fill_choice_caption()) caption = e;
-            if (e.text == "Your name") name_label = e;
-        }
-        ASSERT_EQ(caption.text, std::string(fill_choice_caption()));
-        ASSERT_TRUE(caption.id == MenuId::None && caption.tone == MenuTone::Dim && caption.font == FontSize::Px14 && caption.centered);
-        ASSERT_TRUE(caption.rect.y >= fill.rect.y + fill.rect.h && caption.rect.y + caption.rect.h <= name_label.rect.y);            // under the choice, above the name
-        ASSERT_TRUE(caption.rect.x <= fill.rect.x && caption.rect.x + caption.rect.w >= fill.rect.x + fill.rect.w);                    // centred under the whole control
-        bool caption_drawn = false;
-        for (const Recorder::Text& t : rec.texts) caption_drawn = caption_drawn || (t.text == fill_choice_caption() && t.size == FontSize::Px14);
-        ASSERT_TRUE(caption_drawn);
         Rig room_panel;
         room_panel.menu.show_room("demo-tiny-4p-abc234", 1, 4);
         ASSERT_FALSE(has_text(room_panel.menu.elements(), fill_choice_caption()));                                                       // (only the panel that has the choice)
+    } TEST_END();
+
+    TEST_CASE("M4.5 Host: the Teams row of a room of three or four players goes round the room's choices, free for all first (Left, Right, Enter, click), and is remembered; the request carries it; a room of two has no such row; a choice that the room does not offer any more is free for all again; the room's panel says the teams") {
+        const LocalTeams ffa{};
+        const LocalTeams green_red{true, 0, 1};
+        const LocalTeams green_blue{true, 0, 2};
+        const LocalTeams green_black{true, 0, 3};
+        const LocalTeams red_blue{true, 1, 2};
+        // the words of a choice: the colour words of the seats that play, the pair first
+        ASSERT_EQ(StartMenu::host_teams_text(ffa, 4), std::string("Free for all"));
+        ASSERT_EQ(StartMenu::host_teams_text(green_red, 4), std::string("Green + Red against Blue + Black"));
+        ASSERT_EQ(StartMenu::host_teams_text(green_blue, 4), std::string("Green + Blue against Red + Black"));
+        ASSERT_EQ(StartMenu::host_teams_text(green_black, 4), std::string("Green + Black against Red + Blue"));
+        ASSERT_EQ(StartMenu::host_teams_text(green_red, 3), std::string("Green + Red against Blue"));
+        ASSERT_EQ(StartMenu::host_teams_text(red_blue, 3), std::string("Red + Blue against Green"));
+        ASSERT_EQ(room_teams_sentence(green_red, 4), std::string("Room teams: Green + Red against Blue + Black."));        // (they are the room's: its code names them)
+        ASSERT_EQ(room_teams_sentence(ffa, 4), std::string());
+        ASSERT_EQ(room_teams_sentence(green_black, 3), std::string());                         // (a choice that the room does not offer is no teams)
+        ASSERT_EQ(room_teams_sentence(green_red, 2), std::string());
+        Rig r;
+        r.to_panel(MenuId::HostOnline);
+        ASSERT_TRUE(r.exists(MenuId::HostTeams) && r.element(MenuId::HostTeams).kind == MenuKind::Cycler);
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string("Free for all"));            // free for all until the leader chooses
+        for (int i = 0; i < 5; ++i) r.key(SDLK_DOWN);                                          // the map, the players, the three seats, the teams
+        ASSERT_EQ(r.menu.selected(), MenuId::HostTeams);
+        const char* const four[4] = {"Free for all", "Green + Red against Blue + Black", "Green + Blue against Red + Black", "Green + Black against Red + Blue"};
+        for (int lap = 0; lap < 2; ++lap) {
+            for (const char* word : four) {
+                ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string(word));
+                r.key(SDLK_RIGHT);
+            }
+        }
+        r.key(SDLK_LEFT);
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string(four[3]));                   // Left from the first goes to the last
+        r.key(SDLK_RETURN);
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string(four[0]));
+        r.click(MenuId::HostTeams);
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string(four[1]));
+        ASSERT_TRUE(std::count(r.changes.begin(), r.changes.end(), MenuSetting::HostTeams) >= 11);
+        // the request carries it
+        r.click(MenuId::Host);
+        const MenuRequest request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.teams == green_red && request.players == 4);
+        r.menu.connection_failed("The server is busy.");
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string(four[1]));                   // (a failed attempt keeps it)
+        // a room of three offers its own choices: the pairs 0+1, 0+2 and 1+2 (the third seat plays alone); the choice that was made stays while the room offers it
+        r.mouse_move(MenuId::HostPlayers);
+        r.key(SDLK_LEFT);                                                                      // 4 -> 3: Green + Red against Blue is one of its choices
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string("Green + Red against Blue"));
+        ASSERT_TRUE(r.menu.settings().host_teams == green_red);
+        r.key(SDLK_RIGHT);                                                                     // 3 -> 4: and one of the four's
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string(four[1]));
+        r.click(MenuId::HostPlayers);                                                          // 4 -> 2: no teams, the choice is gone
+        ASSERT_FALSE(r.exists(MenuId::HostTeams));
+        ASSERT_FALSE(r.menu.settings().host_teams.set);
+        r.click(MenuId::Host);
+        ASSERT_TRUE(r.take().teams == ffa);
+        r.menu.connection_failed("The server is busy.");
+        r.click(MenuId::HostPlayers);                                                          // 2 -> 3
+        const char* const three[4] = {"Free for all", "Green + Red against Blue", "Green + Blue against Red", "Red + Blue against Green"};
+        for (const char* word : three) {
+            ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string(word));
+            r.click(MenuId::HostTeams);
+        }
+        r.click(MenuId::HostTeams);
+        r.click(MenuId::HostTeams);
+        r.click(MenuId::HostTeams);                                                            // Red + Blue against Green
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string(three[3]));
+        r.click(MenuId::HostPlayers);                                                          // 3 -> 4: the pair 1+2 is not a choice of a room of four
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string("Free for all"));
+        ASSERT_FALSE(r.menu.settings().host_teams.set);
+        // the room's panel says the teams where a message would stand (a message takes the place)
+        Rig room;
+        room.to_panel(MenuId::HostOnline);
+        room.click(MenuId::HostTeams);
+        room.click(MenuId::HostTeams);                                                         // Green + Blue against Red + Black
+        room.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        const size_t with_teams = room.menu.elements().size();
+        ASSERT_TRUE(has_text(room.menu.elements(), "Room teams: Green + Blue against Red + Black."));
+        room.menu.show_room("demo-tiny-2p-abc234", 1, 2);                                      // (a room of two has no teams)
+        ASSERT_FALSE(has_text(room.menu.elements(), "Room teams:"));
+        ASSERT_EQ(room.menu.elements().size() + 1, with_teams);
+        Rig plain;
+        plain.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        ASSERT_EQ(plain.menu.elements().size() + 1, with_teams);                               // free for all: the panel is what it was
+        room.clipboard.writable = false;
+        room.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        room.key(SDLK_c, KMOD_GUI);
+        ASSERT_TRUE(has_text(room.menu.elements(), "Copy failed") && !has_text(room.menu.elements(), "Room teams:"));
+        // the settings file: written under `host_teams` (ffa or the pair), read back, anything else is free for all
+        {
+            TempDir temp;
+            ConfigStore store;
+            store.set_location(temp.file("settings.ini"));
+            MenuSettings s;
+            s.host_teams = green_blue;
+            s.write(store, MenuSetting::HostTeams);
+            ASSERT_EQ(store.get_string("host_teams", "", 99), std::string("0+2"));
+            MenuSettings back;
+            back.load(store);
+            ASSERT_TRUE(back.host_teams == green_blue);
+            ASSERT_FALSE(back.teams.set);                                                      // (the single-player panel's choice is its own key)
+            s.host_teams = ffa;
+            s.write(store, MenuSetting::HostTeams);
+            ASSERT_EQ(store.get_string("host_teams", "", 99), std::string("ffa"));
+            back.load(store);
+            ASSERT_FALSE(back.host_teams.set);
+            store.set_string("host_teams", " 1+2 ");
+            back.load(store);
+            ASSERT_TRUE(back.host_teams == red_blue);
+            for (const char* bad : {"1+1", "0+4", "01", "x", ""}) {
+                store.set_string("host_teams", bad);
+                back.load(store);
+                ASSERT_FALSE(back.host_teams.set);
+            }
+            MenuSettings fresh;
+            ASSERT_FALSE(fresh.host_teams.set);
+        }
+        // a choice that is stored for a room that does not offer it counts as free for all (the panel shows what the request will carry)
+        Rig stale;
+        MenuSettings stored;
+        stored.name = "Player";
+        stored.host_players = 4;
+        stored.host_teams = red_blue;
+        stale.menu.set_settings(stored);
+        stale.to_panel(MenuId::HostOnline);
+        ASSERT_EQ(stale.element(MenuId::HostTeams).value, std::string("Free for all"));
+        stale.click(MenuId::Host);
+        ASSERT_TRUE(stale.take().teams == ffa);
+    } TEST_END();
+
+    TEST_CASE("M4.6 Host: the Teams row's choice is a word of the room's code (demo-<map>-<n>p-t01-<six characters>: the room makes the teams for every start, the one when it fills up too): every map and every choice of a room of three or four, nothing for free for all, for a room of two and for a choice that the room does not offer; the code is what the server and every game read (net::room_code_teams), valid and within the 32 characters; the Host button's request carries the choice and the code made from it names it") {
+        const char* keys[] = {"tiny", "small", "medium", "gauntlet", "treasure", "islands"};
+        const auto counter = []() {
+            auto n = std::make_shared<uint32_t>(0);
+            return std::function<uint32_t()>([n]() { return *n += 977u; });
+        };
+        size_t words = 0;
+        for (size_t m = 0; m < kMenuMapCount; ++m) {
+            for (int players = 2; players <= 4; ++players) {
+                for (const sim::StartTeams& choice : sim::room_team_choices(static_cast<uint8_t>(players))) {
+                    const std::string plain = make_room_code(menu_map(m), players, counter());                       // (what the code was before: the same random characters)
+                    const std::string code = make_room_code(menu_map(m), players, counter(), choice);
+                    ASSERT_TRUE(net::valid_room_code(code) && code.size() <= 27 && code.size() <= net::kMaxRoomCodeChars);
+                    ASSERT_TRUE(net::room_code_teams(code) == choice);
+                    if (!choice.set) {
+                        ASSERT_EQ(code, plain);                                                                         // free for all: the code is what it was
+                        continue;
+                    }
+                    ++words;
+                    const std::string word = std::string("t") + static_cast<char>('0' + choice.a) + static_cast<char>('0' + choice.b);
+                    const std::string head = std::string("demo-") + keys[m] + "-" + std::to_string(players) + "p-";
+                    ASSERT_EQ(code, head + word + "-" + plain.substr(head.size()));                                     // the word between the player count and the six characters, nothing else changed
+                    ASSERT_EQ(code.size(), plain.size() + 4);
+                }
+            }
+        }
+        ASSERT_EQ(words, kMenuMapCount * 6);                                                                           // three choices for three players, three for four, on each of the six maps
+        // a choice that the room does not offer is no word: a room of two, a seat that the room does not have, the same team written from the other end
+        const LocalTeams green_red{true, 0, 1};
+        const std::vector<std::pair<int, LocalTeams>> not_offered = {
+            {2, green_red}, {3, LocalTeams{true, 0, 3}}, {3, LocalTeams{true, 2, 3}}, {4, LocalTeams{true, 1, 2}}, {4, LocalTeams{true, 2, 3}}, {4, LocalTeams{true, 1, 0}},
+            {4, LocalTeams{true, 0, 0}}, {0, green_red},                                                               // (0 players is a room of two)
+        };
+        for (const auto& c : not_offered) {
+            const std::string plain = make_room_code(menu_map(4), c.first, counter());
+            const std::string code = make_room_code(menu_map(4), c.first, counter(), c.second);
+            ASSERT_EQ(code, plain);
+            ASSERT_FALSE(net::room_code_teams(code).set);
+        }
+        ASSERT_EQ(make_room_code(menu_map(4), 9, counter(), green_red), make_room_code(menu_map(4), 4, counter(), green_red));      // (the players are clamped to 2 .. 4 first: nine is four)
+        ASSERT_EQ(make_room_code(menu_map(4), 4, []() { return 0u; }, LocalTeams{true, 0, 3}), std::string("demo-treasure-4p-t03-aaaaaa"));      // the form of the code, by name
+        ASSERT_EQ(make_room_code(menu_map(1), 3, []() { return 0u; }, LocalTeams{true, 1, 2}), std::string("demo-small-3p-t12-aaaaaa"));
+        // the Host button: the request carries the choice, and the code made from it names it
+        Rig r;
+        r.to_panel(MenuId::HostOnline);
+        r.click(MenuId::HostTeams);
+        r.click(MenuId::HostTeams);
+        r.click(MenuId::HostTeams);                                                                                    // Green + Black against Red + Blue
+        ASSERT_EQ(r.element(MenuId::HostTeams).value, std::string("Green + Black against Red + Blue"));
+        r.click(MenuId::Host);
+        const MenuRequest request = r.take();
+        ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.teams == LocalTeams({true, 0, 3}) && request.players == 4);
+        const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, []() { return 0u; }, request.teams);
+        ASSERT_EQ(code, std::string("demo-treasure-4p-t03-aaaaaa"));
+        ASSERT_TRUE(net::room_code_teams(code) == LocalTeams({true, 0, 3}));
+        r.menu.connection_failed("The server is busy.");
+        r.click(MenuId::HostPlayers);                                                                                  // 4 -> 2: the choice is gone from the request, so from the code
+        r.click(MenuId::Host);
+        const MenuRequest two = r.take();
+        ASSERT_TRUE(two.players == 2 && !two.teams.set);
+        ASSERT_FALSE(net::room_code_teams(make_room_code(menu_map(static_cast<size_t>(two.map)), two.players, []() { return 0u; }, two.teams)).set);
     } TEST_END();
 
     TEST_CASE("M4.4 Host: the map is Treasure until a choice is stored (the list keeps the page's order, so Tiny, its first entry, is not the default) and a stored choice wins: a new menu, an empty store, a store with a word that is no map, a store with each of the six (any case); the panel shows it, the request carries it, the room's code names it, a change is stored") {
@@ -1319,10 +1662,10 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(r.menu.selected(), MenuId::HostMap);
             ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Treasure"));
             ASSERT_EQ(r.menu.settings().host_map, 4);
-            r.key(SDLK_DOWN);                                                              // players
-            r.key(SDLK_DOWN);                                                              // the empty seats at START
-            r.key(SDLK_DOWN);                                                              // the name
-            r.key(SDLK_DOWN);                                                              // Host
+            for (const MenuId next : {MenuId::HostPlayers, MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3, MenuId::HostTeams, MenuId::HostName, MenuId::Host}) {
+                r.key(SDLK_DOWN);                                                          // (the players, the three seats after the leader's, the teams, the name, Host)
+                ASSERT_EQ(r.menu.selected(), next);
+            }
             r.key(SDLK_RETURN);
             const MenuRequest request = r.take();
             ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.map == 4 && request.players == 4);
@@ -2086,9 +2429,8 @@ int main(int argc, char* argv[]) {
         {
             Rig r;
             r.to_panel(MenuId::HostOnline);
-            r.key(SDLK_DOWN);
-            r.key(SDLK_DOWN);
-            r.key(SDLK_DOWN);
+            for (int down = 0; down < 6; ++down) r.key(SDLK_DOWN);                         // (the players, the three seats after the leader's, the teams, the name: Enter in it hosts)
+            ASSERT_EQ(r.menu.selected(), MenuId::HostName);
             r.key(SDLK_RETURN);
             ASSERT_TRUE(r.take().type == MenuRequest::Type::Host);
             r.menu.connection_failed("The server is busy.");
@@ -2212,9 +2554,7 @@ int main(int argc, char* argv[]) {
         // the Host panel's name field too (its line stands where the server's note was)
         Rig h(0, "");
         h.to_panel(MenuId::HostOnline);
-        h.key(SDLK_DOWN);
-        h.key(SDLK_DOWN);
-        h.key(SDLK_DOWN);                                                                  // (map, players, empty seats, then the name)
+        for (int down = 0; down < 6; ++down) h.key(SDLK_DOWN);                             // (map, players, the three seats after the leader's, the teams, then the name)
         ASSERT_EQ(h.menu.selected(), MenuId::HostName);
         h.type("\xE6\x9D\x8E");
         ASSERT_EQ(h.menu.name(), std::string(""));
@@ -2304,7 +2644,12 @@ int main(int argc, char* argv[]) {
         r.click(MenuId::Copy);                                                             // a click that begins on the panel does
         ASSERT_EQ(r.clipboard.writes.size(), static_cast<size_t>(1));
         // the same with a button that the next panel has too, at the same place: the Join panel's Back is held while a room that was left puts the player on the Host panel, whose Back lies under it
+        // (the Host panel of a room of three players: the rows above Host and Back are as many as the room has, and only this one has its Back under the Join panel's)
         Rig j(0, "Dave");
+        j.to_panel(MenuId::HostOnline);
+        j.click(MenuId::HostPlayers);
+        j.click(MenuId::HostPlayers);
+        ASSERT_EQ(j.menu.settings().host_players, 3);
         j.to_panel(MenuId::JoinWithCode);
         const MenuElement back = j.element(MenuId::Back);
         const int32_t bx = back.rect.x + back.rect.w / 2;

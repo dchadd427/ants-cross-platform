@@ -1,17 +1,18 @@
-// Runs the page's own code that validates ?fill= on a table of addresses' values (tests/scripts/test_ants_server.sh): web/shell.html's antsFillArg (what may reach the game's arguments
-// as --fill-bots) and web/four.html's validFill (what may go into a link of the room). Both functions are cut out of the page between their marker comments and run as they are.
-// usage: node web_fill_check.js web/shell.html web/four.html     (exit 0: every row of the table holds; the first differing row is printed)
+// Runs the page's own code that validates ?fill=, ?teams= and ?start= on tables of addresses' values (tests/scripts/test_ants_server.sh): web/shell.html's antsFillArg / antsFillPlanArg / antsTeamsArg /
+// antsStartArg (what may reach the game's arguments as --fill-bots, --teams and --start-when) and web/lobby.html's validFill / validFillPlan (what may go into a link of the room). The functions are cut out of the pages between their marker
+// comments and run as they are.
+// usage: node web_fill_check.js web/shell.html web/lobby.html     (exit 0: every row of the table holds; the first differing row is printed)
 'use strict';
 const fs = require('fs');
 
-function extract(path, begin, end, name) {
+function extract(path, begin, end, names) {
     const text = fs.readFileSync(path, 'utf8');
     const at = text.indexOf(begin);
     const from = at < 0 ? -1 : text.indexOf('\n', at) + 1;              // (the code starts on the line after the marker's comment)
     const to = at < 0 ? -1 : text.lastIndexOf('\n', text.indexOf(end, from) - 1) + 1;     // (and ends before the line of the closing marker)
     if (from < 1 || to < from) throw new Error(path + ': the markers ' + begin + ' / ' + end + ' are missing');
     const code = text.slice(from, to);
-    return new Function(code + '\nreturn ' + name + ';')();
+    return new Function(code + '\nreturn {' + names.map((n) => n + ': ' + n).join(', ') + '};')();
 }
 
 // [value, what comes back]: the three words in any case come back in lower case; everything else is no fill
@@ -24,16 +25,54 @@ const table = [
     ['MEDIUM', 'medium'], ['ｍｅｄｉｕｍ', ''], ['Keasy', ''], ['hard'.repeat(2000), ''],
 ];
 
+// ... and what a LIST of levels is: four words for the seats 0 - 3 (none for none), or one word (every seat); the tested lower case text comes back, "" for no bots at all and for anything that is not one word
+// or four. The one-word rows of the table above are rows of this one too.
+const planTable = table.concat([
+    ['none,none,easy,hard', 'none,none,easy,hard'], ['none,easy,none,hard', 'none,easy,none,hard'], ['hard,hard,hard,hard', 'hard,hard,hard,hard'], ['easy,easy,easy,easy', 'easy,easy,easy,easy'],
+    ['NONE,Easy,None,HARD', 'none,easy,none,hard'], ['None,mEdIuM,medium,MEDIUM', 'none,medium,medium,medium'],
+    ['none,none,none,none', ''], ['NONE,none,None,NONE', ''],
+    ['easy,hard', ''], ['easy,hard,easy', ''], ['none,none,easy', ''], ['none,none,easy,hard,none', ''], ['none,none,easy,hard,', ''], ['none,none,easy,', ''], [',,,', ''], [',', ''], ['none,none,,hard', ''],
+    ['none, none,easy,hard', ''], ['none,none,easy,hard ', ''], [' none,none,easy,hard', ''], ['none,none,easy,hard\n', ''], ['none,none,easy,har', ''], ['none,none,easy,hardd', ''], ['none,none,easy,loud', ''],
+    ['none;none;easy;hard', ''], ['none none easy hard', ''], ['none|none|easy|hard', ''], ['none,none,easy,hard&seat=1', ''], ['none,none,easy,--room x', ''], ['none,none,easy,hard;ls', ''], ['--fill-bots,none,easy,hard', ''],
+    ['none,none,easy,hard\u0000', ''], ['none,none,ｅａｓｙ,hard', ''], ['none,none,İEASY,hard', ''], ['constructor,none,easy,hard', ''], ['__proto__,none,easy,hard', ''],
+    ['hard,'.repeat(2000), ''], [['none', 'none', 'easy', 'hard'], ''], [{ toString() { return 'none,none,easy,hard'; } }, ''],
+]);
+// how many people the leader's game waits for before it presses START by itself (the front page's card: 1 + its Friend rows): one digit 1 - 4, "" for anything else (no hook)
+const startTable = [
+    ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'],
+    ['', ''], [null, ''], [undefined, ''], [1, ''], [2, ''], [{}, ''], [['2'], ''], [{ toString() { return '2'; } }, ''],
+    ['0', ''], ['5', ''], ['9', ''], ['10', ''], ['12', ''], ['01', ''], ['02', ''], ['-1', ''], ['+2', ''], ['2.0', ''], ['2.5', ''], ['1e1', ''], ['0x2', ''],
+    [' 2', ''], ['2 ', ''], ['2\n', ''], ['\n2', ''], ['2\t', ''], ['2\0', ''], ['2,3', ''], ['2;ls', ''], ['2&seat=1', ''], ['2 --room x', ''], ['two', ''], ['\u0662', ''], ['\uff12', ''], ['constructor', ''],
+    ['2'.repeat(2000), ''],
+];
+// the teams: two different seats 0 - 3 as A+B (a "+" that arrived as a blank is read too); "" for anything else, free for all included (nothing to tell the game)
+const teamsTable = [
+    ['0+1', '0+1'], ['0+2', '0+2'], ['0+3', '0+3'], ['1+2', '1+2'], ['1+3', '1+3'], ['2+3', '2+3'], ['3+0', '3+0'], ['1+0', '1+0'], ['2+1', '2+1'],
+    ['0 1', '0+1'], ['2 3', '2+3'], ['3 0', '3+0'],
+    ['', ''], [null, ''], [undefined, ''], [42, ''], [{}, ''], [['0+1'], ''],
+    ['ffa', ''], ['FFA', ''], ['none', ''], ['0+0', ''], ['1+1', ''], ['2 2', ''], ['3+3', ''], ['0+4', ''], ['4+0', ''], ['0+9', ''], ['4+5', ''], ['9+0', ''],
+    ['01', ''], ['0', ''], ['0+', ''], ['+1', ''], ['0++1', ''], ['0+ 1', ''], ['0 +1', ''], ['0  1', ''], [' 0+1', ''], ['0+1 ', ''], ['0+1\n', ''], ['\n0+1', ''], ['0\t1', ''], ['0+1+2', ''], ['0+11', ''], ['00+1', ''],
+    ['0+1&teams=ffa', ''], ['0+1;ls', ''], ['0+1\n--name x', ''], ['0+1,2+3', ''], ['a+b', ''], ['0+one', ''], ['0+\u0967', ''], ['0+\uff11', ''], ['-1+2', ''], ['0-1', ''], ['0/1', ''], ['0+1\u0000', ''],
+    ['constructor', ''], ['__proto__', ''], ['0+1'.repeat(2000), ''],
+];
+
 let failed = 0;
-for (const [path, begin, end, name] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'ANTS_FILL_END', 'antsFillArg'], [process.argv[3], 'FILL_BEGIN', 'FILL_END', 'validFill']]) {
-    if (!path) { console.log('usage: web_fill_check.js shell.html four.html'); process.exit(2); }
-    let fn;
-    try { fn = extract(path, begin, end, name); } catch (e) { console.log('FAIL ' + e.message); failed++; continue; }
-    for (const [value, want] of table) {
+const run = (label, fn, rows) => {
+    for (const [value, want] of rows) {
         let got;
         try { got = fn(value); } catch (e) { got = 'threw ' + e.message; }
-        if (got !== want) { console.log('FAIL ' + name + '(' + JSON.stringify(value).slice(0, 40) + ') = ' + JSON.stringify(got) + ', wanted ' + JSON.stringify(want)); failed++; }
+        if (got !== want) { console.log('FAIL ' + label + '(' + JSON.stringify(value).slice(0, 40) + ') = ' + JSON.stringify(got) + ', wanted ' + JSON.stringify(want)); failed++; }
     }
+};
+for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'ANTS_FILL_END', ['antsFillArg', 'antsFillPlanArg', 'antsTeamsArg', 'antsStartArg']], [process.argv[3], 'FILL_BEGIN', 'FILL_END', ['validFill', 'validFillPlan']]]) {
+    if (!path) { console.log('usage: web_fill_check.js shell.html lobby.html'); process.exit(2); }
+    let fns;
+    try { fns = extract(path, begin, end, names); } catch (e) { console.log('FAIL ' + e.message); failed++; continue; }
+    // (the first of the names is the one level; its table has a few more rows with lists, which are no level)
+    run(names[0], fns[names[0]], table.concat([['none,none,easy,hard', ''], ['easy,hard', ''], ['easy,easy,easy,easy', '']]));
+    run(names[1], fns[names[1]], planTable);
+    if (names[2]) run(names[2], fns[names[2]], teamsTable);
+    if (names[3]) run(names[3], fns[names[3]], startTable);
 }
 // The meeting of ?fill= and the mouse-wheel zoom in one page (web/shell.html carries both): the page cancels the wheel and Safari's pinch over the game's CANVAS only (nothing on window,
 // document or body, so the title, the selector and the guide scroll as usual) and the game's own wheel handler has the page to itself; web/four.html (the games' frames) has no wheel
@@ -73,5 +112,5 @@ for (const [path, isShell] of [[process.argv[2], true], [process.argv[3], false]
     }
 }
 
-console.log(failed === 0 ? 'ok: ' + table.length + ' values, two functions, the wheel handlers of the pages' : failed + ' rows differ');
+console.log(failed === 0 ? 'ok: ' + (table.length + planTable.length + teamsTable.length + startTable.length) + ' values, six functions, the wheel handlers of the pages' : failed + ' rows differ');
 process.exit(failed === 0 ? 0 : 1);
