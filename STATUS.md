@@ -1,9 +1,8 @@
 # Status
 
-_Updated 2026-10-05 02:15 PDT · current release **v0.5.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 02:44 PDT · current release **v0.6.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## In progress
-- Matches that survive a server restart, phase 2 (high priority): built, checked in a real browser, its review's fixes are done; an independent re-check of the fixes is running, then the release (v0.6.0)
 - One start card for every game, all online: your colour, a friend or a bot level for each other colour, invite links in the card; with online bot games and teams (network protocol 13): built and checked in a real browser, ships after v0.6.0 with the short room codes
 - Short room codes: 8 random letters and numbers instead of the long code, a mistyped code says "no such match", and the word "demo" is gone from the codes, the server settings and the docs (planned: starts when the one card and the reconnect fixes are merged; same release, v0.7.0)
 - Bots, stage 1: contested food first, finishing wounded ants (a bot sees every ant's health), fighting when behind, the endgame, the fire play (no lone fire ant, killing the fire ant)
@@ -23,6 +22,7 @@ _Updated 2026-10-05 02:15 PDT · current release **v0.5.1** · details: [CHANGEL
 - Dead-code cleanup, trimming the biggest documents, Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **v0.6.0** an online match waits for you: reload, a lost network or a sleeping phone holds your seat and pauses the match, the front page offers "Rejoin your match", leaving on purpose is immediate, and matches survive a server restart (network protocol 12)
 - **v0.5.1** every page in the front page's look: the game page, the changelog pages and "Sprites and sounds" (with fixes for phones); a way back to the front page from the page that a shared link opens
 - **v0.5.0** a new front page in the original game's style (two cards, one-click bot levels, "How it works"); game statistics on it: matches being played, players online, games played
 - **v0.4.0** many zoom levels, down to the whole map, in online matches too; a level for each bot and teams before a game against bots; your name in single player on the desktop; your own orders show at once in online matches (opt-in: `?prediction=on`); the start scripts open one game with the menu

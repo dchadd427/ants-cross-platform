@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.6.0 - 2026-10-05 - An online match waits for you
 
 **For players:**
 - **An online match waits for you:** if you reload the page, lose the network or your phone falls asleep, your seat is held and the match pauses for everybody ("Ann (Green) lost the connection, waiting 0:06"); when you come back the match goes on where it was. The page keeps a key for three hours and the front page shows **Rejoin your match (CODE)** while it holds one (the desktop game keeps it in a file and rejoins by itself). After 30 seconds the others may vote to go on without you; the pauses of a match are capped at 30 minutes (10 in the rooms the front page makes).
