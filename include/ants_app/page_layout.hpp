@@ -22,6 +22,7 @@
 // All rectangles are half-open (LayoutRect). The geometry is plain numbers; the drawing needs a renderer.
 
 #include <cstdint>
+#include <string>
 
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_layout.hpp"
@@ -51,6 +52,22 @@ inline constexpr ants::assets::ColorRGBA kLoadingBarColour{31, 23, 51, 255};
 
 /// Draws the loading screen after `ticks` ticks of the loading state: the classic page when `wide` is false (the original's own picture, 640 x 480), the wide page otherwise
 void draw_loading_screen(IRenderer& renderer, const ants::assets::AssetArchive& archive, bool wide, int32_t ticks);
+
+/// THE CATCH-UP SCREEN of a way back (docs/NETWORK_PORT.md): while a machine is given the match from the server's log it shows the loading screen's picture instead of the match, the bar filled to
+/// the percent, "Catching up 45%" on the orange strip and "Esc leaves the match" at the strip's right end in small type.
+std::string catch_up_text(int32_t percent);
+inline constexpr const char* kCatchUpHint = "Esc leaves the match";
+/// Where the words stand: the percent's text is centred in the strip, the hint ends 12 px before the strip's right end, both in the strip's middle line
+struct CatchUpLayout {
+    LayoutRect strip;
+    int32_t text_x{0};
+    int32_t text_y{0};
+    int32_t hint_x{0};
+    int32_t hint_y{0};
+    LayoutRect bar_fill;
+};
+CatchUpLayout catch_up_layout(bool wide, int32_t percent, int32_t text_w, int32_t hint_w);
+void draw_catch_up_screen(IRenderer& renderer, const ants::assets::AssetArchive& archive, bool wide, int32_t percent);
 
 /// What the button START! shows
 enum class QuickHelpStart : uint8_t { Up, Hover, Pressed };

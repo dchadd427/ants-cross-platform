@@ -55,7 +55,7 @@ HUD::HUD() {
     init(0);
 }
 
-void HUD::init(uint8_t local_player_id) {
+void HUD::init(uint8_t local_player_id, bool announce) {
     local_player_id_ = local_player_id;
     left_pedestal_.reset();
     right_pedestal_.reset();
@@ -82,8 +82,10 @@ void HUD::init(uint8_t local_player_id) {
     chat_dragging_ = false;
     chat_drag_offset_ = 0;
     chat_scroll_task_ = false;
-    post_status_id(sim::strings::kWelcome, "Ants");    // FUN_0100dbe2 0x100e173, once when the match screen is built
-    add_news_flash(0, "Game started! Go get that food!");     // FUN_01022432: "[0:00] News Flash:", the start message
+    if (announce) {
+        post_status_id(sim::strings::kWelcome, "Ants");    // FUN_0100dbe2 0x100e173, once when the match screen is built
+        add_news_flash(0, "Game started! Go get that food!");     // FUN_01022432: "[0:00] News Flash:", the start message
+    }
 
     // The buttons start with no state; where they are comes from the layout (apply_layout, at the end)
     help_button_ = UIButton{};
@@ -166,8 +168,8 @@ bool HUD::in_slot(int slot, int32_t x, int32_t y) const noexcept {
     }
 }
 
-void HUD::reset() {
-    init(local_player_id_);
+void HUD::reset(bool announce) {
+    init(local_player_id_, announce);
 }
 
 void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
@@ -209,7 +211,7 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
                    world.player_alliances[local_player_id_] != local_player_id_);
 }
 
-void HUD::poll_sim_events(sim::SimulationEngine& sim) {
+void HUD::poll_sim_events(sim::SimulationEngine& sim, bool replayed) {
     auto news = sim.poll_news_events();
     for (const auto& ev : news) {
         if (ev.target_player != 255 && ev.target_player != local_player_id_) continue;
@@ -217,7 +219,7 @@ void HUD::poll_sim_events(sim::SimulationEngine& sim) {
             add_news_flash(ev.timestamp_ms, ev.message_text);
         } else if (ev.channel == sim::NewsChannel::Dialog) {
             // the invitation dialog belongs to the network stage: the match screen has no window for it yet
-        } else {
+        } else if (!replayed) {
             status_line_.post(ev.message_text, ev.blink);
         }
         if (news_note_) {
@@ -848,6 +850,14 @@ static void draw_std_dialog(IRenderer& renderer, const assets::AssetArchive& ass
     } else {
         renderer.fill_rect(dx, dy, 320, 224, assets::ColorRGBA{219, 75, 19, 255});
     }
+}
+
+void HUD::render_quit_dialog_alone(IRenderer& renderer, const assets::AssetArchive& assets) {
+    if (!show_quit_dialog_) return;
+    const LayoutPoint modal = layout_.modal_offset();                    // (where render() puts the dialogs: centred over the map view)
+    renderer.set_origin(modal.x, modal.y);
+    render_quit_dialog(renderer, assets);
+    renderer.set_origin(0, 0);
 }
 
 void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {

@@ -32,6 +32,7 @@ endif()
 add_library(ants_app STATIC
     audio_mixer.cpp
     config_store.cpp
+    rejoin_store.cpp
     midi_player.cpp
     renderer.cpp
     renderer_world_image.cpp

@@ -8,7 +8,7 @@
 //                          -> 201 {"code": "...", "state": "waiting", ...}   (code and seed are optional: the server draws them; "early_start" is true unless it says false: the room's
 //                          leader, the first player who joined, may then start the match with the players who are there, two at least, protocol 7. "reconnect" (protocol 10): the room
 //                          holds the seat of a player whose connection is lost, pauses the match for everybody and takes the player back with its key; what the server was started with
-//                          (--reconnect, off by default) unless the body says; "hold_vote_seconds" 5 .. 3600 (default 30): the others may vote on going on without a seat once it has been
+//                          (on unless --no-reconnect) unless the body says; "hold_vote_seconds" 5 .. 3600 (default 30): the others may vote on going on without a seat once it has been
 //                          away this long in all; "max_pause_seconds" 60 .. 86400 (default 1800): the match's total pause is capped, at the cap every seat that is not present is dropped;
 //                          "max_catch_up_seconds" 10 .. 3600 (default 300): one absence may spend this long catching up in all, over all its attempts; "resume_countdown_seconds" 0 .. 60
 //                          (default 10, 0 = none): after a pause of 3 s or more the match is held this long before it goes on)

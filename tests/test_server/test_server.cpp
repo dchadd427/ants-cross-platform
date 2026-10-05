@@ -3502,7 +3502,7 @@ void run_reconnect_tests() {
         ASSERT_TRUE(captured.str().empty());                                              // the server code writes nothing to stderr
     } TEST_END();
 
-    TEST_CASE("S3.47 The Reconnect Settings Of A Room And Of The Server: The Control Interface Takes \"reconnect\", \"hold_vote_seconds\" (5 - 3600) And \"max_pause_seconds\" (60 - 86400) And Refuses What Is Outside Or Of Another Kind; A Body Without Them Gets The Server's Defaults (--reconnect, --hold-vote-seconds, --max-pause-seconds); create_room Checks The Bounds Too; Demo Rooms Follow The Server's Setting") {
+    TEST_CASE("S3.47 The Reconnect Settings Of A Room And Of The Server: The Control Interface Takes \"reconnect\", \"hold_vote_seconds\" (5 - 3600) And \"max_pause_seconds\" (60 - 86400) And Refuses What Is Outside Or Of Another Kind; A Body Without Them Gets The Server's Defaults (Hold Seats Unless --no-reconnect, --hold-vote-seconds, --max-pause-seconds); create_room Checks The Bounds Too; Demo Rooms Follow The Server's Setting") {
         {
             RoomManager mgr{MapStore(maps_dir())};
             const auto call = [&](const std::string& body) {
@@ -3518,11 +3518,11 @@ void run_reconnect_tests() {
                 ctl::parse_json(r.body, v, &why);
                 return v;
             };
-            // the built-in defaults: do not hold seats, 30 s, 1800 s
+            // the built-in defaults (a deliberate change of release B's switch: they were "do not hold seats"): hold seats, 30 s, 1800 s
             ctl::HttpResponse r = call(R"({"map":"TINY.LVL","code":"O-1"})");
             ASSERT_EQ(r.status, 201);
             ctl::JsonValue v = parse(r);
-            ASSERT_TRUE(!v.get("reconnect").as_bool_or(true) && v.get("hold_vote_seconds").as_int_or(0) == 30 && v.get("max_pause_seconds").as_int_or(0) == 1800);
+            ASSERT_TRUE(v.get("reconnect").as_bool_or(false) && v.get("hold_vote_seconds").as_int_or(0) == 30 && v.get("max_pause_seconds").as_int_or(0) == 1800);
             r = call(R"({"map":"TINY.LVL","code":"O-2","reconnect":true,"hold_vote_seconds":5,"max_pause_seconds":86400})");     // the edges are good
             ASSERT_EQ(r.status, 201);
             v = parse(r);
@@ -3530,7 +3530,10 @@ void run_reconnect_tests() {
             r = call(R"({"map":"TINY.LVL","code":"O-3","hold_vote_seconds":3600,"max_pause_seconds":60})");
             ASSERT_EQ(r.status, 201);
             v = parse(r);
-            ASSERT_TRUE(v.get("hold_vote_seconds").as_int_or(0) == 3600 && v.get("max_pause_seconds").as_int_or(0) == 60 && !v.get("reconnect").as_bool_or(true));
+            ASSERT_TRUE(v.get("hold_vote_seconds").as_int_or(0) == 3600 && v.get("max_pause_seconds").as_int_or(0) == 60 && v.get("reconnect").as_bool_or(false));       // (it said nothing about reconnect: the default holds seats)
+            r = call(R"({"map":"TINY.LVL","code":"O-4","reconnect":false})");                  // the off state, said out loud, stays covered: this room holds no seats
+            ASSERT_EQ(r.status, 201);
+            ASSERT_TRUE(!parse(r).get("reconnect").as_bool_or(true));
             for (const char* bad : {R"("hold_vote_seconds":4)", R"("hold_vote_seconds":3601)", R"("hold_vote_seconds":0)", R"("hold_vote_seconds":-5)", R"("hold_vote_seconds":"30")", R"("hold_vote_seconds":30.5)",
                                     R"("max_pause_seconds":59)", R"("max_pause_seconds":86401)", R"("max_pause_seconds":0)", R"("max_pause_seconds":"1800")", R"("reconnect":"yes")", R"("reconnect":1)", R"("reconnect":null)"}) {
                 r = call(std::string(R"({"map":"TINY.LVL",)") + bad + "}");
@@ -3542,7 +3545,7 @@ void run_reconnect_tests() {
                                         : std::string(bad).find("max_pause") != std::string::npos ? "\"max_pause_seconds\" must be an integer from 60 to 86400" : "\"reconnect\" must be true or false";
                 ASSERT_MSG(why == key, why);
             }
-            ASSERT_EQ(mgr.room_count(), size_t{3});                                       // none of the refused ones made a room
+            ASSERT_EQ(mgr.room_count(), size_t{4});                                       // none of the refused ones made a room
         }
         {   // the server's own defaults reach a room that says nothing; what a room says wins
             ServerLimits limits;
@@ -3566,6 +3569,27 @@ void run_reconnect_tests() {
             ASSERT_TRUE(!v.get("reconnect").as_bool_or(true) && v.get("hold_vote_seconds").as_int_or(0) == 45 && v.get("max_pause_seconds").as_int_or(0) == 120);
             const RoomSpec defaults = mgr.default_spec();
             ASSERT_TRUE(defaults.reconnect && defaults.vote_after_ms == 45000 && defaults.max_pause_ms == 900000 && defaults.max_log_bytes == net::TurnLog::kDefaultMaxBytes);
+        }
+        {   // a server that was started with --no-reconnect (ServerLimits::reconnect false): a room that says nothing holds no seats, and a room that says "reconnect": true still does
+            ServerLimits limits;
+            limits.reconnect = false;
+            limits.hold_vote_ms = 45000;
+            RoomManager mgr{MapStore(maps_dir()), limits};
+            const auto call = [&](const std::string& body) {
+                ctl::HttpRequest rq;
+                rq.method = "POST";
+                rq.path = "/rooms";
+                rq.body = body;
+                ctl::JsonValue v;
+                std::string why;
+                ctl::parse_json(handle_control(mgr, rq, 5000).body, v, &why);
+                return v;
+            };
+            ctl::JsonValue v = call(R"({"map":"TINY.LVL","code":"N-1"})");
+            ASSERT_TRUE(!v.get("reconnect").as_bool_or(true) && v.get("hold_vote_seconds").as_int_or(0) == 45);
+            v = call(R"({"map":"TINY.LVL","code":"N-2","reconnect":true})");
+            ASSERT_TRUE(v.get("reconnect").as_bool_or(false) && v.get("hold_vote_seconds").as_int_or(0) == 45);
+            ASSERT_FALSE(mgr.default_spec().reconnect);
         }
         {   // create_room checks the bounds for everybody who does not come through the JSON
             RoomManager mgr{MapStore(maps_dir())};
@@ -7513,10 +7537,11 @@ void run_persist_server_tests_4() {
         ASSERT_TRUE(status_to_json(ended[0]).get("state_hash").str().size() == 16);
     } TEST_END();
 
-    TEST_CASE("S3.97 The Switch That Phase 2 Flips: Rooms Hold Seats By Default Exactly When kReconnectByDefault Says So (ServerLimits, A Room Specification Made By The Manager, A Room Made By The Control Interface Without A \"reconnect\" Key, A Demo Room), And Whatever The Default Is A Room's Own Key Wins; A Restored Room Holds Seats Whatever The Default Is Now (It Held Them When It Was Written)")  {
-        ASSERT_EQ(ServerLimits().reconnect, kReconnectByDefault);
+    TEST_CASE("S3.97 The Switch Is On (Release B): Rooms Hold Seats By Default (ServerLimits, A Room Specification Made By The Manager, A Room Made By The Control Interface Without A \"reconnect\" Key, A Demo Room) And A Room's Own Key Wins Either Way; A Server That Was Told Not To (--no-reconnect: ServerLimits::reconnect false) Holds None By Default And The Rooms That Say So; A Restored Room Holds Seats Whatever The Default Is Now (It Held Them When It Was Written)")  {
+        ASSERT_TRUE(kReconnectByDefault);                                                      // the switch itself: a test of its value, not only of the plumbing behind it
+        ASSERT_TRUE(ServerLimits().reconnect);
         World dflt;
-        ASSERT_EQ(dflt.mgr.default_spec().reconnect, kReconnectByDefault);
+        ASSERT_TRUE(dflt.mgr.default_spec().reconnect);
         {   // the control interface
             ctl::HttpRequest rq;
             rq.method = "POST";
@@ -7524,7 +7549,7 @@ void run_persist_server_tests_4() {
             rq.body = "{\"map\": \"TINY.LVL\", \"players\": 2, \"code\": \"SW-1\"}";
             ctl::HttpResponse r = handle_control(dflt.mgr, rq, dflt.now);
             ASSERT_EQ(r.status, 201);
-            ASSERT_EQ(dflt.status("SW-1").reconnect, kReconnectByDefault);
+            ASSERT_TRUE(dflt.status("SW-1").reconnect);
             rq.body = "{\"map\": \"TINY.LVL\", \"players\": 2, \"code\": \"SW-2\", \"reconnect\": true}";
             ASSERT_EQ(handle_control(dflt.mgr, rq, dflt.now).status, 201);
             ASSERT_TRUE(dflt.status("SW-2").reconnect);
@@ -7539,9 +7564,29 @@ void run_persist_server_tests_4() {
             World w(l);
             w.connect("Ann", "demo-tiny-2p-abc");
             w.run(500);
-            ASSERT_EQ(w.status("demo-tiny-2p-abc").reconnect, kReconnectByDefault);
+            ASSERT_TRUE(w.status("demo-tiny-2p-abc").reconnect);
         }
-        {   // a server that holds seats by default (whatever the constant is): the same default for every room that does not say
+        {   // a server that does not hold seats by default (--no-reconnect): none of its rooms does unless it says so, the demo rooms included
+            ServerLimits l;
+            l.reconnect = false;
+            l.demo_rooms = 2;
+            l.demo_map = "TINY.LVL";
+            World w(l);
+            ASSERT_FALSE(w.mgr.default_spec().reconnect);
+            ctl::HttpRequest rq;
+            rq.method = "POST";
+            rq.path = "/rooms";
+            rq.body = "{\"map\": \"TINY.LVL\", \"players\": 2, \"code\": \"SW-6\"}";
+            ASSERT_EQ(handle_control(w.mgr, rq, w.now).status, 201);
+            ASSERT_FALSE(w.status("SW-6").reconnect);
+            rq.body = "{\"map\": \"TINY.LVL\", \"players\": 2, \"code\": \"SW-7\", \"reconnect\": true}";
+            ASSERT_EQ(handle_control(w.mgr, rq, w.now).status, 201);
+            ASSERT_TRUE(w.status("SW-7").reconnect);
+            w.connect("Ann", "demo-tiny-2p-abc");
+            w.run(500);
+            ASSERT_FALSE(w.status("demo-tiny-2p-abc").reconnect);
+        }
+        {   // a server that holds seats by default, said out loud: the same default for every room that does not say
             ServerLimits l;
             l.reconnect = true;
             World w(l);

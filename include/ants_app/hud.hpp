@@ -97,13 +97,16 @@ public:
     // Test hook: replaces the millisecond clock used by the pedestal transitions
     void set_ticks_function(uint32_t (*fn)()) noexcept { ticks_fn_ = fn; }
 
-    void init(uint8_t local_player_id = 0);
+    /// `announce` false: no start news (the "Welcome" status text and the news flash "Game started!"): the screen of a match that this machine rejoins, which is not starting
+    void init(uint8_t local_player_id = 0, bool announce = true);
     uint8_t local_player_id() const noexcept { return local_player_id_; }       // the seat that init() was given (the tests ask what a screen was left with)
-    void reset();
+    void reset(bool announce = true);
 
     // Per-tick / per-frame update
     void update(const sim::WorldState& world, uint32_t delta_ticks);
-    void poll_sim_events(sim::SimulationEngine& sim);
+    /// The engine's news since the last call. `replayed`: they come from a stretch of the match that was run without a picture (a catch-up): the status line is for the moment and says none of it; the
+    /// chat log's news flashes are history and are kept.
+    void poll_sim_events(sim::SimulationEngine& sim, bool replayed = false);
     /// A note after the text of a news event: called for every event that this player sees (the engine's own texts are never changed); a text that comes back is added to the chat log as one more
     /// News Flash, with the time of the event, right after the event's own text. The application uses it to say why a bot declined an invitation to team up.
     void set_news_note(std::function<std::string(const sim::NewsEvent&)> note) { news_note_ = std::move(note); }
@@ -308,6 +311,8 @@ public:
     }
     void close_quit_dialog() noexcept { show_quit_dialog_ = false; }
     bool is_quit_dialog_open() const noexcept { return show_quit_dialog_; }
+    /// The quit dialog alone, where render() draws it (nothing when it is not open): the catch-up screen of a way back has no match under it, and its Esc still asks
+    void render_quit_dialog_alone(IRenderer& renderer, const assets::AssetArchive& assets);
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
 
     /// The quick help (F1, the Help button; Ants.exe FUN_010145d2): it closes only by its Return button (the button class: captured at the press, acts at the release)

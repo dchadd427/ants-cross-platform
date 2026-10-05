@@ -174,11 +174,12 @@ struct Peer {
 
 // ---- a dedicated server in the test: the real room manager behind a real TCP listener ----------------------------------------------------------------------------------
 
-server::ServerLimits demo_limits(size_t demo_rooms, const std::vector<std::string>& maps) {
+server::ServerLimits demo_limits(size_t demo_rooms, const std::vector<std::string>& maps, bool hold_seats) {
     server::ServerLimits limits;
     limits.demo_rooms = demo_rooms;
     limits.demo_map = "TINY.LVL";
     limits.demo_maps = maps;
+    limits.reconnect = hold_seats;
     return limits;
 }
 const std::vector<std::string> kAllMaps = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
@@ -188,8 +189,9 @@ struct Server {
     std::unique_ptr<net::TcpListener> listener{net::TcpListener::listen(0, true)};
     uint32_t now{1000};
 
-    // `maps`: the maps that the server's demo rooms may be made on (--demo-maps; the menu offers the six of the original, a server may offer fewer)
-    explicit Server(size_t demo_rooms = 4, const std::vector<std::string>& maps = kAllMaps) : mgr(server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps"), demo_limits(demo_rooms, maps)) {}
+    // `maps`: the maps that the server's demo rooms may be made on (--demo-maps; the menu offers the six of the original, a server may offer fewer). `hold_seats`: whether its rooms hold the seat of a
+    // lost connection: the server's default since release B; false is a server that was started with --no-reconnect
+    explicit Server(size_t demo_rooms = 4, const std::vector<std::string>& maps = kAllMaps, bool hold_seats = server::kReconnectByDefault) : mgr(server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps"), demo_limits(demo_rooms, maps, hold_seats)) {}
     uint16_t port() const { return listener ? listener->port() : uint16_t{0}; }
     void update() {
         if (listener) {
@@ -1864,20 +1866,23 @@ int main(int argc, char** argv) {
         TempDir temp;
         write_no_quick_help(temp.file("s.ini"));
         Server server(16);
-        {   // the room is closed under the players: the match cannot go on
+        for (const bool holds : {false, true}) {   // the room is closed under the players: the match cannot go on. A server that holds no seats (--no-reconnect) loses the connection and says so; the default (release B) holds seats: the game tries to come back and the server's answer is the notice
+            Server closing(16, kAllMaps, holds);
             Application app;
             Peer guest;
-            Hall hall{&server, &app, {&guest}, nullptr, false};
-            ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("s.ini"))));
+            Hall hall{&closing, &app, {&guest}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(closing.address(), ini(temp, holds ? "closing_holds.ini" : "closing_none.ini"))));          // (a settings file for each: the menu remembers its choices in it)
             std::string report;
-            ASSERT_TRUE(host_join_start(hall, app, guest, "127.0.0.1", server.port(), report));
-            const std::string code = server.mgr.list(server.now)[0].code;
+            const bool started = host_join_start(hall, app, guest, "127.0.0.1", closing.port(), report);
+            if (!started) std::cout << "\n    (" << report << ")";                              // (what went wrong, when it does)
+            ASSERT_TRUE(started);
+            const std::string code = closing.mgr.list(closing.now)[0].code;
             hall.step(1000);
-            ASSERT_TRUE(server.mgr.close_room(code, server.now));
+            ASSERT_TRUE(closing.mgr.close_room(code, closing.now));
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 12000));
             ASSERT_TRUE(app.is_running());
             ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);
-            ASSERT_HAS(app.start_menu().message(), "lost");                                  // the notice is on the first panel
+            ASSERT_HAS(app.start_menu().message(), holds ? "take you back" : "lost");        // the notice is on the first panel
             ASSERT_TRUE(app.net() == nullptr);
             ASSERT_EQ(app.window_title(), std::string("Ants"));
         }
@@ -2673,14 +2678,14 @@ int main(int argc, char** argv) {
             app.handle_key_down(y_ev);
             ASSERT_FALSE(app.is_running());                                                    // (the menu is for network games: a single-player game ends the program as the original does)
         }
-        {   // the room closes under a player who sits at seat 1 with the quit dialog, the match's quick help and the options open: back at the menu with all of them closed, seat 0 again
-            Server server;
+        for (const bool holds : {false, true}) {   // the room closes under a player who sits at seat 1 with the quit dialog, the match's quick help and the options open: back at the menu with all of them closed, seat 0 again (a server that holds no seats says "lost"; the default's answer is the way back's refusal)
+            Server server(4, kAllMaps, holds);
             Application app;
             Peer ann;
             Hall hall{&server, &app, {&ann}, nullptr, false};
             ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", "demo-tiny-2p-gone01"));
             ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room; }, 8000));
-            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "c.ini"))));
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, holds ? "c_holds.ini" : "c.ini"))));
             menu_join(app, "Bob", "demo-tiny-2p-gone01");
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && ann.net.phase() == net::NetGame::Phase::Playing; }, 20000));
             hall.step(1000);
@@ -2698,14 +2703,14 @@ int main(int argc, char** argv) {
             ASSERT_EQ(app.local_player_id(), 0);                                              // the seat that was played is not the seat of the next game
             ASSERT_EQ(app.hud().local_player_id(), 0);
             ASSERT_TRUE(app.net_notice().empty());                                            // the reason went to the first panel (below) and is not kept
-            ASSERT_HAS(app.start_menu().message(), "lost");
+            ASSERT_HAS(app.start_menu().message(), holds ? "take you back" : "lost");
         }
-        {   // a room that fills while its code is on the screen starts the match; leaving it must not leave the attempt behind (the menu was told "the connection was lost" a frame later)
-            Server server;
+        for (const bool holds : {false, true}) {   // a room that fills while its code is on the screen starts the match; leaving it must not leave the attempt behind (the menu was told "the connection was lost" a frame later)
+            Server server(4, kAllMaps, holds);
             Application app;
             Peer guest;
             Hall hall{&server, &app, {&guest}, nullptr, false};
-            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "e.ini"))));
+            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, holds ? "e_holds.ini" : "e.ini"))));
             menu_host(app, "Hostess", 0, 1);                                                   // Tiny, two players
             ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
             ASSERT_TRUE(guest.join("127.0.0.1", server.port(), "Guest", shown_code(app)));
@@ -2715,7 +2720,7 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 12000));
             hall.step(500);                                                                    // frames at the menu: nothing of the attempt is left to say anything
             ASSERT_EQ(app.start_menu().panel(), MenuPanel::Main);
-            ASSERT_HAS(app.start_menu().message(), "lost");                                    // (the match's notice, not a failure of the attempt)
+            ASSERT_HAS(app.start_menu().message(), holds ? "take you back" : "lost");          // (the match's notice, not a failure of the attempt)
             ASSERT_TRUE(app.net() == nullptr);
         }
     } TEST_END();

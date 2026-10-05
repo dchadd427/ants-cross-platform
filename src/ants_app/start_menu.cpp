@@ -105,6 +105,10 @@ constexpr int32_t kButtonX = 160;
 constexpr int32_t kButtonW = 320;
 constexpr int32_t kButtonH = 46;
 constexpr int32_t kSeatRowH = 44;                  // a seat row of the single-player panel (portrait, colour, cycler): the panel also holds the name and, with two bots, the Teams row
+constexpr int32_t kRejoinX = 100;                  // the first panel's "Rejoin your match (CODE)": in the gap between the title and Single player (nothing else of the panel moves), wider than the others for the room's code
+constexpr int32_t kRejoinY = 78;
+constexpr int32_t kRejoinW = 440;
+constexpr int32_t kRejoinH = 34;
 constexpr int32_t kHintY = 446;
 constexpr int32_t kHintH = 14;
 constexpr int32_t kTextX = 60;
@@ -576,6 +580,13 @@ void StartMenu::name_changed() {
     name_dirty_ = true;
 }
 
+// The first panel's offer to take the seat in a running match again. The selection that stood on the button is not left on a button that is gone.
+void StartMenu::set_rejoin(std::optional<RejoinOffer> offer) {
+    rejoin_ = std::move(offer);
+    if (!rejoin_ && main_selection_ == MenuId::Rejoin) main_selection_ = MenuId::Single;
+    if (!rejoin_ && selected_ == MenuId::Rejoin) selected_ = MenuId::Single;
+}
+
 void StartMenu::show_main(const std::string& notice) {
     message_ = notice;
     message_tone_ = MenuTone::Normal;
@@ -585,6 +596,10 @@ void StartMenu::show_main(const std::string& notice) {
 void StartMenu::connection_failed(const std::string& message) {
     message_ = message;
     message_tone_ = MenuTone::Bad;
+    if (origin_ == MenuPanel::Main) {                           // a Rejoin that failed: back at the first panel, with the reason
+        go(MenuPanel::Main);
+        return;
+    }
     const MenuPanel to = origin_ == MenuPanel::Host ? MenuPanel::Host : MenuPanel::Join;
     go(to);
     selected_ = to == MenuPanel::Host ? MenuId::Host : MenuId::Join;
@@ -593,6 +608,10 @@ void StartMenu::connection_failed(const std::string& message) {
 
 void StartMenu::connection_cancelled() {
     message_.clear();
+    if (origin_ == MenuPanel::Main) {
+        go(MenuPanel::Main);
+        return;
+    }
     const MenuPanel to = origin_ == MenuPanel::Host ? MenuPanel::Host : MenuPanel::Join;
     go(to);
     selected_ = to == MenuPanel::Host ? MenuId::Host : MenuId::Join;
@@ -696,6 +715,7 @@ std::vector<MenuElement> StartMenu::elements() const {
     switch (panel_) {
         case MenuPanel::Main: {
             add_title(out, sim::strings::format(sim::strings::kWelcome, "Ants"));
+            if (rejoin_) out.push_back(control(MenuId::Rejoin, MenuKind::Button, ButtonRect{kRejoinX, kRejoinY, kRejoinW, kRejoinH}, "Rejoin your match (" + rejoin_->room + ")", FontSize::Px18));
             out.push_back(control(MenuId::Single, MenuKind::Button, centred_button(118, 50), "Single player"));
             out.push_back(control(MenuId::JoinWithCode, MenuKind::Button, centred_button(184, 50), "Join with a code"));
             out.push_back(control(MenuId::HostOnline, MenuKind::Button, centred_button(250, 50), "Host an online match"));
@@ -1008,6 +1028,24 @@ void StartMenu::try_host() {
     request_.teams = teams;
 }
 
+// "Rejoin your match": the room, the seat and the server are the offer's; the name is the panel's when it is one the server would take (else the game's own "Player": the key decides the seat)
+void StartMenu::try_rejoin() {
+    if (!rejoin_) return;
+    std::string clean_name;
+    std::string why;
+    if (!check_player_name(name_, clean_name, why)) clean_name = "Player";
+    message_.clear();
+    origin_ = MenuPanel::Main;
+    connecting_text_ = "Rejoining your match in room " + rejoin_->room + "...";
+    const RejoinOffer offer = *rejoin_;
+    go(MenuPanel::Connecting);
+    request(MenuRequest::Type::Rejoin);
+    request_.name = clean_name;
+    request_.room = offer.room;
+    request_.seat = offer.seat;
+    request_.server = offer.server;
+}
+
 // Continue (and Enter in the name field): the name is checked as Join and Host check it, the bots and the teams are the panel's. The name is written now (the program may end with the game).
 void StartMenu::try_single() {
     std::string clean_name;
@@ -1049,6 +1087,7 @@ void StartMenu::activate(MenuId id) {
             message_.clear();
             go(MenuPanel::Host);
             break;
+        case MenuId::Rejoin: try_rejoin(); break;
         case MenuId::Quit: request(MenuRequest::Type::Quit); break;
         case MenuId::Seat0:
         case MenuId::Seat1:

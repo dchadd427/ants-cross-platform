@@ -84,6 +84,11 @@
         .tv { margin: 0; border: 3px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
         .tv img { width: 100%; aspect-ratio: 761 / 497; object-fit: cover; }
 
+        /* ---- the way back to a match that is still running (the block REJOIN): there only while this browser holds a fresh key of a seat on this site's game server ---- */
+        .rejoin { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 18px 0 0; }
+        .rejoin .btn { max-width: 100%; text-align: center; overflow-wrap: anywhere; }
+        .rejoin-note { max-width: 100%; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }       /* (not .note: the cards' notes wrap at 34 characters) */
+
         /* ---- the two-state buttons of the game (Fog of War On / Off): radio buttons for the picture's shape, the players of a match and the level of each opponent ---- */
         .pair { position: relative; display: inline-flex; gap: 6px; }
         .pair input { position: absolute; left: 0; top: 0; opacity: 0; width: 1px; height: 1px; margin: 0; }
@@ -324,6 +329,8 @@
             .single-grid .right { margin-top: 10px; }
             .joinrow { grid-template-columns: minmax(0, 1fr); }
             .online .btn { width: 100%; }
+            .rejoin { margin: 10px 0 0; align-items: stretch; }
+            .rejoin .btn { width: 100%; }
             .playrow { gap: 14px; }
             .startbtn { width: 196px; height: 54px; }
             .how-body .sheet { max-width: 100%; justify-self: center; }
@@ -357,6 +364,11 @@
         </div>
         <figure class="tv"><img src="front/match_view.png" alt="A match on the Treasure map: green ants at their hill beside the pond, black ants across the path" width="761" height="497" loading="lazy" decoding="async"></figure>
     </header>
+
+    <section id="rejoin" class="rejoin" aria-label="Your running match" hidden>
+        <button id="rejoin-go" type="button" class="btn big"></button>
+        <p class="rejoin-note" id="rejoin-note"></p>
+    </section>
 
     <main class="page">
         <section id="who" class="myname" aria-label="Your name">
@@ -820,6 +832,92 @@ their music and their sound: only the window you are in is heard). The match is 
         })();
         // SHAPE_END
 
+        // REJOINKEY_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
+        // THE KEYS OF THE SEATS that this browser holds. The game page keeps the key of every seat that it holds in a game server's room in the browser's local storage, ants.rejoin.<room>.<seat> =
+        // {"k": 32 hex digits, "s": the server's address, "t": epoch ms} (src/ants_app/rejoin_store.cpp), lets go of it when the match ends, the seat is dropped or the player leaves, and removes an
+        // entry that a day has passed over when it reads it. This block only LOOKS (the front page's Rejoin button and the game page's name step ask it): THE KEY IS A SECRET, it is read to check an
+        // entry and is in nothing that comes out of here; the game finds it in the storage by itself.
+        var REJOIN_PREFIX = 'ants.rejoin.';
+        var REJOIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;         // the game's own rule: an entry that is older is of no use
+        var REJOIN_FUTURE_MS = 60 * 1000;                    // a time further ahead than this is a clock that was wrong, not a match to go back to
+        // One entry of the storage: { room, seat, server, t } when `name` and `text` are exactly what the game page writes (a room code by the page's own rule, a seat 0 - 3, a JSON object with these three
+        // members and no others, a key of 32 hex digits that is not zero, a printable server of 1 - 255 characters, a time that is a whole number of milliseconds), else null. The key is not returned.
+        function rejoinParse(name, text) {
+            var m = /^ants\.rejoin\.([A-Za-z0-9_-]{1,32})\.([0-3])$/.exec(typeof name === 'string' ? name : '');
+            if (!m || typeof text !== 'string') return null;
+            var v;
+            try { v = JSON.parse(text); } catch (e) { return null; }
+            if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+            var members = Object.keys(v).sort().join(',');
+            if (members !== 'k,s,t') return null;
+            if (typeof v.k !== 'string' || !/^[0-9A-Fa-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;
+            if (typeof v.s !== 'string' || !/^[\x20-\x7e]{1,255}$/.test(v.s)) return null;
+            if (typeof v.t !== 'number' || !isFinite(v.t) || Math.floor(v.t) !== v.t || v.t < 0 || v.t > 999999999999999) return null;
+            return { room: m[1], seat: Number(m[2]), server: v.s, t: v.t };
+        }
+        // The seat to offer, or null: the newest (by t; on a tie the lower seat, then the room) entry of `server` that is not older than a day and not more than a minute ahead of `now` (ms), of the
+        // room `room` when one is given ('' or nothing: any) and of the seat `seat` when it is a number from 0 (nothing: any). `storage` is the browser's (length, key(i), getItem, removeItem; any call
+        // may throw). An entry that a day has passed over is removed, as the game does when it reads (whatever its server: a key that old is of no use to anybody); an entry of another server or room,
+        // one from the future and anything that is no entry of the game are left as they are. { room, seat, t }: no key.
+        function rejoinOffer(storage, now, server, room, seat) {
+            var names = [];
+            try {
+                for (var i = 0; i < storage.length; i++) {
+                    var name = storage.key(i);
+                    if (typeof name === 'string' && name.indexOf(REJOIN_PREFIX) === 0) names.push(name);
+                }
+            } catch (e) { return null; }
+            var best = null;
+            names.forEach(function (name) {
+                var text = null;
+                try { text = storage.getItem(name); } catch (e) { return; }
+                var entry = rejoinParse(name, text);
+                if (!entry) return;
+                if (now - entry.t > REJOIN_MAX_AGE_MS) { try { storage.removeItem(name); } catch (e) { /* it stays, and is not offered */ } return; }
+                if (entry.t - now > REJOIN_FUTURE_MS || entry.server !== server) return;
+                if ((room && entry.room !== room) || (typeof seat === 'number' && seat >= 0 && entry.seat !== seat)) return;
+                if (!best || entry.t > best.t || (entry.t === best.t && (entry.seat < best.seat || (entry.seat === best.seat && entry.room < best.room)))) best = entry;
+            });
+            return best ? { room: best.room, seat: best.seat, t: best.t } : null;
+        }
+        // REJOINKEY_END
+
+        // REJOIN_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block, after the one above)
+        // THE WAY BACK to a match that is still running (the Rejoin button at the top of the front page): where the keys are looked for, what the button says and where it goes.
+        // This site's game server as the game page joins it (web/shell.html, ANTS_PAGE.joinArguments: the scheme of the page, its host, the door /ws): what an entry's "s" says when the game page wrote it
+        function rejoinServer(secure, host) { return (secure ? 'wss://' : 'ws://') + host + '/ws'; }
+        // The words of the button and of the note under it (text only: a room code has letters, digits, - and _)
+        function rejoinWords(offer) {
+            return { button: 'Rejoin your match (' + offer.room + ')', note: 'Your match in room ' + offer.room + ' is still running: go back to your seat.' };
+        }
+        // The query of the game page that the button opens, as the page's other join links make it (the door /ws, the room, the name always present, empty or not: it was chosen on this page, and the
+        // picture's shape) with the seat of the entry. No key: the game page looks it up.
+        function rejoinQuery(offer, name, shape) {
+            return '?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9');
+        }
+        // REJOIN_END
+        // The button is there while the two cards are, and only while an entry is offered; it is looked at again when the page comes back from the browser's memory (the Back button) and when another
+        // tab changes the storage: the match may have ended meanwhile.
+        var rejoinOffered = null;
+        function showRejoin() {
+            var offer = null;
+            try { offer = rejoinOffer(window.localStorage, Date.now(), rejoinServer(window.location.protocol === 'https:', window.location.host)); } catch (e) { offer = null; }
+            rejoinOffered = offer;
+            if (!offer) { $('rejoin').hidden = true; return; }
+            var words = rejoinWords(offer);
+            $('rejoin-go').textContent = words.button;
+            $('rejoin-note').textContent = words.note;
+            $('rejoin').hidden = false;
+        }
+        function refreshRejoin() { if (!$('cards').hidden) showRejoin(); }
+        $('rejoin-go').addEventListener('click', function () {
+            if (!rejoinOffered) return;
+            var remembered = nameCheck(recall(NAME_KEY));
+            window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);
+        });
+        window.addEventListener('pageshow', function (e) { if (e && e.persisted) refreshRejoin(); });
+        window.addEventListener('storage', refreshRejoin);
+
         var room = '';
         var fill = '';                      // the bots that the leader's START seats in the empty seats: '', one level for every seat, or four words for the seats 0 - 3 (every link of the room carries it: the page cannot know who connects first)
         var roomTeams = '';                 // the room's teams: '' (free for all) or A+B, two seats 0 - 3: the ones that its code names, else what the address asked for (the leader's START makes those)
@@ -1229,6 +1327,7 @@ their music and their sound: only the window you are in is heard). The match is 
             } else {
                 $('cards').hidden = false;
                 $('how').hidden = false;
+                showRejoin();                       // (the plain front page only: a page that shows a room or asks for a name has its own business)
             }
         }
         // A match that an address asks for is the page of somebody who was sent a link: they are asked for a name first, every time, even when this browser remembers one (the owner: "when joining a link

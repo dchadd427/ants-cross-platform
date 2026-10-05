@@ -40,6 +40,7 @@
 #include "ants_app/midi_player.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/net_overlay.hpp"
+#include "ants_app/rejoin_store.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
 #include "ants_app/room_chat.hpp"
@@ -336,6 +337,10 @@ public:
     /// this machine, no room. While there is a box the status line shows the room's prompt only (the box shows the lines and the typed text; NetGame::set_chat_status_mirror is off).
     const SetupChatLayout* room_chat_box() const noexcept;
 
+    /// Where the keys of this player's seats are kept (rejoin_store.hpp): a file beside the settings file, the browser's local storage, or memory alone in a headless run without a settings file.
+    /// The application writes a key when a server's room hands it out and lets go of it when it is of no more use (NetGame::set_on_key / set_on_forget_key); a join that names a room, and the
+    /// start menu's "Rejoin your match", look a key up here. Public for the tests.
+    RejoinStore* rejoin_store() noexcept { return rejoin_store_.get(); }
     /// The network of a room or a match (nullptr unless started with --host / --join)
     net::NetGame* net() noexcept { return net_.get(); }
     /// True while a room or a network match exists
@@ -444,6 +449,22 @@ public:
     /// The line that a match of the network shows at the top of the playfield right now (an empty text: nothing, and always for a game that is not a match of the network): the one that
     /// render_net_overlay draws, from what the network layer reports. Public for the tests (the seconds before the first turn of a match must say nothing)
     NetOverlayLine net_overlay_now() const;
+    /// What net_overlay_now is made from: the network layer's state as the overlay's model takes it (the tests add states that no rig reaches, a desync or a lag notice, and see which line wins)
+    NetOverlayInput net_overlay_input() const;
+    /// The renderer's width of every text of the overlay (what the drawing and the mouse lay it out with): for the tests
+    NetOverlayMetrics net_overlay_metrics_for_test(const NetOverlayLine& line) const { return net_overlay_metrics(line); }
+    /// The catch-up screen is up instead of the match: the machine is given the match from the server's log (a game started again, a page reloaded, a link lost) and runs it without drawing it; the
+    /// loading picture shows "Catching up N%" (catch_up_percent) until Event::Rejoined. Public for the tests.
+    bool catch_up_screen_active() const;
+    int32_t catch_up_percent() const;
+    /// The vote block's buttons where the screen draws them now (net_overlay_layout over the lines of net_overlay_now): `open` is false, and the rectangles are empty, when no vote is on screen.
+    /// A click inside one is that choice (F2 keeps waiting, F3 goes on without the seat: NetGame::vote). Public for the tests.
+    struct NetVoteButtons {
+        bool open{false};
+        LayoutRect keep;
+        LayoutRect go_on;
+    };
+    NetVoteButtons net_vote_buttons() const;
     /// Where the window is now (client area, screen coordinates)
     WindowRect window_rect() const;
     /// The window as it was CREATED (client area; x and y are SDL's centred position where the place was not known): its size already has the shape of the picture (16:9 by default, 4:3 with
@@ -517,6 +538,7 @@ private:
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
+    std::unique_ptr<RejoinStore> rejoin_store_;           // the keys of the seats (before net_: its callbacks write here, and leave() writes last)
     std::unique_ptr<net::NetGame> net_;
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
@@ -546,6 +568,11 @@ private:
     void close_room_chat();                               // closes the input and starts the guard
     std::vector<ai::BotSpec> fill_specs_;                 // the bots that this machine's START seated in the empty seats of a room on the local network (taken out again when the start is cancelled)
     bool match_over_handled_{false};
+    double held_since_ms_{-1.0};                          // net_time_ms_ when the match began to be held on this screen (a seat missing, or the countdown after a pause): -1 when it is not (track_net_state)
+    std::vector<net::PauseInfo::Seat> prev_missing_;      // the seats that were missing at the last look: who came back when the list empties
+    std::string back_name_;                               // the seat that came back, while the countdown that follows its return runs ("" when nobody did)
+    uint8_t vote_press_{0};                               // a left press went down on a button of the vote block: 1 keep waiting, 2 go on without the seat (its release is the choice)
+    bool catch_up_backlog_{false};                        // this machine has caught up: the sounds that the engine queued meanwhile are dropped with the first live tick (post_tick)
     std::string net_notice_;
     std::string player_name_;
     std::string local_player_name_;                       // the name of a local game (the system user, --name): what a single-player game after a network game shows again
@@ -564,6 +591,9 @@ private:
         int players{4};                                   // hosting: the seats of the room
         int map{0};                                       // hosting: the index of the map that the player chose (menu_map)
         double elapsed_ms{0.0};                           // how long the attempt has taken (its time limit, menu_connect_timeout_ms)
+        bool rejoin{false};                               // "Rejoin your match": the join shows the key of the seat that this machine had (the room is `room`, the server is `server`, which need not be the menu's own)
+        uint8_t seat{255};                                // ... that seat
+        net::SeatKey key{};                               // ... that key (kept here until the join is made, never printed)
     } menu_conn_;
     int32_t mouse_screen_x_{320};
     int32_t mouse_screen_y_{240};
@@ -572,7 +602,7 @@ private:
 
     // The match set-up shared by the local game and the network game
     bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog);   // level, simulation, renderer (no HUD, no sound)
-    void enter_match();                                   // music, start sound, camera, HUD reset, "Get ready", state Playing
+    void enter_match(bool rejoin = false);                // music, start sound, camera, HUD reset, "Get ready", state Playing (a match that this machine rejoins: no start sound, no dialog)
     void post_tick();                                     // what every simulation tick shows: HUD, events, audio, the end of the match
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
@@ -582,11 +612,14 @@ private:
     void enter_start_menu(const std::string& notice = std::string());   // state StartMenu, the first panel (with a line of notice when there is one)
     void update_start_menu(float dt);                     // the menu's clock, what it asked for, its connection (once per frame, from pump_network)
     void process_menu_request(const MenuRequest& request);
-    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map);
+    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map, const RejoinEntry* rejoin = nullptr, const ServerAddress* server = nullptr);
+    void begin_menu_rejoin(const MenuRequest& request);   // "Rejoin your match": the key of the offer's seat, from the store, joins that room on that server
+    std::optional<RejoinOffer> rejoin_offer();            // the newest fresh key that the menu can use (a server of host:port: the browser's entries are for its page), or none
     void pump_menu_connection();                          // the name lookup, the join, the room: what became of them
     void menu_connection_failed(const std::string& message);
     void abort_menu_connection();                         // Cancel, Back from the room, a failure: nothing of the connection stays
     void menu_connected();                                // the player is in the server's room
+    void menu_rejoined();                                 // a rejoin is under way: the match begins by itself (the net's events), not through the room's screens
     void menu_start_single(const MenuRequest& request);
     std::string menu_failure_text() const;                // what a failed join says, in the menu's words
     bool room_has_chosen_map() const;                     // hosting: the room that the server made is on the map that the player chose
@@ -594,18 +627,26 @@ private:
     void return_to_start_menu(const std::string& notice); // a network game is over (left, ended, lost): back to the menu, nothing of it stays
     void leave_game();                                    // Leave of a network game's screens: back to the menu when this run has one, else the program ends as always
     void attach_net();                                    // the tick, chat and HUD hooks of a NetGame that the application owns
+    void make_rejoin_store();                             // where the keys of the seats are kept (rejoin_store.hpp)
+    void hook_rejoin_store();                             // the NetGame's key callbacks write to it (before the join: a Hello that shows a key may be refused at once)
     void apply_player_name(const std::string& name);      // the name that the HUD, the chat, the results and the setup screen show for this player
     void set_window_title(const std::string& title);
 
     // Network play
     void handle_net_events();
     void net_load_match();                                // the host said Start: load the map, initialise the simulation, report
-    void net_begin_match();                               // everybody loaded: the match runs on this machine
+    void net_begin_match(bool rejoin = false);            // everybody loaded: the match runs on this machine (a rejoin: it was given a match that runs, see NetGame::Event::rejoin)
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);
     void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
     void sync_room_view();
     void render_net_overlay();
+    void render_catch_up_screen();                        // the loading screen's picture with "Catching up N%" instead of the match (page_layout.hpp)
+    bool handle_way_back_key(const SDL_KeyboardEvent& key);   // Esc on the way back opens the quit dialog; on the catch-up screen no other key does anything
+    void track_net_state();                               // every frame of a match of the network: how long the match has been held, who came back (the overlay's seconds and names)
+    NetOverlayMetrics net_overlay_metrics(const NetOverlayLine& line) const;    // the renderer's width of every text of the overlay
+    bool handle_vote_key(const SDL_KeyboardEvent& key);   // F2 / F3 while a vote is open
+    bool handle_vote_mouse(const SDL_MouseButtonEvent& button);   // a click on a button of the vote block
     void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
     std::optional<LatencyCornerLayout> last_latency_layout_;                                         // where the last frame put the network's readout (none: it drew none)
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows

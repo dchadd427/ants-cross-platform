@@ -634,6 +634,47 @@ void test_events_reach_the_status_line() {
 }
 
 
+void test_replayed_news() {
+    g_group = "replay";
+    std::printf("[status] news of a stretch that was run without a picture (a catch-up): the status line says none of it, the News Flash lines of the chat log stay; a match that is rejoined has no start news\n");
+    sim::SimulationEngine sim;
+    make_world(sim);
+    const auto log_has = [](const HUD& hud, const std::string& text) {
+        for (const std::string& line : hud.get_chat_log()) {
+            if (line.find(text) != std::string::npos) return true;
+        }
+        return false;
+    };
+    // the same two things happen, told as they happen and told as a replay: a refused hatch (text 13, the status line) and a drop-out (text 46, a News Flash line of the chat log)
+    for (const bool replayed : {false, true}) {
+        const uint8_t dropped = replayed ? 3 : 2;
+        sim.set_player_eggs(0, 3);
+        sim.set_player_score(0, 100);
+        sim.clear_news_events();
+        check(sim.try_hatch(0, sim::AntType::Worker) == sim::SimulationEngine::HatchResult::NotEnoughPoints, "the hatch is refused (text 13)");
+        sim.trigger_player_dropout(dropped);
+        HUD hud;
+        hud.init(0, false);
+        hud.poll_sim_events(sim, replayed);
+        hud.update(sim.get_world_state(), 1);
+        const std::string flash = std::string(replayed ? "Black" : "Blue") + " dropped out";                    // (the body of an entry wraps at 21 characters)
+        check(log_has(hud, flash), std::string(replayed ? "replayed" : "live") + ": the drop-out's News Flash line is in the log");
+        check(hud.status_line().text() == (replayed ? std::string() : std::string(sim::strings::text(sim::strings::kNeed200Points))),
+              std::string(replayed ? "replayed" : "live") + ": the status line says " + (replayed ? "nothing of the hatch" : "\"You need 200 points to hatch!\"") + ", it says \"" + hud.status_line().text() + "\"");
+    }
+    // the screen of a match that is rejoined does not announce a start
+    HUD started;
+    started.init(0);
+    check(log_has(started, "Game started!") && started.status_line().text() == "Welcome to Ants!", "a match that starts: the start news line and the Welcome (\"" + started.status_line().text() + "\")");
+    HUD rejoined;
+    rejoined.init(0, false);
+    check(rejoined.get_chat_log().empty() && rejoined.status_line().text().empty(), "a match that is rejoined: no start news line, no Welcome");
+    rejoined.reset(true);
+    check(log_has(rejoined, "Game started!") && rejoined.status_line().text() == "Welcome to Ants!", "reset() announces by default");
+    rejoined.reset(false);
+    check(rejoined.get_chat_log().empty() && rejoined.status_line().text().empty(), "reset(false) does not");
+}
+
 void test_hatch_texts() {
     g_group = "world";
     std::printf("[status] hatching: 16 without eggs, 14 while one hatches, 13 (with the canthatch cue) below 200 points, 15 when accepted, 63 at the emergence\n");
@@ -930,6 +971,7 @@ int main(int argc, char* argv[]) {
     test_stop();
     test_world_message_flags();
     test_events_reach_the_status_line();
+    test_replayed_news();
     test_hatch_texts();
     test_alliance_texts();
     test_chat_log_format();

@@ -12,6 +12,7 @@
 #include "ants_ai/team_up.hpp"
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include <cctype>
 #include <ctime>
 #include <cstring>
@@ -513,6 +514,7 @@ bool Application::init(const ApplicationConfig& config) {
     choose_aspect();
     choose_zoom();
     choose_prediction();
+    make_rejoin_store();
 
     // 6. Create Desktop Window
     uint32_t win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -662,12 +664,24 @@ bool Application::init(const ApplicationConfig& config) {
     if (networked) {
         config_.start_in_map_select = true;
         net_ = std::make_unique<net::NetGame>(sim_);
+        hook_rejoin_store();
         net_->set_discovery(config_.lan_port);                                          // an open room announces itself to the local network (ants_net/lan.hpp)
         net_->set_game_version(std::string(VERSION_STRING));
         const bool host_role = config_.net_role == ApplicationConfig::NetRole::Host;
+        // A join that names a room of a server joins with the key of the seat that this machine had there, when the store has a fresh one (a game that was closed, a page that was reloaded): the
+        // newest entry of that server and room, or of the seat that --seat asks for. The key goes into the Hello only; the seat is the entry's, so that the key can be let go of by its seat.
+        net::SeatKey join_key{};
+        uint8_t join_seat = config_.net_seat;
+        if (!host_role && !config_.net_room.empty() && rejoin_store_) {
+            const std::string server = rejoin_server_text(config_.net_address, config_.net_port, config_.net_url);
+            if (const std::optional<RejoinEntry> kept = rejoin_store_->find(server, config_.net_room, config_.net_seat)) {
+                join_key = kept->key;
+                join_seat = kept->seat;
+            }
+        }
         const bool ok = host_role                   ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
-                        : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, config_.net_seat, config_.net_room, config_.net_token)
-                                                   : net_->join(config_.net_address, config_.net_port, player_name, config_.net_seat, config_.net_room, config_.net_token);
+                        : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, join_seat, config_.net_room, config_.net_token, join_key)
+                                                   : net_->join(config_.net_address, config_.net_port, player_name, join_seat, config_.net_room, config_.net_token, join_key);
         if (!ok && !host_role && !config_.net_url.empty()) {
 #if defined(__EMSCRIPTEN__)
             std::cerr << "[Application] Could not join " << config_.net_url << " (not a usable ws:// or wss:// address, or this browser has no WebSocket)" << std::endl;
@@ -970,7 +984,7 @@ bool Application::step_zoom(int direction, int32_t anchor_x, int32_t anchor_y) {
 }
 
 bool Application::view_zoom_allowed(int32_t x, int32_t y) const {
-    return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !pointer_outside_ && hud_.view_zoom_allowed() && hud_.over_map(x, y);
+    return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !catch_up_screen_active() && !pointer_outside_ && hud_.view_zoom_allowed() && hud_.over_map(x, y);
 }
 
 // SDL_MOUSEWHEEL over the map view: the wheel rolled away zooms in, towards the pointer, one level per notch (a trackpad's small deltas add up; zoom::wheel_amount undoes the system's
@@ -1099,21 +1113,26 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 }
 
 // The moment a match starts for the player: music and the start sound, the HUD, the "get ready" modal, the Playing state.
-void Application::enter_match() {
+void Application::enter_match(bool rejoin) {
     // In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3. A match that begins while the page is hidden (a background step) starts no music and no sound effect: the page
-    // is not heard; the music starts when it is shown (apply_pending_music)
+    // is not heard; the music starts when it is shown (apply_pending_music). A match that is rejoined is not announced: no start sound, no "Get ready" dialog below.
     if (background_stepping_) {
         pending_music_ = PendingMusic::InGame;
     } else {
         play_next_ingame_music();
         // Play authentic random game startup sound (rndm1..6.wav / Sound IDs 7..12)
-        play_startup_sound();
+        if (!rejoin) play_startup_sound();
     }
 
     // Reset HUD & Scorecard
-    hud_.init(local_player_id_);
-    hud_.reset();
-    hud_.start_match_modal(network_active());                               // (the simulation waits for it: update_simulation, post_tick)
+    hud_.init(local_player_id_, !rejoin);
+    hud_.reset(!rejoin);
+    if (!rejoin) hud_.start_match_modal(network_active());                  // (the simulation waits for it: update_simulation, post_tick)
+    held_since_ms_ = -1.0;                                                  // (nothing of an earlier match's pauses and votes)
+    catch_up_backlog_ = false;
+    prev_missing_.clear();
+    back_name_.clear();
+    vote_press_ = 0;
     cue_router_.reset();                                                    // (no cue of an earlier match is waited for)
     felt_delay_ = net::FeltDelayMeter();
     orders_seen_ = 0;                                                       // (the match's own prediction counts its orders from none)
@@ -1576,7 +1595,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the corner's "delay" in ms as the player reads it (the felt delay while the prediction is on, the
 // network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 cooling down after its budget; 10: the
 // orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
-// 15: reads 0 and starts again).
+// 15: reads 0 and starts again). The lines that the way-back overlay shows (the page cannot read the canvas; tests/scripts/web_rejoin_check.py): 16: how many lines there are now (0: none); 10000 + 1000 * line + index:
+// the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
     if (g_web_app == nullptr) return -1;
@@ -1620,7 +1640,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             g_frame_work_max_ms = 0.0;
             g_frame_work_frames = 0;
             return 0;
-        default: return -1;
+        default: return net_overlay_probe(g_web_app->net_overlay_now(), what);                 // (16 and 10000 and up; anything else is -1)
     }
 }
 #endif
@@ -1805,7 +1825,7 @@ void Application::handle_events() {
         // Gameplay Event Dispatch
         switch (event.type) {
             case SDL_TEXTINPUT:
-                if (state_ == AppState::Playing) {
+                if (state_ == AppState::Playing && !catch_up_screen_active()) {
                     hud_.handle_text_input(event.text.text);
                 }
                 break;
@@ -2041,7 +2061,7 @@ void Application::handle_camera_panning(float dt) {
     input_accumulator_ += dt;
     while (input_accumulator_ >= 0.050f) {
         input_accumulator_ -= 0.050f;
-        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_) continue;
+        if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_ || catch_up_screen_active()) continue;
         if (mouse_screen_x_ < 0 || mouse_screen_x_ >= layout_.width || mouse_screen_y_ < 0 || mouse_screen_y_ >= layout_.height) continue;
         hud_.input_tick(renderer_->camera(), current_level_.width(), current_level_.height(), mouse_screen_x_, mouse_screen_y_);
     }
@@ -2055,6 +2075,9 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER || sym == SDLK_c || sym == SDLK_q || sym == SDLK_x) scorecard_.leave();
         return;
     }
+
+    if (handle_way_back_key(key)) return;                    // Esc on the way back asks to leave; nothing else works on the catch-up screen
+    if (handle_vote_key(key)) return;                        // F2 and F3 are the vote block's keys while a vote is open (the original's keys are F1 and F9 - F12)
 
     bool ctrl_or_gui = (key.keysym.mod & KMOD_CTRL) || (key.keysym.mod & KMOD_GUI);
 
@@ -2074,6 +2097,7 @@ void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
     mouse_screen_y_ = motion.y;
     mouse_has_moved_ = true;
     pointer_outside_ = false;
+    if (catch_up_screen_active() && !hud_.is_quit_dialog_open()) return;       // (no match is on the screen: its hover, rubber band and minimap have nothing to do)
 
     if (scorecard_.is_open()) {
         scorecard_.handle_mouse_motion(motion.x, motion.y);
@@ -2101,6 +2125,9 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
         return;
     }
 
+    if (catch_up_screen_active() && !hud_.is_quit_dialog_open()) return;  // (no match is on the screen: a click would give orders to a map that nobody sees)
+    if (handle_vote_mouse(button)) return;                               // a press and a release on a button of the vote block are that choice (nothing of it reaches the map)
+
     if (button.button == SDL_BUTTON_MIDDLE) {                            // the original has no use for it; the remake's: back to the zoom 1, towards the pointer (the release is nobody's)
         if (button.type == SDL_MOUSEBUTTONDOWN && view_zoom_allowed(button.x, button.y)) set_zoom(zoom::kNormal, button.x, button.y);
         return;
@@ -2112,6 +2139,58 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
     } else if (button.type == SDL_MOUSEBUTTONUP) {
         hud_.handle_mouse_up(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
     }
+}
+
+// The keys of the way back: Esc (this machine's link is lost, or it catches up) opens the quit dialog that Ctrl+Q opens; a held Esc asks once. The catch-up screen has no match to give a key to:
+// no other key does anything there, except the open dialog's Y, N and Esc.
+bool Application::handle_way_back_key(const SDL_KeyboardEvent& key) {
+    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) return false;
+    const bool catching_up = catch_up_screen_active();
+    const bool away = catching_up || (net_->phase() == net::NetGame::Phase::Playing && net_->pause_info().reconnecting);
+    if (!away) return false;
+    if (key.keysym.sym == SDLK_ESCAPE) {
+        if (key.repeat != 0) return true;
+        if (hud_.is_quit_dialog_open() || (hud_.is_modal_open() && !hud_.is_match_start_modal_active())) return false;      // (a dialog's own Esc)
+        hud_.open_quit_dialog();
+        return true;
+    }
+    if (hud_.is_quit_dialog_open()) return false;                        // (the dialog takes its keys: Y and N)
+    return catching_up;                                                  // (the match is not on the screen: no other key reaches it)
+}
+
+// The vote block's keys: F2 keeps waiting, F3 goes on without the seat. A fresh press of the other key changes the vote (the server counts the last choice of every player). Only while a vote is open
+// on this machine's screen and no dialog is over it; a held key sends once.
+bool Application::handle_vote_key(const SDL_KeyboardEvent& key) {
+    if (key.keysym.sym != SDLK_F2 && key.keysym.sym != SDLK_F3) return false;
+    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) return false;
+    if (hud_.is_modal_open() && !hud_.is_match_start_modal_active()) return false;               // a dialog takes every key
+    if (!net_->pause_info().vote_open) return false;
+    if (key.repeat == 0) net_->vote(key.keysym.sym == SDLK_F2);
+    return true;
+}
+
+// The vote block's buttons are the button class of the original's screens: the press captures, the release inside the same button is the choice, and what the button took never reaches the map
+bool Application::handle_vote_mouse(const SDL_MouseButtonEvent& button) {
+    if (button.button != SDL_BUTTON_LEFT) return false;
+    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) {
+        vote_press_ = 0;
+        return false;
+    }
+    if (button.type == SDL_MOUSEBUTTONDOWN) {
+        vote_press_ = 0;
+        if (hud_.is_modal_open() && !hud_.is_match_start_modal_active()) return false;
+        const NetVoteButtons buttons = net_vote_buttons();
+        if (!buttons.open) return false;
+        if (buttons.keep.contains(button.x, button.y)) vote_press_ = 1;
+        else if (buttons.go_on.contains(button.x, button.y)) vote_press_ = 2;
+        return vote_press_ != 0;
+    }
+    if (vote_press_ == 0) return false;
+    const uint8_t pressed = vote_press_;
+    vote_press_ = 0;
+    const NetVoteButtons buttons = net_vote_buttons();
+    if (buttons.open && (pressed == 1 ? buttons.keep : buttons.go_on).contains(button.x, button.y)) net_->vote(pressed == 1);
+    return true;                                                         // (the release of a press that this took is nobody else's)
 }
 
 // The orders that input has given the predicted engine since the last look are felt from this frame (net::FeltDelayMeter). Every order of the player is a mouse button or a key, and those two
@@ -2193,7 +2272,10 @@ void Application::post_tick() {
     const sim::SimulationEngine& shown = view_sim();        // (what the screen shows: with the prediction on, the predicted engine, a tick further for every tick)
     const auto& world = shown.get_world_state();
     hud_.update(world, 1);
-    hud_.poll_sim_events(sim_);                              // (the news are the confirmed engine's: they are told once, whatever was shown before)
+    // The first tick after a catch-up: the engine queued the sounds and news of every turn it ran without a picture. They are not played or said now (the news flashes of the chat log stay).
+    const bool replayed = catch_up_backlog_;
+    catch_up_backlog_ = false;
+    hud_.poll_sim_events(sim_, replayed);                    // (the news are the confirmed engine's: they are told once, whatever was shown before)
 
     if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
     if (net_ != nullptr && net_->predicting()) felt_delay_.on_tick_shown();      // (what an order of this frame did is in the picture now: the next frame that is drawn shows it)
@@ -2204,6 +2286,7 @@ void Application::post_tick() {
                   << " s: its work took longer than its budget too often. The match goes on as it did without it, and the prediction tries again afterwards." << std::endl;
     }
     auto audio_events = sim_.poll_audio_events();            // (drained in every case: the queue must not grow)
+    if (replayed) audio_events.clear();
     std::vector<sim::AudioEvent> predicted_cues;
     if (prediction != nullptr || !cue_router_.idle()) {
         // The cues of the own ants' own actions come from the predicted engine, when it runs the tick that makes them (in step with the picture), and the confirmed engine's copies of them
@@ -2272,6 +2355,12 @@ void Application::update_results(float dt) {
 // quitter, whose row goes last on every results screen, and the results (with Leave) follow. With more sides left the original sends the drop message and
 // exits; here the player leaves the same way as before (the network announces the departure to the others).
 void Application::confirm_quit() {
+    // A match that is held (a seat is missing, the countdown runs, this machine is on its way back) seals no turn: a Quit command would be lost and the player would stay. The player
+    // leaves for good instead (NetGame::leave: the key is let go of, the others are told when the link is up).
+    if (network_active() && net_->paused()) {
+        leave_game();
+        return;
+    }
     if (state_ == AppState::Playing && !sim_.is_match_over() && sim_.other_sides(local_player_id_) == 1) {
         sim::Command quit_command;
         quit_command.type = sim::CommandType::Quit;
@@ -2302,6 +2391,9 @@ void Application::pump_network(float dt, double gap_seconds) {
     if (gap_seconds > 0.0) net_->note_gap(static_cast<uint32_t>(std::min(gap_seconds * 1000.0, 4.0e9)));   // a host that said nothing has been silent for the gap too
     handle_net_events();
     if (!net_) return;                                           // (a lost game brought the player back to the start menu, which let go of the net)
+    track_net_state();
+    // The "Get ready to play!" dialog gives way to a pause (a seat lost before the first turn holds the match): it would hide the overlay and the vote block. It is closed for good.
+    if (hud_.is_match_start_modal_active() && net_->phase() == net::NetGame::Phase::Playing && (net_->paused() || net_->pause_info().vote_open)) hud_.dismiss_match_start_modal();
     if (menu_enabled_ && state_ == AppState::MapSelect && (net_->phase() == net::NetGame::Phase::Failed || net_->phase() == net::NetGame::Phase::Over)) {
         return_to_start_menu(net_->status_text());               // the room is dead (the server closed it, the connection is gone): not a room screen that nothing can happen on
         return;
@@ -2537,7 +2629,7 @@ void Application::handle_net_events() {
                 net_load_match();
                 break;
             case net::NetGame::Event::Type::Begun:
-                net_begin_match();
+                net_begin_match(ev.rejoin);
                 break;
             case net::NetGame::Event::Type::Cancelled:               // the start failed: back in the room, the host's controls work again
                 map_select_.unlock();
@@ -2592,14 +2684,16 @@ void Application::net_load_match() {
 }
 
 // Everybody has loaded: the match runs here from now on.
-void Application::net_begin_match() {
+void Application::net_begin_match(bool rejoin) {
     local_player_id_ = net_->my_seat();
     hud_.set_command_sink(net_.get());
     close_room_chat();
-    enter_match();
+    enter_match(rejoin);
     // The match's chat log starts with what was said in the waiting room (protocol 11: the lobby kept the last 200 lines, this player's own among them): the people of a room who talked
-    // before the START find their talk in the log of the match. The room's own notices ("Bots cannot play with Fog of War.") were for the setup screen and are not repeated.
+    // before the START find their talk in the log of the match. The room's own notices ("Bots cannot play with Fog of War.") were for the setup screen and are not repeated. A machine that
+    // rejoins has no waiting room behind it (and its second begin, after a server that lost the last turns, must not say the old lines again).
     for (const net::ChatLine& line : net_->pregame_chat()) {
+        if (rejoin) break;
         if (line.notice()) continue;
         // (under the name that the sender had when it spoke: the seat may have another player now, a player who left and a newcomer who took the seat)
         const std::string name = !line.name.empty() ? line.name : (line.seat < sim::MAX_PLAYERS ? sim_.get_player_name(line.seat) : std::string());
@@ -2611,6 +2705,10 @@ void Application::net_begin_match() {
 // The session is over (the player left, the host left, a match ended and its results were closed): back to the local setup screen.
 void Application::net_end_session(const std::string& notice) {
     stop_bots();
+    held_since_ms_ = -1.0;
+    prev_missing_.clear();
+    back_name_.clear();
+    vote_press_ = 0;
     room_chat_.close();
     room_chat_press_taken_ = false;
     fill_specs_.clear();
@@ -2629,11 +2727,13 @@ void Application::net_end_session(const std::string& notice) {
     apply_team_names(config_.team_names, 0x0F);
 }
 
-// The waiting and out-of-sync messages of a network match (remake UI: the original has no such text). A machine that waits for the next turn
-// says so after one second; a desync stops the match and says so.
-NetOverlayLine Application::net_overlay_now() const {
-    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return NetOverlayLine{};
+// The lines of a network match (net_overlay.hpp: the way back, the vote, the seats that are missing, the countdown, and today's waiting, lag and out-of-sync lines): remake UI, the original has
+// no such text. What the network layer says is looked at here, the rules and the words are the model's.
+NetOverlayLine Application::net_overlay_now() const { return net_overlay_line(net_overlay_input()); }
+
+NetOverlayInput Application::net_overlay_input() const {
     NetOverlayInput in;
+    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return in;
     in.desynced = net_->desynced();
     in.electing = net_->electing();
     in.stalled_ms = net_->stalled_ms();
@@ -2647,19 +2747,140 @@ NetOverlayLine Application::net_overlay_now() const {
         in.lag_behind_ms = lag->behind_ms;
     }
     in.notice = net_->match_notice();                                   // "Bob is the host now." for a few seconds
-    return net_overlay_line(in);
+    // the way back and the held match
+    const net::PauseInfo pause = net_->pause_info();
+    in.reconnecting = pause.reconnecting;
+    in.away_s = pause.away_s;
+    in.attempts = pause.attempts;
+    in.way_back_catching_up = pause.catching_up;
+    in.held_ms = held_since_ms_ >= 0.0 ? static_cast<uint32_t>(std::max(0.0, net_time_ms_ - held_since_ms_)) : 0u;
+    for (const net::PauseInfo::Seat& seat : pause.missing) in.missing.push_back(NetOverlaySeat{seat.seat, seat.name, seat.away_s, seat.catching_up, seat.progress});
+    in.vote_open = pause.vote_open;
+    in.vote_seat = pause.vote_seat;
+    in.vote_name = pause.vote_name;
+    in.votes_continue = pause.votes_continue;
+    in.voters = pause.voters;
+    in.my_vote = pause.my_vote == net::PauseInfo::Choice::KeepWaiting ? NetOverlayInput::Choice::KeepWaiting
+                 : pause.my_vote == net::PauseInfo::Choice::Continue  ? NetOverlayInput::Choice::Continue
+                                                                       : NetOverlayInput::Choice::None;
+    in.resume_seconds_left = pause.resume_seconds_left;
+    in.back_name = back_name_;
+    in.max_width = net_overlay_max_width(layout_.view());               // (a name that does not fit is cut: every line and every label fits the overlay at either picture)
+    if (renderer_) in.measure = [this](const std::string& text) { return renderer_->get_text_width(text, FontSize::Px14); };
+    return in;
+}
+
+NetOverlayMetrics Application::net_overlay_metrics(const NetOverlayLine& line) const {
+    NetOverlayMetrics m;
+    if (!renderer_) return m;
+    for (const std::string& text : line.lines) m.line_w.push_back(renderer_->get_text_width(text, FontSize::Px14));
+    m.text_h = renderer_->get_text_height(FontSize::Px14);
+    if (line.vote.open) {
+        m.count_w = renderer_->get_text_width(line.vote.count, FontSize::Px14);
+        m.keep_w = renderer_->get_text_width(line.vote.keep, FontSize::Px14);
+        m.go_on_w = renderer_->get_text_width(line.vote.go_on, FontSize::Px14);
+    }
+    return m;
+}
+
+Application::NetVoteButtons Application::net_vote_buttons() const {
+    NetVoteButtons out;
+    const NetOverlayLine line = net_overlay_now();
+    if (!line.vote.open) return out;
+    const NetOverlayLayout where = net_overlay_layout(layout_.view(), net_overlay_metrics(line), true);
+    out.open = true;
+    out.keep = where.keep;
+    out.go_on = where.go_on;
+    return out;
+}
+
+// The catch-up screen (page_layout.hpp): the machine runs the match from the server's log without drawing it. A machine that starts the match again (NetGame's BadRequest fallback) has it from the
+// moment the old session ends: the loading picture, never the match that was reset behind it.
+bool Application::catch_up_screen_active() const {
+    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) return false;
+    switch (net_->phase()) {
+        case net::NetGame::Phase::Playing: return net_->pause_info().catching_up;
+        case net::NetGame::Phase::Connecting:
+        case net::NetGame::Phase::Loading: return true;
+        default: return false;
+    }
+}
+
+int32_t Application::catch_up_percent() const {
+    if (!network_active() || net_->phase() != net::NetGame::Phase::Playing) return 0;
+    return net_->pause_info().catch_up_percent;
+}
+
+void Application::render_catch_up_screen() {
+    renderer_->set_picture(canvas().rect());                             // (the loading screen is the whole canvas, whatever picture the match has)
+    draw_catch_up_screen(*renderer_, assets_, wide_pages(), catch_up_percent());
+    renderer_->set_picture(picture_);
+    hud_.render_quit_dialog_alone(*renderer_, assets_);                  // (Esc asked: the dialog is the match's own, over this picture)
 }
 
 void Application::render_net_overlay() {
     const NetOverlayLine line = net_overlay_now();
-    const std::string& text = line.text;
-    const ants::assets::ColorRGBA colour = line.alarm ? ants::assets::ColorRGBA{255, 90, 90, 255} : ants::assets::ColorRGBA{255, 255, 255, 255};
-    if (text.empty()) return;
-    const int32_t w = renderer_->get_text_width(text, FontSize::Px14);
-    const int32_t h = renderer_->get_text_height(FontSize::Px14);
-    const NetOverlayBox where = net_overlay_box(layout_.view(), w, h);   // centred in the map view, 5 rows below its top (the original's (17 + (441 - w) / 2, 26))
-    renderer_->fill_rect(where.box.x, where.box.y, where.box.w, where.box.h, ants::assets::ColorRGBA{0, 0, 0, 170});
-    renderer_->draw_text(text, where.text_x, where.text_y, colour, FontSize::Px14);
+    if (line.lines.empty() && !line.vote.open) return;
+    using ants::assets::ColorRGBA;
+    const ColorRGBA white{255, 255, 255, 255};
+    const ColorRGBA red{255, 90, 90, 255};
+    const ColorRGBA shade{0, 0, 0, 170};                                // (the dark box that every line has)
+    const NetOverlayLayout where = net_overlay_layout(layout_.view(), net_overlay_metrics(line), line.vote.open);   // centred in the map view, 5 rows below its top (the original's (17 + (441 - w) / 2, 26))
+    for (size_t i = 0; i < line.lines.size() && i < where.lines.size(); ++i) {
+        renderer_->fill_rect(where.lines[i].box.x, where.lines[i].box.y, where.lines[i].box.w, where.lines[i].box.h, shade);
+        renderer_->draw_text(line.lines[i], where.lines[i].text_x, where.lines[i].text_y, i == 0 && line.alarm ? red : white, FontSize::Px14);
+    }
+    if (!where.has_vote) return;
+    renderer_->fill_rect(where.count.box.x, where.count.box.y, where.count.box.w, where.count.box.h, shade);
+    renderer_->draw_text(line.vote.count, where.count.text_x, where.count.text_y, white, FontSize::Px14);
+    // the two buttons: the choice that this player made is the one that is pressed (a lit face and a white edge); the other is dark
+    const auto button = [&](const LayoutRect& rect, const std::string& label, int32_t text_x, bool pressed) {
+        renderer_->fill_rect(rect.x, rect.y, rect.w, rect.h, pressed ? ColorRGBA{52, 124, 102, 240} : ColorRGBA{24, 40, 36, 215});
+        renderer_->draw_rect(rect.x, rect.y, rect.w, rect.h, pressed ? ColorRGBA{235, 245, 240, 255} : ColorRGBA{90, 130, 110, 255});
+        renderer_->draw_text(label, text_x, where.button_text_y, white, FontSize::Px14);
+    };
+    button(where.keep, line.vote.keep, where.keep_text_x, line.vote.keep_pressed);
+    button(where.go_on, line.vote.go_on, where.go_on_text_x, line.vote.go_on_pressed);
+}
+
+// Every frame of a match of the network: how long the match has been held on this screen (the missing seats are shown after a second), and who came back (the countdown that follows a return
+// names the seat: "Bob is back: the match goes on in 7"). A seat that was catching up when the list of the missing emptied is back; one that was still absent was dropped by the vote or the
+// cap, and nobody is named. This machine's own way back says nothing of the others: what was known of them is old.
+void Application::track_net_state() {
+    if (!net_ || !net_->active() || net_->phase() != net::NetGame::Phase::Playing) {
+        held_since_ms_ = -1.0;
+        prev_missing_.clear();
+        back_name_.clear();
+        return;
+    }
+    const net::PauseInfo p = net_->pause_info();
+    const bool own_way_back = p.reconnecting || p.catching_up;
+    if (p.catching_up) catch_up_backlog_ = true;                         // (the turns that it runs now are not heard: see post_tick)
+    const bool held = !own_way_back && (!p.missing.empty() || p.resume_seconds_left > 0);
+    if (!held) held_since_ms_ = -1.0;
+    else if (held_since_ms_ < 0.0) held_since_ms_ = net_time_ms_;
+    if (own_way_back) {
+        prev_missing_.clear();
+        back_name_.clear();
+        return;
+    }
+    if (!p.missing.empty()) {
+        prev_missing_ = p.missing;
+        back_name_.clear();
+        return;
+    }
+    if (!prev_missing_.empty()) {
+        size_t back = 0;
+        std::string name;
+        for (const net::PauseInfo::Seat& seat : prev_missing_) {
+            if (!seat.catching_up) continue;
+            ++back;
+            name = seat.name.empty() ? "Player " + std::to_string(static_cast<unsigned>(seat.seat) + 1u) : seat.name;
+        }
+        back_name_ = back == 1 ? name : std::string();
+        prev_missing_.clear();
+    }
+    if (p.resume_seconds_left == 0) back_name_.clear();                  // (the countdown is over, or there was none: a blip)
 }
 
 // The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" and "delay NN ms" while a room or a match of a network game is on screen. A game of one
@@ -2705,6 +2926,8 @@ void Application::render_frame() {
         map_select_.render(*renderer_, assets_);
     } else if (scorecard_.is_open()) {
         scorecard_.render(*renderer_, assets_);
+    } else if (catch_up_screen_active()) {
+        render_catch_up_screen();
     } else {
         sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
         const auto& world = view.get_world_state();
@@ -2781,7 +3004,7 @@ void Application::render_frame() {
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65): the pointer is the picture's
     renderer_->set_picture(picture_);
     CursorType cur = CursorType::Normal;
-    if (state_ == AppState::Playing && !scorecard_.is_open()) {
+    if (state_ == AppState::Playing && !scorecard_.is_open() && !catch_up_screen_active()) {         // (the catch-up screen has no map to point at)
         sim::SimulationEngine& view = view_sim();
         hud_.set_sim_query(&view);                           // (the cursor's special-target question is asked of the picture's own engine)
         cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, view.get_world_state(), view.grid(), renderer_->camera());

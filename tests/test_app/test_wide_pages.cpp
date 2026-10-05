@@ -9,6 +9,8 @@
 //      the original's own boxes pixel for pixel (the tiles of re_screen), and the wide chain is the same construction 320 columns wider;
 //   4. the loading screen's order (fix of the frame pieces' order): the classic picture draws the pieces of `antslogo` last stored first, as the original does (Capstone: 0x102b8d7, 0x1029924,
 //      0x1029987, 0x102a977), and the old stored order came out differently in 145 pixels;
+//   4b. the catch-up screen of a way back (page_layout.hpp): the loading screen's picture with the bar filled to the percent, "Catching up 45%" on the strip and "Esc leaves the match" under
+//      it, and nothing else of the picture changed, at both shapes;
 //   5. the composed screens against the mock-up PNGs, pixel for pixel (pinned FNV-1a 64 digests of the mock-ups' own pixels, the text areas masked): the real renderer draws each screen;
 //   6. the results' numbers (fix of the counters): the four counters of a row are single-line labels, left aligned at the original's x, clipped to their box and drawn in the original's
 //      8 px digits (squeezed): the draw calls, the ink of the real picture ("20", "4" and "10" are three numbers), a number wider than its label is clipped;
@@ -940,6 +942,110 @@ void test_loading_order(const assets::AssetArchive& arc) {
     const std::vector<uint8_t> bar = rig.read();
     check(pixel(bar, 640, 229, 448) == Rgb{31, 23, 51} && pixel(bar, 640, 229 + 111, 455) == Rgb{31, 23, 51} && pixel(bar, 640, 229 + 112, 455) != Rgb{31, 23, 51} && pixel(game, 640, 229, 448) != Rgb{31, 23, 51},
           "the bar after 12 ticks is 112 px of (31, 23, 51) from the slot's left edge (234 * 12 / 25), and empty at the start");
+}
+
+// =====================================================================================================================================================
+// 4b. The catch-up screen
+// =====================================================================================================================================================
+
+void save_picture(const std::string& name, const std::vector<uint8_t>& px, int32_t w, int32_t h);
+
+void test_catch_up_screen(const assets::AssetArchive& arc) {
+    group("catch-up", "the catch-up screen is the loading screen's picture with the bar filled to the percent and the words on the strip; the rest of the picture is the loading screen's");
+    check(catch_up_text(45) == "Catching up 45%" && catch_up_text(0) == "Catching up 0%" && catch_up_text(100) == "Catching up 100%", "the words: \"Catching up 45%\"");
+    check(catch_up_text(-7) == "Catching up 0%" && catch_up_text(250) == "Catching up 100%", "a percent outside 0 .. 100 is cut to it");
+    check(std::string(kCatchUpHint) == "Esc leaves the match", "the hint: \"Esc leaves the match\"");
+    for (const bool wide : {false, true}) {
+        const std::string shape = wide ? "wide" : "classic";
+        const int32_t w = wide ? 960 : 640;
+        const int32_t h = wide ? 540 : 480;
+        const LoadingLayout& l = LoadingLayout::of(wide);
+        // the calls: the loading screen's own first, then the fill of the bar, the words and the hint
+        {
+            Spy plain(arc);
+            draw_loading_screen(plain, arc, wide, 0);
+            Spy spy(arc);
+            draw_catch_up_screen(spy, arc, wide, 45);
+            const size_t n = plain.events.size();
+            bool same = spy.events.size() > n;
+            for (size_t i = 0; same && i < n; ++i) same = spy.events[i].kind == plain.events[i].kind && spy.events[i].name == plain.events[i].name && spy.events[i].x == plain.events[i].x && spy.events[i].y == plain.events[i].y;
+            check(same, shape + ": the first calls are the loading screen's own picture (" + std::to_string(n) + " calls)");
+            check(spy.events.size() == n + 3, shape + ": and three more follow: the bar's fill, the words and the hint (" + std::to_string(spy.events.size() - n) + ")");
+            if (spy.events.size() == n + 3) {
+                const Spy::Ev& fill = spy.events[n];
+                const int32_t fill_w = 45 * l.bar.w / 100;
+                check(fill.kind == Spy::Kind::Fill && fill.x == l.bar.x && fill.y == l.bar.y && fill.w == fill_w && fill.h == l.bar.h && fill.colour.r == kLoadingBarColour.r && fill.colour.g == kLoadingBarColour.g &&
+                          fill.colour.b == kLoadingBarColour.b,
+                      shape + ": the bar is filled from the slot's left edge to 45% of its width (" + std::to_string(fill_w) + " of " + std::to_string(l.bar.w) + " px) in the loading bar's colour");
+                const Spy::Ev& words = spy.events[n + 1];
+                const int32_t text_w = static_cast<int32_t>(std::string("Catching up 45%").size()) * 6;
+                check(words.kind == Spy::Kind::Text && words.name == "Catching up 45%" && words.size == FontSize::Px24 && words.x == l.strip.x + (l.strip.w - text_w) / 2 &&
+                          words.y == l.strip.y + (l.strip.h - font_cell_height(FontSize::Px24)) / 2 && words.colour.r == 7 && words.colour.g == 11 && words.colour.b == 15,
+                      shape + ": the words are centred on the strip, in the black of the original's labels (" + std::to_string(words.x) + ", " + std::to_string(words.y) + ")");
+                const Spy::Ev& hint = spy.events[n + 2];
+                const int32_t hint_w = static_cast<int32_t>(std::string(kCatchUpHint).size()) * 6;
+                check(hint.kind == Spy::Kind::Text && hint.name == kCatchUpHint && hint.size == FontSize::Px14 && hint.x == l.strip.right() - 12 - hint_w && hint.y == l.strip.y + (l.strip.h - font_cell_height(FontSize::Px14)) / 2 &&
+                          hint.colour.r == 7 && hint.colour.g == 11 && hint.colour.b == 15,
+                      shape + ": the hint ends 12 px before the strip's right end, in the strip's middle line (" + std::to_string(hint.x) + ", " + std::to_string(hint.y) + ")");
+                check(words.x + text_w < hint.x && hint.x >= l.strip.x && hint.x + hint_w <= l.strip.right() && words.y >= l.strip.y && words.y + font_cell_height(FontSize::Px24) <= l.strip.bottom(),
+                      shape + ": the words and the hint lie on the strip and do not touch");
+            }
+        }
+        // the percent's two ends: nothing to fill at 0, the whole slot at 100 (and no more at 250)
+        {
+            Spy none(arc);
+            draw_catch_up_screen(none, arc, wide, 0);
+            Spy full(arc);
+            draw_catch_up_screen(full, arc, wide, 100);
+            Spy over(arc);
+            draw_catch_up_screen(over, arc, wide, 250);
+            Spy plain(arc);
+            draw_loading_screen(plain, arc, wide, 0);
+            check(none.events.size() == plain.events.size() + 2 && none.find_text("Catching up 0%") != nullptr, shape + ": at 0% the bar has no fill call");
+            const Spy::Ev& f = full.events[plain.events.size()];
+            check(f.kind == Spy::Kind::Fill && f.x == l.bar.x && f.w == l.bar.w && full.find_text("Catching up 100%") != nullptr, shape + ": at 100% the whole slot is filled (" + std::to_string(f.w) + " px)");
+            const Spy::Ev& o = over.events[plain.events.size()];
+            check(o.kind == Spy::Kind::Fill && o.w == l.bar.w && over.find_text("Catching up 100%") != nullptr, shape + ": a percent above 100 does not run out of the slot");
+        }
+        // the pictures: the real renderer draws the loading screen at its start and the catch-up screen at 45%; they differ in the bar and on the strip, and nowhere else
+        RendererRig rig(arc, w, h);
+        check(rig.ok, shape + ": the renderer is up on a " + std::to_string(w) + " x " + std::to_string(h) + " canvas");
+        if (!rig.ok) continue;
+        rig.renderer.begin_frame();
+        draw_loading_screen(rig.renderer, arc, wide, 0);
+        const std::vector<uint8_t> plain_px = rig.read();
+        rig.renderer.begin_frame();
+        draw_catch_up_screen(rig.renderer, arc, wide, 45);
+        const std::vector<uint8_t> catch_px = rig.read();
+        save_picture("catch_up_" + shape, catch_px, w, h);
+        const int32_t text_w = rig.renderer.get_text_width("Catching up 45%", FontSize::Px24);
+        const int32_t hint_w = rig.renderer.get_text_width(kCatchUpHint, FontSize::Px14);
+        const CatchUpLayout where = catch_up_layout(wide, 45, text_w, hint_w);
+        const LayoutRect canvas{0, 0, w, h};
+        const int64_t all = differing_pixels(plain_px, catch_px, w, canvas);
+        const int64_t in_bar = differing_pixels(plain_px, catch_px, w, where.bar_fill);
+        const int64_t on_strip = differing_pixels(plain_px, catch_px, w, where.strip);
+        check(in_bar > 0 && on_strip > 100, shape + ": the picture changed in the bar (" + std::to_string(in_bar) + " px) and on the strip (" + std::to_string(on_strip) + ")");
+        check(all == in_bar + on_strip, shape + ": and nowhere else (" + std::to_string(all) + " pixels differ, " + std::to_string(in_bar + on_strip) + " of them in those two places)");
+        const int32_t fill_w = 45 * l.bar.w / 100;
+        const int32_t mid = l.bar.y + l.bar.h / 2;
+        check(pixel(catch_px, w, l.bar.x, mid) == Rgb{31, 23, 51} && pixel(catch_px, w, l.bar.x + fill_w - 1, mid) == Rgb{31, 23, 51} && pixel(catch_px, w, l.bar.x + fill_w, mid) != Rgb{31, 23, 51},
+              shape + ": the bar is the loading bar's purple for " + std::to_string(fill_w) + " px from the slot's left edge and no further");
+        // the words and the hint are dark ink on the strip, each in its own place (the real fonts' widths: they do not touch either)
+        const auto ink_in = [&](const LayoutRect& r) {
+            int64_t n = 0;
+            for (int32_t y = r.y; y < r.bottom(); ++y) {
+                for (int32_t x = r.x; x < r.right(); ++x) n += pixel(catch_px, w, x, y) == Rgb{7, 11, 15} && pixel(plain_px, w, x, y) != Rgb{7, 11, 15} ? 1 : 0;
+            }
+            return n;
+        };
+        check(ink_in(LayoutRect{where.text_x, where.strip.y, text_w, where.strip.h}) > 50, shape + ": the words are in ink on the strip (" + std::to_string(ink_in(LayoutRect{where.text_x, where.strip.y, text_w, where.strip.h})) + " px of the black)");
+        check(ink_in(LayoutRect{where.hint_x, where.strip.y, hint_w, where.strip.h}) > 30, shape + ": and so is the hint (" + std::to_string(ink_in(LayoutRect{where.hint_x, where.strip.y, hint_w, where.strip.h})) + " px of the black)");
+        check(where.text_x + text_w + 8 <= where.hint_x && where.hint_x + hint_w <= where.strip.right() && where.text_x >= where.strip.x,
+              shape + ": at the real fonts' widths the words (" + std::to_string(text_w) + " px) and the hint (" + std::to_string(hint_w) + " px) lie on the strip with room between them");
+        const int32_t widest = rig.renderer.get_text_width("Catching up 100%", FontSize::Px24);
+        check(where.strip.x + (where.strip.w - widest) / 2 + widest + 8 <= where.hint_x, shape + ": and the widest words (\"Catching up 100%\", " + std::to_string(widest) + " px) do not reach the hint");
+    }
 }
 
 // =====================================================================================================================================================
@@ -1969,6 +2075,7 @@ int main(int argc, char* argv[]) {
     test_seams(archive);
     test_boxes(archive);
     test_loading_order(archive);
+    test_catch_up_screen(archive);
     test_mockups(archive);
     test_host_panel(archive);
     test_counters(archive);
