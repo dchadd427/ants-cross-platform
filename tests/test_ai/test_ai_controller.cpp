@@ -1224,4 +1224,43 @@ void run_controller_tests() {
         ASSERT_EQ(sink.log.size(), 1u);                                                   // nothing refused left
         ASSERT_TRUE(sink.log[0].second.tile_x == 22 && sink.log[0].second.ants.size() == 1 && sink.log[0].second.ants[0] == mine[2]);
     } TEST_END();
+
+    TEST_CASE("AI2.22 A Special Order Never Names A Tile That A Living Ant Stands On, Whatever Team It Is (The Seat's Own, Its Ally, Either Enemy): The HUD's Target Cursor Shows Only Where No Ant Is Under The Pointer, So The Click Is Refused (Fate::Filtered) And Counted; The Same Order At A Free Tile Or At A Tile Where An Ant Has Died Passes; The Simulation Is Not Changed By It") {
+        sim::SimulationEngine sim;
+        build_world(sim, 7, 4);
+        sim.form_alliance(0, 3);
+        // one ant of each kind of occupant on a tile of its own, in a row far from every hill
+        const uint32_t own = sim.spawn_unit(0, sim::AntType::Worker, tc(20, 20));
+        sim.spawn_unit(3, sim::AntType::Worker, tc(21, 20));
+        sim.spawn_unit(1, sim::AntType::Worker, tc(22, 20));
+        sim.spawn_unit(2, sim::AntType::Fire, tc(23, 20));                                        // (a Fire Ant stands on a wall: the same)
+        const uint32_t dead = sim.spawn_unit(1, sim::AntType::Worker, tc(24, 20));
+        sim.kill_unit(dead);
+        for (int i = 0; i < 60; ++i) sim.tick();                                                  // (the dead ant is gone from the screen)
+        const std::vector<uint32_t> mine = ants_of(sim, 0);
+        std::vector<uint32_t> senders;
+        for (const uint32_t id : mine) {
+            if (id != own) senders.push_back(id);
+        }
+        ASSERT_TRUE(senders.size() >= 4);
+        RecordingSink sink(sim);
+        BotController c(sim, 3);
+        c.set_start_hold(0);
+        const std::vector<std::pair<int32_t, bool>> tiles = {{20, false}, {21, false}, {22, false}, {23, false}, {24, true}, {25, true}};     // (x, passes)
+        size_t looks = 0;
+        ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+            if (looks < tiles.size()) o.special(senders[looks % senders.size()], tc(tiles[looks].first, 20));
+            ++looks;
+        });
+        ASSERT_TRUE(bot != nullptr);
+        run_ticks(sim, c, 300);
+        ASSERT_TRUE(looks > tiles.size());
+        const BotController::SeatStats& st = c.stats(0);
+        ASSERT_EQ(st.filtered, 4u);                                                               // the own ant's tile, the ally's, the two enemies'
+        ASSERT_EQ(st.released, 2u);                                                               // the tile of the dead ant and the free tile
+        ASSERT_EQ(bot->count(Bot::Fate::Filtered), 4u);
+        ASSERT_EQ(bot->count(Bot::Fate::Sent), 2u);
+        for (const auto& e : sink.log) ASSERT_TRUE(e.second.type == CommandType::GroupSpecial && e.second.tile_x >= 24);
+        ASSERT_EQ(sink.log.size(), 2u);                                                           // nothing refused left
+    } TEST_END();
 }

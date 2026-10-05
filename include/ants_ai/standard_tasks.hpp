@@ -31,6 +31,18 @@ bool attackable(const BotView& view, const AntView& enemy);
 /// Whether an own ant may be sent to fight: it takes orders, holds nothing, is healthy and is a worker (of the level's default type) or a Combat Ant, and does not stand on a power-up
 bool can_fight(const BotView& view, const AntView& ant);
 
+/// What it takes to KILL an ant of `hp` hit points in the real engine (measured: docs/BOTS.md, "Hunting the kill"): the engine lets ONE blow land per hit clip (about 22 ticks, however many ants
+/// strike), and an ant that is down to ONE hit point walks home at the speed of its hunters and is not caught. So only a punch (a Combat Ant: 2 hit points, every other blow 1) finishes an ant:
+/// from an even number of hit points punches alone take it to 0; from an odd number one blow of another ant (`others` of them) opens first, so that one hit point is never left standing.
+/// Without a Combat Ant only an ant of 2 hit points dies, and only when three ants strike (the blows queue up and one lands as its clip ends); an ant of one hit point dies to any blow that
+/// reaches it (whether it can still be reached is for the caller to say).
+struct KillPlan {
+    bool possible{false};
+    uint32_t blows{0};                       // the blows that it takes (the opener included)
+    bool opener{false};                      // an ant that is no Combat Ant strikes first
+};
+KillPlan kill_plan(uint32_t hp, size_t combats, size_t others) noexcept;
+
 // ---- rank 5: fights ---------------------------------------------------------------------------------------------------------------------------------------
 
 /// Fights, one per enemy ant:
@@ -51,6 +63,29 @@ public:
     // ---- for the tests and the reports ----
     size_t fights() const noexcept { return fights_.size(); }
     uint32_t fights_started() const noexcept { return fights_started_; }
+    /// Skirmishes that the bot began of its own accord (plan.skirmish), those that were called off because the force had fallen below the enemy's, and those that ran now
+    uint32_t offence_started() const noexcept { return offence_started_; }
+    uint32_t offence_aborted() const noexcept { return offence_aborted_; }
+    /// Hunts of a kill (plan.hunt): the enemy ants that were killable at some look (each counted once), the hunts begun, and the hunted ants that left the view while it lasted (dead)
+    uint32_t hunt_available() const noexcept { return static_cast<uint32_t>(available_.size()); }
+    uint32_t hunts_started() const noexcept { return hunts_started_; }
+    uint32_t hunts_killed() const noexcept { return hunts_killed_; }
+    /// The looks at which a fight waited out the hit clip of its target instead of ending (a kill was in reach: kill_plan), and the fights that ended because the target had a lead of two tiles on its
+    /// way home with one hit point
+    uint32_t clip_waits() const noexcept { return clip_waits_; }
+    uint32_t escapes() const noexcept { return escapes_; }
+    size_t offence_running() const noexcept {
+        size_t n = 0;
+        for (const auto& f : fights_) n += f.second.offence ? 1u : 0u;
+        return n;
+    }
+    /// The target of the skirmish that runs (0: none)
+    uint32_t offence_target() const noexcept {
+        for (const auto& f : fights_) {
+            if (f.second.offence) return f.first;
+        }
+        return 0;
+    }
     uint32_t attacks_ordered() const noexcept { return attacks_ordered_; }
     uint32_t shunned_count() const noexcept { return shunned_count_; }
     bool shunned(uint32_t enemy, uint64_t tick) const noexcept;
@@ -71,10 +106,15 @@ private:
         uint64_t started{0};
         uint64_t last_alarm{0};
         bool ally{false};                    // a blow on an ant of the ally: only ants within ally_help_radius of the target answer
+        bool offence{false};                 // a skirmish of the bot's own (plan.skirmish): no blow came first, the force is skirmish_force and the fight ends by its strength and its clock
+        bool fire{false};                    // the Fire Ant that lights fire walls on the ring round the own gate (plan.fire_defence): it is hunted while the walls stand
+        bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or the advantage is gone
         std::map<uint32_t, Defender> defenders;
     };
 
     void start_fights(TaskContext& context);
+    void start_offence(TaskContext& context);
+    void start_fire_defence(TaskContext& context);
     void run_fight(TaskContext& context, Fight& fight, bool& end, std::vector<std::pair<sim::TileCoord, std::vector<uint32_t>>>& attacks);
 
     Tactics& tactics_;
@@ -83,6 +123,23 @@ private:
     uint32_t fights_started_{0};
     uint32_t attacks_ordered_{0};
     uint32_t shunned_count_{0};
+    uint32_t offence_started_{0};
+    uint32_t offence_aborted_{0};
+    uint64_t offence_pause_until_{0};
+    uint32_t fire_hunts_{0};
+    uint32_t hunts_started_{0};
+    uint32_t hunts_killed_{0};
+    uint32_t clip_waits_{0};
+    uint32_t escapes_{0};
+    std::set<uint32_t> available_;                   // the enemy ants that were killable at some look
+public:
+    /// Hunts of an enemy Fire Ant that fired the own gate in (plan.fire_defence)
+    uint32_t fire_hunts() const noexcept { return fire_hunts_; }
+    /// Whether the Fire Ant `ant` is hunted now
+    bool hunting(uint32_t ant) const noexcept {
+        const auto it = fights_.find(ant);
+        return it != fights_.end() && it->second.fire;
+    }
 };
 
 // ---- rank 3: power-ups --------------------------------------------------------------------------------------------------------------------------------------
@@ -379,6 +436,12 @@ public:
     uint32_t walls_ordered() const noexcept { return walls_ordered_; }
     size_t working() const noexcept { return working_ ? 1u : 0u; }
     int target() const noexcept { return target_; }
+    /// The Combat Ants that hold the walls of the fire-in at the moment (plan.sabotage_safe), the walls of the ring that the enemy put out, and the looks at which a fire-in was not started
+    /// because the enemy could put it out and no force was there to hold the walls
+    size_t escorts() const noexcept { return escorts_.size(); }
+    uint32_t put_out() const noexcept { return put_out_; }
+    uint32_t refused_safe() const noexcept { return refused_safe_; }
+    bool gave_up(uint8_t team, uint64_t tick) const noexcept { return team < sim::MAX_PLAYERS && giveup_until_[team] > tick; }
     /// The tiles around the gate of `hill` that seal the queue row (see above)
     static std::array<sim::TileCoord, 8> ring_of(const HillInfo& hill) noexcept;
 
@@ -393,6 +456,17 @@ private:
     uint64_t job_sent_{kPending};
     std::map<int64_t, uint64_t> ordered_;            // tile -> the tick of the last order
     uint32_t walls_ordered_{0};
+    // the fire-in that the enemy cannot simply put out (plan.sabotage_safe)
+    std::set<uint32_t> escorts_;                     // the Combat Ants that stay at the entrance and kill what comes to put the fire out
+    std::map<int64_t, uint64_t> lit_order_;          // ring tile -> the tick of the order that is to light it (until the wall is seen burning)
+    std::map<int64_t, bool> burning_;                // ring tile -> seen burning since that order
+    std::array<uint32_t, sim::MAX_PLAYERS> putouts_{};        // walls of the team's ring put out since the last give-up
+    std::array<uint64_t, sim::MAX_PLAYERS> giveup_until_{};   // the team is left alone until this tick
+    std::map<uint32_t, uint64_t> escort_order_;      // escort -> the tick of its last order to the entrance
+    uint64_t ring_done_{0};                          // since when the ring stands (0: it does not)
+    uint32_t put_out_{0};
+    uint32_t refused_safe_{0};
+    void release_escorts(AntLedger& ledger);
 };
 
 // ---- rank 4: harassment ---------------------------------------------------------------------------------------------------------------------------------------

@@ -18,8 +18,14 @@ LevelPlan plan_for(Level level) noexcept {
     LevelPlan p;
     p.level = level;
     // v0.6 (docs/BOTS.md, "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the owner's report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
-    // switches them all off again (the bot of v0.5.0, for the tournaments' comparison)
+    // switches these flags off again (the strategy of v0.5.0, for the tournaments' comparison; the controller's refusal of special orders onto an ant is no plan field and stays)
     p.race = true;
+    p.health_aware = true;
+    p.hunt = true;
+    p.sabotage_safe = true;
+    p.fire_defence = true;
+    p.catchup = true;
+    p.endgame = true;
     switch (level) {
         case Level::Easy:
             p.defenders = 1;
@@ -29,6 +35,14 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 0;
             p.contest_opening_ants = 0;
+            p.catchup_tier1 = 100;               // Easy escalates 2.5 times later than Hard, Medium 1.5 times
+            p.catchup_tier2 = 200;
+            p.catchup_tier3 = 325;
+            p.hunt_blows = 2;
+            p.hunt_force = 2;
+            p.hunt_reach = 6;
+            p.hunt_wide = false;                 // Easy hunts what stands next to its ants and nothing else
+            p.hunt_odds_percent = 150;
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -51,6 +65,12 @@ LevelPlan plan_for(Level level) noexcept {
             p.max_thief = 1;
             p.hatch_extra = 1;
             p.strike_force = 3;                  // (strikes, wipe_focus and hatches are OFF at every level: measured, they cost score, docs/BOTS.md; the numbers are for the flags)
+            p.catchup_tier1 = 60;
+            p.catchup_tier2 = 120;
+            p.catchup_tier3 = 195;
+            p.hunt_blows = 3;
+            p.hunt_force = 3;
+            p.hunt_reach = 10;                   // Medium hunts what is within the leash of its hill and at its piles as well
             break;
         case Level::Hard:
             p.defenders = 3;
@@ -78,6 +98,12 @@ LevelPlan plan_for(Level level) noexcept {
             p.gate = true;                       // guiding for eating: +4 to +23 percent alone on every shipped map (docs/BOTS.md)
             p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOTS.md "Aggression")
             p.raid_min_loot = 15;                // a raid for 15 points is a swing of 30 and a trip of a few hundred ticks: it pays (raidmin 10 / 30 / 60: 96.5 / 94.1 / 93.1 percent against Medium, Medium, Easy)
+            p.hunt_blows = 4;
+            p.hunt_force = 3;
+            p.hunt_reach = 10;
+            p.hunt_leader_carriers = true;       // Hard also hunts the carriers of the leading team wherever they are
+            // (p.skirmish, the stronger force at a carrier or a worker at a pile, is built and OFF: against three bots of v0.5.0 on TREASURE a Hard bot with it won 14.1 percent of 96 matches and 28.6
+            // without it, 25 being equal; it keeps three ants from the piles for up to 600 ticks at a time and the enemy's defenders come: docs/BOTS.md, "Fights of its own")
             break;
     }
     return p;
@@ -351,6 +377,22 @@ Standing standing_of(const LevelPlan& plan, const BotView& view, const MapInfo& 
     const int32_t margin = std::max<int32_t>(static_cast<int32_t>(plan.strike_margin), best * static_cast<int32_t>(plan.strike_margin_percent) / 100);
     st.behind = best >= static_cast<int32_t>(plan.strike_min_leader) && st.mine + margin <= best;
     st.ahead = st.mine >= best;
+    // the pressure: how far behind, as a share of what can still be earned (a margin that is fixed in points, as `behind` has, is almost never reached in a close match and is far too large near the end)
+    if (best > st.mine) {
+        st.deficit = best - st.mine;
+        uint64_t food = 0;
+        for (const PileView& p : view.piles()) food += static_cast<uint64_t>(p.remaining) * p.value;
+        const uint64_t time_points = static_cast<uint64_t>(view.ticks_left()) * plan.catchup_earn_milli / 1000u;
+        const uint64_t earnable = std::max<uint64_t>(std::min(food, time_points), 100u);
+        st.pressure = static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(st.deficit) * 100u / earnable, 100000u));
+        if (plan.catchup && best >= static_cast<int32_t>(plan.catchup_min_leader)) {
+            st.tier = st.pressure >= plan.catchup_tier3 ? 3 : st.pressure >= plan.catchup_tier2 ? 2 : st.pressure >= plan.catchup_tier1 ? 1 : 0;
+        }
+    }
+    if (plan.endgame && view.ticks_left() <= plan.endgame_ticks) {
+        if (st.ahead) st.guard = true;                                                        // with the lead and little time left: protect it
+        else if (plan.catchup && best >= static_cast<int32_t>(plan.catchup_min_leader)) st.tier = 3;       // behind with little time left: all-in
+    }
     return st;
 }
 
