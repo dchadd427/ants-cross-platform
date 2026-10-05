@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.7.0 - 2026-10-05 - A phone can pan, zoom and right click
 
 **For players:**
 - **A phone can pan, zoom and right click:** a tap is a left click and a drag is a selection box, as before. Hold a finger still on the map for about half a second (a ring closes around it, the phone buzzes) and lift it: that is a right click (a move order, a special power, or "send the selected ants there" on the minimap). Two fingers move the map, and pinching zooms towards them.
