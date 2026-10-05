@@ -28,8 +28,8 @@ services:
     stop_grace_period: 15s
     # The page web/lobby.html (the front page) needs demo rooms, which are off by default: uncomment to allow them. The maps folder must hold the demo map and every map of
     # --demo-maps (the page offers the six maps of the original); the number of rooms is 1 to 255 (0, or 256 and more, stop the server at startup); a demo room waits
-    # ten minutes for its players; whoever reaches a game port can fill the rooms.
-    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "12", "--demo-map", "TREASURE.LVL", "--demo-maps", "TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL"]
+    # ten minutes for its players; whoever reaches a game port can fill the rooms. Keep the number of rooms times --log-mb under the 256 MiB that all the turn logs share (see docker-compose.stack.yml).
+    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "48", "--demo-map", "TREASURE.LVL", "--demo-maps", "TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL", "--log-mb", "4"]
     # Reconnect (network protocol 10; ON by default since release B, when the game's own clients came back by themselves): rooms hold the seat of a player whose connection is lost and pause the match for
     # everybody; "--no-reconnect" turns that off (a lost player is dropped at once and no restart record is kept; the last of "--reconnect" and "--no-reconnect" wins). The others vote after 30 s: "--hold-vote-seconds" 5 - 3600; the match's
     # total pause is capped: "--max-pause-seconds" 60 - 86400, default 1800; one absence may spend "--max-catch-up-seconds" 10 - 3600 (300) catching up; after a pause of 3 s or more the match is held for

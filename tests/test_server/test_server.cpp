@@ -1362,8 +1362,8 @@ void run_demo_tests() {
     } TEST_END();
 
     TEST_CASE("S3.74 The Public Stack's Demo Rooms (docker-compose.stack.yml: --demo-map TREASURE.LVL and the six maps of the page): A Code That Names No Map Is Made On TREASURE.LVL For Four Players; A Code That Names One Of The Six Is Made On It, Whatever Its Case; The Players Word Is Read With And Without A Map") {
-        ServerLimits limits;                                                      // the options of the stack file: --demo-rooms 12 --demo-map TREASURE.LVL --demo-maps <the six>
-        limits.demo_rooms = 12;
+        ServerLimits limits;                                                      // the options of the stack file: --demo-rooms 48 --demo-map TREASURE.LVL --demo-maps <the six>
+        limits.demo_rooms = 48;
         limits.demo_map = "TREASURE.LVL";
         limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
         World w(limits);

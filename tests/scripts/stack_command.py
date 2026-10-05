@@ -31,7 +31,7 @@ def server_command(compose_text):
 
 
 def demo_options(args):
-    """{'--demo-rooms': '12', '--demo-map': 'TREASURE.LVL', '--demo-maps': '...'}: the options of the demo rooms that the command holds (each followed by its value)."""
+    """{'--demo-rooms': '48', '--demo-map': 'TREASURE.LVL', '--demo-maps': '...'}: the options of the demo rooms that the command holds (each followed by its value)."""
     found = {}
     for i, arg in enumerate(args):
         if arg in ("--demo-rooms", "--demo-map", "--demo-maps") and i + 1 < len(args):

@@ -5,7 +5,8 @@ test_start_menu_app A4.6) and a LAN host's room (test_network_app N5.3b). What n
 
   - docker-compose.stack.yml: the map of a demo room whose code names none (`--demo-map ${ANTS_DEMO_MAP:-TREASURE.LVL}`), the six maps that a code may choose, and the comments that
     say what the default is; the commented example of docker-compose.server.yml. (A real server started with these options makes a Treasure room for a code that names no map:
-    tests/scripts/test_ants_server.sh.) An ANTS_DEMO_MAP set in the environment of a stack replaces the default; the file's own default is what is read here.
+    tests/scripts/test_ants_server.sh.) An ANTS_DEMO_MAP set in the environment of a stack replaces the default; the file's own default is what is read here. The number of
+    demo rooms and the size of a room's turn log are read too: their product stays under the budget that all the logs share.
   - web/lobby.html (the front page): the map of its card is preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),
     a remembered choice and ?map= still win, and every place that falls back to a map falls back to the default.
   - the defaults of the program and of the page name the same map.
@@ -46,11 +47,23 @@ class StackFile(unittest.TestCase):
         for name in maps:                                                     # (the maps folder of the image holds them: the server stops at its start when one is missing)
             self.assertTrue(os.path.isfile(os.path.join(REPO, "Original-Ants", "Maps", name)), name)
 
-    def test_the_other_demo_options_are_as_they_were(self):
-        self.assertEqual(self.options.get("--demo-rooms"), "12")
+    def test_the_stack_allows_48_demo_rooms_at_a_time(self):
+        self.assertEqual(self.options.get("--demo-rooms"), "48")
+        self.assertIn('"${ANTS_DEMO_ROOMS:-48}"', self.text)                  # (the variable still overrides it: the default is the part after :-)
+
+    def test_the_demo_rooms_cannot_use_up_the_budget_that_all_the_turn_logs_share(self):
+        # The page makes demo rooms with no secret. At the server's own 16 MiB for a room's log, 16 hostile rooms take the 256 MiB that all the logs share (docs/NETWORK_PORT.md, "The log's memory"),
+        # so the stack sets --log-mb and its rooms times that stay under the budget.
+        header = read("include", "ants_server", "room_manager.hpp")
+        budget_mib = int(re.search(r"log_budget_bytes\{(\d+)ull \* 1024ull \* 1024ull\}", header).group(1))
+        for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+            args = stack_command.server_command(read(name))
+            self.assertIn("--log-mb", args, name)
+            rooms = int(stack_command.demo_options(args)["--demo-rooms"])
+            self.assertLessEqual(rooms * int(args[args.index("--log-mb") + 1]), budget_mib, name)
 
     def test_the_comments_name_the_same_default(self):
-        self.assertIn("ANTS_DEMO_ROOMS=12 ANTS_DEMO_MAP=TREASURE.LVL", self.text)
+        self.assertIn("ANTS_DEMO_ROOMS=48 ANTS_DEMO_MAP=TREASURE.LVL", self.text)
         self.assertIn("ANTS_DEMO_MAP (default TREASURE.LVL)", self.text)
         for old in ("ANTS_DEMO_MAP=TINY.LVL", "ANTS_DEMO_MAP (default TINY.LVL)", "(default TINY.LVL)"):
             self.assertNotIn(old, self.text)
