@@ -12,6 +12,7 @@ site's game server. The key is a secret and is never read out of the storage int
   - what needs no browser is read from the files: the markup (hidden, above the cards, no text of its own), the style (the page's teal button, a note of one line, the whole width on a phone), the
     block (its markers, no DOM and no storage of its own, the page's own room-code rule, the game's own constants), the wiring (the plain front page only, text only, this tab, no write to the storage);
   - what it is checked against is pinned too: the game page's way of building the join address, and the application's way of naming the server in a key.
+  - the documents say what the files do (the two texts of the button, no "the switch is still off", the parts of the check).
 The way back in a real browser (a reload, a restart of the server, the button) is tests/scripts/web_rejoin_check.py (opt-in).
 """
 import os
@@ -223,6 +224,35 @@ class TheBrowserCheckAndTheGame(unittest.TestCase):
         self.assertIn('if [ "$status" -eq 3 ]; then', wrapper)
         self.assertNotIn("test_web_rejoin.sh", read("run_tests.sh"))                                              # (opt-in, like the other browser checks)
         self.assertTrue(os.access(os.path.join(REPO, "tests", "scripts", "test_web_rejoin.sh"), os.X_OK))
+
+
+class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
+    """What the documents say about the switch, the button and the check is what the files do."""
+
+    def test_the_two_texts_of_the_button_are_the_pages_own_in_the_network_document(self):
+        doc = read("docs", "NETWORK_PORT.md")
+        lobby = read("web", "lobby.html")
+        self.assertIn("**\"Rejoin your match (CODE)\"**", doc)
+        self.assertIn("**\"Your match in room CODE is still running: go back to your seat.\"**", doc)
+        self.assertIn("'Rejoin your match (' + offer.room + ')'", lobby)
+        self.assertIn("'Your match in room ' + offer.room + ' is still running: go back to your seat.'", lobby)
+
+    def test_no_document_says_that_the_switch_is_off_or_that_the_front_pages_button_is_still_to_come(self):
+        for parts in (("README.md",), ("docs", "NETWORK_PORT.md"), ("docs", "audit", "persist_notes.md")):
+            text = read(*parts)
+            for stale in ("the switch is still off", "Left for the next work package (WP4)", "that page is being redesigned elsewhere", "that page is being redesigned on another branch"):
+                self.assertNotIn(stale, text, "/".join(parts))
+        self.assertIn("kReconnectByDefault = true", read("include", "ants_server", "room_manager.hpp"))
+
+    def test_the_network_document_names_the_parts_of_the_check_and_what_it_stands_on(self):
+        doc = read("docs", "NETWORK_PORT.md")
+        section = doc[doc.index("### The switch, the front page's Rejoin button and the check in a real browser (work package 4)"):]
+        for part in ("reload", "restart", "rejoin", "none"):
+            self.assertIn("| `%s` |" % part, section, part)
+        for needle in ("tests/scripts/web_rejoin_check.py", "tests/scripts/test_web_rejoin.sh", "`ants_probe(16)`", "`holdsThisSeat`", "`REJOINKEY`", "`--no-reconnect`", "Known limits"):
+            self.assertIn(needle, section, needle)
+        self.assertIn("The switch, the front page's Rejoin button and the check in a real browser", read("docs", "audit", "persist_notes.md"))
+        self.assertIn("web_rejoin_check.py", read("README.md"))
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Rejoin block's rules were NOT run (tests/scripts/web_rejoin_block_check.js)")
