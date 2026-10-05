@@ -1,5 +1,6 @@
 #include "ants_net/netgame.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <random>
 
@@ -85,19 +86,30 @@ constexpr bool kInBrowser = true;          // the game runs in a web page (the p
 constexpr bool kInBrowser = false;
 #endif
 
+// A code that begins "demo-" (and has more) is one that the server makes the room of when somebody comes (the front page's card makes such codes): the server answers NoSuchRoom when it cannot,
+// so it is a place that is missing (the cap of demo rooms, the server's limit, a room of that code that has just ended), never a room that does not exist
+bool is_demo_room_code(const std::string& room) {
+    const size_t n = std::char_traits<char>::length(kDemoRoomPrefix);
+    return room.size() > n && room.compare(0, n, kDemoRoomPrefix) == 0;
+}
+constexpr const char* kTextNoPlace = "The server cannot make a room for this match now. Try again in a few minutes.";
+
+// "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
+std::string seat_colour(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(str::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
+
 }  // namespace
 
 // Why a join failed: the original's words where it has them (dropped from the game, unable to connect), the remake's for the rest. In a web page the refusal for another version says what a player
 // can do about it: the game that is open is the one that was loaded when the tab was opened, and after an update of the server only a reload fetches the current one (the desktop game has its own
 // text for this, the start menu's: "Update the game, or wait until the server is updated").
-std::string NetGame::reject_text(RejectReason r, bool in_browser) {
+std::string NetGame::reject_text(RejectReason r, bool in_browser, const std::string& room) {
     switch (r) {
         case RejectReason::Full: return "The room is full.";
         case RejectReason::VersionMismatch:
             return in_browser ? "This version cannot play with the host's version. Reload the page to update." : "This version cannot play with the host's version.";
         case RejectReason::MatchRunning: return "The match has already started.";
         case RejectReason::Kicked: return str::text(str::kDroppedFromGame);
-        case RejectReason::NoSuchRoom: return "There is no such room on this server.";
+        case RejectReason::NoSuchRoom: return is_demo_room_code(room) ? kTextNoPlace : "There is no such room on this server.";
         case RejectReason::Dropped: return str::text(str::kDroppedFromGame);                       // (protocol 10) a seat that was dropped while its player was away: the original's one text for a dropped machine, string 94
         case RejectReason::RejoinFailed: return "The game could not be rejoined.";                // (protocol 10; the remake's own: the original has no way back)
         case RejectReason::Superseded: return "This game was taken over by another window.";      // (protocol 10; the remake's own)
@@ -322,7 +334,9 @@ void NetGame::refresh_status() {
             break;
         }
         case Phase::Room:
-            if ((role_ == Role::Host || is_leader()) && fill_ != FillLevel::None) status_ = start_prompt(fill_, room_.fog);        // (the bots make up the seats: no thumbs to wait for)
+            prompts_.clear();
+            if (role_ == Role::Host || is_leader()) prompts_ = start_prompt_texts(fill_, effective_teams(), room_, room_.fog, room_teams().set);          // (the bots make up the seats: no thumbs to wait for)
+            if (!prompts_.empty()) status_ = prompts_.front();
             else status_ = str::text(role_ == Role::Host || is_leader() ? str::kPressStart : str::kWaitingForHost);      // the leader of a server's room has START: the host's prompt
             break;
         case Phase::Loading:
@@ -342,6 +356,111 @@ std::string NetGame::start_prompt(FillLevel level, bool fog) {
     return "Press START: the empty seats get " + fill_level_title(level) + " bots.";
 }
 
+namespace {
+
+// What a START with a plan and teams would do in this room, as the leader's screens tell it
+struct StartFacts {
+    std::vector<std::pair<uint8_t, FillLevel>> seats;     // the bots that it seats (none with Fog of War)
+    FillLevel same{FillLevel::None};                      // the one level of every empty seat, when it is one
+    bool bots{false};                                     // the plan asks for bots (they are refused with Fog of War)
+    bool fog{false};
+    uint8_t roster{0};                                    // the seats that would play
+    bool teams{false};
+    bool can_team{false};                                 // ... and the teams can be made for them
+    std::string title;                                    // "Green + Red against Blue + Black"
+    std::string vs;                                       // "Green + Red vs Blue + Black"
+};
+
+StartFacts start_facts(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog) {
+    StartFacts f;
+    f.bots = plan.any();
+    f.fog = fog && f.bots;
+    if (!f.fog) f.seats = plan_fill_seats(plan, room, sim::MAX_PLAYERS);       // (the client does not know how many players the room expects: the cap is the server's)
+    size_t empty_seats = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if (room.slots[seat].state == SlotState::Empty) ++empty_seats;
+        else f.roster = static_cast<uint8_t>(f.roster | (1u << seat));
+    }
+    if (plan.uniform()) {
+        f.same = plan.level[0];
+    } else if (f.seats.size() >= 2 && f.seats.size() == empty_seats) {            // (the plan gives the same level to every empty seat: "the empty seats get Medium bots"; one seat is named by its colour)
+        f.same = f.seats[0].second;
+        for (const auto& bot : f.seats) f.same = bot.second == f.same ? f.same : FillLevel::None;
+    }
+    for (const auto& bot : f.seats) f.roster = static_cast<uint8_t>(f.roster | (1u << bot.first));        // (the seats that the bots take play)
+    if (teams.set) {
+        f.teams = true;
+        f.can_team = sim::plan_start_teams(teams, f.roster).why.empty();
+        f.title = sim::start_teams_title(teams, f.roster);
+        f.vs = f.title;
+        const size_t against = f.vs.find(" against ");
+        if (against != std::string::npos) f.vs.replace(against, 9, " vs ");
+    }
+    return f;
+}
+
+}  // namespace
+
+// The plan of a START in one line: the bots that it seats (the one level of the empty seats, or each seat's own) and the teams, longest way first. A room whose START seats nothing and makes no teams has
+// no line of its own: the original's prompt stands.
+std::vector<std::string> NetGame::start_prompt_texts(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog, bool room_teams) {
+    const StartFacts f = start_facts(plan, teams, room, fog);
+    struct Part {
+        std::string full;
+        std::string brief;
+    };
+    Part bots;
+    if (f.fog) {
+        bots = Part{"Fog of War is on, so START seats no bots", "Fog of War: no bots"};
+    } else if (f.bots && f.same != FillLevel::None) {
+        bots = Part{"the empty seats get " + fill_level_title(f.same) + " bots", "empty seats: " + fill_level_title(f.same) + " bots"};
+    } else if (!f.seats.empty()) {
+        bots = Part{fill_seats_sentence(f.seats), "bots: " + fill_seats_short(f.seats)};
+    }
+    Part team;
+    if (f.teams) {
+        const std::string note = f.can_team ? "" : " (not with these seats)";
+        team = room_teams ? Part{"the room's teams: " + f.title + note, "teams " + f.vs + note} : Part{"teams " + f.title + note, "teams " + f.vs + note};
+    }
+    if (bots.full.empty() && team.full.empty()) return {};
+    std::vector<std::string> out;
+    const auto add = [&out](std::string text) {
+        for (const std::string& have : out) {
+            if (have == text) return;
+        }
+        out.push_back(std::move(text));
+    };
+    const std::string press = f.fog ? std::string() : std::string("Press START: ");          // (the Fog of War line is the original-style notice, not an invitation)
+    const auto join = [](const std::string& a, const std::string& b) { return a.empty() ? b : (b.empty() ? a : a + "; " + b); };
+    add(press + join(bots.full, team.full) + ".");                                            // "Press START: Red gets an Easy bot, Black a Hard bot; teams Green + Red against Blue + Black."
+    add(join(bots.full, team.full) + ".");
+    add(join(bots.full, team.brief) + ".");
+    add(join(bots.brief, team.full) + ".");
+    add(join(bots.brief, team.brief) + ".");
+    std::stable_sort(out.begin(), out.end(), [](const std::string& a, const std::string& b) { return a.size() > b.size(); });
+    return out;
+}
+
+// The foot of the leader's Players' Status box (16:9): two lines, each in the ways it can be said (longest first)
+NetGame::FooterTexts NetGame::start_footer(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog, bool room_teams) {
+    const StartFacts f = start_facts(plan, teams, room, fog);
+    FooterTexts out;
+    const bool bots = !f.fog && (f.same != FillLevel::None || !f.seats.empty()) && f.bots;
+    const std::string bots_detail = f.same != FillLevel::None ? fill_level_title(f.same) + " bots" : fill_seats_short(f.seats);
+    if (bots && !f.teams) {
+        out.line[0] = {"Empty seats at START:"};                                              // (the footer of protocol 11, for one level in every seat: "Empty seats at START:" / "Medium bots")
+        out.line[1] = {bots_detail};
+    } else if (!bots && f.teams) {
+        out.line[0] = {room_teams ? "Room teams:" : "Teams at START:"};
+        out.line[1] = {f.title, f.vs};
+    } else if (bots && f.teams) {
+        out.line[0] = f.same != FillLevel::None ? std::vector<std::string>{"Empty seats: " + bots_detail} : std::vector<std::string>{"Bots: " + bots_detail, bots_detail};
+        out.line[1] = {"Teams: " + f.title, f.title, "Teams: " + f.vs, f.vs};
+        if (room_teams) out.line[1].insert(out.line[1].begin(), {"Room teams: " + f.title, "Room teams: " + f.vs});      // ("Room teams: ..." where it fits; the shorter ways keep the colours and the teams)
+    }
+    return out;
+}
+
 LinkQuality NetGame::seat_quality(uint8_t seat) const noexcept {
     if (seat >= sim::MAX_PLAYERS || room_.slots[seat].state == SlotState::Empty) return LinkQuality::Unknown;
     if (room_.slots[seat].state == SlotState::Host) return LinkQuality::Good;
@@ -356,8 +475,8 @@ bool NetGame::request_start() {
     if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
     size_t players = 0;
     for (const auto& slot : room_.slots) players += slot.state != SlotState::Empty ? 1u : 0u;
-    if (players < 2 && fill_ == FillLevel::None) return false;      // "too few players": as the host's START (with a fill the bots make up the rest: one person is enough)
-    return client_lobby_->request_start(fill_);
+    if (players < 2 && plan_fill_seats(fill_, room_, sim::MAX_PLAYERS).empty()) return false;      // "too few players": as the host's START (with bots to seat they make up the rest: one person is enough)
+    return client_lobby_->request_start(fill_.level, effective_teams());              // (the room's own teams are the ones its code names: it ignores these when it has any)
 }
 
 // ---- the waiting room's chat (protocol 11) ----------------------------------------------------------------------------------------------------------
@@ -587,7 +706,7 @@ void NetGame::update_client() {
                         status_ = way_back_text(reject_reason_);
                         if (way_back_forgets(reject_reason_)) forget_key();
                     } else {
-                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser);
+                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser, target_.room);
                     }
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
@@ -737,10 +856,15 @@ void NetGame::note_lobby_welcome() {
     if (welcomed_ || !client_lobby_ || client_lobby_->my_seat() >= sim::MAX_PLAYERS) return;
     welcomed_ = true;
     const SeatKey key = client_lobby_->key();
-    if (!key_is_zero(join_key_) && !client_lobby_->rejoined() && !key_matches(key, join_key_)) {
+    const bool showed_key = !key_is_zero(join_key_);
+    if (showed_key && !client_lobby_->rejoined() && !key_matches(key, join_key_)) {
         forget_key();
         set_notice(kTextNewRoom);
     }
+    // The colour that this player asked for (a link of the front page names one) was taken, so the room gave the first free seat (see join): it says so, once, in colour words. A machine that
+    // shows a key sits where the key says and is told nothing of the kind.
+    const uint8_t given = client_lobby_->my_seat();
+    if (!showed_key && target_.want_seat < sim::MAX_PLAYERS && given != target_.want_seat) set_notice(seat_colour(target_.want_seat) + " was taken: you play " + seat_colour(given) + ".");
     if (client_lobby_->rejoined()) announce_key(key, client_lobby_->my_seat());
     else pending_key_ = key;                                    // (zero for a room that gives none: nothing to announce then)
 }
@@ -1167,18 +1291,17 @@ void NetGame::remove_bot(uint8_t seat) {
     room_.you = seat_;
 }
 
-size_t NetGame::fill_bots(FillLevel level, std::vector<uint8_t>* seats) {
-    if (level == FillLevel::None || role_ != Role::Host || phase_ != Phase::Room || !host_lobby_) return 0;
+size_t NetGame::fill_bots(const FillPlan& plan, std::vector<uint8_t>* seats) {
+    if (!plan.any() || role_ != Role::Host || phase_ != Phase::Room || !host_lobby_) return 0;
     if (host_lobby_->fog()) {
         set_notice(kNoticeFillFog);
         refresh_status();                                            // (the status line says why at once, not with the next update)
         return 0;
     }
     size_t seated = 0;
-    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
-        if (host_lobby_->occupied(seat)) continue;
-        if (!host_lobby_->add_bot(seat, fill_bot_name(level))) break;
-        if (seats != nullptr) seats->push_back(seat);
+    for (const auto& bot : plan_fill_seats(plan, host_lobby_->room(), sim::MAX_PLAYERS)) {         // (a room on the local network has four seats)
+        if (!host_lobby_->add_bot(bot.first, fill_bot_name(bot.second))) break;
+        if (seats != nullptr) seats->push_back(bot.first);
         ++seated;
     }
     room_ = host_lobby_->room();
@@ -1198,12 +1321,28 @@ bool NetGame::can_start() const {
 
 bool NetGame::start_match(uint32_t seed, uint64_t map_hash) {
     if (!can_start()) return false;
-    if (!host_lobby_->start(seed, map_hash, now_)) return false;
+    // The teams (protocol 13): this machine's choice, when the seats that play can make them; else the match starts without, and everybody is told why once it has started
+    uint8_t roster = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) roster = static_cast<uint8_t>(roster | (host_lobby_->occupied(seat) ? 1u << seat : 0u));
+    sim::StartTeams teams;
+    std::string no_teams;
+    if (teams_.set) {
+        const sim::StartTeamsPlan plan = sim::plan_start_teams(teams_, roster);
+        if (plan.why.empty()) teams = teams_;
+        else no_teams = std::string(kNoticeNoTeams) + plan.short_why;
+    }
+    if (!host_lobby_->start(seed, map_hash, now_, teams)) return false;
     phase_ = Phase::Loading;
     phase_since_ms_ = now_;
     loaded_reported_ = false;
     start_ = host_lobby_->start_info();
     events_.push_back(Event{Event::Type::StartRequested, 255});
+    if (!no_teams.empty()) {
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            if (host_lobby_->room().slots[seat].state == SlotState::Client) host_lobby_->notify(seat, no_teams);
+        }
+        set_notice(no_teams);
+    }
     refresh_status();
     return true;
 }

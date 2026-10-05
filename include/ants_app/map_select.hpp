@@ -257,13 +257,21 @@ public:
     };
     void set_chat_panel(ChatPanel panel) { chat_panel_ = std::move(panel); }
     const ChatPanel& chat_panel() const noexcept { return chat_panel_; }
-    /// The foot of the Players' Status box on the Online variant, where the leader sees what fills the empty seats at START ("Empty seats at START:" / "Medium bots"): two 18 px lines in the
-    /// colour of the players' names. Nothing is drawn while both are empty (the default).
+    /// The foot of the Players' Status box on the Online variant, where the leader sees what fills the empty seats at START ("Empty seats at START:" / "Medium bots") and the teams that START makes:
+    /// two lines in the colour of the players' names, at 18 px when they fit the box (the footer of protocol 11, "Empty seats at START:" / "Medium bots", always does), else at 14 px, else at 12 px, else
+    /// cut with "..." (footer_font() says which). Nothing is drawn while both are empty (the default).
     void set_fill_footer(std::string first_line, std::string second_line) {
         fill_footer_[0] = std::move(first_line);
         fill_footer_[1] = std::move(second_line);
     }
     const std::array<std::string, 2>& fill_footer() const noexcept { return fill_footer_; }
+    /// The width of a line of the footer (the Players' Status box's inner width less the text's margin) and the biggest of 18, 14 and 12 px at which `text` fits it (12 px whatever it measures when
+    /// none does: the line is then cut)
+    static int32_t footer_width() noexcept;
+    static FontSize footer_font(const IRenderer& renderer, const std::string& text);
+    /// Whether the prompt `text` fits the status label of the screen as it is now (the original's 293 px page, or the 16:9 page's wider label) in the two lines that the label has: the leader's
+    /// prompt has several ways of being said (NetGame::prompt_texts) and the application picks the longest that fits
+    bool prompt_fits(const IRenderer& renderer, const std::string& text) const;
 
 private:
     void render_wide(IRenderer& renderer, const ants::assets::AssetArchive& archive);        // map_select_wide.cpp

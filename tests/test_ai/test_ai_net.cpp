@@ -281,6 +281,7 @@ struct Machine {
         if (ok) {
             sim.set_fog_of_war_enabled(s.fog);
             sim.init(level, s.seed, s.roster);
+            sim::apply_start_teams(sim, s.teams());                   // (the teams of the Start, before the first tick: what the application does)
             for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.set_player_name(p, s.names[p]);
         }
         net.report_loaded(ok);
