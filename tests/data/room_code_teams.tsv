@@ -1,0 +1,59 @@
+# The teams that a room's code names: <code> TAB <ffa | A+B>. Read by test_lockstep N2.101 (net::room_code_teams, the server's and every game's reading) and by tests/scripts/web_lobby_check.js
+# (codeTeams of web/lobby.html): the two readings must agree on every line. A team word is t<a><b>, two seats 0 - 3, the lower first, a word of a demo code after its first word.
+# the pages' codes
+demo-treasure-4p-t01-k7m2xq	0+1
+demo-treasure-4p-t02-k7m2xq	0+2
+demo-treasure-4p-t03-k7m2xq	0+3
+demo-tiny-3p-t12-k7m2xq	1+2
+demo-small-3p-t01-abcdef	0+1
+demo-gauntlet-3p-t02-abcdef	0+2
+demo-islands-4p-t01-abcdef	0+1
+# codes without a word mean what they always did
+demo-treasure-4p-k7m2xq	ffa
+demo-treasure-2p-k7m2xq	ffa
+demo-x7k2	ffa
+demo-small-x7k2	ffa
+demo-4p-abc	ffa
+demo-	ffa
+demo-a	ffa
+# the word may be anywhere after the first word, in any case, and may end the code
+demo-small-4p-T01-k7m2xq	0+1
+demo-small-4p-t13	1+3
+demo-small-4p-t13-	1+3
+demo-small-t23	2+3
+demo-small-4p-x-t13-y	1+3
+demo-big-island-2p-t01-x	0+1
+demo--t01-x	0+1
+demo-small-4p-t01-t23-x	0+1
+demo-small-4p-t23-t01-x	2+3
+demo-small-4p-t10-t12-x	1+2
+# what is no word: the higher seat first, equal seats, a seat above 3, other lengths, a word inside another, a digit that is not a seat
+demo-small-4p-t10-k7m2xq	ffa
+demo-small-4p-t00-k7m2xq	ffa
+demo-small-4p-t11-k7m2xq	ffa
+demo-small-4p-t33-k7m2xq	ffa
+demo-small-4p-t04-k7m2xq	ffa
+demo-small-4p-t40-k7m2xq	ffa
+demo-small-4p-t0-k7m2xq	ffa
+demo-small-4p-t-k7m2xq	ffa
+demo-small-4p-t012-k7m2xq	ffa
+demo-small-4p-tt01-k7m2xq	ffa
+demo-small-4p-xt01-k7m2xq	ffa
+demo-small-4p-t01x-k7m2xq	ffa
+demo-small-4p-t0a-k7m2xq	ffa
+demo-small-4p-01-k7m2xq	ffa
+demo-small-4p-t01t23-k7m2xq	ffa
+demo-small-4p-t_1-k7m2xq	ffa
+# the first word is the map's or the player count's, never a word of teams; the prefix is exact; only a demo code names teams
+demo-t01-4p-x	ffa
+demo-t01	ffa
+demo-t01-	ffa
+Demo-small-4p-t01-x	ffa
+DEMO-small-4p-t01-x	ffa
+room-small-4p-t01-x	ffa
+small-4p-t01-x	ffa
+t01-x-t01	ffa
+demo_small-4p-t01-x	ffa
+xdemo-small-4p-t01-x	ffa
+# a word in a code for two players is a word (the room says at its start that two seats cannot be teams)
+demo-small-2p-t01-k7m2xq	0+1

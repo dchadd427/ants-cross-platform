@@ -26,8 +26,9 @@
 // goes on beyond it for long is flooding: a violation each); a line that cannot be decoded is a violation as in the match. A guest who joins later hears only what is said after it joined. Both
 // lobbies keep the lines (ChatLog: the last 200) and hand the new ones to their owner (take_chat() and the Chat event), so that the application can show them and start the match's chat log with
 // them. The room itself can speak to one guest (HostLobby::notify: a Chat message from kRoomSender), which is how a server's room tells its leader why a fill was refused. The StartRequest of the
-// leader carries a fill level: with one, the room's owner may seat bots in the empty seats and start (Event::LeaderStart carries the level; HostLobby::can_start_filled says whether the room
-// could start with them: one person is enough).
+// leader carries a fill level for each seat (protocol 13; one level for all of them in protocol 11) and the teams it chose (protocol 13): with a level, the room's owner may seat bots in the empty seats
+// and start (Event::LeaderStart carries the levels and the teams; HostLobby::can_start_filled says whether the room could start with them: one person is enough), and start() puts the teams into the
+// Start message that every machine starts its match from.
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
@@ -102,7 +103,8 @@ public:
         enum class Type : uint8_t { Joined, Left, Rejected, LoadFailed, Cancelled, Begun, LeaderStart, Chat };
         Type type{Type::Joined};
         uint8_t seat{255};
-        FillLevel fill{FillLevel::None};        // LeaderStart: the bots that the leader asked for in the empty seats (protocol 11)
+        std::array<FillLevel, sim::MAX_PLAYERS> fill{};     // LeaderStart: the bot that the leader asked for in each seat when it is empty (protocol 11: one level for all; 13: a level for each seat)
+        sim::StartTeams teams{};                            // LeaderStart: the teams that the leader asked for (protocol 13; free for all when it chose none)
     };
 
     HostLobby() : HostLobby(Config{}) {}
@@ -164,8 +166,9 @@ public:
     /// Every seated guest has been measured: "all players' thumbs have appeared"
     bool all_measured() const noexcept;
 
-    /// Sends Start to everybody: the host loads the map itself too and reports host_loaded(). False unless can_start().
-    bool start(uint32_t seed, uint64_t map_hash, uint32_t now_ms);
+    /// Sends Start to everybody: the host loads the map itself too and reports host_loaded(). False unless can_start(), and (the last line of defence: the owner checks the teams first and tells the
+    /// people why when they cannot be made) False when `teams` cannot be made for the seats that play: every engine would refuse such a Start. The teams go into the Start message (protocol 13).
+    bool start(uint32_t seed, uint64_t map_hash, uint32_t now_ms, const sim::StartTeams& teams = sim::StartTeams{});
     /// Called by start() once the start message is built (start_info() is it, the keys are known) and BEFORE the first byte of it is sent to anybody: a server's room makes its restart record here, so that
     /// the record of a match exists before any machine can act on its Start. It must not call start() or cancel(). Unset (the default): nothing is called.
     void set_before_start(std::function<void(const StartMsg& start, uint32_t now_ms)> fn) { before_start_ = std::move(fn); }
@@ -274,10 +277,13 @@ public:
         return (phase_ == Phase::InRoom || phase_ == Phase::Loading || phase_ == Phase::Loaded) && seat_ < sim::MAX_PLAYERS && room_.leader == seat_;
     }
     /// The leader asks the server to start the match now with the players who are here (StartRequest). False unless this machine leads an open room (InRoom) and the message went
-    /// out. The server decides: it starts only when it can (two players at least) and says nothing to a request that it cannot honour. With a `fill` level (protocol 11) it also seats
-    /// bots of that level in every seat that is still empty (up to the room's player count), and then one person is enough; with Fog of War it refuses the bots, says why (a notice, see
-    /// take_chat()) and starts without them if two people are there.
-    bool request_start(FillLevel fill = FillLevel::None);
+    /// out. The server decides: it starts only when it can (two players at least) and says nothing to a request that it cannot honour. With fill levels (protocol 11; one for each seat since
+    /// protocol 13) it also seats a bot of that level in each seat that is still empty (up to the room's player count), and then one person is enough; with Fog of War it refuses the bots, says
+    /// why (a notice, see take_chat()) and starts without them if two people are there. `teams` (protocol 13) are the teams the match starts with when the seats that play can make them (else it
+    /// starts without and tells everybody why).
+    bool request_start(const std::array<FillLevel, sim::MAX_PLAYERS>& fill = {}, const sim::StartTeams& teams = sim::StartTeams{});
+    /// The same level in every seat (protocol 11's single choice)
+    bool request_start(FillLevel level);
     /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
     /// (a longer line is cut), not empty. The room relays it to everybody, this machine included: the line comes back through take_chat(). False when nothing was sent.
     bool chat(const std::string& text);

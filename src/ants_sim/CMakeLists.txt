@@ -11,6 +11,7 @@ add_library(ants_sim STATIC
     command_system.cpp
     state_hash.cpp
     game_strings.cpp
+    start_teams.cpp
 )
 
 target_include_directories(ants_sim PUBLIC

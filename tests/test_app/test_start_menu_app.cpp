@@ -163,6 +163,7 @@ struct Peer {
                 if (ok) {
                     sim.set_fog_of_war_enabled(s.fog);
                     sim.init(level, s.seed, s.roster);
+                    sim::apply_start_teams(sim, s.teams());
                 }
                 net.report_loaded(ok);
             }
@@ -465,6 +466,15 @@ bool failed_on(Application& app, MenuPanel panel) { return on_panel(app, panel) 
 // The room's code of the panel that shows it
 std::string shown_code(Application& app) { return app.start_menu().room_code(); }
 
+// The levels of the seats after the leader's (Red, Blue, Black) as the Host panel's rows ask for them: the plan of a request (the leader's seat gets nothing)
+net::FillPlan fill_of(net::FillLevel red, net::FillLevel blue, net::FillLevel black) {
+    net::FillPlan plan;
+    plan.level[1] = red;
+    plan.level[2] = blue;
+    plan.level[3] = black;
+    return plan;
+}
+
 // The quick help (when the option shows it) is closed the way a player closes it
 void to_setup_screen(Application& app) {
     if (app.state() == AppState::QuickHelp) app.quick_help_key(SDLK_RETURN);
@@ -739,7 +749,7 @@ int run_real_server(const std::string& address) {
     return ok ? 0 : 1;
 }
 
-// The menu's Host panel with "Empty seats at START" = Medium bots against a server that is already running (the real check of the fill: a server of a docker image, on the network of
+// The menu's Host panel with Medium bots in the three seats after the leader's against a server that is already running (the real check of the fill: a server of a docker image, on the network of
 // the machine): one person, alone, starts a room for four; the server seats three "Bot (Medium)" and the match runs at 20 ticks a second
 int run_real_fill(const std::string& address) {
     ServerAddress server;
@@ -758,8 +768,10 @@ int run_real_fill(const std::string& address) {
         return 1;
     };
     click(app, MenuId::HostOnline);
-    click(app, MenuId::HostFill);                                                      // Leave empty -> Easy bots
-    click(app, MenuId::HostFill);                                                      // -> Medium bots
+    for (const MenuId seat : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+        click(app, seat);                                                              // Leave empty -> Easy bot
+        click(app, seat);                                                              // -> Medium bot
+    }
     fill(app, MenuId::HostName, "Solo");
     click(app, MenuId::Host);
     if (!hall.until([&]() { return on_panel(app, MenuPanel::Room) || failed_on(app, MenuPanel::Host); }, 20000)) return fail("the room's panel did not come");
@@ -2369,10 +2381,17 @@ int main(int argc, char** argv) {
         TempDir temp;
         Server server;
         {   // "Host an online match" and the Host panel's Host button: the second click made a room on the server
+            // (the Host panel of a room of three players, which the settings say: the rows above Host are as many as the room has, and with four players they push the button below the entry)
+            const std::string a_ini = ini(temp, "a.ini");
+            {
+                std::ofstream out(a_ini, std::ios::binary | std::ios::app);
+                out << "host_players=3\n";
+            }
             Application app;
             Hall hall{&server, &app, {}, nullptr, false};
-            ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "a.ini"))));
-            const Pt entry = middle_of(app, MenuId::HostOnline);
+            ASSERT_TRUE(app.init(menu_config(server.address(), a_ini)));
+            Pt entry = middle_of(app, MenuId::HostOnline);
+            entry.y += 21;                                                                   // (the lower part of the entry, where the Host button of that panel lies)
             queue_click(entry, 1);
             app.run_frame_with_delta(0.016f);
             ASSERT_EQ(app.start_menu().panel(), MenuPanel::Host);
@@ -2434,7 +2453,7 @@ int main(int argc, char** argv) {
                 ASSERT_EQ(app.start_menu().panel(), MenuPanel::Connecting);
                 MenuElement cancel;
                 ASSERT_TRUE(app.start_menu().find_element(MenuId::Cancel, cancel));
-                const Pt at{cancel.rect.x + cancel.rect.w / 2, cancel.rect.y + (host ? 2 : 20)};   // (the Host button ends at y 294, Cancel begins at 290)
+                const Pt at{cancel.rect.x + cancel.rect.w / 2, cancel.rect.y + 20};                // (the Host button and Join's Back lie under the same place of Cancel)
                 queue_click(at, 1);
                 app.run_frame_with_delta(0.016f);
                 ASSERT_EQ(app.start_menu().panel(), host ? MenuPanel::Host : MenuPanel::Join);
@@ -2444,6 +2463,8 @@ int main(int argc, char** argv) {
                 app.run_frame_with_delta(0.016f);
                 ASSERT_EQ(app.start_menu().panel(), host ? MenuPanel::Host : MenuPanel::Join);   // not the first panel, not a new attempt
                 ASSERT_TRUE(app.net() == nullptr);
+                for (int waited = 0; waited < 2000 && slow->calls.load() < (host ? 2 : 1); ++waited) std::this_thread::sleep_for(std::chrono::milliseconds(1));   // (the worker thread of the lookup counts when the system starts it: a busy machine starts it late)
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));                        // (a lookup that should not be there has had its time too)
                 ASSERT_EQ(slow->calls.load(), host ? 2 : 1);                                       // (the lookups of this run so far: the Join one, then the Host one; no third)
             }
             slow->release = true;
@@ -2907,7 +2928,7 @@ int main(int argc, char** argv) {
         }
     } TEST_END();
 
-    TEST_CASE("A14.1 Host an online match with \"Empty seats at START\" = Medium bots: the choice reaches the application and the room's network before the connection is made, the room's panel says what START will do, the leader's screen says it on the status line, one person alone starts the match with START and the server seats three \"Bot (Medium)\" (they play), and the choice is remembered for the next run") {
+    TEST_CASE("A14.1 Host an online match with Medium bots in the Red, Blue and Black seats: the choice reaches the application and the room's network before the connection is made, the room's panel says what START will do, the leader's screen says it on the status line, one person alone starts the match with START and the server seats three \"Bot (Medium)\" (they play), and the choice is remembered for the next run") {
         TempDir temp;
         const std::string settings = ini(temp, "s.ini");
         Server server;
@@ -2918,13 +2939,16 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
             ASSERT_EQ(app.fill_bots(), net::FillLevel::None);                                  // nothing is seated unless the player chose it
             click(app, MenuId::HostOnline);
-            click(app, MenuId::HostFill);                                                      // Leave empty -> Easy bots
-            click(app, MenuId::HostFill);                                                      // -> Medium bots
+            for (const MenuId seat : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+                click(app, seat);                                                              // Leave empty -> Easy bot
+                click(app, seat);                                                              // -> Medium bot
+            }
             fill(app, MenuId::HostName, "Solo");
             click(app, MenuId::Host);
             ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
             code = shown_code(app);
-            ASSERT_TRUE(app.fill_bots() == net::FillLevel::Medium && app.net() != nullptr && app.net()->fill_bots() == net::FillLevel::Medium);
+            const net::FillPlan medium = fill_of(net::FillLevel::Medium, net::FillLevel::Medium, net::FillLevel::Medium);
+            ASSERT_TRUE(app.fill_bots() == medium && app.net() != nullptr && app.net()->fill_bots() == medium);      // (the leader's own seat gets nothing)
             bool says = false;
             for (const MenuElement& e : app.start_menu().elements()) says = says || e.text == "Empty seats will be Medium bots.";
             ASSERT_TRUE(says);                                                                 // the room's panel: what START will do
@@ -2946,18 +2970,30 @@ int main(int argc, char** argv) {
             ASSERT_FALSE(app.net()->desynced());
             ASSERT_TRUE(server.status(code).ticks > 40);
         }
-        ASSERT_HAS(read_file(settings), "host_fill=medium\n");                                  // written when the choice changed
+        ASSERT_HAS(read_file(settings), "host_fill=none,medium,medium,medium\n");              // written when the choice changed
         {   // the next run: the Host panel shows it
             Application app;
             ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
-            ASSERT_EQ(app.start_menu().settings().host_fill, net::FillLevel::Medium);
+            ASSERT_TRUE(app.start_menu().settings().host_fill == fill_of(net::FillLevel::Medium, net::FillLevel::Medium, net::FillLevel::Medium));
             click(app, MenuId::HostOnline);
-            MenuElement e;
-            ASSERT_TRUE(app.start_menu().find_element(MenuId::HostFill, e) && e.value == "Medium bots");
+            for (const MenuId seat : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+                MenuElement e;
+                ASSERT_TRUE(app.start_menu().find_element(seat, e) && e.value == "Medium bot");
+            }
+        }
+        {   // a file of an earlier version has one word for every seat: the three seats after the leader's
+            const std::string old_file = ini(temp, "old.ini");
+            {
+                std::ofstream out(old_file, std::ios::binary | std::ios::app);
+                out << "host_fill=hard\n";
+            }
+            Application app;
+            ASSERT_TRUE(app.init(menu_config(server.address(), old_file)));
+            ASSERT_TRUE(app.start_menu().settings().host_fill == fill_of(net::FillLevel::Hard, net::FillLevel::Hard, net::FillLevel::Hard));
         }
     } TEST_END();
 
-    TEST_CASE("A14.2 The fill belongs to the Host panel: --start-menu --fill-bots hard makes the panel start at Hard bots (nothing is written until the player changes it); a player who JOINS fills nothing, whatever the panel said before (only the leader's START seats bots, and the choice is its host's)") {
+    TEST_CASE("A14.2 The fill belongs to the Host panel: --start-menu --fill-bots hard makes the three rows start at Hard bots, --fill-bots none,easy,none,hard each at its own level, --teams the Teams row (nothing is written until the player changes it); a player who JOINS fills nothing, whatever the panel said before (only the leader's START seats bots, and the choice is its host's)") {
         TempDir temp;
         const std::string settings = ini(temp, "s.ini");
         {
@@ -2967,25 +3003,45 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(cfg.startup_error.empty() && cfg.start_menu && cfg.fill_bots == net::FillLevel::Hard);
             Application app;
             ASSERT_TRUE(app.init(cfg));
-            ASSERT_EQ(app.start_menu().settings().host_fill, net::FillLevel::Hard);
+            ASSERT_TRUE(app.start_menu().settings().host_fill == fill_of(net::FillLevel::Hard, net::FillLevel::Hard, net::FillLevel::Hard));
             click(app, MenuId::HostOnline);
-            MenuElement e;
-            ASSERT_TRUE(app.start_menu().find_element(MenuId::HostFill, e) && e.value == "Hard bots");
+            for (const MenuId seat : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+                MenuElement e;
+                ASSERT_TRUE(app.start_menu().find_element(seat, e) && e.value == "Hard bot");
+            }
         }
-        ASSERT_TRUE(read_file(settings).find("host_fill") == std::string::npos);
+        {   // four words: a level for each seat (the first is the leader's and counts for nothing); --teams starts the Host panel's Teams row too
+            std::vector<std::string> args = {"ants", "--headless", "--start-menu", "--fill-bots", "none,easy,none,hard", "--teams", "0+2", "--settings", settings};
+            std::vector<char*> storage;
+            const ApplicationConfig cfg = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+            ASSERT_TRUE(cfg.startup_error.empty() && cfg.start_menu && cfg.fill_bots == fill_of(net::FillLevel::Easy, net::FillLevel::None, net::FillLevel::Hard) && cfg.teams.set);
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            click(app, MenuId::HostOnline);
+            const std::vector<std::pair<MenuId, std::string>> rows = {{MenuId::HostSeat1, "Easy bot"}, {MenuId::HostSeat2, "Leave empty"}, {MenuId::HostSeat3, "Hard bot"},
+                                                                       {MenuId::HostTeams, "Green + Blue against Red + Black"}};
+            for (const auto& row : rows) {
+                MenuElement e;
+                ASSERT_TRUE(app.start_menu().find_element(row.first, e) && e.value == row.second);
+            }
+        }
+        ASSERT_TRUE(read_file(settings).find("host_fill") == std::string::npos && read_file(settings).find("host_teams") == std::string::npos);
         Server server;
         ASSERT_TRUE(server.make_room("JOIN-FILL", 4));
         Application app;
         Hall hall{&server, &app, {}, nullptr, false};
         ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
         click(app, MenuId::HostOnline);
-        click(app, MenuId::HostFill);
-        click(app, MenuId::HostFill);
-        click(app, MenuId::HostFill);                                                          // Hard bots on the Host panel
-        ASSERT_EQ(app.start_menu().settings().host_fill, net::FillLevel::Hard);
+        for (const MenuId seat : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+            click(app, seat);
+            click(app, seat);
+            click(app, seat);                                                                  // Hard bots on the Host panel
+        }
+        const net::FillPlan hard = fill_of(net::FillLevel::Hard, net::FillLevel::Hard, net::FillLevel::Hard);
+        ASSERT_TRUE(app.start_menu().settings().host_fill == hard);
         click(app, MenuId::Host);                                                              // a room is made with it: the application's fill is Hard now
         ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
-        ASSERT_TRUE(app.fill_bots() == net::FillLevel::Hard && app.net() != nullptr && app.net()->fill_bots() == net::FillLevel::Hard);
+        ASSERT_TRUE(app.fill_bots() == hard && app.net() != nullptr && app.net()->fill_bots() == hard);
         click(app, MenuId::Back);                                                              // the room is left again
         ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Host) && app.net() == nullptr; }, 8000));
         press(app, SDLK_ESCAPE);
@@ -3015,8 +3071,10 @@ int main(int argc, char** argv) {
         for (int round = 0; round < 2; ++round) {
             click(app, MenuId::HostOnline);
             if (round == 0) {
-                click(app, MenuId::HostFill);                                                  // Leave empty -> Easy bots
-                click(app, MenuId::HostFill);                                                  // -> Medium bots
+                for (const MenuId seat : {MenuId::HostSeat1, MenuId::HostSeat2, MenuId::HostSeat3}) {
+                    click(app, seat);                                                          // Leave empty -> Easy bot
+                    click(app, seat);                                                          // -> Medium bot
+                }
                 fill(app, MenuId::HostName, "Solo");
             }
             click(app, MenuId::Host);
@@ -3042,6 +3100,76 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(app.map_select().fill_footer()[0].empty() && app.map_select().fill_footer()[1].empty());
             ASSERT_FALSE(app.room_chat().is_open());
             ASSERT_TRUE(app.room_chat_box() == nullptr);
+        }
+    } TEST_END();
+
+    TEST_CASE("A14.4 Host an online match with a level for each seat and the teams: the Host panel's rows and Teams row reach the application and the room's network, the room's panel and the leader's screen say both, one person alone starts the match, the server seats an Easy bot in the Red seat and a Hard bot in the Black seat, leaves the Blue seat empty, and the match starts with Green and Red as a team (the server's referee and the leader's own engine agree), and a Join makes no teams") {
+        TempDir temp;
+        const std::string settings = ini(temp, "s.ini");
+        Server server;
+        std::string code;
+        const LocalTeams green_red{true, 0, 1};
+        {
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
+            click(app, MenuId::HostOnline);
+            click(app, MenuId::HostSeat1);                                                     // Red: Easy bot
+            for (int i = 0; i < 3; ++i) click(app, MenuId::HostSeat3);                         // Black: Hard bot; Blue stays empty
+            click(app, MenuId::HostTeams);                                                     // Green + Red against Blue + Black
+            fill(app, MenuId::HostName, "Solo");
+            click(app, MenuId::Host);
+            ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
+            code = shown_code(app);
+            const net::FillPlan plan = fill_of(net::FillLevel::Easy, net::FillLevel::None, net::FillLevel::Hard);
+            ASSERT_TRUE(app.fill_bots() == plan && app.net() != nullptr && app.net()->fill_bots() == plan);
+            // the teams are a word of the room's code (the room makes them every time, a full room's automatic start too), not the START's choice: this player's own START teams stay free for all
+            ASSERT_TRUE(code.find("-3p-") == std::string::npos && code.find("-4p-t01-") != std::string::npos && net::room_code_teams(code) == green_red);
+            ASSERT_TRUE(app.net()->room_teams() == green_red && app.net()->effective_teams() == green_red && !app.start_teams().set && !app.net()->start_teams().set);
+            bool seats = false;
+            bool teams = false;
+            for (const MenuElement& e : app.start_menu().elements()) {
+                seats = seats || e.text == "At START: Red gets an Easy bot, Black a Hard bot.";
+                teams = teams || e.text == "Room teams: Green + Red against Blue + Black.";
+            }
+            ASSERT_TRUE(seats && teams);                                                       // the room's panel: what START will do
+            click(app, MenuId::EnterRoom);
+            hall.step(700);
+            ASSERT_TRUE(app.state() == AppState::MapSelect && app.map_select().leads_server_room());
+            const std::string status = app.map_select().room().status;                         // (the plan in the longest way that fits the label)
+            ASSERT_TRUE(status.find("Easy") != std::string::npos && status.find("Hard") != std::string::npos && status.find("Green + Red") != std::string::npos);
+            app.room_key_down(SDLK_s, 0, false);                                               // START, alone
+            ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
+            const server::RoomStatus s = server.status(code);
+            ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 2);
+            ASSERT_TRUE(s.names[0] == "Solo" && s.names[1] == "Bot (Easy)" && s.names[3] == "Bot (Hard)");
+            ASSERT_EQ(app.sim().roster_mask(), 0x0B);                                          // Green, Red and Black play
+            ASSERT_EQ(s.teams, std::string("0+1"));
+            ASSERT_EQ(s.room_teams, std::string("0+1"));                                       // (the room's own: its code named them)
+            ASSERT_TRUE(s.allies[0] == 1 && s.allies[1] == 0 && s.allies[2] == sim::ALLIANCE_NONE && s.allies[3] == sim::ALLIANCE_NONE);       // the referee
+            ASSERT_TRUE(app.sim().alliance_of(0) == 1 && app.sim().alliance_of(1) == 0 && app.sim().alliance_of(3) == sim::ALLIANCE_NONE);     // the leader's engine
+            hall.step(net::kMatchStartDelayMs + 4000);
+            ASSERT_FALSE(app.net()->desynced());
+            ASSERT_TRUE(server.status(code).ticks > 40);
+        }
+        ASSERT_HAS(read_file(settings), "host_fill=none,easy,none,hard\n");
+        ASSERT_HAS(read_file(settings), "host_teams=0+1\n");
+        {   // the next run shows both on the Host panel; a Join makes no teams and fills nothing, whatever the panel said
+            Application app;
+            Hall hall{&server, &app, {}, nullptr, false};
+            ASSERT_TRUE(app.init(menu_config(server.address(), settings)));
+            click(app, MenuId::HostOnline);
+            const std::vector<std::pair<MenuId, std::string>> rows = {{MenuId::HostSeat1, "Easy bot"}, {MenuId::HostSeat2, "Leave empty"}, {MenuId::HostSeat3, "Hard bot"},
+                                                                       {MenuId::HostTeams, "Green + Red against Blue + Black"}};
+            for (const auto& row : rows) {
+                MenuElement e;
+                ASSERT_TRUE(app.start_menu().find_element(row.first, e) && e.value == row.second);
+            }
+            ASSERT_TRUE(server.make_room("JOIN-TEAMS", 4));
+            press(app, SDLK_ESCAPE);
+            menu_join(app, "Joiner", "JOIN-TEAMS");
+            ASSERT_TRUE(hall.until([&]() { return app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));
+            ASSERT_TRUE(app.fill_bots() == net::FillLevel::None && !app.start_teams().set && !app.net()->start_teams().set);
         }
     } TEST_END();
 

@@ -8,10 +8,11 @@
 //   Waiting  clients join (Hello with the room's code); when `players` seats are taken the room starts: Start goes to all, the server's own copy of the map is
 //            already loaded (the room was refused otherwise), every client loads and reports, and the match begins when all have. The first player who joined is the
 //            room's LEADER (the next one when it leaves); with `early_start` on, the leader's StartRequest starts the match at once with the players who are there
-//            (two at least), without waiting for the rest. With a FILL LEVEL in the request (protocol 11) the room first seats a bot of that level, named "Bot (Medium)", in
-//            every seat that is still empty (up to `players`), and then one person is enough; a room with Fog of War refuses the bots (bots and fog never mix, docs/BOTS.md rule
-//            8: the leader is told, and the match starts without them if two people are there), and so does a map that the filled roster cannot play. Only the leader's request seats
-//            bots: a room that fills up, or starts by itself, never does
+//            (two at least), without waiting for the rest. With FILL LEVELS in the request (protocol 11; a level for each seat since 13) the room first seats a bot of the seat's level, named
+//            "Bot (Medium)", in every seat that is still empty and has a level (lowest seat first, up to `players`; a seat that a person took meanwhile is skipped), and then one person is
+//            enough; a room with Fog of War refuses the bots (bots and fog never mix, docs/BOTS.md rule 8: the leader is told, and the match starts without them if two people are there), and
+//            so does a map that the filled roster cannot play. Only the leader's request seats bots: a room that fills up, or starts by itself, never does. The request's TEAMS (protocol 13) go
+//            into the Start message when the seats that play can make them (sim::plan_start_teams), else the match starts without teams and every person in the room is told why
 //   Loading  a client that cannot load the map or leaves cancels the start: back to Waiting (a few times at most); the bots that the fill seated go again, so the room is what it was
 //   Running  the referee executes the turns (and runs the room's bots: ants_ai's BotController over the referee's own engine, called after every tick, its commands go
 //            through the session's sequencer like a person's, `HostSession::submit_bot`; a bot seat has no connection, is never absent, never votes and is never counted as
@@ -57,6 +58,7 @@
 #include "ants_server/map_store.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_sim/start_teams.hpp"
 
 namespace ants::server {
 
@@ -71,6 +73,10 @@ struct RoomSpec {
     /// is shown as a bot ("Bot (Medium)") and is run by the server as a virtual client. At least one seat must be left for a person, the seats are distinct and Fog of War is off
     /// (RoomManager::create_room refuses anything else). Empty: no bot code runs in the room, unless its leader's START asks for a fill.
     std::vector<ai::BotSpec> bots;
+    /// The room's own teams (protocol 13): a demo room's code names them (`demo-treasure-4p-t01-k7m2xq`: net::room_code_teams). The match starts with them EVERY time, when the full room starts by itself and
+    /// when its leader's START starts it early; a leader's StartRequest has teams of its own only in a room that has none (sim::start_teams_for). They are checked against the seats that really play at
+    /// the start (sim::plan_start_teams): when they cannot be made the match starts without them and the room says why. Not set: the leader's START chooses.
+    sim::StartTeams teams;
     bool has_seed{false};
     uint32_t seed{1};                       // the match's random seed (the server draws one when the spec has none)
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
@@ -148,6 +154,9 @@ struct RoomStatus {
         bool fill{false};                   // seated by the leader's START (false: by the room's specification)
     };
     std::vector<Bot> bots;
+    std::string teams;                      // the teams that the match started with, "ffa" or "A+B" (protocol 13; "" before the match), and the referee's own alliances by seat now (4: none): for the tests, not shown by
+    std::array<uint8_t, 4> allies{4, 4, 4, 4};     // the control interface
+    std::string room_teams;                 // the room's own teams, "A+B" ("" when its code names none: the leader's START chooses): for the tests, not shown by the control interface
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
     uint32_t bot_start_hold{0};             // ... and its start hold in ticks (BotController::start_hold: ai::kStartHoldTicks, the product's opening; 0 without a controller): for the tests, not shown by the control interface
     uint32_t bot_decisions{0};              // how many times the room's bots have looked at the match since its controller was made (the sum of BotController::SeatStats::decisions): a controller that is called after every tick
@@ -301,6 +310,7 @@ private:
     // Bots (docs/BOTS.md B6): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
     class BotSink;
     void unseat_fill();
+    void notify_people(const std::string& text);             // the room says a line to every person in it (a notice)
     bool start_bots(uint32_t seed, std::string& why);
 
     RoomSpec spec_;
@@ -318,6 +328,7 @@ private:
     net::HostLobby lobby_;
     std::vector<ai::BotSpec> bot_specs_;     // the bots that sit in the room now, by seat (the specification's and the fill's)
     uint8_t fill_seats_{0};                  // bit s: seat s holds a bot that the leader's START seated (it goes again when the start is cancelled)
+    sim::StartTeams start_teams_;            // the teams of the match's Start (protocol 13): every engine of the match made them before its first tick
     std::vector<std::unique_ptr<net::Connection>> connections_;
     std::unique_ptr<sim::SimulationEngine> sim_;
     std::unique_ptr<net::HostSession> session_;
