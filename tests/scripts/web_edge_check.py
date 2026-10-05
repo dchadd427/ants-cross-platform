@@ -305,7 +305,7 @@ def main():
             return json.loads(tab.ev("JSON.stringify((function(){var b=document.querySelector(%s).getBoundingClientRect();return [b.x+b.width/2,b.y+b.height/2];})())" % json.dumps(selector)))
 
         def header_control_spot(box):
-            return spot("header a.nav-btn")                                                    # (the first link of the page's header, above the box)
+            return spot("header a.btn")                                                    # (the first link of the page's header, above the box)
 
         def expect_gone(label, box, x, y, seconds=0.8):
             """The view is in the middle of the map; the pointer goes from the middle of the picture to (x, y): the game takes it as gone and the view stays (+- 4 px)."""
@@ -435,7 +435,7 @@ def main():
 
                 # the page's own controls: a pointer over one is on the page, whatever its distance from the box (all of these are inside the margin)
                 for what, selector in (("the picture's selector 16:9", "#aspect-16-9"), ("the picture's selector Classic 4:3", "#aspect-4-3"), ("the mouse setting Locked", "#lock-on"),
-                                       ("the mouse setting Free", "#lock-off"), ("a link of the header above the game", "header a.nav-btn"), ("the Fullscreen button of the header", "#fullscreen-btn")):
+                                       ("the mouse setting Free", "#lock-off"), ("a link of the header above the game", "header a.btn"), ("the Fullscreen button of the header", "#fullscreen-btn")):
                     x, y = spot(selector)
                     dx = max(left - x, x - right, 0)
                     dy = max(top - y, y - bottom, 0)
