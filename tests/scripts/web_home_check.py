@@ -471,6 +471,18 @@ def main():
             tab.ev("var m = document.getElementById('map-pick'); m.value = 'small'; m.dispatchEvent(new Event('change')); 1")
             c = card()
             check(c["linksNote"] and re.search(r"room=demo-small-4p-t23-", c["links"][0]) is not None, "another map after a copy: a new room, new links, and the note says to copy them again (%s)" % c["linksNote"])
+            # two Friends (Blue is one too): the note stays up until every link that was sent is the one that is shown for its seat
+            tab.ev("document.getElementById('seat-2-friend').click(); 1")
+            real_click("#invite-list .invite:nth-child(1) .btn")
+            real_click("#invite-list .invite:nth-child(2) .btn")
+            time.sleep(0.4)
+            check(not card()["linksNote"], "two Friends, both links copied: no note")
+            tab.ev("var m = document.getElementById('map-pick'); m.value = 'tiny'; m.dispatchEvent(new Event('change')); 1")
+            check(card()["linksNote"], "... another map: the note is up")
+            real_click("#invite-list .invite:nth-child(1) .btn")
+            check(card()["linksNote"], "... one of the links copied again: the note stays (the link that was sent to the other friend is the old room's)")
+            real_click("#invite-list .invite:nth-child(2) .btn")
+            check(not card()["linksNote"], "... both copied again: the note goes")
             shot("home_seats")
             tab.ev("['1', '2'].forEach(function (n) { document.getElementById('seat-' + n + '-nobody').click(); }); 1")
             c = card()
@@ -634,6 +646,8 @@ def main():
             load(web + "?join=/ws&room=demo-small-2p-abc123&aspect=16:9", ready=False, settle=2.0)
             info = json.loads(value("JSON.stringify({stage: !!document.getElementById('game-stage'), lobby: !!document.getElementById('player-name'), ask: !document.getElementById('name-step').hidden, args: ANTS_ARGS})"))
             check(info["stage"] and not info["lobby"] and info["ask"], "a shared game link (/?join=/ws&room=...) opens the game page, which asks for a name")
+            check(tab.ev("(function () { var a = document.getElementById('name-step-back'); return !!a && a.getAttribute('href') === '/' && !!a.closest('.name-step') && a.textContent.indexOf('front page') !== -1; })()"),
+                  "... and the name step has its way out: a link to the front page inside the card")
             check("--join-url" in info["args"] and "--map" not in info["args"] and "--play" not in info["args"], "... a game of the server: no local parameter reaches it (%s)" % info["args"])
             load(web + "?embed=1&aspect=16:9", ready=False, settle=1.5)
             check(tab.ev("!!document.getElementById('game-stage') && document.body.classList.contains('embed')"), "/?embed=1 opens the game page as a frame's game")
@@ -952,6 +966,15 @@ def main():
                 check("printable ASCII" in note["text"] and note["bg"] == "rgb(59, 13, 16)" and note["inside"], "... a name that is refused says so in the front page's notice, inside the card (%s)" % note["text"][:50])
                 contrast_of("the name step's notice at %s" % label, 5)
                 shot("game_name_step_%s" % label.split()[0])
+                back = json.loads(value("""JSON.stringify((function () {
+                    var c = document.querySelector('.name-step').getBoundingClientRect(), a = document.getElementById('name-step-back'), r = a.getBoundingClientRect(), h = document.querySelector('.name-step-hint').getBoundingClientRect();
+                    return { href: a.getAttribute('href'), text: a.textContent, bg: getComputedStyle(a).backgroundColor, inside: r.left >= c.left && r.right <= c.right && r.top >= h.bottom && r.bottom <= c.bottom };
+                })())"""))
+                check(back["href"] == "/" and "front page" in back["text"] and back["bg"] == "rgb(43, 99, 87)" and back["inside"],
+                      "... and its way out at %s: a teal \"Back to the front page\" link under the hint, inside the card (%s)" % (label, back))
+                real_click("#name-step-back")
+                time.sleep(1.0)
+                check(tab.ev("location.pathname + location.search") == "/" and tab.ev("!!document.getElementById('player-name')"), "... which takes the friend to the front page (the card, no room in the address)")
             tab.emulate(1440, 900, 1)
             clear_storage()
     except NotReachable as e:
