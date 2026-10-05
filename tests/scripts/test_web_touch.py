@@ -11,12 +11,14 @@ here, so everything that the page can say about it without one is checked:
     game told of a touchcancel, the trackpad's pinch still zooming the game through the wheel, and the count of fingers that cannot stick;
   - the page's other code: no touchmove listener anywhere, the sound's unlock still on touchend (a hold that ends in a right click still unlocks it), nothing in the page stops a touch event;
   - the guide's text for touch, and what the game exports for the page and for the browser check.
-The same things in a real browser: tests/scripts/web_touch_check.py (opt-in, against a running page; the coordinator runs it on the local web image).
+The same things in a real browser: tests/scripts/test_web_touch.sh (opt-in, against a running page: web_touch_check.py drives it with a Pixel-like and an iPhone-like phone); what can be checked of that
+script without a browser (the protocol of its fingers, the probes it reads, the phones it has, its exit statuses) is checked here.
 """
 import os
 import re
 import shutil
 import subprocess
+import sys
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -24,6 +26,8 @@ SHELL = os.path.join(REPO, "web", "shell.html")
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_touch_check.js")
 APPLICATION = os.path.join(REPO, "src", "ants_app", "application.cpp")
 APPLICATION_TOUCH = os.path.join(REPO, "src", "ants_app", "application_touch.cpp")
+BROWSER_CHECK = os.path.join(REPO, "tests", "scripts", "web_touch_check.py")
+BROWSER_RUNNER = os.path.join(REPO, "tests", "scripts", "test_web_touch.sh")
 
 
 def read(path):
@@ -182,6 +186,88 @@ class TheGame(PageCase):
         source = read(APPLICATION_TOUCH)
         self.assertIn("if (navigator.vibrate) navigator.vibrate(milliseconds);", source)
         self.found(source, r"try \{ if \(navigator\.vibrate\)")
+
+
+class TheBrowserCheck(PageCase):
+    """The opt-in script that drives the page in a real browser (tests/scripts/web_touch_check.py): what can be checked without a browser."""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("web_touch_check", BROWSER_CHECK)
+        cls.module = importlib.util.module_from_spec(spec)
+        sys.path.insert(0, os.path.dirname(BROWSER_CHECK))
+        try:
+            spec.loader.exec_module(cls.module)
+        finally:
+            sys.path.pop(0)
+        cls.source = read(BROWSER_CHECK)
+
+    def test_it_reads_only_what_the_game_exports(self):
+        game = read(APPLICATION)
+        wanted = set(int(n) for n in re.findall(r"probe\((\d+)\)", self.source))
+        self.assertTrue({3, 4, 5, 6, 16, 17, 18, 19, 20, 21, 22} <= wanted, "the check reads the view, the zoom and the touch model: %s" % sorted(wanted))
+        for n in sorted(wanted):
+            self.found(game, r"case %d: return " % n, "the check reads ants_probe(%d), which the game does not answer" % n)
+        for name in ("_ants_touch_cancel", "_ants_match_running"):
+            self.assertIn("Module." + name, self.source)
+
+    def test_both_phones_are_there_with_what_makes_them_different(self):
+        profiles = self.module.PROFILES
+        self.assertEqual(sorted(profiles), ["iphone", "pixel"])
+        pixel, iphone = profiles["pixel"], profiles["iphone"]
+        self.assertIn("Android", pixel["user_agent"])
+        self.assertTrue(pixel["fullscreen_api"] and pixel["vibrate"] and pixel["dpr"] == 2.625)
+        self.assertIn("iPhone", iphone["user_agent"])
+        self.assertFalse(iphone["fullscreen_api"] or iphone["vibrate"])
+
+    def test_it_says_that_chromium_is_not_webkit(self):
+        self.assertIn("Chromium, not WebKit", self.module.__doc__)
+        self.assertIn("THIS ONLY PROVES THE PAGE'S OWN CODE PATHS FOR AN iPHONE", self.module.__doc__)
+
+    def test_the_fingers_speak_the_protocol_as_chromium_understands_it(self):
+        class FakeTab:
+            def __init__(self):
+                self.sent = []
+
+            def call(self, method, params=None):
+                assert method == "Input.dispatchTouchEvent"
+                self.sent.append((params["type"], [(p["id"], p["x"], p["y"]) for p in params["touchPoints"]]))
+
+        tab = FakeTab()
+        fingers = self.module.Fingers(tab)
+        fingers.down(1, 10, 20)
+        fingers.down(2, 30, 40)
+        fingers.move(a=(11, 21), b=(31, 41))
+        fingers.up(1)
+        fingers.up(2)
+        fingers.down(1, 5, 6)
+        fingers.cancel()
+        self.assertEqual(tab.sent, [
+            ("touchStart", [(1, 10, 20)]),
+            ("touchStart", [(1, 10, 20), (2, 30, 40)]),                  # (the new point and the ones that are down)
+            ("touchMove", [(1, 11, 21), (2, 31, 41)]),                   # (all of them, in one event)
+            ("touchEnd", [(1, 11, 21)]),                                 # (only the point that lifts: the other stays)
+            ("touchEnd", [(2, 31, 41)]),
+            ("touchStart", [(1, 5, 6)]),
+            ("touchCancel", []),                                         # (no points: all of them are cancelled)
+        ])
+        self.assertEqual(fingers.points, {})
+
+    def test_the_runner_skips_without_a_page_and_says_so(self):
+        if not shutil.which("bash"):
+            self.skipTest("bash is not installed")
+        env = dict(os.environ)
+        env.pop("ANTS_WEB_URL", None)
+        done = subprocess.run([shutil.which("bash"), BROWSER_RUNNER], capture_output=True, text=True, timeout=60, env=env)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("SKIP", done.stdout)
+        self.assertIn("ANTS_WEB_URL", done.stdout)
+
+    def test_a_bad_command_line_is_status_2_and_asks_for_no_browser(self):
+        done = subprocess.run([sys.executable, BROWSER_CHECK, "--web", "http://127.0.0.1:9/", "--profile", "android-tablet"], capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("unknown profile", done.stdout)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the page's guards for a touch screen were NOT run (tests/scripts/web_touch_check.js)")
