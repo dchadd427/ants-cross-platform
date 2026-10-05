@@ -2497,10 +2497,13 @@ void GateTask::step(TaskContext& c) {
     // what the ants do: a bite that runs, the entrance occupied, a clip that was first seen now
     bool bite = false;
     bool entrance_occupied = false;
+    bool ramp_held = false;
+    const sim::TileCoord ramp{g.hill.x + 1, g.hill.y};
     std::vector<const AntView*> carriers;
     for (const AntView& a : v.mine()) {
         if (a.state == sim::UnitState::HarvestingFood) bite = true;
         if (a.tile == g.entrance) entrance_occupied = true;
+        if (a.tile == ramp && a.state != sim::UnitState::Walking) ramp_held = true;                                // the way to the entrance leads over the ramp: an own ant that stands there shuts it (the engine's walk is refused)
         if (a.state == sim::UnitState::EnteringBase) {
             if (clip_seen_.count(a.id) == 0) {
                 clip_seen_[a.id] = now;
@@ -2564,7 +2567,7 @@ void GateTask::step(TaskContext& c) {
         }
     }
     if (!entrance_occupied) pending_free_at_ = 0;
-    const bool gate_free = !entrance_occupied && !user_active;
+    const bool gate_free = !entrance_occupied && !ramp_held && !user_active;
     const bool predicted = params_.predictive && pending_free_at_ > 0 && !gate_free && static_cast<int64_t>(now) + params_.latency_ticks >= pending_free_at_;
 
     // 2. the queue row as the engine counts it: occupied tiles (any own ant) and own orders onto its tiles that are still on their way

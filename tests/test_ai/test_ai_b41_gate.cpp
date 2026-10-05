@@ -677,4 +677,72 @@ void run_b41_gate_tests() {
             }
         }
     } TEST_END();
+
+    TEST_CASE("AI10.12 An Own Ant That Stands On The Ramp Shuts The Way To The Entrance Like One That Stands On The Entrance: The Gate Clicks Nobody Onto The Entrance While It Stands There (Before: 16 Clicks And 17 Orders In 400 Ticks, Every One Refused, \"Can't Go There.\", Then The Gate Stopped For 900 Ticks), And Clicks At Once When The Ant Has Gone; An Ant That Walks Over The Ramp Holds Nothing")
+    {
+        const TileCoord hill{26, 26};
+        const TileCoord ramp{hill.x + 1, hill.y};
+        // a world with one carrier at the doorstep and nothing else to do: the ant on the ramp stands there (no pile for it to be sent to)
+        const auto world = [&](sim::SimulationEngine& sim) {
+            sim.init_test_world(60, 60, 5, 14400u * sim::TICK_MS);
+            sim.grid_mut().set_anthill(0, hill);
+            sim.grid_mut().set_anthill(1, TileCoord{4, 4});
+            sim.grid_mut().set_anthill(2, TileCoord{54, 4});
+            sim.grid_mut().set_anthill(3, TileCoord{54, 54});
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{27, 20});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            return carrier;
+        };
+        {   // (a) nobody on the ramp: the carrier is clicked onto the entrance once and banks
+            sim::SimulationEngine sim;
+            const uint32_t carrier = world(sim);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.run(400);
+            ASSERT_EQ(rig.as<StandardBot>().gate().entrance_clicks(), 1u);
+            ASSERT_EQ(tally.seat(0).refused, 0u);
+            ASSERT_TRUE(sim.get_player_score(0) >= 25);
+            ASSERT_TRUE(sim.get_unit(carrier).holding == 0);
+        }
+        {   // (b) an own ant stands on the ramp: no click, no reaction; it goes, and the carrier banks
+            sim::SimulationEngine sim;
+            const uint32_t carrier = world(sim);
+            const uint32_t stander = sim.spawn_unit(0, sim::AntType::Worker, ramp);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.run(400);
+            const GateTask& gate = rig.as<StandardBot>().gate();
+            ASSERT_TRUE(sim.get_unit(stander).pos.x == ramp.x && sim.get_unit(stander).pos.y == ramp.y);        // (the premise: it stands there)
+            ASSERT_TRUE(gate.usable());
+            ASSERT_EQ(gate.entrance_clicks(), 0u);
+            ASSERT_EQ(tally.seat(0).refused, 0u);
+            ASSERT_EQ(tally.seat(0).reactions, 0u);
+            ASSERT_TRUE(sim.get_unit(carrier).holding != 0);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {stander}, 20, 18));
+            rig.run(300);
+            ASSERT_TRUE(gate.entrance_clicks() >= 1);
+            ASSERT_EQ(tally.seat(0).refused, 0u);
+            ASSERT_TRUE(sim.get_player_score(0) >= 25);
+        }
+        {   // (c) an own ant that walks over the ramp holds nothing: the carrier is clicked at the first look
+            sim::SimulationEngine sim;
+            world(sim);
+            const uint32_t walker = sim.spawn_unit(0, sim::AntType::Worker, ramp);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {walker}, 23, 20));
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.tick();                                                                                       // the first look: the walker is on the ramp and shows "walking"
+            ASSERT_TRUE(sim.get_unit(walker).state == sim::UnitState::Walking && sim.get_unit(walker).pos.x == ramp.x && sim.get_unit(walker).pos.y == ramp.y);
+            rig.run(60);
+            size_t first_click = 0;
+            for (const auto& e : rig.proposed) {
+                if (first_click == 0 && e.second.type == CommandType::GroupMove && e.second.tile_x == hill.x + 1 && e.second.tile_y == hill.y + 1) first_click = static_cast<size_t>(e.first);
+            }
+            ASSERT_EQ(first_click, 1u);
+            ASSERT_EQ(tally.seat(0).refused, 0u);
+        }
+    } TEST_END();
 }
