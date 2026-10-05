@@ -745,4 +745,67 @@ void run_b41_gate_tests() {
             ASSERT_EQ(tally.seat(0).refused, 0u);
         }
     } TEST_END();
+
+    TEST_CASE("AI10.13 A Swimmer Is Not Cut Off By Water: A Carrier On An Island That No Walk Joins To The Hill Is Named In No Order (The Gate, The Rescue, The Aid Of A Hit Carrier), A Swimmer That Stands There Is Named In All Three (It Swims Home; Before: It Was Left Where It Was)")
+    {
+        const auto water_round = [](sim::SimulationEngine& sim, TileCoord t) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx != 0 || dy != 0) sim.set_terrain(t.x + dx, t.y + dy, sim::TERRAIN_WATER);
+                }
+            }
+        };
+        const auto named = [](const Rig& rig, uint32_t ant) {
+            size_t n = 0;
+            for (const auto& e : rig.sent) {
+                for (const uint32_t id : e.second.ants) n += id == ant ? 1u : 0u;
+            }
+            return n;
+        };
+        for (const bool swims : {false, true}) {
+            {   // (a) the gate (Hard): the carrier stands far from it on a one-tile island
+                GateScene scene;
+                scene.build(4);
+                water_round(scene.sim, TileCoord{10, 12});
+                const uint32_t far = scene.sim.spawn_unit(0, swims ? sim::AntType::Swimmer : sim::AntType::Worker, TileCoord{10, 12});
+                scene.sim.get_unit(far).pick_up_food(1, 25);
+                Rig rig(scene.sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+                rig.run(600);
+                ASSERT_TRUE(rig.as<StandardBot>().gate().usable());
+                ASSERT_TRUE(rig.as<StandardBot>().gate().entrance_clicks() >= 1);                         // (the others are guided)
+                if (swims) ASSERT_TRUE(named(rig, far) >= 1);
+                else ASSERT_EQ(named(rig, far), 0u);
+            }
+            {   // (b) the economy's rescue (Medium: no gate) of a carrier that stands idle with its food; on a level whose ants are swimmers the swimmer is in its pool
+                sim::SimulationEngine sim;
+                empty_field(sim, 8);
+                if (swims) sim.grid_mut().set_default_ant_tile(65);
+                water_round(sim, TileCoord{12, 12});
+                const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});
+                sim.get_unit(carrier).pick_up_food(1, 25);
+                LevelPlan plan = plan_for(Level::Medium);
+                plan.defenders = 0;
+                Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(900);
+                if (swims) ASSERT_TRUE(rig.as<StandardBot>().harvest().rescues() >= 1);
+                else ASSERT_EQ(rig.as<StandardBot>().harvest().rescues(), 0u);
+                if (!swims) ASSERT_EQ(named(rig, carrier), 0u);
+            }
+            {   // (c) the aid of a carrier that was hit (its walk lost): it stands idle with its food after the blow
+                sim::SimulationEngine sim;
+                empty_field(sim, 8);
+                water_round(sim, TileCoord{12, 12});
+                const uint32_t carrier = sim.spawn_unit(0, swims ? sim::AntType::Swimmer : sim::AntType::Worker, TileCoord{12, 12});
+                sim.get_unit(carrier).pick_up_food(1, 25);
+                LevelPlan plan = plan_for(Level::Medium);
+                plan.defenders = 0;
+                Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(3);
+                sim.get_unit(carrier).hp = 6;                                                             // the blow
+                rig.run(300);
+                if (swims) ASSERT_TRUE(rig.as<StandardBot>().aid().sent_home() >= 1);
+                else ASSERT_EQ(rig.as<StandardBot>().aid().sent_home(), 0u);
+            }
+        }
+    } TEST_END();
 }

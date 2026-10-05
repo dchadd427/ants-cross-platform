@@ -374,8 +374,8 @@ MapInfo::NowField MapInfo::field_now(const sim::Grid& grid, uint8_t team, const 
     return out;
 }
 
-bool MapInfo::reaches_hill(const NowField& field, sim::TileCoord tile) const noexcept {
-    if (!field.valid()) return true;
+bool MapInfo::reaches_hill(const NowField& field, sim::TileCoord tile, sim::AntType type) const noexcept {
+    if (!field.valid() || type == sim::AntType::Swimmer) return true;
     const sim::TileCoord o = hills_[field.team].origin;
     if (tile.x >= o.x && tile.x <= o.x + 3 && tile.y >= o.y && tile.y <= o.y + 3) return true;       // on the hill itself (the mound has no walkable tile)
     for (int32_t dy = -1; dy <= 1; ++dy) {

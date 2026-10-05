@@ -919,7 +919,7 @@ void run_map_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI1.23 Whether A Tile Is Joined To The Hill As The Map Is NOW (MapInfo::reaches_hill, From The Field Of field_now): In Open Ground Every Tile Is, The Hill's Own Tiles (Mound, Ramp, Hole) Too; A Pocket Of Rocks Is Not; A Ring Of Fire Walls Round The Gate Joins The Queue Row To Nothing Outside And The Walls Burnt Out Join It Again; An Empty Field Holds Nothing Back")
+    TEST_CASE("AI1.23 Whether A Tile Is Joined To The Hill As The Map Is NOW (MapInfo::reaches_hill, From The Field Of field_now): In Open Ground Every Tile Is, The Hill's Own Tiles (Mound, Ramp, Hole) Too; A Pocket Of Rocks Is Not, An Island Of Water Is Not (Unless The Ant Is A Swimmer); A Ring Of Fire Walls Round The Gate Joins The Queue Row To Nothing Outside And The Walls Burnt Out Join It Again; An Empty Field Holds Nothing Back")
     {
         const TileCoord hills[4] = {{4, 4}, {50, 4}, {4, 50}, {50, 50}};
         const auto world = [&](sim::SimulationEngine& sim) {
@@ -931,6 +931,11 @@ void run_map_tests() {
         for (int dy = -1; dy <= 1; ++dy) {
             for (int dx = -1; dx <= 1; ++dx) {
                 if (dx != 0 || dy != 0) sim.set_terrain(40 + dx, 30 + dy, sim::TERRAIN_OBSTACLE);
+            }
+        }
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (dx != 0 || dy != 0) sim.set_terrain(46 + dx, 40 + dy, sim::TERRAIN_WATER);
             }
         }
         place_crackers(sim, 20, 30);
@@ -950,6 +955,12 @@ void run_map_tests() {
         ASSERT_FALSE(m.reaches_hill(open, TileCoord{40, 30}));                                           // the pocket of rocks
         ASSERT_TRUE(m.reaches_hill(open, TileCoord{42, 30}));                                            // (outside the rocks)
         ASSERT_TRUE(m.reaches_hill(MapInfo::NowField{}, TileCoord{40, 30}));                             // nothing is known: nothing is held back
+        ASSERT_FALSE(m.reaches_hill(open, TileCoord{46, 40}));                                           // an island of one tile: water all round it, no walk joins it to the hill ...
+        for (const sim::AntType walker : {sim::AntType::Worker, sim::AntType::Bomber, sim::AntType::Fire, sim::AntType::Thief, sim::AntType::Combat}) {
+            ASSERT_FALSE(m.reaches_hill(open, TileCoord{46, 40}, walker));
+        }
+        ASSERT_TRUE(m.reaches_hill(open, TileCoord{46, 40}, sim::AntType::Swimmer));                     // ... but a swimmer swims
+        ASSERT_TRUE(m.reaches_hill(open, TileCoord{30, 30}, sim::AntType::Swimmer));
         const std::array<TileCoord, 8> ring = SabotageTask::ring_of(h);
         for (const TileCoord& t : ring) sim.set_fire_at(t, 3600);
         const MapInfo::NowField shut = m.field_now(sim.grid(), 0);

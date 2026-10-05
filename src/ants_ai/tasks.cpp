@@ -434,7 +434,7 @@ void HarvestTask::step(TaskContext& c) {
             const MapInfo::NowField joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
             home.erase(std::remove_if(home.begin(), home.end(), [&](uint32_t id) {
                            const AntView* a = find_ant(v.mine(), id);
-                           return a != nullptr && !c.map.reaches_hill(joined, a->tile);
+                           return a != nullptr && !c.map.reaches_hill(joined, a->tile, a->type);
                        }),
                        home.end());
         }

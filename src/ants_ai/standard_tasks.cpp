@@ -2510,7 +2510,7 @@ void GateTask::step(TaskContext& c) {
                 pending_free_at_ = static_cast<int64_t>(now) + params_.clip_ticks + params_.exit_ticks;
             }
         }
-        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.map.reaches_hill(now_, a.tile)) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
+        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.map.reaches_hill(now_, a.tile, a.type)) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place, a swimmer swims)
     }
     for (auto it = cmd_.begin(); it != cmd_.end();) {                                // only carriers are ours to place
         bool carrier = false;
@@ -2863,7 +2863,7 @@ void CarrierAidTask::step(TaskContext& c) {
         const MapInfo::NowField joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
         home.erase(std::remove_if(home.begin(), home.end(), [&](uint32_t id) {
                        const AntView* a = find_ant(v.mine(), id);
-                       return a != nullptr && !c.map.reaches_hill(joined, a->tile);
+                       return a != nullptr && !c.map.reaches_hill(joined, a->tile, a->type);
                    }),
                    home.end());
     }
