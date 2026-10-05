@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.5.0 - 2026-10-04 - A new front page in the game's own look, with game statistics
+
+**For players:**
+- **A new front page in the game's own look:** the 1998 game's menu style (the clay, the green frame, the teal buttons, the original "ants!" logo and START! button, a picture of the chosen map). Two cards: **Play vs the computer** (each opponent's level is a row of one-click buttons; Teams as before) and **Play online** (host a match or join one by its code); the help is behind "How it works". It fits phones and wide screens with no sideways scrolling, and every address, link and remembered choice works as before.
+- **Game statistics on the front page:** a line under the welcome banner shows the matches being played and the players online now, and the games played today and in all: online matches of 30 seconds or more, and single-player games (a game in the browser tells the server once that it began: a count, nothing else).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56c4c5d...2b28516), [the front page](docs/audit/web_home_notes.md), [the statistics](docs/audit/site_stats_notes.md)
+
 ## v0.4.0 - 2026-10-04 - Many zoom levels, a level for each bot, teams before the start
 
 **For players:**

@@ -13,6 +13,7 @@ page ever had keeps opening it. The rules (docker/nginx.conf):
 Every html answer has the headers that every page of the site has always had: Cache-Control "no-cache, must-revalidate" (exactly one line), the two cross-origin headers, an ETag (a conditional
 request is answered 304), and the redirect has the server's cross-origin headers too. The pages are recognised by one marker each: the lobby has the field of the name (id="player-name"),
 the game page has the stage (id="game-stage"; the build writes it with or without quotes).
+/stats, /stats/local                  the numbers of the front page: a GET and a POST that go to the game server (only what nginx itself refuses is checked here: other methods, a query)
 Exit status 0: every check passed; 1: a check failed; 3: nothing answers at the address.
 """
 import argparse
@@ -97,6 +98,15 @@ def main():
     s1, h1, _, _ = get("/")
     s2, h2, _, _ = get("/?join=/ws&room=x")
     check(h1.get("etag") and h2.get("etag") and h1["etag"] != h2["etag"], "the two pages that share the address / have their own ETags (one cannot revalidate as the other)")
+
+    print("[web routes] the numbers of the front page: /stats takes a plain GET and /stats/local a POST, nothing else (what nginx refuses itself: none of these reaches the game server, none is counted)")
+    for method, path, want in (("POST", "/stats", 405), ("PUT", "/stats", 405), ("DELETE", "/stats", 405), ("HEAD", "/stats", 405), ("GET", "/stats?x=1", 404), ("GET", "/stats/local", 405), ("HEAD", "/stats/local", 405),
+                               ("PUT", "/stats/local", 405), ("DELETE", "/stats/local", 405), ("POST", "/stats/local?x=1", 404), ("POST", "/stats/local?a=b&c=d", 404)):
+        status = get(path, method=method)[0]
+        check(status == want, "%s %s is refused with %d (%s)" % (method, path, want, status))
+    for path in ("/stats/", "/stats/local/", "/stats/x", "/statsx"):
+        status, headers, names, body = get(path)
+        check(status == 200 and bool(GAME.search(body)), "%s is no address of the numbers: it is the game page like any unknown address (%s)" % (path, status))
 
     print("[web routes] %d checks, %d failed" % (count[0], len(failures)))
     return 1 if failures else 0

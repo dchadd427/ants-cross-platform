@@ -167,10 +167,10 @@ const char* reason_phrase(int status) {
     }
 }
 
-// The answer to a refused handshake: no body, and the connection ends
-std::string http_error_response(int status) {
+// The answer to a refused handshake: no body, and the connection ends. A 405 names the one method that the path takes (GET, or POST for the post path)
+std::string http_error_response(int status, const char* allow = "GET") {
     std::string r = "HTTP/1.1 " + std::to_string(status) + " " + reason_phrase(status) + "\r\n";
-    if (status == 405) r += "Allow: GET\r\n";
+    if (status == 405) r += std::string("Allow: ") + allow + "\r\n";
     if (status == 426) r += "Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\n";
     r += "Connection: close\r\nContent-Length: 0\r\n\r\n";
     return r;
@@ -240,11 +240,11 @@ std::string header_joined(const std::vector<HttpHeader>& headers, const char* na
     return out;
 }
 
-WsHandshakeResult rejected(int status, size_t consumed) {
+WsHandshakeResult rejected(int status, size_t consumed, const char* allow = "GET") {
     WsHandshakeResult r;
     r.status = WsHandshakeResult::Status::Rejected;
     r.http_status = status;
-    r.response = http_error_response(status);
+    r.response = http_error_response(status, allow);
     r.consumed = consumed;
     return r;
 }
@@ -257,6 +257,17 @@ WsHandshakeResult answered(const std::string& body, size_t consumed) {
     r.http_status = 200;
     r.response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nContent-Length: " + std::to_string(body.size()) +
                  "\r\nConnection: close\r\n\r\n" + body;
+    r.consumed = consumed;
+    return r;
+}
+
+// The post path's answer: 204, nothing to read, nothing to keep; the listener counts it (a 204 has no Content-Length)
+WsHandshakeResult posted(size_t consumed) {
+    WsHandshakeResult r;
+    r.status = WsHandshakeResult::Status::Answered;
+    r.http_status = 204;
+    r.posted = true;
+    r.response = "HTTP/1.1 204 No Content\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n";
     r.consumed = consumed;
     return r;
 }
@@ -663,7 +674,9 @@ WsHandshakeResult ws_parse_handshake(const std::string& request, const WsServerO
     for (char c : method) {
         if (!is_token_char(static_cast<unsigned char>(c))) return rejected(400, consumed);
     }
-    if (method != "GET") return rejected(405, consumed);
+    // The post path takes a POST of exactly that path (no query: the target is compared whole) and nothing else; its 405 says POST, every other 405 says GET
+    const bool post_path = options.post_action != nullptr && target == options.post_path;
+    if (method != "GET" && !(method == "POST" && post_path)) return rejected(405, consumed, post_path ? "POST" : "GET");
     if (version != "HTTP/1.1") return rejected(400, consumed);
     if (target[0] != '/') return rejected(400, consumed);                               // origin form only: what a proxy sends
 
@@ -680,12 +693,28 @@ WsHandshakeResult ws_parse_handshake(const std::string& request, const WsServerO
         headers.push_back({to_lower(line.substr(0, colon)), trim(line.substr(colon + 1))});
     }
 
-    // The status path: a plain GET of exactly that path (no query: /busy?x is no status request) and no Upgrade header is answered with the status text, whatever the other options say
-    if (!options.status_path.empty() && options.status_body && target == options.status_path && header_count(headers, "upgrade") == 0) {
+    // The post path: a POST of exactly that path with no Upgrade header and no body is counted by the listener and answered 204
+    if (method == "POST") {
+        if (header_count(headers, "upgrade") > 0) return rejected(400, consumed);
         if (header_count(headers, "host") != 1 || header_joined(headers, "host").empty()) return rejected(400, consumed);
         if (header_count(headers, "transfer-encoding") > 0) return rejected(400, consumed);
         if (header_count(headers, "content-length") > 0 && header_joined(headers, "content-length") != "0") return rejected(400, consumed);
-        return answered(options.status_body(), consumed);
+        return posted(consumed);
+    }
+    // The status paths: a plain GET of exactly that path (no query: /busy?x is no status request) and no Upgrade header is answered with the status text, whatever the other options say
+    if (header_count(headers, "upgrade") == 0) {
+        const std::function<std::string()>* body = nullptr;
+        if (!options.status_path.empty() && options.status_body && target == options.status_path) body = &options.status_body;
+        for (const auto& more : options.more_status) {
+            if (body == nullptr && !more.first.empty() && more.second && target == more.first) body = &more.second;
+        }
+        if (body != nullptr) {
+            if (header_count(headers, "host") != 1 || header_joined(headers, "host").empty()) return rejected(400, consumed);
+            if (header_count(headers, "transfer-encoding") > 0) return rejected(400, consumed);
+            if (header_count(headers, "content-length") > 0 && header_joined(headers, "content-length") != "0") return rejected(400, consumed);
+            return answered((*body)(), consumed);
+        }
+        if (post_path) return rejected(405, consumed, "POST");                          // a GET of the post path
     }
     // The path (the query is not part of it)
     if (!options.path.empty()) {
@@ -981,6 +1010,7 @@ bool WsListener::advance(Pending& p, uint64_t now) {
             return true;
         }
         if (r.status == WsHandshakeResult::Status::Rejected || r.status == WsHandshakeResult::Status::Answered) {
+            if (r.posted && options_.post_action) options_.post_action();     // (once: the entry is done with the answer)
             refuse(p, r.response, now);
             return true;
         }

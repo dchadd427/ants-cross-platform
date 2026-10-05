@@ -2287,6 +2287,180 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("W1.25 More status paths and the post path (the server's /stats and POST /stats/local): a GET of each listed path is answered like /busy; a POST of exactly the post path with no body is answered 204 and counted ONCE by the listener (never by the parser); a query, a body, an upgrade, another path, another method, a missing Host or a long request are refused, and over a real socket nothing reaches the game") {
+        int busy_calls = 0;
+        int stats_calls = 0;
+        int more_calls = 0;
+        int posts = 0;
+        WsServerOptions o;
+        o.status_path = "/busy";
+        o.status_body = [&busy_calls]() { ++busy_calls; return std::string("{\"matches\":0,\"players\":0}"); };
+        o.more_status.emplace_back("/stats", [&stats_calls]() { ++stats_calls; return std::string("{\"online\":1}"); });
+        o.more_status.emplace_back("/more", [&more_calls]() { ++more_calls; return std::string("{\"more\":true}"); });
+        o.post_path = "/stats/local";
+        o.post_action = [&posts]() { ++posts; };
+        const std::string post = "POST /stats/local HTTP/1.1\r\nHost: play.example.org\r\n\r\n";
+        // ---- a GET of every listed path is a status answer, each calls its own function once; /busy is what it was ----
+        {
+            const WsHandshakeResult r = handshake("GET /stats HTTP/1.1\r\nHost: x\r\n\r\n", o);
+            ASSERT_TRUE(r.status == WsHandshakeResult::Status::Answered && r.http_status == 200 && !r.posted);
+            ASSERT_TRUE(r.response.find("Cache-Control: no-store\r\n") != std::string::npos && r.response.find("Content-Type: application/json\r\n") != std::string::npos);
+            ASSERT_TRUE(r.response.compare(r.response.size() - 12, 12, "{\"online\":1}") == 0);
+            ASSERT_TRUE(stats_calls == 1 && busy_calls == 0 && more_calls == 0);
+            ASSERT_TRUE(handshake("GET /more HTTP/1.1\r\nHost: x\r\n\r\n", o).response.find("{\"more\":true}") != std::string::npos);
+            ASSERT_TRUE(handshake("GET /busy HTTP/1.1\r\nHost: x\r\n\r\n", o).response.find("{\"matches\":0,\"players\":0}") != std::string::npos);
+            ASSERT_TRUE(stats_calls == 1 && busy_calls == 1 && more_calls == 1);
+        }
+        // the same rules as /busy: no query, no other case, no trailing slash, no body, one Host, and an upgrade is the usual handshake; nothing asks for the text
+        stats_calls = busy_calls = more_calls = 0;
+        ASSERT_TRUE(refused_with("GET /stats?x=1 HTTP/1.1\r\nHost: x\r\n\r\n", 426, o));
+        ASSERT_TRUE(refused_with("GET /stats/ HTTP/1.1\r\nHost: x\r\n\r\n", 426, o));
+        ASSERT_TRUE(refused_with("GET /Stats HTTP/1.1\r\nHost: x\r\n\r\n", 426, o));
+        ASSERT_TRUE(refused_with("GET /stat HTTP/1.1\r\nHost: x\r\n\r\n", 426, o));
+        ASSERT_TRUE(refused_with("GET /stats HTTP/1.1\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("GET /stats HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhello", 400, o));
+        ASSERT_TRUE(refused_with("GET /stats HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n", 405, o));          // (a POST of a status path: 405, Allow: GET)
+        ASSERT_TRUE(handshake("POST /stats HTTP/1.1\r\nHost: x\r\n\r\n", o).response.find("Allow: GET\r\n") != std::string::npos);
+        ASSERT_TRUE(accepted(upgrade_request("", "/stats"), o));
+        ASSERT_TRUE(stats_calls == 0 && busy_calls == 0 && more_calls == 0 && posts == 0);
+        {
+            WsServerOptions blank = o;                                                       // an empty path or no function in the list is no status
+            blank.more_status.emplace_back("", []() { return std::string("{}"); });
+            blank.more_status.emplace_back("/nofn", nullptr);
+            ASSERT_TRUE(refused_with("GET / HTTP/1.1\r\nHost: x\r\n\r\n", 426, blank));
+            ASSERT_TRUE(refused_with("GET /nofn HTTP/1.1\r\nHost: x\r\n\r\n", 426, blank));
+        }
+        // ---- the POST: 204, nothing to read, the parser itself counts nothing ----
+        {
+            const WsHandshakeResult r = handshake(post, o);
+            ASSERT_TRUE(r.status == WsHandshakeResult::Status::Answered && r.http_status == 204 && r.posted && r.consumed == post.size());
+            ASSERT_TRUE(r.response.find("HTTP/1.1 204 No Content\r\n") == 0 && r.response.find("Connection: close\r\n") != std::string::npos);
+            ASSERT_TRUE(r.response.find("Cache-Control: no-store\r\n") != std::string::npos && r.response.find("Content-Length") == std::string::npos);
+            ASSERT_TRUE(r.response.size() >= 4 && r.response.compare(r.response.size() - 4, 4, "\r\n\r\n") == 0);                // (no body after the head)
+            ASSERT_EQ(posts, 0);                                                              // (the listener runs the action: the parser is pure)
+            ASSERT_TRUE(handshake("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n", o).posted);
+            ASSERT_TRUE(handshake("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length:   0  \r\n\r\n", o).posted);
+            ASSERT_TRUE(handshake("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nAccept: */*\r\nOrigin: https://play.example.org\r\n\r\n", o).posted);   // (what a browser adds)
+            const WsHandshakeResult tail = handshake(post + "POST /stats/local HTTP/1.1\r\n", o);                                          // (whatever follows is not read)
+            ASSERT_TRUE(tail.posted && tail.consumed == post.size());
+            ASSERT_TRUE(handshake("POST /stats/local HTTP/1.1\r\nHost: x\r\n", o).status == WsHandshakeResult::Status::NeedMore);       // an incomplete request is waited for
+            ASSERT_EQ(posts, 0);
+        }
+        // ---- what the post path refuses: a body, a query, an upgrade, no or two Hosts, the wrong version, another path, another method, a long request ----
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhello", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: 1\r\n\r\nx", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: 00\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: 0, 0\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: -1\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost:\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nHost: y\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nUpgrade: h2c\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.0\r\nHost: x\r\n\r\n", 400, o));
+        ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\nHost: x\n\n", 400, o));
+        ASSERT_TRUE(refused_with("POST  /stats/local HTTP/1.1\r\nHost: x\r\n\r\n", 400, o));
+        for (const char* other : {"/stats/local?x=1", "/stats/local?", "/stats/local#a", "/stats/local/", "/stats/localx", "/stats/Local", "/stats/loca", "/stats", "/busy", "/", "/ws", "/stats/local/x", "//stats/local"}) {
+            const std::string request = std::string("POST ") + other + " HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n";
+            ASSERT_TRUE(refused_with(request, 405, o));                                       // (a POST of any other path: 405, and it names GET: nothing but the status paths take a request)
+            ASSERT_TRUE(handshake(request, o).response.find("Allow: GET\r\n") != std::string::npos);
+        }
+        for (const char* method : {"GET", "HEAD", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE", "CONNECT", "post", "Post", "PROPFIND"}) {
+            const std::string request = std::string(method) + " /stats/local HTTP/1.1\r\nHost: x\r\n\r\n";
+            const WsHandshakeResult r = handshake(request, o);
+            ASSERT_TRUE(r.status == WsHandshakeResult::Status::Rejected && r.http_status == 405 && !r.posted);                           // (a GET of the post path too: it is no upgrade)
+            ASSERT_TRUE(r.response.find("Allow: POST\r\n") != std::string::npos && r.response.find("Allow: GET") == std::string::npos);
+        }
+        ASSERT_TRUE(accepted(upgrade_request("", "/stats/local"), o));                        // the upgrade of a game is the door's own business, on any path as before
+        {
+            const std::string path = "/" + std::string(7000, 'a');                              // a long path that fits in the 8 KB of a request: not the post path
+            ASSERT_TRUE(refused_with("POST " + path + " HTTP/1.1\r\nHost: x\r\n\r\n", 405, o));
+            ASSERT_TRUE(refused_with("POST /stats/local HTTP/1.1\r\nHost: x\r\nX-Pad: " + std::string(9000, 'b') + "\r\n\r\n", 431, o));            // too long a request: refused whole
+            ASSERT_TRUE(refused_with("POST /" + std::string(9000, 'a') + " HTTP/1.1\r\nHost: x\r\n\r\n", 431, o));
+            ASSERT_TRUE(handshake("POST /stats/local HTTP/1.1\r\nHost: x\r\nX-Pad: " + std::string(kWsMaxRequestBytes, 'b'), o).http_status == 431);   // (no blank line within the limit: refused before it comes)
+        }
+        ASSERT_EQ(posts, 0);
+        {
+            WsServerOptions off = o;                                                          // no function or no path: no post path, and the POST is any other POST
+            off.post_action = nullptr;
+            ASSERT_TRUE(refused_with(post, 405, off));
+            ASSERT_TRUE(handshake(post, off).response.find("Allow: GET\r\n") != std::string::npos);
+            off = o;
+            off.post_path.clear();
+            ASSERT_TRUE(refused_with(post, 405, off));
+            ASSERT_TRUE(refused_with("GET /stats/local HTTP/1.1\r\nHost: x\r\n\r\n", 426, off));
+            ASSERT_TRUE(refused_with("POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n", 405, off));      // (an empty path never matches "/")
+        }
+        // ---- over a real socket ----
+        {
+            Rig rig;
+            ASSERT_TRUE(rig.start(o));
+            RawClient client;
+            const std::string head = connect_and_ask(rig, client, post);
+            ASSERT_TRUE(head.find("HTTP/1.1 204 No Content\r\n") == 0);
+            ASSERT_TRUE(rig.wait([&]() {
+                client.pull();
+                return client.eof();
+            }));                                                                              // the socket is closed after the answer
+            ASSERT_TRUE(client.take_text().empty());                                          // (and the answer has no body)
+            ASSERT_EQ(posts, 1);
+            ASSERT_TRUE(rig.conns.empty());                                                   // nothing reached the game
+            ASSERT_EQ(rig.listener->pending(), 0u);
+            for (int i = 0; i < 9; ++i) {                                                     // ten in all: each counted once
+                RawClient more;
+                ASSERT_TRUE(connect_and_ask(rig, more, post).find("HTTP/1.1 204 ") == 0);
+            }
+            ASSERT_EQ(posts, 10);
+            RawClient slow;                                                                   // a client that sends one byte at a time is counted once, when its request is whole
+            ASSERT_TRUE(slow.connect(rig.listener->port()));
+            for (size_t i = 0; i + 1 < post.size(); ++i) {
+                ASSERT_TRUE(slow.send_text(std::string(1, post[i])));
+                for (int k = 0; k < 3; ++k) rig.step();
+                ASSERT_EQ(posts, 10);
+            }
+            ASSERT_TRUE(slow.send_text(std::string(1, post.back())));
+            std::string slow_head;
+            ASSERT_TRUE(rig.wait([&]() {
+                slow.pull();
+                return slow.take_head(slow_head);
+            }));
+            ASSERT_TRUE(slow_head.find("HTTP/1.1 204 ") == 0);
+            ASSERT_EQ(posts, 11);
+            RawClient body;                                                                   // a body: refused, not counted, the socket still closes cleanly
+            ASSERT_TRUE(connect_and_ask(rig, body, "POST /stats/local HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhello").find("HTTP/1.1 400 ") == 0);
+            RawClient query;
+            ASSERT_TRUE(connect_and_ask(rig, query, "POST /stats/local?x=1 HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n").find("HTTP/1.1 405 ") == 0);
+            RawClient get;
+            ASSERT_TRUE(connect_and_ask(rig, get, "GET /stats/local HTTP/1.1\r\nHost: x\r\n\r\n").find("HTTP/1.1 405 ") == 0);
+            RawClient stats;                                                                  // and a status path of the list answers beside it
+            ASSERT_TRUE(connect_and_ask(rig, stats, "GET /stats HTTP/1.1\r\nHost: x\r\n\r\n").find("HTTP/1.1 200 OK\r\n") == 0);
+            ASSERT_EQ(posts, 11);
+            ASSERT_TRUE(rig.conns.empty());
+            RawClient socket;                                                                 // the door still opens for a game
+            ASSERT_TRUE(connect_and_ask(rig, socket, upgrade_request()).find("HTTP/1.1 101 ") == 0);
+            ASSERT_TRUE(rig.wait([&]() { return rig.conns.size() == 1; }));
+        }
+        {
+            posts = 0;
+            Rig rig;                                                                          // set_post and add_status after the listener exists (the server does it once its rooms and its statistics exist)
+            ASSERT_TRUE(rig.start());
+            RawClient before;
+            ASSERT_TRUE(connect_and_ask(rig, before, post).find("HTTP/1.1 405 ") == 0);
+            RawClient before_get;
+            ASSERT_TRUE(connect_and_ask(rig, before_get, "GET /stats HTTP/1.1\r\nHost: x\r\n\r\n").find("HTTP/1.1 426 ") == 0);
+            rig.listener->set_post("/stats/local", [&posts]() { ++posts; });
+            rig.listener->add_status("/stats", []() { return std::string("{\"ok\":true}"); });
+            RawClient after;
+            ASSERT_TRUE(connect_and_ask(rig, after, post).find("HTTP/1.1 204 ") == 0);
+            ASSERT_EQ(posts, 1);
+            RawClient after_get;
+            ASSERT_TRUE(connect_and_ask(rig, after_get, "GET /stats HTTP/1.1\r\nHost: x\r\n\r\n").find("HTTP/1.1 200 OK\r\n") == 0);
+        }
+    } TEST_END();
+
     std::cout << "\n=======================================================\n";
     std::cout << " WebSocket transport: " << g_test_count << " test cases, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
     std::cout << "=======================================================\n";

@@ -50,6 +50,8 @@ cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web"/favicon.* "${DIST_DIR}/"
+mkdir -p "${DIST_DIR}/front"
+cp -f "${SCRIPT_DIR}/web/front"/* "${DIST_DIR}/front/"            # the front page's pictures and font, served at /front/
 
 echo "========================================================"
 echo " Build Succeeded! Web distribution ready in: ${DIST_DIR}"

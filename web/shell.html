@@ -1411,6 +1411,17 @@
             if (wanted === 'on' || wanted === 'off') ANTS_ARGS.push('--prediction', wanted);
         })();
 
+        // ANTS_REPORT_BEGIN (tests/scripts/web_report_check.js runs this function with a fake fetch and a table of failures)
+        // The game calls this when a game on THIS computer begins (its first tick; a match of the network never does): the server counts it for the numbers of the front page (docs/NETWORK_PORT.md
+        // "Site statistics"). One POST with nothing in it; no retry, nothing on the page, and no failure (no fetch, a throw, a refused or lost request, a 503) is ever the game's business.
+        function antsReportLocalGame() {
+            try {
+                var sent = fetch('/stats/local', { method: 'POST', keepalive: true });
+                if (sent && typeof sent.catch === 'function') sent.catch(function () { /* only the front page's numbers depend on it: nobody is told */ });
+            } catch (e) { /* no fetch in this browser: nothing is counted */ }
+        }
+        // ANTS_REPORT_END
+
         var Module = {
             arguments: ANTS_ARGS,
             preRun: [],

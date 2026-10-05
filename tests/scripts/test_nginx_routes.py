@@ -68,6 +68,10 @@ class TheFile(unittest.TestCase):
         dockerfile = read(os.path.join(REPO, "Dockerfile"))
         self.assertIn("play.html", dockerfile)
 
+    def test_the_numbers_of_the_front_page_have_their_two_exact_locations(self):
+        locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
+        self.assertEqual([l for l in locations if "stats" in l], ["= /stats", "= /stats/local"])          # (their blocks are checked in test_nginx_stats.py, run against a stand-in server there)
+
     def test_no_other_location_could_catch_the_front_page_or_the_old_address(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
         self.assertEqual([l for l in locations if l in ("= /", "= /four.html")], ["= /", "= /four.html"])
@@ -89,7 +93,11 @@ class TheRoutesRun(unittest.TestCase):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)
         conf = os.path.join(cls.tmp, "default.conf")
-        shutil.copyfile(CONF, conf)
+        text = read(CONF)
+        if not os.path.exists("/proc/net/if_inet6"):                                       # a kernel without IPv6 cannot listen on [::]: the rest of the file is the one under test
+            text = text.replace("listen [::]:80;", "")
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write(text)
         cls.name = "ants-routes-" + uuid.uuid4().hex[:8]
         import socket
         s = socket.socket()

@@ -1685,7 +1685,7 @@ def main():
                     var d = f.contentDocument, c = d && d.getElementById('canvas'), b = d && d.getElementById('game-container');
                     var fr = f.getBoundingClientRect(), br = b && b.getBoundingClientRect();
                     return { frame: [fr.width, fr.height], box: br && [br.width, br.height], backing: c && [c.width, c.height], aspect: d && d.getElementById('game-stage').getAttribute('data-aspect'), src: f.src,
-                             page: document.body.getAttribute('data-aspect'), select: document.getElementById('aspect-select').value };
+                             page: document.body.getAttribute('data-aspect'), select: document.querySelector('input[name=aspect]:checked').value };
                 }))"""))
 
             def frames_check(label, frames, want, size=None):

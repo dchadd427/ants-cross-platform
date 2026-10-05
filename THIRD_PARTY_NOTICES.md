@@ -15,6 +15,8 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
   keeps out of every commit; the tests do not need them (see "Reverse Engineering" in the README).
 - Why the data is here: so that the remake can run and so that its tests can compare it with the original. Replacing the original artwork with open
   material is planned as a separate, later project.
+- Pictures made from it: the sprites in `asset_catalog/sprites/` and the pictures of the front page in `web/front/` (cut out of that artwork and of screenshots of the game by
+  `tools/front_page_art/make_art.py`) are the original's artwork too, not this project's.
 - Rights holders: if you hold rights to something here and want it removed, open an issue at the project's repository and it will be taken out.
 
 ## Included in the repository
@@ -29,7 +31,8 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 ### Libre Franklin (font)
 
 - Where: `Original-Ants/LibreFranklin-Medium.ttf`, with its licence in `Original-Ants/LibreFranklin-OFL.txt`. The web build preloads both files
-  with the rest of the folder `Original-Ants`.
+  with the rest of the folder `Original-Ants`. The front page serves a copy of the font, with the same licence text beside it, from
+  `web/front/` (`LibreFranklin-Medium.ttf`, `LibreFranklin-OFL.txt`); `tools/front_page_art/make_art.py` makes the copy.
 - What: Libre Franklin, Copyright 2020 The Libre Franklin Project Authors, <https://github.com/googlefonts/Libre-Franklin>.
 - Licence: SIL Open Font License, Version 1.1. The full text is in `Original-Ants/LibreFranklin-OFL.txt`; keep that file together with the font.
 

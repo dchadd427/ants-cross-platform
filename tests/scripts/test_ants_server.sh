@@ -225,6 +225,31 @@ busy_json_ok() {      # busy_json_ok MATCHES PLAYERS: the answer is 200 JSON tha
 }
 check "GET /busy on the WebSocket port needs no secret and says 200 JSON, no-store, {\"matches\":0,\"players\":0} while nothing runs" "$(busy_json_ok 0 0; echo $?)"
 check "the busy answer is GET only (a POST is 405) and takes no parameter (a query is no status request: 426), and no other path answers it" "$([ "$(code_of -X POST "$BUSY")" = "405" ] && [ "$(code_of "$BUSY?x=1")" = "426" ] && [ "$(code_of "http://127.0.0.1:$WS_PORT/busy/")" = "426" ] && [ "$(code_of "http://127.0.0.1:$WS_PORT/rooms")" = "426" ]; echo $?)"
+# the site statistics (GET /stats and POST /stats/local on the WebSocket port, which the site's nginx routes like /busy): the games that ended here and the single-player games that browsers report, numbers only
+STATS="http://127.0.0.1:$WS_PORT/stats"
+LOCAL="http://127.0.0.1:$WS_PORT/stats/local"
+stats_check() {      # stats_check ONLINE_DAY ONLINE_TOTAL LOCAL_DAY LOCAL_TOTAL [URL]: 200 JSON that nobody may cache, exactly now / online / local / since, the dates of one shape, and these four numbers
+    local head body
+    head="$(curl -s -i -m 3 "${5:-$STATS}" | tr -d '\r')"
+    body="$(curl -s -m 3 "${5:-$STATS}")"
+    echo "$head" | head -1 | grep -q '^HTTP/1.1 200 OK$' && echo "$head" | grep -qi '^content-type: application/json$' && echo "$head" | grep -qi '^cache-control: no-store$' &&
+        echo "$body" | python3 -c '
+import sys, json, re
+d = json.load(sys.stdin)
+ok = sorted(d) == ["local", "now", "online", "since"] and sorted(d["now"]) == ["matches", "players"] and sorted(d["online"]) == ["day", "total"] and sorted(d["local"]) == ["day", "total"]
+ok = ok and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", d["since"]) is not None
+ok = ok and [d["online"]["day"], d["online"]["total"], d["local"]["day"], d["local"]["total"]] == [int(a) for a in sys.argv[1:5]]
+sys.exit(0 if ok else 1)' "$1" "$2" "$3" "$4"
+}
+stat_of() { curl -s -m 3 "${3:-$STATS}" | python3 -c 'import sys, json; print(json.load(sys.stdin)[sys.argv[1]][sys.argv[2]])' "$1" "$2" 2> /dev/null; }      # stat_of online|local day|total [URL]
+check "GET /stats needs no secret and says 200 JSON, no-store, with exactly now, online, local and since, and nothing counted yet" "$(stats_check 0 0 0 0; echo $?)"
+check "GET /stats says what /busy says in its now" "$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); b = json.load(open(sys.argv[2])); sys.exit(0 if d["now"] == b else 1)' <(curl -s -m 3 "$STATS") <(curl -s -m 3 "$BUSY"); echo $?)"
+POST_OUT="$(curl -s -i -m 3 -X POST "$LOCAL" | tr -d '\r')"
+check "POST /stats/local is answered 204 with nothing in it (no body, no Content-Length)" "$(echo "$POST_OUT" | head -1 | grep -q '^HTTP/1.1 204 No Content$' && [ -z "$(echo "$POST_OUT" | sed '1,/^$/d')" ] && ! echo "$POST_OUT" | grep -qi '^content-length'; echo $?)"
+check "... and counts one single-player game (a day and in all), and no online one" "$(stats_check 0 0 1 1; echo $?)"
+check "a POST with a body is 400, with a query 405 (it is no counting request), a GET of the path 405, a POST of /stats 405, and none of them counts" "$([ "$(code_of -X POST -d 'x' "$LOCAL")" = "400" ] && [ "$(code_of -X POST "$LOCAL?x=1")" = "405" ] && [ "$(code_of "$LOCAL")" = "405" ] && [ "$(code_of -X POST "$STATS")" = "405" ] && [ "$(code_of "$STATS?x=1")" = "426" ] && stats_check 0 0 1 1; echo $?)"
+CAP_CODES="$(for _ in $(seq 1 130); do code_of -X POST "$LOCAL"; echo; done | sort | uniq -c | tr -s ' ' | tr '\n' ' ')"
+check "the cap: 131 reports in a few seconds are all answered 204 (the cap cannot be seen: $CAP_CODES) and 120 of them are counted (at most 120 a minute)" "$([ "$CAP_CODES" = " 130 204 " ] && stats_check 0 0 120 120; echo $?)"
 [ "$UP" -ne 0 ] && { cat "$WORK/server.log"; echo "server e2e: $CHECKS checks, $FAILS failures"; exit 1; }
 
 # the secret
@@ -255,6 +280,7 @@ RUN_SEEN_AT="$(python3 -c 'import time; print(time.time())')"
 check "both clients joined and the match started by itself (state running)" "$RUNNING"
 check "both players are in the room list" "$(echo "$STATUS" | grep -q 'Player1' && echo "$STATUS" | grep -q 'Player2'; echo $?)"
 check "while their match runs /busy says one match and two people" "$(busy_json_ok 1 2; echo $?)"
+check "... and /stats says the same in its now" "$(curl -s -m 3 "$STATS" | python3 -c 'import sys, json; sys.exit(0 if json.load(sys.stdin)["now"] == {"matches": 1, "players": 2} else 1)'; echo $?)"
 TICKS="$(wait_ticks "$CODE")"
 DIALOG_WAIT="$(python3 -c "import time; print(round(time.time() - $RUN_SEEN_AT, 1))")"
 check "the referee's clock runs (ticks after the dialog: $TICKS)" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
@@ -296,9 +322,13 @@ TICKS="$(wait_ticks "$LEAD")"
 check "the referee's clock runs for the two of them (ticks after the dialog: $TICKS)" "$([ "${TICKS:-0}" -gt 0 ]; echo $?)"
 check "neither client reported an error" "$(grep -qiE 'out of sync|failed|error' "$WORK/l1.log" "$WORK/l2.log"; [ $? -ne 0 ]; echo $?)"
 check "the room did not fail (no desync)" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | grep -q '"state":"running"'; echo $?)"
+ONLINE_BEFORE="$(stat_of online total)"
+LEAD_TICKS="$(ticks_of "$LEAD")"
 for p in $LEAD_PIDS; do kill "$p" 2> /dev/null; done
 for p in $LEAD_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" > /dev/null
+sleep 0.3
+check "the leader's room, whose match ran for seconds only ($LEAD_TICKS ticks, under 600), ended (its players left, then the owner closed it): it counts nothing (a start-and-quit loop cannot pad the number)" "$([ "${LEAD_TICKS:-0}" -gt 0 ] && [ "${LEAD_TICKS:-0}" -lt 600 ] && [ "$(stat_of online total)" = "$ONLINE_BEFORE" ] && [ "$(stat_of online day)" = "$ONLINE_BEFORE" ]; echo $?)"
 
 # bots fill the empty seats (protocol 11): a room for four whose leader (a headless client with --fill-bots medium, --start-when 1: a test hook that presses START once one player is
 # in) starts it ALONE: the server seats a "Bot (Medium)" in each of the three empty seats and runs them, the status lists them, the match runs and the client reports no error; two
@@ -347,9 +377,12 @@ done
 check "two clients chat in the waiting room: each hears the other's line from the room, with the sender's name" "$HEARD"
 check "each also hears its own line from the room (the room tells the sender that it was heard)" "$(grep -q 'Room chat: Ann: hello from Ann' "$WORK/ch1.log" && grep -q 'Room chat: Bob: hello from Bob' "$WORK/ch2.log"; echo $?)"
 check "nobody started the match by chatting: the room still waits" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CHAT" | grep -q '"state":"waiting"'; echo $?)"
+ONLINE_BEFORE="$(stat_of online total)"
 for p in $CHAT_PIDS; do kill "$p" 2> /dev/null; done
 for p in $CHAT_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CHAT" > /dev/null
+sleep 0.3
+check "the room in which two players only chatted (no match began) was closed: it counts nothing" "$([ "$(stat_of online total)" = "$ONLINE_BEFORE" ]; echo $?)"
 
 # flood control (v0.0.93): a raw client that is no game sends valid messages as fast as its line allows (a StartRequest that is ignored, a Ping), in a room of its own while two real
 # clients play in another. Before the TCP inbox was bounded and the messages counted, the server read and parsed everything into memory (the process grew by gigabytes in seconds,
@@ -469,9 +502,19 @@ for KIND in startreq ping; do
     code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FLOODROOM" > /dev/null
 done
 check "the match next to the floods is still running and its clients saw no error" "$([ "$(field_of "$VICTIM" state)" = "running" ] && ! grep -qiE 'out of sync|failed|error' "$WORK/v1.log" "$WORK/v2.log"; echo $?)"
+# a match is an online game when it has played 600 ticks (30 s) and ended: this one has been playing through the floods, and plays on until it has
+VICTIM_TICKS=0
+for _ in $(seq 1 400); do
+    VICTIM_TICKS="$(ticks_of "$VICTIM")"
+    [ "${VICTIM_TICKS:-0}" -ge 600 ] && break
+    sleep 0.25
+done
+ONLINE_BEFORE="$(stat_of online total)"
 for p in $VICTIM_PIDS; do kill "$p" 2> /dev/null; done
 for p in $VICTIM_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$VICTIM" > /dev/null
+sleep 0.3
+check "the match next to the floods played $VICTIM_TICKS ticks (600 are 30 s) and ended (its players left, then the owner closed it): one online game, counted once (a match that played that long counts, whatever ended it)" "$([ "${VICTIM_TICKS:-0}" -ge 600 ] && [ "$(stat_of online total)" = "$((ONLINE_BEFORE + 1))" ] && [ "$(stat_of online day)" = "$((ONLINE_BEFORE + 1))" ]; echo $?)"
 
 # closing the room writes its result; SIGTERM stops the server
 check "the owner closes the room: 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CODE")" = "200" ]; echo $?)"
@@ -484,6 +527,65 @@ SERVER_PID=""
 check "the server stops cleanly on SIGTERM" "$([ "$SERVER_EXIT" -eq 0 ]; echo $?)"
 check "the room's result file was written" "$([ -s "$WORK/results/$CODE.json" ]; echo $?)"
 check "the log never shows the secret" "$(grep -q "$SECRET" "$WORK/server.log"; [ $? -ne 0 ]; echo $?)"
+# the counters are in the results folder (numbers and one date only), the stop saved them, the next start reads them, and a file that is no statistics is put aside whole
+STATS_FILE="$WORK/results/site-stats.json"
+check "the stop saved the counters in the results folder: one line of JSON, the format, the date, and for each counter its total and its hours (numbers only)" "$(python3 -c '
+import sys, json, re
+d = json.load(open(sys.argv[1]))
+ok = sorted(d) == ["format", "local", "online", "since"] and d["format"] == 1 and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", d["since"]) is not None
+for k in ("online", "local"):
+    ok = ok and sorted(d[k]) == ["hours", "total"] and isinstance(d[k]["total"], int) and all(len(h) == 2 and all(isinstance(x, int) for x in h) for h in d[k]["hours"])
+ok = ok and d["local"]["total"] == 120 and d["online"]["total"] == 1 and sum(h[1] for h in d["local"]["hours"]) == 120
+sys.exit(0 if ok else 1)' "$STATS_FILE"; echo $?)"
+check "the log of the first start says that the counters are new, the stop leaves no temporary file" "$(grep -q 'site statistics: .* is new, counting from' "$WORK/server.log" && [ ! -e "$STATS_FILE.tmp" ]; echo $?)"
+STATS_BEFORE="$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); print(d["since"], d["online"]["total"], d["local"]["total"])' "$STATS_FILE")"
+start_stats_server() {      # start_stats_server LOG: a server over the same results folder, on a WebSocket port of its own (WS2); waits for it
+    WS2="$(free_port)"
+    "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --ws-port "$WS2" --results-dir "$WORK/results" > "$1" 2>&1 &
+    SERVER_PID=$!
+    for _ in $(seq 1 50); do
+        [ "$(code_of "http://127.0.0.1:$WS2/busy")" = "200" ] && return 0
+        kill -0 "$SERVER_PID" 2> /dev/null || return 1
+        sleep 0.1
+    done
+    return 1
+}
+start_stats_server "$WORK/server2.log"
+check "a second start over the same results folder is up" "$?"
+STATS2="http://127.0.0.1:$WS2/stats"
+STATS_AFTER="$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); print(d["since"], d["online"]["total"], d["local"]["total"])' <(curl -s -m 3 "$STATS2") 2> /dev/null)"
+check "it reads the counters back: the same totals, the same date ($STATS_BEFORE)" "$([ "$STATS_AFTER" = "$STATS_BEFORE" ]; echo $?)"
+check "... the games are still in the last 24 hours, and its log says what it read" "$(stats_check "$(stat_of online total "$STATS2")" "$(stat_of online total "$STATS2")" 120 120 "$STATS2" && grep -q 'site statistics: read .* online and 120 single-player games since' "$WORK/server2.log"; echo $?)"
+file_local_total() { python3 -c 'import sys, json; print(json.load(open(sys.argv[1]))["local"]["total"])' "$STATS_FILE" 2> /dev/null; }
+check "a report after the restart counts (121)" "$([ "$(code_of -X POST "http://127.0.0.1:$WS2/stats/local")" = "204" ] && [ "$(stat_of local total "$STATS2")" = "121" ]; echo $?)"
+FILE_SAVED=1
+for _ in $(seq 1 30); do
+    [ "$(file_local_total)" = "121" ] && { FILE_SAVED=0; break; }
+    sleep 0.1
+done
+check "the file has it within three seconds while the server runs (a change is written when it is due: the first write after a start is at once)" "$FILE_SAVED"
+check "a second report right after it (inside the ten seconds that the next write waits) counts (122) and is not in the file yet" "$([ "$(code_of -X POST "http://127.0.0.1:$WS2/stats/local")" = "204" ] && [ "$(stat_of local total "$STATS2")" = "122" ] && sleep 0.3 && [ "$(file_local_total)" = "121" ]; echo $?)"
+stop_server
+check "the second server stops cleanly and the stop saved the 122" "$([ "$(file_local_total)" = "122" ]; echo $?)"
+printf 'this is no statistics' > "$STATS_FILE"
+mkdir "$WORK/results/site-stats.json.tmp"      # (a folder where the counters' temporary file goes: the first write of this start cannot be made)
+start_stats_server "$WORK/server3.log"
+check "a start over a file that is no statistics is up" "$?"
+STATS3="http://127.0.0.1:$WS2/stats"
+check "... it puts the file aside whole (named .broken-<time>), says so in its log, and counts again from 0" "$([ "$(ls "$WORK/results" | grep -c '^site-stats.json.broken-')" = "1" ] && [ "$(cat "$WORK"/results/site-stats.json.broken-*)" = "this is no statistics" ] && grep -q 'site statistics: .* cannot be used .* put aside as .*broken-.*counters start at 0' "$WORK/server3.log" && stats_check 0 0 0 0 "$STATS3"; echo $?)"
+# a file that cannot be written is said in the log while the server runs, once (the next try is ten seconds on); the stop writes it when the place is free again
+SAID=1
+for _ in $(seq 1 30); do
+    grep -q 'site statistics could not be saved' "$WORK/server3.log" && { SAID=0; break; }
+    sleep 0.1
+done
+check "a file that cannot be written is said in the log while the server runs" "$SAID"
+sleep 1.5
+check "... once" "$([ "$(grep -c 'site statistics could not be saved' "$WORK/server3.log")" = "1" ]; echo $?)"
+rmdir "$WORK/results/site-stats.json.tmp"
+stop_server
+check "the stop wrote the file when the place was free again, and said so" "$(grep -q 'site statistics are saved again' "$WORK/server3.log" && [ "$(file_local_total)" = "0" ] && [ ! -e "$STATS_FILE.tmp" ]; echo $?)"
+check "the good file beside the one that was put aside is a statistics file: format 1, no online game" "$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); sys.exit(0 if d["format"] == 1 and d["online"]["total"] == 0 else 1)' "$STATS_FILE"; echo $?)"
 fi
 
 # ---- part secret: the control secret that the server makes, keeps, shows and reads from a file --------------------------------------------------------------------
