@@ -459,6 +459,10 @@ bool Application::init(const ApplicationConfig& config) {
     // Several games on one screen: the click that activates a window is also a click in it (the first click on a background window is not lost)
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
+    // A touch screen's fingers are the touch model's (application_touch.cpp): SDL's own emulation, which made the first finger a left mouse button, is off so that nothing reaches the game twice. At
+    // SDL's highest priority: an environment variable SDL_TOUCH_MOUSE_EVENTS=1 would beat an ordinary SDL_SetHint, and the fingers would reach the game twice.
+    SDL_SetHintWithPriority(SDL_HINT_TOUCH_MOUSE_EVENTS, "0", SDL_HINT_OVERRIDE);
+
     if (SDL_Init(sdl_flags) != 0) {
         std::cerr << "[Application] SDL_Init Error: " << SDL_GetError() << std::endl;
         return false;
@@ -1468,6 +1472,8 @@ void Application::run_frame() {
 void Application::set_page_hidden(bool hidden) {
     if (hidden == page_hidden_) return;
     if (hidden) {
+        cancel_touch();                                      // (the browser may never say that a finger lifted while the page was away)
+        cancel_touch_queued();                               // (and the finger events that SDL holds are followed by the cancel too)
         page_hidden_ = true;                                 // from now on the wake-ups may drive a network match: the first one counts the time since the last frame
         last_frame_run_ = 0;                                 // (only a frame that runs from now on shows that the browser still delivers frames)
         hidden_since_ = now_counter();
@@ -1607,6 +1613,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {
     if (g_web_app != nullptr) g_web_app->leave_network_match();
 }
 
+// For the page (web/shell.html): the browser took the touch away (touchcancel: a system gesture, a call, the lock screen) or the page knows that no finger of the game can be down (a first
+// touch lands: whatever the game still tracks lost its lift): no finger is tracked any more and a press that a finger held ends with no act. The cancel waits behind the finger events that SDL
+// already holds (a finger that went down in the same frame is cancelled after it begins). SDL turns a touchcancel into the finger's lift as well, which the touch model finds unknown by then.
+extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel() {
+    if (g_web_app != nullptr) g_web_app->cancel_touch_queued();
+}
+
 // For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The selector of the picture under the game restarts the game
 // (the picture is made when the game starts), so it asks the player first when this says 1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
@@ -1621,6 +1634,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
 // 15: reads 0 and starts again). The lines that the way-back overlay shows (the page cannot read the canvas; tests/scripts/web_rejoin_check.py): 16: how many lines there are now (0: none); 10000 + 1000 * line + index:
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
+// The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
+// is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
     if (g_web_app == nullptr) return -1;
@@ -1664,6 +1679,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             g_frame_work_max_ms = 0.0;
             g_frame_work_frames = 0;
             return 0;
+        case 30: return static_cast<int>(g_web_app->touch().stats().taps);
+        case 31: return static_cast<int>(g_web_app->touch().stats().holds);
+        case 32: return static_cast<int>(g_web_app->touch().stats().drags);
+        case 33: return static_cast<int>(g_web_app->touch().stats().two_finger);
+        case 34: return static_cast<int>(g_web_app->touch().fingers());
+        case 35: return static_cast<int>(g_web_app->touch().mode());
+        case 36: return static_cast<int>(g_web_app->touch_slop() * 100.0 + 0.5);
         default: return net_overlay_probe(g_web_app->net_overlay_now(), what);                 // (16 and 10000 and up; anything else is -1)
     }
 }
@@ -1732,7 +1754,26 @@ void Application::handle_events() {
         screen_before = now_screen;
         left_event = false;
     };
-    while (SDL_PollEvent(&event)) {
+    bool touch_timers_run = false;                           // the touch model's clock runs once per call, after the events (a finger that rests makes a hold due without any event)
+    for (;;) {
+        if (!touch_queue_.empty()) {
+            if (!take_touch_event(event)) continue;          // (a pan, a zoom, the end of a press: done there; a mouse event is handled below like any that SDL sends)
+        } else if (SDL_PollEvent(&event)) {
+            if (event.type == SDL_FINGERDOWN || event.type == SDL_FINGERMOTION || event.type == SDL_FINGERUP) {
+                feed_touch(event.tfinger);                   // (what the model says is queued and comes first, before the next event of SDL's)
+                continue;
+            }
+            if (event.type == touch_cancel_event_type()) {   // (the page's touchcancel, behind the finger events that came before it: cancel_touch_queued)
+                cancel_touch();
+                continue;
+            }
+        } else if (!touch_timers_run) {
+            touch_timers_run = true;
+            queue_touch(touch_.update(touch_now()));
+            continue;
+        } else {
+            break;
+        }
         watch_screen();
         left_event = (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) && event.button.button == SDL_BUTTON_LEFT;
         left_event_ms = left_event ? event.button.timestamp : 0u;
@@ -1893,6 +1934,7 @@ bool Application::button_outside_window(const SDL_MouseButtonEvent& button) cons
 
 void Application::handle_window_event(const SDL_WindowEvent& we) {
     if (we.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+        cancel_touch();                                                        // (a finger whose lift will never be heard of must not hold a press, nor block the next ones)
         set_app_active(false);
         if (!config_.headless) SDL_ShowCursor(SDL_ENABLE);                     // not ours to hide while another window has the input
     }
@@ -1909,6 +1951,7 @@ void Application::handle_window_event(const SDL_WindowEvent& we) {
         if (!config_.headless) SDL_ShowCursor(SDL_ENABLE);
     }
     if (we.event == SDL_WINDOWEVENT_MINIMIZED || we.event == SDL_WINDOWEVENT_HIDDEN) {
+        cancel_touch();
         is_paused_ = true;
         midi_player_.pause();
     }
@@ -1916,6 +1959,7 @@ void Application::handle_window_event(const SDL_WindowEvent& we) {
         is_paused_ = false;
         midi_player_.resume();
     }
+    if (we.event == SDL_WINDOWEVENT_SIZE_CHANGED) cancel_touch();              // (a rotation, a fullscreen toggle, the address bar: the same spot of the glass is another pixel of the picture, and a finger that rests would become a drag)
     if (we.event == SDL_WINDOWEVENT_SIZE_CHANGED || we.event == SDL_WINDOWEVENT_RESIZED || we.event == SDL_WINDOWEVENT_MAXIMIZED ||
         we.event == SDL_WINDOWEVENT_RESTORED) {
         if (renderer_ && window_) {
@@ -2829,7 +2873,9 @@ Application::NetVoteButtons Application::net_vote_buttons() const {
 // The catch-up screen (page_layout.hpp): the machine runs the match from the server's log without drawing it. A machine that starts the match again (NetGame's BadRequest fallback) has it from the
 // moment the old session ends: the loading picture, never the match that was reset behind it.
 bool Application::catch_up_screen_active() const {
-    if (state_ != AppState::Playing || scorecard_.is_open() || !network_active()) return false;
+    if (state_ != AppState::Playing || scorecard_.is_open()) return false;
+    if (catch_up_forced_) return true;
+    if (!network_active()) return false;
     switch (net_->phase()) {
         case net::NetGame::Phase::Playing: return net_->pause_info().catching_up;
         case net::NetGame::Phase::Connecting:
@@ -3045,6 +3091,7 @@ void Application::render_frame() {
 
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65): the pointer is the picture's
     renderer_->set_picture(picture_);
+    render_touch_feedback();                                 // (the ring of a coming hold: over everything of the picture, under the pointer)
     CursorType cur = CursorType::Normal;
     if (state_ == AppState::Playing && !scorecard_.is_open() && !catch_up_screen_active()) {         // (the catch-up screen has no map to point at)
         sim::SimulationEngine& view = view_sim();

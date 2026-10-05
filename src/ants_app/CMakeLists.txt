@@ -55,10 +55,13 @@ add_library(ants_app STATIC
     net_overlay.cpp
     start_menu.cpp
     start_menu_view.cpp
+    touch_control.cpp
+    touch_feedback.cpp
     room_chat.cpp
     host_lookup.cpp
     application.cpp
     application_menu.cpp
+    application_touch.cpp
 )
 
 if(NOT EMSCRIPTEN)
