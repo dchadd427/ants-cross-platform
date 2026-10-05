@@ -114,7 +114,7 @@ class TheLocation(unittest.TestCase):
         self.assertIn("proxy_hide_header X-Content-Type-Options;", BUSY)                     # (the server-level nosniff line applies once)
 
     def test_the_block_is_what_the_documents_say(self):
-        text = read("docs", "WORKFLOW.md") + read("docs", "NETWORK_PORT.md") + read("README.md")
+        text = read("docs", "WORKFLOW.md") + read("docs", "NETWORK_PORT.md") + read("docs", "SERVER.md")
         for needle in ("/busy", "\"matches\"", "\"players\""):
             self.assertIn(needle, text)
 
