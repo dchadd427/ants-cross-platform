@@ -955,7 +955,7 @@
         //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
         //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
-        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
+        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &teams= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
         //   localArguments the arguments of a game on THIS computer (?map= &bots= &teams= &name=: the front page's Play), through a whitelist
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
@@ -1123,12 +1123,31 @@
                 return accept;
             }
 
-            // ANTS_FILL_BEGIN (tests/scripts/web_fill_check.js runs this function on a table of addresses)
+            // ANTS_FILL_BEGIN (tests/scripts/web_fill_check.js runs these functions on a table of addresses)
             // The bots of the leader's START, from the address: easy, medium or hard in any case (the game's own --fill-bots takes any case), and ONLY those three words. What this returns is
             // the lower case word that was tested, never the text of the address: nothing else can reach the game's arguments through ?fill=.
             function antsFillArg(value) {
                 var word = typeof value === 'string' ? value.toLowerCase() : '';
                 return /^(easy|medium|hard)$/.test(word) ? word : '';
+            }
+            // ... or a level for each seat (protocol 13): four of those words, or none for none, for the seats 0 - 3 (none,none,easy,hard; the game's --fill-bots takes both forms). The tested lower case text comes
+            // back, '' for no bots at all or for anything that is not one word or four.
+            function antsFillPlanArg(value) {
+                var words = typeof value === 'string' ? value.toLowerCase().split(',') : [];
+                if (words.length === 1) return antsFillArg(words[0]);
+                if (words.length !== 4) return '';
+                var levels = [];
+                for (var i = 0; i < 4; i++) {
+                    if (words[i] === 'none') levels.push('none');
+                    else if (antsFillArg(words[i])) levels.push(words[i]);
+                    else return '';
+                }
+                return levels.every(function (l) { return l === 'none'; }) ? '' : levels.join(',');
+            }
+            // The teams of the leader's START, from the address: two different seats 0 - 3 as A+B (the "+" of an address arrives as a blank: both are read), what the game's --teams takes; '' for anything else
+            function antsTeamsArg(value) {
+                var m = typeof value === 'string' ? /^([0-3])[+ ]([0-3])$/.exec(value) : null;
+                return m && m[1] !== m[2] ? m[1] + '+' + m[2] : '';
             }
             // ANTS_FILL_END
 
@@ -1143,7 +1162,8 @@
                 var room = q.get('room');
                 var seat = q.get('seat');
                 var name = q.get('name');
-                var fill = antsFillArg(q.get('fill'));
+                var fill = antsFillPlanArg(q.get('fill'));
+                var teams = antsTeamsArg(q.get('teams'));
                 out.embed = q.get('embed') === '1';
                 if (out.embed) out.args.push('--audio-focus');
                 if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
@@ -1151,6 +1171,7 @@
                     if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) out.args.push('--room', room);
                     if (seat && /^[0-3]$/.test(seat)) out.args.push('--seat', seat);
                     if (fill) out.args.push('--fill-bots', fill);
+                    if (teams) out.args.push('--teams', teams);
                     if (name) {
                         name = name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
                         if (name) out.args.push('--name', name);
@@ -1266,10 +1287,12 @@
                      downloadWithRetries: downloadWithRetries };
         })();
 
-        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&fill=easy|medium|hard (any case)][&embed=1] (ANTS_PAGE.joinArguments reads it)
+        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&fill=<plan>][&teams=A+B][&embed=1] (ANTS_PAGE.joinArguments reads it)
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
         //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
-        //   fill   the bots that this player's START seats in the empty seats of the room when this player is its leader (the first to connect): the game's --fill-bots; harmless for everybody else
+        //   fill   the bots that this player's START seats in the empty seats of the room when this player is its leader (the first to connect): easy, medium or hard (any case) for every seat, or four words
+        //          for the seats 0 - 3 (none,none,easy,hard): the game's --fill-bots; harmless for everybody else
+        //   teams  the teams that the leader's START makes: two different seats 0 - 3 as A+B: the game's --teams; harmless for everybody else too
         //   embed  the page is a frame of another page (lobby.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
         var ANTS_EMBED = false;

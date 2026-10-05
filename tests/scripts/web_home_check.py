@@ -378,13 +378,16 @@ def main():
             check(pages() == before, "no new tab was opened by any of it")
 
         if wanted("host"):
-            print("[web home] the host: 3 players, Create the match, Play in this tab")
+            print("[web home] the host: 3 players, a level for each seat and the teams, Create the match, Play in this tab")
             clear_storage()
             load(web, settle=1.5)
-            tab.ev("document.getElementById('players-3').click(); var f = document.getElementById('fill'); f.value = 'easy'; f.dispatchEvent(new Event('change')); 1")
+            tab.ev("document.getElementById('players-3').click(); document.getElementById('host-seat-1-easy').click(); document.getElementById('host-seat-2-easy').click(); var t = document.getElementById('host-teams'); t.value = '0+1'; t.dispatchEvent(new Event('change')); 1")
             tab.ev("var n = document.getElementById('player-name'); n.value = 'Ann'; n.dispatchEvent(new Event('input')); 1")
-            check(tab.ev("document.getElementById('host').textContent.trim()") == "Host the match" and tab.ev("document.getElementById('players-3').checked") is True and tab.ev("document.getElementById('fill').value") == "easy",
-                  "3 players and Easy bots for the empty seats on the Host card")
+            check(tab.ev("document.getElementById('host').textContent.trim()") == "Host the match" and tab.ev("document.getElementById('players-3').checked") is True
+                  and tab.ev("document.getElementById('host-seat-1-easy').checked && document.getElementById('host-seat-2-easy').checked") is True and tab.ev("document.getElementById('host-teams').value") == "0+1",
+                  "3 players, Easy bots in the Red and Blue seats and the team Green + Red on the Host card")
+            check(tab.ev("document.getElementById('host-seat-row-3').hidden") is True and tab.ev("document.getElementById('host-teams-line').hidden") is False,
+                  "... the Black seat has no group (a room of three has no such seat) and the Teams line is there")
             tab.ev("document.getElementById('host').click(); 1")
             time.sleep(0.8)
             room = tab.ev("document.getElementById('room-code').textContent")
@@ -398,6 +401,7 @@ def main():
             a = json.loads(tab.ev("JSON.stringify({search: location.search, args: ANTS_ARGS})")) if ok else {"search": "", "args": []}
             check(ok and ("room=" + room) in a["search"] and pages() == before, "Play in this tab takes this tab to the game page of the room (%s), no new tab" % a["search"])
             check("--join-url" in a["args"] and "--fill-bots" in a["args"] and a["args"][a["args"].index("--fill-bots") + 1] == "easy" and "--name" in a["args"], "... with the room, the leader's bots and the name in the game's arguments (%s)" % a["args"])
+            check("--teams" in a["args"] and a["args"][a["args"].index("--teams") + 1] == "0+1", "... and the room's team (%s)" % a["args"])
     except NotReachable as e:
         print("  SKIP: %s" % e)
         return 3

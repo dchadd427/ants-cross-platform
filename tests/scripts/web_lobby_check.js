@@ -3,11 +3,15 @@
 //   * web/lobby.html, the block LOBBY_BEGIN .. LOBBY_END: what the two cards mean. playersChoice (1 .. 4, else the fallback), hostPlayers (the Host card's 2 .. 4: an old stored 1 is 2), soloBots (the opponents that the first versions remembered:
 //     nothing remembered is Medium, anything that is no level is none), soloSeats (one level per seat from the new key, else the old one), soloTeamChoices / soloTeam (the Teams select), and
 //     localGameQuery (the address of a game on THIS computer: ?map=<key>[&bots=<levels>][&teams=0%2BN]&name=<name>&aspect=<shape>, never a ?join=, a room or a server);
+//   * the same block's Host card (protocol 13): hostSeats / hostSeatsText (the levels of the three seats after the leader's, as the browser remembers them: four words, or the one word of the first versions),
+//     hostFillText (what a room of 2 - 4 players asks of START, as an address holds it), hostTeamChoices / hostTeam / hostTeamText (the room's teams), validFillPlan and validRoomTeams (what an address may say),
+//     hostPlanText (the words of the room panel);
 //   * web/shell.html, ANTS_PAGE.localArguments: the game page's local parameters through a WHITELIST (the map by its key out of the six shipped maps, the opponents by one level word or three,
 //     the teams by ffa or 0+N, a name of printable ASCII): what reaches the game's own arguments is a file name from a fixed table, level words that were tested, a seat that has a bot, a
 //     cleaned name and flags, never the text of the address; nothing at all for an address with no local parameter (today's front page: the setup screen);
 //   * the two pages agree: the six maps (keys and files, which exist in Original-Ants/Maps), and every address that the lobby can make is read by the game page as the same map, the
-//     same bot in each of the three other bases, the same teams and the same name.
+//     same bot in each of the three other bases, the same teams and the same name; every address of a ROOM that the Host card can make (every room of 2 - 4 players, every set of levels, every team)
+//     is read by the game page as the same --fill-bots plan and the same --teams.
 // tests/scripts/test_web_lobby.py runs this with node (the quick tier). usage: node web_lobby_check.js web/shell.html web/lobby.html     (exit 0: every check holds; failures are printed)
 'use strict';
 const fs = require('fs');
@@ -51,7 +55,7 @@ const lobbyCode = [
     'function mapByKey(key) { for (var i = 0; i < MAPS.length; i++) if (MAPS[i].key === key) return MAPS[i]; return null; }',
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath),
-    'return { MAPS: MAPS, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, soloTeamChoices: soloTeamChoices, soloTeam: soloTeam, SOLO_SEATS: SOLO_SEATS, localGameQuery: localGameQuery, validFill: validFill };',
+    'return { MAPS: MAPS, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, soloTeamChoices: soloTeamChoices, soloTeam: soloTeam, SOLO_SEATS: SOLO_SEATS, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostSeatsText: hostSeatsText, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, SEAT_COLOURS: SEAT_COLOURS };',
 ].join('\n');
 const L = new Function(lobbyCode)();
 
@@ -328,6 +332,101 @@ try {
             if (JSON.stringify(local('?bots=' + text)) !== JSON.stringify(botArgs([a, b, c]))) drift++;
         }
         check('the settings text of the levels is read back whole by the form and by the game page (' + drift + ' differ)', drift === 0);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // the Host card (network protocol 13): a level for each seat after the leader's, and the room's teams
+    // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    {
+        const N3 = ['', '', ''];
+        same('the seats of the Host card are Red, Blue, Black and the colours of the seats of a room are Green, Red, Blue, Black', [L.SOLO_SEATS, L.SEAT_COLOURS], [['Red', 'Blue', 'Black'], ['Green', 'Red', 'Blue', 'Black']]);
+        same('hostSeats: a first visit (nothing remembered) is none in all three seats: the empty seats stay empty until the leader chooses', [L.hostSeats(null), L.hostSeats(undefined), L.hostSeats('')], [N3, N3, N3]);
+        same('hostSeats: four words are the levels of the seats 0 - 3 and the first (the leader\'s seat) counts for nothing; any case', [L.hostSeats('none,easy,none,hard'), L.hostSeats('hard,medium,medium,medium'), L.hostSeats('NONE,None,EASY,Hard'), L.hostSeats('none,none,none,none')],
+             [['easy', '', 'hard'], ['medium', 'medium', 'medium'], ['', 'easy', 'hard'], N3]);
+        same('hostSeats: one word is every seat (what the first versions of the page remembered); none and anything else is none', [L.hostSeats('easy'), L.hostSeats('HARD'), L.hostSeats('medium'), L.hostSeats('none'), L.hostSeats('junk')],
+             [['easy', 'easy', 'easy'], ['hard', 'hard', 'hard'], ['medium', 'medium', 'medium'], N3, N3]);
+        for (const bad of ['easy,hard', 'easy,hard,easy', 'none,easy,none,hard,none', 'none,easy,,hard', 'none, easy,none,hard', 'none,easy,none,loud', ',,,', 'none;easy;none;hard', 5, {}, ['easy', 'easy', 'easy', 'easy']]) {
+            same('hostSeats: a remembered ' + JSON.stringify(bad) + ' is not one word or four: none in all three seats', L.hostSeats(bad), N3);
+        }
+        same('hostSeatsText: four words, the leader\'s seat none (what the browser remembers)', [L.hostSeatsText(['easy', '', 'hard']), L.hostSeatsText(N3), L.hostSeatsText(['EASY', 'junk', 'Medium']), L.hostSeatsText([])],
+             ['none,easy,none,hard', 'none,none,none,none', 'none,easy,none,medium', 'none,none,none,none']);
+        same('hostSeats and hostSeatsText read each other', ['none,easy,none,hard', 'none,none,none,none', 'none,hard,hard,easy'].map((t) => L.hostSeatsText(L.hostSeats(t))), ['none,easy,none,hard', 'none,none,none,none', 'none,hard,hard,easy']);
+
+        // what a room asks of START: nothing, one word when every seat that the room has gets the same level, else four words; the seats beyond the room are none
+        same('hostFillText: no bots in the seats of the room is no plan at all', [L.hostFillText(N3, 4), L.hostFillText(N3, 2), L.hostFillText(['', '', 'hard'], 2), L.hostFillText(['', '', 'hard'], 3), L.hostFillText(undefined, 4)], ['', '', '', '', '']);
+        same('hostFillText: the same level in every seat of the room is that one word (the address of the first versions), however many seats the room has', [L.hostFillText(['easy', 'easy', 'easy'], 4), L.hostFillText(['hard', 'hard', 'hard'], 3), L.hostFillText(['medium', 'junk', 'easy'], 2),
+              L.hostFillText(['hard', 'hard', 'easy'], 3)], ['easy', 'hard', 'medium', 'hard']);
+        same('hostFillText: any other plan is four words for the seats 0 - 3, the leader\'s seat none and the seats beyond the room none', [L.hostFillText(['easy', '', 'hard'], 4), L.hostFillText(['easy', 'hard', 'medium'], 4), L.hostFillText(['easy', '', 'hard'], 3), L.hostFillText(['', 'hard', ''], 4), L.hostFillText(['easy', 'hard', 'easy'], 3)],
+             ['none,easy,none,hard', 'none,easy,hard,medium', 'none,easy,none,none', 'none,none,hard,none', 'none,easy,hard,none']);
+        // the words of the room panel
+        same('hostPlanText: one word is "Medium bots", four words name the seats that get a bot (the seats of the room only)', [L.hostPlanText('medium', 4), L.hostPlanText('none,easy,none,hard', 4), L.hostPlanText('none,easy,none,hard', 3), L.hostPlanText('none,easy,hard,medium', 4), L.hostPlanText('', 4)],
+             ['Medium bots', 'Red Easy, Black Hard', 'Red Easy', 'Red Easy, Blue Hard, Black Medium', '']);
+
+        // the teams: a choice for each room size (the game's room_team_choices): none but free for all with two players
+        same('hostTeamText: the pair first, then the other seats that play', [L.hostTeamText([0, 1], 4), L.hostTeamText([0, 2], 4), L.hostTeamText([0, 3], 4), L.hostTeamText([0, 1], 3), L.hostTeamText([0, 2], 3), L.hostTeamText([1, 2], 3)],
+             ['Green + Red against Blue + Black', 'Green + Blue against Red + Black', 'Green + Black against Red + Blue', 'Green + Red against Blue', 'Green + Blue against Red', 'Red + Blue against Green']);
+        same('hostTeamChoices: four players: free for all and Green with Red, Blue or Black', L.hostTeamChoices(4), [FFA, { value: '0+1', text: 'Green + Red against Blue + Black' }, { value: '0+2', text: 'Green + Blue against Red + Black' }, { value: '0+3', text: 'Green + Black against Red + Blue' }]);
+        same('hostTeamChoices: three players: free for all and the pairs 0+1, 0+2 and 1+2 (the third seat plays alone)', L.hostTeamChoices(3), [FFA, { value: '0+1', text: 'Green + Red against Blue' }, { value: '0+2', text: 'Green + Blue against Red' }, { value: '1+2', text: 'Red + Blue against Green' }]);
+        same('hostTeamChoices: two players: free for all only (a team of them would end the match at once)', [L.hostTeamChoices(2), L.hostTeamChoices(1), L.hostTeamChoices(undefined)], [[FFA], [FFA], [FFA]]);
+        same('hostTeam: a choice of the room stays, a choice that the room does not offer (another size, a pair of seats that do not play) and anything that is no choice is free for all',
+             [L.hostTeam('0+1', 4), L.hostTeam('0+3', 4), L.hostTeam('1+2', 3), L.hostTeam('1+2', 4), L.hostTeam('0+3', 3), L.hostTeam('0+1', 2), L.hostTeam('ffa', 4), L.hostTeam('0+4', 4), L.hostTeam('1+3', 4), L.hostTeam('', 4), L.hostTeam(null, 4), L.hostTeam('0 1', 4), L.hostTeam('constructor', 4)],
+             ['0+1', '0+3', '1+2', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa']);
+
+        // what an address may say
+        same('validFillPlan: one level in any case, or four words (none for none): the tested lower case text; no bots at all and anything else is ""',
+             [L.validFillPlan('easy'), L.validFillPlan('MEDIUM'), L.validFillPlan('none,easy,none,hard'), L.validFillPlan('NONE,Easy,None,HARD'), L.validFillPlan('hard,hard,hard,hard'), L.validFillPlan('none'), L.validFillPlan('none,none,none,none'), L.validFillPlan(''), L.validFillPlan(null)],
+             ['easy', 'medium', 'none,easy,none,hard', 'none,easy,none,hard', 'hard,hard,hard,hard', '', '', '', '']);
+        for (const bad of ['easy,hard', 'easy,hard,easy', 'none,easy,none,hard,none', 'none,easy,,hard', 'none, easy,none,hard', 'none,easy,none,loud', ',,,', ',', 'none;easy;none;hard', 'easy hard', 'none,easy,none,hard\n', 'none,easy,none,hard&seat=1', 'none,easy,none,--room x', 'none,easy,none,hard,', 5, {}, ['easy'], 'hard,'.repeat(2000)]) {
+            same('validFillPlan: ' + JSON.stringify(bad).slice(0, 40) + ' is no plan', L.validFillPlan(bad), '');
+        }
+        same('validRoomTeams: two different seats 0 - 3 as A+B (a + that came as a blank too): the tested text', [L.validRoomTeams('0+1'), L.validRoomTeams('0 1'), L.validRoomTeams('1+2'), L.validRoomTeams('3+0'), L.validRoomTeams('2 3')], ['0+1', '0+1', '1+2', '3+0', '2+3']);
+        for (const bad of ['', 'ffa', 'FFA', '0+0', '2+2', '0+4', '4+0', '01', '0++1', '0+1+2', ' 0+1', '0+1 ', '0 +1', '0+ 1', '0\t1', '0+1\n', '0+1&teams=ffa', 'a+b', '0+१', '0+１', 'constructor', null, undefined, 1, {}, ['0+1']]) {
+            same('validRoomTeams: ' + JSON.stringify(bad) + ' is no team', L.validRoomTeams(bad), '');
+        }
+
+        // the two pages agree for rooms: whatever the Host card makes of its levels and its team (a room of 2, 3 or 4 players, every set of three levels, every team that the room offers), the game page
+        // reads the address (&fill= &teams=) as the same plan, in the same seats, and the same teams for the game; and the plan means what the card chose for the seats that the room has
+        const WORDS = ['', 'easy', 'medium', 'hard'];
+        let wrong = 0;
+        let sample = '';
+        let made = 0;
+        let planned = 0;
+        let teamed = 0;
+        const planLevels = (text) => { const w = text.split(','); return w.length === 1 ? [w[0], w[0], w[0], w[0]] : w.map((x) => (x === 'none' ? '' : x)); };       // the game's parse_fill_plan: one word is every seat, four words are the seats 0 - 3
+        for (const players of [2, 3, 4]) {
+            for (const a of WORDS) for (const b of WORDS) for (const c of WORDS) {
+                const levels = [a, b, c];
+                const plan = L.hostFillText(levels, players);
+                for (const choice of L.hostTeamChoices(players)) {
+                    const team = choice.value === 'ffa' ? '' : choice.value;
+                    const address = '?join=/ws&room=demo-small-' + players + 'p-abc123' + (plan ? '&fill=' + plan : '') + (team ? '&teams=' + encodeURIComponent(team) : '') + '&name=Bob';
+                    const args = P.joinArguments(address, true, 'play.test').args;
+                    const fillAt = args.indexOf('--fill-bots');
+                    const teamsAt = args.indexOf('--teams');
+                    made++;
+                    if ((fillAt === -1) !== (plan === '') || (fillAt !== -1 && args[fillAt + 1] !== plan)) { wrong++; if (!sample) sample = address + ' -> ' + JSON.stringify(args); }
+                    if ((teamsAt === -1) !== (team === '') || (teamsAt !== -1 && args[teamsAt + 1] !== team)) { wrong++; if (!sample) sample = address + ' -> ' + JSON.stringify(args); }
+                    if (plan) {
+                        planned++;
+                        const got = planLevels(L.validFillPlan(plan));                           // (what the game seats: the seats after the leader's that the room has)
+                        for (let seat = 1; seat < players; seat++) if (got[seat] !== levels[seat - 1]) { wrong++; if (!sample) sample = address + ' seat ' + seat + ' -> ' + got[seat]; }
+                        if (got[0] !== '' && !(plan.split(',').length === 1)) { wrong++; if (!sample) sample = address + ' the leader\'s seat has a level'; }
+                    }
+                    if (team) teamed++;
+                    if (L.validFillPlan(plan) !== plan || L.validRoomTeams(team) !== team || L.hostTeam(team || 'ffa', players) !== (team || 'ffa')) { wrong++; if (!sample) sample = address + ' is not read back whole'; }
+                }
+            }
+        }
+        check('every address of a room that the Host card can make (' + made + ': ' + planned + ' with bots, ' + teamed + ' with teams) is read by the game page as the same --fill-bots plan and the same --teams, the plan means the card\'s level in every seat that the room has, and the lobby reads it back whole (' + sample + ')', wrong === 0 && planned > 100 && teamed > 100);
+        // the whitelist of the game page: a plan or a team that is not what the card makes never reaches the game's arguments
+        {
+            const rooms = (search) => P.joinArguments('?join=/ws&room=abc' + search, true, 'play.test').args;
+            same('the game page passes the plan and the teams of a room: --fill-bots, --teams (the + of an address arrives as a blank: both are read)', [rooms('&fill=none,easy,none,hard&teams=0%2B2'), rooms('&fill=EASY&teams=1+2')],
+                 [['--join-url', 'wss://play.test/ws', '--room', 'abc', '--fill-bots', 'none,easy,none,hard', '--teams', '0+2'], ['--join-url', 'wss://play.test/ws', '--room', 'abc', '--fill-bots', 'easy', '--teams', '1+2']]);
+            for (const bad of ['easy,hard', 'none,none,none,none', 'none,easy,none', 'easy;--room x', 'none,easy,none,hard,none', 'none, easy,none,hard']) same('the game page: a plan ' + JSON.stringify(bad) + ' is no --fill-bots', rooms('&fill=' + encodeURIComponent(bad)), ['--join-url', 'wss://play.test/ws', '--room', 'abc']);
+            for (const bad of ['ffa', '0+0', '0+4', '1+1', '01', '0++1', 'a+b', '0+1+2', '0+1;ls', '0+1\n--name x', '']) same('the game page: teams ' + JSON.stringify(bad) + ' is no --teams', rooms('&teams=' + encodeURIComponent(bad)), ['--join-url', 'wss://play.test/ws', '--room', 'abc']);
+            same('without a join nothing about a plan or teams goes to the game', [P.joinArguments('?fill=easy&teams=0%2B1', true, 'play.test').args, P.joinArguments('?room=abc&fill=hard&teams=0%2B1', true, 'play.test').args], [[], []]);
+        }
     }
 } catch (e) {
     failures++;

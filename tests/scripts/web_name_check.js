@@ -578,12 +578,21 @@ const seatLevels = (env) => [1, 2, 3].map((seat) => { const on = LEVEL_WORDS.fil
 // the person clicks the button of a level in each seat's group (a word that is none: the first button)
 const setSeats = (env, levels) => levels.forEach((level, i) => env.pick(levelId(i + 1, level)));
 const teamChoices = (env) => env.$('teams').children.map((o) => [o.value, o.textContent]);
+// the Host card's empty seats (protocol 13): a group of four buttons for each seat after the leader's (host-seat-N-<word>), shown for the seats that the room has, and the Teams select of the room
+const hostId = (seat, word) => 'host-seat-' + seat + '-' + (word || 'none');
+const hostLevels = (env) => [1, 2, 3].map((seat) => { const on = LEVEL_WORDS.filter((w) => env.$(hostId(seat, w)).checked); return on.length === 1 ? env.$(hostId(seat, on[0])).value : '?' + on.length; });
+const setHostSeats = (env, levels) => levels.forEach((level, i) => env.pick(hostId(i + 1, level)));
+const hostRowsShown = (env) => [1, 2, 3].filter((seat) => !env.$('host-seat-row-' + seat).hidden).join('+');
+const hostTeamChoices = (env) => env.$('host-teams').children.map((o) => [o.value, o.textContent]);
+const FOUR_TEAMS = [['ffa', 'Free for all'], ['0+1', 'Green + Red against Blue + Black'], ['0+2', 'Green + Blue against Red + Black'], ['0+3', 'Green + Black against Red + Blue']];
+const THREE_TEAMS = [['ffa', 'Free for all'], ['0+1', 'Green + Red against Blue'], ['0+2', 'Green + Blue against Red'], ['1+2', 'Red + Blue against Green']];
 const FFA_ONLY = [['ffa', 'Free for all']];
 const ALL_TEAMS = [['ffa', 'Free for all'], ['0+1', 'You + Red'], ['0+2', 'You + Blue'], ['0+3', 'You + Black']];
 const MAP_KEYS = ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands'];
 {
     const env = runLobby('', {}, { firstVisit: true });
-    same('a first visit: Treasure on both cards, Medium in all three bases, 2 players on the Host card and no bots for its empty seats', [env.$('map-solo').value, env.$('map-host').value, seatLevels(env), env.hostPlayersNow(), env.$('fill').value], ['treasure', 'treasure', ['medium', 'medium', 'medium'], '2', '']);
+    same('a first visit: Treasure on both cards, Medium in all three bases, 2 players on the Host card and no bots for its empty seats', [env.$('map-solo').value, env.$('map-host').value, seatLevels(env), env.hostPlayersNow(), hostLevels(env)], ['treasure', 'treasure', ['medium', 'medium', 'medium'], '2', ['', '', '']]);
+    same('... the Host card has the Red seat only (two players) and no Teams line: a team of two would end the match at once', [hostRowsShown(env), env.$('host-teams-line').hidden, hostTeamChoices(env)], ['1', true, [['ffa', 'Free for all']]]);
     same('... START (named for a screen reader: the button is the original\'s own picture), the two cards and "How it works" all there at once', [env.$('play').getAttribute('aria-label'), env.$('cards').hidden, env.$('how').hidden, env.$('who-go').hidden], ['Start the game', false, false, true]);
     check('... and the Host card\'s button reads Host the match', /<button id="host"[^>]*>Host the match<\/button>/.test(lobbyText));
     same('... with three bots the Teams select is shown: free for all (chosen), and the player with each bot', [env.$('teams-line').hidden, teamChoices(env), env.$('teams').value], [false, ALL_TEAMS, 'ffa']);
@@ -596,7 +605,7 @@ const MAP_KEYS = ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands'];
     check('... /play.html, the map, the Medium bots (one word: all three alike), no teams, the name Player and the 16:9 picture', url.pathname === '/play.html' && env.param(url.href, 'map') === 'treasure' && env.param(url.href, 'bots') === 'medium' && env.param(url.href, 'teams') === null && env.param(url.href, 'name') === 'Player' && env.param(url.href, 'aspect') === '16:9', url.href);
     check('... no room, no server, no seat, no frame (nothing of a match on the game server)', ['join', 'room', 'seat', 'embed', 'fill'].every((k) => env.param(url.href, k) === null) && !env.roomStarted() && env.replaced.length === 0 && env.frames().length === 0);
     same('... and the choices are remembered: the map, the three levels, the teams (what the Host card remembers is not touched, and the old key is never written)',
-         [env.storage.data['ants-four-map'], env.storage.data['ants-solo-seats'], env.storage.data['ants-solo-teams'], 'ants-solo-bots' in env.storage.data, 'ants-four-fill' in env.storage.data, 'ants-four-players' in env.storage.data], ['treasure', 'medium,medium,medium', 'ffa', false, false, false]);
+         [env.storage.data['ants-four-map'], env.storage.data['ants-solo-seats'], env.storage.data['ants-solo-teams'], 'ants-solo-bots' in env.storage.data, 'ants-four-fill' in env.storage.data, 'ants-four-teams' in env.storage.data, 'ants-four-players' in env.storage.data], ['treasure', 'medium,medium,medium', 'ffa', false, false, false, false]);
 }
 {
     const env = runLobby('', { 'ants-four-map': 'islands' }, { firstVisit: true });
@@ -727,10 +736,100 @@ for (const junk of ['easy', 'easy,medium', 'easy,medium,hard,easy', 'easy,,hard'
 }
 {
     const env = runLobby('', { 'ants-four-players': '3', 'ants-four-fill': 'easy', 'ants-solo-bots': 'hard' }, { firstVisit: true });
-    same('a browser that chose 3 players, Easy empty seats and Hard solo opponents: each card shows its own choice (Host: 3 players and Easy bots; the first card: Hard in all three bases and the Teams)', [env.hostPlayersNow(), env.$('fill').value, seatLevels(env), env.$('teams-line').hidden], ['3', 'easy', ['hard', 'hard', 'hard'], false]);
+    same('a browser that chose 3 players, Easy empty seats (the one word of the first versions: every seat) and Hard solo opponents: each card shows its own choice (Host: 3 players, Red and Blue Easy and the room\'s Teams; the first card: Hard in all three bases and the Teams)',
+         [env.hostPlayersNow(), hostLevels(env), hostRowsShown(env), env.$('host-teams-line').hidden, seatLevels(env), env.$('teams-line').hidden], ['3', ['easy', 'easy', 'easy'], '1+2', false, ['hard', 'hard', 'hard'], false]);
     env.$('host').click();
     check('Host the match makes the room of 3 (the empty seats\' bots Easy in the code\'s links), as ever', env.roomStarted() && env.assigned.length === 0 && /fill=easy/.test(env.$('any-link').value) && /room=demo-treasure-3p-/.test(env.$('any-link').value), env.$('any-link').value);
-    same('... and remembers the Host card\'s choices without touching the opponents\' (the old key still Hard, nothing written for the new ones)', [env.storage.data['ants-four-players'], env.storage.data['ants-four-fill'], env.storage.data['ants-solo-bots'], 'ants-solo-seats' in env.storage.data, 'ants-solo-teams' in env.storage.data], ['3', 'easy', 'hard', false, false]);
+    same('... and remembers the Host card\'s choices (four words for the seats, the room\'s team) without touching the opponents\' (the old key still Hard, nothing written for the new ones)', [env.storage.data['ants-four-players'], env.storage.data['ants-four-fill'], env.storage.data['ants-four-teams'], env.storage.data['ants-solo-bots'], 'ants-solo-seats' in env.storage.data, 'ants-solo-teams' in env.storage.data], ['3', 'none,easy,easy,easy', 'ffa', 'hard', false, false]);
+}
+{   // the Host card (protocol 13): a group for each seat after the leader's that the room has, the room's Teams, and what they make of the room's links, address and panel
+    const env = runLobby('', {}, { firstVisit: true });
+    same('two players: only the Red seat has a group and there is no Teams line (a team of two would end the match at once)', [hostRowsShown(env), env.$('host-teams-line').hidden, hostTeamChoices(env)], ['1', true, [['ffa', 'Free for all']]]);
+    env.hostPlayers(3);
+    same('three players: Red and Blue, and the Teams of three (the third seat plays alone)', [hostRowsShown(env), env.$('host-teams-line').hidden, hostTeamChoices(env), env.$('host-teams').value], ['1+2', false, THREE_TEAMS, 'ffa']);
+    env.hostPlayers(4);
+    same('four players: all three seats, and the Teams of four (Green with Red, Blue or Black)', [hostRowsShown(env), env.$('host-teams-line').hidden, hostTeamChoices(env), env.$('host-teams').value], ['1+2+3', false, FOUR_TEAMS, 'ffa']);
+    same('the first visit leaves every seat empty (the choice of the leader\'s START is made on the card)', hostLevels(env), ['', '', '']);
+    env.$('host-teams').value = '0+1';
+    env.$('host-teams').fire('change', {});
+    env.hostPlayers(3);
+    same('a team that the room of three offers too stays when the players change (Green + Red against Blue)', [env.$('host-teams').value, hostRowsShown(env)], ['0+1', '1+2']);
+    env.$('host-teams').value = '1+2';
+    env.$('host-teams').fire('change', {});
+    env.hostPlayers(4);
+    same('a team that the room of four does not offer is free for all again (and stays so)', env.$('host-teams').value, 'ffa');
+    env.hostPlayers(3);
+    same('... also when the players go back', env.$('host-teams').value, 'ffa');
+    setHostSeats(env, ['easy', 'hard', 'medium']);
+    env.hostPlayers(2);
+    same('the levels of the seats that the room does not have are kept for the next time', [hostRowsShown(env), hostLevels(env)], ['1', ['easy', 'hard', 'medium']]);
+}
+{   // a room made with a level for each seat and a team: the code's links, the address of the page, the room's panel and what is remembered
+    const env = runLobby('', {}, {});
+    setHostSeats(env, ['easy', '', 'hard']);
+    env.$('host-teams').value = '0+2';
+    env.$('host-teams').fire('change', {});
+    env.type('player-name', 'Ann');
+    env.$('host').click();
+    const link = env.$('any-link').value;
+    check('Host makes the room of 4', env.roomStarted() && /room=demo-treasure-4p-/.test(link), link);
+    same('the link for anybody carries the plan (four words, the leader\'s seat none) and the team (the + is %2B)', [env.param(link, 'fill'), env.param(link, 'teams'), /&teams=0%2B2/.test(link)], ['none,easy,none,hard', '0+2', true]);
+    same('the address of the page names the room with both', [String(env.replaced[0][2]).indexOf('fill=none,easy,none,hard') !== -1, String(env.replaced[0][2]).indexOf('teams=0%2B2') !== -1], [true, true]);
+    const hint = env.$('fill-hint');
+    check('the room panel says the seats and the teams in words', !hint.hidden && /Empty seats at START: Red Easy, Black Hard\./.test(hint.textContent) && /Teams at START: Green \+ Blue against Red \+ Black\./.test(hint.textContent) && /Every link of this room carries the choices/.test(hint.textContent), hint.textContent);
+    env.rowButton(1, 'Play here').click();
+    const frame = env.frameOf(1);
+    same('a seat that plays on the page gets both in its game address', [env.param(frame.src, 'fill'), env.param(frame.src, 'teams')], ['none,easy,none,hard', '0+2']);
+    env.rowButton(0, 'Copy link').click();
+    same('the link of a seat for somebody else carries both', [env.param(env.copied[0], 'fill'), env.param(env.copied[0], 'teams')], ['none,easy,none,hard', '0+2']);
+    env.$('play-tab').click();
+    same('"Play in this tab" carries both', [env.param(env.assigned[0], 'fill'), env.param(env.assigned[0], 'teams')], ['none,easy,none,hard', '0+2']);
+    same('what is remembered: the four words and the team (the opponents of the first card are not touched)', [env.storage.data['ants-four-fill'], env.storage.data['ants-four-teams'], 'ants-solo-seats' in env.storage.data], ['none,easy,none,hard', '0+2', false]);
+    // the same card, 3 players: the seats beyond the room are none in the link, and one level for the seats that the room has is one word
+    const three = runLobby('', {}, {});
+    three.hostPlayers(3);
+    setHostSeats(three, ['hard', 'hard', 'easy']);
+    three.$('host').click();
+    same('three players, Red and Blue Hard (Black is no seat of the room): one word, no teams parameter for free for all', [three.param(three.$('any-link').value, 'fill'), three.param(three.$('any-link').value, 'teams')], ['hard', null]);
+    const mixed = runLobby('', {}, {});
+    mixed.hostPlayers(3);
+    setHostSeats(mixed, ['easy', 'hard', 'easy']);
+    mixed.$('host').click();
+    same('three players, Red Easy and Blue Hard: four words with Black none', mixed.param(mixed.$('any-link').value, 'fill'), 'none,easy,hard,none');
+    const quiet = runLobby('', {}, {});
+    quiet.$('host').click();
+    same('no bots and free for all: no fill and no teams in the room\'s links, the address or the hint', [quiet.param(quiet.$('any-link').value, 'fill'), quiet.param(quiet.$('any-link').value, 'teams'), /fill=|teams=/.test(String(quiet.replaced[0][2])), quiet.$('fill-hint').hidden], [null, null, false, true]);
+}
+{   // what the card remembered: four words, one word (the first versions), a team; anything else is none and free for all
+    const four = runLobby('', { 'ants-four-players': '4', 'ants-four-fill': 'none,easy,none,hard', 'ants-four-teams': '0+3' }, { firstVisit: true });
+    same('four remembered words and a team: the levels of the seats after the leader\'s and the team are on the card', [hostLevels(four), hostRowsShown(four), four.$('host-teams').value], [['easy', '', 'hard'], '1+2+3', '0+3']);
+    const one = runLobby('', { 'ants-four-players': '4', 'ants-four-fill': 'medium' }, { firstVisit: true });
+    same('the one word of the first versions is every seat', hostLevels(one), ['medium', 'medium', 'medium']);
+    for (const junk of ['easy,hard', 'none,easy,none,loud', 'loud', 'none,easy,none,hard,none', '']) {
+        const env = runLobby('', { 'ants-four-players': '4', 'ants-four-fill': junk, 'ants-four-teams': 'x' }, { firstVisit: true });
+        same('a remembered ' + JSON.stringify(junk) + ' is none in all three seats, and a team that is none of the choices is free for all', [hostLevels(env), env.$('host-teams').value], [['', '', ''], 'ffa']);
+    }
+    const stale = runLobby('', { 'ants-four-players': '2', 'ants-four-teams': '0+1' }, { firstVisit: true });
+    same('a team that the room of two cannot make is free for all', [stale.$('host-teams-line').hidden, stale.$('host-teams').value], [true, 'ffa']);
+}
+{   // an address that asks for a room: the plan and the team are read through the whitelist (lower case, valid or nothing) and every link of the room carries them
+    const env = runLobby('?room=demo-small-4p-abc12&fill=NONE,Easy,none,hard&teams=0%2B1', {});
+    env.$('who-go').click();
+    const link = env.$('any-link').value;
+    same('?room= &fill= &teams=: the room opens with both, the plan in lower case', [env.roomStarted(), env.param(link, 'fill'), env.param(link, 'teams'), String(env.replaced[0][2]).indexOf('teams=0%2B1') !== -1], [true, 'none,easy,none,hard', '0+1', true]);
+    check('... and the panel says them', /Red Easy, Black Hard/.test(env.$('fill-hint').textContent) && /Green \+ Red against Blue \+ Black/.test(env.$('fill-hint').textContent), env.$('fill-hint').textContent);
+    const old = runLobby('?room=demo-small-2p-abc12&fill=medium', {});
+    old.$('who-go').click();
+    same('the old address with one word still opens a room that carries that one word', [old.param(old.$('any-link').value, 'fill'), old.param(old.$('any-link').value, 'teams')], ['medium', null]);
+    const bad = runLobby('?room=demo-small-4p-abc12&fill=easy,hard&teams=0%2B0', {});
+    bad.$('who-go').click();
+    same('a plan of two words and a team of one seat are nothing: no fill and no teams in the links', [bad.param(bad.$('any-link').value, 'fill'), bad.param(bad.$('any-link').value, 'teams'), bad.$('fill-hint').hidden], [null, null, true]);
+    const host = runLobby('?map=small&players=3&fill=hard&teams=1%2B2', {});
+    host.$('who-go').click();
+    same('?map= &players=3 &fill=hard &teams=1+2 hosts the room of three with both (one word for the seats that the room has)', [/room=demo-small-3p-/.test(host.$('any-link').value), host.param(host.$('any-link').value, 'fill'), host.param(host.$('any-link').value, 'teams')], [true, 'hard', '1+2']);
+    const far = runLobby('?map=small&players=4&teams=1%2B2', {});
+    far.$('who-go').click();
+    same('a team that the room of four does not offer is dropped when the address hosts it', far.param(far.$('any-link').value, 'teams'), null);
 }
 check('"How it works" is a details element that no script opens or closes (the script only hides it with the cards, and shows it with them)', /<details class="how" id="how" hidden>\s*<summary>/.test(lobbyText) && (lobbyScript.match(/\$\('how'\)[.\w]*/g) || []).length === 2 && (lobbyScript.match(/\$\('how'\)[.\w]*/g) || []).every((u) => u === "$('how').hidden") && !/getElementById\('how'\)/.test(lobbyScript));
 for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
@@ -788,8 +887,7 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
 {
     const env = runLobby('', {}, {});
     env.hostPlayers(3);
-    env.$('fill').value = 'medium';
-    env.$('fill').fire('change', {});
+    setHostSeats(env, ['medium', 'medium', 'medium']);
     env.type('player-name', 'Ann');
     env.$('host').click();
     check('Create the match with 3 players makes the room panel, and the play-here note of the frames is not shown yet', env.roomStarted() && env.$('frames-note').hidden === true);

@@ -47,18 +47,30 @@ class TheFrontPageMarkup(PageCase):
         for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
 
-    def test_the_host_card_offers_players_2_to_4_as_buttons_the_empty_seats_and_its_own_button(self):
+    def test_the_host_card_offers_players_2_to_4_as_buttons_a_level_for_each_empty_seat_the_teams_and_its_own_button(self):
         self.assertNotIn('<select id="players">', self.page)                                   # (the Players select of 1 - 4 is gone: 1 player is the first card, 2 - 4 the second)
         self.assertEqual(re.findall(r'<input type="radio" name="players" id="players-(\d)" value="(\d)"( checked)?>', self.page), [("2", "2", " checked"), ("3", "3", ""), ("4", "4", "")])
-        fill = re.search(r'<select id="fill">(.*?)</select>', self.page, re.S).group(1)
-        self.assertEqual(re.findall(r'<option value="([a-z]*)">([^<]*)</option>', fill), [("", "Leave empty"), ("easy", "Easy bots"), ("medium", "Medium bots"), ("hard", "Hard bots")])
-        self.found(self.page, r'<label class="lab" for="fill">Empty seats at START</label>')
+        # the empty seats at START (protocol 13): the old single select is gone; one group of four buttons for each seat after the leader's, in the order of the room's seats (1 Red, 2 Blue, 3 Black), none checked first
+        self.assertNotIn('<select id="fill">', self.page)
+        self.found(self.page, r'<span class="lab" id="fill-label">Empty seats at START</span>')
+        host = self.page[self.page.index('<ul class="roster hostseats" id="host-roster"'):]
+        host = host[:host.index("</ul>")]
+        groups = re.findall(r'<li id="host-seat-row-(\d)"><img src="front/ant_(\w+)\.png" alt="" width="23" height="40">\s*<fieldset class="lvlset"><legend>(\w+)</legend><div class="lvls"><span class="pair">(.*?)</span></div></fieldset></li>', host, re.S)
+        self.assertEqual([(n, img, name) for n, img, name, _ in groups], [("1", "red", "Red"), ("2", "blue", "Blue"), ("3", "black", "Black")])
+        for n, _, name, body in groups:
+            buttons = re.findall(r'<input type="radio" name="host-seat-%s" id="host-seat-%s-(\w+)" value="(\w*)"( checked)?><label for="host-seat-%s-\1">(\w+)</label>' % (n, n, n), body)
+            self.assertEqual([(word, value, text) for word, value, _, text in buttons], [("none", "", "None"), ("easy", "easy", "Easy"), ("medium", "medium", "Medium"), ("hard", "hard", "Hard")], name)
+            self.assertEqual([word for word, _, checked, _ in buttons if checked], ["none"], name + ": a first visit leaves the seat empty")
+        # the room's Teams: a line that the script shows for three or four players, and a select that the script fills (the choices depend on the players)
+        self.found(self.page, r'<div class="teamrow" id="host-teams-line" hidden>\s*<label class="lab" for="host-teams">Teams</label>\s*<div class="sel"><select id="host-teams"></select></div>\s*</div>')
+        self.found(self.page, r'\.roster li\[hidden\] \{ display: none; \}')                          # (a seat that the room does not have is hidden although the rows of a roster are grids)
         self.found(self.page, r'<button id="host" type="button" class="btn">Host the match</button>')
 
     def test_the_first_card_has_a_group_of_four_buttons_for_each_base_the_teams_and_start(self):
         # one fieldset for each of the other three bases, in the order of the game's --bot seats (1 Red, 2 Blue, 3 Black), named by its legend, with the radio buttons None, Easy, Medium, Hard
         self.assertNotIn('id="opponents"', self.page)
-        groups = re.findall(r'<fieldset class="lvlset"><legend>(\w+)</legend><div class="lvls"><span class="pair">(.*?)</span></div></fieldset>', self.page, re.S)
+        first_card = self.page[:self.page.index('<section class="card online"')]                # (the Host card has its own groups: host-seat-N)
+        groups = re.findall(r'<fieldset class="lvlset"><legend>(\w+)</legend><div class="lvls"><span class="pair">(.*?)</span></div></fieldset>', first_card, re.S)
         self.assertEqual([name for name, _ in groups], ["Red", "Blue", "Black"])
         for seat, (name, body) in enumerate(groups, 1):
             buttons = re.findall(r'<input type="radio" name="opponent-%d" id="opponent-%d-(\w+)" value="(\w*)"( checked)?><label for="opponent-%d-\1">(\w+)</label>' % (seat, seat, seat), body)
@@ -82,7 +94,8 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("$('players-' + hostPlayers(recall('ants-four-players'), 2)).checked = true;", self.page)            # (the Host card's players: 2 - 4, an old stored 1 is 2)
         self.assertIn("function soloBots(stored) { return stored === null || stored === undefined ? 'medium' : validFill(stored); }", self.page)
         self.assertIn("var levels = soloSeats(recall('ants-solo-seats'), recall('ants-solo-bots'));", self.page)               # (the new key, else the old one: one level for all three)
-        self.assertIn("fillSelect.value = validFill(recall('ants-four-fill'));", self.page)                  # (the rooms' choice is what it always was: leave empty until chosen)
+        self.assertIn("hostSeats(recall('ants-four-fill')).forEach(function (level, i) { $('host-seat-' + (i + 1) + '-' + (level || 'none')).checked = true; });", self.page)     # (the rooms' choice: none in every seat until chosen; an old single word is every seat)
+        self.assertIn("var hostTeamWanted = recall('ants-four-teams');", self.page)
 
     def test_the_old_key_of_the_opponents_is_read_and_never_written(self):
         self.assertEqual(len(re.findall(r"recall\('ants-solo-bots'\)", self.page)), 1)
@@ -118,11 +131,11 @@ class TheFrontPageMarkup(PageCase):
     def test_play_goes_to_this_tab_and_the_host_s_own_seat_too(self):
         self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(", self.page)
         self.assertIn("var LOCAL_PAGE = 'play.html';", self.page)
-        self.assertIn("window.location.assign(joinUrl(room, checked.name, fill));", self.page)
-        self.assertIn("window.location.assign(joinUrl(code, checked.name, ''));", self.page)
+        self.assertIn("window.location.assign(joinUrl(room, checked.name, fill, roomTeams));", self.page)
+        self.assertIn("window.location.assign(joinUrl(code, checked.name, '', ''));", self.page)
 
     def test_the_old_address_and_its_state_addresses_still_work_at_the_front_page(self):
-        for needle in ("params.get('room')", "params.get('map')", "params.get('players')", "validFill(params.get('fill'))", "params.get('play') === 'here'", "new URLSearchParams(window.location.search).get('aspect')"):
+        for needle in ("params.get('room')", "params.get('map')", "params.get('players')", "validFillPlan(params.get('fill'))", "validRoomTeams(params.get('teams'))", "params.get('play') === 'here'", "new URLSearchParams(window.location.search).get('aspect')"):
             self.assertIn(needle, self.page, needle)
         self.assertIn("var wantedPlayers = playersChoice(wantedPlayersText, 4);", self.page)         # (an address that names no players hosts 4, as before; players=1 plays on this computer)
         self.assertNotIn("four.html", self.page)

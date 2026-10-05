@@ -1152,7 +1152,7 @@ void run_room_chat_tests() {
 // Protocol 12: the first turn of a match is sealed kMatchStartDelayMs after the match began (the "Get ready to play!" dialog of every machine), on a game of the local network too
 void run_start_delay_tests() {
     TEST_CASE("N3.22 Protocol 12, The Start Of A Match On The Local Network: No Machine Runs A Tick For 5 s After The Match Began, Nobody Waits Or Is Told Anything Meanwhile (No Stall, No Lag, No Election, No Notice), Then Every Machine's First Tick Comes And The Match Is Identical; A Guest Of Protocol 11 Is Refused By The Host's Door") {
-        ASSERT_EQ(kProtocolVersion, 13);                                  // (12 added the start delay: no message; 13 changed the StartRequest and the Start: N2.96, N3.34)
+        ASSERT_EQ(kProtocolVersion, 13);                                  // (12 added the start delay: no message; 13 changed the StartRequest and the Start: N2.100, N3.34)
         Table t;
         ASSERT_TRUE(make_room(t, 2));
         Machine& host = *t.machines[0];

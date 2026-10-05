@@ -1211,7 +1211,7 @@ void run_protocol_tests() {
         presence.your_vote = 2;
         presence.cap_s = 1700;
         const std::vector<uint8_t> seed_presence = encode(presence);
-        StartRequestMsg request13;                                     // protocol 13: a level for each seat and a pair of seats as a team (N2.96 has the rules one by one)
+        StartRequestMsg request13;                                     // protocol 13: a level for each seat and a pair of seats as a team (N2.100 has the rules one by one)
         request13.fill = {FillLevel::None, FillLevel::Easy, FillLevel::Medium, FillLevel::Hard};
         request13.set_teams(sim::StartTeams{true, 1, 2});
         const std::vector<uint8_t> seed_request13 = encode(request13);
@@ -1376,7 +1376,7 @@ void run_protocol_tests() {
             longer.push_back(255);
             ASSERT_FALSE(decode(longer, out));
         }
-        // StartRequest (protocol 13): exactly the type, a fill level 0 .. 3 for each of the four seats and the two team bytes (N2.96 has every rule of it)
+        // StartRequest (protocol 13): exactly the type, a fill level 0 .. 3 for each of the four seats and the two team bytes (N2.100 has every rule of it)
         const std::vector<uint8_t> request = encode(StartRequestMsg{});
         ASSERT_TRUE(request == (std::vector<uint8_t>{24, 0, 0, 0, 0, 255, 255}));
         StartRequestMsg sr;
@@ -9143,7 +9143,7 @@ void run_reconnect_session_tests() {
 
 void run_protocol11_tests() {
     TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
-        ASSERT_EQ(kProtocolVersion, 13);                                 // (the Chat of protocol 11 is the Chat of protocol 13; the StartRequest grew in 13: a level for each seat and the teams, N2.96 has its rules, here the one level of protocol 11 is the same level in every seat)
+        ASSERT_EQ(kProtocolVersion, 13);                                 // (the Chat of protocol 11 is the Chat of protocol 13; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
         const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
@@ -9757,7 +9757,7 @@ StartMsg start_of_hold(const HoldMatch& m) {
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 void run_protocol13_tests() {
-    TEST_CASE("N2.96 Protocol 13, The Messages: StartRequest Is The Type, A Level For Each Seat (0 .. 3) And Two Team Bytes (None Both, Or Two Different Seats 0 .. 3), Seven Bytes And Nothing Else; Start Ends With The Same Two Bytes And Its Decoder Takes Only Teams That Its Own Roster Can Make; The Notice Fits A Line Of Chat") {
+    TEST_CASE("N2.100 Protocol 13, The Messages: StartRequest Is The Type, A Level For Each Seat (0 .. 3) And Two Team Bytes (None Both, Or Two Different Seats 0 .. 3), Seven Bytes And Nothing Else; Start Ends With The Same Two Bytes And Its Decoder Takes Only Teams That Its Own Roster Can Make; The Notice Fits A Line Of Chat") {
         ASSERT_EQ(kProtocolVersion, 13);
         ASSERT_TRUE(kNoTeam == 255 && kFillLevelLast == 3);
         StartRequestMsg out;
