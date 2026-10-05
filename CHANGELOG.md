@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **One card, New match:** the front page's two cards (a game against the computer, and Play online) are one. Pick the map and your colour (**Sit here** moves you), then make every other seat a **Friend** (a person you invite), a bot at **Easy**, **Medium** or **Hard**, or **Nobody**; with three or four players **Teams** pairs two of them. **START!** takes you in: against bots the match begins at once, with Friends it begins when they are in. The card remembers its choices.
+- **An invitation for each Friend**, shown in the card with its colour, **Copy link** and, where the browser has it, **Share**. The links carry no name and no key; a friend is asked for a name first, and can go back to the front page from that step.
+- **A level for every bot seat, at any colour** (a bot may sit at Green too), and the room's teams: in the desktop game's Host panel as well.
+- A game against the computer from the front page is now a room on the game server; an old address with `&players=1` still plays on your computer.
+
+**Rules / network:** network protocol 13: a start carries a bot level for each seat and the teams, so a v0.6.x game cannot join (reload the page once after the update). A room's teams are a word of its code (`demo-treasure-4p-t01-k7m2xq`).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW), [the front page](docs/NETWORK_PORT.md), [bot games](docs/BOTS.md)
+
 ## v0.6.0 - 2026-10-05 - An online match waits for you
 
 **For players:**

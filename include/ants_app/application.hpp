@@ -121,9 +121,10 @@ struct ApplicationConfig {
     std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
     std::string net_token;                      // Join: the credential that came with the room code (--token T)
     uint8_t net_seat{255};                      // Join: the seat asked for (--seat N, 0 .. 3: the colours green, red, blue, black); 255: any free seat
-    /// A test hook (--start-when N, 1 .. 4; 0 = off, the default): a headless client has nobody to click START, so when it leads a server's room it presses START itself (the S key
-    /// of the setup screen, the same path as a click) once N players are in the room, again every second until the match starts. 1 is for a leader with --fill-bots (one person is
-    /// enough then; without a fill the START of one person is the can't-go cue, every second). A game that is played never uses it.
+    /// --start-when N (1 .. 4; 0 = off, the default): when this game leads a server's room it presses START itself (the S key of the setup screen, the same path as a click) once N
+    /// players are in the room, again every second until the match starts. The web front page's card gives it to the game of a match (1 + the card's Friend rows: the START of the
+    /// card was the click) and a headless test client has nobody to click at all. 1 is for a leader with --fill-bots (one person is enough then; without a fill the START of one
+    /// person is the can't-go cue, every second). A game started from the menus never uses it.
     uint8_t net_start_when{0};
     /// --fill-bots none|easy|medium|hard, or four of them joined by commas for the seats 0 - 3 (protocol 11; a level for each seat since 13): the bots that this player's START seats in the empty
     /// seats of its room when it can start one: the leader of a server's room (the request goes to the server, which seats them and runs them) and the host of a room on the local network

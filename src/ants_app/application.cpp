@@ -2432,7 +2432,7 @@ void Application::pump_network(float dt, double gap_seconds) {
     }
     if (state_ == AppState::MapSelect && net_->active()) {
         sync_room_view();
-        // --start-when N (a test hook): the leader of a server's room presses START, as a click or the S key would, once N players are in; again every second until the match starts
+        // --start-when N (the web front page's card and the headless test clients give it): the leader of a server's room presses START, as a click or the S key would, once N players are in; again every second until the match starts
         // --say TEXT (a test hook): the line is said once, in the waiting room, as soon as two players are there to hear it
         if (!config_.net_say.empty() && !say_sent_ && net_->phase() == net::NetGame::Phase::Room && net_->my_seat() < 4) {
             size_t here = 0;
