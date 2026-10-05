@@ -353,7 +353,7 @@ def main():
             # colour up to 700 px); the map and the seats in two columns from 1100 px up, one above the other under it
             wrong = []
             for width in (320, 340, 360, 375, 390, 414, 480, 600, 700, 701, 768, 900, 1024, 1099, 1100, 1219, 1220, 1280, 1366, 1440, 1600):
-                tab.emulate(width, 900, 1)
+                tab.emulate(width, 900, 1, width <= 480)       # (a phone's scrollbar is an overlay and takes no width: a browser that shows classic ones leaves 305 px of a 320 px window, which five buttons cannot share)
                 time.sleep(0.3)
                 m = json.loads(value(LAYOUT_JS))
                 problems = []
