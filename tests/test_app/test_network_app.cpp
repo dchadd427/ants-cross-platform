@@ -3994,6 +3994,8 @@ void run_room_bot_tests() {
         using MS = MapSelectScreen;
         size_t checked = 0;
         size_t widest_classic = 0;
+        size_t fitting = 0;
+        size_t too_long = 0;
         int32_t widest_footer = 0;
         for (const net::FillPlan& plan : plans) {
             for (const sim::StartTeams& t : teams) {
@@ -4008,6 +4010,11 @@ void run_room_bot_tests() {
                             ASSERT_TRUE(wrap_label_text(r, prompts.back(), 363, FontSize::Px14).size() <= 2);
                             widest_classic = std::max(widest_classic, wrap_label_text(r, prompts.back(), 293, FontSize::Px14).size());
                             for (size_t i = 1; i < prompts.size(); ++i) ASSERT_TRUE(prompts[i].size() <= prompts[i - 1].size());
+                            for (const std::string& text : prompts) {                              // the screen's rule is the label's own measure: two lines of 293 px on this (the classic) page
+                                const bool two_lines = wrap_label_text(r, text, 293, FontSize::Px14).size() <= 2;
+                                ASSERT_EQ(app.map_select().prompt_fits(r, text), two_lines);
+                                (two_lines ? fitting : too_long) += 1;
+                            }
                         }
                         const net::NetGame::FooterTexts footer = net::NetGame::start_footer(plan, t, room, fog);
                         for (const std::vector<std::string>& line : footer.line) {
@@ -4026,6 +4033,7 @@ void run_room_bot_tests() {
             }
         }
         ASSERT_TRUE(checked > 1000 && widest_footer > 0);
+        ASSERT_TRUE(fitting > 1000 && too_long > 20);                                                // (the rule above met both answers: the long ways of a plan of three bots and teams do not fit)
         ASSERT_EQ(widest_classic, size_t{2});                                                        // (the shortest ways take the two lines that the label has, and no more)
         // the footer of protocol 11 is at 18 px: its lines fit the box at the size that the screen has always used
         ASSERT_EQ(MS::footer_font(r, "Empty seats at START:"), FontSize::Px18);

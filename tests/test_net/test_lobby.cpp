@@ -2288,7 +2288,11 @@ int main() {
         ASSERT_EQ(fill_plan_text(FillPlan()), std::string("none"));
         ASSERT_EQ(fill_plan_text(hard), std::string("hard"));
         ASSERT_EQ(fill_plan_text(mixed), std::string("none,easy,none,hard"));
-        for (const FillPlan& plan : {FillPlan(), hard, mixed, FillPlan(FillLevel::Easy), FillPlan(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::Medium, FillLevel::Easy, FillLevel::None})}) {
+        const FillPlan same_start(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::Easy, FillLevel::Hard});          // (the first seats alike, the later ones not: four words, not one)
+        const FillPlan same_three(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::Hard, FillLevel::Hard, FillLevel::Easy});
+        ASSERT_EQ(fill_plan_text(same_start), std::string("none,none,easy,hard"));
+        ASSERT_EQ(fill_plan_text(same_three), std::string("hard,hard,hard,easy"));
+        for (const FillPlan& plan : {FillPlan(), hard, mixed, same_start, same_three, FillPlan(FillLevel::Easy), FillPlan(std::array<FillLevel, 4>{FillLevel::Hard, FillLevel::Medium, FillLevel::Easy, FillLevel::None})}) {
             FillPlan back = FillLevel::Medium;
             ASSERT_TRUE(parse_fill_plan(fill_plan_text(plan), back, why) && back == plan);
         }
