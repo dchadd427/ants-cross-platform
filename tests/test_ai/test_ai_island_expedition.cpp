@@ -35,8 +35,9 @@ struct Run {
     int32_t score{0};
 };
 
-Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::function<void(LevelPlan&)>& tweak = {}) {
+Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::function<void(LevelPlan&)>& tweak = {}, uint32_t latency = 0) {
     Match m;
+    m.latency = latency;
     m.expedition = true;
     m.ferry = true;                                                                                  // (the bot as it plays: the Swimmers of the expedition go to work at once)
     m.init("ISLANDS", seed, static_cast<uint8_t>(1u << seat), level, 0, tweak);
@@ -144,6 +145,7 @@ void run_island_expedition_tests() {
         ASSERT_EQ(r.drowned, 0);
         ASSERT_TRUE(r.first_landing > 0 && r.first_swimmer > r.first_landing);
         ASSERT_TRUE(r.swimmers >= 1);
+        ASSERT_TRUE(r.first_swimmer <= 1950);                                                        // (a dud is seen at once; by the timeout alone the first Swimmer comes at 2,200 instead of 1,800)
     } TEST_END();
 
     TEST_CASE("AI17.5 The Levels Want Their Own Number Of Swimmers: Easy Two, Medium Three, Hard Three (Seat 0, Seed 1); The Expedition Is Over When The Bot Has Them, And A Hard Bot Is Quicker Than A Medium One, And A Medium One Than An Easy One")
@@ -209,5 +211,27 @@ void run_island_expedition_tests() {
         ASSERT_EQ(a.first_landing, b.first_landing);
         ASSERT_EQ(a.first_swimmer, b.first_swimmer);
         ASSERT_EQ(a.duds, b.duds);
+    } TEST_END();
+
+    TEST_CASE("AI17.9 The Swimmer That Took Its Token Is Not Shut In: Four Hard Bots On ISLANDS (Seed 4, The Plan Alone, Commands At Once) All Score Within 6,000 Ticks; In This Match A Crew Ant That Stood In The First Steps From The End Of The Row Once Held The Swimmer Of Seat 3 There For Good (One Tile Wide), And The Seat Scored Nothing")
+    {
+        Match m;
+        m.expedition = true;
+        m.ferry = true;
+        m.builders = 0;
+        m.init("ISLANDS", 4, 0x0F, Level::Hard, 0);
+        m.run(6000);
+        for (uint8_t seat = 0; seat < 4; ++seat) {
+            ASSERT_TRUE(m.sim.get_player_score(seat) > 0);
+            ASSERT_TRUE(m.bot(seat)->expedition().swimmers_taken() >= 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI17.10 The Landing Stays Free When The Bot Is Slow: An Easy Bot On Seat 3 With The Arena's Command Latency Of 3 Ticks (Seed 40, 5,000 Ticks) Loses No Ant; Without The Look At Who Stands By The Landing When The Next Hop Is Ordered, An Ant Of The Crew Is Thrown Into The Water")
+    {
+        const Run r = play(Level::Easy, 3, 40, 5000, {}, 3);
+        ASSERT_EQ(r.lost, 0);
+        ASSERT_EQ(r.drowned, 0);
+        ASSERT_TRUE(r.first_landing > 0);
     } TEST_END();
 }

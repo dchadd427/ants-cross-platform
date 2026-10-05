@@ -155,7 +155,7 @@ struct LevelPlan {
     // islands (ISLANDS, SMALL: food beyond water; IslandTask, docs/BOTS.md "Islands"): a Swimmer digs bridges, the economy walks over them. Idle where nothing lies beyond water
     bool islands{false};                 // the island task is on (every level of the standard bot; a plan made by hand, as the tests do, has it off)
     uint32_t island_swimmers{1};         // the Swimmers that the bot wants (taken from the map by the power-up task)
-    uint32_t island_builders{1};         // Swimmers that dig bridges at a time
+    uint32_t island_builders{1};         // Swimmers that dig bridges at a time (a plan made by hand: the level plans have none, a bridge loses to the ferry: docs/BOTS.md "Islands")
     uint32_t island_bridge_ants{1};      // ants that work the piles over one bridge at a time (two that meet head-on on a one-wide bridge stop for good: IslandTask "traffic")
     bool island_guard{true};             // false: the ants on a bridge that goes, and the ants that walk to one, are left alone (the ablation that the tests of the guard use)
     bool island_expedition{false};       // the expedition is on (ExpeditionTask: a crew is flown to the Swimmers that lie beyond water, bomb by bomb); the tests of the island task switch it off

@@ -18,7 +18,7 @@
 // The numbers depend on how the hill banks deposits (about one every 100 ticks) and on the bot: when either changes on purpose, the table is regenerated on purpose:
 //   cmake --build build --target bot_arena && ./build/bot_arena --write-baselines > tests/test_ai/baselines.inc
 //
-// ISLANDS: no hill can walk to any food, so the worker bot scores 0 there (0 = 0, exempt until the island hops of milestone B4a).
+// ISLANDS: no hill can walk to any food and the worker bot never crosses water, so it scores 0 there (0 = 0, exempt; the standard bot's island play is in docs/BOTS.md, "Islands").
 
 #include <array>
 #include <cstdint>

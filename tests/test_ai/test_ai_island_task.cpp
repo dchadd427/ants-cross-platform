@@ -55,6 +55,24 @@ uint64_t dig_north_chain(sim::SimulationEngine& sim, const std::function<void()>
     return middle;
 }
 
+// A chain of water tiles dug by a Swimmer of team 0 that the test puts on `from` (land next to the first tile); returns the tick at which the first tile was finished
+uint64_t dig_chain(sim::SimulationEngine& sim, const std::function<void()>& tick, TileCoord from, const std::vector<TileCoord>& tiles) {
+    const uint32_t swimmer = sim.spawn_unit(0, sim::AntType::Swimmer, from);
+    uint64_t first = 0;
+    for (const TileCoord t : tiles) {
+        Command c;
+        c.type = CommandType::GroupSpecial;
+        c.issuer = 0;
+        c.tile_x = static_cast<int16_t>(t.x);
+        c.tile_y = static_cast<int16_t>(t.y);
+        c.ants = {swimmer};
+        sim.apply_command(c);
+        for (int i = 0; i < 120 && !finished(sim, t); ++i) tick();
+        if (first == 0) first = sim.current_tick();
+    }
+    return first;
+}
+
 }  // namespace
 
 void run_island_task_tests() {
@@ -78,7 +96,7 @@ void run_island_task_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI15.2 On ISLANDS And SMALL The Island Task Is On From The First Look; The Level Plans Switch It On; A Plan Made By Hand Has It Off")
+    TEST_CASE("AI15.2 On ISLANDS And SMALL The Island Task Is On From The First Look; The Level Plans Switch It On, With No Builder (The Swimmers Ferry); A Plan Made By Hand Has It Off")
     {
         for (const char* map : {"ISLANDS", "SMALL"}) {
             Match m;
@@ -86,7 +104,10 @@ void run_island_task_tests() {
             m.run(60);
             ASSERT_TRUE(m.island(0).active());
         }
-        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) ASSERT_TRUE(plan_for(level).islands);
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
+            ASSERT_TRUE(plan_for(level).islands);
+            ASSERT_EQ(plan_for(level).island_builders, 0u);                                                  // (the Swimmers ferry: a bridge lost to the ferry in the tournaments, docs/BOTS.md)
+        }
         ASSERT_FALSE(LevelPlan{}.islands);
         Match off;
         off.init("ISLANDS", 1, 0x01, Level::Medium, 0x01, [](LevelPlan& p) { p.islands = false; });
@@ -316,20 +337,22 @@ void run_island_task_tests() {
         ASSERT_TRUE(least >= 20);
     } TEST_END();
 
-    TEST_CASE("AI15.12 The Ends Of A Bridge That Is About To Go Are Counted In Steps Over Land, Not Across The Water: A Worker That Stands Eight Tiles By Air From The North End Of The Chain, On The Island West Of The North Island, Is Told Nothing By The Guard, While The Workers By The South End (On The Hill's Island) Are Held (A Medium Bot, ISLANDS)")
+    TEST_CASE("AI15.12 The Ends Of A Bridge That Is About To Go Are Counted In Steps Over Land, Not Across The Water: On SMALL, With A Chain Dug From The East Bank To The Island, A Worker Put By Its East End Is Taken By The Guard And A Worker On The West Bank (Nine Tiles By Air From The Island's End, Across The Lake) Is Not (A Medium Bot)")
     {
         Match m;
-        m.init("ISLANDS", 1, 0x01, Level::Medium, 0, [&](LevelPlan& p) { lone(p); p.island_bridge_ants = 0; });
-        const uint64_t middle = dig_north_chain(m.sim, [&] { m.tick(); });
-        m.run(static_cast<int>(middle + 3600 - 700 - m.sim.current_tick()));
-        const uint32_t far = m.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{16, 14});
-        m.run(800);                                                                                                       // (the chain is gone by now)
-        int told = 0;
-        for (const auto& e : m.log()) {
-            for (const uint32_t ant : e.second.ants) told += ant == far ? 1 : 0;
+        m.init("SMALL", 1, 0x01, Level::Medium, 0, [&](LevelPlan& p) { lone(p); p.island_bridge_ants = 0; });
+        const uint64_t first = dig_chain(m.sim, [&] { m.tick(); }, TileCoord{26, 20}, {TileCoord{25, 20}, TileCoord{24, 20}, TileCoord{23, 20}});
+        m.run(static_cast<int>(first + 3600 - 240 - m.sim.current_tick()));                                        // (the oldest tile has 240 ticks of life left: the chain is hot)
+        const uint32_t near = m.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{27, 21});
+        const uint32_t far = m.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14, 20});
+        bool near_taken = false, far_taken = false;
+        for (int t = 1; t <= 130; ++t) {                                                                           // (then the worker on the west bank has walked round the lake: it comes near the east end by land)
+            m.tick();
+            near_taken = near_taken || m.island(0).guard_mode(near) >= 0;
+            far_taken = far_taken || m.island(0).guard_mode(far) >= 0;
         }
-        ASSERT_EQ(told, 0);
-        ASSERT_TRUE(m.island(0).holds() >= 1);                                                                             // (the guard was at work: the ants by the south end are held)
+        ASSERT_TRUE(near_taken);
+        ASSERT_FALSE(far_taken);
         ASSERT_EQ(m.total_collapsed(), 0);
     } TEST_END();
 
@@ -359,5 +382,37 @@ void run_island_task_tests() {
         ASSERT_EQ(swimmers(), before + 1);
         ASSERT_FALSE(m.sim.grid().has_powerup_at(TileCoord{25, 14}));
         ASSERT_EQ(m.total_unforced(), 0);
+    } TEST_END();
+
+    TEST_CASE("AI15.14 A Pile Whose Way Would Not Last A Round Trip Is Closed To The Economy: In The Lab Of The North Chain (Nobody Works The Pile) The Pile Beyond It Has A Place While The Chain Is Young, And Is Closed, With No Place, When Less Than 450 Ticks Of Its Life Are Left (A Medium Bot, ISLANDS, Seat 0)")
+    {
+        Match m;
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0, [&](LevelPlan& p) { lone(p); p.island_bridge_ants = 0; });                // (nobody works the pile: it is not eaten up before the chain goes)
+        const uint64_t middle = dig_north_chain(m.sim, [&] { m.tick(); });
+        m.run(300);
+        ASSERT_EQ(m.island(0).pile_limits().size(), 1u);
+        const uint32_t pile = m.island(0).pile_limits().begin()->first;
+        ASSERT_EQ(m.island(0).closed_piles().count(pile), 0u);
+        m.run(static_cast<int>(middle + 3600 - 450 - m.sim.current_tick()));
+        ASSERT_EQ(m.island(0).closed_piles().count(pile), 1u);
+        ASSERT_EQ(m.island(0).pile_limits().count(pile), 0u);
+    } TEST_END();
+
+    TEST_CASE("AI15.15 A Pile Is Closed Also When A Way Over A Bridge That Is Retired Costs About As Much As The Good One (The Engine May Take It): Two Chains Join The Hill's Island To The North Island, (26, 18 - 16) Dug 2,800 Ticks Before (24, 18 - 16); The Pile Beyond Has A Place While Both Last, And Is Closed When The Old Chain Has Less Than 450 Ticks Left, Although The Young One Carries (A Medium Bot, ISLANDS, Seat 0)")
+    {
+        Match m;
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0, [&](LevelPlan& p) { lone(p); p.island_bridge_ants = 0; });
+        const uint64_t old_first = dig_chain(m.sim, [&] { m.tick(); }, TileCoord{26, 19}, {TileCoord{26, 18}, TileCoord{26, 17}, TileCoord{26, 16}});
+        m.run(static_cast<int>(old_first + 2800 - m.sim.current_tick()));
+        dig_chain(m.sim, [&] { m.tick(); }, TileCoord{24, 19}, {TileCoord{24, 18}, TileCoord{24, 17}, TileCoord{24, 16}});
+        ASSERT_TRUE(finished(m.sim, TileCoord{26, 18}) && finished(m.sim, TileCoord{24, 18}));
+        m.run(100);
+        ASSERT_EQ(m.island(0).pile_limits().size(), 1u);
+        const uint32_t pile = m.island(0).pile_limits().begin()->first;
+        ASSERT_EQ(m.island(0).closed_piles().count(pile), 0u);
+        m.run(static_cast<int>(old_first + 3600 - 450 - m.sim.current_tick()));
+        ASSERT_TRUE(finished(m.sim, TileCoord{26, 18}));                                                         // (the old chain stands, with less than 450 ticks of life)
+        ASSERT_EQ(m.island(0).closed_piles().count(pile), 1u);
+        ASSERT_EQ(m.island(0).pile_limits().count(pile), 0u);
     } TEST_END();
 }

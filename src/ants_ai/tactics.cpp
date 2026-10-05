@@ -29,7 +29,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.islands = true;
             p.island_expedition = true;
             p.island_ferry = true;
-            p.island_swimmers = 2;                                  // one digs, one carries food
+            p.island_swimmers = 2;                                  // they carry food; no builder at any level (a Swimmer that ferries earns 700 to 850 points a match, a bridge carries one ant at a time: docs/BOTS.md)
+            p.island_builders = 0;
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -55,7 +56,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.islands = true;
             p.island_expedition = true;
             p.island_ferry = true;
-            p.island_swimmers = 3;                                  // one digs, two carry food (the row has three Swimmers; with one more the bot scored a third more: docs/BOTS.md)
+            p.island_swimmers = 3;                                  // (the row has three Swimmers; with one more the bot scored a third more: docs/BOTS.md)
+            p.island_builders = 0;
             break;
         case Level::Hard:
             p.defenders = 3;
@@ -87,6 +89,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_expedition = true;
             p.island_ferry = true;
             p.island_swimmers = 3;
+            p.island_builders = 0;
             break;
     }
     return p;

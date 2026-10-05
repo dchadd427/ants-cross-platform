@@ -1388,7 +1388,7 @@ bool baselines_text(const Options& o, std::string& text, std::string& err) {
            "// The worker bot at three levels on the shipped maps; every number is the mean over the seeds " + seeds + ", the arena's sink latency is " + std::to_string(ai::kBaselineLatency) +
            " ticks, seats are rotated.\n"
            "//   columns: map, level, {alone against three idle bots, 2 minutes, seats 0..3}, {the same, whole match}, {four workers, whole match, seats 0..3}, sum of those four, reachable pot\n"
-           "// ISLANDS: no hill walks to any food: 0 = 0 until the island hops of B4a.\n";
+           "// ISLANDS: no hill walks to any food and the worker bot never crosses water: 0 = 0 (the standard bot's island play: docs/BOTS.md, \"Islands\").\n";
     for (const ai::BaselineRow& r : rows) text += ai::baseline_line(r) + "\n";
     return true;
 }

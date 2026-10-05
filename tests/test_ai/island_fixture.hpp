@@ -73,6 +73,8 @@ struct Match {
     uint32_t swimmers[4] = {0, 0, 0, 0};                 // the ids of the Swimmers that were given
     bool expedition{false};                              // the bots fly a crew to the Swimmers (the level's plan has it on; the tests of the island task switch it off, they give the Swimmer)
     bool ferry{false};                                   // the Swimmers that dig no bridge carry food (the level's plan has it on)
+    uint32_t builders{1};                                // Swimmers that dig bridges in a plan made by hand (the labs of the island task need one; the level plans have none: they ferry)
+    bool styled{false};                                  // the bots of the registry, as the arena and a room play them (a style drawn per seat, the plan of the level with `tweak` on top); else the plan alone
     uint32_t latency{0};                                 // the ticks that a released command takes to reach the engine (the arena's default is 3; 0: at once)
     std::unique_ptr<LatencySink> delayed;                // the sink, when there is a latency (then `sink` is not used)
 
@@ -100,21 +102,28 @@ struct Match {
             spec.seat = t;
             spec.kind = "standard";
             spec.level = level;
-            LevelPlan plan = ants::ai::plan_for(level);
-            plan.island_expedition = expedition;
-            plan.island_ferry = ferry;
-            if (tweak) tweak(plan);
-            if (!ctl->add(spec, std::make_unique<StandardBot>(plan), out, why)) std::cout << "  (cannot seat " << int(t) << ": " << why << ")\n";
+            std::unique_ptr<StandardBot> bot;
+            if (styled) {
+                bot = std::make_unique<StandardBot>(level, ants::ai::Style::Random, [tweak](LevelPlan& p) { if (tweak) tweak(p); });
+            } else {
+                LevelPlan plan = ants::ai::plan_for(level);
+                plan.island_expedition = expedition;
+                plan.island_ferry = ferry;
+                plan.island_builders = builders;
+                if (tweak) tweak(plan);
+                bot = std::make_unique<StandardBot>(plan);
+            }
+            if (!ctl->add(spec, std::move(bot), out, why)) std::cout << "  (cannot seat " << int(t) << ": " << why << ")\n";
         }
         prev_bridge.assign(sim.grid().cells().size(), 0);
     }
 
     void tick() {
         sim.tick();
-        sim.clear_news_events();
-        sim.clear_audio_events();
         if (delayed != nullptr) delayed->flush();
         ctl->on_tick(sim);
+        sim.clear_news_events();                                                                          // (after the bots looked, as the arena does: they read the news of the tick)
+        sim.clear_audio_events();
         const ants::sim::Grid& grid = sim.grid();
         for (const auto& a : sim.get_world_state().ants) {
             if (a.state != ants::sim::UnitState::Drowning || !drowning.insert(a.id).second) continue;

@@ -25,8 +25,7 @@ struct Result {
 
 Result play_match(const std::string& map, Level level, uint32_t seed) {
     Match m;
-    m.expedition = true;
-    m.ferry = true;
+    m.styled = true;                                                                                 // (the bots of the registry, with the styles that the arena draws)
     m.latency = 3;                                                                                   // (the arena's default: what the tournaments and a room play with)
     m.init(map, seed, 0x0F, level, 0);
     while (!m.sim.is_match_over() && m.sim.current_tick() < 40000) m.tick();
