@@ -198,8 +198,8 @@ struct LevelPlan {
     uint32_t catchup_tier2{80};
     uint32_t catchup_tier3{130};
     uint8_t catchup_workers_tier{4};     // from this tier on workers join the strike and the skirmish opens for every level; 4: never. A worker's blow takes one hit point and one blow lands per hit clip, so workers
-                                         // kill nothing above two hit points: with them from tier 2 a bot 2,000 ticks late in TREASURE scored 1,661 points against 1,786 with no catch-up, from tier 3 1,709,
-                                         // with Combat Ants only 1,779 (Hard, 96 matches each, docs/BOTS.md)
+                                         // kill nothing above two hit points: with them from tier 2 a bot 2,000 ticks late in TREASURE scored 1,720 points against 1,836 with no catch-up, from tier 3 1,756,
+                                         // with Combat Ants only 1,823 (Hard, 96 matches each, docs/BOTS.md)
     uint8_t catchup_lift_tier{2};        // from this tier on a plan that does not raid, take a Thief or take Combat Ants (Easy) does
     bool catchup_wants{true};            // from tier 1 on more Combat Ants (and from tier 2 a Thief) are wanted: more trips for power-ups
     uint32_t catchup_min_leader{300};    // the leader holds at least this many points (below that a fight is not worth the trip)
