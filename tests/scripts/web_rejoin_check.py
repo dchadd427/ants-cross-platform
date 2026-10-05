@@ -10,7 +10,8 @@ this tree (--server), a Chromium-based browser and Python 3; nothing else (the D
 itself, with the options of docker-compose.stack.yml (the site's own: the demo rooms, and NO reconnect option: what holds the seats is the default) on ports of its own, and every player is a
 browser of its own (its own profile: its own local storage, as a player's own computer has; nothing of yours is touched). Parts (--only NAME):
 
-  * reload   two players join a two-seat room by the room's links and the match starts; the first reloads its page: it is back in the running match within 20 s, with NO "Get ready" dialog; the
+  * reload   two players join a two-seat room by the room's links (the first one's link is a shared one with no seat in it: the game tells its page the seat that the room gave it, and the address
+             carries it from then on) and the match starts; the first reloads its page: it is back in the running match within 20 s, with NO "Get ready" dialog; the
              other player's screen said that the seat was missing and, when the pause had lasted 3 s or more (the server held the resume countdown: its status says so), "... is back: the match goes
              on in N" (the game's own words, read through ants_probe 16 and 10000 +); the match goes on and the two games' state hashes (the sync lines that every game posts every 100 ticks) agree;
              the server's status says it was paused, took a player back and is not paused any more;
@@ -198,9 +199,10 @@ class Server:
 class Player:
     """One person at a computer of their own: a browser with its own profile and storage, and the tab that the game runs in."""
 
-    def __init__(self, path, name, seat, web, ready_timeout):
+    def __init__(self, path, name, seat, web, ready_timeout, link_seat=True):
         self.name = name
         self.seat = seat
+        self.link_seat = link_seat                                           # the room's link has the seat in it (the front page's); False: a shared link, the room gives a seat
         self.web = web
         self.ready_timeout = ready_timeout
         self.browser = Browser(path)
@@ -258,7 +260,11 @@ class Player:
     # ---- the page
     def game_url(self, room):
         """The room's link for this seat, as the front page makes it for a window of its own (web/lobby.html, gameUrl)."""
-        return "%s?join=/ws&room=%s&seat=%d&name=%s&aspect=16:9" % (self.web, room, self.seat, self.name)
+        return "%s?join=/ws&room=%s%s&name=%s&aspect=16:9" % (self.web, room, "&seat=%d" % self.seat if self.link_seat else "", self.name)
+
+    def address_seats(self):
+        """The seat parameters of the address that this tab shows now (the game tells the page the seat that the room gave it, and the page puts it there)."""
+        return re.findall(r"[?&]seat=(\d+)", self.ev("window.location.search") or "")
 
     def open_game(self, room):
         """Opens the game page of this seat and waits until its game is ready."""
@@ -453,9 +459,10 @@ def main():
     def new_room():
         return "demo-tiny-2p-" + secrets.token_hex(3)
 
-    def begin_match(room):
-        """Two players, each on a computer of their own, take the two seats of a room through the room's links; returns when the match runs for both and no dialog is open."""
-        a = Player(chrome, "Ann", 0, web, args.ready_timeout)
+    def begin_match(room, seatless=False):
+        """Two players, each on a computer of their own, take the two seats of a room through the room's links; returns when the match runs for both and no dialog is open. `seatless`: the first
+        player's link is a shared one, with no seat in it (the room gives the first seat)."""
+        a = Player(chrome, "Ann", 0, web, args.ready_timeout, link_seat=not seatless)
         players.append(a)
         b = Player(chrome, "Bob", 1, web, args.ready_timeout)
         players.append(b)
@@ -528,9 +535,10 @@ def main():
         if wanted("reload"):
             print("[web rejoin] reload: a page that is reloaded in the middle of a match takes its seat again, and the other player waits")
             room = new_room()
-            a, b, running = begin_match(room)
-            check(running, "two players joined %s through the room's links and the match runs, with no dialog open" % room)
+            a, b, running = begin_match(room, seatless=True)
+            check(running, "two players joined %s through the room's links (the first one's has no seat in it) and the match runs, with no dialog open" % room)
             if running:
+                check(a.address_seats() == ["0"] and b.address_seats() == ["1"], "the address of each page carries the seat that the room gave it, once (%s, %s)" % (a.address_seats(), b.address_seats()))
                 watch = Watch(server, room, [a, b])
                 watch.until(lambda: a.ticks and b.ticks, 40)
                 check(bool(a.ticks and b.ticks), "both games report their state hash (every 100 ticks) from the start (ticks %s and %s)" % (sorted(a.ticks)[:2], sorted(b.ticks)[:2]))
@@ -596,6 +604,7 @@ def main():
                 check(not any(re.search(WAY_BACK_LINE, line) for line in tl_b.lines()), "a slow reload: the other player's own connection never failed")
                 agree_afterwards(watch, a, b, "after the slow reload", before_tick)
                 server_says(room, "after the slow reload", state="running", paused=False, rejoins=lambda n: isinstance(n, int) and n >= 2, absent=[])
+                check(a.address_seats() == ["0"] and b.address_seats() == ["1"], "after the reloads the addresses still carry the seats, once (%s, %s)" % (a.address_seats(), b.address_seats()))
                 a.shot(args.shots, "rejoin_reload_after")
                 key_nowhere("reload", [a, b])
                 clean_consoles("reload", [a, b])

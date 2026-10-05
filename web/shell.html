@@ -1233,6 +1233,33 @@
                 return kept.length ? '?' + kept.join('&') : '';
             }
 
+            // The address with `seat` set to the seat that the room gave this window (replacing the one that was there, the others kept in their order): a reload then asks for this seat and takes its key.
+            // Without it the game takes the newest key of the room, which is another window's when two windows of one browser play one room (they share the storage). Not a seat of a player: unchanged.
+            function withSeat(search, seat) {
+                var text = String(search);
+                if (!(typeof seat === 'number' && seat >= 0 && seat <= 3 && Math.floor(seat) === seat)) return text;
+                var parts = text.charAt(0) === '?' ? text.slice(1).split('&') : [];
+                var kept = parts.filter(function (part) {
+                    var key = part.split('=')[0];
+                    try { key = decodeURIComponent(key.replace(/\+/g, ' ')); } catch (e) { /* a key that does not decode is not `seat` */ }
+                    return part !== '' && key !== 'seat';
+                });
+                kept.push('seat=' + seat);
+                return '?' + kept.join('&');
+            }
+
+            // Does the page cancel the browser's own reaction to this key press while the game has the screen (the game still receives every key)? The keys of the game that a browser also uses: Ctrl+A, H, L, N, O, P,
+            // Q and S, F1 (help), F2 and F3 (the vote's keys: F3 is the browser's search) and the keys that scroll the page. Never F5 and F12 (the player's own reload and tools), never Space or a letter (the chat box).
+            function cancelsBrowserKey(e) {
+                var key = (e.key || '').toLowerCase();
+                var ctrlOnly = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+                var gameCtrlKey = ctrlOnly && key.length === 1 && 'ahlnopqs'.indexOf(key) !== -1;
+                var pageScrollKey = !e.ctrlKey && !e.altKey && !e.metaKey &&
+                    (key === 'arrowup' || key === 'arrowdown' || key === 'arrowleft' || key === 'arrowright' ||
+                     key === 'pageup' || key === 'pagedown' || key === 'home' || key === 'end');
+                return !!(gameCtrlKey || key === 'f1' || key === 'f2' || key === 'f3' || pageScrollKey);
+            }
+
             // Is what came back for index.data the data? A captive portal or an error page is served with "200 OK" and a body that is not the package: its type is HTML and it is far
             // smaller than the package. null: it is the data; else the reason. `expected` is the package's exact size in bytes when the build knows it (the Dockerfile writes it into
             // the page; 0 when it does not), else anything under a megabyte (the package is 14.7 MB) is not it.
@@ -1262,7 +1289,7 @@
             }
 
             return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, withoutName: withoutName, badDownload: badDownload,
+                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
@@ -1306,6 +1333,14 @@
                 b.setAttribute('aria-checked', b.getAttribute('data-aspect') === ANTS_ASPECT ? 'true' : 'false');
             });
         })();
+        // The game tells the page the seat that the room gave this window (after the Welcome, and again if it changes: Application's on_seat_known): the address of a game of a server's room then carries it
+        // (withSeat), so that a reload of THIS window takes this seat and its key. Never for a frame of another page (the page that holds it makes its addresses) or a game on this computer.
+        window.antsSeatKnown = function (seat) {
+            if (ANTS_EMBED || ANTS_ARGS.indexOf('--join-url') === -1) return;
+            var changed = ANTS_PAGE.withSeat(window.location.search, seat);
+            if (changed === window.location.search) return;
+            try { window.history.replaceState(null, '', window.location.pathname + changed + window.location.hash); } catch (e) { /* the address stays as it is */ }
+        };
         // ANTS_PAGE_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
@@ -2267,7 +2302,7 @@
         })();
 
         // The game's keys belong to the game: while it has the screen the browser's own reactions to them (Ctrl+O opens a file dialog, Ctrl+S saves the page,
-        // Ctrl+P prints, Ctrl+H opens the history, Ctrl+A selects the page, F1 opens the browser's help, the arrows and Page Up / Down scroll the page) are switched off.
+        // Ctrl+P prints, Ctrl+H opens the history, Ctrl+A selects the page, F1 opens the browser's help, F3 its search (F2 and F3 are the vote's keys), the arrows and Page Up / Down scroll the page) are switched off.
         // The game still receives every key: only the default action is cancelled (never for Space or letters: they type into the chat box). Keys that a
         // browser reserves (Ctrl+N, Ctrl+T, Ctrl+W) cannot be reached.
         // The wheel and a trackpad's pinch (the browser's ctrl + wheel) over the game zoom the GAME and never scroll or zoom the page. SDL's own listener takes the wheel for the game (the
@@ -2297,13 +2332,7 @@
 
         window.addEventListener('keydown', function(e) {
             if (!isReadyToPlay) return;                                      // before the game is ready the page behaves as usual
-            var key = (e.key || '').toLowerCase();
-            var ctrlOnly = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
-            var gameCtrlKey = ctrlOnly && key.length === 1 && 'ahlnopqs'.indexOf(key) !== -1;
-            var pageScrollKey = !e.ctrlKey && !e.altKey && !e.metaKey &&
-                (key === 'arrowup' || key === 'arrowdown' || key === 'arrowleft' || key === 'arrowright' ||
-                 key === 'pageup' || key === 'pagedown' || key === 'home' || key === 'end');
-            if (gameCtrlKey || key === 'f1' || pageScrollKey) e.preventDefault();
+            if (ANTS_PAGE.cancelsBrowserKey(e)) e.preventDefault();
         }, false);
     </script>
     <script>

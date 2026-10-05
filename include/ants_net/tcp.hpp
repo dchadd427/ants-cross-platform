@@ -58,6 +58,10 @@ private:
     size_t inbox_bytes_{0};                     // the payload bytes of messages_
 };
 
+/// The numeric address (as text, no port: "192.0.2.7", "2001:db8::1") that a host name or address stands for: the first address that a socket can be made for; empty when it does not resolve. The
+/// lookup itself may block briefly: a game that joins by a name does it once (NetGame::join) and makes its later links to the address.
+std::string resolve_host(const std::string& host);
+
 class TcpListener final {
 public:
     /// Listens on `port` (0 = any free port; see port()). `loopback_only` accepts only connections from this machine. nullptr on failure.

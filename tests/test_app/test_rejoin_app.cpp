@@ -338,6 +338,7 @@ struct World {
     uint32_t now{1000};
     uint32_t steps_{0};
     size_t app_wire{0};                           // the n-th link that the door accepted is the application's
+    std::function<void(uint8_t)> seat_hook;       // given to every application that start_app makes (set_on_seat_known)
 
     uint32_t server_now() const { return server.now(now); }
 
@@ -366,6 +367,7 @@ struct World {
     // The application joins (its link is the newest that the door accepted: a test can cut it)
     Application& start_app(const ApplicationConfig& cfg) {
         app = std::make_unique<Application>();
+        if (seat_hook) app->set_on_seat_known(seat_hook);
         const uint32_t before = server.accepted;
         if (!app->init(cfg)) throw std::runtime_error("the application could not start");
         run_until([&]() { return server.accepted > before; }, 2000);
@@ -1704,6 +1706,90 @@ void run_way_back_tests() {
             ASSERT_TRUE(w.status("RA-63B").absent.size() == 1);
             FileRejoinStore file((dir / "rejoin.txt").string());
             ASSERT_EQ(file.entries().size(), size_t{1});
+        }
+    } TEST_END();
+
+    TEST_CASE("RA6.4 Quit While The Catch-Up Screen Is Up (L3 Of The Review): A Match That Starts Again After A BadRequest Has No Session That Plays In Its Lobby Phases (Connecting, Loading: Nothing Holds It, `paused()` Is False), So A Quit Command Would Go Nowhere; The Quit Dialog's Yes Leaves For Good There As It Did In The Catch-Up Of A Way Back (The Game Ends, The Key Is Let Go Of, No Results Open)") {
+        const Captured output;
+        for (const bool lobby_phases : {true, false}) {
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-64"), w.server_now()).ok);
+            const fs::path dir = scratch_dir(lobby_phases ? "ra64a" : "ra64b");
+            Application& app = w.start_app(w.config(dir, "RA-64", "Ann"));
+            ASSERT_TRUE(w.run_until([&]() { return app.net()->phase() == NetGame::Phase::Room && app.net()->my_seat() == 0; }, 5000));
+            Machine& bob = w.join("Bob", "RA-64");
+            ASSERT_TRUE(w.run_until([&]() { return app.state() == AppState::Playing; }, 12000));
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+            w.run(lobby_phases ? 3000 : 20000);                                                   // (a longer match has more to catch up on)
+            ASSERT_EQ(app.rejoin_store()->entries().size(), size_t{1});
+            const net::SeatKey key = app.rejoin_store()->entries()[0].key;
+            w.server.script_reason = net::RejectReason::BadRequest;                               // (the refusal that makes the machine start the match again from nothing)
+            w.server.door = Server::Door::Scripted;
+            ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+            ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 8000));
+            w.server.door = Server::Door::Open;
+            bool there = false;
+            for (uint32_t elapsed = 0; elapsed < 30000 && !there; elapsed += 10) {
+                w.run(10);
+                const NetGame::Phase phase = app.net()->phase();
+                there = lobby_phases ? (phase == NetGame::Phase::Connecting || phase == NetGame::Phase::Loading) : (phase == NetGame::Phase::Playing && app.net()->pause_info().catching_up);
+            }
+            ASSERT_TRUE(there && app.catch_up_screen_active());
+            ASSERT_EQ(app.net()->paused(), !lobby_phases);                                        // (the catch-up of a way back holds the match, as it did: the quit already left; the lobby phases of a new start do not)
+            ASSERT_EQ(app.sim().other_sides(app.local_player_id()), 1);                           // (the case that submits a Quit command)
+            quit_by_dialog(app);
+            ASSERT_FALSE(app.is_running());                                                       // the player left (a game that was joined by arguments ends)
+            ASSERT_EQ(app.net()->phase(), NetGame::Phase::Off);
+            ASSERT_FALSE(app.scorecard().is_open());
+            ASSERT_TRUE(app.rejoin_store()->entries().empty());
+            ASSERT_FALSE(fs::exists(dir / "rejoin.txt"));
+            ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
+        }
+    } TEST_END();
+
+    TEST_CASE("RA10.1 The Page Is Told The Seat That The Room Gave The Machine (L2 Of The Review): In The Waiting Room Once The Room Has Said Where It Sits, Before Any Start, And Not Again At The Start Or After A Way Back; A Game That Is Started Again Without A Seat In Its Arguments (A Reloaded Page) Is Told The Seat Of Its Key When It Is Given Its Match; Nothing Is Told For A Game That Has No Room") {
+        const Captured output;
+        std::vector<unsigned> told;
+        World w;
+        w.seat_hook = [&](uint8_t seat) { told.push_back(seat); };
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RA-101"), w.server_now()).ok);
+        const fs::path dir = scratch_dir("ra101");
+        Application& app = w.start_app(w.config(dir, "RA-101", "Ann"));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->phase() == NetGame::Phase::Room && app.net()->my_seat() == 0; }, 5000));
+        ASSERT_TRUE(told == std::vector<unsigned>({0u}));                                         // (in the waiting room: the Start is not here yet)
+        Machine& bob = w.join("Bob", "RA-101");
+        ASSERT_TRUE(w.run_until([&]() { return app.state() == AppState::Playing; }, 12000));
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
+        w.run(3000);
+        ASSERT_TRUE(told == std::vector<unsigned>({0u}));                                         // (not again at the Start)
+        ASSERT_TRUE(w.server.cut_wire(w.app_wire));                                               // a way back: the same seat, not told again
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->pause_info().reconnecting; }, 4000));
+        ASSERT_TRUE(w.run_until([&]() { return !w.status("RA-101").paused && !app.net()->pause_info().reconnecting && !app.net()->pause_info().catching_up; }, 25000));
+        ASSERT_TRUE(told == std::vector<unsigned>({0u}));
+        // the page is reloaded: a new game with no seat in its arguments takes the seat of its key and is told it when it is given its match
+        w.app_wire = w.server.accepted - 1;                                                       // (the game's link is the newest that the door took: the way back made a new one)
+        w.crash_app(dir);
+        told.clear();
+        Application& again = w.start_app(w.config(dir, "RA-101", "Ann"));
+        ASSERT_TRUE(w.run_until([&]() { return again.net() != nullptr && again.net()->phase() == NetGame::Phase::Playing && !w.status("RA-101").paused; }, 25000));
+        ASSERT_TRUE(told == std::vector<unsigned>({0u}));
+        w.run(2000);
+        ASSERT_TRUE(told == std::vector<unsigned>({0u}));
+        // leaving ends the session: nothing more is told, and a game of one machine tells nothing at all
+        again.leave_network_match();
+        w.run(500);
+        ASSERT_TRUE(told == std::vector<unsigned>({0u}));
+        {
+            std::vector<unsigned> local;
+            World v;
+            v.seat_hook = [&](uint8_t seat) { local.push_back(seat); };
+            const fs::path dir2 = scratch_dir("ra101b");
+            Application& menu = v.start_menu_app(dir2);
+            menu.set_on_seat_known([&](uint8_t seat) { local.push_back(seat); });
+            v.run(1000);
+            ASSERT_TRUE(local.empty());
         }
     } TEST_END();
 

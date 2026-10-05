@@ -52,7 +52,8 @@ std::string match_lost_text(ClientSession::LostReason reason);
 /// How a client reached its server, kept by join() and join_url() so that the way back can make the same link again: the TCP address and port of a native client, or the WebSocket URL of the
 /// browser build, and what the Hello said (the name, the seat that was asked for, the room's code, the token: carried, never interpreted, never written to a log).
 struct JoinTarget {
-    std::string address;               // native: the host to connect to (empty in the browser)
+    std::string address;               // native: the host to connect to, as the player gave it (empty in the browser)
+    std::string resolved;              // native: the numeric address that `address` stood for when the game was joined: the way back's links go there, the name is not looked up again
     uint16_t port{0};
     std::string url;                   // the browser build: the ws:// or wss:// URL (empty natively)
     std::string name;
@@ -89,7 +90,7 @@ struct PauseInfo {
         uint8_t progress{0};           // catching_up: 0 .. 100
     };
     std::vector<Seat> missing;
-    // the vote of the others about the seat that has been away longest (or that flaps)
+    // the vote of the others about the seat that has been away longest (or that flaps); never about this machine's own seat: that seat has no block and no vote to cast
     bool vote_open{false};
     uint8_t vote_seat{255};
     std::string vote_name;
@@ -206,6 +207,8 @@ public:
     void set_on_wake(std::function<void()> fn) { on_wake_ = std::move(fn); }
     /// The tests: the way back asks this function for every new link instead of connecting to the JoinTarget; null means that no link could be made (the name does not resolve: the network is down)
     void set_link_maker_for_test(std::function<std::unique_ptr<Connection>()> fn) { link_maker_ = std::move(fn); }
+    /// The tests: join() asks this function for the numeric address of its host (the lookup that it makes once) instead of the system's; "" means that the name does not resolve
+    void set_resolver_for_test(std::function<std::string(const std::string&)> fn) { resolver_ = std::move(fn); }
 
     // ---- state -----------------------------------------------------------------------------------------------------------------------------------
     Phase phase() const noexcept { return phase_; }
@@ -480,6 +483,7 @@ private:
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void()> on_wake_;
     std::function<std::unique_ptr<Connection>()> link_maker_;      // (the tests: make_link)
+    std::function<std::string(const std::string&)> resolver_;      // (the tests: join's one lookup)
     std::function<void()> on_tick_;
     std::function<void()> on_prediction_dropped_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;

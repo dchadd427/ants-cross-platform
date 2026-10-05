@@ -376,6 +376,9 @@ public:
     /// server is told (Leave: the seat is dropped at once and the others do not wait for it) and the key is let go of. Does nothing without a network game. A closed tab or a reload never gets here:
     /// its seat is held and its key kept, which is what lets it come back.
     void leave_network_match();
+    /// The seat that the room gave this machine is known (after the Welcome, in the waiting room or at the start of a rejoin) or changed: `fn` is told, once for each seat. The web build tells its page, which puts
+    /// the seat into its address (a reload of this window takes this seat: window.antsSeatKnown in web/shell.html); the tests give a function of their own. Never called for a game that has no seat (a game of one machine).
+    void set_on_seat_known(std::function<void(uint8_t)> fn) { on_seat_known_ = std::move(fn); }
     /// The same with the time given (seconds; the tests call it)
     bool background_pump_after(float dt);
     /// What a wake-up does with the time that has passed since the clocks last moved (`elapsed`, real time; a clock that went backwards counts for nothing). The network's
@@ -543,6 +546,8 @@ private:
     uint64_t orders_seen_{0};                             // the orders that the prediction has taken and the felt delay has been told of
     double net_time_ms_{0.0};
     double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START
+    std::function<void(uint8_t)> on_seat_known_;           // (set_on_seat_known)
+    uint8_t seat_told_{255};                               // the seat that on_seat_known_ was last told (255: none, or the session ended)
     bool page_hidden_{false};                              // the browser's page is hidden (set_page_hidden): a network match belongs to the wake-ups, see background_pump
     bool advancing_{false};                                // a frame or a background step is advancing the clocks and the match: no other one may start inside it
     uint32_t background_pumps_{0};                         // the wake-ups that made a step, in all
@@ -601,6 +606,7 @@ private:
     void enter_match(bool rejoin = false);                // music, start sound, camera, HUD reset, "Get ready", state Playing (a match that this machine rejoins: no start sound, no dialog)
     void post_tick();                                     // what every simulation tick shows: HUD, events, audio, the end of the match
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes
+    void note_seat();                                     // the seat that the room gave this machine, told once to on_seat_known_
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
 
     // The desktop start menu (application_menu.cpp)

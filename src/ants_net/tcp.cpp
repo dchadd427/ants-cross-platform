@@ -80,18 +80,25 @@ void tune(socket_t s) {
 #endif
 }
 
-std::string address_text(const sockaddr* sa) {
+// The address of a socket address as text, without its port ("" for a family that is not an internet one)
+std::string host_text(const sockaddr* sa) {
     char buf[64] = {0};
     if (sa->sa_family == AF_INET) {
         const auto* in = reinterpret_cast<const sockaddr_in*>(sa);
         inet_ntop(AF_INET, &in->sin_addr, buf, sizeof(buf));
-        return std::string(buf) + ":" + std::to_string(ntohs(in->sin_port));
+        return buf;
     }
     if (sa->sa_family == AF_INET6) {
         const auto* in6 = reinterpret_cast<const sockaddr_in6*>(sa);
         inet_ntop(AF_INET6, &in6->sin6_addr, buf, sizeof(buf));
-        return std::string("[") + buf + "]:" + std::to_string(ntohs(in6->sin6_port));
+        return buf;
     }
+    return std::string();
+}
+
+std::string address_text(const sockaddr* sa) {
+    if (sa->sa_family == AF_INET) return host_text(sa) + ":" + std::to_string(ntohs(reinterpret_cast<const sockaddr_in*>(sa)->sin_port));
+    if (sa->sa_family == AF_INET6) return "[" + host_text(sa) + "]:" + std::to_string(ntohs(reinterpret_cast<const sockaddr_in6*>(sa)->sin6_port));
     return "?";
 }
 
@@ -101,6 +108,26 @@ TcpConnection::TcpConnection(int fd, bool connecting, std::string peer)
     : fd_(fd), state_(connecting ? State::Connecting : State::Open), peer_(std::move(peer)) {}
 
 TcpConnection::~TcpConnection() { close(); }
+
+std::string resolve_host(const std::string& host) {
+    if (host.empty()) return std::string();
+    ensure_sockets();
+    addrinfo hints;
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* res = nullptr;
+    if (getaddrinfo(host.c_str(), nullptr, &hints, &res) != 0 || res == nullptr) return std::string();
+    std::string out;
+    for (addrinfo* ai = res; ai != nullptr && out.empty(); ai = ai->ai_next) {
+        const socket_t s = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);       // (as connect() does: an address that no socket can be made for is passed over)
+        if (s == kBadSocket) continue;
+        close_socket(s);
+        out = host_text(ai->ai_addr);
+    }
+    freeaddrinfo(res);
+    return out;
+}
 
 std::unique_ptr<TcpConnection> TcpConnection::connect(const std::string& host, uint16_t port) {
     ensure_sockets();

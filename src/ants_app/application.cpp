@@ -799,6 +799,10 @@ bool Application::init(const ApplicationConfig& config) {
     g_web_app = this;
     emscripten_set_visibilitychange_callback(this, EM_FALSE, on_visibility_change);
     refresh_page_visibility();
+    on_seat_known_ = [](uint8_t seat) {                          // the page puts the seat into its address (web/shell.html: antsSeatKnown)
+        const std::string script = "try{if(window.antsSeatKnown)window.antsSeatKnown(" + std::to_string(static_cast<unsigned>(seat)) + ");}catch(e){}";
+        emscripten_run_script(script.c_str());
+    };
 #endif
     return true;
 }
@@ -2379,9 +2383,9 @@ void Application::update_results(float dt) {
 // quitter, whose row goes last on every results screen, and the results (with Leave) follow. With more sides left the original sends the drop message and
 // exits; here the player leaves the same way as before (the network announces the departure to the others).
 void Application::confirm_quit() {
-    // A match that is held (a seat is missing, the countdown runs, this machine is on its way back) seals no turn: a Quit command would be lost and the player would stay. The player
-    // leaves for good instead (NetGame::leave: the key is let go of, the others are told when the link is up).
-    if (network_active() && net_->paused()) {
+    // A match that is held (a seat is missing, the countdown runs, this machine is on its way back) seals no turn, and no session plays in the lobby phases of a match that starts again after a BadRequest (the
+    // catch-up screen is up): a Quit command would be lost and the player would stay. The player leaves for good instead (NetGame::leave: the key is let go of, the others are told when the link is up).
+    if (network_active() && (net_->paused() || catch_up_screen_active())) {
         leave_game();
         return;
     }
@@ -2407,7 +2411,10 @@ void Application::confirm_quit() {
 void Application::pump_network(float dt, double gap_seconds) {
     room_chat_.end_of_frame();                                   // (the text event of the T that opened the chat input has been dealt with: it came in the same batch of events)
     if (menu_enabled_) update_start_menu(dt);                    // the start menu's clock, what it asked for and its connection (application_menu.cpp)
-    if (!net_ || !net_->active()) return;
+    if (!net_ || !net_->active()) {
+        seat_told_ = 255;                                        // (the session is over: the next one tells its seat again)
+        return;
+    }
     net_->set_prediction_suspended(page_hidden_ || background_stepping_);   // a hidden page shows nothing: its match is stepped by the wake-ups, and the prediction would be work for no picture
     net_->set_chat_status_mirror(room_chat_box() == nullptr);   // (the lines of the room go to the chat box of the 16:9 setup screen when it has one, to the status line otherwise)
     net_time_ms_ += static_cast<double>(dt) * 1000.0;
@@ -2416,6 +2423,7 @@ void Application::pump_network(float dt, double gap_seconds) {
     handle_net_events();
     if (!net_) return;                                           // (a lost game brought the player back to the start menu, which let go of the net)
     track_net_state();
+    note_seat();
     // The "Get ready to play!" dialog gives way to a pause (a seat lost before the first turn holds the match): it would hide the overlay and the vote block. It is closed for good.
     if (hud_.is_match_start_modal_active() && net_->phase() == net::NetGame::Phase::Playing && (net_->paused() || net_->pause_info().vote_open)) hud_.dismiss_match_start_modal();
     if (menu_enabled_ && state_ == AppState::MapSelect && (net_->phase() == net::NetGame::Phase::Failed || net_->phase() == net::NetGame::Phase::Over)) {
@@ -2840,6 +2848,20 @@ void Application::render_net_overlay() {
     };
     button(where.keep, line.vote.keep, where.keep_text_x, line.vote.keep_pressed);
     button(where.go_on, line.vote.go_on, where.go_on_text_x, line.vote.go_on_pressed);
+}
+
+// The seat that the room gave this machine (the waiting room's Room message, or the Welcome of a rejoin at its Start) is told once, and again when it changes
+void Application::note_seat() {
+    const net::NetGame::Phase phase = net_->phase();
+    const bool seated = phase == net::NetGame::Phase::Room || phase == net::NetGame::Phase::Loading || phase == net::NetGame::Phase::Playing;
+    const uint8_t seat = seated ? net_->my_seat() : uint8_t{255};
+    if (seat >= sim::MAX_PLAYERS) {
+        if (!seated) seat_told_ = 255;
+        return;
+    }
+    if (seat == seat_told_) return;
+    seat_told_ = seat;
+    if (on_seat_known_) on_seat_known_(seat);
 }
 
 // Every frame of a match of the network: how long the match has been held on this screen (the missing seats are shown after a second), and who came back (the countdown that follows a return

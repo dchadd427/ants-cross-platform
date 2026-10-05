@@ -2094,6 +2094,74 @@ void run_way_back_tests() {
         v.run(500);
         ASSERT_TRUE(n.net.phase() == NetGame::Phase::Off && n.keys_forgotten.size() == 1);
     } TEST_END();
+
+    TEST_CASE("RJ1.23 A Vote About A Machine's Own Seat Is Not Shown To It And Cannot Be Cast By It (L5 Of The Review): A Seat That Flaps Is Put To The Vote At Once; When Its Machine Is Back The Others Have The Block With The Vote About It, And Its Own Screen Has None (pause_info Has No Vote, vote() Is False For Both Choices)") {
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-23", 3), w.server_now()).ok);
+        Machine& a = w.join("Ann", "RJ-23");
+        Machine& b = w.join("Bob", "RJ-23");
+        Machine& c = w.join("Cat", "RJ-23");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b, &c}); }, 14000 + kPre));
+        w.run(2000);
+        for (int cut = 0; cut < 3; ++cut) {                                              // (Cat's link is the newest each time: it flaps)
+            ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.run_until([&]() { return c.net.pause_info().reconnecting; }, 4000));
+            ASSERT_TRUE(w.run_until([&]() { return !c.net.pause_info().reconnecting && !c.net.pause_info().catching_up && c.net.phase() == NetGame::Phase::Playing; }, 20000));
+            w.run(1500);
+        }
+        const uint8_t cat = c.net.my_seat();
+        ASSERT_TRUE(w.status("RJ-23").vote_seat == cat);                                 // the server holds a vote about Cat's seat, now that Cat is back
+        for (Machine* other : {&a, &b}) {
+            const net::PauseInfo p = other->net.pause_info();
+            ASSERT_TRUE(p.vote_open && p.vote_seat == cat && p.vote_name == "Cat" && p.voters == 2);
+        }
+        const net::PauseInfo own = c.net.pause_info();
+        ASSERT_TRUE(!own.vote_open && own.vote_seat == 255 && own.vote_name.empty() && own.voters == 0 && own.my_vote == net::PauseInfo::Choice::None);
+        ASSERT_FALSE(c.net.vote(false));                                                 // (the server would ignore it: a vote is for the others)
+        ASSERT_FALSE(c.net.vote(true));
+        ASSERT_TRUE(a.net.vote(false));                                                  // the others may
+    } TEST_END();
+
+    TEST_CASE("RJ1.24 A Join By A Host Name Looks The Name Up Once (L7 Of The Review): The Lookup Of join() Is The Only One, The Way Back Of Every Later Loss Of The Link Goes To The Address That It Gave (No Lookup, So No Freeze Of A Frame, And A Name That Points Elsewhere By Then Gets No Key), Also When The Name Does Not Resolve Any More; A Name That Does Not Resolve At All Is A Join That Fails; The Address Is Kept As The Player Gave It For The Key's Entry") {
+        World w;
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-24"), w.server_now()).ok);
+        int lookups = 0;
+        bool resolves = true;
+        Machine& a = w.add_machine("Ann");
+        a.net.set_resolver_for_test([&](const std::string& host) -> std::string {
+            ++lookups;
+            return resolves && host == "ants.example.test" ? std::string("127.0.0.1") : std::string();
+        });
+        const uint32_t before = w.server.accepted;
+        ASSERT_TRUE(a.net.join("ants.example.test", w.server.port(), "Ann", 255, "RJ-24"));
+        ASSERT_TRUE(w.run_until([&]() { return w.server.accepted > before; }, 2000));
+        ASSERT_EQ(lookups, 1);
+        ASSERT_TRUE(a.net.join_target().address == "ants.example.test" && a.net.join_target().resolved == "127.0.0.1");
+        Machine& b = w.join("Bob", "RJ-24");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 14000 + kPre));
+        ASSERT_EQ(lookups, 1);
+        resolves = false;                                                                // (the name stops resolving: its DNS is down, or points elsewhere)
+        size_t ann_wire = before;
+        for (int loss = 1; loss <= 3; ++loss) {                                          // three losses of the link: every way back goes to the address of the join
+            const uint32_t accepted = w.server.accepted;
+            ASSERT_TRUE(w.server.cut_wire(ann_wire));
+            ASSERT_TRUE(w.run_until([&]() { return w.server.accepted > accepted && w.status("RJ-24").rejoins == static_cast<uint32_t>(loss) && !w.status("RJ-24").paused && !a.net.pause_info().reconnecting && !a.net.pause_info().catching_up; }, 25000));
+            ann_wire = w.server.accepted - 1;
+            w.run(500);
+        }
+        ASSERT_EQ(lookups, 1);                                                           // (a lookup at every attempt would be 1 + the attempts: and here they would all have failed)
+        ASSERT_TRUE(a.net.phase() == NetGame::Phase::Playing && a.keys_forgotten.empty());
+        ASSERT_EQ(a.keys_given.back().server, std::string("ants.example.test:") + std::to_string(w.server.port()));      // (the entry of the key says the name that the player gave)
+        Machine& c = w.add_machine("Cat");
+        c.net.set_resolver_for_test([&](const std::string&) -> std::string { return std::string(); });
+        ASSERT_FALSE(c.net.join("nowhere.example.test", w.server.port(), "Cat", 255, "RJ-24"));          // a name that does not resolve: no join
+        ASSERT_EQ(c.net.phase(), NetGame::Phase::Off);
+        // an address that is a number is its own answer
+        ASSERT_EQ(net::resolve_host("127.0.0.1"), std::string("127.0.0.1"));
+        ASSERT_EQ(net::resolve_host(""), std::string());
+    } TEST_END();
 }
 
 int main() {

@@ -195,6 +195,66 @@ const STRIP = [
 for (const [search, want] of STRIP) same('withoutName(' + search + ')', P.withoutName(search), want);
 check('a copy of the address of a game that was given a name is a shared link', P.asksForName(P.withoutName('?join=/ws&room=ABC&seat=1&name=Bob')) === true);
 
+// The seat in the address (the review's L2): the game tells the page the seat that the room gave this window, and the address carries it, so that a reload of this window takes its own seat and its key
+const SEATS = [
+    ['a link with no seat gets it, at the end', '?join=/ws&room=ABC', 0, '?join=/ws&room=ABC&seat=0'],
+    ['a seat that was asked for and is not the one given is replaced', '?join=/ws&room=ABC&seat=1', 2, '?join=/ws&room=ABC&seat=2'],
+    ['... wherever it stood, the others keep their order', '?seat=1&join=/ws&room=ABC', 3, '?join=/ws&room=ABC&seat=3'],
+    ['... every one of them', '?join=/ws&seat=1&room=ABC&seat=2', 0, '?join=/ws&room=ABC&seat=0'],
+    ['the name and the picture stay', '?join=/ws&room=ABC&name=Bob&aspect=16:9', 1, '?join=/ws&room=ABC&name=Bob&aspect=16:9&seat=1'],
+    ['a seat with no value is the seat parameter too', '?join=/ws&room=ABC&seat', 1, '?join=/ws&room=ABC&seat=1'],
+    ['another key that ends in seat is not', '?join=/ws&myseat=1', 2, '?join=/ws&myseat=1&seat=2'],
+    ['an encoded key is read', '?join=/ws&se%61t=1&room=ABC', 2, '?join=/ws&room=ABC&seat=2'],
+    ['no address at all', '', 1, '?seat=1'],
+    ['a seat that is the same stays', '?join=/ws&room=ABC&seat=1', 1, '?join=/ws&room=ABC&seat=1'],
+];
+for (const [label, search, seat, want] of SEATS) same('withSeat: ' + label + ' (' + search + ', ' + seat + ')', P.withSeat(search, seat), want);
+for (const seat of [4, -1, 255, 1.5, NaN, '1', null, undefined]) same('withSeat: ' + String(seat) + ' is no seat of a player: the address is as it was', P.withSeat('?join=/ws&room=ABC', seat), '?join=/ws&room=ABC');
+{
+    const doc = { getElementById() { return { setAttribute() {}, classList: { add() {} } }; }, querySelectorAll() { return []; }, body: { classList: { add() {} } } };
+    const pageAt = (search, throws) => {
+        const win = { location: { search, protocol: 'http:', host: 'h', pathname: '/play.html', hash: '#x' }, localStorage: null, urls: [] };
+        win.history = {
+            replaceState(state, title, url) {
+                if (throws) throw new Error('refused');
+                win.urls.push(url);
+                const q = url.indexOf('?');
+                win.location.search = q === -1 ? '' : url.slice(q).replace(/#.*/, '');
+            },
+        };
+        new Function('window', 'document', shellCode)(win, doc);
+        return win;
+    };
+    const told = pageAt('?join=/ws&room=ABC&name=Bob', false);
+    check('antsSeatKnown is a function of the page: the game calls it', typeof told.antsSeatKnown === 'function');
+    told.antsSeatKnown(1);
+    same('a game of a server\'s room is told its seat: the address gets it (the hash stays)', told.urls, ['/play.html?join=/ws&room=ABC&name=Bob&seat=1#x']);
+    told.antsSeatKnown(1);
+    same('... told the same seat again, it leaves the address alone', told.urls.length, 1);
+    told.antsSeatKnown(2);
+    same('... another seat replaces it', told.urls[1], '/play.html?join=/ws&room=ABC&name=Bob&seat=2#x');
+    const frame = pageAt('?join=/ws&room=ABC&seat=1&name=Bob&embed=1', false);
+    frame.antsSeatKnown(1);
+    frame.antsSeatKnown(0);
+    same('a frame of another page leaves its address alone', frame.urls, []);
+    const local = pageAt('?map=TINY.LVL&bots=easy', false);
+    local.antsSeatKnown(0);
+    same('a game on this computer leaves its address alone', local.urls, []);
+    const refusing = pageAt('?join=/ws&room=ABC&name=Bob', true);
+    let threw = false;
+    try { refusing.antsSeatKnown(1); } catch (e) { threw = true; }
+    check('an address that cannot be changed is left as it is, with no error', !threw);
+}
+
+// The keys of the game that the browser also uses (the review's L4): F1 (help), F2 and F3 (the vote's keys; F3 is the browser's search); never the player's own F5 and F12
+for (const [label, e, want] of [
+    ['F1', { key: 'F1' }, true], ['F2', { key: 'F2' }, true], ['F3', { key: 'F3' }, true], ['Shift+F3 (search backwards)', { key: 'F3', shiftKey: true }, true],
+    ['F4', { key: 'F4' }, false], ['F5 (reload)', { key: 'F5' }, false], ['F11 (full screen)', { key: 'F11' }, false], ['F12 (tools)', { key: 'F12' }, false],
+    ['a letter (the chat box)', { key: 'a' }, false], ['Space', { key: ' ' }, false], ['Ctrl+A', { key: 'a', ctrlKey: true }, true], ['Ctrl+S', { key: 's', ctrlKey: true }, true],
+    ['Ctrl+R (reload)', { key: 'r', ctrlKey: true }, false], ['Ctrl+Shift+A', { key: 'A', ctrlKey: true, shiftKey: true }, false], ['an arrow scrolls the page', { key: 'ArrowUp' }, true],
+    ['Page Down', { key: 'PageDown' }, true], ['Ctrl+Arrow (the browser\'s own)', { key: 'ArrowLeft', ctrlKey: true }, false], ['no key', {}, false],
+]) check('cancelsBrowserKey: ' + label, P.cancelsBrowserKey(e) === want, String(P.cancelsBrowserKey(e)));
+
 // the gate: a shared link holds the game back until the button; every other address does not
 {
     const ui = fakeUi();

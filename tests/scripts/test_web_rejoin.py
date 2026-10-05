@@ -161,6 +161,24 @@ class TheGamePageDoesNotAskARejoinerForAName(unittest.TestCase):
         self.assertIn("var stripped = ANTS_PAGE.withoutName(window.location.search);", self.shell)
         self.assertIn("window.history.replaceState(null, '', window.location.pathname + stripped + window.location.hash);", self.shell)
 
+    def test_the_game_tells_the_page_its_seat_and_the_address_carries_it_so_that_a_reload_takes_its_own_seat(self):
+        """The review's L2: two windows of one browser that play one room share the storage, and a reload with no seat in its address took the newest key, which was the other window's."""
+        self.assertIn("window.antsSeatKnown = function (seat) {", self.shell)
+        self.assertIn("if (ANTS_EMBED || ANTS_ARGS.indexOf('--join-url') === -1) return;", self.shell)
+        self.assertIn("var changed = ANTS_PAGE.withSeat(window.location.search, seat);", self.shell)
+        self.assertIn("try { window.history.replaceState(null, '', window.location.pathname + changed + window.location.hash); } catch (e) { /* the address stays as it is */ }", self.shell)
+        app = read("src", "ants_app", "application.cpp")
+        self.assertIn('"try{if(window.antsSeatKnown)window.antsSeatKnown(" + std::to_string(static_cast<unsigned>(seat)) + ");}catch(e){}"', app)      # (the web build's own function: the page is told)
+        self.assertIn("    track_net_state();\n    note_seat();\n", app)                                          # (looked at every frame of a network game)
+        self.assertIn("void set_on_seat_known(std::function<void(uint8_t)> fn)", read("include", "ants_app", "application.hpp"))
+
+    def test_the_vote_keys_of_the_game_are_kept_from_the_browser_like_help(self):
+        """The review's L4: F2 and F3 are the vote's keys (keep waiting, go on without them); F3 is the browser's search."""
+        self.assertIn("if (ANTS_PAGE.cancelsBrowserKey(e)) e.preventDefault();", self.shell)
+        self.assertIn("return !!(gameCtrlKey || key === 'f1' || key === 'f2' || key === 'f3' || pageScrollKey);", self.shell)
+        self.assertIn("SDLK_F2", read("src", "ants_app", "application.cpp"))                                        # (the keys that the game takes for the vote)
+        self.assertIn("SDLK_F3", read("src", "ants_app", "application.cpp"))
+
 
 class TheBrowserCheckAndTheGame(unittest.TestCase):
     """The opt-in check (tests/scripts/web_rejoin_check.py) is not run here, but what it stands on is pinned: what the game exports for it, what it asks of the site and the server, its parts and its exit statuses."""
@@ -218,6 +236,8 @@ class TheBrowserCheckAndTheGame(unittest.TestCase):
         self.assertEqual(len(re.findall(r"print\([^)]*key", self.check)), 0)
         self.assertIn("def key_hexes(self):", self.check)
         self.assertIn("def key_nowhere(label, ps, earlier=None):", self.check)
+        self.assertIn("def address_seats(self):", self.check)                                                      # (the address carries the seat that the room gave the page)
+        self.assertIn("begin_match(room, seatless=True)", self.check)
         self.assertNotRegex(self.check, r"/home/|/Users/|/tmp/")                           # (nothing of this machine in the file)
 
     def test_the_wrapper_is_opt_in_and_skips_without_its_environment(self):

@@ -201,11 +201,14 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     return false;
 #else
     if (role_ != Role::None) return false;
-    auto conn = TcpConnection::connect(address, port);
+    // The name is looked up here, once: every link of the way back goes to this address (a lookup at every attempt would hold up the frame, and a name that points elsewhere by then would get the key)
+    const std::string numeric = resolver_ ? resolver_(address) : resolve_host(address);
+    if (numeric.empty()) return false;
+    auto conn = TcpConnection::connect(numeric, port);
     if (!conn) return false;
     auto peer_listener = TcpListener::listen(0, false);                 // where the other guests reach us during the match (host migration)
     const uint16_t peer_port = peer_listener ? peer_listener->port() : uint16_t{0};
-    target_ = JoinTarget{address, port, std::string(), name, want_seat, room, token};        // (the way back of a server's room makes its links from this)
+    target_ = JoinTarget{address, numeric, port, std::string(), name, want_seat, room, token};        // (the way back of a server's room makes its links from this)
     begin_client(std::move(conn), peer_port, key);
     transport_->peer_listener = std::move(peer_listener);
     return true;
@@ -218,7 +221,7 @@ bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t 
     auto conn = WasmWsConnection::connect(url);
     if (!conn) return false;
     WasmWsConnection* raw = conn.get();
-    target_ = JoinTarget{std::string(), 0, url, name, want_seat, room, token};
+    target_ = JoinTarget{std::string(), std::string(), 0, url, name, want_seat, room, token};
     begin_client(std::move(conn), 0, key);                                // no port for the other guests: a server's room has no links between guests
     raw->set_on_open([this]() {                                           // the Hello goes out when the socket opens, not at the next frame: a page that is not drawn
         if (client_lobby_) client_lobby_->send_hello();                   // runs no frames, and the server closes a connection that says nothing for 10 s
@@ -687,7 +690,7 @@ std::unique_ptr<Connection> NetGame::make_link(bool for_lobby) {
 #else
     (void)for_lobby;
     if (target_.address.empty()) return nullptr;
-    return TcpConnection::connect(target_.address, target_.port);
+    return TcpConnection::connect(target_.resolved.empty() ? target_.address : target_.resolved, target_.port);
 #endif
 }
 
@@ -808,7 +811,7 @@ PauseInfo NetGame::pause_info() const {
         seat.progress = e.progress;
         info.missing.push_back(std::move(seat));
     }
-    if (p.vote_seat < sim::MAX_PLAYERS) {
+    if (p.vote_seat < sim::MAX_PLAYERS && p.vote_seat != seat_) {      // (a vote about this machine's own seat is not its to cast, the server ignores it: its screen has no block for it)
         info.vote_open = true;
         info.vote_seat = p.vote_seat;
         info.vote_name = name_of(p.vote_seat);
@@ -823,7 +826,7 @@ PauseInfo NetGame::pause_info() const {
 bool NetGame::vote(bool keep_waiting) {
     if (phase_ != Phase::Playing || !client_session_) return false;
     const uint8_t seat = client_session_->presence().vote_seat;
-    if (seat >= sim::MAX_PLAYERS) return false;                 // no vote is open
+    if (seat >= sim::MAX_PLAYERS || seat == seat_) return false;      // no vote is open, or it is about this machine's own seat
     return client_session_->vote(seat, !keep_waiting);          // (the session sends it only while it follows the live match)
 }
 
