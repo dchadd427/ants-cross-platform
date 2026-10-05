@@ -306,37 +306,6 @@ jobs:
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
-      - name: Burn diagnostics (diagnostic push, not for merging)
-        if: ${{ !cancelled() }}
-        run: |
-          for f in build/tests/test_net/burn_diag_*.txt; do echo "##### $f"; cat "$f"; done || true
-
-      - name: Starvation experiment (diagnostic push, not for merging)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        continue-on-error: true
-        timeout-minutes: 20
-        run: |
-          # The old prediction-budget tests, run on this runner while busy loops take the processors (the field failures came with the other test programs running beside them)
-          cd build/tests/test_net
-          for hogs in 4 8 16; do
-            for round in 1 2; do
-              pids=""
-              for i in $(seq 1 $hogs); do ( while :; do :; done ) & pids="$pids $!"; done
-              sleep 2
-              echo "##### hogs=$hogs round=$round"
-              rm -f burn_diag_*.txt
-              ANTS_TEST_FILTER=RP7 timeout 200 ./test_prediction.exe > rp7.log 2>&1; echo "test_prediction RP7 exit=$?"
-              grep -E "Assertion failed|Failed: +[1-9]" rp7.log | head -10 || true
-              cp burn_diag_prediction.txt diag_rp7_${hogs}_${round}.txt 2>/dev/null || true
-              ANTS_TEST_FILTER=N3.30 timeout 200 ./test_netgame.exe > n330.log 2>&1; echo "test_netgame N3.30 exit=$?"
-              grep -E "Assertion failed|Failed: +[1-9]" n330.log | head -10 || true
-              cp burn_diag_netgame.txt diag_n330_${hogs}_${round}.txt 2>/dev/null || true
-              kill $pids 2>/dev/null || true
-              wait 2>/dev/null || true
-            done
-          done
-          for f in diag_*.txt; do echo "##### $f"; grep -E "^==|^request|ODD" "$f" | cut -c1-420 | head -50; done
-
       - name: Tool self-tests (map_sweep, bot_arena)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |

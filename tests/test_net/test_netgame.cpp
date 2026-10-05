@@ -23,7 +23,7 @@
 #include <thread>
 #include <vector>
 #include "ants_test_paths.hpp"
-#include "burn_diag.hpp"
+#include "manual_clock.hpp"
 
 using namespace ants;
 using namespace ants::net;
@@ -1313,10 +1313,6 @@ void run_start_delay_tests() {
 // The prediction of one's own orders (prediction.hpp), in a match of real NetGames
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-// Work that costs `ns` of the thread's CPU time AND of wall time: a block is charged the smaller of the two (work_cost_ns), and Windows' thread clock moves in steps of about
-// 15.6 ms, so it can read 60 ms after 45 ms of work. A clock that stands still fails the test instead of hanging it: the spin gives up when the clock has not moved in 100 ms.
-void burn_cpu(uint64_t ns) { burn_diag::burn(ns); }     // DIAG (the loop is the same, with a record of the clocks)
-
 // The prediction is OFF by default (opt-in): the tests of it ask for it, as the application does when it is told `--prediction on`
 void enable_prediction(Table& t) {
     for (auto& m : t.machines) m->net.set_prediction_enabled(true);
@@ -1878,7 +1874,8 @@ void run_prediction_tests() {
 
     TEST_CASE("N3.30 Prediction: A Machine Whose Prediction Costs More Than Its Budget Loses The Prediction For A While And Nothing Else (A Cool-Down: The Confirmed Engine Is Shown, Orders Go As They Did Before, The Match Runs On And Ends Identical); The Other Machine Goes On Predicting, And When The Cool-Down Is Over It Begins Again") {
         constexpr uint64_t kMs = 1000ull * 1000ull;
-        uint64_t burn = 30 * kMs;                                                                // (declared before the table: the machine's hook holds it) what every timed block costs
+        ManualClock clock;                                                                       // (declared before the table: the machine's clocks and hook hold it) the clocks of Bob's prediction
+        uint64_t burn = 30 * kMs;                                                                // what every timed block costs
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         enable_prediction(t);
@@ -1886,13 +1883,13 @@ void run_prediction_tests() {
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
         bob.net.set_prediction_budget(50 * kMs, 3, 40);                                          // three strikes of more than 50 ms of CPU, a cool-down of 40 ticks (2 s)
-        bob.net.set_prediction_work_hook([&burn]() { burn_cpu(burn); });
+        bob.net.set_prediction_clocks(clock.wall_clock(), clock.cpu_clock());                    // (a spin on the real clocks cannot cost a block what it says on every runner)
+        bob.net.set_prediction_work_hook([&burn, &clock]() { clock.work(burn); });
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(11, hash));
         ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting(); }, kUntilRunning));
         t.run(500);
-        { const auto& st = bob.net.prediction()->stats(); burn_diag::slot()->note("N3.30 after 500 steps at 30 ms a block: over_budget=" + std::to_string(st.over_budget) + " ticks_advanced=" + std::to_string(st.ticks_advanced) + " rebuilds=" + std::to_string(st.rebuilds) + " starts=" + std::to_string(st.starts) + " advance_ns_max=" + std::to_string(st.advance_ns_max)); }   // DIAG
         ASSERT_TRUE(bob.net.predicting());                                                       // 30 ms a block is under the budget of 50: no strike (the default budget, 12 ms, would have had four)
         ASSERT_EQ(bob.net.prediction()->stats().over_budget, 0u);
         burn = 60 * kMs;                                                                         // (a machine that is too slow for it)
@@ -2068,7 +2065,6 @@ void run_prediction_tests() {
 }
 
 int main() {
-    burn_diag::start("netgame");   // DIAG
     NetGame::default_prediction_budget_ns() = UINT64_MAX;      // (a busy machine stalls the test process now and then: that is not the prediction's cost, and no test is to lose its prediction to it)
     std::cout << "\n=======================================================\n [SUITE] Network port: NetGame (room, start barrier, match) over real sockets\n"
                  "=======================================================\n";

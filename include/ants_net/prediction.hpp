@@ -29,7 +29,7 @@
 // work costs more than its budget too often (Config::budget_ns). While it is off the engine that is shown is the confirmed one, as it always was, and nothing is predicted. It never touches
 // the confirmed engine, the network or the hashes.
 //
-// The class has no sockets and no SDL, and its only clock is the thread's CPU time, for the budget: the owner calls on_turn() for every live turn that the runner queues (LockstepRunner::set_on_turn), on_tick() after every tick that the runner
+// The class has no sockets and no SDL, and its only clocks are the thread's CPU time and the wall clock, for the budget (the tests move them by hand: Config::cpu_clock, wall_clock): the owner calls on_turn() for every live turn that the runner queues (LockstepRunner::set_on_turn), on_tick() after every tick that the runner
 // executes (set_on_tick), and submit() for the player's commands.
 
 #include <chrono>
@@ -73,6 +73,11 @@ public:
         uint32_t cooldown_ticks{200};                      // 10 s
         uint32_t cooldown_max_ticks{3200};                 // 160 s
         std::function<void()> work_hook;                   // the tests: called inside every timed block (a sleep there is not a cost, a spin is)
+        // The tests: the clocks that a timed block is measured with, in ns (empty: the real ones, steady_clock and thread_cpu_ns()). A rig that moves them itself from the work hook costs a block
+        // exactly what it says, on every platform and however busy the machine is; a spin on the real clocks cannot (Windows' thread clock counts in ticks of about 15.6 ms and a stalled thread
+        // reads nothing at all).
+        std::function<uint64_t()> wall_clock;
+        std::function<uint64_t()> cpu_clock;
         // The lead is the median lag (the upper one of an even number) of the last `lag_samples` own orders, none older than `lag_fresh_ticks`, plus `lead_bias_ticks`: one stalled order
         // does not move it. Off: the owner's estimate alone (the tests that hold a wrong lead to account).
         bool learn_lead{true};
