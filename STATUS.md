@@ -1,18 +1,18 @@
 # Status
 
-_Updated 2026-10-05 12:53 PDT · current release **v0.7.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 13:32 PDT · current release **v0.7.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.8.0** one start card for every game (network protocol 13) | ██████░░░░ 57% | Mon 2026-10-05, early afternoon | ready for review: tested here, reviewed twice, every finding fixed; the five CI checks run once more after main was merged in, then the owner's yes to merge |
+| **v0.8.0** one start card for every game (network protocol 13) | ███████░░░ 71% | Mon 2026-10-05, early afternoon | ready for review: tested here, reviewed twice, every finding fixed, the five CI checks green; the owner's yes to merge is next |
 | **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ███░░░░░░░ 29% | Mon or Tue | the two finished batches are being merged and re-tested |
 | **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the one card |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- One start card (v0.8.0): built, tested in a real browser and reviewed twice, every finding fixed; its pull request is ready for review, its five CI checks run once more after main was merged in, then it waits for the owner's yes to merge
+- One start card (v0.8.0): built, tested in a real browser and reviewed twice, every finding fixed; its five CI checks are green and its pull request is ready for review, so it waits for the owner's yes to merge
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are finished and being merged into one batch
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls (not illegal orders); the batch being merged no longer orders special actions onto an ant (-95% on Small); a counter and the rest follow
