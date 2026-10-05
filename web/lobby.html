@@ -900,7 +900,7 @@ their music and their sound: only the window you are in is heard). The match is 
             if (why) return why;
             var friends = cardFriends(state).length;
             if (friends === 0) return 'Starts at once, in this tab. Bots gather food, raid and fight back.';
-            return 'Starts when ' + (friends === 1 ? 'your friend is' : 'your friends are') + ' in, or when you press START in the waiting room.';
+            return 'Starts when ' + (friends === 1 ? 'your friend is' : 'your friends are') + ' in (the first player in the room can start sooner).';
         }
         // CARD_END
 
@@ -1173,9 +1173,11 @@ their music and their sound: only the window you are in is heard). The match is 
             function fallback() {
                 var box = document.createElement('input');
                 box.value = text; box.setAttribute('readonly', ''); box.style.position = 'fixed'; box.style.opacity = '0';
-                document.body.appendChild(box); box.select();
-                try { document.execCommand('copy'); done(true); } catch (e) { done(false); }
+                document.body.appendChild(box);
+                var copied = false;
+                try { box.select(); copied = document.execCommand('copy') === true; } catch (e) { copied = false; }       // (it answers false when the browser did not copy: then the person is asked to)
                 document.body.removeChild(box);
+                done(copied);
             }
             if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
             else fallback();
@@ -1301,11 +1303,19 @@ their music and their sound: only the window you are in is heard). The match is 
         function youName() { var checked = nameCheck(nameInput.value); return checked.ok && checked.name ? checked.name : names[0]; }
         // The room that the invitations and START use, made when the page first needs one (a Friend seat, or START) and kept while the map and the teams stay, since the code holds them: another map or other teams
         // are another room, and the invitations change with it. The tab keeps it until START, so that a reload (the picture's selector reloads the page; a phone may discard a page that was left for the
-        // messages) does not change the links that were sent. Once START has taken the tab into the match it is let go: the next match is another room. `used` is the links as they were when one was last
-        // copied or shared ('' before; kept when the code no longer fits, e.g. the map was changed in another tab): the links that are shown now say so when they are not those any more (the plan and the
-        // number of people are in every link, and a friend who leads the room starts with what the link says), and the note under them asks for them to be copied again.
+        // messages) does not change the links that were sent. Once the tab has left the page for the match (START) it is let go: the next match is another room. `used` is the link of each seat as it was when
+        // that seat's was last copied or shared ({ seat: link }, nothing for a seat that was never sent; kept when the code no longer fits, e.g. the map was changed in another tab): a link that is shown
+        // now is not the one that was sent when they differ (the plan and the number of people are in every link, and a friend who leads the room starts with what the link says), and the note under
+        // them asks for the links to be copied again until every link that was sent is the one that is shown.
         var cardRoom = null;                       // { code, used }
-        var linksNow = '';                         // the links that are shown, joined
+        var linksNow = {};                         // the links that are shown: { seat: link }
+        // What the tab remembers of the links that were sent: an object with a text for the seats 0 - 3 (nothing else is believed: the first versions of the page kept the links in one text)
+        function usedParse(raw) {
+            var out = {};
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+            [0, 1, 2, 3].forEach(function (seat) { if (typeof raw[seat] === 'string' && raw[seat].length <= 1000) out[seat] = raw[seat]; });
+            return out;
+        }
         function cardRoomSave() {
             try {
                 if (cardRoom) window.sessionStorage.setItem(CARD_ROOM_KEY, JSON.stringify(cardRoom));
@@ -1315,23 +1325,27 @@ their music and their sound: only the window you are in is heard). The match is 
         (function () {
             var stored = null;
             try { stored = JSON.parse(window.sessionStorage.getItem(CARD_ROOM_KEY)); } catch (e) { stored = null; }
-            if (stored && typeof stored === 'object') cardRoom = { code: stored.code, used: typeof stored.used === 'string' && stored.used.length <= 4000 ? stored.used : '' };       // (the code is judged where it is used)
+            if (stored && typeof stored === 'object') cardRoom = { code: stored.code, used: usedParse(stored.used) };       // (the code is judged where it is used)
         })();
         function cardEnsureRoom() {
             if (cardRoom && cardRoomFits(cardRoom.code, card)) return cardRoom.code;
-            cardRoom = { code: cardCode(card, randomCode()), used: cardRoom ? cardRoom.used : '' };
+            cardRoom = { code: cardCode(card, randomCode()), used: cardRoom ? cardRoom.used : {} };
             cardRoomSave();
             return cardRoom.code;
         }
         function cardRoomForget() { cardRoom = null; cardRoomSave(); }
-        // Copy link and Share both put the links into use
-        function linkUsed(link) {
-            if (cardRoom) { cardRoom.used = linksNow; cardRoomSave(); }
-            $('links-note').hidden = true;
+        // The note is up while a link that was sent is not the link that is shown for its seat (a seat that shows no link keeps nothing up, and a seat that was never sent has nothing to be out of date)
+        function showLinksNote() {
+            $('links-note').hidden = !(cardRoom && Object.keys(linksNow).some(function (seat) { return cardRoom.used[seat] !== undefined && cardRoom.used[seat] !== linksNow[seat]; }));
+        }
+        // Copy link and Share both put the link of that seat into use
+        function linkUsed(seat, link) {
+            if (cardRoom) { cardRoom.used[seat] = link; cardRoomSave(); }
+            showLinksNote();
             return link;
         }
         function shareLink(seat, link) {
-            linkUsed(link);
+            linkUsed(seat, link);
             try {
                 var shared = navigator.share({ title: 'Ants', text: 'Play Ants with me: your seat is ' + SEATS[seat].name + '.', url: link });
                 if (shared && typeof shared.catch === 'function') shared.catch(function () { /* the person closed the sheet */ });
@@ -1393,7 +1407,7 @@ their music and their sound: only the window you are in is heard). The match is 
             field.setAttribute('aria-label', 'Invitation link for ' + SEATS[seat].name);
             field.addEventListener('focus', function () { try { field.select(); } catch (e) { /* the person selects it */ } });
             var copy = button('Copy link', 'btn sm', function () {});
-            copyButton(copy, function () { return linkUsed(link); });
+            copyButton(copy, function () { return linkUsed(seat, link); });
             row.appendChild(who);
             row.appendChild(field);
             row.appendChild(copy);
@@ -1405,21 +1419,21 @@ their music and their sound: only the window you are in is heard). The match is 
             var list = $('invite-list');
             while (list.firstChild) list.removeChild(list.firstChild);
             $('invites').hidden = friends.length === 0;
+            linksNow = {};
             if (friends.length === 0) return;
             var code = cardEnsureRoom();
-            var links = [];
             friends.forEach(function (seat) {
                 var made = inviteRow(seat, code);
-                links.push(made.link);
+                linksNow[seat] = made.link;
                 list.appendChild(made.row);
             });
-            linksNow = links.join(' ');
-            $('links-note').hidden = !(cardRoom.used !== '' && cardRoom.used !== linksNow);
+            showLinksNote();
         }
         // START is there with at least two players, and says why not otherwise; the line under it says what it will do
         function showStart() {
             $('play').disabled = cardWhy(card) !== '';
-            $('start-note').textContent = cardNote(card);
+            var note = cardNote(card);
+            if ($('start-note').textContent !== note) $('start-note').textContent = note;       // (a live region says its text again whenever it is written: only a line that changed is)
         }
         function showCard() {
             showMap();
@@ -1448,8 +1462,11 @@ their music and their sound: only the window you are in is heard). The match is 
             });
         });
         nameInput.addEventListener('input', showYouName);
-        // A page that comes back from the browser's memory (Back after START) shows the card again: START let go of the room (the match's now), so the card makes another when it needs one
-        window.addEventListener('pageshow', function (e) { if (e && e.persisted) showCard(); });
+        // A page that comes back from the browser's memory (Back after START) shows the card again: the room was let go of when the page left for the match (it is the match's), so the card makes another
+        // when it needs one
+        var starting = false;                      // START sent this tab to the game page
+        window.addEventListener('pagehide', function () { if (starting) cardRoomForget(); });
+        window.addEventListener('pageshow', function (e) { starting = false; if (e && e.persisted) showCard(); });
         showCard();
         // A game on this computer, for an address that asks for one: this tab goes to the game page (never a new tab) with the map, the opponents, the typed name and the picture's shape (the game page's own parameters)
         function startLocal(mapKey, levels) {
@@ -1526,13 +1543,14 @@ their music and their sound: only the window you are in is heard). The match is 
             fromAddress();
         }
         // START takes THIS tab into the match: the game page with the room, your colour, the plan (a bot for each bot seat), your name and the picture's shape, and the number of people to wait for. The game of the leader
-        // of the room presses START by itself when they are in (no Friend seat: at once, against the bots). The room is let go of here: it is the match's now, and the next one is another.
+        // of the room presses START by itself when they are in (no Friend seat: at once, against the bots). The room is the match's now and the page lets go of it when it is left (pagehide above), not before:
+        // the game page may be slow to come, and a second click (a held Enter) goes to the same room, so that the links that were sent stay good.
         $('play').addEventListener('click', function () {
             if (!readName().ok) return;               // a bad name starts nothing (the field says why)
             if (cardWhy(card) !== '') return;         // fewer than two players: the button is off, and the line under it says why
             var code = cardEnsureRoom();
             var query = cardQuery(card, code, card.you, youName(), aspect);
-            cardRoomForget();
+            starting = true;
             window.location.assign(new URL('./' + query, window.location.href).href);
         });
 

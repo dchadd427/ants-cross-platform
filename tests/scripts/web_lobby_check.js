@@ -605,8 +605,8 @@ try {
              ['Pick at least one more seat: a friend or a bot.', 'Pick at least one more seat: a friend or a bot.', '', '']);
         same('cardNote: the reason when START is off; with bots only it starts at once; with one friend or more it waits for them and says what else starts it',
              [L.cardNote(st(0, ['medium', 'nobody', 'nobody', 'nobody'])), L.cardNote(st(0, M4)), L.cardNote(st(0, ['medium', 'friend', 'nobody', 'nobody'])), L.cardNote(st(0, ['medium', 'friend', 'friend', 'hard'])), L.cardNote(st(1, ['friend', 'friend', 'friend', 'friend']))],
-             ['Pick at least one more seat: a friend or a bot.', 'Starts at once, in this tab. Bots gather food, raid and fight back.', 'Starts when your friend is in, or when you press START in the waiting room.',
-              'Starts when your friends are in, or when you press START in the waiting room.', 'Starts when your friends are in, or when you press START in the waiting room.']);
+             ['Pick at least one more seat: a friend or a bot.', 'Starts at once, in this tab. Bots gather food, raid and fight back.', 'Starts when your friend is in (the first player in the room can start sooner).',
+              'Starts when your friends are in (the first player in the room can start sooner).', 'Starts when your friends are in (the first player in the room can start sooner).']);
 
         // the addresses: START and an invitation
         {

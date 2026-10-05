@@ -339,6 +339,11 @@ for (const [label, e, want] of [
     for (const id of ['name-step', 'name-step-title', 'name-step-input', 'name-step-go', 'name-step-msg']) check('the card of the step has #' + id, new RegExp('id="' + id + '"').test(shellText));
     check('the name field of the card holds 32 characters at the most and is no autofill target', /id="name-step-input"[^>]*maxlength="32"[^>]*autocomplete="off"/.test(shellText));
     check('the card is hidden until the step shows it', /id="name-step"[^>]*hidden/.test(shellText));
+    // The invitation of the front page's card is a link to THIS page's step (?join=/ws&room=..&seat=..: no name), so a friend who opens it on a phone sees this card and nothing else: the way out is here too,
+    // as the front page's own step has it ("Whatever the one-card page does with the name step, it keeps a visible way out of it")
+    const stepMarkup = shellText.slice(shellText.indexOf('id="name-step"'), shellText.indexOf('<div class="view-bar"'));
+    check('the card has a way out: "Back to the front page", a plain link to the front page (no query: nothing of the match goes with it), after the hint and inside the card',
+          /<a class="btn sm name-step-back" id="name-step-back" href="\/">&larr; Back to the front page<\/a>\s*<\/div>\s*<\/div>/.test(stepMarkup) && stepMarkup.indexOf('name-step-hint') < stepMarkup.indexOf('name-step-back'));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -393,7 +398,7 @@ class El {
 const THROWS = 'THROWS';
 function runLobby(search, stored, options) {
     options = options || {};
-    const env = { innerHTMLWrites: [], assigned: [], replaced: [], opened: [], copied: [], shared: [], elements: {}, focused: null, confirms: [] };
+    const env = { innerHTMLWrites: [], assigned: [], replaced: [], opened: [], copied: [], commanded: [], shared: [], elements: {}, focused: null, confirms: [] };
     const html = lobbyText;
     const body = html.slice(html.indexOf('<body>'));
     for (const m of body.matchAll(/<(\w+)([^>]*)>/g)) {
@@ -412,7 +417,12 @@ function runLobby(search, stored, options) {
         createElement(tag) { return new El(env, tag, ''); },
         createTextNode(text) { return { isText: true, textContent: String(text), parent: null }; },
         activeElement: null,
-        execCommand() { return true; },
+        execCommand(cmd) {                                // the copy command copies what the last field of the page holds (options.copyResult: false is a browser that did not copy, 'throws' one that refuses)
+            const field = doc.body.children[doc.body.children.length - 1];
+            env.commanded.push({ cmd, value: field ? field.value : null });
+            if (options.copyResult === 'throws') throw new Error('not allowed');
+            return options.copyResult !== false;
+        },
         hidden: false, listeners: {},
         addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); },
     };
@@ -443,7 +453,7 @@ function runLobby(search, stored, options) {
         confirm(q) { env.confirms.push(q); return true; },
     };
     if (!options.noSession) win.sessionStorage = session;
-    const nav = { clipboard: { writeText(t) { env.copied.push(t); return { then() {} }; } } };
+    const nav = options.clipboard === false ? {} : { clipboard: { writeText(t) { env.copied.push(t); return { then() {} }; } } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
     // options.share: a browser that has navigator.share (true: it takes the data; 'throws': it throws; 'rejects': the person closes the sheet, a promise that fails)
     if (options.share === true) nav.share = (data) => { env.shared.push(data); return Promise.resolve(); };
     if (options.share === 'throws') nav.share = () => { throw new Error('not allowed'); };
@@ -823,6 +833,90 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     pickTeam(env, '0+1');
     check('the teams are a word of the code: Green + Red (all four seats play) makes demo-tiny-4p-t01-<six characters>, and the note is up again (the links changed after a copy)', /^demo-tiny-4p-t01-[a-z2-9]{6}$/.test(env.param(inviteLinks(env)[0], 'room')) && !env.$('links-note').hidden);
 }
+{   // two Friends: the note stays up until every link that was sent is the one that is shown for its seat (a seat that was never sent has nothing to be out of date)
+    const env = runLobby('', {});
+    choose(env, 1, 'friend');
+    choose(env, 2, 'friend');
+    copyOf(env, 0).click();
+    copyOf(env, 1).click();
+    check('both links copied: no note', env.$('links-note').hidden);
+    pickMap(env, 'small');
+    check('another map after both were sent: the note is up (both links are another room\'s now)', !env.$('links-note').hidden);
+    copyOf(env, 0).click();
+    check('... one of them copied again: the note stays (the link that was sent for the other seat is the old room\'s: its friend would wait alone)', !env.$('links-note').hidden);
+    const half = runLobby('', env.storage.data, { session: env.session.data });
+    check('... and a reload of the page does not lose that (the tab keeps what was copied for each seat)', !half.$('links-note').hidden);
+    copyOf(env, 1).click();
+    check('... both copied again: the note goes', env.$('links-note').hidden);
+    check('... and a reload keeps it gone', runLobby('', env.storage.data, { session: env.session.data }).$('links-note').hidden);
+    choose(env, 3, 'easy');
+    check('Black is an Easy bot now (the plan is in every link) after both were sent: the note is up', !env.$('links-note').hidden);
+    copyOf(env, 1).click();
+    check('... the second link copied: the first one that was sent is still the old one, the note stays', !env.$('links-note').hidden);
+    choose(env, 3, 'medium');
+    check('... Black put back: the first link is the one that was sent for its seat again, the second is not (it was copied with Easy): the note stays for that one', !env.$('links-note').hidden);
+    copyOf(env, 1).click();
+    check('... and when that one is copied again the note goes', env.$('links-note').hidden);
+    choose(env, 2, 'easy');
+    check('Blue is a bot now: one row left, and its link changed (the plan, the people to wait for): the note is up', invites(env).length === 1 && !env.$('links-note').hidden);
+    copyOf(env, 0).click();
+    check('... the one link that is shown copied: the note goes (the seat that shows no link keeps nothing up)', env.$('links-note').hidden);
+    const lone = runLobby('', {});
+    choose(lone, 1, 'friend');
+    choose(lone, 2, 'friend');
+    copyOf(lone, 1).click();
+    check('a link copied for one seat only: no note (the other seat was never sent)', lone.$('links-note').hidden);
+    choose(lone, 3, 'easy');
+    check('... and a change that changes the link that was sent brings it (the link of the seat that was never sent changes too: it does not matter)', !lone.$('links-note').hidden);
+    copyOf(lone, 0).click();
+    check('... copying the other seat\'s link does not take it away: the link that was sent is still the old one', !lone.$('links-note').hidden);
+    copyOf(lone, 1).click();
+    check('... copying that seat\'s link does', lone.$('links-note').hidden);
+}
+{   // the copy: the browser's own API, else the copy command (and what that says is told: a copy that the browser did not do is not "Copied")
+    const text = (env, i) => copyOf(env, i).textContent;
+    const api = runLobby('', {});
+    choose(api, 1, 'friend');
+    copyOf(api, 0).click();
+    check('where the browser has the clipboard\'s API the copy command is not used', api.commanded.length === 0 && api.copied.length === 1);
+    const plain = runLobby('', {}, { clipboard: false });
+    choose(plain, 1, 'friend');
+    const link = inviteLinks(plain)[0];
+    const before = plain.body.children.length;
+    copyOf(plain, 0).click();
+    same('a browser without it: the copy command copies the link (from a field that is gone again) and the button says Copied', [plain.commanded, plain.body.children.length, text(plain, 0)], [[{ cmd: 'copy', value: link }], before, 'Copied']);
+    const no = runLobby('', {}, { clipboard: false, copyResult: false });
+    choose(no, 1, 'friend');
+    copyOf(no, 0).click();
+    same('... a copy command that says no (the browser did not copy): the button asks the person to select the link and copy it, and no field is left behind', [text(no, 0), no.body.children.length], ['Select the link and copy it', 0]);
+    const refuses = runLobby('', {}, { clipboard: false, copyResult: 'throws' });
+    choose(refuses, 1, 'friend');
+    copyOf(refuses, 0).click();
+    same('... a copy command that throws says the same', [text(refuses, 0), refuses.body.children.length], ['Select the link and copy it', 0]);
+    check('... and the link counts as sent in every case (the person copies it by hand): changing the map after it brings the note', [plain, no, refuses].every((e) => { pickMap(e, 'small'); return !e.$('links-note').hidden; }));
+}
+{   // the line under START is a live region: it is written only when its text changes (a screen reader says a live region again whenever it is written)
+    const env = runLobby('', {});
+    const note = env.$('start-note');
+    const own = Object.getOwnPropertyDescriptor(El.prototype, 'textContent');
+    let writes = 0;
+    Object.defineProperty(note, 'textContent', { get() { return own.get.call(note); }, set(v) { writes++; own.set.call(note, v); } });
+    choose(env, 1, 'easy');
+    choose(env, 2, 'hard');
+    sit(env, 3);
+    pickMap(env, 'small');
+    pickTeam(env, '0+1');
+    check('choices that leave the line as it is (bots, a seat for You, a map, the teams) do not write it', writes === 0, String(writes));
+    choose(env, 1, 'friend');
+    same('a Friend seat changes it: one write, with the new text', [writes, note.textContent], [1, 'Starts when your friend is in (the first player in the room can start sooner).']);
+    choose(env, 2, 'easy');
+    choose(env, 0, 'hard');
+    check('... and a choice that leaves it as it is again does not write it', writes === 1, String(writes));
+    choose(env, 2, 'friend');
+    check('... the second Friend seat changes the words: another write', writes === 2 && /^Starts when your friends are in/.test(note.textContent), String(writes));
+    env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
+    check('a page that comes back from the browser\'s memory shows the card again and writes nothing that did not change', writes === 2, String(writes));
+}
 {   // a reload keeps the room of the tab (the links that were sent stay good); START lets go of it; the page that comes back from memory has a room of its own
     const env = runLobby('', {});
     choose(env, 1, 'friend');
@@ -836,14 +930,19 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     pickMap(reloaded, 'islands');
     const third = runLobby('', reloaded.storage.data, { session: reloaded.session.data });
     same('a reload after the map changed keeps the room of that map (the tab saved it when it was made)', [/^demo-islands-4p-/.test(third.param(inviteLinks(third)[0], 'room')), third.param(inviteLinks(third)[0], 'room') === reloaded.param(inviteLinks(reloaded)[0], 'room')], [true, true]);
-    const other = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: '' }) } });
+    const other = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: {} }) } });
     check('a code that the tab holds for another map is not used (the choices changed meanwhile): the page makes a room of its own', /^demo-islands-4p-/.test(other.param(inviteLinks(other)[0], 'room')) && other.param(inviteLinks(other)[0], 'room') !== 'demo-tiny-4p-abcdef');
     check('... and with no link copied there is no note', other.$('links-note').hidden);
-    const kept = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: 'the links that were copied' }) } });
-    check('... but what was copied stays known (the map changed in another tab): the links are not those any more, so the note is up', !kept.$('links-note').hidden && /^demo-islands-4p-/.test(kept.param(inviteLinks(kept)[0], 'room')));
-    const longUsed = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: 'x'.repeat(4001) }) } });
+    const kept = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: { 1: 'the link that was copied' } }) } });
+    check('... but what was copied stays known (the map changed in another tab): the link of that seat is not that any more, so the note is up', !kept.$('links-note').hidden && /^demo-islands-4p-/.test(kept.param(inviteLinks(kept)[0], 'room')));
+    const unseen = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: { 0: 'a link of the seat of You', 3: 'a link of a seat that is a bot' } }) } });
+    check('... a link that was copied for a seat that shows no link (You, a bot) keeps nothing up', unseen.$('links-note').hidden);
+    const longUsed = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: { 1: 'x'.repeat(1001) } }) } });
+    const textUsed = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: 'the links that were copied' }) } });
     const numberUsed = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: 5 }) } });
-    check('... a record that is too long or is no text is not believed', longUsed.$('links-note').hidden && numberUsed.$('links-note').hidden);
+    const listUsed = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: ['a', 'the link that was copied'] }) } });
+    const badLink = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': JSON.stringify({ code: 'demo-tiny-4p-abcdef', used: { 1: 5, 2: null } }) } });
+    check('... a record that is too long, is no object or holds no text is not believed (the first versions of the page kept the links as one text: that is not read either)', [longUsed, textUsed, numberUsed, listUsed, badLink].every((e) => e.$('links-note').hidden));
     for (const junk of ['not json', '{}', '{"code":5}', '{"code":"demo-islands-4p-ABCDEF"}', '{"code":"demo-islands-4p-t01-abcdef"}', '{"code":"x"}', 'null', '[]', '"demo-islands-4p-abcdef"']) {
         const j = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': junk } });
         check('a room entry that is junk (' + junk.slice(0, 40) + ') is not used: the page makes its own', /^demo-islands-4p-[a-z2-9]{6}$/.test(j.param(inviteLinks(j)[0], 'room')) && j.param(inviteLinks(j)[0], 'room') !== 'abcdef');
@@ -855,12 +954,21 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     const startRoom = start.param(inviteLinks(start)[0], 'room');
     start.$('play').click();
     check('START: one assignment, this tab (no window), the same room as the invitations', start.assigned.length === 1 && start.opened.length === 0 && start.param(start.assigned[0], 'room') === startRoom, JSON.stringify(start.assigned));
-    check('... and the tab let go of the room (the next match is another room)', start.session.data['ants-match-room'] === undefined);
+    check('... the tab still holds the room while the game page loads (the navigation may not happen at all: the links on the card stay the room\'s)', start.session.data['ants-match-room'] !== undefined && JSON.parse(start.session.data['ants-match-room']).code === startRoom);
+    start.$('play').click();
+    check('a second click while the game page loads (a held Enter, a tap on a slow phone) goes to the same room, not to another one: the friend\'s link stays good', start.assigned.length === 2 && start.param(start.assigned[1], 'room') === startRoom && start.assigned[1] === start.assigned[0], JSON.stringify(start.assigned));
+    (start.win.listeners.pagehide || []).forEach((fn) => fn({ persisted: false }));
+    check('... the tab lets go of the room when it leaves the page (the next match is another room)', start.session.data['ants-match-room'] === undefined);
     start.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
     check('a page that comes back from the browser\'s memory (Back) has a room of its own', start.param(inviteLinks(start)[0], 'room') !== startRoom && CODE.test(start.param(inviteLinks(start)[0], 'room')));
     let ok = true;
     try { const t = runLobby('', {}, { noSession: true }); choose(t, 1, 'friend'); ok = inviteLinks(t).length === 1; } catch (e) { ok = false; }
     check('a browser with no session storage (or one that refuses it) still has its links', ok);
+    const away = runLobby('', {});                       // a page that is left for another reason than START (a link, a Join, a close) keeps its room: Back brings the same links
+    choose(away, 1, 'friend');
+    const awayRoom = away.param(inviteLinks(away)[0], 'room');
+    (away.win.listeners.pagehide || []).forEach((fn) => fn({ persisted: true }));
+    check('a page that is left without START keeps the room of the tab (the links that were sent stay good)', away.session.data['ants-match-room'] !== undefined && JSON.parse(away.session.data['ants-match-room']).code === awayRoom);
 }
 {   // Back from the browser's memory without START (from a Join, say): the card's room and what was copied stay
     const env = runLobby('', {});
@@ -911,9 +1019,9 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     env.$('play').click();
     check('... and a click on it (a script, a keyboard that reaches it) goes nowhere', env.assigned.length === 0);
     choose(env, 2, 'friend');
-    same('a Friend seat is a player: START is on again, and says that it waits for the friend', [env.$('play').disabled, env.$('start-note').textContent], [false, 'Starts when your friend is in, or when you press START in the waiting room.']);
+    same('a Friend seat is a player: START is on again, and says that it waits for the friend', [env.$('play').disabled, env.$('start-note').textContent], [false, 'Starts when your friend is in (the first player in the room can start sooner).']);
     choose(env, 3, 'friend');
-    check('... two friends: "your friends are in"', env.$('start-note').textContent === 'Starts when your friends are in, or when you press START in the waiting room.');
+    check('... two friends: "your friends are in"', env.$('start-note').textContent === 'Starts when your friends are in (the first player in the room can start sooner).');
     sit(env, 1);
     choose(env, 2, 'nobody');
     choose(env, 3, 'nobody');
