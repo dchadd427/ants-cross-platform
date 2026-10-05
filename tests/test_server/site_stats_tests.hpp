@@ -95,33 +95,96 @@ std::string http_exchange(net::WsListener& listener, const std::string& request)
 
 }  // namespace
 
+// The program's own fsync, for the tests that want to see it called: every call goes on to the real one (the system call); while a test has armed the spy, a call for the watched file is
+// recorded (what that file and the one beside it held at that moment) and can be made to fail. Linux only, and not under a sanitizer (which has an fsync of its own).
+#if defined(__linux__)
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#elif defined(__has_feature)
+#if !__has_feature(address_sanitizer) && !__has_feature(thread_sanitizer)
+#define ANTS_FSYNC_SPY 1
+#endif
+#else
+#define ANTS_FSYNC_SPY 1
+#endif
+#endif
+
+#ifdef ANTS_FSYNC_SPY
+#include <sys/syscall.h>
+
+struct FsyncSpy {
+    static inline std::atomic<bool> armed{false};
+    static inline std::string watch;                // the real path of the file whose sync is recorded
+    static inline std::string beside;               // a file whose text is read at the same moment
+    static inline int calls = 0;
+    static inline std::string watched_text;
+    static inline std::string beside_text;
+    static inline bool fail = false;                // the sync of the watched file fails (EIO)
+    static inline bool interrupt_first = false;     // the first sync of the watched file is interrupted by a signal (EINTR)
+};
+
+extern "C" int fsync(int fd) {
+    if (FsyncSpy::armed.load()) {
+        char link[64];
+        std::snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
+        char target[4096];
+        const ssize_t n = ::readlink(link, target, sizeof(target) - 1);
+        if (n > 0 && std::string(target, static_cast<size_t>(n)) == FsyncSpy::watch) {
+            ++FsyncSpy::calls;
+            FsyncSpy::watched_text = stats_slurp(FsyncSpy::watch);
+            FsyncSpy::beside_text = stats_slurp(FsyncSpy::beside);
+            if (FsyncSpy::fail) {
+                errno = EIO;
+                return -1;
+            }
+            if (FsyncSpy::interrupt_first && FsyncSpy::calls == 1) {
+                errno = EINTR;
+                return -1;
+            }
+        }
+    }
+    return static_cast<int>(::syscall(SYS_fsync, fd));
+}
+#endif
+
 void run_site_stats_tests() {
-    TEST_CASE("S3.140 What counts online: a room whose match RAN (one tick is enough) and ended is one game, whatever ended it, demo rooms too; a room that never began is nothing; the day and the total agree and the local counter is not touched") {
+    TEST_CASE("S3.140 What counts online: a room whose match ran at least 600 ticks (30 s of play) and ended is one game, whatever ended it, demo rooms too; a shorter match and a room that never began are nothing (a start-and-quit loop cannot pad the number); the day and the total agree and the local counter is not touched") {
         StatsClock clock;
         SiteStats stats(clock.fn());
+        ASSERT_EQ(SiteStats::kMinTicks, 600u);                                                  // 30 seconds at 20 ticks a second
         ASSERT_TRUE(stats.online().day == 0 && stats.online().total == 0 && stats.local().day == 0 && stats.local().total == 0);
         stats.count_ended(ended_room("MATCH-1", RoomState::Finished, 1200));                  // a match that was played to its end
         ASSERT_TRUE(stats.online().day == 1 && stats.online().total == 1);
         stats.count_ended(ended_room("demo-small-2p-x7k2", RoomState::Finished, 5000));        // a demo room (every web match is one)
         ASSERT_TRUE(stats.online().day == 2 && stats.online().total == 2);
-        stats.count_ended(ended_room("MATCH-2", RoomState::Failed, 77));                       // it ran and then failed (closed by the owner, a desync, the room's limit): it was played
+        stats.count_ended(ended_room("MATCH-2", RoomState::Failed, 777));                      // it ran and then failed (closed by the owner, a desync, the room's limit): it was played
         ASSERT_TRUE(stats.online().day == 3 && stats.online().total == 3);
-        stats.count_ended(ended_room("MATCH-3", RoomState::Failed, 1));                        // one tick is a match that ran
+        stats.count_ended(ended_room("MATCH-3", RoomState::Failed, 600));                      // exactly 30 s is a game ...
         ASSERT_TRUE(stats.online().day == 4 && stats.online().total == 4);
+        stats.count_ended(ended_room("SHORT-1", RoomState::Finished, 599));                    // ... one tick less is not
+        stats.count_ended(ended_room("SHORT-2", RoomState::Failed, 1));                        // a match that was quit at once
+        stats.count_ended(ended_room("SHORT-3", RoomState::Finished, 77));
+        stats.count_ended(ended_room("demo-short", RoomState::Finished, 300));                 // a demo room quit after 15 s
         stats.count_ended(ended_room("NOBODY-1", RoomState::Failed, 0));                       // nobody came
         stats.count_ended(ended_room("demo-lonely", RoomState::Failed, 0));
         stats.count_ended(ended_room("SHUT-1", RoomState::Failed, 0));                         // closed while it waited, or during the dialog before the first tick
         stats.count_ended(ended_room("ODD-1", RoomState::Finished, 0));
         ASSERT_TRUE(stats.online().day == 4 && stats.online().total == 4);
         ASSERT_TRUE(stats.local().day == 0 && stats.local().total == 0);
-        stats.count_online();                                                                   // (the plain count is the same as an ended room that ran)
+        stats.count_online();                                                                   // (the plain count is one game, whatever it is told)
         ASSERT_TRUE(stats.online().day == 5 && stats.online().total == 5);
         // the numbers of a status are the only thing that decides: a name, a code or a map never does
-        RoomStatus named = ended_room("", RoomState::Finished, 20);
+        RoomStatus named = ended_room("", RoomState::Finished, 600);
         named.names[0] = "Ann";
         named.map = "TINY.LVL";
         stats.count_ended(named);
         ASSERT_EQ(stats.online().total, uint64_t{6});
+        RoomStatus unnamed = ended_room("", RoomState::Finished, 599);
+        unnamed.names[0] = "Ann";
+        unnamed.map = "TINY.LVL";
+        stats.count_ended(unnamed);
+        ASSERT_EQ(stats.online().total, uint64_t{6});
+        stats.count_ended(ended_room("LONG-1", RoomState::Finished, UINT32_MAX));              // the largest clock is a game too
+        ASSERT_EQ(stats.online().total, uint64_t{7});
     } TEST_END();
 
     TEST_CASE("S3.141 The last 24 hours are 24 buckets of an hour on the server's clock: the hour that runs and the 23 before it; a game leaves the window when its hour is 24 hours old, the total never forgets, a bucket is used again a day later, and a clock that goes back loses nothing") {
@@ -659,7 +722,115 @@ void run_site_stats_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.148 A real room manager: a demo room that ran and ended counts once (also when its code is asked for again before anybody looked), a room closed during the dialog or while it waited counts nothing, a match that ran and was closed by the owner counts, and nothing counts twice") {
+#ifdef ANTS_FSYNC_SPY
+    TEST_CASE("S3.150 The counters' file is on the disk before it has its name: the temporary file holds the whole new text and is fsync'ed (once), and only then renamed; a sync that fails removes the temporary file, leaves the old file whole and is said, and the next try saves; a sync that a signal interrupts is asked again") {
+        const fs::path dir = fs::canonical(temp_dir_for("stats-sync"));
+        const std::string path = (dir / SiteStats::kFileName).string();
+        StatsClock clock;
+        SiteStats stats(clock.fn());
+        stats.open(path);
+        ASSERT_TRUE(stats.save());
+        const std::string first = stats_slurp(path);
+        stats.take_notices();
+        stats.count_online();
+        FsyncSpy::calls = 0;
+        FsyncSpy::fail = false;
+        FsyncSpy::watch = path + ".tmp";
+        FsyncSpy::beside = path;
+        FsyncSpy::armed = true;
+        const bool saved = stats.save();
+        FsyncSpy::armed = false;
+        ASSERT_TRUE(saved);
+        ASSERT_EQ(FsyncSpy::calls, 1);
+        const std::string second = stats_slurp(path);
+        ASSERT_TRUE(!second.empty() && second != first);
+        ASSERT_TRUE(FsyncSpy::watched_text == second);                                          // when it was synced the temporary file held the whole new text (written and flushed first) ...
+        ASSERT_TRUE(FsyncSpy::beside_text == first);                                            // ... and the file still had its old text: the rename came after the sync
+        ASSERT_TRUE(!fs::exists(path + ".tmp") && !stats.dirty());
+        // a sync that fails: nothing is renamed, the temporary file is removed, the old file is whole, the counters stay unsaved, the log says so
+        stats.count_online();
+        FsyncSpy::calls = 0;
+        FsyncSpy::fail = true;
+        FsyncSpy::armed = true;
+        const bool failed = stats.save();
+        FsyncSpy::armed = false;
+        ASSERT_FALSE(failed);
+        ASSERT_EQ(FsyncSpy::calls, 1);
+        ASSERT_TRUE(stats_slurp(path) == second && !fs::exists(path + ".tmp") && stats.dirty());
+        const std::vector<std::string> said = stats.take_notices();
+        ASSERT_TRUE(notice_has(said, "could not be saved") && notice_has(said, "cannot write") && notice_has(said, ".tmp"));
+        FsyncSpy::fail = false;
+        ASSERT_TRUE(stats.save() && !stats.dirty() && stats_slurp(path) != second && !fs::exists(path + ".tmp"));
+        ASSERT_TRUE(notice_has(stats.take_notices(), "saved again"));
+        // a sync that a signal interrupts is not a failure: it is asked again
+        stats.count_online();
+        FsyncSpy::calls = 0;
+        FsyncSpy::interrupt_first = true;
+        FsyncSpy::armed = true;
+        const bool interrupted = stats.save();
+        FsyncSpy::armed = false;
+        FsyncSpy::interrupt_first = false;
+        ASSERT_TRUE(interrupted && FsyncSpy::calls == 2 && !stats.dirty() && !fs::exists(path + ".tmp"));
+        ASSERT_TRUE(stats.take_notices().empty());
+    } TEST_END();
+#endif
+
+#ifndef _WIN32
+    TEST_CASE("S3.151 A write that fails (a full disk: here the process may write no file) removes the temporary file, leaves the old file whole and is said (where); a temporary file that a crash left is written over; a folder in its place is not ours to remove; the file is made with the umask's mode") {
+        const fs::path dir = temp_dir_for("stats-full");
+        const std::string path = (dir / SiteStats::kFileName).string();
+        StatsClock clock;
+        SiteStats stats(clock.fn());
+        stats.open(path);
+        ASSERT_TRUE(stats.save());
+        const std::string first = stats_slurp(path);
+        stats.take_notices();
+        stats.count_online();
+        struct rlimit before_limit;
+        ASSERT_EQ(::getrlimit(RLIMIT_FSIZE, &before_limit), 0);
+        struct sigaction ignore;
+        std::memset(&ignore, 0, sizeof(ignore));
+        ignore.sa_handler = SIG_IGN;
+        struct sigaction before_action;
+        ASSERT_EQ(::sigaction(SIGXFSZ, &ignore, &before_action), 0);                              // (a write past the limit is a signal, which ends a process that does not ignore it)
+        struct rlimit none = before_limit;
+        none.rlim_cur = 0;
+        ASSERT_EQ(::setrlimit(RLIMIT_FSIZE, &none), 0);
+        const bool saved = stats.save();
+        ::setrlimit(RLIMIT_FSIZE, &before_limit);
+        ::sigaction(SIGXFSZ, &before_action, nullptr);
+        ASSERT_FALSE(saved);
+        ASSERT_TRUE(!fs::exists(path + ".tmp") && stats_slurp(path) == first && stats.dirty());   // nothing half written is left, under any name
+        const std::vector<std::string> notices = stats.take_notices();
+        ASSERT_TRUE(notice_has(notices, "could not be saved") && notice_has(notices, "cannot write") && notice_has(notices, SiteStats::kFileName) && notice_has(notices, ".tmp"));   // the log says where
+        stats_write(path + ".tmp", std::string(500, 'x'));                                        // (a temporary file that a crash left behind: written over, never added to)
+        ASSERT_TRUE(stats.save() && stats_slurp(path) != first && !fs::exists(path + ".tmp"));    // the disk is well again
+        ASSERT_TRUE(stats_slurp(path).rfind("{\"format\":1,", 0) == 0 && stats_slurp(path).find("xxxx") == std::string::npos);
+        // a folder where the temporary file goes cannot be opened: it is not removed (it is not what this program made)
+        fs::create_directories(path + ".tmp");
+        stats.count_online();
+        ASSERT_FALSE(stats.save());
+        ASSERT_TRUE(fs::is_directory(path + ".tmp"));
+        fs::remove_all(path + ".tmp");
+        // the mode is that of any new file: 0666 less the umask
+        const mode_t old_mask = ::umask(022);
+        fs::remove(path);
+        ASSERT_TRUE(stats.save());
+        struct stat st;
+        ASSERT_EQ(::stat(path.c_str(), &st), 0);
+        const mode_t mode_022 = st.st_mode & 0777;
+        ::umask(077);
+        fs::remove(path);
+        stats.count_online();
+        ASSERT_TRUE(stats.save());
+        ASSERT_EQ(::stat(path.c_str(), &st), 0);
+        const mode_t mode_077 = st.st_mode & 0777;
+        ::umask(old_mask);
+        ASSERT_TRUE(mode_022 == 0644 && mode_077 == 0600);
+    } TEST_END();
+#endif
+
+    TEST_CASE("S3.148 A real room manager: a demo room that played 30 s and ended counts once (also when its code is asked for again before anybody looked), a match that was quit sooner, a room closed during the dialog and one closed while it waited count nothing, a match that played 30 s and was closed by the owner counts, and nothing counts twice") {
         ServerLimits limits;
         limits.demo_rooms = 4;
         limits.demo_map = "TINY.LVL";
@@ -679,6 +850,9 @@ void run_site_stats_tests() {
             return ended;
         };
         const auto ticking = [&](const std::string& code) { return w.status(code).state == RoomState::Running && w.status(code).ticks > 20; };
+        const auto played = [&](const std::string& code) { return w.status(code).state == RoomState::Running && w.status(code).ticks >= SiteStats::kMinTicks; };   // 30 s of play
+        sim::Command quit;
+        quit.type = sim::CommandType::Quit;
         const auto play_until = [&](const std::function<bool()>& done, uint32_t max_ms) {
             for (uint32_t t = 0; t < max_ms && !done(); t += 250) w.run(250);
             return done();
@@ -689,18 +863,28 @@ void run_site_stats_tests() {
         ASSERT_TRUE(w.status("demo-lone").state == RoomState::Failed && w.status("demo-lone").ticks == 0);
         ASSERT_EQ(look(), size_t{1});
         ASSERT_TRUE(stats.online().total == 0);
-        // two players: the match runs; one quits and the match ends; counted when the end is looked at, once
+        // two players, and one quits after a few seconds of play: the match ends and is told, and it was too short to count
+        Client& sue = w.connect("Sue", "demo-short");
+        w.connect("Tom", "demo-short");
+        ASSERT_TRUE(play_until([&]() { return ticking("demo-short"); }, 30000));
+        quit.issuer = sue.lobby->my_seat();
+        ASSERT_TRUE(sue.session->submit(quit));
+        ASSERT_TRUE(play_until([&]() { return w.status("demo-short").state == RoomState::Finished; }, 20000));
+        ASSERT_TRUE(w.status("demo-short").ticks > 20 && w.status("demo-short").ticks < SiteStats::kMinTicks);
+        ASSERT_EQ(look(), size_t{1});
+        ASSERT_TRUE(stats.online().total == 0 && stats.online().day == 0);
+        // two players: the match runs 30 s; one quits and the match ends; counted when the end is looked at, once
         Client& ann = w.connect("Ann", "demo-ran");
         w.connect("Bob", "demo-ran");
         ASSERT_TRUE(play_until([&]() { return ticking("demo-ran"); }, 30000));
         ASSERT_EQ(look(), size_t{0});                                                            // (it runs: it has not ended)
+        ASSERT_TRUE(play_until([&]() { return played("demo-ran"); }, 60000));
+        ASSERT_EQ(look(), size_t{0});
         ASSERT_TRUE(stats.online().total == 0);
-        sim::Command quit;
-        quit.type = sim::CommandType::Quit;
         quit.issuer = ann.lobby->my_seat();
         ASSERT_TRUE(ann.session->submit(quit));
         ASSERT_TRUE(play_until([&]() { return w.status("demo-ran").state == RoomState::Finished; }, 20000));
-        ASSERT_TRUE(w.status("demo-ran").ticks > 20);
+        ASSERT_TRUE(w.status("demo-ran").ticks >= SiteStats::kMinTicks);
         ASSERT_EQ(look(), size_t{1});
         ASSERT_TRUE(stats.online().total == 1 && stats.online().day == 1);
         ASSERT_EQ(look(), size_t{0});                                                            // (told once: nothing more to count)
@@ -710,7 +894,7 @@ void run_site_stats_tests() {
         // a match that ended and whose code is asked for before anybody looked: the manager forgets the room at once and still tells its end, once
         w.connect("Cat", "demo-twice");
         Client& dan = w.connect("Dan", "demo-twice");
-        ASSERT_TRUE(play_until([&]() { return ticking("demo-twice"); }, 30000));
+        ASSERT_TRUE(play_until([&]() { return played("demo-twice"); }, 60000));
         quit.issuer = dan.lobby->my_seat();
         ASSERT_TRUE(dan.session->submit(quit));
         ASSERT_TRUE(play_until([&]() { return w.status("demo-twice").state == RoomState::Finished; }, 20000));
@@ -720,7 +904,7 @@ void run_site_stats_tests() {
         ASSERT_EQ(look(), size_t{1});                                                            // the end of the old one (and only that)
         ASSERT_TRUE(stats.online().total == 2);
         ASSERT_EQ(look(), size_t{0});
-        // a room that the control interface made, closed while it waits: nothing. Closed during the dialog before the first tick: nothing. Closed in the match: counted.
+        // a room that the control interface made, closed while it waits: nothing. Closed during the dialog before the first tick: nothing. Closed after a few seconds of play: nothing. Closed after 30 s: counted.
         ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-wait", 2), w.now).ok);
         ASSERT_TRUE(w.mgr.close_room("CTL-wait", w.now));
         ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-dialog", 2), w.now).ok);
@@ -733,9 +917,15 @@ void run_site_stats_tests() {
         w.connect("Hal", "CTL-play");
         w.connect("Ida", "CTL-play");
         ASSERT_TRUE(play_until([&]() { return ticking("CTL-play"); }, 30000));
-        ASSERT_TRUE(w.mgr.close_room("CTL-play", w.now));
-        ASSERT_TRUE(w.status("CTL-play").state == RoomState::Failed && w.status("CTL-play").ticks > 20);
-        ASSERT_MSG(look() == 4, seen);                                                           // four rooms ended (the new demo-twice, which nobody joined, failed meanwhile); only the one that played is a game
+        ASSERT_TRUE(w.mgr.close_room("CTL-play", w.now));                                        // closed after a few seconds of play: nothing
+        ASSERT_TRUE(w.status("CTL-play").state == RoomState::Failed && w.status("CTL-play").ticks > 20 && w.status("CTL-play").ticks < SiteStats::kMinTicks);
+        ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-long", 2), w.now).ok);                       // and one that is closed after 30 s of play: counted
+        w.connect("Jan", "CTL-long");
+        w.connect("Kim", "CTL-long");
+        ASSERT_TRUE(play_until([&]() { return played("CTL-long"); }, 60000));
+        ASSERT_TRUE(w.mgr.close_room("CTL-long", w.now));
+        ASSERT_TRUE(w.status("CTL-long").state == RoomState::Failed && w.status("CTL-long").ticks >= SiteStats::kMinTicks);
+        ASSERT_MSG(look() == 5, seen);                                                           // five rooms ended (the new demo-twice, which nobody joined, failed meanwhile); only the one that played 30 s is a game
         ASSERT_TRUE(stats.online().total == 3 && stats.online().day == 3);
         ASSERT_EQ(look(), size_t{0});
         ASSERT_TRUE(stats.local().total == 0);
