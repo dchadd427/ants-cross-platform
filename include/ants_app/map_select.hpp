@@ -113,6 +113,8 @@ public:
     static constexpr int32_t PLAYER_THUMB_X = 540;
     static constexpr int32_t PLAYER_THUMB_Y = 95;
     static constexpr int32_t PLAYER_ROW_PITCH = 50;
+    static constexpr int32_t PLAYER_BOX_X = 371;       // the inside of the black box of the picture (200 wide, from y = 83): a row that a press hits is one box wide, the four rows fill it
+    static constexpr int32_t PLAYER_BOX_W = 200;
 
 
     MapSelectScreen();
@@ -229,6 +231,18 @@ public:
     bool follow_host_choice(const std::string& filename, bool fog);
     /// START on the leader's screen (button, Enter, S, s): the leader asks the server to start now. Nothing else fires on that screen but Leave.
     void set_on_request_start(std::function<void()> cb) { on_request_start_ = std::move(cb); }
+    /// The leader of a server's room moves a player to another colour by pressing the player's row of the Players' Status box (protocol 14): `seat` is the seat of the player whose row was pressed and let
+    /// go of on the same row. The press lights the row and plays the click of the buttons; the action comes with the release, as for the buttons. Rows are the leader's alone, and only while the room
+    /// is open and the screen has shown its players (can_move_players()); a guest's presses on them do nothing.
+    void set_on_move_seat(std::function<void(uint8_t seat)> cb) { on_move_seat_ = std::move(cb); }
+    bool can_move_players() const noexcept { return leads_server_room() && !started_ && refreshed(); }
+    /// The rectangle of row `row` (0 .. 3, as row_seats counts them) of the Players' Status box that a press hits: the box's width and one row's height, on the classic page and on the 16:9 one
+    LayoutRect player_row_rect(size_t row) const noexcept;
+    /// The row of a player that the point is on, -1 for none (a row that shows nobody, a point outside the rows, a screen whose rows cannot be pressed)
+    int32_t player_row_at(int32_t screen_x, int32_t screen_y) const noexcept;
+    /// The row that is lit because the pointer is over it, and the one that a press holds (as row_seats counts them), -1 for none
+    int32_t hovered_row() const noexcept { return row_hover_; }
+    int32_t pressed_row() const noexcept { return row_pressed_; }
 
     void set_player_name(std::string name) { player_name_ = std::move(name); }
     void set_player_team(uint8_t team) noexcept { player_team_ = team; }
@@ -274,6 +288,7 @@ public:
     bool prompt_fits(const IRenderer& renderer, const std::string& text) const;
 
 private:
+    void draw_row_light(IRenderer& renderer, size_t row) const;                                // the row that the pointer is over (or presses) is lit
     void render_wide(IRenderer& renderer, const ants::assets::AssetArchive& archive);        // map_select_wide.cpp
     void place_buttons();                                                                      // the buttons' rectangles for the classic or the wide page
     const MapPreview* preview_of(const MapSelectEntry& entry, int32_t inner, IRenderer& renderer, const ants::assets::AssetArchive& archive);
@@ -316,6 +331,10 @@ private:
     void change_fog(bool on);
     std::function<void(const std::string& map_path)> on_start_{nullptr};
     std::function<void()> on_request_start_{nullptr};
+    std::function<void(uint8_t seat)> on_move_seat_{nullptr};
+    int8_t row_hover_{-1};                // the leader's row under the pointer (a row of row_seats), -1 none
+    int8_t row_pressed_{-1};              // ... and the one that a press captured
+    int8_t row_pressed_seat_{-1};         // ... with the seat of its player (a release moves that player, and nobody else when the rows closed up meanwhile)
     std::function<void()> on_quit_{nullptr};
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };

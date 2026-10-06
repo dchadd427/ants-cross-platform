@@ -317,6 +317,12 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             if (++clients_[player].ignored_start_requests > kIgnoredStartRequestsAllowed) violation(player);
             return;
         }
+        case MsgType::SeatMove: {                    // the leader's press on a player's row crossed the Start on the wire (protocol 14): the colours are fixed now
+            SeatMoveMsg m;
+            if (!decode(msg, m) || !seatless()) return violation(player);      // (a host that holds a seat has no leader: nobody sends it one)
+            if (++clients_[player].ignored_seat_moves > kIgnoredSeatMovesAllowed) violation(player);       // the same ladder as the StartRequest's: free at first, a violation each beyond it
+            return;
+        }
         case MsgType::Chat: {
             ChatMsg m;
             if (!decode(msg, m)) return violation(player);
