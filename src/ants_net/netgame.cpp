@@ -495,6 +495,7 @@ bool NetGame::is_leader() const noexcept {
 
 bool NetGame::request_start() {
     if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
+    if (move_unanswered()) return false;                                              // (the plan of bots is for the colours as the room shows them: it follows the answer of a SeatMove, so a START waits for it)
     size_t players = 0;
     for (const auto& slot : room_.slots) players += slot.state != SlotState::Empty ? 1u : 0u;
     if (players < 2 && plan_fill_seats(fill_, room_, sim::MAX_PLAYERS).empty()) return false;      // "too few players": as the host's START (with bots to seat they make up the rest: one person is enough)
@@ -510,18 +511,19 @@ uint8_t NetGame::seat_move_target(const RoomMsg& room, uint8_t seat) noexcept {
     return 255;                                                                       // every colour is taken: nowhere to go (a room of four starts when the fourth player comes)
 }
 
+// A SeatMove went out and the room has not answered it: the room still seats its people as it did, and less than a second has passed (a request that the room cannot do is not answered at all)
+bool NetGame::move_unanswered() const noexcept {
+    return move_pending_ != 0 && move_pending_ == seating_hash(room_) && now_ - move_sent_ms_ < kMoveAnswerMs;
+}
+
 bool NetGame::request_move_seat(uint8_t seat) {
     if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
     const uint8_t target = seat_move_target(room_, seat);
     if (target >= sim::MAX_PLAYERS) return false;
-    const uint64_t seating = seating_hash(room_);
-    if (move_pending_ != 0) {
-        const uint32_t since = now_ - move_sent_ms_;
-        if (since < kMoveGapMs) return false;                                         // a double click is one press
-        if (move_pending_ == seating && since < kMoveAnswerMs) return false;         // the last request has not been answered (the room still seats its people as it did)
-    }
+    if (move_pending_ != 0 && now_ - move_sent_ms_ < kMoveGapMs) return false;      // a double click is one press
+    if (move_unanswered()) return false;                                              // the last request has not been answered
     if (!client_lobby_->request_seat_move(seat, target)) return false;
-    move_pending_ = seating;
+    move_pending_ = seating_hash(room_);
     move_sent_ms_ = now_;
     return true;
 }
@@ -529,7 +531,8 @@ bool NetGame::request_move_seat(uint8_t seat) {
 // The leader's plan of bots is by colour: a level for each seat, seated in the seats that are empty at START. When the room shows a person in another colour (a colour that a person held is empty
 // now, one that was empty is a person's now, nothing else changed: the leader's SeatMove, whenever its answer comes) the bot that was for the colour that the person took is for the colour that it
 // left, so the match that START makes has the same people and the same bots as the leader saw. The plan follows what the room shows, not what was asked: a request that the room does not do, or
-// does once however many times it was sent, changes nothing here.
+// does once however many times it was sent, changes nothing here. Each Room message is compared with the one before it (a move is one message; a person who comes or goes is another), however
+// many arrive in one update.
 void NetGame::follow_moved_player(const RoomMsg& before) {
     uint8_t left = 255;
     uint8_t took = 255;
@@ -730,8 +733,8 @@ void NetGame::update_client() {
                         phase_since_ms_ = now_;
                     }
                     const RoomMsg before = room_;
-                    room_ = client_lobby_->room();
-                    seat_ = client_lobby_->my_seat();
+                    room_ = ev.room;                                                 // (this event's Room message: update() can read several, and each is compared with the one before it)
+                    seat_ = ev.room.you < sim::MAX_PLAYERS ? ev.room.you : client_lobby_->my_seat();
                     if (!first && is_leader()) follow_moved_player(before);
                     if (!move_hint_given_ && is_leader() && notice_until_ms_ <= now_) {        // (the leader's first company: it can put a player in another colour)
                         size_t people = 0;

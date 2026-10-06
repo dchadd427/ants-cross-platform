@@ -710,7 +710,7 @@ private:
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);
     void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
-    void net_move_seat(uint8_t seat);                     // a press on a player's row of the leader's screen (protocol 14): the request goes to the server, and the plan's bots follow the player
+    void net_move_seat(uint8_t seat);                     // a press on a player's row of the leader's screen (protocol 14): the request goes to the server, and the plan's bots follow the room's answer
     void sync_room_view();
     void render_net_overlay();
     void render_catch_up_screen();                        // the loading screen's picture with "Catching up N%" instead of the match (page_layout.hpp)

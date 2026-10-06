@@ -3200,7 +3200,7 @@ int main() {
             ASSERT_EQ(layout(room.host.room()), "Ann@0 Bob@1 Cat@2");
             ASSERT_TRUE(room.host.occupied(0) && room.host.leader() == 0 && room.guests[ann].lobby->phase() == ClientLobby::Phase::InRoom);
         }
-        {   // a leader who gave no name is "Player 1" in the room's notice, as everywhere in the lobby
+        {   // a leader who gave no name is "Player 1" in the room's notice (the word for a player without a name that the lobby and the application use; the chat's own lines say "Seat 1")
             Room room(keyed_server_config(36));
             const size_t ann = room.join_seat("");
             const size_t bob = room.join_seat("Bob");

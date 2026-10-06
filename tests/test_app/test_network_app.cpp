@@ -2560,6 +2560,7 @@ void run_leader_tests() {
         // the first press is sent (Gus to Blue, the next free colour); a second one, at once or less than half a second later, is a double click: held back, with or without an answer
         ASSERT_TRUE(leader.net()->request_move_seat(1));
         ASSERT_FALSE(leader.net()->request_move_seat(1));
+        ASSERT_FALSE(leader.net()->request_start());                                       // (START waits for the answer too: N5.96)
         // only the leader's clock runs now, so no answer comes (a request that the room cannot do is not answered either): at 500 ms the double click is over, and the press waits for the answer or for a second
         for (int i = 0; i < 4; ++i) leader.pump_network(0.1f);                              // 400 ms
         ASSERT_FALSE(leader.net()->request_move_seat(1));
@@ -2623,7 +2624,7 @@ void run_leader_tests() {
         guest.quit();
     } TEST_END();
 
-    TEST_CASE("N5.93 Leader, The Colours (Protocol 14): A Press Holds The Player Of The Row, Not The Place: When The Rows Close Up Before The Release (A Player Left) The Release Moves Nobody, And The Same Press On The Row That The Player Has Moved To Does") {
+    TEST_CASE("N5.93 Leader, The Colours (Protocol 14): A Press Holds The Seat Of The Row's Player, Not The Row's Place: When The Rows Close Up Before The Release (A Player Left) The Release Moves Nobody, And The Same Press On The Row That The Player Has Moved To Does") {
         Server server;
         ASSERT_TRUE(server.make_room("MOVE-HOLD", 4));
         Application leader;
@@ -2679,13 +2680,13 @@ void run_leader_tests() {
         hall.step(5200);                                                                     // (the hint is shown for five seconds)
         ASSERT_TRUE(lea.net.status_text() != hint);
         ASSERT_TRUE(lea.net.request_move_seat(1));                                           // Bob goes to Blue: the press is the last of this room
-        ASSERT_TRUE(hall.until([&]() { return lea.net.room().slots[2].state == net::SlotState::Client; }, 8000));
+        ASSERT_TRUE(hall.until([&]() { return lea.net.room().slots[2].state == net::SlotState::Client; }, 0));      // (from here on the game clock stands still: no time has passed since the press when the next one is made, whatever the machine's speed)
         lea.net.leave();
         // another room, a fresh session: the second person brings the hint again, and the first press is not held for the press that was made in the room that is gone
         ASSERT_TRUE(lea.net.join("127.0.0.1", server.port(), "Lea", 255, "MOVE-HINT-B"));
-        ASSERT_TRUE(hall.until([&]() { return lea.net.phase() == net::NetGame::Phase::Room && lea.net.is_leader(); }, 8000));
+        ASSERT_TRUE(hall.until([&]() { return lea.net.phase() == net::NetGame::Phase::Room && lea.net.is_leader(); }, 0));
         ASSERT_TRUE(dan.net.join("127.0.0.1", server.port(), "Dan", 255, "MOVE-HINT-B"));
-        ASSERT_TRUE(hall.until([&]() { return dan.net.phase() == net::NetGame::Phase::Room && lea.net.room().slots[1].state == net::SlotState::Client; }, 8000));
+        ASSERT_TRUE(hall.until([&]() { return dan.net.phase() == net::NetGame::Phase::Room && lea.net.room().slots[1].state == net::SlotState::Client; }, 0));
         ASSERT_EQ(lea.net.status_text(), hint);
         ASSERT_TRUE(lea.net.request_move_seat(1));
         ASSERT_TRUE(hall.until([&]() { return lea.net.room().slots[2].state == net::SlotState::Client; }, 8000));
@@ -2695,6 +2696,107 @@ void run_leader_tests() {
         ASSERT_TRUE(hall.until([&]() { return lea.net.phase() == net::NetGame::Phase::Loading && dan.report_pending; }, 10000));
         ASSERT_TRUE(lea.net.status_text() != hint);
         ASSERT_TRUE(lea.net.status_text() == std::string(sim::strings::text(sim::strings::kLoadingGame)) || lea.net.status_text() == std::string(sim::strings::text(sim::strings::kWaitingForOthers)));
+    } TEST_END();
+
+    TEST_CASE("N5.96 Leader, The Colours (Protocol 14): A START Pressed While A Colour Change Has Not Been Answered Waits (The Plan Of Bots Follows The Room's Answer, So A START Before It Would Carry The Colours As They Were, With The Player Already Moved): Nothing Is Sent, And Once The Room Has Answered The START Goes With The Plan As The Answer Made It; A Request That The Room Never Answers Holds START For A Second Only") {
+        {
+            Server server;
+            const std::string code = "MOVE-START-A";
+            ASSERT_TRUE(server.make_room(code, 4));
+            Peer lea;
+            Peer gus;
+            Hall hall{server, nullptr, {&lea, &gus}};
+            ASSERT_TRUE(lea.net.join("127.0.0.1", server.port(), "Lea", 255, code));
+            ASSERT_TRUE(hall.until([&]() { return lea.net.phase() == net::NetGame::Phase::Room && lea.net.is_leader(); }, 8000));
+            lea.net.set_fill_bots(plan(L::None, L::None, L::Hard, L::None));               // a Hard bot for Blue
+            ASSERT_TRUE(gus.net.join("127.0.0.1", server.port(), "Gus", 255, code));
+            ASSERT_TRUE(hall.until([&]() { return gus.net.phase() == net::NetGame::Phase::Room && lea.net.room().slots[1].state == net::SlotState::Client; }, 8000));
+            ASSERT_TRUE(lea.net.request_move_seat(1));                                       // Gus to Blue: the Hard bot is for Red then
+            ASSERT_FALSE(lea.net.request_start());                                           // (the START of the reviewer's scenario: pressed before the answer, it would seat nobody in Blue and Red)
+            ASSERT_TRUE(lea.net.fill_bots() == plan(L::None, L::None, L::Hard, L::None));
+            ASSERT_TRUE(hall.until([&]() { return lea.net.room().slots[2].state == net::SlotState::Client; }, 8000));
+            ASSERT_TRUE(lea.net.fill_bots() == plan(L::None, L::Hard, L::None, L::None));    // the plan followed the answer
+            {
+                const server::RoomStatus s = server.status(code);
+                ASSERT_TRUE(s.state == server::RoomState::Waiting && s.ignored_start_requests == 0 && s.seat_moves == 1 && s.names[2] == "Gus");      // (nothing was sent: no START, not even an ignored one)
+            }
+            ASSERT_TRUE(lea.net.request_start());                                            // the answer is in: START goes, with the plan as it is
+            ASSERT_TRUE(hall.until([&]() { const server::RoomStatus s = server.status(code); return s.state != server::RoomState::Waiting && s.bots.size() == 1; }, 10000));
+            {
+                const server::RoomStatus s = server.status(code);
+                ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "hard" && s.bots[0].name == "Bot (Hard)" && s.bots[0].fill);                 // the Hard bot plays Red, Gus Blue
+                ASSERT_TRUE(s.names[0] == "Lea" && s.names[1] == "Bot (Hard)" && s.names[2] == "Gus" && s.names[3].empty() && s.ignored_start_requests == 0);
+            }
+        }
+        {   // a request that the room does not answer (only this machine's clock runs): START is held for a second, not for ever
+            Server server;
+            const std::string code = "MOVE-START-B";
+            ASSERT_TRUE(server.make_room(code, 4));
+            Peer lea;
+            Peer gus;
+            Hall hall{server, nullptr, {&lea, &gus}};
+            ASSERT_TRUE(lea.net.join("127.0.0.1", server.port(), "Lea", 255, code));
+            ASSERT_TRUE(hall.until([&]() { return lea.net.phase() == net::NetGame::Phase::Room && lea.net.is_leader(); }, 8000));
+            ASSERT_TRUE(gus.net.join("127.0.0.1", server.port(), "Gus", 255, code));
+            ASSERT_TRUE(hall.until([&]() { return gus.net.phase() == net::NetGame::Phase::Room && lea.net.room().slots[1].state == net::SlotState::Client; }, 8000));
+            hall.step(100);
+            ASSERT_TRUE(lea.net.request_move_seat(1));
+            const auto lea_waits = [&](uint32_t ms) { for (uint32_t t = 0; t < ms; t += 100) { lea.now += 100; lea.update(); } };
+            lea_waits(900);
+            ASSERT_FALSE(lea.net.request_start());                                           // 900 ms and no answer yet
+            lea_waits(100);
+            ASSERT_TRUE(lea.net.request_start());                                            // a second: the wait is over, START goes
+        }
+    } TEST_END();
+
+    TEST_CASE("N5.97 Leader, The Colours (Protocol 14): The Hint Gives Way To A Line That Is Showing On The Status Line (A Player Who Comes And Speaks In One Reading); START Takes Away The Hint And Nothing Else (A Notice Shown At START Stays, As It Did Before The Hint)") {
+        const std::string hint = "Tap a player to change their colour.";
+        {
+            Server server;
+            const std::string code = "MOVE-NOTE-A";
+            ASSERT_TRUE(server.make_room(code, 4));
+            Peer lea;
+            Peer bob;
+            Hall hall{server, nullptr, {&lea, &bob}};
+            ASSERT_TRUE(lea.net.join("127.0.0.1", server.port(), "Lea", 255, code));
+            ASSERT_TRUE(hall.until([&]() { return lea.net.phase() == net::NetGame::Phase::Room && lea.net.is_leader(); }, 8000));
+            hall.peers = {&bob};                                                             // Lea's machine does not look while Bob comes and speaks
+            ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, code));
+            ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, 8000));
+            ASSERT_TRUE(bob.net.chat("hi"));
+            ASSERT_TRUE(hall.until([&]() { return bob.net.pregame_chat().size() == 1; }, 8000));      // (the room has said it to everybody)
+            hall.step(30);
+            for (int i = 0; i < 2000 && lea.net.room().slots[1].state != net::SlotState::Client; ++i) {
+                lea.update();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            for (int i = 0; i < 20; ++i) {                                                   // (the line may come a moment after the room: a reading each)
+                lea.update();
+                if (lea.net.status_text() == "Bob: hi") break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            ASSERT_TRUE(lea.net.room().slots[1].name == "Bob");
+            ASSERT_EQ(lea.net.status_text(), std::string("Bob: hi"));                       // the line that Bob said is on the status line, not the hint
+        }
+        {
+            Server server;
+            const std::string code = "MOVE-NOTE-B";
+            ASSERT_TRUE(server.make_room(code, 4));
+            Peer lea;
+            Peer dan;
+            dan.hold_report = true;                                                          // (Dan's machine is slow to report the map: the room stays in its loading phase)
+            Hall hall{server, nullptr, {&lea, &dan}};
+            ASSERT_TRUE(lea.net.join("127.0.0.1", server.port(), "Lea", 255, code));
+            ASSERT_TRUE(hall.until([&]() { return lea.net.phase() == net::NetGame::Phase::Room && lea.net.is_leader(); }, 8000));
+            ASSERT_TRUE(dan.net.join("127.0.0.1", server.port(), "Dan", 255, code));
+            ASSERT_TRUE(hall.until([&]() { return dan.net.phase() == net::NetGame::Phase::Room && lea.net.room().slots[1].state == net::SlotState::Client; }, 8000));
+            ASSERT_EQ(lea.net.status_text(), hint);
+            ASSERT_TRUE(dan.net.chat("ready?"));
+            ASSERT_TRUE(hall.until([&]() { return lea.net.status_text() == "Dan: ready?"; }, 8000));      // the line takes the place of the hint
+            ASSERT_TRUE(lea.net.request_start());
+            ASSERT_TRUE(hall.until([&]() { return lea.net.phase() == net::NetGame::Phase::Loading && dan.report_pending; }, 10000));
+            ASSERT_EQ(lea.net.status_text(), std::string("Dan: ready?"));                   // START took away the hint only: a line that is showing stays its five seconds
+        }
     } TEST_END();
 
     TEST_CASE("N5.75 The \"Get Ready\" Dialog In A Server's Room (Protocol 12): A Leader Who Starts A Room With Bots Sees The Dialog For The 5 s Before The Referee's First Turn, Up Exactly While No Tick Has Run And Gone The Step The First One Ran; The Referee Seals Nothing And Runs Nothing Meanwhile, The Screen Says Nothing, The Bots Look And Send Nothing; A Click Selects Nothing Until It Is Gone") {

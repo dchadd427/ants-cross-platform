@@ -218,7 +218,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     const int32_t row = player_row_at(screen_x, screen_y);                     // (the leader's rows: a press on a player's row captures it, the release moves the player)
     if (row >= 0) {
         row_pressed_ = static_cast<int8_t>(row);
-        row_pressed_seat_ = row_seats(room_)[static_cast<size_t>(row)];        // (the press holds the player, not the place: the rows close up when somebody leaves)
+        row_pressed_seat_ = row_seats(room_)[static_cast<size_t>(row)];        // (the press holds the seat of the player, not the row's place: the rows close up when somebody leaves; a newcomer who takes that very seat is the one that moves, as for every SeatMove)
         play_sfx(sim::SoundID::ButtonClick);
     }
     if (is_guest() || started_) return;                                       // (the leader of a server's room has the host's buttons: they act or do not act when released)

@@ -1041,15 +1041,16 @@ their music and their sound: only the window you are in is heard). The match is 
         var syncBox = $('sync');
         function show(text, cls) { syncBox.textContent = text; syncBox.className = cls || ''; }
 
-        function onSync(seat, tick, hash) {
+        function onSync(seat, tick, hash, shown) {
             if (!(seat >= 0 && seat < SEATS.length) || typeof tick !== 'number' || !/^[0-9a-f]{16}$/.test(hash)) return;
+            if (!(shown >= 0 && shown < SEATS.length)) shown = seat;      // (the label and the row that show the report are the frame's: a game that the leader put in another colour reports the seat it plays now)
             if (tick < state[seat].tick) resetMatch();                // a seat that reports an earlier tick than before: a new match began
             $('sync').hidden = false;                                  // (games of this room that were opened some other way report too)
             $('frames-note').hidden = false;
             reported = true;
             state[seat] = { tick: tick, hash: hash, at: Date.now() };
-            if (labels[seat]) labels[seat].textContent = 'tick ' + tick + ' \u00b7 ' + hash.slice(0, 8);
-            setRowState(seat, 'tick ' + tick);
+            if (labels[shown]) labels[shown].textContent = 'tick ' + tick + ' \u00b7 ' + hash.slice(0, 8);
+            setRowState(shown, 'tick ' + tick);
             var row = byTick[tick] || (byTick[tick] = []);
             row[seat] = hash;
             var complete = 0, same = true, first = null;
@@ -1072,10 +1073,11 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         window.addEventListener('message', function (e) {
             if (e.origin !== window.location.origin || !e.data || e.data.ants !== 'sync') return;
+            var shown = -1;
             for (var k = 0; k < SEATS.length; k++) {
-                if (e.source && frames[k] && frames[k].contentWindow === e.source && e.data.seat >= 0 && e.data.seat < SEATS.length) frameSeat[k] = e.data.seat;
+                if (e.source && frames[k] && frames[k].contentWindow === e.source && e.data.seat >= 0 && e.data.seat < SEATS.length) { frameSeat[k] = e.data.seat; shown = k; }
             }
-            onSync(e.data.seat, e.data.tick, String(e.data.hash));
+            onSync(e.data.seat, e.data.tick, String(e.data.hash), shown);
         });
         var channel = null;
         try {
@@ -1099,13 +1101,14 @@ their music and their sound: only the window you are in is heard). The match is 
         // ---- the seats: on this page (a frame), in a window of its own, or a link for somebody else ----
         // A link to the game page of this site (never taken from the path of this page: a path that starts with // would leave the site). `own`: the game is one of this page's own (a frame, a window): it
         // carries the picture's shape and the NAME of its seat (the name always has its parameter, empty or not: the name was chosen on this page). A link for somebody else carries no name: the game
-        // page asks whoever opens it what they want to be called.
-        function gameUrl(seat, own) {
+        // page asks whoever opens it what they want to be called. `nameSeat` (a game that the leader put in another colour, protocol 14): the seat whose NAME the game keeps, the one of its row; the link
+        // asks for `seat`, where its key is.
+        function gameUrl(seat, own, nameSeat) {
             var q = '?join=/ws&room=' + encodeURIComponent(room);
             if (fill) q += '&fill=' + fill;                // (the game takes it as --fill-bots; it matters for the leader only)
             if (roomTeams && !teamsInCode) q += '&teams=' + encodeURIComponent(roomTeams);       // (and --teams: the same; the teams that the code names need no parameter, the game reads the code)
             if (seat >= 0) q += '&seat=' + seat;
-            if (own && seat >= 0) q += '&name=' + encodeURIComponent(seatNames.start(seat));
+            if (own && seat >= 0) q += '&name=' + encodeURIComponent(seatNames.start(nameSeat === undefined ? seat : nameSeat));
             if (own || aspectFromAddress) q += '&aspect=' + aspect;
             return new URL('./' + q, window.location.href).href;
         }
@@ -1127,7 +1130,7 @@ their music and their sound: only the window you are in is heard). The match is 
         function playHere(seat) {
             if (!inFrame[seat] && !readName().ok) return false;       // a bad name starts nothing (the field says why)
             if (inFrame[seat]) {                     // again: reconnect that seat (a frame whose game lost its connection, or a room that was made again), as the seat that its game plays now
-                if (frames[seat]) frames[seat].src = gameUrl(frameSeat[seat] === null ? seat : frameSeat[seat], true) + '&embed=1';
+                if (frames[seat]) frames[seat].src = gameUrl(frameSeat[seat] === null ? seat : frameSeat[seat], true, seat) + '&embed=1';
                 setRowState(seat, 'on this page (reconnected)');
                 return true;
             }

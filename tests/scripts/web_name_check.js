@@ -551,7 +551,8 @@ const openRoom = (search, stored, name) => {
     const env = openRoom('?map=treasure&players=4', {}, 'Alice');
     env.rowButton(1, 'Play here').click();
     const frame = env.frameOf(1);
-    const say = (source, seat) => (env.win.listeners.message || []).forEach((fn) => fn({ origin: 'https://play.test', source, data: { ants: 'sync', seat, tick: 40, hash: '0123456789abcdef' } }));
+    const opened = frame.src;                                         // (the address that the frame was opened with: a reconnect changes the address of this same element)
+    const say = (source, seat, tick) => (env.win.listeners.message || []).forEach((fn) => fn({ origin: 'https://play.test', source, data: { ants: 'sync', seat, tick: tick || 40, hash: '0123456789abcdef' } }));
     frame.contentWindow = null;                                       // (a frame whose window is gone has none, and a window that was closed has no source: they are not the same window)
     say(null, 3);
     env.rowButton(1, 'Play here').click();
@@ -567,10 +568,22 @@ const openRoom = (search, stored, name) => {
     say(frame.contentWindow, 7);
     env.rowButton(1, 'Play here').click();
     check('... and neither does a seat that no room has', env.param(env.frameOf(1).src, 'seat') === '1');
-    say(frame.contentWindow, 3);
+    say(frame.contentWindow, 3, 77);
+    const cell1 = env.$('grid').children.find((c) => c.getAttribute('data-seat') === '1');
+    check('the report of a game that plays another colour is shown on its own frame and row (the first seat of the page), not on the colour that it plays now', cell1.textContent.indexOf('tick 77') !== -1 && env.rows()[1].children[1].textContent === 'tick 77' && env.rows()[3].children[1].textContent !== 'tick 77', JSON.stringify([cell1.textContent, env.rows()[1].children[1].textContent, env.rows()[3].children[1].textContent]));
     env.rowButton(1, 'Play here').click();
     const src = env.frameOf(1).src;
-    check('a game that the leader put in another colour comes back as the seat that it plays now, with the rest of its address as before', env.param(src, 'seat') === '3' && /&embed=1$/.test(src) && env.param(src, 'room') === env.param(frame.src, 'room') && env.param(src, 'join') === '/ws', src);
+    check('a game that the leader put in another colour comes back as the seat that it plays now, with the rest of its address as before', env.param(src, 'seat') === '3' && /&embed=1$/.test(src) && env.param(src, 'room') === env.param(opened, 'room') && env.param(src, 'join') === '/ws' && env.param(src, 'aspect') === env.param(opened, 'aspect'), src);
+    check('... and under its own name, the one of its row (the typed name, not the name of the colour that it plays now)', env.param(opened, 'name') === 'Alice' && env.param(src, 'name') === 'Alice', src);
+    // two games that the leader put in each other's colours (through the free colours) trade no names: each keeps the name of its row
+    env.rowButton(2, 'Play here').click();
+    const frame2 = env.frameOf(2);
+    const opened2 = frame2.src;
+    frame2.contentWindow = {};
+    say(frame2.contentWindow, 1, 90);
+    env.rowButton(2, 'Play here').click();
+    const src2 = env.frameOf(2).src;
+    check('a second game that plays the seat of the first one\'s row comes back as that seat, under the name of its own row', env.param(src2, 'seat') === '1' && randomName(env.param(opened2, 'name')) && env.param(src2, 'name') === env.param(opened2, 'name') && env.param(src2, 'name') !== 'Alice', src2);
 }
 {   // the first seat that starts takes the name, whatever its number
     const env = openRoom('?map=treasure&players=4', {}, 'Zed');

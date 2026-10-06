@@ -1724,6 +1724,109 @@ void run_seat_move_tests() {
         }
         ASSERT_TRUE(answered > 100);                                               // (the rule answers for many of the rooms: the test is no empty loop)
     } TEST_END();
+
+    TEST_CASE("N3.39 Protocol 14, The Plan Of Bots Follows The Room Message By Message (NetGame::follow_moved_player, With A Server That Is A Script): A Message In Which A Person Left One Colour And Took Another Trades The Levels Of The Two Colours; A Person Who Only Comes Or Goes, Two Who Go And One Who Comes, One Who Goes And Two Who Come, A Bot Seated Or Nothing Changed Trade Nothing; Messages Read Together Are Compared One By One (A Person Who Goes And Another Who Comes Are No Move, A Move With A Newcomer After It Is One); A Guest's Plan Never Moves") {
+        using L = FillLevel;
+        const FillPlan base(std::array<L, 4>{L::None, L::Easy, L::Medium, L::Hard});            // a different level in each colour but the leader's: any trade shows
+        const auto traded = [&base](size_t a, size_t b) {
+            std::array<L, 4> level = base.level;
+            std::swap(level[a], level[b]);
+            return FillPlan(level);
+        };
+        // a room as the script says it: "C.CB" is a person, nobody, a person, a bot; this machine (a person) is seat 0
+        const auto room_of = [](const std::string& kinds, uint8_t leader) {
+            RoomMsg r;
+            r.map_name = "TINY.LVL";
+            r.you = 0;
+            r.leader = leader;
+            for (size_t seat = 0; seat < 4; ++seat) {
+                if (kinds[seat] == 'C') r.slots[seat] = {SlotState::Client, "P" + std::to_string(seat), 10};
+                else if (kinds[seat] == 'B') r.slots[seat] = {SlotState::Bot, "Bot (Easy)", 0};
+            }
+            return r;
+        };
+        for (const bool leads : {true, false}) {
+            auto listener = TcpListener::listen(0, true);
+            ASSERT_TRUE(listener != nullptr);
+            sim::SimulationEngine sim;
+            NetGame net(sim);
+            net.set_discovery(0);
+            ASSERT_TRUE(net.join("127.0.0.1", listener->port(), "P0", 255, "ROOM-1"));
+            std::unique_ptr<TcpConnection> server;
+            uint32_t now = 1000;
+            const auto run_until = [&](const std::function<bool()>& cond) {
+                for (int i = 0; i < 3000 && !cond(); ++i) {
+                    now += 10;
+                    net.update(now);
+                    if (!server) server = listener->accept();
+                    std::this_thread::sleep_for(std::chrono::microseconds(300));
+                }
+                return cond();
+            };
+            const auto shows = [&](const std::string& kinds) {                         // the room that this machine shows is the one that the script said
+                for (size_t seat = 0; seat < 4; ++seat) {
+                    const SlotState want = kinds[seat] == 'C' ? SlotState::Client : kinds[seat] == 'B' ? SlotState::Bot : SlotState::Empty;
+                    if (net.room().slots[seat].state != want) return false;
+                }
+                return true;
+            };
+            // the first person of a room leads it: the seat of the last person in the room when this machine does not lead (a guest is led by somebody else)
+            const auto leader_of = [&](const std::string& kinds) -> uint8_t {
+                if (leads) return 0;
+                for (size_t seat = 3; seat > 0; --seat) {
+                    if (kinds[seat] == 'C') return static_cast<uint8_t>(seat);
+                }
+                return 0;
+            };
+            const auto say = [&](const std::string& kinds) { return server->send(encode(room_of(kinds, leader_of(kinds)))); };
+            // joined: Hello heard, Welcome and the first room sent
+            ASSERT_TRUE(run_until([&]() { return server != nullptr; }));
+            bool hello_heard = false;
+            ASSERT_TRUE(run_until([&]() {                                                                          // (a condition that reads must remember what it read)
+                std::vector<uint8_t> m;
+                if (server->poll(m)) hello_heard = peek_type(m) == MsgType::Hello;
+                return hello_heard;
+            }));
+            ASSERT_TRUE(server->send(encode(WelcomeMsg{0, 4})));
+            ASSERT_TRUE(say("CC.."));
+            ASSERT_TRUE(run_until([&]() { return net.phase() == NetGame::Phase::Room && shows("CC.."); }));
+            ASSERT_EQ(net.is_leader(), leads);
+            // one case: the room that the machine shows, the script's messages (all sent before the machine looks), what the plan is after them
+            struct Case {
+                const char* from;
+                std::vector<const char*> then;       // each is one Room message
+                int a;                               // the two colours whose levels trade places (-1: none)
+                int b;
+            };
+            const std::vector<Case> cases = {
+                {"CC..", {"C.C."}, 1, 2},            // the person of Red takes Blue
+                {"C.C.", {"C..C"}, 2, 3},            // ... and goes on to Black
+                {"C..C", {"CC.C"}, -1, -1},          // a person only comes
+                {"CC.C", {"C..C"}, -1, -1},          // a person only goes
+                {"CCC.", {"C..C"}, -1, -1},          // two go and one comes
+                {"CC..", {"C.CC"}, -1, -1},          // one goes and two come
+                {"CC..", {"C.B."}, -1, -1},          // one goes, a bot is seated (it is nobody's move)
+                {"C.C.", {"CBC."}, -1, -1},          // a bot is seated
+                {"CC..", {"CC.."}, -1, -1},          // nothing changed (the same message again)
+                {"CC..", {"C...", "C.C."}, -1, -1},  // one goes, and later another comes: two messages, no move
+                {"CC..", {"C.C.", "C.CC"}, 1, 2},    // a move, and a newcomer in the next message: the move is not lost
+                {"CC..", {"CCC.", "C.C."}, -1, -1},  // one comes, and later one goes: two messages, no move
+                {"CC.C", {"C.CC"}, 1, 2},            // a move while another sits in Black
+            };
+            for (const Case& c : cases) {
+                ASSERT_TRUE(say(c.from));
+                ASSERT_TRUE(run_until([&]() { return shows(c.from); }));
+                net.set_fill_bots(base);
+                for (const char* kinds : c.then) ASSERT_TRUE(say(kinds));
+                std::this_thread::sleep_for(std::chrono::milliseconds(3));                  // (the messages are in the socket together when the machine looks, as far as the kernel is quick)
+                ASSERT_TRUE(run_until([&]() { return shows(c.then.back()); }));
+                net.update(now);                                                            // (nothing is left unread)
+                const FillPlan want = leads && c.a >= 0 ? traded(static_cast<size_t>(c.a), static_cast<size_t>(c.b)) : base;
+                ASSERT_TRUE(net.fill_bots() == want);
+                ASSERT_TRUE(net.phase() == NetGame::Phase::Room && net.my_seat() == 0);
+            }
+        }
+    } TEST_END();
 }
 
 void run_prediction_tests() {

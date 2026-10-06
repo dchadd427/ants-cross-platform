@@ -283,6 +283,8 @@ public:
         enum class Type : uint8_t { RoomChanged, StartRequested, Begun, Cancelled, Rejected, Disconnected, Chat };       // Chat (protocol 11): a line arrived; take_chat() has it
         Type type{Type::RoomChanged};
         uint8_t seat{255};                      // Chat: the sender's seat, kRoomSender (255) for a notice of the room itself
+        RoomMsg room{};                         // RoomChanged: the Room message of this event. update() can read several in one call and room() has the last one only; the owner that compares each
+                                                // message with the one before it (NetGame's follow of a move) takes them from the events
     };
 
     ClientLobby(Connection* connection, Config config) : conn_(connection), cfg_(std::move(config)) {}

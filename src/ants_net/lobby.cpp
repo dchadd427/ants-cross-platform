@@ -268,7 +268,7 @@ bool HostLobby::move_seat(uint8_t from, uint8_t to) {
     if (to != room_.leader) {                                                                             // the player is told by the room (the leader sees its own move)
         std::string who = "The room";                                                                     // (a host that holds a seat has no leader: the owner of the lobby moved the guest)
         if (room_.leader < sim::MAX_PLAYERS) {
-            const std::string& name = room_.slots[room_.leader].name;                                     // (a guest may have no name: the lobby's own "Player 2")
+            const std::string& name = room_.slots[room_.leader].name;                                     // (a guest may have no name: "Player 2", the word that the application uses for a seat without one)
             who = name.empty() ? "Player " + std::to_string(static_cast<unsigned>(room_.leader) + 1u) : name;
         }
         notify(to, who + " moved you to " + seat_colour_word(to) + ".");
@@ -707,7 +707,7 @@ void ClientLobby::update(uint32_t now_ms) {
                 if (decode(msg, r) && (phase_ == Phase::InRoom || phase_ == Phase::Joining)) {
                     room_ = r;
                     if (r.you != 255) seat_ = r.you;
-                    events_.push_back(Event{Event::Type::RoomChanged});
+                    events_.push_back(Event{Event::Type::RoomChanged, 255, r});
                 }
                 break;
             }
