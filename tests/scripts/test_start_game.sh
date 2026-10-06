@@ -120,7 +120,7 @@ check "--players 1 is --single" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 1 
 check "--single is the bare program, with no mode flag: the start menu appears" "$([ "$OUT" = "./build/src/ants_app/ants" ]; echo $?)"
 OUT="$("$SCRIPT" --single --dry-run --map-select)"
 check "--single --map-select: the setup screen as before (the option skips the menu)" "$([ "$OUT" = "./build/src/ants_app/ants --map-select" ]; echo $?)"
-# the options of one game make it a single game (what the README shows), unless --players is given
+# the options of one game make it a single game (what docs/COMMAND_LINE.md shows), unless --players is given
 for one in "--host" "--join 10.0.0.5" "--bot 1:medium" "--lan-list" "--headless" "--screenshot x.png" "--map X.LVL"; do
     OUT="$("$SCRIPT" --dry-run $one)"
     check "$one alone: one window, as before" "$([ "$(echo "$OUT" | wc -l | tr -d ' ')" -eq 1 ]; echo $?)"
