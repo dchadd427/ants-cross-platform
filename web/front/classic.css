@@ -37,7 +37,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { background: var(--clay); }
 body {
-    background: var(--clay) url("clay.png");
+    background: var(--clay) url("clay.png?v=ef1e7ee6");
     color: var(--ink);
     font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif;
     font-synthesis: none;
