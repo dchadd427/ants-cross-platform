@@ -63,6 +63,39 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> raided_{};
 };
 
+/// What the arena counts of the "Can't go there." reactions (docs/BOTS.md, "The can't-go loop"): per seat and match, from what a person sees of it; counted after every tick, once the tick's
+/// commands were applied. The refused orders are an indicator that the tests bound, not a proof of cause (an ant that walks on from an earlier order and meets a wall is counted too).
+class CantGoTally {
+public:
+    static constexpr uint64_t kRefusedWindow = 10;
+    struct Seat {
+        uint32_t reactions{0};                 // the news items "Can't go there." and "Can't do that..." posted to the seat: everything its owner hears
+        uint32_t began{0};                     // of them, those of an ant that was not in the can't-go state a tick before (the rest repeat: the original's loop)
+        uint32_t orders{0};                    // the group orders (move, special, attack) for the seat, as the engine was given them
+        uint32_t refused{0};                   // of them, those followed within kRefusedWindow ticks by the first reaction of an ant they name (the engine answers a walk within 4)
+    };
+    /// A command that the engine was given when its tick count was `tick`: the ants it names are remembered
+    void command(const sim::Command& c, uint64_t tick);
+    /// After the tick's commands were applied: counts `news` (the tick's news items) and the ants that entered the can't-go state (looked at only when one can have)
+    void scan(const sim::SimulationEngine& sim, const std::vector<sim::NewsEvent>& news);
+    const Seat& seat(uint8_t s) const noexcept { return seats_[s < sim::MAX_PLAYERS ? s : 0]; }
+    /// The ticks at which the ants were looked at (the tests: a match without a can't-go reaction looks at none)
+    uint64_t scans() const noexcept { return scans_; }
+
+private:
+    struct Last {
+        uint32_t order{0};                     // the number of the last order that named the ant (0: none)
+        uint64_t tick{0};
+    };
+    std::array<Seat, sim::MAX_PLAYERS> seats_{};
+    std::vector<uint8_t> in_cantgo_;           // by ant id: the ant showed can't-go at the last scan
+    uint32_t flagged_{0};                      // how many ants showed it at the last scan
+    uint64_t scans_{0};
+    std::vector<Last> last_;                   // by ant id
+    std::vector<uint8_t> refused_;             // by order number: counted as refused already
+    std::vector<uint8_t> order_seat_;          // by order number: the seat it was for
+};
+
 struct ArenaSpec {
     const assets::LevelData* level{nullptr};   // the map (must outlive the call)
     uint32_t seed{1};                          // the engine's seed AND the controller's match seed
@@ -100,6 +133,10 @@ struct ArenaSeatResult {
     uint32_t kills{0};
     uint32_t losses{0};
     uint32_t stalls{0};                        // times a standard bot's stall detector sent it to the plain economy (StandardBot::stalls); 0 for the other kinds
+    uint32_t cantgo{0};                        // the "Can't go there." / "Can't do that..." reactions of the seat's ants (CantGoTally::Seat::reactions)
+    uint32_t cantgo_began{0};                  // of them, the ones that began from another state: the rest are the repeats of a can't-go loop
+    uint32_t orders{0};                        // the orders (group moves, specials, attacks) that the engine was given for the seat
+    uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {

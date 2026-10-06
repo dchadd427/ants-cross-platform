@@ -42,6 +42,8 @@ struct LevelPlan {
     int32_t leash_tiles{10};             // a fight is never carried further than this from the place of the blow (or from the hill, for a thief)
     uint32_t fight_linger_ticks{100};    // a fight ends this long after the last blow that was seen
     bool carrier_aid{true};              // a carrier that was hit stands idle with its food (the blow cleared its walk): it is sent home at once, as a person would click it
+    bool cantgo_aware{true};             // no order that the engine is bound to refuse for a reason that the view shows (a ring of fire shuts the hill, an ant holds a hole or the ramp): docs/BOTS.md,
+                                         // "The can't-go loop"; false (the ablation cg=0): the bot as it was before
     // the economy
     bool contest_aware{false};           // the contest-aware pile order: the piles that several enemies reach first, then those that one reaches, the safe ones, those of the ally, the hopeless (HarvestTask::Params::contest_aware)
     uint32_t contest_low{70};            // an enemy whose cost to a pile is below this percentage of the own cost is there first
@@ -216,6 +218,7 @@ struct LevelPlan {
     int32_t ambush_distance{6};          // ... it waits this many tiles east of the three tiles in front of the hole
     uint32_t ambush_thieves{1};          // ... at most this many thieves wait at a time (the others harvest between raids)
     uint32_t raid_min_loot{30};          // a hill whose score box shows less is not raided (RaidTask)
+    uint32_t raid_min_free{1};           // a hole is raided only when at least this many of the three tiles in front of it are free (1: any; 2: the quiet variant, docs/BOTS.md "The can't-go loop")
     uint32_t raid_black_ticks{600};      // a hill that could not be reached is left alone this long
     // the stall detector (StandardBot, docs/BOTS.md; 0 switches a trigger off): stall_ticks without a point, or repeat_limit equal orders within repeat_window with nothing banked, send the seat to the
     // plain economy for fallback_ticks (doubled at every stall, at most 9,600)
