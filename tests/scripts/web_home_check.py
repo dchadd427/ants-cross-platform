@@ -411,7 +411,7 @@ def main():
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("seats"):
-            print("[web home] the seats: the keyboard and the pointer, Sit here, the Teams, the invitations, START off")
+            print("[web home] the seats: the keyboard and the pointer, Sit here, the Teams, the invitations, START (always on)")
             clear_storage()
             browser.devtools.call("Browser.grantPermissions", {"origin": re.match(r"^https?://[^/]+", web).group(0), "permissions": ["clipboardReadWrite", "clipboardSanitizedWrite"]})
             load(web, settle=1.5)

@@ -29,8 +29,10 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html { background: var(--clay); }
+        /* The tile's address ends in ?v= and the first 8 hex digits of the file's sha256: the server lets a browser keep a .png for a week without asking, so a changed tile needs a new address
+           (tests/scripts/test_web_front.py keeps the six addresses of the pages equal to the file's) */
         body {
-            background: var(--clay) url("front/clay.png");
+            background: var(--clay) url("front/clay.png?v=ef1e7ee6");
             color: var(--ink);
             font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif;
             font-synthesis: none;
@@ -397,7 +399,7 @@
             <label class="lab" for="player-name">Your name</label>
             <input type="text" id="player-name" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="who-hint name-msg">
             <button id="who-go" type="button" class="btn big" hidden>Join</button>
-            <p class="hint" id="who-hint"><span id="who-general"><span class="desk">The name your ants play under. Leave it empty for a random name when you host and Player otherwise. This browser remembers it.</span><span class="mob">Your ants play under this name. Empty: a random one when you host, Player otherwise.</span></span><span id="who-step-hint" hidden></span></p>
+            <p class="hint" id="who-hint"><span id="who-general"><span class="desk">The name your ants play under. Leave it empty for a random name. This browser remembers it.</span><span class="mob">Your ants play under this name. Empty: a random one.</span></span><span id="who-step-hint" hidden></span></p>
             <p class="msg" id="name-msg" role="alert"></p>
             <a id="who-back" class="btn sm who-back" href="/" hidden>&larr; Back to the front page</a>
         </section>
@@ -701,10 +703,12 @@ their music and their sound: only the window you are in is heard). The match is 
         // The players of the Host card of the earlier pages (ants-four-players): 2 .. 4. A 1 that an earlier page remembered (it was the choice of a game on this computer) is 2.
         function hostPlayers(text, fallback) { var n = playersChoice(text, 0); return n === 1 ? 2 : n >= 2 ? n : fallback; }
         // The opponents of a game on this computer, from what the browser remembered by the first versions (the key ants-solo-bots holds 'none' or one level for all three bases): nothing remembered is
-        // Medium (a first visit); anything that is no level is none (the original's single player, alone). That key is read and never written any more: see soloSeats.
+        // Medium (the old page's first visit; the card's own first visit is a Friend, and only reads these keys when one of them is there); anything that is no level is none (the original's single player,
+        // alone). That key is read and never written any more: see soloSeats.
         function soloBots(stored) { return stored === null || stored === undefined ? 'medium' : validFill(stored); }
         // The level of Red, Blue and Black ('' is none: the order of the game's --bot seats 1, 2, 3) from what the browser remembered: the key ants-solo-seats holds three words, none or a level each
-        // ("easy,medium,none"); without it (or with a text that is not three such words) the old key gives its one level to all three seats, and a first visit is Medium for all three.
+        // ("easy,medium,none"); without it (or with a text that is not three such words) the old key gives its one level to all three seats, and with neither it is Medium for all three (the old page's first
+        // visit; cardFromOld only comes here when one of the keys is there).
         function soloSeats(stored, legacy) {
             var words = typeof stored === 'string' ? stored.split(',') : [];
             if (words.length === 3 && words.every(function (w) { return w.toLowerCase() === 'none' || validFill(w) !== ''; })) return words.map(validFill);
@@ -1290,7 +1294,7 @@ their music and their sound: only the window you are in is heard). The match is 
 
         // ---- the card (the rules are the block CARD above; this is the page that shows them) ----
         // It remembers its choices under CARD_KEY (and nothing else of the earlier pages: their keys are read for a first visit and never written). A first visit is Treasure, You at Green and a Friend in
-        // each of the other seats; the page writes nothing by being loaded, only a choice is written.
+        // each of the other seats; the page writes no choice by being loaded, only a choice is written (the room of the invitations is the tab's own, in its session storage: cardEnsureRoom).
         var mapPick = $('map-pick');
         MAPS.forEach(function (m) {
             var o = document.createElement('option');
@@ -1300,7 +1304,7 @@ their music and their sound: only the window you are in is heard). The match is 
         var card = cardParse(recall(CARD_KEY)) || cardFromOld({ solo: recall('ants-solo-seats'), legacy: recall('ants-solo-bots'), soloTeams: recall('ants-solo-teams'), map: recall('ants-four-map'),
                                                               players: recall('ants-four-players'), fill: recall('ants-four-fill'), teams: recall('ants-four-teams') });
         var teamsSelect = $('teams');
-        // The name under You: the typed name, else a random one (the field says so: "Leave it empty for a random name when you host")
+        // The name under You: the typed name, else a random one (the field says so: "Leave it empty for a random name")
         function youName() { var checked = nameCheck(nameInput.value); return checked.ok && checked.name ? checked.name : names[0]; }
         // The room that the invitations and START use, made when the page first needs one (a Friend seat, or START) and kept while the map and the teams stay, since the code holds them: another map or other teams
         // are another room, and the invitations change with it. The tab keeps it until START, so that a reload (the picture's selector reloads the page; a phone may discard a page that was left for the
@@ -1468,10 +1472,10 @@ their music and their sound: only the window you are in is heard). The match is 
         window.addEventListener('pagehide', function () { if (starting) cardRoomForget(); });
         window.addEventListener('pageshow', function (e) { starting = false; if (e && e.persisted) showCard(); });
         showCard();
-        // A game on this computer, for an address that asks for one and for a card with nobody else in the match: this tab goes to the game page (never a new tab) with the map, the opponents, the typed name and the picture's shape (the game page's own parameters)
+        // A game on this computer, for an address that asks for one and for a card with nobody else in the match: this tab goes to the game page (never a new tab) with the map, the opponents, the name that the
+        // card shows under You (the typed one, else the page's random one, as for a room) and the picture's shape (the game page's own parameters)
         function startLocal(mapKey, levels) {
-            var checked = nameCheck(nameInput.value);
-            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, checked.ok ? checked.name : '', aspect), window.location.href).href);
+            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, youName(), aspect), window.location.href).href);
         }
         // What an address that names a map makes: a game on this computer with &players=1 (&fill= is then the level of all three opponents), else a room of 2 to 4 seats with the plan (&fill=) and the teams
         // (&teams=) as text. The code carries the choice (the server reads it: demo-<map>-<n>p-[<team word>-]<random>). Nothing is remembered: the choices that the card remembers are the card's own.
@@ -1545,12 +1549,11 @@ their music and their sound: only the window you are in is heard). The match is 
         // START takes THIS tab into the match: the game page with the room, your colour, the plan (a bot for each bot seat), your name and the picture's shape, and the number of people to wait for. The game of the leader
         // of the room presses START by itself when they are in (no Friend seat: at once, against the bots). The room is the match's now and the page lets go of it when it is left (pagehide above), not before:
         // the game page may be slow to come, and a second click (a held Enter) goes to the same room, so that the links that were sent stay good. With nobody else in the match (every other seat is Nobody) it is
-        // a game on this computer instead (the game page at its own path: no room, no links), because a room of the game server needs two people to start.
+        // a game on this computer instead (the game page at its own path: no room, no links), because a room of the game server needs two people to start. It leaves the tab's room alone: Back brings the same links.
         $('play').addEventListener('click', function () {
             if (!readName().ok) return;               // a bad name starts nothing (the field says why)
             if (cardAlone(card)) {
-                starting = true;
-                startLocal(card.map, []);
+                startLocal(card.map, []);                  // (not `starting`: this game is in no room, so the tab keeps the room of its invitations when it leaves)
                 return;
             }
             var code = cardEnsureRoom();

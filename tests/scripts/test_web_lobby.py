@@ -118,6 +118,9 @@ class TheFrontPageMarkup(PageCase):
         for word in ("<b>You</b>", "<b>Sit here</b>", "<b>Friend</b>", "<b>Easy</b>", "<b>Nobody</b>", "<b>Teams</b>", "<b>START!</b>", "<b>Invite your friends</b>", "<b>Copy link</b>", "<b>Share</b>", "<b>Join</b>"):
             self.assertIn(word, steps, word)
         self.assertNotIn("Play vs the computer", steps)
+        self.assertIn("You, your friends and the bots are 1 to 4 players.", steps)                 # (a game for one is a game: START is never off)
+        self.assertNotIn("are 2 to 4 players", steps)
+        self.assertIn("with every other seat on <b>Nobody</b> it is a game for one on this computer", steps)
         self.assertNotIn("setup-hint", self.page)                                              # (the long hints of the old form are in "How it works" and the room panel)
 
     def test_a_first_visit_is_treasure_you_at_green_a_friend_in_the_other_seats_and_the_choices_are_the_cards_own(self):

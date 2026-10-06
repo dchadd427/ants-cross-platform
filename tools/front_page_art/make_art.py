@@ -13,7 +13,8 @@ What it makes (web/front/, or the folder of --out):
                                    page's START! button is not one of them: the original's picture is 98 x 27 pixels and broke up when it was shown larger, so web/lobby.html draws a button of
                                    its own in the same teal
   clay.png                         the background tile that every page repeats: the orange of the game's menus with a little noise and dirt (artlib.dirty_clay; the original's own tile is a flat
-                                   orange, which looked too clean). It is made, not cut out, and the same every time
+                                   orange, which looked too clean). It is made, not cut out, and the same every time. The pages name it with ?v= and the first 8 hex digits of its sha256, because the
+                                   server lets a browser keep a .png for a week: after a new tile, put its hash in the six places (tests/scripts/test_web_front.py says which)
   ant_green/red/blue/black.png     the front standing ant of the roster, tinted for each team
   logo.png                         the "ants!" lettering of the title screen without its clay (make_logo.py)
   preview_<map>.png                the setup screen's own map preview of each of the six maps, 300 x 300: the game is run headless on its setup screen with only that map in its Maps folder

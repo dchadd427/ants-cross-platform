@@ -17,6 +17,7 @@ sprites and screenshots by tools/front_page_art/make_art.py (a developer's tool,
   - the page uses the art: every picture it names is in the folder (and the folder holds nothing it does not use), each <img> has the size of its file, the Map Info lines are the ones in the level
     files, nothing is loaded from another site, the pictures that are not seen at once are lazy, the font is preloaded and the level buttons are radio buttons that the keyboard reaches
 """
+import hashlib
 import os
 import re
 import struct
@@ -183,14 +184,14 @@ class TheSharedStylesheet(unittest.TestCase):
 
     def test_the_font_and_the_clay_tile_it_names_are_in_the_folder_beside_it(self):
         self.assertRegex(self.css, r'@font-face \{ font-family: "Libre Franklin"; src: url\("LibreFranklin-Medium\.ttf"\) format\("truetype"\);')       # (relative: it resolves next to the sheet)
-        self.assertIn('url("clay.png")', self.css)
+        self.assertRegex(self.css, r'url\("clay\.png\?v=[0-9a-f]{8}"\)')                        # (the address carries the file's hash: TheClay)
         for name in ("LibreFranklin-Medium.ttf", "clay.png"):
             self.assertIn(name, os.listdir(FRONT))
 
     def test_it_loads_nothing_from_another_site(self):
         self.assertNotIn("@import", self.css)
         for target in re.findall(r"url\(\s*[\"']?([^\"')]+)", self.css):
-            self.assertTrue(target.startswith("data:image/svg+xml,") or target in os.listdir(FRONT), target)          # (a file of this folder or the select's own arrow, drawn in the sheet)
+            self.assertTrue(target.startswith("data:image/svg+xml,") or target.split("?")[0] in os.listdir(FRONT), target)          # (a file of this folder, its address may end in ?v=, or the select's own arrow, drawn in the sheet)
         self.assertNotRegex(self.css, r"url\(\s*[\"']?(?:https?:)?//")
 
     def test_it_has_the_pieces_that_every_page_needs(self):
@@ -226,6 +227,15 @@ class TheClay(unittest.TestCase):
         cls.ink = re.search(r"--ink: (#[0-9a-f]{6});", css).group(1)
         cls.light = {c: TheColours.luminance("#%02x%02x%02x" % c) for row in cls.rows for c in row}
         cls.ink_light = TheColours.luminance(cls.ink)
+
+    def test_every_page_names_the_tile_by_its_content(self):
+        # docker/nginx.conf lets a browser keep a .png for a week without asking again, so a tile that changes under the same address stays the clean one for everybody who has been here: its address ends in
+        # ?v= and the first 8 hex digits of the file's sha256, in the six places that name it (a new tile fails this until they say so)
+        version = hashlib.sha256(read_bytes("web", "front", "clay.png")).hexdigest()[:8]
+        for parts, count in ((("web", "lobby.html"), 1), (("web", "shell.html"), 4), (("web", "front", "classic.css"), 1)):
+            text = read(*parts)
+            self.assertEqual(len(re.findall(r"clay\.png", text)), count, "%s names the tile %d time(s)" % (parts[-1], count))
+            self.assertEqual(len(re.findall(r'url\("(?:front/)?clay\.png\?v=%s"\)' % version, text)), count, "%s: the tile's address ends in ?v=%s" % (parts[-1], version))
 
     def test_it_has_noise_and_dirt_and_is_no_flat_orange(self):
         pixels = [c for row in self.rows for c in row]

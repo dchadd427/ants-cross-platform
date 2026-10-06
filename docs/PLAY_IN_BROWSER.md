@@ -15,7 +15,7 @@ From top to bottom it shows:
 
 ### The card: New match
 
-There is no separate game against the computer and no separate host and join: a match is always a room on the game server, and the page makes the room. That needs a server with demo rooms (`--demo-rooms N --demo-map TREASURE.LVL --demo-maps ...`, as `docker-compose.stack.yml` starts it: [`SERVER.md`](SERVER.md#demo-rooms)); the rooms that the front page makes are demo rooms.
+There is no separate game against the computer and no separate host and join: a match is a room on the game server, and the page makes the room (the one exception is a game for one: with every other seat on **Nobody**, **START!** plays on this computer, with no room and no server). The rooms need a server with demo rooms (`--demo-rooms N --demo-map TREASURE.LVL --demo-maps ...`, as `docker-compose.stack.yml` starts it: [`SERVER.md`](SERVER.md#demo-rooms)); the rooms that the front page makes are demo rooms.
 
 - **Map**: the six maps of the original, each with a picture. **Treasure** is preselected until you choose another.
 - **Seats**: Green, Red, Blue and Black, each with its ant. Exactly one is **You** (your name under it); **Sit here** on another colour moves you there, which is how you change colour. Every other seat is one group of buttons that the arrow keys and Tab drive: **Friend** (a seat for a person you invite), **Easy**, **Medium** or **Hard** (a bot of that level) or **Nobody** (the seat stays out). A first visit is Treasure, You at Green and a Friend in the other three seats. The page remembers the choices.
@@ -41,7 +41,7 @@ The addresses of the earlier pages are not offered any more and work as before: 
 
 One field at the top of the page, shared by **START!**, **Have a code?** and the name step, and remembered in this browser (`ants.name`). The "Bot (" rule is the desktop start menu's, in the same words: a name that starts with "Bot (", whatever its blanks and capitals, is refused with the reason. A name has at most 32 printable ASCII characters; this page refuses one that has more, or another character, and says why (the desktop menu drops such characters and cuts the name), and it accepts an empty field (the desktop menu asks for a name). A bad name starts nothing and says why under the field.
 
-- The seat that you play from this page plays under it (when you play several seats yourself, the first seat does and the others keep random names). An empty field gives a random name when you start a match with **START!** and "Player" when you join with a code.
+- The seat that you play from this page plays under it (when you play several seats yourself, the first seat does and the others keep random names). An empty field gives a random name when you start a match with **START!** (a game for one included) and "Player" when you join with a code.
 - **A link that somebody sends you asks for your name first, every time, except on a reload of a game page whose seat this browser holds** (the reload takes the seat back and asks nobody). This covers the game page's `?join=...&room=...` (an invitation of the card is such a link), the room links of this page and the links that host a match on a map. A small card shows your remembered name with a Join button (Host on a link that hosts a match on a map; or press Enter), and the game does not connect before you have chosen.
 - The page's own frames and windows already carry the name chosen on the page and ask nobody, nor does `&play=here`.
 

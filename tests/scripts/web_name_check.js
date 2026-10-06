@@ -718,7 +718,7 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
 {
     const env = runLobby('', {});
     same('a first visit: Treasure, You at Green, a Friend in every other seat, free for all', [env.$('map-pick').value, youSeats(env), seatWords(env), env.$('teams').value], ['treasure', [0], ['friend', 'friend', 'friend', 'friend'], 'ffa']);
-    check('... the name under You is one of the page\'s random names (the field is empty: "Leave it empty for a random name when you host"), and the marker says You', randomName(env.$('seat-name-0').textContent) && !env.$('seat-name-0').hidden && [0, 1, 2, 3].every((s) => new RegExp('<span class="you" id="seat-you-' + s + '" hidden> &middot; You</span>').test(lobbyText)));
+    check('... the name under You is one of the page\'s random names (the field is empty: "Leave it empty for a random name"), and the marker says You', randomName(env.$('seat-name-0').textContent) && !env.$('seat-name-0').hidden && [0, 1, 2, 3].every((s) => new RegExp('<span class="you" id="seat-you-' + s + '" hidden> &middot; You</span>').test(lobbyText)));
     same('... the rows of the other seats have a Sit here and a group of five buttons; the row of You has neither', [0, 1, 2, 3].map((s) => [env.$('sit-' + s).hidden, env.$('seat-set-' + s).hidden]), [[true, true], [false, false], [false, false], [false, false]]);
     check('... the seat of You is marked (a class), the others are not', env.$('seat-row-0').classList.contains('is-you') && [1, 2, 3].every((s) => !env.$('seat-row-' + s).classList.contains('is-you')));
     same('... four seats play: the Teams select offers free for all and Green with each of the others', [env.$('teams-line').hidden, teamChoices(env)], [false, FOUR_TEAMS]);
@@ -1034,7 +1034,21 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     for (const s of [1, 2, 3]) choose(nameless, s, 'nobody');
     pickMap(nameless, 'islands');
     nameless.$('play').click();
-    same('an empty name is the game\'s own Player (the line under the field says so), on the map that the card has', [nameless.param(nameless.assigned[0], 'map'), nameless.param(nameless.assigned[0], 'name')], ['islands', 'Player']);
+    const nu = nameless.assigned[0] || '';
+    same('an empty name is the one that the card shows under You (a random one of the page\'s, as for a room: the line under the field says so), on the map that the card has', [nameless.param(nu, 'map'), randomName(nameless.param(nu, 'name')), nameless.param(nu, 'name') === nameless.$('seat-name-0').textContent], ['islands', true, true]);
+    const classic = runLobby('?aspect=4:3', BOTS());
+    for (const s of [1, 2, 3]) choose(classic, s, 'nobody');
+    classic.$('play').click();
+    check('the picture of the page goes with a game for one too (Classic 4:3)', classic.assigned.length === 1 && new URL(classic.assigned[0]).pathname === '/play.html' && classic.param(classic.assigned[0], 'aspect') === '4:3', JSON.stringify(classic.assigned));
+    const kept = runLobby('', {});                         // a first visit: three Friends, so the tab holds a room for their links
+    const keptRoom = kept.param(inviteLinks(kept)[0], 'room');
+    for (const s of [1, 2, 3]) choose(kept, s, 'nobody');
+    kept.$('play').click();
+    (kept.win.listeners.pagehide || []).forEach((fn) => fn({ persisted: true }));
+    check('a game for one is in no room: the tab keeps the room of its invitations when it leaves', kept.assigned.length === 1 && new URL(kept.assigned[0]).pathname === '/play.html' && kept.session.data['ants-match-room'] !== undefined && JSON.parse(kept.session.data['ants-match-room']).code === keptRoom, JSON.stringify(kept.session.data));
+    kept.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
+    choose(kept, 1, 'friend');
+    check('... and Back from the game brings the same links (the friends who were sent them wait in that room)', kept.param(inviteLinks(kept)[0], 'room') === keptRoom);
     choose(env, 2, 'friend');
     same('a Friend seat is a player: START says that it waits for the friend', [!env.$('play').disabled, env.$('start-note').textContent], [true, 'Starts when your friend is in (the first player in the room can start sooner).']);
     choose(env, 3, 'friend');
@@ -1152,9 +1166,9 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
             }
             const u = env.assigned[before];
             started++;
-            if (playing === 1) {                               // nobody else: the game of this computer on the card's map, under the typed name (Player when there is none), with no room and nothing of one
+            if (playing === 1) {                               // nobody else: the game of this computer on the card's map, under the name that the card shows under You, with no room and nothing of one
                 alone++;
-                const same4 = new URL(u).pathname === '/play.html' && env.param(u, 'map') === env.$('map-pick').value && env.param(u, 'name') === (typed.name || 'Player') && env.param(u, 'aspect') === '16:9' &&
+                const same4 = new URL(u).pathname === '/play.html' && env.param(u, 'map') === env.$('map-pick').value && env.param(u, 'name') === (typed.name || env.$('seat-name-' + you[0]).textContent) && env.param(u, 'aspect') === '16:9' &&
                               ['join', 'room', 'bots', 'teams', 'fill', 'start', 'seat', 'key'].every((k) => env.param(u, k) === null);
                 if (!same4) wrong += ' alone ' + step + ' ' + u;
                 env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));

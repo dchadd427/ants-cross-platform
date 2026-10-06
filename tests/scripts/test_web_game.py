@@ -405,7 +405,7 @@ class TheLoadingScreen(PageCase):
             self.assertIn(message, self.page)
 
     def test_the_overlay_is_the_clay_and_the_bar_is_teal_in_a_black_box(self):
-        self.assertEqual(rule(self.style, "#splash-overlay")["background"], 'var(--clay) url("front/clay.png")')
+        self.assertRegex(rule(self.style, "#splash-overlay")["background"], r'^var\(--clay\) url\("front/clay\.png\?v=[0-9a-f]{8}"\)$')     # (the tile's address carries its hash: test_web_front.py)
         fill = rule(self.style, ".progress-bar-fill")
         self.assertEqual(fill["background"], "var(--teal)")
         self.assertIn("var(--teal-lo)", fill["box-shadow"])
