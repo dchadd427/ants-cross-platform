@@ -30,7 +30,7 @@
 //
 // The catch-up (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A machine that comes back to a match that it lost (a lost connection, a reloaded page) is given the turns it misses, up to
 // all of them, from the server's log. They are handed in with on_catch_up_turn() and executed with fast_forward(): as fast as the machine can, without waiting for real time, without
-// calling any hook (nothing is drawn, no sound plays, no news appears: the match of the past is only replayed), in exactly the order of update(): a turn's commands are applied in
+// calling a presentation hook (nothing is drawn, no sound plays, no news appears: the match of the past is only replayed; the watcher of set_on_executed, the replay recorder, is told), in exactly the order of update(): a turn's commands are applied in
 // order, then its tick runs. The catch-up is not the live stream and tells the jitter buffer nothing about the link: its turns all arrive at once, "late" by minutes, and would
 // make the buffer ask for its maximum (and make the lateness that it measured before the pause look like a clock that jumped). After a fast-forward the runner is as it is at the
 // start of a match: the buffer back at its steady value with no turns read, the next live turns collected before the first of them runs (the first is not due before target + 1 are queued).
@@ -71,7 +71,7 @@ public:
     /// not an arrival of the live stream: the jitter buffer is not told about it. Run these turns with fast_forward(), never with update().
     bool on_catch_up_turn(TurnMsg turn);
 
-    /// Executes up to `max_ticks` of the queued turns at once, without pacing and without any hook (set_on_tick, set_on_command and set_on_applied are not called): for each turn its
+    /// Executes up to `max_ticks` of the queued turns at once, without pacing and without any presentation hook (set_on_tick, set_on_command and set_on_applied are not called; set_on_executed is): for each turn its
     /// commands are applied in order, then its tick runs, as update() does it, and the state hash is not taken (the caller asks state_hash() when it has run what it wanted to).
     /// A turn is one tick (kTicksPerTurn), so `max_ticks` is also the most turns. Returns the number of turns executed, 0 when nothing is queued. When it executed any turn the runner is
     /// left as at the start of a match (see "The catch-up" above), so update() goes on from there as soon as the live turns are in. Calls to it are as short or as long as the caller
@@ -96,6 +96,10 @@ public:
     /// Called for every LIVE turn that the runner has queued, after it is queued (queued_turn() finds it, next_turn_expected() is the number after it); not for the turns of the catch-up
     /// (on_catch_up_turn). The client-side prediction (prediction.hpp) compares each turn that arrives with what it assumed for that tick.
     void set_on_turn(std::function<void(const TurnMsg&)> fn) { on_turn_ = std::move(fn); }
+    /// Called for every turn that has run, after its commands were applied and its tick ran, with the turn as it was executed: by update() just BEFORE on_tick, and by fast_forward() (the catch-up's
+    /// turns run here, with no other hook). So a watcher sees every turn of the match from its first, whichever way it ran: the replay recorder (ants_replay/recorder.hpp) is one. It only watches: what it
+    /// does must not change the engine.
+    void set_on_executed(std::function<void(const TurnMsg&)> fn) { on_executed_ = std::move(fn); }
     /// The turn number `turn` when it has been received and not yet executed (it stands in the queue: the jitter buffer), else null. The commands of the turns in hand are KNOWN before
     /// the engine runs them: the prediction runs them ahead of the engine as certain input. Between two turns, and inside the hooks of update() (a turn is popped when it runs, so the
     /// first turn that this answers for is the one after it), the answer is always about turns that have not run.
@@ -175,6 +179,7 @@ private:
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
     std::function<void(const sim::Command&)> on_applied_;
     std::function<void(const TurnMsg&)> on_turn_;
+    std::function<void(const TurnMsg&)> on_executed_;
 };
 
 }  // namespace ants::net

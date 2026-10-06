@@ -408,6 +408,12 @@
             }
         }
 
+        /* The replay of the match that has just ended: the game offers its file (antsOfferReplay) and this button saves it. The button is the game's own bevelled one, so the .btn display must
+           not win over `hidden`. */
+        .replay-part[hidden] {
+            display: none;
+        }
+
         /* The fullscreen mouse (the pointer lock) is for a mouse: a screen with no pointer that hovers (a phone, a tablet) has no use for the control */
         @media (hover: none) {
             .lock-part {
@@ -1050,6 +1056,7 @@
             <button type="button" role="radio" id="lock-on" data-lock="on" aria-checked="true" title="Fullscreen holds the mouse inside the game: your cursor cannot leave the picture, and on a Mac the Dock and the menu bar stay away. In Chrome and Edge Esc goes to the game (hold it to leave fullscreen); in other browsers Esc gives the mouse back first.">Locked</button>
             <button type="button" role="radio" id="lock-off" data-lock="off" aria-checked="false" title="Fullscreen as the browser makes it: the mouse is free (a mouse over the black bars still scrolls the map at the picture's edge)">Free</button>
         </div>
+        <button type="button" id="replay-download" class="btn sm replay-part" hidden onclick="antsDownloadReplay()" title="Save the match you just played as a replay file (.antsrep): it holds every order of every player, and the replay tool lists them and plays the match again exactly. Send the file to whoever should look at the match.">Download replay</button>
     </div>
 
     <div class="mobile-tip-banner" id="mobile-tip-banner">
@@ -1783,6 +1790,54 @@
             } catch (e) { /* no fetch in this browser: nothing is counted */ }
         }
         // ANTS_REPORT_END
+
+        // ANTS_REPLAY_BEGIN (tests/scripts/web_replay_check.js runs this block with a fake page)
+        // The replay of the match that has just ended (docs/REPLAYS.md). The game calls antsOfferReplay when a match is over: `bytes` is the file (a Uint8Array) and `name` its name, and the "Download replay"
+        // button appears under the game; the game calls it with null when the next match begins, and the button goes away. antsDownloadReplay (the button's click) saves the file through a link with the
+        // download attribute. Nothing here is ever the game's business: a page without the button, a browser without Blob or object URLs, a refused download, none of them throws.
+        var antsReplayFile = null;
+        function antsReplayFileName(name) {
+            var clean = String(name || '').replace(/[^A-Za-z0-9._-]/g, '_');
+            if (!/\.antsrep$/.test(clean) || clean.length < 9 || clean.charAt(0) === '.') clean = 'ants-match.antsrep';
+            return clean;
+        }
+        function antsReplaySize(count) {
+            return count < 1024 ? count + ' bytes' : count < 1048576 ? Math.max(1, Math.round(count / 1024)) + ' KB' : (count / 1048576).toFixed(1) + ' MB';
+        }
+        function antsOfferReplay(bytes, name) {
+            try {
+                var button = document.getElementById('replay-download');
+                if (!bytes || !bytes.length) {
+                    antsReplayFile = null;
+                    if (button) button.hidden = true;
+                    return;
+                }
+                antsReplayFile = { bytes: bytes, name: antsReplayFileName(name) };
+                if (button) {
+                    button.textContent = 'Download replay (' + antsReplaySize(bytes.length) + ')';
+                    button.hidden = false;
+                }
+            } catch (e) { /* nothing is offered */ }
+        }
+        function antsDownloadReplay() {
+            var file = antsReplayFile;
+            if (!file) return false;
+            try {
+                var url = URL.createObjectURL(new Blob([file.bytes], { type: 'application/octet-stream' }));
+                var link = document.createElement('a');
+                link.href = url;
+                link.download = file.name;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+        // ANTS_REPLAY_END
 
         var Module = {
             arguments: ANTS_ARGS,

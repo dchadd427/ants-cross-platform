@@ -27,6 +27,7 @@
 #include "ants_net/cue_router.hpp"
 #include "ants_net/latency.hpp"
 #include "ants_net/netgame.hpp"
+#include "ants_replay/recorder.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/hud.hpp"
@@ -246,6 +247,13 @@ public:
     void set_local_player(uint8_t team_id);
 
     ants::sim::SimulationEngine& sim() noexcept { return sim_; }
+    /// The replay of the match that ended (or was left) last (docs/REPLAYS.md): the bytes of a .antsrep file, empty until a match has ended that could be recorded. Every match is recorded as it is played; the
+    /// web page offers the file as a download (its "Download replay" button), the desktop game writes it into the `replays` folder beside its settings file, and the file is kept here too.
+    const std::vector<uint8_t>& last_replay() const noexcept { return last_replay_; }
+    /// What that file is called when it is saved or downloaded ("ants-TREASURE-20261006-143209.antsrep")
+    const std::string& last_replay_name() const noexcept { return last_replay_name_; }
+    /// The recording of the match that is being played (null: none is made, or the match has ended)
+    const replay::Recorder* recorder() const noexcept { return recorder_.get(); }
     /// The engine that the match screen SHOWS and that the HUD asks (the picture, the minimap, the panel, the selection, the pointer's cursor, what a click picks): `sim()`, the confirmed
     /// engine, except in a match of the network that predicts the player's own orders (net::Prediction, docs/NETWORK_PORT.md "Prediction of one's own orders"), where it is the predicted
     /// engine: the player's orders show at once and everything else is the confirmed state a few ticks ahead. The cues, the news, the scores, the end of the match and the hashes stay the
@@ -596,6 +604,10 @@ private:
 
     uint8_t local_player_id_{0};
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
+    std::unique_ptr<replay::Recorder> recorder_;          // the recording of the match that is on (replay.hpp; empty: none is made, or the match has ended); the sinks below hold a reference to it
+    std::unique_ptr<sim::CommandSink> local_sink_;        // where the HUD's orders of a game on this computer go: into the engine and into the recording (a network game's go to net_)
+    std::vector<uint8_t> last_replay_;                    // the file of the match that ended last, and its name (finish_recording)
+    std::string last_replay_name_;
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<RejoinStore> rejoin_store_;           // the keys of the seats (before net_: its callbacks write here, and leave() writes last)
@@ -730,11 +742,20 @@ private:
     bool start_local_bots(uint32_t match_seed);                        // after the simulation was initialised: the controller, one LocalBotSink per seat
     bool add_bot(const ai::BotSpec& spec, sim::CommandSink& sink, std::string& why);   // seats one bot (the registry's, or the tests' factory's)
     void start_net_bots();                                             // the host of a room: the controller over NetBotSink, for the seats that hold a bot
-    void form_start_teams();                                           // --teams: the pairs of the plan become teams with the original's commands, before the first tick of a local match
+    bool form_start_teams();                                           // --teams: the pairs of the plan become teams with the original's commands, before the first tick of a local match; true when teams were made
     void stop_bots();
     const ai::BotSpec* bot_spec_of(uint8_t seat) const;                // the --bot spec of a seat, null for the others
     bool is_bot_seat(uint8_t seat) const;                              // a computer player holds the seat: a local game's specs, in a room the slots that the room calls bots
     std::string declined_team_up_note(const sim::NewsEvent& event) const;   // the line that says why a bot declined the local player's invitation (the HUD's news note); "" for any other event
+
+    // Replays (replay.hpp, docs/REPLAYS.md; application_replay.cpp): every match is recorded as it is played, and the file is made when it ends
+    void use_local_sink();                                             // the HUD's orders of a game on this computer go through local_sink_, which the recording sees (they went straight into the engine)
+    void begin_local_recording(uint32_t seed, bool teams_made);        // a match on this computer began: the engine is initialised and the teams are made, no command was given yet
+    void begin_net_recording();                                        // the Start of a network match was loaded (net_load_match)
+    void begin_recording(replay::Header head);                         // the recording of the match that begins (what was not finished of an earlier one is dropped), and the offer of the last file goes
+    void finish_recording();                                           // the match is over or left: the file is made, kept in last_replay_ and handed on (offer_replay); a match left at once leaves none
+    void offer_replay();                                               // last_replay_: the web page's Download replay button gets it; the desktop game writes it beside its settings
+    void withdraw_replay();                                            // a match begins: the page's button goes away
 
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
     bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same canvas: wide_page.hpp)

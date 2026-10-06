@@ -384,6 +384,9 @@ public:
     /// After every simulation tick / for every applied command (see LockstepRunner); may be set before the match begins
     void set_on_tick(std::function<void()> fn);
     void set_on_command(std::function<void(const sim::Command&, const sim::CommandResult&)> fn);
+    /// After every turn that the match's runner has run, the live ones and the catch-up's alike, with the turn as it ran (LockstepRunner::set_on_executed): the replay recorder's tap. It travels with the
+    /// runner when the host changes. It only watches; may be set before the match begins
+    void set_on_executed(std::function<void(const TurnMsg&)> fn);
     /// The match is over: the host stops sealing turns
     void freeze();
 
@@ -523,6 +526,7 @@ private:
     std::function<void()> on_tick_;
     std::function<void()> on_prediction_dropped_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
+    std::function<void(const TurnMsg&)> on_executed_;
 
     // transport (owned here, borrowed by the lobbies and sessions)
     struct Transport;

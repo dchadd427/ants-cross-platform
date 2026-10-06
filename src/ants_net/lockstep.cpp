@@ -87,8 +87,9 @@ uint32_t LockstepRunner::fast_forward(uint32_t max_ticks) {
         TurnMsg turn = std::move(queue_.front());
         queue_.pop_front();
         in_turn_ = true;
-        for (const sim::Command& c : turn.commands) sim_.apply_command(c);        // (no hook: nothing is presented, nobody is asked what the engine said)
+        for (const sim::Command& c : turn.commands) sim_.apply_command(c);        // (no presentation hook: nothing is presented, nobody is asked what the engine said)
         sim_.tick();
+        if (on_executed_) on_executed_(turn);                   // (the watcher of the match sees the catch-up's turns too)
         ++next_execute_;
         in_turn_ = false;
         ++turns;
@@ -154,6 +155,7 @@ std::vector<LockstepRunner::Executed> LockstepRunner::update(uint32_t dt_ms) {
             if (on_command_) on_command_(c, r);
         }
         sim_.tick();
+        if (on_executed_) on_executed_(turn);                   // (before on_tick: the application ends the match from there, and the watcher has this turn by then)
         if (on_tick_) on_tick_();
         Executed e;
         e.turn = turn.turn;

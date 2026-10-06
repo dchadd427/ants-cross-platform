@@ -42,7 +42,7 @@ print_usage() {
     echo "                   sanitizer, none of the slow suites (the ones --list marks full, for example lock-step soak, server, worker bot, network application): CI runs everything for every pull request"
     echo "  --all            Run all test suites (ants_assets + ants_sim + ants_app + E2E + repository checks, default)"
     echo "  --assets         Run only asset decoder tests (test_assets)"
-    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker) and server suites)"
+    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker), replay (test_replay, replay_tool --selftest) and server suites)"
     echo "  --app            Run only application integration tests (test_app_integration)"
     echo "  --e2e            Run only opaque-box E2E test suites (e2e_runner)"
     echo "  --tools          Run only the repository checks (tools/check_version_consistency.py, the python tests of tests/scripts)"
@@ -263,6 +263,8 @@ define_suites() {
     suite "2.26"   sim    0 "test_engine_copy"           "Engine Copy, whole matches (test_engine_copy)"             "ENGINE COPY, WHOLE MATCHES (six shipped maps to the end of the match, a copy taken every 1000 ticks, the state hash compared at every tick)" '"./$BUILD_DIR/tests/test_sim/test_engine_copy" --whole-matches' 'cost=35'
     suite "2.27"   sim    1 "test_prediction"            "Prediction (test_prediction)"                              "PREDICTION SUITE (one's own orders shown at once: exact with the right lead, rebuilt only when a turn disagrees, equal to its derivation, never touching the confirmed engine)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_prediction"' 'cost=16'
     suite "2.28"   sim    0 "test_ai_islands"            "Island Matches (test_ai_islands)"                          "ISLAND MATCHES SUITE (whole matches of four standard bots on ISLANDS and SMALL: nobody lost to a bridge or a flight, every team scores, the island of SMALL is taken)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai_islands"' "cost=60"
+    suite "2.29"   sim    1 "test_replay"                "Replays (test_replay)"                                     "REPLAYS SUITE (the file and its strict reader, the recorder, the lock-step runner's tap, the player that checks a file against its hashes, the list of orders)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_replay/test_replay"' 'cost=2'
+    suite "2.30"   sim    1 "replay_tool"                "Replay Tool (replay_tool --selftest)"                      "REPLAY TOOL SELF-TEST (the command line, info, verify and orders, the filters, the table for a spreadsheet, damaged, cut and foreign files)" '"./$BUILD_DIR/replay_tool" --selftest'
 
     # 3. application
     suite "3"      app    1 "test_app_integration"       "Application Integration Tests (test_app)"                  "APPLICATION INTEGRATION SUITES (ants_app)"                                         '"./$BUILD_DIR/tests/test_app/test_app_integration"'
@@ -297,6 +299,7 @@ define_suites() {
     suite "3.24"   app    0 "test_rejoin_app"            "Way Back in the Application (test_rejoin_app)"             "WAY BACK IN THE APPLICATION SUITE (the overlay, the vote, the catch-up screen, the start of a rejoin, leaving while held, the keys' file, the start menu's Rejoin; a real room manager over loopback)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_rejoin_app"' "cost=8"
     suite "3.25"   app    1 "test_touch_model"           "Touch Model (test_touch_model)"                            "TOUCH MODEL SUITE (tap, drag, hold, the minimap, pan and pinch, the extra fingers, cancels, the clock, the slop's size)" '"./$BUILD_DIR/tests/test_app/test_touch_model"'
     suite "3.26"   app    1 "test_touch_app"             "Touch in the Application (test_touch_app)"                 "TOUCH IN THE APPLICATION SUITE (finger events through the real event loop: tap, drag and hold against the mouse, the pan and the pinch, where two fingers do nothing, cancels, the other screens, the window's letterbox, the slop)" '"./$BUILD_DIR/tests/test_app/test_touch_app"' 'cost=10'
+    suite "3.27"   app    1 "test_replay_app"            "Replays in the Application (test_replay_app)"              "REPLAYS IN THE APPLICATION SUITE (a game on this computer and a network match record what is played: the file plays out to the same state; where the desktop game keeps it)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_replay_app"' 'cost=3'
 
     # 4. opaque-box E2E (its own build folder)
     suite "4"      e2e    0 "-"                          "Opaque-Box E2E Tests (e2e_runner)"                         "E2E OPAQUE-BOX VERIFICATION SUITES"                                                './build_e2e/e2e_runner $E2E_ARGS'
@@ -386,7 +389,7 @@ if [ "$NO_BUILD" -eq 0 ] && [ "$NEED_MAIN" -eq 1 ]; then
         fi
     fi
     if [ "$FAST" -eq 1 ]; then
-        # only what the quick suites run (an incremental build of the changed files); map_sweep and bot_arena are optional targets, named here like the rest
+        # only what the quick suites run (an incremental build of the changed files); map_sweep, bot_arena and replay_tool are optional targets, named here like the rest
         echo -e "${YELLOW}[BUILD] Compiling the targets of the quick suites (-j${NCPU})...${RESET}"
         # shellcheck disable=SC2086
         cmake --build "$BUILD_DIR" -j"$NCPU" --target $FAST_TARGETS
@@ -394,8 +397,8 @@ if [ "$NO_BUILD" -eq 0 ] && [ "$NEED_MAIN" -eq 1 ]; then
         echo -e "${YELLOW}[BUILD] Compiling libraries and test suites (-j${NCPU})...${RESET}"
         cmake --build "$BUILD_DIR" -j"$NCPU"
         if [ "$NEED_SIM" -eq 1 ]; then
-            # the map sweep and the bot arena are optional targets (not in the default build); their --selftest is run with the simulation suites
-            cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep bot_arena
+            # the map sweep, the bot arena and the replay tool are optional targets (not in the default build); their --selftest is run with the simulation suites
+            cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep bot_arena replay_tool
         fi
     fi
 fi

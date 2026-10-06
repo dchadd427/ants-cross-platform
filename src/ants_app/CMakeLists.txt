@@ -61,6 +61,7 @@ add_library(ants_app STATIC
     host_lookup.cpp
     application.cpp
     application_menu.cpp
+    application_replay.cpp
     application_touch.cpp
 )
 
@@ -83,6 +84,7 @@ endif()
 
 target_link_libraries(ants_app PUBLIC
     ants_ai
+    ants_replay
     ants_net
     ants_sim
     ants_assets

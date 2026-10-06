@@ -4,6 +4,8 @@ The owner: "I want replays anyway and I want to be able to see the bots play 1v1
 
 Scratch design; nothing in the repository was changed. Evidence (what the code has, what the original has, every measurement) is in `FACTS.md`; the pictures are in `mockups/` (`mockups/overview.png` first); the build plan is `PLAN.md`. Written against main `b8d2603` (v0.1.2) and the branches in flight. Paths are repository-relative.
 
+**Status (2026-10-06).** Recording, the file and `replay_tool` are built, as [`../REPLAYS.md`](../REPLAYS.md) says; where this page and that one differ, that one is what the code does (the game writes a file whole when a match ends or is left instead of writing it as it goes, and a recording over 1 MiB is not kept instead of being marked incomplete). The rest of this design is not built.
+
 **The idea in three lines.** A lock-step match IS its start data plus its commands, so a replay is that and a few checks. One recorder, fed from the two places that every mode passes (the lock-step runner's executed turns; a local game's one command sink), writes it. One viewer, the normal match screen with no local team, plays it; a watch match is the same viewer over bots that are being recorded.
 
 ## 1. The replay file (`.antsrep`)
