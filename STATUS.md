@@ -16,7 +16,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - One start card (v0.8.0): the card and the bot-games work (a fill level for each seat, teams) are being merged onto v0.6.0 and tested in a real browser
 - Touch controls (v0.7.0): the second review's fixes (a resting thumb while the game stalls; a cancelled options slider) are done and merged; the browser checks passed (149); the five CI checks are next
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are finished and being merged into one batch
-- Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
+- Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls (not illegal orders); the batch being merged no longer orders special actions onto an ant (-95% on Small); a counter and the rest follow
 - Short room codes, and the platform and operating system icons: planned after the one card
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
