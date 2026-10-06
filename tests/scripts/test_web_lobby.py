@@ -79,7 +79,7 @@ class TheFrontPageMarkup(PageCase):
         self.found(self.page, r'<button id="play" class="btn startbtn" type="button" aria-describedby="start-note">START!</button>')
         self.found(self.page, r'<p class="note" id="start-note" aria-live="polite"></p>')
         self.found(self.page, r'\.startbtn:disabled \{[^}]*cursor: not-allowed')
-        self.found(self.page, r'\.startbtn:disabled:hover \{ background: var\(--teal\); \}')           # (a button that is off does not answer the pointer)
+        self.found(self.page, r'\.startbtn:disabled:hover \{ background-color: var\(--teal\); \}')           # (a button that is off does not answer the pointer)
 
     def test_start_is_the_pages_own_button_drawn_by_the_browser_at_a_modest_size(self):
         # v0.8.0 showed the original's 98 x 27 picture as the button's background at three times its size (294 x 81 pixels, 196 x 54 on a phone) with image-rendering: pixelated, so its letters and edges were
