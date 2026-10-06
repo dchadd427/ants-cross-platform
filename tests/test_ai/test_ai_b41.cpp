@@ -1632,7 +1632,7 @@ void run_b41_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI7.23 The Defence Against The Double-Thief Opening (The Owner's Playbook: A Player Steals Your Thief Power-Up With His Second Ant And Raids Twice From The Start): The Bench Aggressor That Takes TWO Thief Power-Ups (Its Own Side's And The Nearest Other) Finds The Thief Of A Neighbour's Side Gone When The Neighbour Is A Medium Or Hard Bot (Taken In The Opening) And Takes It At Easy")
+    TEST_CASE("AI7.23 The Defence Against The Double-Thief Opening (A Player Steals Your Thief Power-Up With His Second Ant And Raids Twice From The Start): The Bench Aggressor That Takes TWO Thief Power-Ups (Its Own Side's And The Nearest Other) Finds The Thief Of A Neighbour's Side Gone When The Neighbour Is A Medium Or Hard Bot (Taken In The Opening) And Takes It At Easy")
     {
         assets::LevelData treasure;
         ASSERT_TRUE(treasure.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TREASURE.LVL"));
@@ -1677,7 +1677,7 @@ void run_b41_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI7.24 The Double-Thief Opening At Hard (The Owner's Playbook; Stealing Is Hard's Only): With Three Idle Neighbours The Hard Bot Has Two Thief Ants After 900 Ticks (The Thief Of Its Own Side And The Unguarded Thief Power-Up Of Another), Medium One, Easy None; A Neighbour That Takes Its Own Thief Power-Up At The Start (Medium Or Hard) Is Not Robbed")
+    TEST_CASE("AI7.24 The Double-Thief Opening At Hard (Stealing Is Hard's Only): With Three Idle Neighbours The Hard Bot Has Two Thief Ants After 900 Ticks (The Thief Of Its Own Side And The Unguarded Thief Power-Up Of Another), Medium One, Easy None; A Neighbour That Takes Its Own Thief Power-Up At The Start (Medium Or Hard) Is Not Robbed")
     {
         for (const Level level : {Level::Hard, Level::Medium, Level::Easy}) {
             sim::SimulationEngine sim;
