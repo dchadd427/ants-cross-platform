@@ -812,7 +812,7 @@ Request of the owner (2026-10-05): "how can the host change peoples color forcef
 
 ### The change in the network
 
-* `kProtocolVersion` goes from 13 to **14**; one message is new, nothing else changes (the same number carries the short room codes that are planned for the same release). A Hello of 13 is refused with `VersionMismatch`, as every other version is.
+* `kProtocolVersion` goes from 13 to **14**; one message is new, nothing else changes (the short room codes that are planned for a later release will need the next number). A Hello of 13 is refused with `VersionMismatch`, as every other version is.
 * **SeatMove** (type 31, client to server) is `[31][from][to]`: **three bytes**, two different seats 0 - 3, "put the player that holds `from` in the empty seat `to`". `MsgType::Last` is 31 now. The decoder is exact: any other length, a seat above 3 and two equal seats are no SeatMove (a violation like any garbage).
 * The answer is the **Room message** that every guest gets anyway (each with its own `you` and `leader`); the leader is sent nothing else. The player who was moved is told by the room, a notice in the waiting room's chat (`Chat` from sender 255): "Ann moved you to Red." The leader moving itself is told nothing.
 
