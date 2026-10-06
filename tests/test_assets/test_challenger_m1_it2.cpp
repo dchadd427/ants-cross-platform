@@ -48,7 +48,7 @@ static std::string locate_assets_dir() {
 int main() {
     std::cout << "=======================================================\n";
     std::cout << " Challenger M1 Iteration 2 Empirical Stress Test Suite\n";
-    std::cout << " Target: libants-assets (Sanitizer & Allocation Bounds)\n";
+    std::cout << " Target: ants_assets (Sanitizer & Allocation Bounds)\n";
     std::cout << "=======================================================\n\n";
 
     std::string assets_dir = locate_assets_dir();

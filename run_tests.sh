@@ -39,8 +39,8 @@ print_usage() {
     echo "Options:"
     echo "  --fast           The quick tier, for every change: the asset, simulation, network-core and application MODEL suites that need no window and finish in seconds,"
     echo "                   plus the repository checks (version / changelog consistency, tool and script tests). No E2E, no script suites that start the game, no"
-    echo "                   sanitizer, none of the slow suites (lock-step soak, server, worker bot, network application): CI runs everything for every pull request"
-    echo "  --all            Run all test suites (libants-assets + libants-sim + libants-app + E2E + repository checks, default)"
+    echo "                   sanitizer, none of the slow suites (the ones --list marks full, for example lock-step soak, server, worker bot, network application): CI runs everything for every pull request"
+    echo "  --all            Run all test suites (ants_assets + ants_sim + ants_app + E2E + repository checks, default)"
     echo "  --assets         Run only asset decoder tests (test_assets)"
     echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker) and server suites)"
     echo "  --app            Run only application integration tests (test_app_integration)"
@@ -51,7 +51,7 @@ print_usage() {
     echo "  --list           Print the suites that the other options select (id, tier, quick or full) and exit; nothing is built or run"
     echo "  -j, --jobs N     Run up to N suites at the same time (default: the number of cores)"
     echo "  --serial         One suite at a time, its output live, as this script used to run (the same as --jobs 1)"
-    echo "  -v, --verbose    Enable verbose assertions output in test suites"
+    echo "  -v, --verbose    Make the E2E runner print a [PASS] line for every test that passes (no other suite takes the option)"
     echo "  -h, --help       Display this help message and exit"
     echo ""
     echo "--fast filters whatever the tier options select to the quick suites (./run_tests.sh --sim --fast: only the quick simulation suites)."
@@ -223,7 +223,7 @@ run_worker_bot_suite() {
 
 define_suites() {
     # 1. asset decoders
-    suite "1"      assets 1 "test_assets"                "Native Asset Decoder Tests (test_assets)"                  "ASSET DECODER SUITES (libants-assets)"                                             '"./$BUILD_DIR/tests/test_assets/test_assets"'
+    suite "1"      assets 1 "test_assets"                "Native Asset Decoder Tests (test_assets)"                  "ASSET DECODER SUITES (ants_assets)"                                                '"./$BUILD_DIR/tests/test_assets/test_assets"'
     suite "1.1"    assets 1 "test_movement_tables"       "Movement Table Parity (test_movement_tables)"              "MOVEMENT TABLE PARITY (generated tables vs Ants.exe or its pinned digests / ants.chd)" '"./$BUILD_DIR/tests/test_assets/test_movement_tables"'
     suite "1.2"    assets 1 "test_challenger_m1_1"       "Challenger M1_1 (test_challenger_m1_1)"                    "CHALLENGER M1_1 (adversarial asset decoding)"                                      '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_1"'
     suite "1.3"    assets 1 "test_challenger_m1_2"       "Challenger M1_2 (test_challenger_m1_2)"                    "CHALLENGER M1_2 (asset decoding, second pass)"                                     '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_2"'
@@ -231,7 +231,7 @@ define_suites() {
     suite "1.5"    assets 1 "test_challenger_m1_it2_2"   "Challenger M1_IT2_2 (test_challenger_m1_it2_2)"            "CHALLENGER M1_IT2_2 (asset interface contract, deep)"                              '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2_2"'
 
     # 2. simulation rules, network core, bots, server
-    suite "2"      sim    1 "test_sim_rules"             "Simulation Rules Tests (test_sim_rules)"                   "SIMULATION RULES SUITES (libants-sim)"                                             '"./$BUILD_DIR/tests/test_sim/test_sim_rules"'
+    suite "2"      sim    1 "test_sim_rules"             "Simulation Rules Tests (test_sim_rules)"                   "SIMULATION RULES SUITES (ants_sim)"                                                '"./$BUILD_DIR/tests/test_sim/test_sim_rules"'
     suite "2.1"    sim    1 "test_challenger_m2_1"       "Challenger M2_1 (test_challenger_m2_1)"                    "CHALLENGER M2_1 (Combat, Hazards, Physics)"                                        '"./$BUILD_DIR/tests/test_sim/test_challenger_m2_1"'
     suite "2.2"    sim    1 "test_challenger_m2_2"       "Challenger M2_2 (test_challenger_m2_2)"                    "CHALLENGER M2_2 (Lifecycle, Economy, Alliances)"                                   '"./$BUILD_DIR/tests/test_sim/test_challenger_m2_2"'
     suite "2.3"    sim    1 "test_path_planner"          "Path Planner (test_path_planner)"                          "ORIGINAL PATH PLANNER (PATHMGR A*) SUITE"                                          '"./$BUILD_DIR/tests/test_sim/test_path_planner"'
@@ -265,7 +265,7 @@ define_suites() {
     suite "2.28"   sim    0 "test_ai_islands"            "Island Matches (test_ai_islands)"                          "ISLAND MATCHES SUITE (whole matches of four standard bots on ISLANDS and SMALL: nobody lost to a bridge or a flight, every team scores, the island of SMALL is taken)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_ai/test_ai_islands"' "cost=60"
 
     # 3. application
-    suite "3"      app    1 "test_app_integration"       "Application Integration Tests (test_app)"                  "APPLICATION INTEGRATION SUITES (libants-app)"                                      '"./$BUILD_DIR/tests/test_app/test_app_integration"'
+    suite "3"      app    1 "test_app_integration"       "Application Integration Tests (test_app)"                  "APPLICATION INTEGRATION SUITES (ants_app)"                                         '"./$BUILD_DIR/tests/test_app/test_app_integration"'
     suite "3.1"    app    1 "test_render_parity"         "Render Parity (test_render_parity)"                        "RENDER PARITY SUITE (renderer vs original draw rules)"                             '"./$BUILD_DIR/tests/test_app/test_render_parity"'
     suite "3.2"    app    1 "test_hud_layout"            "HUD Layout (test_hud_layout)"                              "HUD LAYOUT SUITE (draw calls vs original coordinates)"                             '"./$BUILD_DIR/tests/test_app/test_hud_layout"'
     suite "3.3"    app    1 "test_status_messages"       "Status Messages (test_status_messages)"                    "STATUS MESSAGES SUITE (status line, selection / order texts)"                      '"./$BUILD_DIR/tests/test_app/test_status_messages"'
@@ -293,7 +293,7 @@ define_suites() {
     suite "3.20"   app    1 "test_zoom_fingerprint"      "Zoom Fingerprint (test_zoom_fingerprint)"                  "ZOOM FINGERPRINT SUITE (the pictures and the pointer pinned at the zoom 0.5 and 2, classic and wide)" '"./$BUILD_DIR/tests/test_app/test_zoom_fingerprint"'
     suite "3.21"   app    1 "test_prestart_view"         "Prestart View (test_prestart_view)"                        "PRESTART VIEW SUITE (the ants behind the start dialog: every team's ants drawn, local and network, classic and wide; the first tick leaves their pixels; nothing moves before it)" '"./$BUILD_DIR/tests/test_app/test_prestart_view"'
     suite "3.22"   app    1 "test_prediction_app"        "Prediction in the Application (test_prediction_app)"       "PREDICTION IN THE APPLICATION SUITE (the match screen reads the predicted engine: the frame, the click, the HUD's step, the switch; a real match over loopback)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_prediction_app"' 'cost=8'
-    suite "3.23"   app    1 "test_rejoin_store"          "Rejoin Store (test_rejoin_store)"                          "REJOIN STORE SUITE (the keys of the seats: the desktop's file with its format, broken lines, 24 hours, 8 entries, replace, forget, mode 0600 and atomic write; the browser's storage over a map)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_rejoin_store"'
+    suite "3.23"   app    1 "test_rejoin_store"          "Rejoin Store (test_rejoin_store)"                          "REJOIN STORE SUITE (the keys of the seats: the desktop's file with its format, broken lines, 3 hours, 8 entries, replace, forget, mode 0600 and atomic write; the browser's storage over a map)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_rejoin_store"'
     suite "3.24"   app    0 "test_rejoin_app"            "Way Back in the Application (test_rejoin_app)"             "WAY BACK IN THE APPLICATION SUITE (the overlay, the vote, the catch-up screen, the start of a rejoin, leaving while held, the keys' file, the start menu's Rejoin; a real room manager over loopback)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_app/test_rejoin_app"' "cost=8"
     suite "3.25"   app    1 "test_touch_model"           "Touch Model (test_touch_model)"                            "TOUCH MODEL SUITE (tap, drag, hold, the minimap, pan and pinch, the extra fingers, cancels, the clock, the slop's size)" '"./$BUILD_DIR/tests/test_app/test_touch_model"'
     suite "3.26"   app    1 "test_touch_app"             "Touch in the Application (test_touch_app)"                 "TOUCH IN THE APPLICATION SUITE (finger events through the real event loop: tap, drag and hold against the mouse, the pan and the pinch, where two fingers do nothing, cancels, the other screens, the window's letterbox, the slop)" '"./$BUILD_DIR/tests/test_app/test_touch_app"' 'cost=10'
@@ -375,7 +375,7 @@ for i in ${SELECTED[@]+"${SELECTED[@]}"}; do
     done
 done
 
-# 1. Build Asset, Simulation, and App Tests (libants-assets, libants-sim, libants-app)
+# 1. Build Asset, Simulation, and App Tests (ants_assets, ants_sim, ants_app)
 if [ "$NO_BUILD" -eq 0 ] && [ "$NEED_MAIN" -eq 1 ]; then
     if [ ! -d "$BUILD_DIR" ] || [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
         echo -e "${YELLOW}[BUILD] Configuring ${BUILD_DIR} (CMake)...${RESET}"

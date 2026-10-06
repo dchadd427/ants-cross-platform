@@ -4,8 +4,9 @@ Verified findings behind `docs/GAME_REVERSE_ENGINEERING.md` §5.32 ("Movement Gr
 movement code (`src/ants_sim/movement_system.cpp`, `src/ants_sim/path_planner.cpp`,
 `src/ants_sim/movement_tables_data.inc`).
 
-Method: Capstone disassembly of `Original-Ants/Ants.exe` (image base `0x01000000`) is the primary source; the Ghidra
-output `docs/legacy/Ants.exe.c` was used only to navigate. Each report was followed by an independent adversarial
+Method: Capstone disassembly of `Original-Ants/Ants.exe` (image base `0x01000000`) is the primary source of these
+reports; the Ghidra output `docs/legacy/Ants.exe.c` (the project's other primary reference, `docs/GAME_REVERSE_ENGINEERING.md` 2.0)
+was used here only to navigate. Each report was followed by an independent adversarial
 pass that re-derived every claim from the instructions; its verdicts are appended to the report. The program and the
 decompilation are local copies that are not part of the repository (`docs/GAME_REVERSE_ENGINEERING.md` 2.0).
 
