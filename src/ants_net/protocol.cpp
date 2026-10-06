@@ -94,25 +94,60 @@ bool valid_room_code(const std::string& code) noexcept {
     return true;
 }
 
-sim::StartTeams room_code_teams(const std::string& code) noexcept {
-    const size_t prefix = std::char_traits<char>::length(kDemoRoomPrefix);
-    if (code.size() <= prefix || code.compare(0, prefix, kDemoRoomPrefix) != 0) return sim::StartTeams{};
-    size_t dash = code.find('-', prefix);                                              // (the first word, the map's or the player count's, is never a token)
-    while (dash != std::string::npos) {
-        const size_t from = dash + 1;
-        const size_t next = code.find('-', from);
-        const size_t length = (next == std::string::npos ? code.size() : next) - from;
-        if (length == 3 && (code[from] == 't' || code[from] == 'T') && code[from + 1] >= '0' && code[from + 1] <= '3' && code[from + 2] > code[from + 1] && code[from + 2] <= '3') {
-            return sim::StartTeams{true, static_cast<uint8_t>(code[from + 1] - '0'), static_cast<uint8_t>(code[from + 2] - '0')};
-        }
-        dash = next;
-    }
-    return sim::StartTeams{};
+bool valid_create_block(const CreateBlock& block) noexcept {
+    if (!block.map_name.empty() && !valid_map_name(block.map_name)) return false;
+    if (block.seats < 2 || block.seats > sim::MAX_PLAYERS) return false;
+    if ((block.flags & ~kCreateLeaderStarts) != 0) return false;
+    if (block.team_a == kNoTeam && block.team_b == kNoTeam) return true;
+    return block.team_a < block.team_b && block.team_b < sim::MAX_PLAYERS;             // two different seats, the lower first: a pair has one spelling
 }
 
-std::string room_code_team_word(const sim::StartTeams& teams) {
-    if (!teams.set || teams.a >= teams.b || teams.b >= sim::MAX_PLAYERS) return std::string();
-    return std::string("t") + static_cast<char>('0' + teams.a) + static_cast<char>('0' + teams.b);
+uint8_t native_platform() noexcept {
+#if defined(__EMSCRIPTEN__)
+    return static_cast<uint8_t>(kPlatformBrowser | kOsOther);                          // (the page says which: its --platform argument)
+#elif defined(_WIN32)
+    return kOsWindows;
+#elif defined(__ANDROID__)
+    return kOsAndroid;
+#elif defined(__APPLE__)
+    return kOsMacos;
+#elif defined(__linux__)
+    return kOsLinux;
+#else
+    return kOsOther;
+#endif
+}
+
+bool parse_platform(const std::string& text, uint8_t& out) {
+    std::string word;
+    for (const char c : text) word.push_back(static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c));
+    uint8_t browser = 0;
+    static const char kBrowser[] = "browser-";
+    if (word.compare(0, sizeof(kBrowser) - 1, kBrowser) == 0) {
+        browser = kPlatformBrowser;
+        word.erase(0, sizeof(kBrowser) - 1);
+    }
+    struct Word {
+        const char* word;
+        uint8_t os;
+    };
+    static const Word kWords[] = {{"windows", kOsWindows}, {"macos", kOsMacos}, {"linux", kOsLinux}, {"android", kOsAndroid}, {"ios", kOsIos}, {"other", kOsOther}};
+    for (const Word& w : kWords) {
+        if (word == w.word) {
+            out = static_cast<uint8_t>(w.os | browser);
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string platform_text(uint8_t platform) {
+    if (platform == kPlatformUnknown || !valid_platform(platform)) return std::string();
+    static const char* const kNames[] = {"", "Windows", "macOS", "Linux", "Android", "iOS", "another system"};
+    std::string text = kNames[platform & 0x0Fu];
+    if (text.empty()) return text;                                                    // (the browser bit alone: the system was not told)
+    if ((platform & kPlatformBrowser) != 0) text += " (browser)";
+    return text;
 }
 
 MsgType peek_type(const uint8_t* data, size_t size) noexcept {
@@ -133,6 +168,14 @@ std::vector<uint8_t> encode(const HelloMsg& m) {
     w.str8(clip(m.token, kMaxTokenChars));
     w.bytes(m.key.data(), m.key.size());
     w.u32(m.have_turns);
+    w.u8(m.platform);
+    if (m.create) {                                                                    // the create block ends the message
+        w.str8(m.create->map_name);
+        w.u8(m.create->seats);
+        w.u8(m.create->team_a);
+        w.u8(m.create->team_b);
+        w.u8(m.create->flags);
+    }
     return out;
 }
 bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
@@ -148,7 +191,18 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
     m.token = r->str8();
     m.key = get_key(*r);
     m.have_turns = r->u32();
-    if (!r->done() || m.name.size() > kMaxNameChars || m.token.size() > kMaxTokenChars || !valid_room_code(m.room)) return false;
+    m.platform = r->u8();
+    if (r->ok() && r->left() > 0) {                                                    // a create block, strictly: whatever it is, it is the end of the message
+        CreateBlock block;
+        block.map_name = r->str8();
+        block.seats = r->u8();
+        block.team_a = r->u8();
+        block.team_b = r->u8();
+        block.flags = r->u8();
+        if (!r->ok() || !valid_create_block(block)) return false;
+        m.create = std::move(block);
+    }
+    if (!r->done() || !valid_platform(m.platform) || m.name.size() > kMaxNameChars || m.token.size() > kMaxTokenChars || !valid_room_code(m.room)) return false;
     if (key_is_zero(m.key) && m.have_turns != 0) return false;                  // a new player has no turns: a count needs the key that it belongs to
     for (char c : m.name) {
         if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
@@ -368,11 +422,15 @@ std::vector<uint8_t> encode(const RoomMsg& m) {
         w.u8(static_cast<uint8_t>(slot.state));
         w.str8(clip(slot.name, kMaxNameChars));
         w.u16(slot.rtt_ms);
+        w.u8(slot.platform);
     }
     w.str8(m.map_name);
     w.u8(m.fog ? 1 : 0);
     w.u8(m.you);
     w.u8(m.leader);
+    w.u8(m.team_a);
+    w.u8(m.team_b);
+    w.u8(m.flags);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
@@ -384,17 +442,26 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
         const uint8_t st = r->u8();
         slot.name = r->str8();
         slot.rtt_ms = r->u16();
+        slot.platform = r->u8();
         if (st > static_cast<uint8_t>(SlotState::Bot) || !printable_name(slot.name, kMaxNameChars)) return false;
         slot.state = static_cast<SlotState>(st);
+        // what a seat runs on: a person's (the host or a guest) says an operating system or nothing; a seat that holds nobody, and a bot, say nothing
+        if (!valid_platform(slot.platform) || (slot.platform != kPlatformUnknown && slot.state != SlotState::Host && slot.state != SlotState::Client)) return false;
     }
     m.map_name = r->str8();
     const uint8_t fog = r->u8();
     m.you = r->u8();
     m.leader = r->u8();
+    m.team_a = r->u8();
+    m.team_b = r->u8();
+    m.flags = r->u8();
     // an empty map name = the host has not chosen a map yet
     if (!r->done() || fog > 1 || (!m.map_name.empty() && !valid_map_name(m.map_name)) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
     // the leader: nobody (255), or a seat that a person holds as a guest (a server's room has no host in a seat; a bot, an empty seat or the host of a LAN room never leads)
     if (m.leader != kNoLeader && (m.leader >= sim::MAX_PLAYERS || m.slots[m.leader].state != SlotState::Client)) return false;
+    // the room's own teams (protocol 15): none, or two seats, the lower first; and no rule bit that this build does not know
+    if ((m.team_a != kNoTeam || m.team_b != kNoTeam) && (m.team_a >= m.team_b || m.team_b >= sim::MAX_PLAYERS)) return false;
+    if ((m.flags & ~kRoomLeaderStarts) != 0) return false;
     m.fog = fog == 1;
     out = std::move(m);
     return true;
@@ -416,6 +483,7 @@ std::vector<uint8_t> encode(const StartMsg& m) {
     }
     w.u8(m.team_a);
     w.u8(m.team_b);
+    for (const uint8_t platform : m.platforms) w.u8(platform);                          // (protocol 15: at the end, so that a record of an older protocol reads with four zero bytes more)
     return out;
 }
 bool decode(const uint8_t* data, size_t size, StartMsg& out) {
@@ -439,9 +507,13 @@ bool decode(const uint8_t* data, size_t size, StartMsg& out) {
     }
     m.team_a = r->u8();
     m.team_b = r->u8();
+    for (uint8_t& platform : m.platforms) platform = r->u8();
     int players = 0;
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) players += (m.roster >> p) & 1;
     if (!r->done() || fog > 1 || !valid_map_name(m.map_name) || (m.roster & 0xF0) != 0 || players < 2) return false;
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (!valid_platform(m.platforms[p]) || (m.platforms[p] != kPlatformUnknown && (m.roster & (1u << p)) == 0)) return false;     // (a seat that plays says what it runs on or nothing; one that does not play says nothing)
+    }
     // the teams (protocol 13): none, or a pair that this roster can make (the room checked it before it sent the Start: a machine that is told otherwise would start another match than the others)
     if ((m.team_a != kNoTeam || m.team_b != kNoTeam) && !sim::plan_start_teams(sim::StartTeams{true, m.team_a, m.team_b}, m.roster).why.empty()) return false;
     m.fog = fog == 1;

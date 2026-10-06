@@ -36,6 +36,8 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.min_players = spec.early_start ? uint8_t{2} : players;       // the leader may start with two; without an early start the room waits for every seat
     cfg.max_players = players;
     cfg.early_start = spec.early_start;                              // the lobby names the leader only in a room that allows it
+    cfg.room_teams = spec.teams;                                     // (protocol 15: the Room message names the room's own teams and rules to everybody)
+    cfg.leader_starts = spec.leader_starts && spec.early_start;      // (the lead is what starts such a room: a room without a leader never would)
     cfg.load_timeout_ms = spec.load_ms;
     // A room that holds seats gives every player a key (128 random bits of the operating system's generator: ants_net never reads it itself, the library is built for the web too).
     // A room that does not has none: its Welcomes carry the zero key and a Hello with a key is just a Hello.
@@ -335,6 +337,7 @@ void Room::update(uint32_t now_ms) {
         // with the seats that are taken now, as the room would with all of them; a request that falls into the pause after a cancelled start is lost (START again).
         const bool full = lobby_.players() >= spec_.players;
         const bool early = spec_.early_start && asked_by != net::kNoLeader && lobby_.leader() == asked_by;
+        const bool holds = spec_.leader_starts && spec_.early_start;                // (protocol 15: a full room waits for its leader's START)
         // The fill (protocol 11, a level for each seat since 13): only the leader's request seats bots, in the seats that are still empty and whose level is not none, the lowest seat first, up to the players
         // the room expects (the seat that a person took meanwhile is skipped, its level is ignored); a room that is full starts by itself with nobody added. Bots and Fog of War never mix (docs/BOTS.md
         // rule 8): the leader is told, and the match starts without bots if two people are there. The teams (protocol 13) are the room's own (its code) or else the leader's, and are checked against the seats that really play below.
@@ -346,7 +349,7 @@ void Room::update(uint32_t now_ms) {
         }
         const std::vector<std::pair<uint8_t, net::FillLevel>> fill_seats = net::plan_fill_seats(fill, lobby_.room(), spec_.players);       // (seat, level) of the bots that this START seats
         const bool can = !fill_seats.empty() ? lobby_.can_start_filled() : lobby_.can_start();
-        if (can && (full || early)) {
+        if (can && ((full && !holds) || early)) {
             uint8_t roster = 0;                                      // the seats that play: a map is playable for some rosters and not for others (a start marker outside the grid)
             for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) roster = static_cast<uint8_t>(roster | (lobby_.room().slots[seat].state != net::SlotState::Empty ? 1u << seat : 0u));
             for (const auto& bot : fill_seats) roster = static_cast<uint8_t>(roster | (1u << bot.first));      // (with the bots that the fill would seat)
@@ -437,6 +440,7 @@ RestartHead Room::make_head() const {
     h.players = spec_.players;
     h.fog = spec_.fog;
     h.early_start = spec_.early_start;
+    h.public_room = spec_.public_room;
     h.wait_ms = spec_.wait_ms;
     h.load_ms = spec_.load_ms;
     h.keep_ms = spec_.keep_ms;
@@ -548,6 +552,7 @@ RoomSpec room_spec_of(const RestartHead& h) {
     spec.fog = h.fog;
     spec.players = h.players;
     spec.early_start = h.early_start;
+    spec.public_room = h.public_room;
     for (const ai::BotSpec& b : h.bots) {
         if ((h.fill_mask & (1u << b.seat)) == 0) spec.bots.push_back(b);        // (the leader's fill is seated by Room::replay)
     }
@@ -807,6 +812,8 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.fog = spec_.fog;
     s.expected = spec_.players;
     s.early_start = spec_.early_start;
+    s.public_room = spec_.public_room;
+    s.leader_starts = spec_.leader_starts && spec_.early_start;
     if (spec_.teams.set) s.room_teams = sim::start_teams_text(spec_.teams);
     s.leader = state_ == RoomState::Waiting || state_ == RoomState::Loading ? lobby_.leader() : uint8_t{255};      // (the lead means something until the match runs)
     s.ignored_start_requests = lobby_.ignored_start_requests() + (session_ ? session_->ignored_start_requests() : 0u);       // (the late ones of a running match are the session's)

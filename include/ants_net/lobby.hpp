@@ -40,6 +40,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -92,6 +93,13 @@ public:
         /// (RoomMsg::leader) and its StartRequest is passed on to the room (Event::LeaderStart) when the room can start. False: the room has no leader and every StartRequest
         /// is ignored (the server's `early_start` option of a room).
         bool early_start{true};
+        /// Protocol 15: what a host that holds a seat (a LAN or direct host) runs on (valid_platform; 0: not told): the Room message shows it in the host's seat.
+        uint8_t host_platform{0};
+        /// Protocol 15: the room's own rules, made known to everybody in the Room message (RoomMsg::team_a / team_b / flags). `room_teams`: the room starts its matches with these teams every
+        /// time (none: free for all; the owner of the lobby does the starting, the lobby only tells). `leader_starts`: the room does not start by itself when it is full, only its leader's START
+        /// starts it (the owner does that too; it needs a leader, so it is for a server's room that allows an early start).
+        sim::StartTeams room_teams{};
+        bool leader_starts{false};
         /// Flood control (flood.hpp): the messages that one guest may send, a token bucket. A message beyond it is not handled and is a violation (eight throw the guest out).
         uint32_t message_burst{kMessageBurst};
         uint32_t messages_per_second{kMessagesPerSecond};
@@ -277,6 +285,8 @@ public:
         uint32_t ping_every_ms{1000};        // the guest measures its own round trip to the host this often once it has a seat (the "ping" next to the frame rate)
         SeatKey key{};                       // protocol 10: the key of the seat that this machine had (a page that was reloaded, a game that was started again): the Hello shows it and the
                                              // server gives the seat back. All zero: a new player. Its turns (Hello::have_turns) are 0: this lobby starts from nothing
+        uint8_t platform{0};                 // protocol 15: what this machine runs on, told in the Hello (valid_platform; 0: not told)
+        std::optional<CreateBlock> create;   // protocol 15: the choices of the room that this Hello makes when the room does not exist (a server's public rooms); none: the Hello joins a room
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
     struct Event {

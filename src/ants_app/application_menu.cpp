@@ -156,11 +156,12 @@ void Application::process_menu_request(const MenuRequest& request) {
             break;
         case MenuRequest::Type::Host: {
             set_fill_bots(request.fill);                                  // the Host panel's seat rows: this player leads the room it makes, and its START carries the levels
-            set_start_teams(LocalTeams{});                                // (the Teams choice is not the START's: it is a word of the room's code, below, and the room makes the teams every time)
+            set_start_teams(LocalTeams{});                                // (the Teams choice is not the START's: it is in the room's create block, below, and the room makes the teams every time)
             static std::random_device entropy;
             const std::function<uint32_t()> random = config_.room_code_random ? config_.room_code_random : std::function<uint32_t()>([]() { return static_cast<uint32_t>(entropy()); });
-            const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, random, request.teams);
-            begin_menu_connection(true, code, request.name, request.players, request.map);
+            const std::string code = make_room_code(random);              // (only a name: 8 random letters and numbers)
+            const net::CreateBlock block = make_create_block(menu_map(static_cast<size_t>(request.map)), request.players, request.teams);
+            begin_menu_connection(true, code, request.name, request.players, request.map, nullptr, nullptr, &block);
             break;
         }
         case MenuRequest::Type::Rejoin:
@@ -186,9 +187,10 @@ void Application::process_menu_request(const MenuRequest& request) {
 
 // ---- the connection --------------------------------------------------------------------------------------------------------------------------------
 
-// Join (hosting false: the room is the code that the player typed) and Host (hosting true: the code is a new "demo-<map>-<n>p-<random>" that the server makes on the first Hello): the same
-// path as `--join HOST:PORT --room CODE --name NAME`, after the server's name has been looked up on a worker thread (the window stays alive; Esc cancels)
-void Application::begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map, const RejoinEntry* rejoin, const ServerAddress* server) {
+// Join (hosting false: the room is the code that the player typed) and Host (hosting true: the code is a new random one, and the Hello carries the create block that the server makes the room from): the
+// same path as `--join HOST:PORT --room CODE --name NAME [--room-map M --room-seats N]`, after the server's name has been looked up on a worker thread (the window stays alive; Esc cancels)
+void Application::begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map, const RejoinEntry* rejoin, const ServerAddress* server,
+                                        const net::CreateBlock* create) {
     abort_menu_connection();
     menu_conn_ = MenuConnection{};
     menu_conn_.stage = MenuConnection::Stage::Lookup;
@@ -199,6 +201,7 @@ void Application::begin_menu_connection(bool hosting, const std::string& room, c
     menu_conn_.label = server_label(menu_conn_.server);
     menu_conn_.players = players;
     menu_conn_.map = map;
+    if (create != nullptr) menu_conn_.create = *create;
     if (rejoin != nullptr) {
         menu_conn_.rejoin = true;
         menu_conn_.seat = rejoin->seat;
@@ -258,6 +261,8 @@ void Application::pump_menu_connection() {
             net_ = std::make_unique<net::NetGame>(sim_);
             net_time_ms_ = 0.0;
             attach_net();                                                    // (a guest announces nothing on the LAN: only a host's room does, so neither the announcement nor its version is set)
+            if (config_.net_platform != 0) net_->set_platform(config_.net_platform);
+            if (menu_conn_.create) net_->set_create(*menu_conn_.create);     // (the room that the server makes from this Hello when it has none of the code)
             if (!net_->join(host_lookup_.address(), menu_conn_.server.port, menu_conn_.name, menu_conn_.rejoin ? menu_conn_.seat : uint8_t{255}, menu_conn_.room, std::string(), menu_conn_.key)) {
                 menu_connection_failed(unreachable_text(menu_conn_.label));            // (no socket could be made for the address: the same to the player as a server that does not answer)
                 break;
@@ -313,7 +318,7 @@ void Application::menu_connected() {
         return;
     }
     if (menu_conn_.hosting && !room_has_chosen_map()) {
-        // The server makes a demo room on the map that the code names when it offers that map (--demo-maps), and on its default map when it does not: the player chose a map that this server does
+        // The server makes a public room on the map that the create block names when it offers that map (--demo-maps), and on its default map when it does not: the player chose a map that this server does
         // not play. The room is left again, and the player is told which map it was.
         const MenuMap& wanted = menu_map(static_cast<size_t>(menu_conn_.map));
         menu_connection_failed(std::string("This server does not offer the ") + wanted.name + " map (its room is on " + net_->room().map_name + "). Choose another map.");
@@ -340,7 +345,7 @@ void Application::menu_rejoined() {
     menu_conn_.key = net::SeatKey{};                                         // (it is the net's now)
 }
 
-// The room that the server made is on the map that the menu asked for (the file's name without its extension is the map's word of the room code, in any case)
+// The room that the server made is on the map that the menu asked for (the file's name without its extension is the map's word, in any case)
 bool Application::room_has_chosen_map() const {
     if (!net_) return true;
     std::string stem = net_->room().map_name;

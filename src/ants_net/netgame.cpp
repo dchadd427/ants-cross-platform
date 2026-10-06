@@ -87,12 +87,8 @@ constexpr bool kInBrowser = true;          // the game runs in a web page (the p
 constexpr bool kInBrowser = false;
 #endif
 
-// A code that begins "demo-" (and has more) is one that the server makes the room of when somebody comes (the front page's card makes such codes): the server answers NoSuchRoom when it cannot,
-// so it is a place that is missing (the cap of demo rooms, the server's limit, a room of that code that has just ended), never a room that does not exist
-bool is_demo_room_code(const std::string& room) {
-    const size_t n = std::char_traits<char>::length(kDemoRoomPrefix);
-    return room.size() > n && room.compare(0, n, kDemoRoomPrefix) == 0;
-}
+// A Hello with a create block is one that the server makes the room of when somebody comes (the front page's card and the start menu send them): the server answers NoSuchRoom when it cannot,
+// so it is a place that is missing (the cap of public rooms, the server's limit, a server that makes none), never a room that does not exist
 constexpr const char* kTextNoPlace = "The server cannot make a room for this match now. Try again in a few minutes.";
 
 // "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
@@ -122,14 +118,14 @@ uint64_t seating_hash(const RoomMsg& room) {
 // Why a join failed: the original's words where it has them (dropped from the game, unable to connect), the remake's for the rest. In a web page the refusal for another version says what a player
 // can do about it: the game that is open is the one that was loaded when the tab was opened, and after an update of the server only a reload fetches the current one (the desktop game has its own
 // text for this, the start menu's: "Update the game, or wait until the server is updated").
-std::string NetGame::reject_text(RejectReason r, bool in_browser, const std::string& room) {
+std::string NetGame::reject_text(RejectReason r, bool in_browser, bool made_a_room) {
     switch (r) {
         case RejectReason::Full: return "The room is full.";
         case RejectReason::VersionMismatch:
             return in_browser ? "This version cannot play with the host's version. Reload the page to update." : "This version cannot play with the host's version.";
         case RejectReason::MatchRunning: return "The match has already started.";
         case RejectReason::Kicked: return str::text(str::kDroppedFromGame);
-        case RejectReason::NoSuchRoom: return is_demo_room_code(room) ? kTextNoPlace : "There is no such room on this server.";
+        case RejectReason::NoSuchRoom: return made_a_room ? kTextNoPlace : "There is no such room on this server.";
         case RejectReason::Dropped: return str::text(str::kDroppedFromGame);                       // (protocol 10) a seat that was dropped while its player was away: the original's one text for a dropped machine, string 94
         case RejectReason::RejoinFailed: return "The game could not be rejoined.";                // (protocol 10; the remake's own: the original has no way back)
         case RejectReason::Superseded: return "This game was taken over by another window.";      // (protocol 10; the remake's own)
@@ -279,6 +275,8 @@ ClientLobby::Config NetGame::lobby_config(const SeatKey& key, uint8_t want_seat)
     cfg.room = target_.room;
     cfg.token = target_.token;
     cfg.key = key;                                            // (all zero: a new player; else the Hello shows the key of the seat that this machine had)
+    cfg.platform = platform_;
+    cfg.create = create_;                                     // (the lobby leaves a block out that no server would read; a keyed Hello never makes a room, the server ignores it there)
     return cfg;
 }
 
@@ -787,7 +785,7 @@ void NetGame::update_client() {
                         status_ = way_back_text(reject_reason_);
                         if (way_back_forgets(reject_reason_)) forget_key();
                     } else {
-                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser, target_.room);
+                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser, create_.has_value());
                     }
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
@@ -871,6 +869,7 @@ HelloMsg NetGame::way_back_hello() const {
     h.room = target_.room;
     h.token = target_.token;
     h.want_seat = seat_;                                                  // (the key decides the seat: this is only what the server would be told by anybody)
+    h.platform = platform_;                                               // (a Hello with a key never makes a room: no create block)
     return h;
 }
 
@@ -931,7 +930,7 @@ void NetGame::forget_key() {
 // The lobby's Welcome is the moment that a room hands out a key (none from a game on the local network or a room that holds no seats). A rejoin's Welcome (the flag: the match is this machine's own, it
 // is running) announces the key at once. A new player's key waits for the Start (announce_start_key): a visit to a waiting room alone, a tab that is closed in it, leaves no key behind to be offered
 // for a match that never began. A Hello that showed a key and was answered as a new player's (the Welcome has no rejoin flag and another key: a room with the same code is waiting for its players, a
-// demo room that another Hello made; the server never makes one for a Hello that shows a key) found nothing to take the seat of: the old key is of no use, and the machine is a player of the waiting
+// public room that another Hello made; the server never makes one for a Hello that shows a key) found nothing to take the seat of: the old key is of no use, and the machine is a player of the waiting
 // room like any other. The same key without the flag is the seat taken back in a waiting room.
 void NetGame::note_lobby_welcome() {
     if (welcomed_ || !client_lobby_ || client_lobby_->my_seat() >= sim::MAX_PLAYERS) return;

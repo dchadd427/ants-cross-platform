@@ -295,14 +295,26 @@ int menu_map_index(const std::string& key) noexcept {
     return -1;
 }
 
-std::string make_room_code(const MenuMap& map, int players, const std::function<uint32_t()>& random, const LocalTeams& teams) {
-    const int n = std::clamp(players, 2, 4);
-    std::string code = std::string("demo-") + map.key + "-" + std::to_string(n) + "p-";
-    const sim::StartTeams offered = offered_teams(teams, n);                     // (only what a room of this many players offers: a pair that it cannot make is no word of its code)
-    if (offered.set) code += net::room_code_team_word(offered) + "-";
+std::string make_room_code(const std::function<uint32_t()>& random) {
+    std::string code;
     const size_t alphabet = std::char_traits<char>::length(kRoomCodeAlphabet);
-    for (size_t i = 0; i < kRoomCodeRandomChars; ++i) code.push_back(kRoomCodeAlphabet[random() % alphabet]);
+    for (size_t i = 0; i < kRoomCodeChars; ++i) code.push_back(kRoomCodeAlphabet[random() % alphabet]);
     return code;
+}
+
+std::string room_code_display(const std::string& code) {
+    if (code.size() != kRoomCodeChars) return code;
+    return code.substr(0, kRoomCodeChars / 2) + " " + code.substr(kRoomCodeChars / 2);
+}
+
+net::CreateBlock make_create_block(const MenuMap& map, int players, const LocalTeams& teams, bool leader_starts) {
+    net::CreateBlock block;
+    for (const char* c = map.key; *c != '\0'; ++c) block.map_name.push_back(static_cast<char>(*c >= 'a' && *c <= 'z' ? *c - 'a' + 'A' : *c));
+    block.map_name += ".LVL";
+    block.seats = static_cast<uint8_t>(std::clamp(players, 2, 4));
+    block.set_teams(offered_teams(teams, block.seats));                          // (only what a room of this many players offers: a pair that it cannot make is left out)
+    if (leader_starts) block.flags = static_cast<uint8_t>(block.flags | net::kCreateLeaderStarts);
+    return block;
 }
 
 std::string clean_player_name(const std::string& raw) {
@@ -345,6 +357,7 @@ bool check_room_code(const std::string& raw, std::string& clean, std::string& wh
         if (printable_char(c)) printable.push_back(c);
     }
     clean = trim_blanks(printable);
+    clean.erase(std::remove(clean.begin(), clean.end(), ' '), clean.end());           // (a code has no blank: the screens show it in groups of four, and what was copied from there comes back as it was)
     if (clean.empty()) {
         why = "Type the room code first.";
         return false;
@@ -835,7 +848,7 @@ std::vector<MenuElement> StartMenu::elements() const {
             MenuElement caption = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 82, kTextW, 28}, "Your room:", FontSize::Px24);
             caption.centered = true;
             out.push_back(caption);
-            MenuElement code = control(MenuId::None, MenuKind::Code, ButtonRect{80, 112, 480, 70}, room_code_, FontSize::Px35);
+            MenuElement code = control(MenuId::None, MenuKind::Code, ButtonRect{80, 112, 480, 70}, room_code_display(room_code_), FontSize::Px35);
             code.centered = true;
             out.push_back(code);
             MenuElement info = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, 190, kTextW, 38},

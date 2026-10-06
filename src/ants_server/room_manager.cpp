@@ -118,84 +118,56 @@ bool iequals(const std::string& a, const std::string& b) {
     return true;
 }
 
-// What the code of a demo room chooses: "demo-[<map>-][<n>p-]<anything>" (the team word of the code, `t01`, is read by net::room_code_teams: it names the room's teams, not the map or the players). <map> is the name of one of the allowed maps without its extension (any case; of
-// several that fit, the longest name wins: a name may contain dashes itself); <n>p is the number of players, 2 to 4 ("demo-small-2p-x7k2": SMALL.LVL for two
-// players). When the first word is not an allowed map, <n>p may still be the first or the second word (the page offers the six maps of the original; a server
-// that allows fewer still makes the room for the players the page shows). What the code does not choose is the default (`demo_map`, `demo_players`).
-struct DemoChoice {
+// What a create block chooses (protocol 15): the map, when the server offers it (a name that it does not offer, or none: its default map), and the seats, 2 to 4. The match is the room's: a block never
+// chooses what the server does not allow. The old way (the code's words, "demo-<map>-<n>p-...") is gone: a code is only a name.
+struct PublicChoice {
     std::string map;
     uint8_t players;
 };
 
-bool is_demo_code(const std::string& code) {
-    const size_t n = std::char_traits<char>::length(kDemoRoomPrefix);
-    return code.size() > n && code.compare(0, n, kDemoRoomPrefix) == 0;
-}
-
-bool players_word(const std::string& rest, size_t at, uint8_t& players) {
-    if (rest.size() < at + 3 || rest[at] < '2' || rest[at] > '4' || (rest[at + 1] != 'p' && rest[at + 1] != 'P') || rest[at + 2] != '-') return false;
-    players = static_cast<uint8_t>(rest[at] - '0');
-    return true;
-}
-
-DemoChoice demo_choice_of(const std::string& code, const ServerLimits& limits) {
-    DemoChoice c{limits.demo_map, limits.demo_players};
-    const std::string rest = code.substr(std::char_traits<char>::length(kDemoRoomPrefix));
-    const std::string* best = nullptr;
-    size_t best_len = 0;
+PublicChoice public_choice_of(const net::CreateBlock& block, const ServerLimits& limits) {
+    PublicChoice c{limits.demo_map, block.seats};
     for (const std::string& file : limits.demo_maps) {
-        const size_t dot = file.rfind('.');
-        const size_t len = dot == std::string::npos ? file.size() : dot;
-        if (len == 0 || len <= best_len || rest.size() <= len || rest[len] != '-') continue;
-        if (iequals(rest.substr(0, len), file.substr(0, len))) {
-            best = &file;
-            best_len = len;
+        if (!block.map_name.empty() && iequals(block.map_name, file)) {
+            c.map = file;
+            break;
         }
     }
-    if (best != nullptr) {
-        c.map = *best;
-        players_word(rest, best_len + 1, c.players);
-        return c;
-    }
-    if (players_word(rest, 0, c.players)) return c;
-    const size_t dash = rest.find('-');
-    if (dash != std::string::npos && dash > 0) players_word(rest, dash + 1, c.players);
     return c;
 }
 
 }  // namespace
 
-bool RoomManager::make_demo_room(const std::string& code, uint32_t now_ms) {
-    if (limits_.demo_rooms == 0 || limits_.demo_map.empty()) return false;
-    const std::string prefix = kDemoRoomPrefix;
-    if (code.size() <= prefix.size() || code.compare(0, prefix.size(), prefix) != 0 || !net::valid_room_code(code)) return false;
-    size_t demos = 0;
-    for (const auto& kv : rooms_) demos += kv.first.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
-    for (const Restoring& r : restoring_) demos += r.code.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
-    while (demos >= limits_.demo_rooms) {                           // no place is free: a match that nobody has come back to for a while gives its place up (never a room with a person at it)
-        if (!evict_abandoned_demo(now_ms)) return false;
-        --demos;
+bool RoomManager::make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms) {
+    if (limits_.demo_rooms == 0 || limits_.demo_map.empty() || !net::valid_room_code(code) || code.empty() || !net::valid_create_block(block)) return false;
+    size_t places = 0;
+    for (const auto& kv : rooms_) places += kv.second->public_room() ? 1u : 0u;
+    for (const Restoring& r : restoring_) places += r.head.public_room ? 1u : 0u;
+    while (places >= limits_.demo_rooms) {                          // no place is free: a match that nobody has come back to for a while gives its place up (never a room with a person at it)
+        if (!evict_abandoned_public(now_ms)) return false;
+        --places;
     }
-    RoomSpec spec = default_spec();                                 // (demo rooms follow the server's reconnect setting and its limits)
+    RoomSpec spec = default_spec();                                 // (public rooms follow the server's reconnect setting and its limits)
     spec.code = code;
-    spec.max_pause_ms = std::min(spec.max_pause_ms, kDemoMaxPauseMs);      // (the cap of a match that is abandoned: a demo place is not held for half an hour)
-    const DemoChoice choice = demo_choice_of(code, limits_);
+    spec.max_pause_ms = std::min(spec.max_pause_ms, kDemoMaxPauseMs);      // (the cap of a match that is abandoned: a public place is not held for half an hour)
+    const PublicChoice choice = public_choice_of(block, limits_);
     spec.map = choice.map;
     spec.players = choice.players;
-    spec.teams = net::room_code_teams(code);                        // (protocol 13: a team word in the code, `demo-treasure-4p-t01-k7m2xq`: the room starts with them every time)
-    spec.early_start = true;                                        // the first player in a demo room may start it with the players who are there (the page tells them)
+    spec.teams = block.teams();                                     // (the room starts with them every time: the first Hello's choice)
+    spec.leader_starts = block.leader_starts();                     // (a full room waits for its leader's START)
+    spec.public_room = true;
+    spec.early_start = true;                                        // the first player in a public room may start it with the players who are there (the page tells them)
     spec.wait_ms = limits_.demo_wait_ms;
     spec.keep_ms = 30000;
-    spec.run_ms = 30u * 60u * 1000u;                                // a demo room does not hold its slot for longer than half an hour of play
+    spec.run_ms = 30u * 60u * 1000u;                                // a public room does not hold its place for longer than half an hour of play
     return create_room(std::move(spec), now_ms).ok;
 }
 
-bool RoomManager::evict_abandoned_demo(uint32_t now_ms) {
-    const std::string prefix = kDemoRoomPrefix;
+bool RoomManager::evict_abandoned_public(uint32_t now_ms) {
     auto best = rooms_.end();
     uint32_t best_ms = 0;
     for (auto it = rooms_.begin(); it != rooms_.end(); ++it) {
-        if (it->first.compare(0, prefix.size(), prefix) != 0) continue;
+        if (!it->second->public_room()) continue;
         const uint32_t gone = it->second->abandoned_ms(now_ms);
         if (gone >= kDemoAbandonedMs && (best == rooms_.end() || gone > best_ms)) {     // (on a tie the first code in the map's order: the same room every time)
             best = it;
@@ -321,12 +293,12 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
     bool rejoin = false;                                           // a player who comes back to a match that runs (a Hello with the key of a seat)
     auto it = hello.room.empty() ? rooms_.end() : rooms_.find(hello.room);
     const bool ended = it != rooms_.end() && (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed);
-    // A Hello that shows a key is a player who comes back to a match: never a newcomer. It does not make a demo room and does not replace an ended one (the match of its key is over: NoSuchRoom,
+    // A Hello that shows a key is a player who comes back to a match: never a newcomer. It does not make a public room and does not replace an ended one (the match of its key is over: NoSuchRoom,
     // and its machine lets the key go); the review found a stale key that opened a new, empty room of the same code and left the player alone in it.
     const bool keyed = !net::key_is_zero(hello.key);
-    if (ended && !keyed && is_demo_code(hello.room) && limits_.demo_rooms > 0) {
-        // A demo room that is over is forgotten at once when somebody comes back to its code (a late friend, a reload, a rematch with the same
-        // link): its end is reported, and the Hello makes a new room below
+    if (ended && !keyed && hello.create.has_value() && it->second->public_room() && limits_.demo_rooms > 0) {
+        // A public room that is over is forgotten at once when somebody comes back to its code with a create block (a late friend, a reload, a rematch with the same
+        // link: the link carries the block): its end is reported, and the Hello makes a new room below
         if (!it->second->end_reported()) {
             it->second->mark_end_reported();
             unreported_.push_back(it->second->status(now_ms));
@@ -341,7 +313,7 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
             return;
         }
     }
-    if (it == rooms_.end() && !keyed && !hello.room.empty() && make_demo_room(hello.room, now_ms)) it = rooms_.find(hello.room);
+    if (it == rooms_.end() && !keyed && hello.create.has_value() && !hello.room.empty() && make_public_room(hello.room, *hello.create, now_ms)) it = rooms_.find(hello.room);
     if (it == rooms_.end()) {
         good = false;
         reason = net::RejectReason::NoSuchRoom;

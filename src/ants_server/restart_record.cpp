@@ -65,6 +65,7 @@ constexpr size_t kMaxVersionChars = 32;
 constexpr size_t kMaxBuildIdChars = 64;
 constexpr size_t kMaxStartBytes = 2048;
 constexpr uint16_t kLastProtocolWithoutStartTeams = 12;           // (protocol 13 added the two team bytes to the Start message)
+constexpr uint16_t kLastProtocolWithoutStartPlatforms = 14;       // (protocol 15 added the four platform bytes at the end of it)
 constexpr size_t kMaxBots = sim::MAX_PLAYERS;
 
 bool printable(const std::string& s, size_t max_chars, bool allow_empty) {
@@ -116,7 +117,7 @@ std::vector<uint8_t> encode_restart_head(const RestartHead& h) {
     w.str8(h.map);
     w.u64(h.map_hash);
     w.u8(h.players);
-    w.u8(static_cast<uint8_t>((h.fog ? 1u : 0u) | (h.early_start ? 2u : 0u)));
+    w.u8(static_cast<uint8_t>((h.fog ? 1u : 0u) | (h.early_start ? 2u : 0u) | (h.public_room ? 4u : 0u)));
     w.u32(h.wait_ms);
     w.u32(h.load_ms);
     w.u32(h.keep_ms);
@@ -175,9 +176,10 @@ bool decode_restart_head(const uint8_t* payload, size_t size, RestartHead& out, 
     if (h.code.empty() || !net::valid_room_code(h.code)) return bad("the head of the record has no valid room code");
     if (!net::valid_map_name(h.map)) return bad("the head of the record has no valid map name");
     if (h.players < 2 || h.players > sim::MAX_PLAYERS) return bad("the head of the record has an impossible number of players");
-    if ((flags & ~3u) != 0) return bad("the head of the record has flags that this build does not know");
+    if ((flags & ~7u) != 0) return bad("the head of the record has flags that this build does not know");
     h.fog = (flags & 1u) != 0;
     h.early_start = (flags & 2u) != 0;
+    h.public_room = (flags & 4u) != 0;
     if (bot_count > kMaxBots) return bad("the head of the record has too many bots");
     uint8_t bot_seats = 0;
     for (uint8_t i = 0; i < bot_count; ++i) {
@@ -199,12 +201,16 @@ bool decode_restart_head(const uint8_t* payload, size_t size, RestartHead& out, 
     const uint8_t* start_bytes = r.take(start_len);
     if (start_bytes == nullptr) return bad("the head of the record is cut short");
     if (!net::decode(start_bytes, start_len, h.start)) {
-        // protocol 12's Start has no team bytes: with them added as "no teams" it reads, and judge_record then refuses the record for its protocol (kept for a day, the room fails and says why)
+        // the Start of an older protocol lacks what later ones added at its end (protocol 13: the two team bytes, 15: four platform bytes): with them added as "no teams" and "not told" it reads,
+        // and judge_record then refuses the record for its protocol (kept for a day, the room fails and says why)
         bool read = false;
-        if (h.identity.protocol == kLastProtocolWithoutStartTeams) {
+        if (h.identity.protocol <= kLastProtocolWithoutStartPlatforms) {
             std::vector<uint8_t> widened(start_bytes, start_bytes + start_len);
-            widened.push_back(net::kNoTeam);
-            widened.push_back(net::kNoTeam);
+            if (h.identity.protocol <= kLastProtocolWithoutStartTeams) {
+                widened.push_back(net::kNoTeam);
+                widened.push_back(net::kNoTeam);
+            }
+            for (size_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) widened.push_back(net::kPlatformUnknown);
             read = net::decode(widened.data(), widened.size(), h.start);
         }
         if (!read) return bad("the start message in the record is not one");

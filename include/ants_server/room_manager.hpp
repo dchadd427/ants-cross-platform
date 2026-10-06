@@ -10,7 +10,7 @@
 //
 // A Hello with a KEY (protocol 10) for a room whose match runs and that holds seats goes to that room (Room::rejoin: the session takes the connection over and gives the player the match
 // again); a key that fits no seat, a room that does not hold seats and a room that is loading are answered MatchRunning, as a Hello without a key is, so that nothing is revealed; a room
-// that is over is NoSuchRoom, and so is one for a room that is gone: a Hello that shows a key never makes a demo room and never replaces a demo room that ended (its match is over; its player is
+// that is over is NoSuchRoom, and so is one for a room that is gone: a Hello that shows a key never makes a public room and never replaces a public room that ended (its match is over; its player is
 // told so and lets the key go). A Hello with a key for a room that still waits is the lobby's. A Hello for a room whose restart
 // record still waits for its replay is PARKED (the connection and the Hello wait in the manager, a minute at the most) and goes through this door as soon as the room is restored. The server's
 // own defaults for what the rooms hold (reconnect, the vote, the cap, the limit of the log) and the budget that all the logs share are ServerLimits.
@@ -43,24 +43,19 @@ struct ServerLimits {
     uint32_t hello_timeout_ms{10000};       // ... and the time they get for it
     uint32_t reject_linger_ms{2000};        // a rejected connection is kept open this long so that the answer reaches the peer
     uint32_t park_timeout_ms{60000};        // a Hello for a room that waits for its replay (a restart record) waits this long for the room, then its connection is dropped (no hello timeout applies meanwhile)
-    // Demo rooms (off by default; for a public test page that has no secret to make rooms with): a Hello for a room whose code starts with "demo-" that does not
-    // exist makes it, on `demo_map`, for `demo_players` players, at most `demo_rooms` of them at a time (0 = off); the code can choose the map and the players
-    // (`demo_maps`). A demo room waits `demo_wait_ms` (ten minutes) for its players and is forgotten half a minute after it ended; a Hello for the code of one that
-    // is over makes a new room at once. Whoever can reach the door can fill these rooms and hold them for a match: that is the price of a page that works without
-    // a secret; real rooms are made by the control interface.
+    // Public rooms (off by default; for a public test page that has no secret to make rooms with; the server's --demo-rooms, --demo-map, --demo-maps): a Hello that carries a CREATE BLOCK (protocol 15: the map,
+    // the seats, the teams and the leader-starts flag that the room should have) for a room that does not exist makes it, at most `demo_rooms` of them at a time (0 = off). The code is only a name: whatever
+    // 8 letters and numbers the first player's game made. The block chooses the seats (2 to 4), the teams and whether a full room waits for its leader's START; the map is the block's when the server offers
+    // it (`demo_maps`) and `demo_map` when it does not (a page that offers a map this server does not allow still gets the room it asked for). A public room waits `demo_wait_ms` (ten minutes) for its players and is
+    // forgotten half a minute after it ended; a Hello with a block for the code of one that is over makes a new room at once, and a Hello without a block is NoSuchRoom (a Hello for a room that is not there is, too). Whoever can
+    // reach the door can fill these rooms and hold them for a match: that is the price of a page that works without a secret; rooms of the control interface are made by the control interface and are never public.
     size_t demo_rooms{0};
     std::string demo_map;
-    uint8_t demo_players{4};
-    // How long a demo room waits for its players, from the first Hello (the page's link goes to friends on other computers: they need time to arrive)
+    // How long a public room waits for its players, from the first Hello (the page's link goes to friends on other computers: they need time to arrive)
     uint32_t demo_wait_ms{10u * 60u * 1000u};
-    // The maps that a Hello may choose for a demo room. The code of a demo room chooses: "demo-[<map>-][<n>p-]<anything>" (and a team word t01 after the first word names the room's teams:
-    // net::room_code_teams, protocol 13): <map> is the name of one of these
-    // maps without its extension (any case, then a dash; file names of the maps folder, e.g. "SMALL.LVL"), <n>p the number of players, 2 to 4 ("demo-small-2p-x7k2":
-    // SMALL.LVL for two). The player count may also follow a first word that is not one of these maps ("demo-medium-2p-x" on a server without MEDIUM: the default
-    // map, for two), so that a page that offers a map the server does not allow still gets the players it asked for. What a code does not choose is `demo_map` and
-    // `demo_players`, as before. The choice rides in the room code because the Hello has no other field (the protocol is unchanged).
+    // The maps that a create block may choose (file names of the maps folder, e.g. "SMALL.LVL"; the block's map_name is compared with them in any case)
     std::vector<std::string> demo_maps;
-    // Reconnect (protocol 10; ants_server's --reconnect / --no-reconnect, --hold-vote-seconds, --max-pause-seconds, --max-catch-up-seconds, --resume-countdown-seconds, --log-mb): what a room holds unless its specification says otherwise. Demo rooms follow
+    // Reconnect (protocol 10; ants_server's --reconnect / --no-reconnect, --hold-vote-seconds, --max-pause-seconds, --max-catch-up-seconds, --resume-countdown-seconds, --log-mb): what a room holds unless its specification says otherwise. Public rooms follow
     // `reconnect`. ON by default (kReconnectByDefault).
     bool reconnect{kReconnectByDefault};
     uint32_t hold_vote_ms{net::kVoteAfterMs};                       // the vote opens after a seat has been away this long in all
@@ -71,15 +66,12 @@ struct ServerLimits {
     uint64_t log_budget_bytes{256ull * 1024ull * 1024ull};          // the memory that all the rooms' logs may take together; a log that cannot grow is not kept (its room drops a lost seat at once)
 };
 
-/// The code prefix of the rooms that a Hello may make when demo rooms are on
-inline constexpr const char* kDemoRoomPrefix = net::kDemoRoomPrefix;
-
-/// A demo room's cap on the match's pauses: the match of a page's link that nobody comes back to must not hold one of the few demo places for the server's 30 minutes. A demo room takes the smaller of
+/// A public room's cap on the match's pauses: the match of a page's link that nobody comes back to must not hold one of the few public places for the server's 30 minutes. A public room takes the smaller of
 /// this and the server's cap; the rooms of the control interface keep the server's.
 inline constexpr uint32_t kDemoMaxPauseMs = 10u * 60u * 1000u;
 
-/// A demo room whose people have all been gone this long is abandoned: when a Hello needs a demo place and none is free, the demo room that has been abandoned the longest is ended and its place is
-/// given to the new room (RoomManager::make_demo_room). A room with a person at its match, or in its lobby, is never ended for that. The floor keeps a blip of every link at once (a proxy that
+/// A public room whose people have all been gone this long is abandoned: when a Hello needs a public place and none is free, the public room that has been abandoned the longest is ended and its place is
+/// given to the new room (RoomManager::make_public_room). A room with a person at its match, or in its lobby, is never ended for that. The floor keeps a blip of every link at once (a proxy that
 /// restarts) from costing a match.
 inline constexpr uint32_t kDemoAbandonedMs = 60u * 1000u;
 
@@ -228,11 +220,12 @@ private:
     void release_parked(const std::string& code, uint32_t now_ms);
     void reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms);
     std::string new_code();
-    /// Makes the demo room that a Hello names, when demo rooms are on, the code has the prefix, and there is a free place (or one can be had: evict_abandoned_demo); false otherwise
-    bool make_demo_room(const std::string& code, uint32_t now_ms);
-    /// Ends the demo room that has been abandoned the longest (at least kDemoAbandonedMs: every seat of a person held absent, nobody back): its clients are dropped, its record is deleted, its log is
-    /// freed, its end is reported, and it is forgotten at once so that its place can be taken. False when no demo room qualifies (a room with a person present never does).
-    bool evict_abandoned_demo(uint32_t now_ms);
+    /// Makes the public room that a Hello with a create block names, when public rooms are on, the code is a valid one, the block is valid and there is a free place (or one can be had:
+    /// evict_abandoned_public); false otherwise
+    bool make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
+    /// Ends the public room that has been abandoned the longest (at least kDemoAbandonedMs: every seat of a person held absent, nobody back): its clients are dropped, its record is deleted, its log is
+    /// freed, its end is reported, and it is forgotten at once so that its place can be taken. False when no public room qualifies (a room with a person present never does).
+    bool evict_abandoned_public(uint32_t now_ms);
 
     MapStore store_;
     ServerLimits limits_;

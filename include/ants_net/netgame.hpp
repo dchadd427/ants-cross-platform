@@ -158,6 +158,16 @@ public:
     /// be used or there is no WebSocket (every native build: it joins with TCP). A server's room has no host migration and no links between guests.
     bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
                   const SeatKey& key = SeatKey{});
+    /// Before join() / join_url() (protocol 15): what this machine tells the room about itself and about the room it would make. `set_platform`: the platform byte of the Hello (net::kOs..., with
+    /// kPlatformBrowser for a game in a page), which the room hands on to everybody as an icon beside the name; cosmetic, nothing is decided by it; the default is net::native_platform(), the page says
+    /// what its browser is. `set_create`: the CREATE BLOCK of the Hello: the map, the seats, the teams and the leader-starts flag of the room if the server has none of this code yet (a server that
+    /// makes public rooms makes it from the block; the room that exists ignores it). Not set: the Hello only joins, and a room that is not there is NoSuchRoom ("There is no such room on this server.").
+    /// A block that net::valid_create_block() refuses is left out of the Hello. Both stay set for the way back's links.
+    void set_platform(uint8_t platform) noexcept { platform_ = valid_platform(platform) ? platform : native_platform(); }
+    uint8_t platform() const noexcept { return platform_; }
+    void set_create(const CreateBlock& block) { create_ = block; }
+    void clear_create() noexcept { create_.reset(); }
+    const std::optional<CreateBlock>& create() const noexcept { return create_; }
     /// Leaves for good: tells the others (a guest says Leave), closes every connection. The others see the host or the guest gone. This works in every state of the way back: a machine whose link is up
     /// (during a pause too, when no Quit command would be sealed) says Leave; one that has no link cannot tell the server (its seat is held until the others vote or the cap drops it). The key is forgotten,
     /// unless the session had ended by itself (Over, Failed): its end decided about the key (a refusal that keeps it, a link that never opened), and the application's way back to its menu only cleans up.
@@ -261,17 +271,17 @@ public:
     /// that play can (else the match starts without them and everybody in the room is told why). A LAN host's own START and a server's leader's request carry them.
     void set_start_teams(const sim::StartTeams& teams) noexcept { teams_ = teams; }
     const sim::StartTeams& start_teams() const noexcept { return teams_; }
-    /// The teams that the room's own code names (protocol 13: net::room_code_teams of the room that this machine joined; none for the host of a LAN room): the room makes them for EVERY start, when it fills
-    /// up and starts by itself too, and ignores the teams of a leader's request.
-    sim::StartTeams room_teams() const noexcept { return role_ == Role::Client ? room_code_teams(target_.room) : sim::StartTeams{}; }
-    /// The teams that this machine's screens show and its START asks for: the room's own when its code names some, else set_start_teams' (sim::start_teams_for)
+    /// The teams that the room itself has (protocol 15: the Room message names them; the create block that made the room chose them; none for the host of a LAN room, and until the first Room message has
+    /// arrived): the room makes them for EVERY start, when it fills up and starts by itself too, and ignores the teams of a leader's request.
+    sim::StartTeams room_teams() const noexcept { return role_ == Role::Client ? room_.teams() : sim::StartTeams{}; }
+    /// The teams that this machine's screens show and its START asks for: the room's own when it has some, else set_start_teams' (sim::start_teams_for)
     sim::StartTeams effective_teams() const noexcept { return sim::start_teams_for(room_teams(), true, teams_); }
     /// What the status line of the setup screen says to somebody who can START a room that has a fill level or teams (the host of a room on the local network, the leader of a server's room), in
     /// place of the original's "Press START when all players' thumbs have appeared.": "Press START: the empty seats get Medium bots." (one level for every empty seat), "Press START: Red gets
     /// an Easy bot, Black a Hard bot; teams Green + Red against Blue + Black." and, in a room with Fog of War (bots and fog never mix), "Fog of War is on, so START seats no bots."
     static std::string start_prompt(FillLevel level, bool fog);
     /// The same line for a plan and teams over the seats of `room`, and shorter ways to say it for a label that is too narrow (the longest first); empty when there is nothing to say (no bot
-    /// would be seated and no teams are chosen: the original's own prompt stands). `room_teams`: the teams are the room's own (its code names them), not a choice of this START: "the room's teams:
+    /// would be seated and no teams are chosen: the original's own prompt stands). `room_teams`: the teams are the room's own (the room names them), not a choice of this START: "the room's teams:
     /// Green + Red against Blue + Black" in place of "teams Green + Red against Blue + Black".
     static std::vector<std::string> start_prompt_texts(const FillPlan& plan, const sim::StartTeams& teams, const RoomMsg& room, bool fog, bool room_teams = false);
     /// The foot of the leader's Players' Status box on the 16:9 setup screen (two lines, each in the ways it can be said, the longest first; the screen takes the first that fits): "Empty seats at
@@ -288,10 +298,10 @@ public:
     const std::vector<std::string>& prompt_texts() const noexcept { return prompts_; }
     /// The words of a refusal, as the status line shows them when a join fails (the original's text for a dropped machine, the remake's for the rest). `in_browser`: the game runs in a web page,
     /// where reloading the page is how a player gets the current version (a tab that was opened before the server was updated is the old game), so the refusal for another version says so; every
-    /// other refusal is the same words everywhere (the desktop start menu has texts of its own, Application::menu_failure_text). `room`: the code that was asked for. NoSuchRoom for a code that
-    /// begins "demo-" (the server makes the room of such a code when somebody comes) says that the server cannot make a room now, which is what a full cap of demo rooms is; for any other code, or
-    /// none, it says that there is no such room.
-    static std::string reject_text(RejectReason reason, bool in_browser, const std::string& room = std::string());
+    /// other refusal is the same words everywhere (the desktop start menu has texts of its own, Application::menu_failure_text). `made_a_room`: the Hello carried a create block (the server makes the
+    /// room of such a Hello when somebody comes): NoSuchRoom then says that the server cannot make a room now, which is what a full cap of public rooms is; for a Hello without a block it says that
+    /// there is no such room.
+    static std::string reject_text(RejectReason reason, bool in_browser, bool made_a_room = false);
 
     // ---- the waiting room's chat (protocol 11) ------------------------------------------------------------------------------------------------------
     /// Says a line to everybody in the room: in the waiting room and while the map loads (and, as ever, during the match: then `team` counts; before it nobody has a team and the flag is
@@ -517,6 +527,8 @@ private:
     FillPlan fill_;                         // the bots that this machine's START asks for: a level for each seat (protocol 11, 13)
     sim::StartTeams teams_;                 // the teams that this machine's START asks for (protocol 13)
     JoinTarget target_;                     // client: how the first link was made (join, join_url)
+    uint8_t platform_{native_platform()};   // client: what the Hello says this machine is (set_platform)
+    std::optional<CreateBlock> create_;     // client: the room that the Hello would make when the server has none of this code (set_create)
     bool way_back_{false};                  // client: the session was built to come back by itself (a dedicated server's room that gave this machine a key)
     bool reload_used_{false};               // client: the BadRequest fallback (reload_after_bad_request) was taken in this match
     SeatKey join_key_{};                    // client: the key that the lobby's Hello showed (all zero: a new player)

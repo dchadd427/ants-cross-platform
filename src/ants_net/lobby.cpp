@@ -83,7 +83,14 @@ HostLobby::HostLobby(Config config) : cfg_(std::move(config)) {
         room_.slots[cfg_.host_seat].state = SlotState::Host;
         room_.slots[cfg_.host_seat].name = human_name(cfg_.host_name, "Host");
         room_.slots[cfg_.host_seat].rtt_ms = 0;                // the host's own thumb is always good
+        room_.slots[cfg_.host_seat].platform = valid_platform(cfg_.host_platform) ? cfg_.host_platform : kPlatformUnknown;
     }
+    // the room's own rules (protocol 15): told to everybody in every Room message; a pair that no honest client could have sent (two seats, the lower first) is no team
+    if (cfg_.room_teams.set && cfg_.room_teams.a < cfg_.room_teams.b && cfg_.room_teams.b < sim::MAX_PLAYERS) {
+        room_.team_a = cfg_.room_teams.a;
+        room_.team_b = cfg_.room_teams.b;
+    }
+    room_.flags = cfg_.leader_starts ? kRoomLeaderStarts : uint8_t{0};
     // room_.map_name stays empty until the host chooses a map (the setup screen lists what the Maps folder holds; no map is named in the program)
 }
 
@@ -312,6 +319,7 @@ bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms, const s
         if (room_.slots[s].state == SlotState::Empty) continue;
         start_.roster = static_cast<uint8_t>(start_.roster | (1u << s));
         start_.names[s] = room_.slots[s].name;
+        start_.platforms[s] = room_.slots[s].platform;
         if (guests_[s].conn != nullptr && !guests_[s].address.empty() && guests_[s].listen_port != 0) {
             start_.endpoints[s] = Endpoint{guests_[s].address, guests_[s].listen_port};      // how the other guests reach it
         }
@@ -384,6 +392,7 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello) {
     g.next_ping_ms = 0;
     for (uint32_t& sent : g.ping_sent) sent = 0;
     room_.slots[seat].rtt_ms = kRttUnknown;
+    room_.slots[seat].platform = hello.platform;                 // (the same guest, maybe on another device: what it says now)
     ++takeovers_;
     if (old != nullptr && old != p.conn && old->is_open()) {
         old->send(encode(RejectMsg{RejectReason::Superseded}));
@@ -434,6 +443,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].key = key;
     room_.slots[seat].state = SlotState::Client;
     room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
+    room_.slots[seat].platform = hello.platform;
     elect_leader();                                              // the first guest to be welcomed leads (a server's room that allows an early start)
     WelcomeMsg welcome;
     welcome.player = seat;
@@ -654,6 +664,8 @@ void ClientLobby::send_hello() {
     h.room = cfg_.room;
     h.token = cfg_.token;
     h.key = cfg_.key;                                // (have_turns stays 0: this lobby starts from nothing; a key that is zero makes the Hello that of a new player)
+    h.platform = valid_platform(cfg_.platform) ? cfg_.platform : kPlatformUnknown;
+    if (cfg_.create && valid_create_block(*cfg_.create)) h.create = cfg_.create;             // (a block that no server would read is left out: the Hello then joins)
     conn_->send(encode(h));
     phase_ = Phase::Joining;
     joined_stamp_pending_ = true;
