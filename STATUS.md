@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 19:53 PDT · current release **v0.9.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 20:10 PDT · current release **v0.9.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -23,7 +23,6 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and its release turn has started
 - **Nobody means nobody** (no version number of its own, no protocol change; PR #27): a game for one has only your colony, no hill, ants or eggs for the empty seats; built and tested here, draft PR open.
 - **Team 1 and Team 2 switches** (in PR #27 with "Nobody means nobody", no version number of its own, no protocol change): each colour on the front page's card has a Team 1 and a Team 2 switch instead of the Teams menu; built and tested here, review running.
-- **Server tests that fail now and then** (tests only, no release; PR #28): two timing checks, S3.100 on Windows and S3.32 on macOS, are being fixed so that they no longer assume a quiet machine; the draft carries extra diagnostics for now, which come out before it merges.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
@@ -33,6 +32,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **Two more test flakes fixed** (no release; PR #28, merged 2026-10-05 20:09 PDT): the server tests S3.100 (Windows) and S3.32 (macOS) no longer fail now and then on a slow runner (the first flush of the first test wrote a backlog of 2.4 MB, and the flood test did not allow for the time the drop takes); tests only, nothing changes for players, no redeploy.
 - **Source comments cleaned** (no release; PR #25, merged 2026-10-05 19:44 PDT): fourteen comments and five test titles in the bot code say what the code does instead of whose notes a rule came from; nothing changes for players (the beta redeploys with the same version).
 - **Documents and test banners corrected** (no release; PR #24, merged 2026-10-05 19:35 PDT): about 44 statements in 23 files that no longer matched the game now say what the code, the data and the changelog say; nothing changes for players.
 - **v0.9.1** A player who quits during a catch-up no longer leaves the match paused: the server reads the Leave that came before the reset and drops the seat (native and browser connections) (PR #22, merged 2026-10-05 19:10 PDT, live 19:14 PDT)
