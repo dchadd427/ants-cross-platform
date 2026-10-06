@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 18:57 PDT · current release **v0.9.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 18:59 PDT · current release **v0.9.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -23,6 +23,8 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 - **No-Docker browser checks** (pull request #13, tools only, no redeploy): reviewed twice and every finding fixed; main with v0.9.0 is in and the five checks are running; it merges as soon as they are green
 - Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and it merges in its turn
+- **Nobody means nobody** (patch, number to come, no protocol change; PR #27): a game for one has only your colony, no hill, ants or eggs for the empty seats; built and tested here, draft PR open.
+- **Server tests that fail now and then** (tests only, no release; PR #28): two timing checks, S3.100 on Windows and S3.32 on macOS, are being fixed so that they no longer assume a quiet machine; the draft carries extra diagnostics for now, which come out before it merges.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
