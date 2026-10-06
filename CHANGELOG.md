@@ -32,6 +32,13 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [detailed notes](docs/NETWORK_PORT.md#protocol-14-the-leader-of-a-room-moves-a-player-to-another-colour)
 
+## v0.9.1 - 2026-10-05 - A player who quits during a catch-up no longer pauses the match
+
+**For players:**
+- **A player who quits during a catch-up no longer leaves the match paused:** the server reads the Leave that came before the reset and drops the seat. Quitting while a lot of the server's messages were still unread (the catch-up a rejoining player gets) made the connection reset, the reset lost the Leave, and the server kept the seat, so the others waited for a player who had gone.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cf4e71f...4b81a2c)
+
 ## v0.9.0 - 2026-10-05 - Computer players that race, hunt and cross the water
 
 **For players:**
