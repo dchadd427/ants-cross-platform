@@ -2464,8 +2464,8 @@ void run_socket_tests() {
                 // the pings need at least 16 updates (64 of a connection per update) to use up the budget, so the seat is seen, and then the drop: within two seconds
                 ASSERT_TRUE(seated);
                 // a second's worth was answered, not the millions that were sent: the burst, and what the budget gave back while the flood lasted (kMessagesPerSecond a second of the clock: the drain took 0.1 to 0.7 s
-                // on the macOS runners, 1,100 to 1,600 pongs, and the loop may stall for 400 ms below, which gives back all it lasts in one update); the clock below began before the flooder did (its connect and its
-                // Hello are inside the time), and the pongs that the reset takes away are not counted, so the bound is a little wide
+                // on the macOS runners, 1,100 to 1,600 pongs, and the loop may stall for 400 ms below, which gives back all it lasts in one update); the clock above (timer_b) began before the flooder did (its connect and
+                // its Hello are inside the time), and the pongs that the reset takes away are not counted, so the bound is a little wide
                 const double most_pongs = net::kMessageBurst + net::kMessagesPerSecond * dropped_after + 2;
                 std::cout << "\n      [measured] the flooder was answered with " << pongs << " pongs (from " << net::kMessageBurst << " to " << most_pongs << ") and dropped after " << dropped_after << " s" << std::flush;
                 ASSERT_TRUE(dropped_after >= 0.0 && dropped_after < 2.0);
