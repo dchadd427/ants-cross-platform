@@ -144,6 +144,8 @@ struct RoomStatus {
     bool early_start{true};                 // the room allows the leader's early start
     uint8_t leader{255};                    // the seat of the leader while the room waits or loads (255: none: nobody has joined yet, the room does not allow an early start, or the match runs)
     uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start, a late click of a match that runs)
+    uint32_t seat_moves{0};                 // the colours that the leader moved a player to (protocol 14: each one that the room carried out)
+    uint32_t ignored_seat_moves{0};         // SeatMove messages that were heard and not acted on (a player who is not the leader, a seat that is not a player's, a late move of a match that runs)
     /// The computer players of the room: the specification's, and the ones that the leader's START seated (`fill`); the seats stay listed after the match. `joined` counts them (a bot is a player).
     struct Bot {
         uint8_t seat{255};

@@ -144,6 +144,7 @@ When the body leaves a key out, the five reconnect keys take what the server was
 | `players` | `[{"seat", "name", "bot"}]`: the players of the room; a bot says so. |
 | `bots` | The room's computer players: `seat`, `bot`, `kind`, `level`, `style` (standard bots only), `name`, `fill`. |
 | `early_start`, `leader`, `ignored_start_requests` | `leader` is the seat of the room's leader while the room waits or loads, and null while nobody leads and once the match runs. `ignored_start_requests` counts the START requests that the room did not honour. |
+| `seat_moves`, `ignored_seat_moves` | The colours that the leader moved a player to, and the SeatMove requests that the room did not honour (network protocol 14). |
 | `ticks`, `turns`, `age_seconds` | How far the match has run, and how old the room is. |
 | `state_hash` | A finished room: the referee's state at `ticks`, as 16 hex digits. |
 | `result` | A finished room: `quitter` and the rows of the results screen (`names`, `seats`, `score`, `lost`, `killed`, `hatched`, `winner`; an alliance is one row). |
@@ -186,6 +187,7 @@ In a room with `early_start` on (the default; demo rooms have it on) the first p
 
 - START starts the match at once with the players who are there, when the room is waiting and at least two players are in. One player is enough when the START asks for bots (next section). `expected` keeps what the room was made for and `joined` shows who came. A room whose seats are all taken still starts by itself.
 - Every other START request is ignored and counted in `ignored_start_requests`: one of a player who is not the leader, of a room with `early_start` off, with one player and no fill level, or when the match is loading already. The first 16 of a connection cost nothing (a double or triple click); each one after the sixteenth is a violation, and eight violations throw the sender out.
+- The leader may also **move a player to a free colour** (network protocol 14: a press on the player's row of its screen). The room puts the guest, with its key and its place in the order of the Welcomes, in the empty seat, sends every player the new room and tells the player in its chat. A request from a guest that is not the leader, for a colour that somebody holds, for a seat that holds nobody or in a room that has started is ignored and counted in `ignored_seat_moves` (the same 16 free, then violations, and it costs no part of the budget); the moves that are made have a budget of 6, then 4 a second. Details: [`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-14-the-leader-of-a-room-moves-a-player-to-another-colour), "Protocol 14".
 
 Details: [`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-7-the-rooms-leader-starts-early-the-first-player-of-a-servers-room), "Protocol 7: the room's leader starts early".
 

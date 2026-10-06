@@ -666,6 +666,7 @@ bool Application::init(const ApplicationConfig& config) {
         }
     });
     map_select_.set_on_request_start([this]() { net_request_start(); });
+    map_select_.set_on_move_seat([this](uint8_t seat) { net_move_seat(seat); });
     map_select_.set_on_quit([this]() {
         leave_game();                                         // (a network game that the start menu led to: back to the menu)
     });
@@ -2665,6 +2666,11 @@ void Application::net_request_start() {
     if (!net_ || !net_->request_start()) play_effect(sim::SoundID::CantGo);
 }
 
+// A press on a player's row of the leader's screen (protocol 14): the player goes to the next colour (NetGame::request_move_seat decides, and says nothing when the request is held back).
+void Application::net_move_seat(uint8_t seat) {
+    if (net_) net_->request_move_seat(seat);
+}
+
 // START on the setup screen of a room (host only): the map file's hash goes with the Start message so that every machine checks its own copy.
 void Application::net_start_from_setup(const std::string& map_path) {
     if (!net_ || !net_->is_host()) return;
@@ -2712,6 +2718,9 @@ void Application::handle_net_events() {
                 for (const ai::BotSpec& spec : fill_specs_) net_->remove_bot(spec.seat);      // the room is as it was before the START: the bots that it seated go again
                 fill_specs_.clear();
                 break;
+            case net::NetGame::Event::Type::RoomChanged:             // (protocol 14) a player that the leader moved takes the bot that was for its colour: NetGame moves it in its plan when the room shows the
+                if (net_->is_leader()) config_.fill_bots = net_->fill_bots();      // move, and the application's copy of the plan, which the footer of the setup screen shows, follows
+                break;
             case net::NetGame::Event::Type::Chat:                    // (protocol 11) a line in the waiting room: the log of the program has it; the status line shows it for a few seconds
                 for (const std::string& text : room_chat_log_.take(net_->take_pregame_chat(), static_cast<uint32_t>(net_time_ms_))) {       // (a budget: a flooded room does not flood the log)
                     std::cerr << "[Application] Room chat: " << text << std::endl;
@@ -2732,7 +2741,7 @@ void Application::handle_net_events() {
                 std::cerr << "[Application] The network match is out of sync (turn " << net_->turns_executed() << ")" << std::endl;
                 break;
             default:
-                break;                                        // room changes are shown by sync_room_view, the rest by the overlay and the chat log
+                break;                                        // the rest of the room is shown by sync_room_view, the match by the overlay and the chat log
         }
     }
 }
