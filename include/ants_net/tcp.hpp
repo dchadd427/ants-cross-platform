@@ -28,7 +28,7 @@ public:
     bool send(const std::vector<uint8_t>& message) override;
     bool poll(std::vector<uint8_t>& message) override;
     State state() const override { return state_; }
-    /// Closes this side. What was received and not polled is dropped with it (nobody reads it any more); what a peer sent before IT closed is delivered, as before.
+    /// Closes this side. What was received and not polled is dropped with it (nobody reads it any more); what a peer sent before IT closed, or reset the link, is delivered.
     void close() override;
 
     /// The peer's address as text (diagnostics)

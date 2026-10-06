@@ -223,6 +223,9 @@ void TcpConnection::pump() {
         state_ = State::Open;
     }
     if (state_ != State::Open) return;
+    // A link that the peer reset still holds what the peer sent before it: a failed write or read is only noted, the bytes that are there are read and parsed, and then the connection fails (a Leave
+    // sent just before a quit during a catch-up used to be lost here, and the server held the seat of a player who had gone).
+    bool reset = false;
     // write what is queued
     while (!out_.empty()) {
 #ifdef MSG_NOSIGNAL
@@ -236,7 +239,8 @@ void TcpConnection::pump() {
         } else if (n < 0 && would_block()) {
             break;
         } else {
-            return fail();
+            reset = true;
+            break;
         }
     }
     // Read what is there. Bounded per pump so that a flooding peer cannot stall the game, and only while the game has room for what it reads: when half of the inbox is full
@@ -257,7 +261,8 @@ void TcpConnection::pump() {
         } else if (would_block()) {
             break;
         } else {
-            return fail();
+            reset = true;
+            break;
         }
     }
     // parse frames: u32 length, payload (as many as the inbox takes: the rest stays in in_, which is bounded above)
@@ -272,6 +277,7 @@ void TcpConnection::pump() {
         pos += 4 + len;
     }
     if (pos > 0) in_.erase(in_.begin(), in_.begin() + static_cast<std::ptrdiff_t>(pos));
+    if (reset) fail();
 }
 
 bool TcpConnection::send(const std::vector<uint8_t>& message) {

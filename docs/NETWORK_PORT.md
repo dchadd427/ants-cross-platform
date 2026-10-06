@@ -117,10 +117,10 @@ checks.
 ## TCP for LAN and development (`tcp.hpp`, native builds, v0.0.45)
 
 `TcpConnection` / `TcpListener`: non-blocking sockets (POSIX and Winsock), `u32` length + payload framing, a length above 64 KB fails the connection without allocating for it, a sender whose peer never
-reads is cut off when its queue passes 512 KB, an orderly close still delivers what was sent before it, `TCP_NODELAY`, and **the messages that wait to be polled are bounded** (4096 messages and 1 MiB, as in the
+reads is cut off when its queue passes 512 KB, a close still delivers what was sent before it, an orderly one or a reset (a link that is closed with unread bytes is reset; where the kernel keeps what came before, as Linux does, a Leave sent just before such a quit is read, not lost), `TCP_NODELAY`, and **the messages that wait to be polled are bounded** (4096 messages and 1 MiB, as in the
 WebSocket connection: at half of either the socket is not read until the game has taken what is there, so the bytes stay in the kernel and TCP holds a flooding sender back; v0.0.93, see "Flood control"). It implements the same `Connection` interface as the in-memory link, so the sessions,
 lobby and tests run unchanged on real sockets (`tests/test_net/test_tcp.cpp`: message boundaries and order for every size up to the limit, 20000 small messages, hostile length prefixes, truncated frames, dead
-ports, the never-reading peer, a 40 s match of a host and three clients over real sockets, the room from `Hello` to `Begin`, and a burst of 48 connections that come while nobody accepts, all of which wait for the server when it looks: the listener holds 64, `kListenBacklog`; with 8 a macOS listener kept 8 and the other 40 never came: N3.8; the WebSocket listener holds 64 too, it was 32: `test_ws` W1.23).
+ports, the never-reading peer, a 40 s match of a host and three clients over real sockets, the room from `Hello` to `Begin`, and a burst of 48 connections that come while nobody accepts, all of which wait for the server when it looks: the listener holds 64, `kListenBacklog`; with 8 a macOS listener kept 8 and the other 40 never came: N3.8; the WebSocket listener holds 64 too, it was 32: `test_ws` W1.23; and the Leave that comes before a reset, whether the connection writes or reads first: N3.10).
 
 ## LAN discovery (`lan.hpp`, native builds, v0.0.78)
 
