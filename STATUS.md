@@ -1,18 +1,18 @@
 # Status
 
-_Updated 2026-10-05 17:29 PDT · current release **v0.8.2** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 17:38 PDT · current release **v0.8.2** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.8.3** Friend as the default seat, a game for one with START!, a dirtier background | ███░░░░░░░ 29% | Mon or Tue | built and tested here; an independent review is running, then the browser checks on the final head and the pull request |
-| **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ██████░░░░ 57% | Mon or Tue | PR #14 is the release pull request (both batches joined, both independent reviews answered, version and changelog done); the five checks are running on its final head, then the merge once no match is running |
+| **v0.8.3** Friend as the default seat, a game for one with START!, a dirtier background | ████░░░░░░ 43% | Mon or Tue | pull request #23 is up: built, reviewed with every finding fixed, quick tier passes; the browser checks and the five CI checks are running on its final head, then the merge once no match is running |
+| **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ██████░░░░ 57% | Mon or Tue | PR #14 is the release pull request (both batches joined, both independent reviews answered, version and changelog done); the five checks are running on its final head; it merges right after v0.8.3, once no match is running |
 | **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the bots (v0.9.0) |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- v0.8.3: START with every other seat on Nobody begins a game for one on this computer (the original's single player; a room on the game server needs two people), Friend is the default seat of the New match card, and the orange background gets a little noise and dirt (the owner's asks); a patch release, built and tested here, with its review running
+- v0.8.3 (pull request #23): START with every other seat on Nobody begins a game for one on this computer (the original's single player; a room on the game server needs two people), Friend is the default seat of the New match card, and the orange background gets a little noise and dirt (the owner's asks); built and reviewed with every finding fixed; its checks are running, then the merge once no match is running
 - **Quitting during a catch-up** (draft pull request #22): a player who quits while their game is catching up no longer leaves the match paused with their seat held; review and checks running; ships as the next patch release after v0.8.3
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in PR #14, the v0.9.0 release pull request (both independent code reviews answered and every finding fixed; the five checks are running on the final head, then the merge)
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
