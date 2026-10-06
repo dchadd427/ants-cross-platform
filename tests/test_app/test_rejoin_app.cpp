@@ -430,9 +430,8 @@ struct World {
         }
         for (auto& m : machines) m->frame(now);
     }
-    // While `deliver_room` names the room of a match that runs, a pass gives the clients frames of no length (the clock stands still) until every client has been handed every turn that the room has sealed. A loopback
-    // that delivers within the pass (Linux) needs one such frame; a kernel that holds bytes back for tens of milliseconds, which are seconds of game time on this clock, costs real time here, not a stall, a deeper
-    // jitter buffer and a place behind the others. A client that is not handed them within two seconds ends the waiting for good: the assertions of the test say what is wrong
+    // While `deliver_room` names a room whose match runs, a pass gives the clients frames of no length until each has been handed every turn that the room has sealed: a late kernel costs real time, not game
+    // time. A client that is not handed them within the cap ends the waiting until the next assignment (the assertions of the test say what is wrong)
     std::string deliver_room;
     bool turns_are_here() const {
         const uint32_t sealed = status(deliver_room).turns;
@@ -454,7 +453,7 @@ struct World {
             }
             server.pump(now);
             pump_clients(0.0f);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if (!turns_are_here()) std::this_thread::sleep_for(std::chrono::milliseconds(1));         // (a loopback that delivers within the pass costs no sleep)
         }
     }
     // 10 ms of game time per step. The sockets are real and the clock is not: a loopback link delivers within the pass that wrote to it on Linux, but not on every system (a Mac's loopback is handled by a kernel
@@ -870,9 +869,9 @@ void run_use_tests() {
                 blocked = poke(second, ant);
                 picture_ok = catch_up_picture(grab(second, dir / "ra41.bmp"), second.catch_up_percent(), picture_problem);
             }
+            if (began && !w.status("RA-4").paused) w.deliver_room = "RA-4";                      // (the room runs again: from here on a late kernel costs real time, not game time)
             if (began && !now.catching && !w.status("RA-4").paused) break;
         }
-        w.deliver_room = "RA-4";                                                                 // (the match goes on)
         ASSERT_TRUE(began && poked);
         ASSERT_FALSE(blocked.options || blocked.click || blocked.wheel || blocked.text);
         if (!picture_ok) std::cout << "\n    [the catch-up screen] " << picture_problem;
@@ -1978,6 +1977,7 @@ void run_way_back_tests() {
             looks.push_back(now);
             reloaded = reloaded || now.phase == NetGame::Phase::Connecting || now.phase == NetGame::Phase::Loading;
             if (now.catching) last_catching_tick = now.tick;
+            if (reloaded && !w.status("RA-9").paused) w.deliver_room = "RA-9";                    // (the room runs again: from here on a late kernel costs real time, not game time)
             if (reloaded && now.phase == NetGame::Phase::Playing && !now.catching && !w.status("RA-9").paused && now.tick > last_catching_tick) break;
             if (!slow_begin && now.phase == NetGame::Phase::Loading) {            // the map is loaded and the Begin is a round trip away (here: half a second, as a Mac under load or a far server make it)
                 slow_begin = true;
@@ -1987,7 +1987,6 @@ void run_way_back_tests() {
                 ASSERT_EQ(app.sim().current_tick(), tick_at_load);               // no tick of its own meanwhile: the match is the runner's (the first begin's screen was a local game's, ticking at 20 a second, and a tick here is a state that the replay does not reach: the server refused the machine)
             }
         }
-        w.deliver_room = "RA-9";                                                                  // (the match goes on)
         ASSERT_TRUE(reloaded && slow_begin);
         for (const Look& l : looks) {
             ASSERT_EQ(l.state, AppState::Playing);
