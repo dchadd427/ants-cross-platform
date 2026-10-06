@@ -98,14 +98,14 @@ if part_enabled options; then
 # the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
 check "web/lobby.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/lobby.html")" -ge 3 ]; echo $?)"
 # bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the front page's one card offers four seats with a group of five buttons each (Friend, Easy, Medium,
-# Hard, Nobody), Sit here and the Teams, remembers them, and every link of the room carries the plan as ?fill=<plan> (and &start=<people>), validated; the game page turns exactly those texts into --fill-bots,
+# Hard, Nobody), Sit here and a Team 1 and a Team 2 switch, remembers them, and every link of the room carries the plan as ?fill=<plan> (and &start=<people>), validated; the game page turns exactly those texts into --fill-bots,
 # --teams and --start-when (and nothing else: an address cannot put another word on the command line)
 FOUR_PAGE="$ROOT/web/lobby.html"
 SHELL_PAGE="$ROOT/web/shell.html"
 FILL_FORM=1
-if grep -qF 'id="seat-0-friend"' "$FOUR_PAGE" && grep -qF 'id="seat-1-easy"' "$FOUR_PAGE" && grep -qF 'id="seat-2-medium"' "$FOUR_PAGE" && grep -qF 'id="seat-3-hard"' "$FOUR_PAGE" && grep -qF 'id="seat-3-nobody"' "$FOUR_PAGE" && grep -qF 'id="sit-3"' "$FOUR_PAGE" && grep -qF 'id="teams"' "$FOUR_PAGE" \
+if grep -qF 'id="seat-0-friend"' "$FOUR_PAGE" && grep -qF 'id="seat-1-easy"' "$FOUR_PAGE" && grep -qF 'id="seat-2-medium"' "$FOUR_PAGE" && grep -qF 'id="seat-3-hard"' "$FOUR_PAGE" && grep -qF 'id="seat-3-nobody"' "$FOUR_PAGE" && grep -qF 'id="sit-3"' "$FOUR_PAGE" && grep -qF 'id="team-0-1"' "$FOUR_PAGE" && grep -qF 'id="team-3-2"' "$FOUR_PAGE" \
     && grep -qF "remember(CARD_KEY, cardText(card));" "$FOUR_PAGE" && grep -qF "var card = cardParse(recall(CARD_KEY)) || cardFromOld({" "$FOUR_PAGE"; then FILL_FORM=0; fi
-check 'web/lobby.html offers four seats with Friend, Easy, Medium, Hard and Nobody for each, Sit here and the Teams on its one card, and remembers them' "$FILL_FORM"
+check 'web/lobby.html offers four seats with Friend, Easy, Medium, Hard and Nobody for each, Sit here and the Team 1 and Team 2 switches on its one card, and remembers them' "$FILL_FORM"
 FILL_LINKS=1
 if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "if (roomTeams && !teamsInCode) q += '&teams=' + encodeURIComponent(roomTeams)" "$FOUR_PAGE" && grep -qF "validFillPlan(params.get('fill'))" "$FOUR_PAGE" && grep -qF "validRoomTeams(params.get('teams'))" "$FOUR_PAGE" \
     && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF "(roomTeams && !teamsInCode ? '&teams=' + encodeURIComponent(roomTeams) : '')" "$FOUR_PAGE" && grep -qF "(plan ? '&fill=' + plan : '')" "$FOUR_PAGE" \
@@ -116,7 +116,7 @@ TEAM_WORD=1
 if grep -qF "var word = roomTeamWord(roomTeam);" "$FOUR_PAGE" && grep -qF "'p-' + (word ? word + '-' : '') + randomCode()" "$FOUR_PAGE" && grep -qF "var named = codeTeams(code);" "$FOUR_PAGE" && grep -qF "roomTeams = teamsInCode ? named : (named ? '' : validRoomTeams(teams));" "$FOUR_PAGE" \
     && grep -qF "joinUrl(room, checked.name, fill, teamsInCode ? '' : roomTeams)" "$FOUR_PAGE" && grep -qF "hostTeam(wantedTeams, d.players)" "$FOUR_PAGE" \
     && grep -qF "var word = roomTeamWord(state.teams);" "$FOUR_PAGE" && grep -qF "return 'demo-' + state.map + '-4p-' + (word ? word + '-' : '') + random;" "$FOUR_PAGE"; then TEAM_WORD=0; fi
-check "web/lobby.html makes the Teams choice a word of the room's code (demo-<map>-<n>p-t01-<random>; the card's room is always demo-<map>-4p-...), reads the words of a code (codeTeams), lets the code's teams win over the address's, and narrows an address's &teams= to the player count that the code names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_WORD"
+check "web/lobby.html makes the teams that the Team 1 and Team 2 switches make a word of the room's code (demo-<map>-<n>p-t01-<random>; the card's room is always demo-<map>-4p-...), reads the words of a code (codeTeams), lets the code's teams win over the address's, and narrows an address's &teams= to the player count that the code names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_WORD"
 FILL_SHELL=1
 if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillPlanArg(q.get('fill'));" "$SHELL_PAGE" && grep -qF "out.args.push('--teams', teams)" "$SHELL_PAGE" && grep -qF "var teams = antsTeamsArg(q.get('teams'));" "$SHELL_PAGE" \
     && grep -qF "out.args.push('--start-when', start)" "$SHELL_PAGE" && grep -qF "var start = antsStartArg(q.get('start'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
