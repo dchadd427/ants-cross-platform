@@ -11,8 +11,9 @@ builds nothing), so these tests run the real script on made-up suites and check 
   - --asan gives the suites the time scale of a sanitized build (ANTS_E2E_TIME_SCALE=4, a value that is set stays); a run without it sets none
   - the real table: what --fast contains (and does not), listed without running anything
   - the parallel run (the default; --jobs N, --serial): suites that are independent run at the same time and only then, each suite's output stays together and is printed
-    in the order of the table, the result of every suite is the same as in a serial run, exclusive / lock / weight in the table are kept, every suite has a temporary
-    folder of its own, the longest suites start first (the cost of the table, then the time that the last run measured), and a signal stops what was started
+    in the order of the table, the result of every suite is the same as in a serial run and is never read before it is written, exclusive / lock / weight in the table are
+    kept, every suite has a temporary folder of its own, the longest suites start first (the cost of the table, then the time that the last run measured), and a signal
+    stops what was started
 """
 import os
 import re
@@ -289,6 +290,19 @@ class ParallelRunner(StubRunner):
             self.assertIn("Suites run: 4, failed: 2", result.stdout)
             self.assertIn("RESULT: 2 TEST SUITE(S) FAILED!", result.stdout)
         self.assertIn("hello", parallel.stdout)
+
+    def test_a_result_is_never_read_before_it_is_written(self):
+        # BASH_ENV gives the script's shell an `echo` that waits before it prints a 0 (the status of a suite that passed). The shell has made the file of
+        # `echo "$status" > file` by then, so a runner that writes its result in place is polled while the file is still empty ("integer expression expected", "FAILED (exit code )").
+        slow = os.path.join(self.tmp.name, "slow_echo.sh")
+        with open(slow, "w", encoding="utf-8", newline="\n") as f:
+            f.write('echo() { [ "$1" = 0 ] && sleep 0.3; builtin echo "$@"; }\n')
+        table = self.suites(*['suite "Q%d" sim 1 "-" "Quick %d" "Q%d" \'touch "$MARK_DIR/q%d"\'' % (n, n, n, n) for n in range(1, 4)])
+        result = self.run_script(["--jobs", "3"], table, BASH_ENV=slow)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.ran(), ["q1", "q2", "q3"])
+        self.assertIn("Suites run: 3, failed: 0", result.stdout)
+        self.assertNotIn("integer expression expected", result.stderr)
 
 
 class ParallelResources(StubRunner):
