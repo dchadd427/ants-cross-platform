@@ -1,20 +1,19 @@
 # Status
 
-_Updated 2026-10-05 16:52 PDT · current release **v0.8.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 17:12 PDT · current release **v0.8.2** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.8.2** rounder, less flat buttons (8 px corners, a bevel on every edge) | ██████░░░░ 57% | Mon | reviewed with every fix done; the pull request is up (PR #21) and its five checks are running, then the merge |
-| **v0.8.3** a game for one on this computer, Friend as the default seat, a dirtier orange background | █░░░░░░░░░ 14% | Mon or Tue | built here; waits for v0.8.2 to merge, then its own checks and review |
+| **v0.8.3** Friend as the default seat, a game for one with START!, a dirtier background | ███░░░░░░░ 29% | Mon or Tue | built and tested here; an independent review is running, then the browser checks on the final head and the pull request |
 | **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ████░░░░░░ 43% | Mon or Tue | PR #14 (both batches joined, main v0.8.0 in) has all five checks green; two independent code reviews are running, then the release steps and the merge |
 | **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the bots (v0.9.0) |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- v0.8.2: rounder buttons (8 px corners) with a bevel on every edge and soft top-to-bottom shading, so they look less flat (the owner's asks); a patch release, reviewed, with pull request #21 up and its five checks running
-- v0.8.3: START with every other seat on Nobody begins a game for one on this computer (the original's single player; a room on the game server needs two people), Friend is the default seat of the New match card, and the orange background gets a little noise and dirt (the owner's asks); a patch release right after v0.8.2, built here
+- v0.8.3: START with every other seat on Nobody begins a game for one on this computer (the original's single player; a room on the game server needs two people), Friend is the default seat of the New match card, and the orange background gets a little noise and dirt (the owner's asks); a patch release, built and tested here, with its review running
+- **Quitting during a catch-up** (draft pull request #22): a player who quits while their game is catching up no longer leaves the match paused with their seat held; review and checks running; ships as the next patch release after v0.8.3
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in draft PR #14, the v0.9.0 candidate (all five checks green with main v0.8.0 in; two independent code reviews running, then the release steps)
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. PR #14 (the v0.9.0 candidate) no longer orders special actions onto an ant (-95% on Small); draft PR #16, stacked on it, adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 68% on Small Hard and 35 to 45% on Treasure, scores unchanged within noise. The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
@@ -22,9 +21,9 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- Browser checks without Docker (draft pull request #13): a session that has no Docker can build the web pages and run the touch checks and the other browser checks; it changes no page (no redeploy), has main v0.8.0 in and merges once its five checks are green
+- **No-Docker browser checks** (pull request #13, tools only, no redeploy): main is in and four of its five checks are green; it waits for the Windows test fix (pull request #20) to reach main, then merges
 - Host moves a player's colour in the waiting room (tap a player's ant; network protocol 14, ships with v0.10.0 and the short room codes): being built, draft pull request to follow
-- **Windows prediction-budget test flake** (draft pull request #20): diagnostic first, then the fix; merges once its five checks are green and it has been reviewed.
+- **Windows prediction-budget test flake** (draft pull request #20): the cause is Windows' coarse 15.6 ms thread clock; the fix gives the tests a clock they control, is pushed and in review, and merges once its five checks are green
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
@@ -34,6 +33,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **v0.8.2** Rounder buttons with a bevel on every edge: 8 px corners, a face lit from above and a bevel on all four edges, on the front page, the game page, the changelog pages and Sprites and sounds (PR #21, merged 2026-10-05 17:06 PDT, live 17:09 PDT; the owner asked for rounder, less flat buttons, then a bevel on the left edge and slightly smaller corners)
 - **README split** (no release): the README is a 63-line front page and each topic has its own page under docs/; every statement of the old README was checked against the game as built (PR #17, merged 2026-10-05 16:29 PDT, docs only).
 - **Sanitizer tier (PR #15)**: the four sanitizer suites that ended red without a bug now pass on a clean machine; merged 2026-10-05 15:48 PDT, no redeploy (tests and tools only).
 - **v0.8.1** a sharp START! button and 48 demo rooms: the front page's START! is a real button that your browser draws at your screen's own resolution (it was the original's small picture blown up three times, so it looked big and blocky), and the public game server makes up to 48 demo rooms at a time instead of 12, each with a turn log of at most 4 MiB (PR #18, merged 2026-10-05 15:30 PDT, live 15:34 PDT)
