@@ -378,7 +378,7 @@ class TheColours(unittest.TestCase):
         return (high + 0.05) / (low + 0.05)
 
     def test_the_banners_buttons_and_hovered_buttons_keep_their_text_readable(self):
-        single = re.search(r"\.card\.match > \.banner \{ background: (#[0-9a-f]{6}); \}", self.style).group(1)
+        single = re.search(r"\.card\.match > \.banner \{ background-color: (#[0-9a-f]{6}); \}", self.style).group(1)
         for what, text, background in (("gold title on a teal banner", self.token("gold"), self.token("teal")),
                                        ("cream text on a teal button or banner", self.token("cream"), self.token("teal")),
                                        ("cream text on a hovered button", self.token("cream"), self.token("teal-hi")),

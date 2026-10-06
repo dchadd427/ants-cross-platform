@@ -154,16 +154,16 @@
     font-size: 0.8rem;
     line-height: 1.15;
     color: var(--cream);
-    background: var(--teal);
+    background: var(--teal) var(--sheen, none);                /* (the sheen is the style sheet's token: with an older style sheet the button is flat, not transparent) */
     border: 2px solid var(--edge);
-    border-radius: 3px;
+    border-radius: 8px;
     box-shadow: var(--btn-shadow-sm);
     cursor: pointer;
     text-decoration: none;
     white-space: nowrap;
     transition: background 0.15s ease;
   }
-  .sort-btn:hover, .copy-btn:hover, .ctrl-btn:hover, .stage-pill-btn:hover, .stage-mini-btn:hover, .view-toggle-btn:hover, .filter-chip:hover, .sound-quick-play:hover, .anim-link-chip:hover, .step-link-btn:hover { background: var(--teal-hi); }
+  .sort-btn:hover, .copy-btn:hover, .ctrl-btn:hover, .stage-pill-btn:hover, .stage-mini-btn:hover, .view-toggle-btn:hover, .filter-chip:hover, .sound-quick-play:hover, .anim-link-chip:hover, .step-link-btn:hover { background-color: var(--teal-hi); }
   .sort-btn.active, .copy-btn.active, .stage-pill-btn.active, .view-toggle-btn.active, .filter-chip.active, .sound-quick-play.playing {
     background: var(--pressed);
     color: var(--pressed-ink);
@@ -806,8 +806,8 @@
     padding: 1.5rem;
     flex-shrink: 0;
   }
-  #btn-load-all { background: var(--teal-hi) !important; }
-  #btn-load-all:hover { background: #3a8a6f !important; }
+  #btn-load-all { background-color: var(--teal-hi) !important; }
+  #btn-load-all:hover { background-color: #3a8a6f !important; }
 
   /* Modal */
   .modal-overlay {
@@ -1382,7 +1382,7 @@
     </div>
     <div class="load-more-container" id="sprites-load-more-box">
       <button class="ctrl-btn" id="btn-load-more" style="padding:0.6rem 1.4rem;">Load More Sprites (+200)</button>
-      <button class="ctrl-btn" id="btn-load-all" style="padding:0.6rem 1.4rem; background: #1e3a8a;">Load All 2,794 Sprites</button>
+      <button class="ctrl-btn" id="btn-load-all" style="padding:0.6rem 1.4rem;">Load All 2,794 Sprites</button>
     </div>
 
     <!-- 3B. Sprites Table Mode -->
