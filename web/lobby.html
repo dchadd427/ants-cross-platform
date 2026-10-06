@@ -776,7 +776,7 @@ their music and their sound: only the window you are in is heard). The match is 
             return SEAT_COLOURS[pair[0]] + ' + ' + SEAT_COLOURS[pair[1]] + ' against ' + rest.map(function (s) { return SEAT_COLOURS[s]; }).join(' + ');
         }
         function hostTeamText(pair, players) { return teamTitle(pair, [0, 1, 2, 3].filter(function (s) { return s < players; })); }
-        // The choices of the Teams select of a room of `players` (the game's room_team_choices): free for all; three players: Green + Red, Green + Blue or Red + Blue as a team; four: Green with Red, Blue or Black.
+        // The teams that a room of `players` can have (the game's room_team_choices): free for all; three players: Green + Red, Green + Blue or Red + Blue as a team; four: Green with Red, Blue or Black.
         // The value is what the address and the game's --teams take: ffa or A+B (seats 0 - 3).
         function hostTeamChoices(players) {
             var out = [{ value: 'ffa', text: 'Free for all' }];

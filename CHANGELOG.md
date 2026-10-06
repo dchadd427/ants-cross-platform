@@ -27,6 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Nobody means nobody in a game for one:** with every other seat on **Nobody**, START! plays on this computer with only your colony on the map. Red, Blue and Black no longer have a hill, ants or eggs there (v0.8.3 gave them all three and left them standing still). A room was right already: a seat that nobody takes has no colony there. The game takes a new option for it, `--alone` ([`docs/COMMAND_LINE.md`](docs/COMMAND_LINE.md)); the desktop game without it is unchanged.
+- **A Team 1 and a Team 2 switch on each colour:** with three or four players the front page's card has no Teams drop-down menu of sentences any more; every colour that plays has two switches instead. Put two colours on the same team and they start the match allied (with four players the other two colours are the other team, with three the third colour plays alone), and a line under the colours says the plan in words. A team is two colours at most, so a third press on a full team says what to do. The room code, the invitation links and the saved choices work as before (a saved team shows as its two colours on Team 1).
 
 ## v0.8.3 - 2026-10-05 - Friend by default, a game for one and a dirtier background
 

@@ -107,6 +107,26 @@ class TheFrontPageMarkup(PageCase):
         phone_block = self.page[at:self.page.index("@media", at + 1)]
         self.assertEqual(len(re.findall(r"\.startbtn \{", phone_block)), 1, "the phone's rule is the one in the 700 px block")
 
+    def test_the_team_switches_have_their_look_a_hidden_rule_and_a_place_on_every_width(self):
+        # Team 1 and Team 2 are two buttons that show only when three or four seats play (the script un-hides them), so `hidden` has to win over the flex box of their group, and a pressed switch
+        # must look different from a loose one in more than colour (it is pushed in: moved and darker, like the seat buttons)
+        self.found(self.page, r'\.seats4 \.teamset \{[^}]*display: flex;')
+        self.found(self.page, r'\.seats4 \.teamset\[hidden\] \{ display: none; \}')
+        pressed = re.search(r'\.tbtn\[aria-pressed="true"\] \{([^}]*)\}', self.page)
+        self.assertIsNotNone(pressed, "a pressed switch has a rule")
+        self.assertIn("transform: translate(", pressed.group(1))
+        self.found(self.page, r'\.tbtn\[aria-disabled="true"\] \{ opacity: \.45;')              # (a switch that a third seat may not press is dimmed but stays a button: it says why when pressed)
+        self.found(self.page, r'\.tbtn:focus-visible \{ outline: 3px solid var\(--gold\);')
+        # a place in the row for the switches on a wide page, a phone, a narrower phone and the narrowest: the grid areas name "team" in each
+        wide = self.page[:self.page.index("@media (max-width: 700px)")]
+        self.found(wide, r'\.seats4\.with-teams li \{ grid-template-areas: "ant who pick sit" "ant team pick sit"; \}')
+        at = self.page.index("@media (max-width: 700px)")
+        phone = self.page[at:self.page.index("@media (max-width: 480px)", at)]
+        self.found(phone, r'\.seats4\.with-teams li \{[^}]*grid-template-areas: "ant who team sit" "pick pick pick pick"')
+        narrow = self.page[self.page.index("@media (max-width: 374px)"):]
+        self.found(narrow, r'\.seats4\.with-teams li \{[^}]*"team team team"')
+        self.assertIn('with-teams', self.page[self.page.index("function showTeams"):])                  # (the script puts the class on the list when the switches show)
+
     def test_the_card_has_a_line_to_join_a_match_that_somebody_else_made_with_the_old_ids(self):
         self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
         self.assertLess(self.page.index('id="start-note"'), self.page.index('class="havecode"'))          # under the card's match, inside the card
@@ -279,7 +299,7 @@ class TheImageAndTheCi(PageCase):
 class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_notes_say_where_the_one_card_is_and_what_it_does(self):
         page = read("docs", "PLAY_IN_BROWSER.md")
-        for needle in ("`/play.html?map=", "**one card for every game, New match**", "**You**", "**Sit here**", "**Friend**", "**Nobody**", "**Teams**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "/four.html", "`--start-when`", "**Menu**",
+        for needle in ("`/play.html?map=", "**one card for every game, New match**", "**You**", "**Sit here**", "**Friend**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "/four.html", "`--start-when`", "**Menu**",
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`"):
             self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")
