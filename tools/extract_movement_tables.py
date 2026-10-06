@@ -26,7 +26,8 @@ run from any directory):
 Requirements: python3, pefile (`pip install pefile`) and YOUR OWN COPY of the
 original program: Original-Ants/Ants.exe is not part of the repository (it is
 a local reference that .gitignore keeps out of every commit; the repository
-holds only the original's data archive, maps and music). Put your own copy of
+holds only the original's data archive, maps and music, and the pictures and
+sounds made from the archive). Put your own copy of
 the original Ants.exe in Original-Ants/; without it the script stops with that
 message (exit status 1). The tests do not need it: test_movement_tables and
 test_movement_differential check the generated tables against pinned SHA-256

@@ -1096,7 +1096,7 @@ void challenge_suite_6_level_fuzzing(const std::string& map_dir) {
 int main() {
     std::cout << "=======================================================\n"
               << " Ants Challenger 2 Adversarial Test Suite\n"
-              << " Target: libants_assets (5-to-8 Mirroring & Level Decoder)\n"
+              << " Target: ants_assets (5-to-8 Mirroring & Level Decoder)\n"
               << "=======================================================\n";
 
     std::string assets_dir = locate_assets_dir();

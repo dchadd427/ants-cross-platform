@@ -34,7 +34,7 @@ if errorlevel 1 exit /b %errorlevel%
 
 echo.
 echo ======================================================================
-echo --- 1. RUNNING ASSET DECODER SUITES [libants-assets]
+echo --- 1. RUNNING ASSET DECODER SUITES [ants_assets]
 echo ======================================================================
 build\tests\test_assets\Release\test_assets.exe
 if errorlevel 1 exit /b %errorlevel%
@@ -49,7 +49,7 @@ if errorlevel 1 exit /b %errorlevel%
 
 echo.
 echo ======================================================================
-echo --- 2. RUNNING SIMULATION RULES SUITES [libants-sim]
+echo --- 2. RUNNING SIMULATION RULES SUITES [ants_sim]
 echo ======================================================================
 build\tests\test_sim\Release\test_sim_rules.exe
 if errorlevel 1 exit /b %errorlevel%
@@ -60,14 +60,14 @@ if errorlevel 1 exit /b %errorlevel%
 
 echo.
 echo ======================================================================
-echo --- 3. RUNNING APPLICATION INTEGRATION SUITES [libants-app]
+echo --- 3. RUNNING APPLICATION INTEGRATION SUITES [ants_app]
 echo ======================================================================
 build\tests\test_app\Release\test_app_integration.exe
 if errorlevel 1 exit /b %errorlevel%
 
 echo.
 echo ======================================================================
-echo --- 4. RUNNING OPAQUE-BOX E2E TEST SUITES [506 tests]
+echo --- 4. RUNNING OPAQUE-BOX E2E TEST SUITES
 echo ======================================================================
 build_e2e\Release\e2e_runner.exe --all
 if errorlevel 1 exit /b %errorlevel%
