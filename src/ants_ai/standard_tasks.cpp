@@ -1349,13 +1349,12 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
         teams.push_back(t);
     }
     // the cheap checks first: a hill that is not there, or whose hole is shut, is no target, and a thief that looks at the world every few ticks must not search the map for nothing (a full
-    // search per look and thief was the most expensive thing that the bot did). A hole is raided only when at least raid_min_free of the three tiles in front of it are free (a thief can
-    // step onto them: nothing lit, bombed or solid, and with the can't-go fixes no ant standing on them) and, with the fixes, no ant stands on the raid tile: an ant that holds the last free
-    // tile or the raid tile shuts the hole, and the order ends in "Can't go there." (CG2 of the can't-go report)
+    // search per look and thief was the most expensive thing that the bot did)
     teams.erase(std::remove_if(teams.begin(), teams.end(),
                                [&](uint8_t t) {
                                    const HillInfo& h = c.map.hill(t);
                                    if (!h.present) return true;
+                                   // raided with raid_min_free free tiles in front (nothing lit, bombed or solid; with the can't-go fixes no ant on them) and no ant on the raid tile: such an ant shuts the hole
                                    size_t free_tiles = 0;
                                    for (const sim::TileCoord& e : east_tiles(h)) {
                                        const EastTile k = classify_tile(grid, e);
@@ -2538,21 +2537,24 @@ void GateTask::step(TaskContext& c) {
     // what the ants do: a bite that runs, the entrance occupied, a clip that was first seen now
     bool bite = false;
     bool entrance_occupied = false;
-    bool ramp_held = false;
+    bool ramp_standing = false;
     const sim::TileCoord ramp{g.hill.x + 1, g.hill.y};
     std::vector<const AntView*> carriers;
     for (const AntView& a : v.mine()) {
         if (a.state == sim::UnitState::HarvestingFood) bite = true;
         if (a.tile == g.entrance) entrance_occupied = true;
-        if (params_.cantgo_aware && a.tile == ramp && a.state != sim::UnitState::Walking) ramp_held = true;                                // the way to the entrance leads over the ramp: an own ant that stands there shuts it (the engine's walk is refused)
+        if (params_.cantgo_aware && a.tile == ramp && a.state != sim::UnitState::Walking) ramp_standing = true;                          // an own ant that stands on the ramp shuts the way to the entrance
         if (a.state == sim::UnitState::EnteringBase) {
             if (clip_seen_.count(a.id) == 0) {
                 clip_seen_[a.id] = now;
                 pending_free_at_ = static_cast<int64_t>(now) + params_.clip_ticks + params_.exit_ticks;
             }
         }
-        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.map.reaches_hill(now_, a.tile, a.type)) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place, a swimmer swims; with cg=0 the field is never made and every tile reaches the hill)
+        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && (!params_.cantgo_aware || c.map.reaches_hill(now_, a.tile, a.type))) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
     }
+    if (!ramp_standing) ramp_since_ = -1;
+    else if (ramp_since_ < 0) ramp_since_ = static_cast<int64_t>(now);
+    const bool ramp_held = ramp_standing && static_cast<int64_t>(now) < ramp_since_ + static_cast<int64_t>(params_.ramp_wait_ticks);        // (an ant that stays longer is not waited for: nothing moves it)
     for (auto it = cmd_.begin(); it != cmd_.end();) {                                // only carriers are ours to place
         bool carrier = false;
         for (const AntView* a : carriers) carrier = carrier || a->id == it->first;
@@ -2885,6 +2887,7 @@ void CarrierAidTask::step(TaskContext& c) {
         if (h.carried && h.hp_now > 0) aid_[h.ant] = Aid{now, 0, 0};
     }
     std::vector<uint32_t> home;
+    MapInfo::NowField joined;                                                            // the walking field of the hill as it is now, made at the first carrier that is due an order
     for (auto it = aid_.begin(); it != aid_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         const bool carrying = a != nullptr && (a->holding || a->carried_points > 0);
@@ -2894,19 +2897,18 @@ void CarrierAidTask::step(TaskContext& c) {
         }
         // the blow's stun lasts about 12 ticks; an ant that is idle after it has lost its walk
         if (now >= blocked_until_ && a->idle() && now >= it->second.hit + 8 && now >= it->second.last_order + 40 && !v.has_pending_path(a->id)) {
-            home.push_back(a->id);
             it->second.last_order = now;
+            if (tactics_.plan.cantgo_aware && v.has_grid()) {                            // a carrier that no walk joins to the hill (a ring of fire walls round its gate) is not sent: it would be refused, and no try is spent on it
+                if (!joined.valid()) joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
+                if (!c.map.reaches_hill(joined, a->tile, a->type)) {
+                    ++it;
+                    continue;
+                }
+            }
+            home.push_back(a->id);
             ++it->second.tries;
         }
         ++it;
-    }
-    if (tactics_.plan.cantgo_aware && !home.empty() && v.has_grid()) {                   // a carrier that no walk joins to the hill (a ring of fire walls round its gate) is not sent: it would be refused
-        const MapInfo::NowField joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
-        home.erase(std::remove_if(home.begin(), home.end(), [&](uint32_t id) {
-                       const AntView* a = find_ant(v.mine(), id);
-                       return a != nullptr && !c.map.reaches_hill(joined, a->tile, a->type);
-                   }),
-                   home.end());
     }
     if (!home.empty()) {
         c.orders.move(home, hill.entrance, Priority::Normal);

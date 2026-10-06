@@ -193,10 +193,8 @@ public:
     };
     /// One walkable mask and one Dijkstra over the whole map (about 70 to 300 microseconds on the shipped maps in a release build, about 5 ms on a 256 x 256 map)
     NowField field_now(const sim::Grid& grid, uint8_t team, const WalkContext& ctx = WalkContext{}) const;
-    /// Whether an ant that stands on `tile` can walk to the queue row of the hill that `field` was made for, in the map as it was when the field was made (a ring of fire walls round
-    /// the gate shuts the queue row off: every walk into the hill is then refused, "Can't go there."). A tile of the hill's own 4 x 4 mound counts (it has no walkable tile), and so does a tile next to one that the
-    /// field reaches (the ramp and the hole are not walkable tiles either). True when the field is empty (nothing is known: no order is held back for it), and always for a swimmer: the field
-    /// is the walkers' (water is no tile in it), a swimmer crosses it.
+    /// Whether an ant on `tile` can walk to the queue row of the hill that `field` was made for, as the map was then (a ring of fire walls shuts it: every walk in is refused). True for a tile of the
+    /// mound or next to one that the field reaches, for an empty field, and for every Swimmer (the field is the walkers': water and fire are not checked for a swimmer).
     bool reaches_hill(const NowField& field, sim::TileCoord tile, sim::AntType type = sim::AntType::Worker) const noexcept;
     /// The same question as the Approach of a PileInfo, asked of the map as `grid` shows it NOW: a pile's footprint shrinks and changes shape as it is eaten (its tile changes with
     /// every stage, the anchor cell always stays), so the click tile of the start may no longer be food, and a wall, a bridge or a bomb may have changed the way. The walking costs

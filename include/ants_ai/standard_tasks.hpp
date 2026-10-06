@@ -591,7 +591,8 @@ public:
         uint32_t blocked_ticks{900};         // a tile that the controller refused a click onto (a power-up on it) is not chosen again this long
         uint32_t user_fail_limit{16};        // this many clicks onto the entrance in a row that delivered nothing (a healthy gate fails up to 10 in a row: measured on the shipped maps): it stops guiding for blocked_ticks (0: never)
         uint32_t field_ticks{200};           // the walking field of the hill as it is now (MapInfo::field_now) is made again after this many ticks, and at once when a tile of the ring round the gate or of the queue row changed
-        bool cantgo_aware{true};             // the gate asks that field before it guides, places only the carriers that it joins to the hill, and waits while an own ant stands on the ramp: LevelPlan::cantgo_aware
+        uint32_t ramp_wait_ticks{200};       // it waits this long for an own ant that stands on the ramp (a longer one is not waited for: the click is refused and the stop above takes over)
+        bool cantgo_aware{true};             // the gate asks that field before it guides, places only the carriers that it joins to the hill, and waits for the ramp: LevelPlan::cantgo_aware
         bool predictive{true};
         int32_t doorstep_dx0{-4};
         int32_t doorstep_dx1{6};
@@ -657,6 +658,7 @@ private:
     std::map<int64_t, uint64_t> blocked_;         // tile (y * 4096 + x) -> the tick until which no click is put onto it (a refused click)
     std::map<uint32_t, uint64_t> clip_seen_;
     int64_t pending_free_at_{0};
+    int64_t ramp_since_{-1};                      // the tick at which an own ant was first seen standing on the ramp (-1: none does)
     uint32_t bite_waited_{0};
     uint32_t user_{0};
     uint64_t user_release_{0};

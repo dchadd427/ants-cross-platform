@@ -151,14 +151,21 @@ void CantGoTally::command(const sim::Command& c, uint64_t tick) {
 }
 
 void CantGoTally::scan(const sim::SimulationEngine& sim, const std::vector<sim::NewsEvent>& news) {
+    bool entered = false;
     for (const sim::NewsEvent& n : news) {
-        if ((n.string_id == sim::strings::kCantGoThere || n.string_id == sim::strings::kCantDoThat) && n.target_player < sim::MAX_PLAYERS) ++seats_[n.target_player].reactions;
+        if (n.string_id != sim::strings::kCantGoThere && n.string_id != sim::strings::kCantDoThat) continue;
+        entered = true;
+        if (n.target_player < sim::MAX_PLAYERS) ++seats_[n.target_player].reactions;
     }
+    if (!entered && flagged_ == 0) return;                      // an ant enters the state only with one of the two news items (enter_cant_go): the ants are looked at while one shows it
+    ++scans_;
     const uint64_t tick = sim.current_tick();
+    uint32_t flagged = 0;
     for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
         if (a.id > (1u << 20)) continue;
         if (a.id >= in_cantgo_.size()) in_cantgo_.resize(static_cast<size_t>(a.id) + 1, 0);
         const bool now = a.state == sim::UnitState::CantGo;
+        flagged += now ? 1u : 0u;
         if (now && in_cantgo_[a.id] == 0 && a.player_id < sim::MAX_PLAYERS) {
             ++seats_[a.player_id].began;
             if (a.id < last_.size() && last_[a.id].order != 0 && tick >= last_[a.id].tick && tick - last_[a.id].tick <= kRefusedWindow && refused_[last_[a.id].order - 1] == 0) {
@@ -168,6 +175,7 @@ void CantGoTally::scan(const sim::SimulationEngine& sim, const std::vector<sim::
         }
         in_cantgo_[a.id] = now ? 1 : 0;
     }
+    flagged_ = flagged;
 }
 
 void read_seat_result(const sim::SimulationEngine& sim, uint8_t seat, ArenaSeatResult& out) {

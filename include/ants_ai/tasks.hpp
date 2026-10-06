@@ -171,7 +171,7 @@ public:
         uint32_t rescue_max_carriers{8};     // nobody is helped while this many carriers or more stand idle with food (the gate is saturated: see "rescue")
         uint32_t rescue_cooldown_ticks{200}; // and not again for this long (the walk takes about 80 ticks, the queue longer)
         bool rescue{true};                   // false: no carrier is ever sent home by this task (the standard bot's gate task owns every carrier)
-        bool cantgo_aware{false};            // true (the standard bot: LevelPlan::cantgo_aware): a carrier that no walk joins to the hill (a ring of fire walls round its gate, a pocket) is not sent home. The worker bot's harvest (the frozen yardstick) keeps sending it
+        bool cantgo_aware{false};            // true (the standard bot: LevelPlan::cantgo_aware): a carrier that no walk joins to the hill (a ring of fire walls, a pocket) is not sent home; the worker bot keeps sending it
         int32_t ring_tiles{4};               // "far from the hill" is more than this many tiles from the 4 x 4 mound (the queue stands within 3 with up to 8 ants on a hill)
         /// Ants of these types (bit t = AntType t) join the pool besides the level's default type: a typed ant harvests like a worker (a Combat Ant punches the enemy that comes within
         /// two tiles of its way as well), so the standard bot lets its Fire and Bomber ants harvest between their jobs. 0 (the worker bot): the default type only.

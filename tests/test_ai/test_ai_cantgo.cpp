@@ -11,6 +11,8 @@
 //   AI22.7  the seats are counted apart
 //   AI22.8  scanning changes nothing in the engine (the state hash after 400 ticks is the same with and without the tally)
 //   AI22.9  play_match reports it: three scripted bots' refused orders, equal to the commands of the log, with either sink
+//   AI22.10 the fixes make the bots' own refused orders fewer: whole matches on TREASURE with and without them (cg=0)
+//   AI22.11 the tally looks at the ants only while it must (a quiet world: never), and its counts equal those of a look at every tick
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -18,6 +20,7 @@
 #include "ai_test.hpp"
 #include "ants_ai/arena.hpp"
 #include "ants_ai/standard_bot.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "b41_helpers.hpp"
 
 namespace {
@@ -116,6 +119,24 @@ private:
     uint8_t seat_{0};
     const MapInfo* map_{nullptr};
     bool done_{false};
+};
+
+// The tally as it was before it looked at the ants only when it must: every ant at every tick (the reference of AI22.11)
+struct EveryTickCount {
+    std::array<uint32_t, sim::MAX_PLAYERS> reactions{};
+    std::array<uint32_t, sim::MAX_PLAYERS> began{};
+    std::vector<uint8_t> in;
+    void scan(const sim::SimulationEngine& sim, const std::vector<sim::NewsEvent>& news) {
+        for (const sim::NewsEvent& n : news) {
+            if ((n.string_id == sim::strings::kCantGoThere || n.string_id == sim::strings::kCantDoThat) && n.target_player < sim::MAX_PLAYERS) ++reactions[n.target_player];
+        }
+        for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+            if (a.id >= in.size()) in.resize(static_cast<size_t>(a.id) + 1, 0);
+            const bool now = a.state == sim::UnitState::CantGo;
+            if (now && in[a.id] == 0 && a.player_id < sim::MAX_PLAYERS) ++began[a.player_id];
+            in[a.id] = now ? 1 : 0;
+        }
+    }
 };
 
 }  // namespace
@@ -294,7 +315,7 @@ void run_cantgo_tests() {
         ASSERT_EQ(watch.tally.seat(2).reactions + watch.tally.seat(3).reactions + watch.tally.seat(2).orders + watch.tally.seat(3).orders, 0u);
     } TEST_END();
 
-    TEST_CASE("AI22.8 Counting Changes Nothing In The Engine: The Ring World (A Loop, 400 Ticks) Reaches The Same State Hash With The Tally Scanning Every Tick As Without It, And The News Items Are The Same")
+    TEST_CASE("AI22.8 Counting Changes Nothing In The Engine: The Ring World (A Loop, 400 Ticks) Reaches The Same State Hash With The Tally Counting As Without It, And The News Items Are The Same")
     {
         const auto run = [&](bool counted, uint64_t& news_items) {
             RingWorld world;
@@ -359,30 +380,117 @@ void run_cantgo_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI22.10 The Bot's Own Refused Orders Stay Under A Bound: Four Hard Standard Bots Play Whole Matches On TREASURE (Seeds 1 To 4, Four Matches): At Most 9 Of 1,000 Orders Are Refused (7.9 With The Fixes Of The Can't-Go Loop: 65 Of 8,200; 9.8 Without Them, cg=0: 83 Of 8,427); The Loops Themselves Are Reported, Not Bounded")
+    TEST_CASE("AI22.10 The Fixes Make The Bots' Own Refused Orders Fewer: Four Hard Standard Bots Play Whole Matches On TREASURE (Seeds 1 To 4) With The Fixes Of The Can't-Go Loop And Without Them (cg=0, The Bot As It Was): At Least 10 Percent Fewer Of Their Orders Are Refused With Them (65 Against 83 When This Was Pinned); The Loops Themselves Are Reported, Not Bounded")
     {
-        uint64_t orders = 0;
-        uint64_t refused = 0;
-        for (uint32_t seed = 1; seed <= 4; ++seed) {
-            ArenaSpec spec;
-            spec.level = &level_of("TREASURE");
-            spec.seed = seed;
-            for (uint8_t seat = 0; seat < 4; ++seat) {
-                BotSpec b;
-                b.seat = seat;
-                b.kind = "standard";
-                b.level = Level::Hard;
-                spec.bots.push_back(b);
-            }
-            const ArenaResult r = play_match(spec);
-            ASSERT_TRUE(r.error.empty());
-            ASSERT_TRUE(r.match_over);
-            for (const ArenaSeatResult& seat : r.seats) {
-                orders += seat.orders;
-                refused += seat.refused_orders;
+        uint64_t orders[2] = {0, 0};
+        uint64_t refused[2] = {0, 0};
+        for (const bool aware : {true, false}) {
+            for (uint32_t seed = 1; seed <= 4; ++seed) {
+                ArenaSpec spec;
+                spec.level = &level_of("TREASURE");
+                spec.seed = seed;
+                for (uint8_t seat = 0; seat < 4; ++seat) {
+                    BotSpec b;
+                    b.seat = seat;
+                    b.kind = "standard";
+                    b.level = Level::Hard;
+                    spec.bots.push_back(b);
+                }
+                spec.factory = [aware](const BotSpec& b) { return std::make_unique<StandardBot>(b.level, b.style, [aware](LevelPlan& p) { p.cantgo_aware = aware; }); };
+                const ArenaResult r = play_match(spec);
+                ASSERT_TRUE(r.error.empty());
+                ASSERT_TRUE(r.match_over);
+                for (const ArenaSeatResult& seat : r.seats) {
+                    orders[aware ? 0 : 1] += seat.orders;
+                    refused[aware ? 0 : 1] += seat.refused_orders;
+                }
             }
         }
-        ASSERT_TRUE(orders >= 6000);                                                  // the matches were played (8,200 orders when this was pinned)
-        ASSERT_TRUE(refused * 1000u <= orders * 9u);                                  // the bound: 7.9 measured, the bot without the fixes (cg=0) is at 9.8 (a hole is raided with one free tile: with two, raid_min_free, it is 3.0)
+        ASSERT_TRUE(orders[0] >= 3000 && orders[1] >= 3000);                          // the matches were played (about 8,300 orders each when this was pinned)
+        ASSERT_TRUE(refused[1] >= 20);                                                // the bot as it was has refused orders to lose (83 when this was pinned)
+        ASSERT_TRUE(refused[0] * 10u <= refused[1] * 9u);                             // 65 against 83 when pinned; the bound is relative so that the next batches, which move both, do not break it
+    } TEST_END();
+
+    TEST_CASE("AI22.11 The Tally Looks At The Ants Only On A Tick That Posted A Can't-Go News Item Or While An Ant Still Shows The State, And Counts As A Look At Every Tick Does: A Quiet World Is Never Looked At; The Same Ant Refused Twice (Two Beginnings), An Ability Refused At Once And The Loop Of The Ring World Give The Reference's Numbers")
+    {
+        struct Both {
+            sim::SimulationEngine& sim;
+            CantGoTally tally;
+            EveryTickCount every;
+            explicit Both(sim::SimulationEngine& s) : sim(s) {}
+            void order(const Command& c) {
+                sim.apply_command(c);
+                tally.command(c, sim.current_tick());
+            }
+            void run(uint64_t n) {
+                for (uint64_t i = 0; i < n; ++i) {
+                    sim.tick();
+                    const std::vector<sim::NewsEvent> news = sim.poll_news_events();
+                    tally.scan(sim, news);
+                    every.scan(sim, news);
+                    sim.clear_audio_events();
+                }
+            }
+            bool same() const {
+                for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+                    if (tally.seat(s).began != every.began[s] || tally.seat(s).reactions != every.reactions[s]) return false;
+                }
+                return true;
+            }
+        };
+        {   // a world in which nothing is refused: the ants are never looked at
+            sim::SimulationEngine sim;
+            pocket_field(sim);
+            const uint32_t a = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 20});
+            Both w(sim);
+            w.run(5);
+            w.order(command_of(CommandType::GroupMove, 0, {a}, 30, 20));
+            w.run(200);
+            ASSERT_EQ(w.tally.scans(), 0u);
+            ASSERT_EQ(w.tally.seat(0).reactions, 0u);
+            ASSERT_TRUE(w.same());
+        }
+        {   // the same ant is refused twice, 100 ticks apart: two beginnings, and the ants are looked at only while the clip plays
+            sim::SimulationEngine sim;
+            pocket_field(sim);
+            const uint32_t a = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 20});
+            Both w(sim);
+            w.run(5);
+            const Command into = command_of(CommandType::GroupMove, 0, {a}, kPocket.x, kPocket.y);
+            w.order(into);
+            w.run(100);
+            ASSERT_EQ(w.tally.seat(0).began, 1u);
+            w.order(into);
+            w.run(100);
+            ASSERT_EQ(w.tally.seat(0).began, 2u);
+            ASSERT_EQ(w.tally.seat(0).reactions, 2u);
+            ASSERT_EQ(w.tally.seat(0).refused, 2u);
+            ASSERT_TRUE(w.same());
+            ASSERT_TRUE(w.tally.scans() >= 2 && w.tally.scans() <= 40);                                       // (the tick of the news and the clip, twice: a few ticks, not 205)
+        }
+        {   // an ability that the engine refuses at once
+            sim::SimulationEngine sim;
+            empty_field(sim, 1);
+            sim.set_terrain(30, 30, sim::TERRAIN_OBSTACLE);
+            const uint32_t f = sim.spawn_unit(0, sim::AntType::Fire, TileCoord{20, 20});
+            Both w(sim);
+            w.run(5);
+            w.order(command_of(CommandType::GroupSpecial, 0, {f}, 30, 30));
+            w.run(60);
+            ASSERT_EQ(w.tally.seat(0).began, 1u);
+            ASSERT_EQ(w.tally.seat(0).reactions, 1u);
+            ASSERT_TRUE(w.same());
+        }
+        {   // the loop of the ring world: a reaction every few ticks for 2 ants
+            RingWorld world;
+            world.build();
+            Both w(world.sim);
+            w.run(5);
+            w.order(command_of(CommandType::GroupMove, 1, {world.victim, world.victim2}, 30, 30));
+            w.run(400);
+            ASSERT_EQ(w.tally.seat(1).began, 2u);
+            ASSERT_TRUE(w.tally.seat(1).reactions >= 60);
+            ASSERT_TRUE(w.same());
+        }
     } TEST_END();
 }

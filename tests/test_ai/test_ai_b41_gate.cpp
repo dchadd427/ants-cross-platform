@@ -10,8 +10,6 @@
 //   AI10.6  a gate whose clicks onto the entrance deliver nothing (gate_user_fails in a row: the carriers are boxed in) stops for 900 ticks, the economy's rescue is on meanwhile
 //   AI10.7  a seat whose gate is answered by a world that cancels the walk of an ant and then fails (the loop of M2) banks next to nothing and burns its budget without the stall detector,
 //           and banks like the worker with it (the repeat rule, the rule of the clock, both with the gate's own stop)
-#include <cstdio>
-
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -643,9 +641,10 @@ void run_b41_gate_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI10.11 The Aid Of A Hit Carrier Sends It Home At Once, Unless A Ring Of Fire Walls Shut The Hill: The Blow Clears Its Walk And It Stands With Its Food; With The Ring Lit The Standard Bot Orders Nothing (Before: One Order Per Try, Refused)")
+    TEST_CASE("AI10.11 The Aid Of A Hit Carrier Sends It Home At Once, Unless A Ring Of Fire Walls Shut The Hill: The Blow Clears Its Walk And It Stands With Its Food; With The Ring Lit The Standard Bot Orders Nothing (Before: One Order Per Try, Refused); A Ring That Burns Out After 300 Ticks Has Cost It No Try: The Carrier Is Sent Home Then")
     {
-        for (const bool ring : {false, true}) {
+        for (const int ring_ticks : {0, 3600, 300}) {
+            const bool ring = ring_ticks != 0;
             sim::SimulationEngine sim;
             empty_field(sim, 8);
             const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 9});
@@ -658,7 +657,7 @@ void run_b41_gate_tests() {
             rig.count_with(&tally);
             if (ring) {
                 const MapInfo m(sim);
-                for (const TileCoord& t : SabotageTask::ring_of(m.hill(0))) sim.set_fire_at(t, 3600);
+                for (const TileCoord& t : SabotageTask::ring_of(m.hill(0))) sim.set_fire_at(t, static_cast<uint32_t>(ring_ticks));
             }
             rig.run(3);
             sim.apply_command(command_of(CommandType::GroupAttack, 1, {enemy}, 9, 9));
@@ -669,8 +668,9 @@ void run_b41_gate_tests() {
             }
             ASSERT_TRUE(hit);
             const StandardBot& bot = rig.as<StandardBot>();
-            if (!ring) {
+            if (!ring || ring_ticks == 300) {
                 ASSERT_TRUE(bot.aid().sent_home() >= 1);
+                ASSERT_EQ(tally.seat(0).refused, 0u);
             } else {
                 ASSERT_EQ(bot.aid().sent_home(), 0u);
                 ASSERT_EQ(tally.seat(0).refused, 0u);
@@ -678,7 +678,7 @@ void run_b41_gate_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI10.12 An Own Ant That Stands On The Ramp Shuts The Way To The Entrance Like One That Stands On The Entrance: The Gate Clicks Nobody Onto The Entrance While It Stands There (Before: 16 Clicks And 17 Orders In 400 Ticks, Every One Refused, \"Can't Go There.\", Then The Gate Stopped For 900 Ticks), And Clicks At Once When The Ant Has Gone; An Ant That Walks Over The Ramp Holds Nothing")
+    TEST_CASE("AI10.12 An Own Ant That Stands On The Ramp Shuts The Way To The Entrance Like One That Stands On The Entrance: The Gate Clicks Nobody Onto The Entrance While It Stands There (Before: 16 Clicks And 17 Orders In 400 Ticks, Every One Refused, \"Can't Go There.\", Then The Gate Stopped For 900 Ticks), And Clicks At Once When The Ant Has Gone; An Ant That Walks Over The Ramp Holds Nothing; An Ant That Never Goes Is Waited For 200 Ticks, Not Longer")
     {
         const TileCoord hill{26, 26};
         const TileCoord ramp{hill.x + 1, hill.y};
@@ -712,7 +712,7 @@ void run_b41_gate_tests() {
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
             CantGoTally tally;
             rig.count_with(&tally);
-            rig.run(400);
+            rig.run(150);
             const GateTask& gate = rig.as<StandardBot>().gate();
             ASSERT_TRUE(sim.get_unit(stander).pos.x == ramp.x && sim.get_unit(stander).pos.y == ramp.y);        // (the premise: it stands there)
             ASSERT_TRUE(gate.usable());
@@ -743,6 +743,24 @@ void run_b41_gate_tests() {
             }
             ASSERT_EQ(first_click, 1u);
             ASSERT_EQ(tally.seat(0).refused, 0u);
+        }
+        {   // (d) an own ant stands on the ramp and never goes: nothing moves it, so the gate waits ramp_wait_ticks (200) and then clicks as it did before (the click is refused, and the gate's stop takes over)
+            sim::SimulationEngine sim;
+            world(sim);
+            const uint32_t stander = sim.spawn_unit(0, sim::AntType::Worker, ramp);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.run(400);
+            ASSERT_TRUE(sim.get_unit(stander).pos.x == ramp.x && sim.get_unit(stander).pos.y == ramp.y);        // (the premise: it stands there all along)
+            ASSERT_EQ(rig.as<StandardBot>().gate().params().ramp_wait_ticks, 200u);
+            uint64_t first_click = 0;
+            for (const auto& e : rig.proposed) {
+                if (first_click == 0 && e.second.type == CommandType::GroupMove && e.second.tile_x == hill.x + 1 && e.second.tile_y == hill.y + 1) first_click = e.first;
+            }
+            ASSERT_TRUE(first_click >= 201 && first_click <= 215);                                              // (the first look is at tick 1; a look every 4 ticks)
+            ASSERT_TRUE(rig.as<StandardBot>().gate().entrance_clicks() >= 1);
+            ASSERT_TRUE(tally.seat(0).refused >= 1);                                                            // (what the wait spares: the engine refuses it)
         }
     } TEST_END();
 
