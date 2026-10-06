@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 18:07 PDT · current release **v0.8.3** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 18:18 PDT · current release **v0.8.3** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -13,7 +13,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 ## In progress
 - **Quitting during a catch-up** (draft pull request #22): a player who quits while their game is catching up no longer leaves the match paused with their seat held; review and checks running; ships as a patch release after v0.9.0
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in PR #14, the v0.9.0 release pull request (both independent code reviews answered and every finding fixed; main with v0.8.3 is merged in and the five checks are running again, then the merge)
-- Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
+- Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. PR #14 (the v0.9.0 candidate) no longer orders special actions onto an ant (-95% on Small); draft PR #16, stacked on it, adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 68% on Small Hard and 35 to 45% on Treasure, scores unchanged within noise (measured before #14's review fixes; #16 is measured again on the merged bot and moves onto main when #14 merges). The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
 - Short room codes, and the platform and operating system icons: planned after the bots (v0.9.0)
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
@@ -31,6 +31,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- PR #19 merged: the macOS flakes of test_rejoin_app (RA1.3, RA4.1, RA9.1) are fixed; tests only, no redeploy
 - **v0.8.3** Friend by default, a game for one and a dirtier background: a first visit to the New match card has a Friend in the three other seats (it was a Medium bot; a browser that saved its choices keeps them), START! is always on and, with every other seat on Nobody, begins a game for one on this computer (no room, no opponent; you play Green), and the orange background has a little noise and dirt (PR #23, merged 2026-10-05 17:58 PDT, live 18:01 PDT; the owner asked for each of the three)
 - **v0.8.2** Rounder buttons with a bevel on every edge: 8 px corners, a face lit from above and a bevel on all four edges, on the front page, the game page, the changelog pages and Sprites and sounds (PR #21, merged 2026-10-05 17:06 PDT, live 17:09 PDT; the owner asked for rounder, less flat buttons, then a bevel on the left edge and slightly smaller corners)
 - **README split** (no release): the README is a 63-line front page and each topic has its own page under docs/; every statement of the old README was checked against the game as built (PR #17, merged 2026-10-05 16:29 PDT, docs only).
