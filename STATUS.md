@@ -1,12 +1,13 @@
 # Status
 
-_Updated 2026-10-05 18:18 PDT · current release **v0.8.3** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 18:23 PDT · current release **v0.8.3** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
 | **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ███████░░░ 71% | Mon or Tue | PR #14 is the release pull request (both batches joined, both independent reviews answered, version and changelog done); v0.8.3 is out, so main is merged in and the five checks are running again; it merges when they are green and no match is running |
-| **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the bots (v0.9.0) |
+| **v0.10.0** the leader of a room can move a player to another colour (network protocol 14) | ████░░░░░░ 43% | Mon night or Tue, after v0.9.0 | built and reviewed with every fix done (draft PR #26); the long local checks and the five CI checks are running; it merges after v0.9.0 |
+| **v0.11.0** short room codes (no "demo") and platform / operating system icons (protocol 15) | ░░░░░░░░░░ 0% | Wed or later | planned, starts when v0.10.0 is on main |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
@@ -15,12 +16,12 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in PR #14, the v0.9.0 release pull request (both independent code reviews answered and every finding fixed; main with v0.8.3 is merged in and the five checks are running again, then the merge)
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. PR #14 (the v0.9.0 candidate) no longer orders special actions onto an ant (-95% on Small); draft PR #16, stacked on it, adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 68% on Small Hard and 35 to 45% on Treasure, scores unchanged within noise (measured before #14's review fixes; #16 is measured again on the merged bot and moves onto main when #14 merges). The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
-- Short room codes, and the platform and operating system icons: planned after the bots (v0.9.0)
+- Short room codes, and the platform and operating system icons (v0.11.0, protocol 15): planned after v0.10.0
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 - **No-Docker browser checks** (pull request #13, tools only, no redeploy): main is in and four of its five checks are green; it waits for the Windows test fix (pull request #20) to reach main, then merges
-- Host moves a player's colour in the waiting room (tap a player's ant; network protocol 14, ships with v0.10.0 and the short room codes): being built, draft pull request to follow
+- Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and it merges after v0.9.0
 - **Prediction-budget tests (the Windows flake, PR #20):** reviewed, no defect; main with v0.8.3 is merged in and the five checks are running again; merges right after v0.9.0.
 
 ## On hold (not started; the owner decides when)
