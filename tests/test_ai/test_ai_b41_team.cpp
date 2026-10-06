@@ -113,7 +113,7 @@ void run_b41_team_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI8.2 The Contest-Aware Pile Order On TREASURE (The Owner's Playbook: The Centre First, Then The Contested Sides): The First Harvest Orders Of Every Seat At Every Level Go To The Pile In The Centre (Contested By All Three Enemies); Without The Order They Go To The Near Piles; The Worker's Order Is Unchanged")
+    TEST_CASE("AI8.2 The Contest-Aware Pile Order On TREASURE (The Centre First, Then The Contested Sides): The First Harvest Orders Of Every Seat At Every Level Go To The Pile In The Centre (Contested By All Three Enemies); Without The Order They Go To The Near Piles; The Worker's Order Is Unchanged")
     {
         sim::SimulationEngine probe;
         start_match(probe, "TREASURE", 7, 0x0F);
@@ -269,7 +269,7 @@ void run_b41_team_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI8.4 The Opening Contests The Centre (The Owner's Playbook): At The Start Medium Sends ONE Ant And Hard TWO To The Pile In The Centre Of TREASURE, The Rest Harvest By Value Per Trip, Easy None; After The Opening (1200 Ticks) A Pile Of That Class Gets The Ants By Value Per Trip Again; Where Nothing Is Contested The Opening Changes Nothing")
+    TEST_CASE("AI8.4 The Opening Contests The Centre: At The Start Medium Sends ONE Ant And Hard TWO To The Pile In The Centre Of TREASURE, The Rest Harvest By Value Per Trip, Easy None; After The Opening (1200 Ticks) A Pile Of That Class Gets The Ants By Value Per Trip Again; Where Nothing Is Contested The Opening Changes Nothing")
     {
         sim::SimulationEngine probe;
         start_match(probe, "TREASURE", 7, 0x0F);

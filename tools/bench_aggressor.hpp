@@ -31,7 +31,7 @@ namespace ants::ai::bench {
 
 class AggressorBot final : public Bot {
 public:
-    /// thieves: how many Thief power-ups it takes before it takes the Combat ones (1: the plain aggressor; 2: the DOUBLE-THIEF opening of the owner's playbook, kind "aggressor2": the thief of
+    /// thieves: how many Thief power-ups it takes before it takes the Combat ones (1: the plain aggressor; 2: the DOUBLE-THIEF opening, kind "aggressor2": the thief of
     /// its own side and, with the next idle worker, the nearest other Thief power-up that nobody stands on, then two raids from the start)
     /// max_attackers: how many ants (Combat Ants first) attack carriers at most (the experiments of the harassment's worth: "aggr3" attacks with three ants only; the rest stand idle as a stand-in for an economy)
     explicit AggressorBot(size_t thieves = 1, size_t max_attackers = 1000) : thieves_wanted_(thieves), max_attackers_(max_attackers) {}

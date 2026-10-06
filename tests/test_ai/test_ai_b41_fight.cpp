@@ -227,7 +227,7 @@ void run_b41_fight_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI9.3 The Strike (The Owner's Playbook: If You Are Losing, Force A Fight): Clearly Behind The Leader And Winnable (The Own Strength, A Combat Ant 2, At Least 150 Percent Of The Enemy's Near Its Hill) Sends A Force To Hunt The Leader's Carriers; Behind But Hopeless, Ahead, Not Behind Enough, Too Few Ants, The Last 900 Ticks, Or Easy Send None; The Force Is Called Off When The Bot Draws Level")
+    TEST_CASE("AI9.3 The Strike (If You Are Losing, Force A Fight): Clearly Behind The Leader And Winnable (The Own Strength, A Combat Ant 2, At Least 150 Percent Of The Enemy's Near Its Hill) Sends A Force To Hunt The Leader's Carriers; Behind But Hopeless, Ahead, Not Behind Enough, Too Few Ants, The Last 900 Ticks, Or Easy Send None; The Force Is Called Off When The Bot Draws Level")
     {
         struct World {
             sim::SimulationEngine sim;

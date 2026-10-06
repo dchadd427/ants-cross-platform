@@ -5,7 +5,7 @@
 //
 //   rank 5  FightTask     strike back at an enemy that hit an own ant, and attack an enemy Thief that is on its way to the own hill
 //   rank 4  WallTask      the Fire Ant that keeps three fire walls in front of the own thief hole
-//   rank 4  StrikeTask    a strike force hunts the carriers of the leading team when the bot is clearly behind and the fight looks winnable (the owner's playbook)
+//   rank 4  StrikeTask    a strike force hunts the carriers of the leading team when the bot is clearly behind and the fight looks winnable
 //   rank 3  PowerUpTask   the ants that are sent to take the power-ups that the bot wants; RaidTask: a Thief raids the hill of the leading team
 //   rank 2  GuardTask     a Combat Ant is parked where its reflex covers the hill
 //   rank 1  HarvestTask   the economy (tasks.hpp, unchanged)
@@ -312,7 +312,7 @@ private:
 
 // ---- rank 4: the strike -------------------------------------------------------------------------------------------------------------------------------------
 
-/// The owner's playbook: "if you're losing, forcing a team fight is a good way to swing the game back in your favour if you can win". When the bot (with its ally, by the score boxes) is
+/// A player who is losing can swing the game back by forcing a team fight that it can win. When the bot (with its ally, by the score boxes) is
 /// clearly BEHIND the leader (Standing::behind) and a fight looks winnable, a strike force hunts the carriers of the leader near its hill: a blow on a carrier on its way home clears
 /// its walk (it stands idle with its food until its owner sends it on) and costs the leader the time, and a won fight costs it ants (and, at the last ant, an egg). One attack order is
 /// one blow, so a member is ordered again each time it is idle after a blow; between targets the force waits three tiles in front of the leader's hill on the side the carriers come from.
@@ -476,7 +476,7 @@ private:
 
 // ---- the gate -----------------------------------------------------------------------------------------------------------------------------------------------
 
-/// "Guiding for eating" (the owner's playbook: "bypassing the queue by manually controlling which ant deposits food"). The engine's own queue sends an ant that finds the entrance busy to a
+/// "Guiding for eating" (bypassing the queue by manually controlling which ant deposits food). The engine's own queue sends an ant that finds the entrance busy to a
 /// waiting tile on the FAR side of the mound (bx - 1, by + 3), and the task ANTHILLQ dispatches it from there on a walk of 44 to 68 ticks around the mound: one deposit per 93 to 116
 /// ticks, 10 to 13 a minute for a hill however many workers feed it. By hand a deposit takes 55 to 65 ticks (docs/BOTS.md, "The gate": measured with a Hard-limited client in the
 /// engine, +23 percent on TREASURE for a lone seat, +55 to +86 percent for 8 to 12 workers on a pile 8 to 20 tiles away). The task owns every carrier of the seat (an ant that holds food):

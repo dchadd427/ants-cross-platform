@@ -72,7 +72,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.standing = standing_of(plan, view, *map);
     tactics_.wall_demand = wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
-    if (plan.secure_side) {                                       // the power-ups of the own side are taken early (the owner's playbook): an enemy that steals the Fire can wall the piles in, the Bomber can mine the base, the Thief can raid twice
+    if (plan.secure_side) {                                       // the power-ups of the own side are taken early: an enemy that steals the Fire can wall the piles in, the Bomber can mine the base, the Thief can raid twice
         uint8_t present = 0;
         for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (view.rows()[t].present ? 1u << t : 0u));
         for (const PowerUpView& p : view.powerups()) {
