@@ -13,6 +13,7 @@
     --inset: #070b0f;       /* the black boxes of the setup screen */
     --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b;
     --shadow: #9d0d17;      /* the red shadow under every picture */
+    --sheen: linear-gradient(180deg, rgba(255, 255, 255, .24) 0, rgba(255, 255, 255, 0) 4px, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, .32) 100%);   /* the teal buttons are lit from above: a light edge at the top, shade toward the bottom (the light is gone by 4 px, above the words of the smallest buttons) */
     --gold: #f6d058;
     --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b;
     /* more of the same palette, for text in the black boxes */
@@ -23,8 +24,9 @@
     /* what a framed box and a button are made of */
     --frame-bevel: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi);
     --box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow);
-    --bevel: inset 0 1px 0 #f4f4ff, inset 3px 0 0 #3d9a7d, inset 0 -4px 0 var(--teal-lo);
-    --bevel-sm: inset 0 1px 0 #f4f4ff, inset 2px 0 0 #3d9a7d, inset 0 -3px 0 var(--teal-lo);
+    /* the bevel of the teal buttons follows their rounded corners: a bright line, a lit facet and a soft glow on the top and the left edge, a thin dark line and a dark facet on the bottom and the right (-sm: the smaller buttons') */
+    --bevel: inset 1px 1px 0 #f4f4ff, inset 2px 2px 0 #5dc2a0, inset 4px 4px 2px #3d9a7d, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -3px -4px 2px var(--teal-lo);
+    --bevel-sm: inset 1px 1px 0 #f4f4ff, inset 2px 2px 0 #5dc2a0, inset 3px 3px 1px #3d9a7d, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -2px -3px 1px var(--teal-lo);
     --btn-shadow: var(--bevel), 3px 4px 0 var(--shadow);
     --btn-shadow-down: var(--bevel), 1px 1px 0 var(--shadow);
     --btn-shadow-sm: var(--bevel-sm), 2px 3px 0 var(--shadow);
@@ -54,9 +56,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .wrap.narrow { max-width: 980px; }
 
 /* the bevelled teal button of the game's menus, and the banner that looks like one */
-.btn, .banner { background: var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 2px; box-shadow: var(--btn-shadow); }
+.btn, .banner { background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow); }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 18px; font: inherit; font-size: 16px; line-height: 1.1; text-decoration: none; cursor: pointer; }
-.btn:hover { background: var(--teal-hi); }
+.btn:hover { background-color: var(--teal-hi); }
 .btn:active { transform: translate(2px, 3px); box-shadow: var(--btn-shadow-down); }
 .btn.sm { min-height: 38px; padding: 6px 14px; font-size: 15px; }
 .btn.big { min-height: 54px; font-size: 20px; padding: 10px 26px; }

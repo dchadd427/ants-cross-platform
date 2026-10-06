@@ -308,6 +308,9 @@ def main():
                 banner: document.querySelector('.card .banner').textContent,
                 start: (function () { var b = document.getElementById('play'), r = b.getBoundingClientRect(), cs = getComputedStyle(b);
                     return {text: b.textContent.trim(), label: b.getAttribute('aria-label'), w: Math.round(r.width), h: Math.round(r.height), bg: cs.backgroundImage, font: cs.fontSize}; })(),
+                corners: Array.prototype.map.call(document.querySelectorAll('.btn, .banner, .pair label'), function (e) { return getComputedStyle(e).borderTopLeftRadius; }),
+                faces: Array.prototype.map.call(document.querySelectorAll('.btn, .banner, .pair input:not(:checked) + label'), function (e) { return getComputedStyle(e).backgroundImage; }),
+                chosen: Array.prototype.map.call(document.querySelectorAll('.pair input:checked + label'), function (e) { return getComputedStyle(e).backgroundImage; }),
                 shown: [!document.getElementById('cards').hidden, !document.getElementById('how').hidden], name: document.getElementById('player-name').value,
                 aspect: document.querySelector('input[name=aspect]:checked').value, code: !!document.getElementById('join-code') && !!document.getElementById('join-go'), haveCode: document.querySelector('.havecode .lab').textContent,
                 links: Array.prototype.map.call(document.querySelectorAll('header a'), function (a) { return [a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target')]; }),
@@ -319,8 +322,13 @@ def main():
             check(now["teamsShown"] and now["teamOptions"] == ["ffa", "0+1", "0+2", "0+3"] and not now["invitesShown"] and not now["startOff"] and now["note"].startswith("Starts at once"),
                   "... four seats play: the Teams offer Green with each of the others; no invitation; START is on and says that it starts at once (%r)" % now["note"])
             start = info["start"]
-            check(start["text"] == "START!" and start["label"] is None and start["bg"] == "none" and 150 <= start["w"] <= 260 and 44 <= start["h"] <= 64,
+            check(start["text"] == "START!" and start["label"] is None and "url(" not in start["bg"] and 150 <= start["w"] <= 260 and 44 <= start["h"] <= 64,
                   "START is a real button with its own text, drawn by the browser (no picture, so no blocky edges) at a modest size: 150 - 260 x 44 - 64 px, not the 294 x 81 of the original's picture blown up (%s)" % (start,))
+            corners = [float(c[:-2]) if c and c.endswith("px") else None for c in info["corners"]]
+            check(len(corners) >= 10 and None not in corners and len(set(corners)) == 1 and 8 <= corners[0] <= 12,
+                  "every button, banner and two-state button has rounded corners, all alike (8 - 12 px; they were 2 and 3): START, the links, the seats' buttons and the rest (%d of them: %s)" % (len(corners), sorted(set(info["corners"]))))
+            check(len(info["faces"]) >= 10 and all("linear-gradient" in f and "url(" not in f for f in info["faces"]) and info["chosen"] and all(f == "none" for f in info["chosen"]),
+                  "... and their faces are lit from above (a gradient over the teal, %d of them), while a chosen two-state button is a flat dark plate (%d)" % (len(info["faces"]), len(info["chosen"])))
             check(info["shown"] == [True, True] and info["code"] and info["haveCode"] == "Have a code?", "\"How it works\" and \"Have a code?\" with its field and Join are there (%r)" % (info["haveCode"],))
             check(info["name"] == "" and info["aspect"] == "16:9", "no name yet, the picture is 16:9")
             hrefs = [l[1] for l in info["links"]]
@@ -747,7 +755,7 @@ def main():
                              barShown: getComputedStyle(bar).display !== 'none', barBg: getComputedStyle(bar).backgroundColor, fill: getComputedStyle(document.getElementById('progress-fill')).backgroundColor,
                              fillWidth: document.getElementById('progress-fill').style.width, old: !!o.querySelector('.splash-title'), text: document.getElementById('status-text').textContent,
                              inside: l.left >= box.left && l.right <= box.right && l.top >= box.top && l.bottom <= box.bottom,
-                             page: { bg: body.backgroundImage, font: body.fontFamily, button: f.backgroundColor, shadow: f.boxShadow, frame: getComputedStyle(document.body, '::after').boxShadow,
+                             page: { bg: body.backgroundImage, font: body.fontFamily, button: f.backgroundColor, face: f.backgroundImage, shadow: f.boxShadow, radius: f.borderTopLeftRadius, frame: getComputedStyle(document.body, '::after').boxShadow,
                                      fontLoaded: Array.from(document.fonts).some(function (x) { return x.family.indexOf('Libre Franklin') !== -1 && x.status === 'loaded'; }) } };
                 })())"""))
                 check(loading["shown"] and "front/clay.png" in loading["bg"] and not loading["old"], "the loading screen is the clay with no \"ANTS\" word on it (%s)" % loading["bg"])
@@ -757,6 +765,8 @@ def main():
                 check("front/clay.png" in page["bg"] and page["font"].startswith('"Libre Franklin"') and page["fontLoaded"], "the page is on the clay, in the game's own font Libre Franklin (loaded from the site)")
                 check(page["button"] == "rgb(43, 99, 87)" and "rgb(157, 13, 23)" in page["shadow"] and "rgb(43, 95, 67)" in page["frame"] and "157, 13, 23" in page["frame"],
                       "a button of the header is the teal one with the red shadow, and the page has the thin green frame with its red line (%s)" % page["shadow"][:60])
+                check(page["radius"].endswith("px") and 6 <= float(page["radius"][:-2]) <= 12, "... and the button's corners are rounded, as on the front page (%s)" % page["radius"])
+                check("linear-gradient" in page["face"] and "url(" not in page["face"], "... and its face is lit from above, as on the front page (%s)" % page["face"][:40])
                 shot("game_loading_1440")
                 contrast_of("the loading screen at 1440 px", 20)
                 tab.emulate(390, 844, 2, mobile=True)

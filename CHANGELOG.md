@@ -32,6 +32,13 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [detailed notes](docs/NETWORK_PORT.md#protocol-14-the-leader-of-a-room-moves-a-player-to-another-colour)
 
+## v0.8.2 - 2026-10-05 - Rounder buttons with a bevel on every edge
+
+**For players:**
+- **Rounder, less flat buttons:** the teal buttons (START! and the seat choices on the front page, the game page's buttons, the buttons and version plates on the changelog pages, the small buttons of Sprites and sounds) have 8 px rounded corners instead of nearly square ones, and a face lit from above. A bevel runs round all four edges: a bright line and a lit facet on the top and the left, a dark facet on the bottom and the right, so a button looks raised on every side, not only at the top. Their sizes, colours and wording are the same, and the text on them is as easy to read as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/638c796...73649a1)
+
 ## v0.8.1 - 2026-10-05 - A sharp START! button and 48 demo rooms
 
 **For players:**

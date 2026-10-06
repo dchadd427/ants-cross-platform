@@ -119,6 +119,26 @@ class TheSitesPages(unittest.TestCase):
             self.assertFalse(ok, "%s is in the Classic look now (%s): remove it from PENDING in tests/scripts/test_web_pages_classic.py (%s)" % (name, why, reason))
 
 
+class TheReleasePlates(unittest.TestCase):
+    def test_a_release_plate_has_the_corners_and_the_sheen_of_the_buttons(self):
+        # "v0.8.1" on a changelog page is a teal plate with the buttons' bevel: it is cut and lit like them (the owner, 2026-10-05: "round a little more", "less flat")
+        classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
+        button = re.search(r"\.btn, \.banner \{([^}]*)\}", classic).group(1)
+        radius = re.search(r"border-radius: (\d+px);", button).group(1)
+        face = re.search(r"background: ([^;]+);", button).group(1)
+        self.assertEqual(face, "var(--teal) var(--sheen)")
+        found = 0
+        for name, page in sorted(pages().items()):
+            if "generated" not in name:
+                continue
+            plate = re.search(r"\.rel \{([^}]*)\}", page)
+            self.assertIsNotNone(plate, name)
+            self.assertIn("border-radius: " + radius + ";", plate.group(1), name)
+            self.assertIn("background: " + face.replace("var(--sheen)", "var(--sheen, none)") + ";", plate.group(1), name)       # (the plate takes the token from the style sheet: flat teal, not transparent, with an older one)
+            found += 1
+        self.assertEqual(found, 2)
+
+
 class TheInlineCopies(unittest.TestCase):
     def test_the_front_pages_colours_are_the_stylesheets(self):
         shared = tokens_of(read("web", "front", "classic.css"))
