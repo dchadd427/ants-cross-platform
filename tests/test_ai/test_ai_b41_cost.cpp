@@ -293,4 +293,45 @@ void run_b41_cost_tests() {
         ASSERT_EQ(st.rejected, 0u);
         for (const auto& e : sink.log) ASSERT_FALSE(e.second.type == CommandType::GroupSpecial && e.second.tile_x == 51 && e.second.tile_y == 5);      // nothing refused ever left
     } TEST_END();
+
+    TEST_CASE("AI13.5 An Ant That Dies On The Entrance Of The Enemy Hill Is Still Under The Pointer (The Controller Refuses A Click On It): The Thief's Raid Goes By Another Tile Of The Mound, Is Not Refused And The Hill Is Not Left Alone For 900 Ticks")
+    {
+        sim::SimulationEngine sim;
+        empty_field(sim, 77);                                                                              // team 1's hill is at (50, 4): its entrance is (51, 5)
+        sim.set_player_score(1, 200);
+        const uint32_t dying = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{51, 5});
+        sim.get_unit(dying).hp = 1;
+        const uint32_t striker = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{52, 5});
+        sim.execute_melee_attack(striker, dying);                                                          // (one blow kills it: it dies on its clip, about 42 ticks, which the world lists)
+        sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 10});
+        for (int t = 0; t < 2; ++t) sim.tick();
+        size_t listed = 0;
+        for (const sim::AntSnapshot& a : sim.get_world_state().ants) listed += a.tile_x == 51 && a.tile_y == 5 && a.hp == 0 ? 1u : 0u;
+        ASSERT_EQ(listed, 1u);
+        RecordingSink sink(sim, true);
+        BotController ctl(sim, 5);
+        ctl.set_start_hold(0);
+        LevelPlan plan = plan_for(Level::Hard);
+        plan.gate = false;
+        BotSpec spec;
+        spec.seat = 0;
+        spec.level = Level::Hard;
+        std::string why;
+        ASSERT_TRUE(ctl.add(spec, std::make_unique<StandardBot>(plan), sink, why));
+        for (int t = 0; t < 40; ++t) {
+            sim.tick();
+            sim.clear_news_events();
+            sim.clear_audio_events();
+            ctl.on_tick(sim);
+        }
+        const BotController::SeatStats& st = ctl.stats(0);
+        ASSERT_EQ(st.filtered, 0u);                                                                        // nothing was refused ...
+        size_t raids = 0;
+        for (const auto& e : sink.log) {
+            if (e.second.type != CommandType::GroupSpecial) continue;
+            ++raids;
+            ASSERT_FALSE(e.second.tile_x == 51 && e.second.tile_y == 5);                                   // ... the click is not on the dying ant's tile ...
+        }
+        ASSERT_TRUE(raids >= 1);                                                                           // ... and the raid was ordered at once (another tile of the mound)
+    } TEST_END();
 }

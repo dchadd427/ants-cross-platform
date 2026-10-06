@@ -5,8 +5,9 @@
 //
 //   what it holds    the clock, the scores of every team (as the score boxes show them: 0 for a team that is not in the match or has dropped out), the alliance state,
 //                    the seat's own egg stock and whether an egg is incubating, the seat's own ants (everything), every other team's ants (what is on the screen: an ant
-//                    that has been ordered but still stands in its idle clip, because its path is not delivered or it waits for a blocker, is idle), and the food piles
-//   what it hides    other teams' eggs and incubation, other teams' hit points and carried points, every ant's order and target, the engaged flag; and it never
+//                    that has been ordered but still stands in its idle clip, because its path is not delivered or it waits for a blocker, is idle; and, by the owner's decision,
+//                    their hit points, 1 to 10), and the food piles
+//   what it hides    other teams' eggs and incubation, other teams' carried points, every ant's order and target, the engaged flag; and it never
 //                    reads the news or audio queues (they belong to the screen: reading them would empty the HUD's queues)
 //   copies           everything it keeps is a COPY: the engine's get_world_state() reference is a cache that is rewritten after any tick or command, so a view
 //                    stays what it was when it was built, however the engine moves on
@@ -15,6 +16,7 @@
 //
 // Known deviations from "exactly what the screen shows" (accepted, harmless, listed in docs/BOTS.md "Fairness in detail" next to the egg-tray and pile-unit ones):
 //   * the exact egg stock and the exact units of a pile (a person sees a tray of at most nine eggs and counts the bites);
+//   * the hit points of every ant, the other teams' too (the original draws a health bar over a SELECTED enemy ant only): the project owner decided that players know them;
 //   * grid() is the engine's own grid: the owner and the remaining life (timer_ticks, 3,600 ticks counting down from the moment of lighting or building) of fire walls and
 //     bridges are on it although the screen draws every fire wall and every bridge alike. A bot that watches continuously would know the same by noting when it first saw the
 //     wall, and who lit a wall is the fire ant next to it; the cost of hiding it (a copy of the grid per look) is not worth it.
@@ -41,7 +43,10 @@ struct AntView {
     /// LVL block 3), which is Worker on every shipped map
     sim::AntType type{sim::AntType::Worker};
     sim::TileCoord tile{};
-    uint8_t hp{0};                       // own ants only (a player sees the bar of its own selection); another team's ant: 0
+    /// The ant's hit points, 1 to 10 (sim::AntUnit::MAX_HP; 0 is dead and an ant that is dead is not listed): of EVERY ant that the seat can see, its own and the other teams'. This is the
+    /// project owner's decision on what players know ("they see all the ants' health in their view as a number: 10 is full, 1 is 1 hp left, 0 is dead"); the original draws a health bar over
+    /// a selected enemy ant, and the remake lets a bot read all of them. With Fog of War an ant that the team's view does not show is not in the view at all (bots with fog are refused).
+    uint8_t hp{0};
     /// An own ant: the engine's label. Another team's ant: what the screen draws, so a label that says "walking" while the ant still stands in its idle clip (an order given a moment
     /// ago whose path the path manager has not delivered yet, or a pause behind a blocker) reads as idle: who has been ordered is not on any screen.
     sim::UnitState state{sim::UnitState::Idle};
@@ -151,6 +156,9 @@ public:
     const std::vector<FireWallView>& fire_walls() const noexcept { return fire_walls_; }
     /// The power-up on `tile`, null when there is none (works on a COPY of a view too)
     const PowerUpView* powerup_at(sim::TileCoord tile) const noexcept;
+    /// Whether an ant that has died still plays its death clip (about 42 ticks) on `tile`: it is in neither mine() nor others(), but the screen draws it and a click on it is a click on an
+    /// ant (BotController::allowed refuses a special order there), so a task that picks the tile of a special order looks here too
+    bool dying_at(sim::TileCoord tile) const noexcept;
     /// Whether the ant STANDS on a power-up: its tile holds one and it is not walking (idle, on guard or in the "can't go" clip). Such an ant is immune: an attack order on it is
     /// acknowledged and then ends in "Can't go there." three or four ticks later, a Combat Ant's reflex fails the same way, and no bomb or fire wall can reach it. Own ants and other
     /// teams' ants alike (an ant that has only crossed into the tile on its way to take the power-up is not standing yet: it takes it within a few ticks and is vulnerable again).
@@ -204,6 +212,7 @@ private:
     std::vector<PowerUpView> powerups_;
     std::vector<BombView> bombs_;
     std::vector<FireWallView> fire_walls_;
+    std::vector<sim::TileCoord> dying_;              // the tiles of the ants in their death clip (not in mine_ or others_)
 };
 
 }  // namespace ants::ai

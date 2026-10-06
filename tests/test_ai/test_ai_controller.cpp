@@ -196,7 +196,7 @@ void run_controller_tests() {
                     mine_seen[seat].push_back(static_cast<uint32_t>(v.mine().size()));
                     others_seen[seat].push_back(static_cast<uint32_t>(v.others().size()));
                     for (const AntView& a : v.mine()) ASSERT_EQ(a.team, seat);
-                    for (const AntView& a : v.others()) ASSERT_TRUE(a.team != seat && a.hp == 0);                   // another team's hit points are not on the screen
+                    for (const AntView& a : v.others()) ASSERT_TRUE(a.team != seat && a.hp > 0 && a.hp <= 10);     // another team's hit points are on the view (the owner's decision)
                 });
                 ASSERT_TRUE(b[seat] != nullptr && b[seat]->started && b[seat]->seat == seat);
             }
@@ -970,7 +970,7 @@ void run_controller_tests() {
         const sim::WorldState& ws = sim.get_world_state();
         bool engine_knows_other_hp = false;
         for (const sim::AntSnapshot& a : ws.ants) engine_knows_other_hp = engine_knows_other_hp || (a.player_id != 0 && a.hp > 0);
-        ASSERT_TRUE(engine_knows_other_hp);                                                   // (so the zeros below are the view's doing)
+        ASSERT_TRUE(engine_knows_other_hp);                                                   // (so the hit points below come from the engine: the view hides only the carried points)
         const BotView v0 = BotView::build(sim, 0);
         ASSERT_EQ(v0.score(), 150);                                                           // 100 + its ally's 50
         ASSERT_EQ(v0.rows()[1].score, 150);
@@ -982,7 +982,7 @@ void run_controller_tests() {
         ASSERT_EQ(v0.mine().size(), 12u);
         ASSERT_EQ(v0.others().size(), 36u);
         for (const AntView& a : v0.mine()) ASSERT_TRUE(a.team == 0 && a.hp > 0);              // the own ants are exact
-        for (const AntView& a : v0.others()) ASSERT_TRUE(a.team != 0 && a.hp == 0 && a.carried_points == 0);
+        for (const AntView& a : v0.others()) ASSERT_TRUE(a.team != 0 && a.hp > 0 && a.carried_points == 0);
         const BotView v2 = BotView::build(sim, 2);
         ASSERT_EQ(v2.invite_from(), 3);                                                       // the invitation that waits for seat 2
         ASSERT_EQ(v2.score(), 0);
@@ -1223,5 +1223,80 @@ void run_controller_tests() {
         ASSERT_EQ(first.tick, bot->thought.front());
         ASSERT_EQ(sink.log.size(), 1u);                                                   // nothing refused left
         ASSERT_TRUE(sink.log[0].second.tile_x == 22 && sink.log[0].second.ants.size() == 1 && sink.log[0].second.ants[0] == mine[2]);
+    } TEST_END();
+
+    TEST_CASE("AI2.22 A Special Order Never Names A Tile That A Living Ant Stands On, Whatever Team It Is (The Seat's Own, Its Ally, Either Enemy): The HUD's Target Cursor Shows Only Where No Ant Is Under The Pointer, So The Click Is Refused (Fate::Filtered) And Counted; The Same Order At A Free Tile Or At A Tile Where An Ant Has Died And Is Gone Passes, One That Is Still Dying Does Not (The HUD's Pick Lists It); The Simulation Is Not Changed By It") {
+        sim::SimulationEngine sim;
+        build_world(sim, 7, 4);
+        sim.form_alliance(0, 3);
+        // one ant of each kind of occupant on a tile of its own, in a row far from every hill
+        const uint32_t own = sim.spawn_unit(0, sim::AntType::Worker, tc(20, 20));
+        sim.spawn_unit(3, sim::AntType::Worker, tc(21, 20));
+        sim.spawn_unit(1, sim::AntType::Worker, tc(22, 20));
+        sim.spawn_unit(2, sim::AntType::Fire, tc(23, 20));                                        // (a Fire Ant stands on a wall: the same)
+        const uint32_t dead = sim.spawn_unit(1, sim::AntType::Worker, tc(24, 20));
+        sim.kill_unit(dead);
+        for (int i = 0; i < 60; ++i) sim.tick();                                                  // (the dead ant is gone from the screen)
+        const std::vector<uint32_t> mine = ants_of(sim, 0);
+        std::vector<uint32_t> senders;
+        for (const uint32_t id : mine) {
+            if (id != own) senders.push_back(id);
+        }
+        ASSERT_TRUE(senders.size() >= 4);
+        RecordingSink sink(sim);
+        BotController c(sim, 3);
+        c.set_start_hold(0);
+        const std::vector<std::pair<int32_t, bool>> tiles = {{20, false}, {21, false}, {22, false}, {23, false}, {24, true}, {25, true}};     // (x, passes)
+        size_t looks = 0;
+        ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+            if (looks < tiles.size()) o.special(senders[looks % senders.size()], tc(tiles[looks].first, 20));
+            ++looks;
+        });
+        ASSERT_TRUE(bot != nullptr);
+        run_ticks(sim, c, 300);
+        ASSERT_TRUE(looks > tiles.size());
+        const BotController::SeatStats& st = c.stats(0);
+        ASSERT_EQ(st.filtered, 4u);                                                               // the own ant's tile, the ally's, the two enemies'
+        ASSERT_EQ(st.released, 2u);                                                               // the tile of the dead ant and the free tile
+        ASSERT_EQ(bot->count(Bot::Fate::Filtered), 4u);
+        ASSERT_EQ(bot->count(Bot::Fate::Sent), 2u);
+        for (const auto& e : sink.log) ASSERT_TRUE(e.second.type == CommandType::GroupSpecial && e.second.tile_x >= 24);
+        ASSERT_EQ(sink.log.size(), 2u);                                                           // nothing refused left
+
+        {   // (b) an ant that dies on its clip (about 42 ticks) is still under the pointer: the order of the first look, released while it dies, is refused; the same order after the clip passes
+            sim::SimulationEngine sim2;
+            build_world(sim2, 7, 4);
+            const uint32_t sender = ants_of(sim2, 0)[0];
+            const uint32_t dying = sim2.spawn_unit(1, sim::AntType::Worker, tc(22, 20));
+            sim2.get_unit(dying).hp = 1;
+            const uint32_t striker = sim2.spawn_unit(0, sim::AntType::Worker, tc(21, 20));
+            sim2.execute_melee_attack(striker, dying);                                            // (the blow kills it: it dies on its clip, which lists it for about 42 ticks)
+            for (int i = 0; i < 2; ++i) sim2.tick();
+            {   // (it is dying, and the world lists it)
+                size_t n = 0;
+                for (const sim::AntSnapshot& a : sim2.get_world_state().ants) n += a.tile_x == 22 && a.tile_y == 20 && a.hp == 0 ? 1u : 0u;
+                ASSERT_EQ(n, 1u);
+            }
+            RecordingSink sink2(sim2);
+            BotController c2(sim2, 3);
+            c2.set_start_hold(0);
+            bool first = false;
+            bool second = false;
+            ScriptBot* bot2 = seat_script(c2, sim2, spec_of(0, Level::Hard), sink2, [&](const BotView& v, Orders& o) {
+                if (!first) {
+                    first = true;
+                    o.special(sender, tc(22, 20));
+                } else if (v.tick() >= 90 && !second) {
+                    second = true;
+                    o.special(sender, tc(22, 20));
+                }
+            });
+            ASSERT_TRUE(bot2 != nullptr);
+            run_ticks(sim2, c2, 200);
+            ASSERT_TRUE(first && second);
+            ASSERT_EQ(bot2->count(Bot::Fate::Filtered), 1u);
+            ASSERT_EQ(bot2->count(Bot::Fate::Sent), 1u);
+            ASSERT_EQ(sink2.log.size(), 1u);
+        }
     } TEST_END();
 }
