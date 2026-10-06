@@ -294,15 +294,18 @@ class ParallelRunner(StubRunner):
     def test_a_result_is_never_read_before_it_is_written(self):
         # BASH_ENV gives the script's shell an `echo` that waits before it prints a 0 (the status of a suite that passed). The shell has made the file of
         # `echo "$status" > file` by then, so a runner that writes its result in place is polled while the file is still empty ("integer expression expected", "FAILED (exit code )").
+        # The echo notes each wait, so that a runner that writes its status in another way cannot pass this test without having been tried by it.
         slow = os.path.join(self.tmp.name, "slow_echo.sh")
         with open(slow, "w", encoding="utf-8", newline="\n") as f:
-            f.write('echo() { [ "$1" = 0 ] && sleep 0.3; builtin echo "$@"; }\n')
+            f.write('echo() { if [ "$1" = 0 ]; then builtin echo waited >> "$MARK_DIR/slow_echo.log"; sleep 0.3; fi; builtin echo "$@"; }\n')
         table = self.suites(*['suite "Q%d" sim 1 "-" "Quick %d" "Q%d" \'touch "$MARK_DIR/q%d"\'' % (n, n, n, n) for n in range(1, 4)])
         result = self.run_script(["--jobs", "3"], table, BASH_ENV=slow)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.ran(), ["q1", "q2", "q3"])
         self.assertIn("Suites run: 3, failed: 0", result.stdout)
         self.assertNotIn("integer expression expected", result.stderr)
+        waited = self.read_marks("slow_echo.log").split().count("waited") if os.path.exists(os.path.join(self.marks, "slow_echo.log")) else 0
+        self.assertGreaterEqual(waited, 3, "no status was written by an echo of 0: this test no longer tries the runner")
 
 
 class ParallelResources(StubRunner):
