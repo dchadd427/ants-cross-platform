@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 
+#include "ants_ai/arena.hpp"
 #include "ants_ai/standard_bot.hpp"
 
 namespace b41 {
@@ -55,9 +56,11 @@ public:
         if (delay != 0) profile_.reaction_delay = delay;
         bot_->start(BotContext{seat, profile_, 1, &map_});
     }
+    /// Counts the run's can't-go reactions and refused orders (the arena's CantGoTally): the news items are read at every tick, after the commands of the tick were applied, instead of dropped
+    void count_with(CantGoTally* tally) { tally_ = tally; }
     void tick() {
         sim_.tick();
-        sim_.clear_news_events();
+        if (tally_ == nullptr) sim_.clear_news_events();
         sim_.clear_audio_events();
         const uint64_t now = sim_.current_tick();
         for (size_t i = 0; i < waiting_.size();) {
@@ -69,9 +72,11 @@ public:
             waiting_.erase(waiting_.begin() + static_cast<std::ptrdiff_t>(i));
             c.issuer = seat_;
             sim_.apply_command(c);
+            if (tally_ != nullptr) tally_->command(c, now);
             sent.emplace_back(now, c);
             bot_->on_command(c, Bot::Fate::Sent, now);
         }
+        if (tally_ != nullptr) tally_->scan(sim_, sim_.poll_news_events());
         if (now >= next_look_) {
             next_look_ = now + std::max<uint32_t>(1u, profile_.decision_interval);
             const BotView view = BotView::build(sim_, seat_, &map_);
@@ -114,6 +119,7 @@ private:
     std::unique_ptr<Bot> bot_;
     std::vector<Waiting> waiting_;
     uint64_t next_look_{1};
+    CantGoTally* tally_{nullptr};
 };
 
 inline const sim::AntSnapshot* snapshot_of(const sim::SimulationEngine& sim, uint32_t id) {

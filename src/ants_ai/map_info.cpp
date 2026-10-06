@@ -374,6 +374,19 @@ MapInfo::NowField MapInfo::field_now(const sim::Grid& grid, uint8_t team, const 
     return out;
 }
 
+bool MapInfo::reaches_hill(const NowField& field, sim::TileCoord tile, sim::AntType type) const noexcept {
+    if (!field.valid() || type == sim::AntType::Swimmer) return true;
+    const sim::TileCoord o = hills_[field.team].origin;
+    if (tile.x >= o.x && tile.x <= o.x + 3 && tile.y >= o.y && tile.y <= o.y + 3) return true;       // on the hill itself (the mound has no walkable tile)
+    for (int32_t dy = -1; dy <= 1; ++dy) {
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            const sim::TileCoord t{tile.x + dx, tile.y + dy};
+            if (inside(t) && at(t) < field.cost.size() && field.cost[at(t)] >= 0) return true;
+        }
+    }
+    return false;
+}
+
 Approach MapInfo::approach_now(const sim::Grid& grid, uint32_t pile, const NowField& field) const {
     if (!field.valid() || static_cast<int>(grid.width()) != w_ || static_cast<int>(grid.height()) != h_) return Approach{};
     const std::vector<sim::FoodObject>& table = grid.food_objects();

@@ -2189,9 +2189,10 @@ void run_b41_tests() {
             ASSERT_TRUE(spans[0] == 1500 && spans[1] == 3000 && spans[2] == 6000 && spans[3] == StandardBot::kMaxFallbackTicks && spans[4] == StandardBot::kMaxFallbackTicks);
             ASSERT_EQ(StandardBot::kMaxFallbackTicks, 9600u);
         }
-        {   // what the fallback changes: the harvest of the worker (no contested piles, no typed ants, the rescue on) and no raids; the Thief is the economy's again; afterwards everything is back
+        for (const bool aware : {true, false}) {   // what the fallback changes: the harvest of the worker (no contested piles, no typed ants, no check of fire, the can't-go check as the plan has it, the rescue on) and no raids; the Thief is the economy's again; afterwards everything is back
             LevelPlan plan = base;
             plan.raids = true;
+            plan.cantgo_aware = aware;                                                       // (the switch cg=0 is the bot as it was: the fallback's harvest keeps whatever the plan says)
             plan.stall_ticks = 0;
             plan.repeat_limit = 12;
             plan.fallback_ticks = 600;
@@ -2199,7 +2200,7 @@ void run_b41_tests() {
             w.look(1);
             for (int k = 0; k < 10 && w.bot->ledger().owner(w.thief) != StandardBot::kRaids; ++k) w.look(4);
             const HarvestTask::Params normal = w.bot->harvest().params();
-            ASSERT_TRUE(normal.contest_opening_ants != 0 && normal.extra_types != 0);        // the Hard bot's own economy: ants to the contested centre in the opening, typed ants that harvest
+            ASSERT_TRUE(normal.contest_opening_ants != 0 && normal.extra_types != 0 && normal.cantgo_aware == aware);        // the Hard bot's own economy: ants to the contested centre in the opening, typed ants that harvest, no carrier sent into a hill that is shut
             ASSERT_EQ(w.bot->ledger().owner(w.thief), StandardBot::kRaids);                  // the thief is kept for a raid
             const uint32_t raids_before = w.bot->raids().raids_ordered();
             ASSERT_TRUE(raids_before >= 1);
@@ -2212,7 +2213,7 @@ void run_b41_tests() {
             ASSERT_TRUE(w.bot->in_fallback());
             ASSERT_EQ(w.bot->fallback_until(), now + 600);
             const HarvestTask::Params plain = w.bot->harvest().params();
-            ASSERT_TRUE(plain.contest_opening_ants == 0 && !plain.contest_aware && plain.extra_types == 0 && plain.rescue && !plain.fire_aware);
+            ASSERT_TRUE(plain.contest_opening_ants == 0 && !plain.contest_aware && plain.extra_types == 0 && plain.rescue && !plain.fire_aware && plain.cantgo_aware == aware);
             ASSERT_EQ(w.bot->ledger().owner(w.thief), kNoTask);                              // released, and no raid takes it again while the fallback lasts
             for (int k = 0; k < 20; ++k) w.look(20);
             ASSERT_EQ(w.bot->ledger().owner(w.thief), kNoTask);
@@ -2220,7 +2221,7 @@ void run_b41_tests() {
             for (int k = 0; k < 40; ++k) w.look(20);                                          // the fallback is over (600 ticks)
             ASSERT_FALSE(w.bot->in_fallback());
             const HarvestTask::Params back = w.bot->harvest().params();
-            ASSERT_TRUE(back.contest_opening_ants == normal.contest_opening_ants && back.extra_types == normal.extra_types && back.fire_aware == normal.fire_aware);
+            ASSERT_TRUE(back.contest_opening_ants == normal.contest_opening_ants && back.extra_types == normal.extra_types && back.fire_aware == normal.fire_aware && back.cantgo_aware == aware);
         }
     } TEST_END();
 }
