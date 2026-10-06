@@ -3083,24 +3083,29 @@ int main() {
             ASSERT_TRUE(room.guests[ann].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[ann].lobby->reject_reason() == RejectReason::BadRequest);
             ASSERT_TRUE(room.host.leader() == 1 && room.guests[bob].lobby->is_leader());
         }
-        {   // the budget of a leader's presses is a person's: a burst of 6 is done, the next 12 are dropped (no answer, no count), every one after them is a violation, the eighth throws the leader out
-            Room room(keyed_server_config(29));
+        for (const int presses : {25, 26}) {   // the budget of a leader's presses is a person's: a burst of 6 is done, the next 12 are dropped (no answer, no count), every one after them is a violation, the eighth throws the leader out: of the presses of one millisecond the 25th is the seventh violation (she stays) and the 26th the eighth (she goes)
+            Room room(keyed_server_config(presses == 25 ? 29 : 37));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
             room.run(300);
             for (const size_t g : {ann, bob}) room.guests[g].lobby->take_chat();
-            for (int i = 0; i < 30; ++i) {                                                                      // thirty presses in the same millisecond: Bob bounces between seat 1 and 2 six times, and the rest press him on to seat 2 again
+            for (int i = 0; i < presses; ++i) {                                                                 // the presses in the same millisecond: Bob bounces between seat 1 and 2 six times, and the rest press him on to seat 2 again
                 const bool back = i < 6 && i % 2 == 1;                                                          // (every one of them can be done: the dropped ones leave Bob in seat 1)
                 room.guests[ann].client_end->send(encode(SeatMoveMsg{back ? uint8_t{2} : uint8_t{1}, back ? uint8_t{1} : uint8_t{2}}));
             }
             room.run(300);
             ASSERT_EQ(room.host.seat_moves(), kSeatMoveBurst);
             ASSERT_EQ(room.host.ignored_seat_moves(), 0u);
-            ASSERT_FALSE(room.host.occupied(0));                                                                // 6 done + 12 dropped + 8 violations = the 26th message throws her out
-            ASSERT_TRUE(room.guests[ann].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[ann].lobby->reject_reason() == RejectReason::BadRequest);
-            ASSERT_TRUE(room.host.leader() == 1 && room.guests[bob].lobby->is_leader());                        // (six moves: Bob is where he started)
-            ASSERT_EQ(layout(room.host.room()), "Bob@1");
             ASSERT_EQ(notices_of(*room.guests[bob].lobby).size(), size_t{6});                                  // each of the six moves told Bob (to seat 2 three times, back to seat 1 three times): a notice of the room each
+            if (presses == 25) {
+                ASSERT_TRUE(room.host.occupied(0) && room.host.leader() == 0 && room.guests[ann].lobby->phase() == ClientLobby::Phase::InRoom);       // 6 done + 12 dropped + 7 violations
+                ASSERT_EQ(layout(room.host.room()), "Ann@0 Bob@1");
+            } else {
+                ASSERT_FALSE(room.host.occupied(0));                                                            // 6 done + 12 dropped + 8 violations: the 26th message throws her out
+                ASSERT_TRUE(room.guests[ann].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[ann].lobby->reject_reason() == RejectReason::BadRequest);
+                ASSERT_TRUE(room.host.leader() == 1 && room.guests[bob].lobby->is_leader());                    // (six moves: Bob is where he started)
+                ASSERT_EQ(layout(room.host.room()), "Bob@1");
+            }
         }
         {   // a person's presses never meet it: one every quarter of a second for as long as a finger keeps at it, and two taps at once
             Room room(keyed_server_config(30));
