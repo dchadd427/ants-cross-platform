@@ -1813,6 +1813,26 @@ void run_seat_move_tests() {
                 ASSERT_TRUE(net.fill_bots() == want);
                 ASSERT_TRUE(net.phase() == NetGame::Phase::Room && net.my_seat() == 0);
             }
+            // a session that follows another one starts afresh: its first Room message is not compared with the last room of the session before it (the machine shows that room until
+            // the new one speaks: "C.CC" left, "CC.C" is a room of other people, so nobody has moved)
+            net.leave();
+            ASSERT_TRUE(net.phase() == NetGame::Phase::Off);
+            server.reset();
+            ASSERT_TRUE(net.join("127.0.0.1", listener->port(), "P0", 255, "ROOM-2"));
+            net.set_fill_bots(base);
+            ASSERT_TRUE(run_until([&]() { return server != nullptr; }));
+            hello_heard = false;
+            ASSERT_TRUE(run_until([&]() {
+                std::vector<uint8_t> m;
+                if (server->poll(m)) hello_heard = peek_type(m) == MsgType::Hello;
+                return hello_heard;
+            }));
+            ASSERT_TRUE(server->send(encode(WelcomeMsg{0, 4})));
+            ASSERT_TRUE(net.room().slots[3].state == SlotState::Client);                    // (the old room is still what the machine shows)
+            ASSERT_TRUE(say("CC.C"));
+            ASSERT_TRUE(run_until([&]() { return net.phase() == NetGame::Phase::Room && shows("CC.C"); }));
+            ASSERT_EQ(net.is_leader(), leads);
+            ASSERT_TRUE(net.fill_bots() == base);
         }
     } TEST_END();
 }
