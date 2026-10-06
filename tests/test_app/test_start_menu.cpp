@@ -2097,7 +2097,7 @@ int main(int argc, char* argv[]) {
         // the options that choose a mode: each skips the menu (today's start exactly)
         const std::vector<std::vector<std::string>> skipping = {
             {"--map", "Original-Ants/Maps/TINY.LVL"}, {"--map-select"}, {"--play"}, {"--host"}, {"--host", "4002"}, {"--join", "127.0.0.1:4001"}, {"--join-url", "ws://x/ws"}, {"--room", "abc"},
-            {"--token", "t"}, {"--seat", "1"}, {"--bot", "1:easy"}, {"--headless"}, {"--screenshot", "x.png"}, {"--player", "1"}, {"-pnum:1"}, {"-pnum=2"}, {"--select-ant", "3"},
+            {"--token", "t"}, {"--seat", "1"}, {"--bot", "1:easy"}, {"--alone"}, {"--headless"}, {"--screenshot", "x.png"}, {"--player", "1"}, {"-pnum:1"}, {"-pnum=2"}, {"--select-ant", "3"},
             {"--select-base", "1"}, {"--open-options"}, {"--scorecard"}};
         for (const auto& args : skipping) {
             const ApplicationConfig c = menu_for(args);
@@ -2163,7 +2163,7 @@ int main(int argc, char* argv[]) {
 #endif
     } TEST_END();
 
-    TEST_CASE("M9.3b Command line: --alone is a game for one: off by default (a game of this machine without --bot plays all four colonies), a mode (no start menu) that --play and --map leave as they are, and it is refused with --bot, in either order, with the reason") {
+    TEST_CASE("M9.3b Command line: --alone is a game for one: off by default (a game of this machine without --bot plays all four colonies), a mode of its own (no start menu) that --play and --map leave as they are, and it is refused with --bot and with --start-menu, in either order, with the reason") {
         const auto parse = [](std::vector<std::string> args) {
             std::vector<std::string> full = {"ants"};
             full.insert(full.end(), args.begin(), args.end());
@@ -2179,11 +2179,18 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(c.alone && c.play_at_once && c.bots.empty() && c.startup_error.empty());
         ASSERT_TRUE(c.player_name == "Bob" && c.default_map_path == tiny && c.start_in_map_select);
         ASSERT_TRUE(c.net_role == ApplicationConfig::NetRole::None);
-#if !defined(__EMSCRIPTEN__)
-        ASSERT_FALSE(c.start_menu);                                                            // --alone chooses the match's seats: no start menu in front of it
-#endif
         c = parse({"--alone"});
         ASSERT_TRUE(c.alone && c.startup_error.empty());
+#if !defined(__EMSCRIPTEN__)
+        ASSERT_FALSE(c.start_menu);                                                            // --alone chooses the match's seats: no start menu in front of it (--map and --play do not need it: M9.1 has it alone)
+        // the menu's Single player chooses who plays, so the two cannot be combined (the menu is not asked what the option has decided); the reason is told, in either order
+        for (const auto& args : std::vector<std::vector<std::string>>{{"--start-menu", "--alone"}, {"--alone", "--start-menu"}, {"--headless", "--alone", "--start-menu"}}) {
+            c = parse(args);
+            ASSERT_EQ(c.startup_error, std::string("--start-menu cannot be combined with --alone: the menu's Single player chooses who plays."));
+        }
+        c = parse({"--start-menu", "--map", "x.lvl", "--alone"});
+        ASSERT_TRUE(c.startup_error.find("--map") != std::string::npos);                        // (the first mistake is the one that is told)
+#endif
         c = parse({"--alone", "--bot", "1:easy"});
         ASSERT_EQ(c.startup_error, std::string("--alone cannot be used with --bot: a game for one has no other player."));
         c = parse({"--bot", "1:easy", "--alone"});

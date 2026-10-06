@@ -420,9 +420,11 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
 #if !defined(__EMSCRIPTEN__)
     if (menu_forced) {
-        // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
+        // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it, nor can --alone, which decides who plays (the menu's Single player does)
         if ((direct_match || cfg.net_role != ApplicationConfig::NetRole::None) && cfg.startup_error.empty()) {
             cfg.startup_error = "--start-menu cannot be combined with --map, --open-options, --scorecard, --host, --join or --join-url: they start a match or a room at once";
+        } else if (cfg.alone && cfg.startup_error.empty()) {
+            cfg.startup_error = "--start-menu cannot be combined with --alone: the menu's Single player chooses who plays.";
         }
         cfg.start_menu = true;
     } else {
@@ -493,10 +495,10 @@ bool Application::init(const ApplicationConfig& config) {
         if (start_verdict.first_fatal()) std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
         return false;
     }
-    // A game that starts straight into its match (--map, no setup screen, no network) plays all four teams: the level must be playable by them, as load_match demands
-    // of every match that starts from the setup screen (a start marker outside the grid has no behaviour in the original)
+    // A game that starts straight into its match (--map, no setup screen, no network) plays the seats that are taken (all four, or you and the bots, or you alone): the level must be
+    // playable by them, as load_match demands of every match that starts from the setup screen (a start marker outside the grid has no behaviour in the original)
     if (!config_.start_in_map_select && config_.net_role == ApplicationConfig::NetRole::None) {
-        start_verdict = current_level_.validate(0x0F);
+        start_verdict = current_level_.validate(local_roster_);
         if (!start_verdict.playable) {
             std::cerr << "[Application] The level cannot be played: " << config_.default_map_path << std::endl;
             std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
