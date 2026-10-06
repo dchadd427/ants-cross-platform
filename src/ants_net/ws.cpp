@@ -864,7 +864,7 @@ bool WsConnection::drain_parser() {
 void WsConnection::pump() {
     if (fd_ < 0 || state_ != State::Open) return;
     if (!drain_parser()) return;
-    if (!flush()) return fail();
+    bool reset = !flush();                                  // a failed write or read is only noted: what the peer sent before the link broke is read first
     const socket_t s = static_cast<socket_t>(fd_);
     uint8_t buf[16384];
     for (int rounds = 0; rounds < 16; ++rounds) {           // bounded per pump so that a flooding peer cannot stall the game
@@ -874,13 +874,16 @@ void WsConnection::pump() {
             parser_.feed(buf, static_cast<size_t>(n));
             if (!drain_parser()) return;
         } else if (n == 0) {                                // the peer closed the socket without a close frame
-            return finish(State::Closed);
+            if (!reset) return finish(State::Closed);
+            break;                                          // (after a failed write the link is broken, not closed: it fails below)
         } else if (would_block() || interrupted()) {
             break;
         } else {
-            return fail();
+            reset = true;
+            break;
         }
     }
+    if (reset) return fail();
     // a quiet connection is kept alive for the proxies in between (the peer's pong, if it comes, is read and dropped)
     if (ping_interval_ms_ != 0 && backlog() == 0 && now_ms() - last_send_ms_ >= ping_interval_ms_) {
         if (!enqueue(WsOpcode::Ping, nullptr, 0)) return;
