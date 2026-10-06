@@ -7714,40 +7714,10 @@ void run_persist_server_tests_6() {
             const double write_seconds = seconds_since(t0);
             ASSERT_EQ(writer->turns(), turns);
             const double write_us = write_seconds * 1e6 / turns;
-            // DIAGNOSTIC ONLY, NOT FOR MERGING: when each flush ran and what it cost, and a heartbeat thread that says when the machine did not run it (a sleep of 5 ms that took 50 ms more)
-            const auto diag_clock = []() {
-                const auto now = std::chrono::system_clock::now();
-                const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-                char text[32];
-                std::snprintf(text, sizeof text, "%02d:%02d:%02d.%03d", static_cast<int>(ms / 3600000 % 24), static_cast<int>(ms / 60000 % 60), static_cast<int>(ms / 1000 % 60), static_cast<int>(ms % 1000));
-                return std::string(text);
-            };
-            std::atomic<bool> beat_stop{false};
-            std::vector<std::string> beat_late;
-            std::thread beat([&]() {
-                while (!beat_stop.load()) {
-                    const auto a = std::chrono::steady_clock::now();
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                    const double late = seconds_since(a) * 1000.0 - 5.0;
-                    if (late > 50.0) beat_late.push_back(diag_clock() + " late " + std::to_string(static_cast<int>(late)) + " ms");
-                }
-            });
-            struct BeatGuard {
-                std::atomic<bool>& stop;
-                std::thread& t;
-                ~BeatGuard() {
-                    stop = true;
-                    if (t.joinable()) t.join();
-                }
-            } beat_guard{beat_stop, beat};
-            std::vector<std::string> diag_lines;
-            int diag_n = 0;
             // The 100,000 turns are in the operating system's cache, and the first flush writes all of them out (2.4 MB): it is no flush of a second's turns, which are about 20, so it is made first and told apart
-            const std::string diag_backlog_at = diag_clock();
             const auto b0 = std::chrono::steady_clock::now();
             ASSERT_TRUE(writer->sync());
             const double backlog_ms = seconds_since(b0) * 1000.0;
-            diag_lines.push_back("      [diag] flush -1 at " + diag_backlog_at + " cost " + std::to_string(backlog_ms) + " ms (the backlog)");
             // A flush of a second's turns: 30 of them are a trial. Noise only adds time, so the cost of the flush is the cheapest trial's, and a trial is cheap when its mean and its worst are: a shared runner's disk has
             // slow minutes (4.7 s for one flush on a Windows one), and the flush is cheap if one of three trials is
             const int syncs = 30;
@@ -7764,21 +7734,14 @@ void run_persist_server_tests_6() {
                         t.turn = writer->turns();
                         ASSERT_TRUE(writer->append_turn(t));
                     }
-                    const std::string at = diag_clock();
                     const auto s0 = std::chrono::steady_clock::now();
                     ASSERT_TRUE(writer->sync());
                     const double ms = seconds_since(s0) * 1000.0;
                     worst_sync_ms = std::max(worst_sync_ms, ms);
                     total_sync_ms += ms;
-                    diag_lines.push_back("      [diag] flush " + std::to_string(diag_n++) + " at " + at + " cost " + std::to_string(ms) + " ms (trial " + std::to_string(trials) + ")");
                 }
                 mean_sync_ms = total_sync_ms / syncs;
             }
-            beat_stop = true;
-            beat.join();
-            for (const std::string& line : diag_lines) std::cout << "\n" << line;
-            for (const std::string& line : beat_late) std::cout << "\n      [diag] heartbeat " << line;
-            std::cout << std::flush;
             std::cout << "\n      [measured] writing a turn costs " << write_us << " microseconds (100,000 turns in " << write_seconds << " s, " << writer->bytes() / 1024 << " KiB); the first flush, of all of them, " << backlog_ms
                       << " ms; a flush of a second's turns costs " << mean_sync_ms << " ms on average, " << worst_sync_ms << " ms at the worst of " << syncs << (trials > 1 ? ", in trial " + std::to_string(trials) : std::string()) << std::flush;
             ASSERT_TRUE(write_us < 1000.0);

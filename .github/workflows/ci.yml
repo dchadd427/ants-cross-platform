@@ -187,31 +187,6 @@ jobs:
           cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build_e2e
 
-      - name: S3.32 flood diagnostic (diagnostic push, not for merging)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        continue-on-error: true
-        timeout-minutes: 15
-        run: |
-          # What the flooder of S3.32 is answered with on this runner (the pongs it reads and when the server dropped it), alone and beside the test programs that ctest runs next to test_server
-          # (as in the runs that failed). No -e.
-          set +e +o pipefail
-          cd build/tests/test_server
-          one() {
-            ANTS_TEST_FILTER=S3.32 ./test_server > s332_run.log 2>&1
-            echo "--- $1: exit=$?  $(date -u +%H:%M:%S)  $(grep -h 'the flooder was answered' s332_run.log | sed 's/^ *//' | cut -c1-160)  $(grep -h 'Assertion failed' s332_run.log | sed 's/^ *//' | cut -c1-200)"
-          }
-          echo "##### S3.32 alone x12"
-          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do one "alone $i"; done
-          echo "##### S3.32 beside the other test programs of ctest"
-          (cd ../../.. && ctest --test-dir build --timeout 900 --parallel 3 -E "test_server" > ctest_neighbours.log 2>&1) &
-          ctest_pid=$!
-          sleep 20
-          n=0
-          while kill -0 $ctest_pid 2>/dev/null && [ $n -lt 40 ]; do n=$((n+1)); one "beside $n"; done
-          wait $ctest_pid
-          tail -3 ../../../ctest_neighbours.log
-          exit 0
-
       - name: Test programs (ctest)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
@@ -326,83 +301,6 @@ jobs:
         run: |
           sccache --show-stats || true
           sccache --stop-server || true
-
-      - name: S3.100 flush diagnostic (diagnostic push, not for merging)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        continue-on-error: true
-        timeout-minutes: 20
-        run: |
-          # What a flush costs on this runner: alone, and beside the test programs that ctest runs next to test_server (the failing runs had test_netgame, test_rejoin, test_ai, test_app_integration,
-          # test_network_app and others on the other three processors). Per flush: when it ran and what it cost; a heartbeat thread says when the machine did not run the test. No -e.
-          set +e +o pipefail
-          echo "##### machine"
-          powershell -NoProfile -Command "Get-CimInstance Win32_OperatingSystem | Format-List Caption,Version; Get-CimInstance Win32_Processor | Format-List Name,NumberOfCores,NumberOfLogicalProcessors; Get-PSDrive -PSProvider FileSystem | Format-Table Name,Used,Free -AutoSize; Get-Volume | Format-Table DriveLetter,FileSystem,Size,SizeRemaining -AutoSize; try { Get-MpPreference | Format-List DisableRealtimeMonitoring } catch { 'no Defender state: ' + $_ }; 'TEMP=' + $env:TEMP"
-          cd build/tests/test_server
-          # disk and processor counters once a second, to correlate with the time stamps of the flushes (local time = UTC on the runner)
-          typeperf "\System\Processor Queue Length" "\Processor(_Total)\% Processor Time" "\PhysicalDisk(_Total)\Avg. Disk sec/Write" "\PhysicalDisk(_Total)\Current Disk Queue Length" "\PhysicalDisk(_Total)\Disk Write Bytes/sec" -si 1 -o ../../../typeperf.csv -y > /dev/null 2>&1 &
-          typeperf_pid=$!
-          summary() {
-            python3 - "$1" <<'PY'
-          import re, sys
-          back = None
-          small = []
-          for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
-              m = re.search(r'\[diag\] flush (-?\d+) at (\S+) cost ([\d.]+) ms', line)
-              if m:
-                  i, t, c = int(m.group(1)), m.group(2), float(m.group(3))
-                  if i < 0:
-                      back = (t, c)
-                  else:
-                      small.append((i, t, c))
-          if back:
-              print(f"    backlog flush: {back[1]:.1f} ms at {back[0]}")
-          if small:
-              costs = sorted(c for _, _, c in small)
-              slow = [f"#{i}@{t}={c:.0f}ms" for i, t, c in small if c > 30]
-              print(f"    {len(small)} flushes: median {costs[len(costs)//2]:.1f}, mean {sum(costs)/len(costs):.1f}, max {costs[-1]:.1f}; over 30 ms: {' '.join(slow) or 'none'}")
-          for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
-              if '[diag] heartbeat' in line or '[measured] writing a turn' in line or 'FAILED' in line:
-                  print('   ', line.strip()[:300])
-          PY
-          }
-          run_once() {
-            ANTS_TEST_FILTER=S3.100 timeout 300 ./test_server.exe > s3100_run.log 2>&1
-            rc=$?
-            echo "--- $1: exit=$rc  $(date -u +%H:%M:%S)"
-            summary s3100_run.log
-          }
-          echo "##### S3.100 alone x8"
-          for i in 1 2 3 4 5 6 7 8; do run_once "alone $i"; done
-          echo "##### S3.100 beside the other test programs of ctest (what the failing runs had)"
-          (cd ../../.. && ctest --test-dir build --timeout 900 --parallel 3 -E "test_server" > ctest_neighbours.log 2>&1) &
-          ctest_pid=$!
-          sleep 20
-          n=0
-          while kill -0 $ctest_pid 2>/dev/null && [ $n -lt 40 ]; do n=$((n+1)); run_once "beside $n"; done
-          wait $ctest_pid
-          echo "##### the whole test_server program beside the other test programs (S3.100 comes after the other persist cases)"
-          for round in 1 2; do
-            (cd ../../.. && ctest --test-dir build --timeout 900 --parallel 3 -E "test_server" > ctest_neighbours_$round.log 2>&1) &
-            ctest_pid=$!
-            sleep 5
-            timeout 600 ./test_server.exe > s3100_full.log 2>&1
-            rc=$?
-            echo "--- whole test_server $round: exit=$rc  $(date -u +%H:%M:%S)"
-            summary s3100_full.log
-            kill $ctest_pid 2>/dev/null
-            wait $ctest_pid 2>/dev/null
-          done
-          kill $typeperf_pid 2>/dev/null
-          tail -3 ../../../ctest_neighbours.log
-          echo "##### counters"
-          python3 - <<'PY'
-          import csv
-          rows = list(csv.reader(open('../../../typeperf.csv', encoding='utf-8', errors='replace')))
-          print(len(rows) - 1, 'samples;', rows[0][1:])
-          for r in rows[1:][::10]:
-              print(','.join(r))
-          PY
-          exit 0
 
       - name: Test programs (ctest)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
