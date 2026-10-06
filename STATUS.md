@@ -1,12 +1,12 @@
 # Status
 
-_Updated 2026-10-05 17:19 PDT · current release **v0.8.2** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 17:29 PDT · current release **v0.8.2** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
 | **v0.8.3** Friend as the default seat, a game for one with START!, a dirtier background | ███░░░░░░░ 29% | Mon or Tue | built and tested here; an independent review is running, then the browser checks on the final head and the pull request |
-| **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ██████░░░░ 57% | Mon or Tue | PR #14 (both batches joined): both independent code reviews are answered and every finding is fixed on the branch; next the release commit, five green checks on the final head and the merge once no match is running |
+| **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ██████░░░░ 57% | Mon or Tue | PR #14 is the release pull request (both batches joined, both independent reviews answered, version and changelog done); the five checks are running on its final head, then the merge once no match is running |
 | **v0.10.0** short room codes (no "demo") and platform / operating system icons (protocol 14) | ░░░░░░░░░░ 0% | Tue or later | planned after the bots (v0.9.0) |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
@@ -14,7 +14,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 ## In progress
 - v0.8.3: START with every other seat on Nobody begins a game for one on this computer (the original's single player; a room on the game server needs two people), Friend is the default seat of the New match card, and the orange background gets a little noise and dirt (the owner's asks); a patch release, built and tested here, with its review running
 - **Quitting during a catch-up** (draft pull request #22): a player who quits while their game is catching up no longer leaves the match paused with their seat held; review and checks running; ships as the next patch release after v0.8.3
-- Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in draft PR #14, the v0.9.0 candidate (both independent code reviews answered and every finding fixed; next the release commit, five green checks on the final head and the merge)
+- Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in PR #14, the v0.9.0 release pull request (both independent code reviews answered and every finding fixed; the five checks are running on the final head, then the merge)
 - Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered playbook questions 1, 2, 4, 7, 11)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. PR #14 (the v0.9.0 candidate) no longer orders special actions onto an ant (-95% on Small); draft PR #16, stacked on it, adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 68% on Small Hard and 35 to 45% on Treasure, scores unchanged within noise (measured before #14's review fixes; #16 is measured again on the merged bot and moves onto main when #14 merges). The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
 - Short room codes, and the platform and operating system icons: planned after the bots (v0.9.0)
