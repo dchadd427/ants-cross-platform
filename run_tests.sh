@@ -554,7 +554,7 @@ start_suite() {       # start_suite INDEX
         status=$?
         ended=$(now_ms)
         echo $((ended - started)) > "$RUN_DIR/$i.ms"
-        echo "$status" > "$RUN_DIR/$i.status"
+        echo "$status" > "$RUN_DIR/$i.status.tmp" && mv "$RUN_DIR/$i.status.tmp" "$RUN_DIR/$i.status"      # the parent reads the file as soon as it exists: it must never exist empty (`> file` creates it, then writes)
     ) &
     SUITE_PID[$i]=$!
     STATE[$i]=1
