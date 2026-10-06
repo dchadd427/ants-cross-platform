@@ -8,21 +8,25 @@ The tool replays the Dockerfile on this machine and serves the result with nginx
     step that is left out
   - the .dockerignore: what the image's build gets of the repository's own file (the three entries of .git, the archive of the changelog, no scripts, no tests, no program of the original
     game) and the rules of the matching (* inside a name, **, ! brings back, a folder takes its content with it)
-  - the replay of small Dockerfiles: COPY (files, folders, patterns, --from), the folders that are moved (nothing is written to this machine's /src), ARG and --build-arg, ENV, WORKDIR,
-    the warning for a path that is not moved, and the errors
+  - the replay of small Dockerfiles: COPY (files, folders, patterns, --from), the folders that are moved (nothing is written to this machine's /src), ARG and --build-arg (with the quotes
+    of a value taken out), ENV, WORKDIR, and the errors: a path that is not moved, a COPY flag that the tool would leave out, an unbalanced quote
   - the replay of the REAL Dockerfile with a fake compiler (Linux): every step but the compile runs as in the image, so the pages have what CI's checks of the image look for (the version,
     the build id, no placeholder left, the staging label, the changelog pages, the files of the runner stage)
-  - the emsdk: the version that is there is taken as it is, another one or a strange folder is an error, a missing one is cloned at the tag, installed and activated
-  - the ports that Emscripten would download (read from the port files of the installed Emscripten) and how they are put in its cache, from a git tag or from the mirror
-  - nginx: docker/nginx.conf moved to a port and a folder, and (where nginx is installed) really started and asked for the routes of the site
+  - the emsdk: the version that is there is taken as it is when its install was finished, another one or a strange folder is an error, a missing one or one that a cut-short run left half
+    way is cloned, installed and activated, and one whose environment has no emcc is an error
+  - the ports that Emscripten would download (read from the port files of the installed Emscripten) and how they are put in its cache, from a git tag or from the mirror (an answer that is
+    cut off or is no archive is an error with the address)
+  - nginx: docker/nginx.conf moved to a port and a folder, the command line (-e only where nginx has it), the master process (a pid file of another process is not it), and (where nginx is
+    installed) really started and asked for the routes of the site, and stopped when it does not answer
   - the browser for the checks: Playwright's headless shell before Chromium, a script with --no-sandbox for root, a CHROME that is set is left alone
+  - the command line: a work folder that a shell would read apart is refused, --reuse takes a finished build only, a failure that is not the tool's own is a message
 """
 import contextlib
+import http.client
 import io
 import os
 import re
 import shutil
-import socket
 import subprocess
 import sys
 import tarfile
@@ -102,12 +106,16 @@ class TheDockerfileIsRead(unittest.TestCase):
         self.assertEqual((step.flags, step.words), ({"from": "builder"}, ["/x/a", "/y/"]))
 
     def test_what_the_tool_cannot_play_is_refused(self):
-        for text in ("ADD x y", "ONBUILD RUN x", "SHELL [\"/bin/bash\", \"-c\"]", "RUN [\"a\", \"b\"]", "COPY [\"a\", \"b\"]", "RUN --mount=type=cache,target=/x true", "RUN cat <<EOF\nx\nEOF"):
+        for text in ("ADD x y", "ONBUILD RUN x", "SHELL [\"/bin/bash\", \"-c\"]", "RUN [\"a\", \"b\"]", "COPY [\"a\", \"b\"]", "RUN --mount=type=cache,target=/x true"):
             with self.subTest(text):
                 with self.assertRaises(wd.ToolError):
                     wd.parse_dockerfile("FROM a\n" + text + "\n")
         with self.assertRaises(wd.ToolError):
             wd.parse_dockerfile("RUN true\n")
+
+    def test_a_heredoc_is_refused_at_its_first_line(self):
+        with self.assertRaisesRegex(wd.ToolError, r"line 2: this form of RUN is not supported"):       # (the lines after it would be refused as unknown instructions, which is not the point)
+            wd.parse_dockerfile("FROM a\nRUN cat <<EOF\nEOF\n")
 
     def test_a_shell_form_that_starts_with_a_bracket_is_a_shell_form(self):
         self.assertEqual(wd.parse_dockerfile("FROM a\nRUN [ -f x ] && true\n")[1].text, "[ -f x ] && true")
@@ -221,14 +229,28 @@ class TheReplay(Scratch):
             self.assertEqual(f.read().strip(), "hi ants[]")
         self.assertIn("--build-arg NOT_DECLARED is not an ARG", said)
 
-    def test_a_path_that_is_not_moved_is_a_warning_and_the_harmless_ones_are_not(self):
-        _, said = self.play("FROM a\nRUN test -d /usr && true > /dev/null && echo '</strong>' > /dev/null && test -d /src && test -d /usr/share/nginx/html\n")
-        warnings = [line for line in said.splitlines() if "warning" in line]
-        self.assertEqual(len(warnings), 1, warnings)
-        self.assertIn("RUN uses /usr, which this tool does not move", warnings[0])
+    def test_arg_and_env_values_have_their_quotes_taken_out_as_in_docker(self):
+        fs, _ = self.play('FROM a\nARG EMPTY=""\nARG WHO="the ants"\nARG PLAIN=x\nENV GREETING="hello world" KIND=\'big\' NAME=ant\nENV OLD value with spaces\nWORKDIR /src\n'
+                          'RUN printf "[%s][%s][%s][%s][%s][%s][%s]" "$EMPTY" "$WHO" "$PLAIN" "$GREETING" "$KIND" "$NAME" "$OLD" > /src/out.txt\n')
+        with open(self.seen(fs, "src/out.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "[][the ants][x][hello world][big][ant][value with spaces]")
+
+    def test_a_path_that_is_not_moved_is_an_error_before_the_command_runs_and_the_harmless_ones_are_not(self):
+        self.play("FROM a\nRUN test -d /src && true > /dev/null && echo '</strong>' > /dev/null && test -d /usr/share/nginx/html && /bin/sh -c true\n")
+        outside = self.path("outside.txt")
+        for path in ("/usr", "/nowhere/lists/*", outside):
+            with self.subTest(path):
+                with self.assertRaises(wd.ToolError) as caught:
+                    self.play("FROM a\nRUN echo x > %s\n" % path)
+                self.assertIn("RUN uses %s, which this tool does not move" % path, str(caught.exception))
+        self.assertFalse(os.path.exists(outside), "the command ran on this machine")
 
     def test_the_errors(self):
         for dockerfile, files, wanted in (
+                ("FROM a\nCOPY --chmod=755 a.txt /src/\n", {"a.txt": "x"}, "line 2: COPY --chmod is not supported"),
+                ("FROM a\nCOPY --link a.txt /src/\n", {"a.txt": "x"}, "line 2: COPY --link is not supported"),
+                ('FROM a\nARG A="open\n', {}, "line 2: ARG"),
+                ("FROM a\nENV A='open\n", {}, "line 2: ENV"),
                 ("FROM a\nCOPY a.txt /etc/passwd\n", {"a.txt": "x"}, "outside the folders"),
                 ("FROM a\nCOPY a.txt /src/\n", {}, "nothing of it is in the build context"),
                 ("FROM a\nCOPY --from=nope /src/a /src/\n", {}, "not an earlier stage"),
@@ -330,9 +352,14 @@ class TheRealDockerfileReplayed(Scratch):
 
 
 class TheEmsdk(Scratch):
-    def made(self, version):
-        write(os.path.join(self.path("emsdk"), "upstream", "emscripten", "emscripten-version.txt"), '"%s"\n' % version)
-        return self.path("emsdk")
+    def made(self, version, finished=True):
+        """An emsdk of that version, with the files that the end of `emsdk install` and of `emsdk activate` leave (finished), else with the one that the unpacking of Emscripten leaves first."""
+        emsdk = self.path("emsdk")
+        write(os.path.join(emsdk, "upstream", "emscripten", "emscripten-version.txt"), '"%s"\n' % version)
+        if finished:
+            write(os.path.join(emsdk, "upstream", ".emsdk_version"), "releases-abc-64bit")
+            write(os.path.join(emsdk, ".emscripten"), "NODE_JS = 'node'\n")
+        return emsdk
 
     def test_the_version_that_is_there_is_taken_as_it_is(self):
         emsdk = self.made("3.1.58")
@@ -341,6 +368,18 @@ class TheEmsdk(Scratch):
         run.assert_not_called()
         self.assertEqual(wd.installed_emscripten_version(emsdk), "3.1.58")
         self.assertIsNone(wd.installed_emscripten_version(self.path("nothing")))
+
+    def test_an_install_that_a_cut_short_run_left_half_way_is_finished_and_not_taken_for_done(self):
+        for missing in (os.path.join("upstream", ".emsdk_version"), ".emscripten", None):
+            with self.subTest(missing=missing):
+                emsdk = self.made("3.1.58", finished=missing is not None)
+                write(os.path.join(emsdk, "emsdk"), "#!/bin/sh\n", 0o755)
+                if missing:
+                    os.remove(os.path.join(emsdk, missing))
+                with mock.patch.object(wd, "run") as run:
+                    quiet(wd.ensure_emsdk, "3.1.58", emsdk)
+                self.assertEqual([call.args[0] for call in run.call_args_list], [[os.path.join(emsdk, "emsdk"), "install", "3.1.58"], [os.path.join(emsdk, "emsdk"), "activate", "3.1.58"]])
+                shutil.rmtree(emsdk)
 
     def test_another_version_is_an_error_and_nothing_is_changed(self):
         emsdk = self.made("3.1.50")
@@ -368,13 +407,23 @@ class TheEmsdk(Scratch):
 
     @unittest.skipUnless(shutil.which("bash"), "bash is needed")
     def test_the_environment_is_what_emsdk_env_sh_makes_of_this_one(self):
-        write(os.path.join(self.path("emsdk"), "emsdk_env.sh"), 'export FROM_EMSDK="$(basename "$EMSDK_TEST")"\nexport PATH="/fake/bin:$PATH"\necho noise\n')
-        with mock.patch.dict(os.environ, {"EMSDK_TEST": "/x/y", "KEEP_ME": "1"}):
+        write(os.path.join(self.path("fake", "bin"), "emcc"), "#!/bin/sh\n", 0o755)
+        write(os.path.join(self.path("emsdk"), "emsdk_env.sh"), 'export FROM_EMSDK="$(basename "$EMSDK_TEST")"\nexport PATH="$EMSDK_TEST_BIN:$PATH"\necho noise\n')
+        with mock.patch.dict(os.environ, {"EMSDK_TEST": "/x/y", "EMSDK_TEST_BIN": self.path("fake", "bin"), "KEEP_ME": "1"}):
             env = wd.emsdk_environment(self.path("emsdk"))
         self.assertEqual((env["FROM_EMSDK"], env["KEEP_ME"]), ("y", "1"))
-        self.assertTrue(env["PATH"].startswith("/fake/bin:"))
+        self.assertTrue(env["PATH"].startswith(self.path("fake", "bin") + os.pathsep))
         with self.assertRaises(wd.ToolError):
             wd.emsdk_environment(self.path("no emsdk"))
+
+    @unittest.skipUnless(shutil.which("bash"), "bash is needed")
+    def test_an_emsdk_whose_environment_has_no_emcc_is_an_error_that_says_so(self):
+        write(os.path.join(self.path("emsdk"), "emsdk_env.sh"), "export SOMETHING=1\n")
+        real = shutil.which
+        with mock.patch.object(shutil, "which", side_effect=lambda name, path=None: None if name == "emcc" else real(name, path=path)):
+            with self.assertRaises(wd.ToolError) as caught:
+                wd.emsdk_environment(self.path("emsdk"))
+        self.assertIn("puts no emcc on the PATH", str(caught.exception))
 
     def test_the_ports_go_to_the_cache_of_the_emsdk_or_to_the_one_that_is_named(self):
         emsdk = self.made("3.1.58")
@@ -478,6 +527,22 @@ class ThePorts(Scratch):
             with self.assertRaises(wd.ToolError):
                 wd.fetch_port("other", "https://example.org/other.tar.xz", ports)
 
+    def test_a_mirror_answer_that_is_cut_off_or_is_no_archive_is_an_error_with_the_address(self):
+        ports = self.path("ports")
+        os.makedirs(ports)
+        for what, read in (("cut off", http.client.IncompleteRead(b"abc", 100)), ("no archive", b"<html>not a tar file</html>")):
+            answer = mock.MagicMock()
+            if isinstance(read, bytes):
+                answer.__enter__.return_value.read.return_value = read
+            else:
+                answer.__enter__.return_value.read.side_effect = read
+            with self.subTest(what):
+                with mock.patch.object(wd, "source_of", return_value=("mirror", "https://mirror.invalid/x.tar.gz")), mock.patch.object(urllib.request, "urlopen", return_value=answer):
+                    with self.assertRaises(wd.ToolError) as caught:
+                        wd.fetch_port("other", "https://example.org/other.tar.xz", ports)
+                self.assertIn("https://mirror.invalid/x.tar.gz", str(caught.exception))
+                self.assertFalse(os.path.exists(os.path.join(ports, "other", ".emscripten_url")), "a port that was not unpacked has no marker")
+
 
 class TheSiteConfiguration(Scratch):
     def test_nginx_conf_goes_to_a_port_and_a_folder(self):
@@ -516,15 +581,13 @@ class TheSiteConfiguration(Scratch):
         write(os.path.join(html, "lobby.html"), "<title>the lobby</title>")
         write(os.path.join(html, "index.html"), "<title>the game</title>")
         write(os.path.join(html, "index.wasm"), "\0asm")
+        write(wd.built_marker(work), "built\n")
         return work
 
     def nginx_ready(self):
-        try:
-            wd.mime_types()
-        except wd.ToolError:
-            self.skipTest("nginx is not installed")
         if not shutil.which("nginx") or not LINUX:
             self.skipTest("nginx is not installed")
+        wd.mime_types()                     # (where nginx is, a missing mime.types is a fault of the tool and fails the test: it is no reason to skip)
 
     def test_nginx_serves_the_routes_of_the_site_from_the_moved_folders(self):
         self.nginx_ready()
@@ -532,6 +595,7 @@ class TheSiteConfiguration(Scratch):
         server = wd.Nginx(work, wd.free_port())
         self.addCleanup(server.stop)
         url = server.start()
+        self.assertTrue(server.running(), "the master process is found by its command line")
         for path, expected in (("", "the lobby"), ("?join=ABC", "the game"), ("?embed=1", "the game"), ("index.html", "the game"), ("lobby.html", "the lobby")):
             with urllib.request.urlopen(url + path, timeout=5) as answer:
                 self.assertIn(expected, answer.read().decode("utf-8"), path)
@@ -553,6 +617,90 @@ class TheSiteConfiguration(Scratch):
         with open(out, encoding="utf-8") as f:
             self.assertRegex(f.read().strip(), r"^http://127\.0\.0\.1:\d+/$")
         self.assertFalse(wd.Nginx(work, 1).running(), "nginx is stopped after the command")
+
+    def test_nginx_that_started_and_does_not_answer_is_stopped_and_the_error_says_what_it_answered(self):
+        self.nginx_ready()
+        work = self.fake_site()
+        os.remove(os.path.join(work, "fs", "usr", "share", "nginx", "html", "lobby.html"))
+        server = wd.Nginx(work, wd.free_port())
+        self.addCleanup(server.stop)
+        with mock.patch.object(wd, "START_SECONDS", 1.5):
+            with self.assertRaises(wd.ToolError) as caught:
+                server.start()
+        self.assertIn("HTTP 404", str(caught.exception))
+        self.assertFalse(server.running(), "nginx was left running with the port")
+
+    @unittest.skipUnless(os.name == "posix" and shutil.which("sh"), "a fake nginx is a shell script")
+    def test_the_error_log_switch_is_used_only_where_nginx_has_it(self):
+        usages = {True: "Usage: nginx [-?hvVtTq] [-s signal] [-p prefix]\n             [-e filename] [-c filename] [-g directives]\n\nOptions:\n  -p prefix     : set prefix path\n"
+                        "  -e filename   : set error log file (default: /var/log/nginx/error.log)\n  -c filename   : set configuration file\n",
+                  False: "Usage: nginx [-?hvVtTq] [-s signal] [-p prefix] [-c filename] [-g directives]\n\nOptions:\n  -p prefix     : set prefix path\n  -c filename   : set configuration file\n"}
+        for has_it, usage in usages.items():
+            fake = self.path("nginx-%s" % has_it, "nginx")
+            write(fake, "#!/bin/sh\ncat >&2 <<'EOF'\n%sEOF\n" % usage, 0o755)
+            server = wd.Nginx(self.path("work"), 1)
+            with mock.patch.object(shutil, "which", return_value=fake):
+                command = server.command("-t")
+            expected = [fake, "-p", server.prefix + "/"] + (["-e", os.path.join(server.prefix, "error.log")] if has_it else []) + ["-c", server.conf, "-t"]
+            self.assertEqual(command, expected, "nginx %s the -e switch" % ("has" if has_it else "has not"))
+
+    def test_mime_types_that_nginx_lacks_are_found_before_the_build_and_not_after_it(self):
+        real = shutil.which
+        with mock.patch.object(shutil, "which", side_effect=lambda name, path=None: real(name, path=path) or "/bin/true"), \
+                mock.patch.object(wd, "mime_types", side_effect=wd.ToolError("nginx's mime.types is not there", 3)):
+            with self.assertRaises(wd.ToolError) as caught:
+                wd.build(self.path("a context with no Dockerfile"), self.path("work"), self.path("emsdk"), {})
+        self.assertEqual(caught.exception.status, 3)
+        self.assertFalse(os.path.exists(self.path("work")), "nothing was built")
+
+    @unittest.skipUnless(os.name == "posix" and shutil.which("sh"), "the Dockerfile's RUN lines are played by sh")
+    def test_a_build_that_is_cut_short_leaves_no_marker_and_a_finished_one_leaves_it(self):
+        context, work = self.path("context"), self.path("work")
+        write(os.path.join(context, "Dockerfile"), "FROM emscripten/emsdk:3.1.58 AS builder\nWORKDIR /src\nRUN mkdir -p /usr/share/nginx/html && echo wasm > /usr/share/nginx/html/index.wasm\n")
+        real = shutil.which
+        with mock.patch.object(shutil, "which", side_effect=lambda name, path=None: real(name, path=path) or "/bin/true"), mock.patch.object(wd, "mime_types", return_value="/x"), \
+                mock.patch.object(wd, "ensure_emsdk"), mock.patch.object(wd, "emsdk_environment", return_value=dict(os.environ)), mock.patch.object(wd, "prepare_ports"):
+            quiet(wd.build, context, work, self.path("emsdk"), {})
+            self.assertTrue(os.path.isfile(wd.built_marker(work)), "a finished build has its marker")
+            for dockerfile, wanted in (("RUN exit 4\n", "RUN failed with status 4"), ("RUN true\n", "the replay ended without")):
+                write(os.path.join(context, "Dockerfile"), "FROM emscripten/emsdk:3.1.58 AS builder\n" + dockerfile)
+                with self.assertRaises(wd.ToolError) as caught:
+                    quiet(wd.build, context, work, self.path("emsdk"), {})
+                self.assertIn(wanted, str(caught.exception))
+                self.assertFalse(os.path.exists(wd.built_marker(work)), "a build that was cut short or has no page must not pass for the finished one before it")
+
+
+@unittest.skipUnless(LINUX, "the master process is found through /proc: Linux")
+class TheNginxProcess(Scratch):
+    def idle(self, *extra):
+        """A process that lives a minute, with `extra` after its code in its command line (as nginx's master has `-c FILE` there)."""
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"] + list(extra))
+        self.addCleanup(child.wait)
+        self.addCleanup(child.kill)
+        return child
+
+    def test_a_pid_file_that_names_another_process_is_not_this_nginx_and_nothing_is_sent_to_it(self):
+        server = wd.Nginx(self.path("work"), 1)
+        other = self.idle()
+        for text in ("%d\n" % other.pid, "%d\n" % os.getpid(), "999999999\n", "not a number\n", ""):
+            with self.subTest(text):
+                write(server.pid_file, text)
+                self.assertFalse(server.running())
+        write(server.pid_file, "%d\n" % other.pid)
+        with mock.patch.object(subprocess, "run") as ran:
+            server.stop()
+        ran.assert_not_called()
+        self.assertIsNone(other.poll(), "stop() ended a process that is not this nginx")
+        self.assertFalse(wd.Nginx(self.path("no work"), 1).running(), "no pid file")
+
+    def test_the_process_that_holds_the_configuration_file_in_its_command_line_is_this_nginx_and_no_other_nginx(self):
+        server = wd.Nginx(self.path("work"), 1)
+        master = self.idle("-c", server.conf)
+        write(server.pid_file, "%d\n" % master.pid)
+        self.assertTrue(server.running())
+        another = wd.Nginx(self.path("another work"), 1)
+        write(another.pid_file, "%d\n" % master.pid)
+        self.assertFalse(another.running(), "the master of another work folder is not this one's")
 
 
 class TheBrowser(Scratch):
@@ -622,6 +770,34 @@ class TheCommandLine(Scratch):
             status, _, err = self.run_main("--reuse", "--work", self.path("w"))
         self.assertEqual(status, 1)
         self.assertIn("nothing was built", err)
+
+    @unittest.skipUnless(LINUX, "the tool runs on Linux")
+    def test_reuse_takes_a_finished_build_and_not_a_tree_that_a_cut_short_run_left(self):
+        half = self.path("half")
+        write(os.path.join(half, "fs", "usr", "share", "nginx", "html", "index.html"), "<title>half</title>")
+        with mock.patch.object(wd.shutil, "which", side_effect=lambda name: "/usr/sbin/nginx"):
+            status, _, err = self.run_main("--reuse", "--work", half)
+        self.assertEqual(status, 1)
+        self.assertIn("cut short", err)
+
+    @unittest.skipUnless(LINUX, "the tool runs on Linux")
+    def test_a_work_folder_that_a_shell_would_read_apart_is_refused_before_anything_is_touched(self):
+        for name in ("a b", "semi;colon", "it's", "$HOME", "back`tick"):
+            with self.subTest(name):
+                status, _, err = self.run_main("--stop", "--work", self.path(name))
+                self.assertEqual(status, 3)
+                self.assertIn("give --work a plain path", err)
+                self.assertFalse(os.path.exists(self.path(name)))
+
+    @unittest.skipUnless(LINUX, "the tool runs on Linux")
+    def test_a_failure_that_is_not_the_tools_own_is_a_message_and_not_a_traceback(self):
+        for error in (OSError("disk full"), http.client.IncompleteRead(b"abc", 5), tarfile.ReadError("not a tar file")):
+            with self.subTest(type(error).__name__):
+                with mock.patch.object(wd.shutil, "which", return_value="/usr/sbin/nginx"), mock.patch.object(wd, "build", side_effect=error):
+                    status, _, err = self.run_main("--work", self.path("w"))
+                self.assertEqual(status, 1)
+                self.assertTrue(err.startswith("web_without_docker: "), err)
+                self.assertNotIn("Traceback", err)
 
     @unittest.skipUnless(LINUX, "the tool runs on Linux")
     def test_a_machine_without_nginx_or_a_tool_says_so_and_builds_nothing(self):

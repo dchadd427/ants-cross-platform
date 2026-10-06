@@ -3,29 +3,35 @@
 
 usage: web_without_docker.py [--context DIR] [--work DIR] [--emsdk DIR] [--port N] [--build-arg NAME=VALUE]... [--reuse] [--keep] [--stop] [-- COMMAND [ARG ...]]
 
-    tools/web_without_docker.py -- tests/scripts/test_web_aspect.sh        (any command that reads ANTS_WEB_URL: the other tests/scripts/test_web_*.sh)
+    tools/web_without_docker.py -- tests/scripts/test_web_aspect.sh        (a command that reads ANTS_WEB_URL and needs only the page: also test_web_edge.sh, test_web_touch.sh and test_web_home.sh)
 
 It replays the Dockerfile itself (FROM, ARG, ENV, WORKDIR, COPY with the .dockerignore and COPY --from, RUN) on this machine, with the three folders that the Dockerfile writes to (/src,
 /usr/share/nginx/html, /etc/nginx) moved under WORK/fs, so the pages are made by the commands of the image's build. The game is compiled by Emscripten (the version of the Dockerfile's
 FROM, installed with emsdk when it is not there) and the ports that it needs (SDL2, SDL2_ttf, FreeType, HarfBuzz) are put in Emscripten's cache from git tags and Emscripten's own mirror,
 because a session may not download a GitHub archive. Then it writes an nginx.conf around docker/nginx.conf, starts nginx on 127.0.0.1:PORT (default 19980), runs COMMAND with ANTS_WEB_URL
 set (and CHROME, when it is not, to a script that starts a browser as the checks need it: Playwright's headless shell, else Chromium, with a desktop's mouse and, as root, --no-sandbox) and stops nginx. It does not run Docker and does not replace CI's `docker build`: that is the gate.
+It serves the pages and starts no game server: test_web_home.sh leaves out its parts that play, and test_web_hidden.sh, test_web_prediction.sh and test_web_rejoin.sh, which need one, say SKIP and exit 0 (no pass).
 
   --context DIR  the tree to build (default: the tree of this script; a git worktree of a branch works)     --work DIR  where everything goes (default: CONTEXT/scratch/web_without_docker)
   --emsdk DIR    the emsdk (default: $EMSDK when it has the right version, else ~/.cache/ants-web/emsdk-VERSION, made there when it is not)     --port N  nginx's port (0: a free one)
-  --build-arg    NAME=VALUE for an ARG of the Dockerfile (ANTS_BUILD_ID, ANTS_SITE_LABEL)     --reuse  serve what an earlier run built     --keep  leave nginx running     --stop  stop it
+  --build-arg    NAME=VALUE for an ARG of the Dockerfile (ANTS_BUILD_ID, ANTS_SITE_LABEL)     --keep  leave nginx running     --stop  stop it
+  --reuse        serve what an earlier run built (a run that was cut short is not taken)
+
+The RUN lines of the Dockerfile get the work folder's path as it is, so a path with a space or a character that a shell reads apart is refused: give --work a plain one.
 
 Needs Linux (the Dockerfile's RUN lines use GNU tools), git, bash, cmake, make, python3 and nginx (sudo apt-get update && sudo apt-get install -y nginx), and the network to github.com (git clones)
 and storage.googleapis.com (Emscripten's downloads and its mirror). Exit status: COMMAND's, or 0; 1 a step failed; 2 COMMAND could not be started; 3 something that it needs is not
-there (nothing was built or checked).
+there, or the work folder's name is refused (nothing was built or checked).
 """
 import argparse
 import fnmatch
+import http.client
 import io
 import json
 import os
 import posixpath
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -39,6 +45,7 @@ import urllib.request
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 DEFAULT_PORT = 19980
+START_SECONDS = 10                      # how long nginx gets to answer after it was started
 EMSDK_URL = "https://github.com/emscripten-core/emsdk.git"
 PORT_MIRROR = "https://storage.googleapis.com/webassembly/emscripten-ports/"
 VIRTUAL_ROOTS = ("/src", "/usr/share/nginx/html", "/etc/nginx")      # what the Dockerfile writes to: moved under WORK/fs
@@ -261,7 +268,7 @@ class Replay:
         return re.sub(pattern, lambda m: os.path.join(self.fs, m.group(1).lstrip("/")), command)
 
     def unmapped(self, command):
-        """Absolute paths of a RUN (as the Dockerfile has it) that this tool does not move: a command that writes there writes to this machine, so it is a warning."""
+        """Absolute paths of a RUN (as the Dockerfile has it) that this tool does not move: a command that writes there writes to this machine, so it is an error."""
         found = re.findall(r"(?<![^\s\"'=(:;|&`])(/[\w.@%+-]+(?:/[\w.@%+*-]+)*)", command)
         return [p for p in found if p not in HARMLESS_PATHS and not self.virtual_ok(p)]
 
@@ -279,28 +286,37 @@ class Replay:
         self.workdir, self.args, self.envs = "/", {}, {}
         say("FROM %s (stage %s)" % (step.words[0], name))
 
+    @staticmethod
+    def shell_words(step):
+        """The words of an ARG or ENV with their quotes and backslashes taken out, as Docker reads them: `ARG NAME=""` has an empty value and `ENV NAME="a b"` is one word."""
+        try:
+            return shlex.split(step.text)
+        except ValueError as e:
+            raise ToolError("Dockerfile line %d: %s %s: %s" % (step.line, step.op, step.text, e))
+
     def do_arg(self, step):
-        for word in step.words:
+        for word in self.shell_words(step):
             name, has_value, value = word.partition("=")
             self.declared.add(name)
             self.args[name] = self.build_args.get(name, value if has_value else "")
 
     def do_env(self, step):
-        words = step.words
+        words = self.shell_words(step)
         if words and "=" not in words[0]:
             self.envs[words[0]] = self.substitute(" ".join(words[1:]))
             return
         for word in words:
             name, _, value = word.partition("=")
-            self.envs[name] = self.substitute(value.strip("\"'"))
+            self.envs[name] = self.substitute(value)
 
     def do_workdir(self, step):
         self.workdir = posixpath.normpath(posixpath.join(self.workdir, self.substitute(step.text.strip())))
         os.makedirs(self.real(self.workdir), exist_ok=True)
 
     def do_run(self, step):
-        for path in self.unmapped(step.text):
-            say("warning: line %d: RUN uses %s, which this tool does not move (it is this machine's)" % (step.line, path))
+        outside = self.unmapped(step.text)
+        if outside:
+            raise ToolError("Dockerfile line %d: RUN uses %s, which this tool does not move (the command would run on this machine's folder): add the folder to VIRTUAL_ROOTS or the path to HARMLESS_PATHS, with a test, or build with Docker" % (step.line, outside[0]))
         command = self.remap(step.text)
         say("RUN " + re.sub(r"\s+", " ", command)[:110] + (" ..." if len(command) > 110 else ""))
         env = dict(self.env)
@@ -323,6 +339,9 @@ class Replay:
         if len(words) < 2:
             raise ToolError("Dockerfile line %d: COPY needs a source and a destination" % step.line)
         sources, dest = words[:-1], words[-1]
+        for flag in step.flags:
+            if flag != "from":
+                raise ToolError("Dockerfile line %d: COPY --%s is not supported by this tool (it would be left out): add it, with a test, or build with Docker" % (step.line, flag))
         origin = step.flags.get("from")
         if origin is not None and origin not in self.stages:
             raise ToolError("Dockerfile line %d: COPY --from=%s is not an earlier stage (an image is not supported)" % (step.line, origin))
@@ -389,11 +408,17 @@ def installed_emscripten_version(emsdk):
         return None
 
 
+def emsdk_complete(emsdk):
+    """Whether `emsdk install` and `emsdk activate` ran to the end: Emscripten's version file is unpacked early, `upstream/.emsdk_version` is the last file of the install and `.emscripten` is
+    what activate writes. An emsdk that a cut-short run left half way has the first only."""
+    return all(os.path.isfile(os.path.join(emsdk, *path)) for path in (("upstream", "emscripten", "emscripten-version.txt"), ("upstream", ".emsdk_version"), (".emscripten",)))
+
+
 def ensure_emsdk(version, emsdk):
     have = installed_emscripten_version(emsdk)
-    if have == version:
+    if have == version and emsdk_complete(emsdk):
         return
-    if have is not None:
+    if have is not None and have != version:
         raise ToolError("%s holds Emscripten %s and the Dockerfile wants %s: give --emsdk another folder (this tool does not change an emsdk that it did not make)" % (emsdk, have, version))
     if not os.path.exists(os.path.join(emsdk, "emsdk")):
         if os.path.isdir(emsdk) and os.listdir(emsdk):
@@ -418,6 +443,8 @@ def emsdk_environment(emsdk):
         name, has_value, value = item.partition("=")
         if has_value and name:
             env[name] = value
+    if not shutil.which("emcc", path=env.get("PATH")):
+        raise ToolError("emsdk_env.sh of %s puts no emcc on the PATH: its install is not complete (run its `emsdk install` and `emsdk activate`, or remove the folder and run this again)" % emsdk)
     return env
 
 
@@ -513,9 +540,9 @@ def fetch_port(name, url, ports):
         try:
             with urllib.request.urlopen(source[1], timeout=120) as answer:
                 data = answer.read()
-        except (urllib.error.URLError, OSError) as e:
+            extract(data, target, "r:gz")
+        except (OSError, http.client.HTTPException, tarfile.TarError) as e:       # (an answer that is cut off, or is no archive)
             raise ToolError("%s: %s" % (source[1], e))
-        extract(data, target, "r:gz")
     with open(marker, "w", encoding="utf-8") as f:
         f.write(url + "\n")
     return True
@@ -573,16 +600,31 @@ def main_config(prefix, site, mime, as_root):
         ""])
 
 
+def takes_error_log_switch(nginx):
+    """Whether `nginx -e FILE` (the error log until the configuration is read) exists: nginx 1.19.5 and later have it, the 1.18 of Ubuntu 22.04 and Debian 11 calls it an invalid option."""
+    try:
+        done = subprocess.run([nginx, "-h"], capture_output=True, text=True, errors="replace")
+    except OSError:
+        return False
+    return re.search(r"^\s*-e\s+filename", done.stdout + done.stderr, re.M) is not None
+
+
 class Nginx:
     def __init__(self, work, port):
         self.work = work
         self.prefix = os.path.join(work, "nginx")
         self.conf = os.path.join(self.prefix, "nginx.conf")
         self.site = os.path.join(self.prefix, "site.conf")
+        self.pid_file = os.path.join(self.prefix, "nginx.pid")
         self.port = port
+        self.error_log_switch = None        # whether this nginx has -e: asked with its first command
 
     def command(self, *extra):
-        return [shutil.which("nginx") or "nginx", "-p", self.prefix + "/", "-e", os.path.join(self.prefix, "error.log"), "-c", self.conf] + list(extra)
+        nginx = shutil.which("nginx") or "nginx"
+        if self.error_log_switch is None:
+            self.error_log_switch = takes_error_log_switch(nginx)
+        log = ["-e", os.path.join(self.prefix, "error.log")] if self.error_log_switch else []
+        return [nginx, "-p", self.prefix + "/"] + log + ["-c", self.conf] + list(extra)
 
     def configure(self):
         fs = os.path.join(self.work, "fs")
@@ -594,9 +636,12 @@ class Nginx:
             f.write(main_config(self.prefix, self.site, mime_types(), hasattr(os, "geteuid") and os.geteuid() == 0))
 
     def running(self):
+        """Whether the master process of this nginx is alive. A pid file can outlive its process (a killed run, a restart of the machine) and its number then belongs to some other process, so
+        the process has to hold this configuration file in its command line, as nginx's master process does (/proc: Linux)."""
         try:
-            os.kill(int(read_text(os.path.join(self.prefix, "nginx.pid")).strip()), 0)
-            return True
+            pid = int(read_text(self.pid_file).strip())
+            with open("/proc/%d/cmdline" % pid, "rb") as f:
+                return os.fsencode(self.conf) in f.read()
         except (OSError, ValueError):
             return False
 
@@ -609,15 +654,24 @@ class Nginx:
             raise ToolError("nginx does not accept its configuration:\n" + tested.stderr)
         run(self.command())
         url = "http://127.0.0.1:%d/" % self.port
-        for _ in range(100):
-            try:
-                with urllib.request.urlopen(url + "lobby.html", timeout=2) as answer:
-                    if answer.status == 200:
-                        return url
-            except (urllib.error.URLError, OSError):
-                pass
-            time.sleep(0.1)
-        raise ToolError("nginx started and does not answer at %s (see %s)" % (url, os.path.join(self.prefix, "error.log")))
+        last = "no answer"
+        try:
+            deadline = time.monotonic() + START_SECONDS
+            while time.monotonic() < deadline:
+                try:
+                    with urllib.request.urlopen(url + "lobby.html", timeout=2) as answer:
+                        if answer.status == 200:
+                            return url
+                        last = "HTTP %d" % answer.status
+                except urllib.error.HTTPError as e:
+                    last = "HTTP %d" % e.code
+                except (urllib.error.URLError, OSError) as e:
+                    last = str(e)
+                time.sleep(0.1)
+            raise ToolError("nginx started and does not answer at %slobby.html (last try: %s; see %s)" % (url, last, os.path.join(self.prefix, "error.log")))
+        except BaseException:               # (a failure, Ctrl-C, SIGTERM: nginx has daemonized and would keep the port)
+            self.stop()
+            raise
 
     def stop(self):
         if self.running():
@@ -671,10 +725,16 @@ def browser_environment(work, env):
     return dict(env, CHROME=wrapper)
 
 
+def built_marker(work):
+    """The file that the last step of a build writes: a tree that a cut-short run left half way has none, and --reuse does not take it."""
+    return os.path.join(work, "built")
+
+
 def build(context, work, emsdk, build_args):
     for tool in ("git", "bash", "cmake", "make", "python3"):
         if not shutil.which(tool):
             raise ToolError("%s is not installed (sudo apt-get update && sudo apt-get install -y %s)" % (tool, tool), 3)
+    mime_types()                            # (nginx's file is looked for now, not after minutes of build)
     steps = parse_dockerfile(read_text(os.path.join(context, "Dockerfile")))
     version = emscripten_version(steps)
     if not emsdk:
@@ -684,12 +744,16 @@ def build(context, work, emsdk, build_args):
     env = emsdk_environment(os.path.abspath(emsdk))
     prepare_ports(context, os.path.abspath(emsdk), env)
     fs = os.path.join(work, "fs")
+    if os.path.lexists(built_marker(work)):
+        os.remove(built_marker(work))
     shutil.rmtree(fs, ignore_errors=True)
     os.makedirs(fs)
     Replay(steps, context, fs, env, build_args).play()
     html = os.path.join(fs, "usr", "share", "nginx", "html")
     if not os.path.isfile(os.path.join(html, "index.wasm")):
         raise ToolError("the replay ended without %s" % os.path.join(html, "index.wasm"))
+    with open(built_marker(work), "w", encoding="utf-8") as f:
+        f.write("built from %s\n" % context)
     say("built: %s" % html)
 
 
@@ -720,6 +784,10 @@ def main(argv):
         return 3
     context = os.path.abspath(args.context)
     work = os.path.abspath(args.work or os.path.join(context, "scratch", "web_without_docker"))
+    if shlex.quote(work) != work:
+        print("web_without_docker: the work folder %s has a character that a shell reads apart (a space, a quote, $ ...) and the RUN lines of the Dockerfile get its path as it is: give --work a plain path" % work,
+              file=sys.stderr)
+        return 3
     try:
         nginx = Nginx(work, args.port if args.port else free_port())
         if args.stop:
@@ -729,8 +797,8 @@ def main(argv):
             raise ToolError("nginx is not installed (sudo apt-get update && sudo apt-get install -y nginx)", 3)
         if not args.reuse:
             build(context, work, args.emsdk, build_args)
-        elif not os.path.isfile(os.path.join(work, "fs", "usr", "share", "nginx", "html", "index.html")):
-            raise ToolError("--reuse: nothing was built in %s" % work)
+        elif not os.path.isfile(built_marker(work)):
+            raise ToolError("--reuse: nothing was built in %s (or a build there was cut short)" % work)
         url = nginx.start()
         say("serving %s (nginx's logs are in %s)" % (url, nginx.prefix))
         status = 0
@@ -749,6 +817,9 @@ def main(argv):
     except ToolError as e:
         print("web_without_docker: %s" % e, file=sys.stderr)
         return e.status
+    except (OSError, http.client.HTTPException, tarfile.TarError) as e:         # (a missing file, a full disk, a download that is cut off: a message, not a traceback)
+        print("web_without_docker: %s" % e, file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 130
 
