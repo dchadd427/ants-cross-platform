@@ -50,7 +50,7 @@ STYLE = """main { margin-top: 26px; }
 nav.versions { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 12px 22px; font-size: 14px; line-height: 1.8; }
 section h2 { margin: 0 0 12px; font-size: 20px; font-weight: 500; line-height: 1.7; color: var(--gold); }
 section h2 a { color: var(--gold); }
-.rel { display: inline-block; margin-right: 12px; padding: 0 12px; line-height: 1.4; background: var(--teal); border: 2px solid var(--edge); border-radius: 2px; box-shadow: var(--btn-shadow-sm); }
+.rel { display: inline-block; margin-right: 12px; padding: 0 12px; line-height: 1.4; background: var(--teal) var(--sheen, none); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
 section:target { border-color: var(--gold); }
 @media (max-width: 700px) {
     main { margin-top: 16px; }
