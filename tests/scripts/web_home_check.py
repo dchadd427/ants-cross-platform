@@ -2,7 +2,7 @@
 """The front page and the way into and out of a game, in a REAL browser (opt-in; see tests/scripts/test_web_home.sh and docs/NETWORK_PORT.md, "The front page").
 
 The owner, on a phone: "I don't see a way to change colors or send an invite to another person should all be right there. We don't need separate AI and online. Only do online." The front page is
-ONE card, New match: four seats (exactly one You, every other Friend, a bot of a level or Nobody), the Teams, an invitation for each Friend and START!, which takes THIS tab into a match on the game
+ONE card, New match: four seats (exactly one You, every other Friend, a bot of a level or Nobody, each with a Team 1 and a Team 2 switch), an invitation for each Friend and START!, which takes THIS tab into a match on the game
 server. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`, run it on a port), a Chromium-based browser and Python 3; the parts that play
 need the site's /ws to lead to a game server: --ws-port is the port that it leads to, and the check starts the native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTools
 protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway headless browser (its own profile and port; nothing of yours is touched). Parts:
@@ -12,7 +12,7 @@ protocol is spoken with the client of web_hidden_check.py, standard library only
              ONE line, the seat's line (colour, buttons and Sit here on one line from 701 px, two under it), two columns from 1100 px; the contrast of all text at 1440 and 390 px, also with an invitation
              and the note about changed links up);
   * seats    the keyboard and the pointer: the arrows move and check inside a seat's group, Tab goes on to Sit here and the next seat, the focused button shows its outline; Sit here (the key Enter and the
-             pointer) moves You and the focus goes to the seat that You left; the Teams offer the pairs of the seats that play; a Friend seat shows its invitation, Copy link puts exactly that link on the
+             pointer) moves You and the focus goes to the seat that You left; the Team 1 and Team 2 switches of the seats that play make the teams (two seats on one switch, the other two on the other); a Friend seat shows its invitation, Copy link puts exactly that link on the
              clipboard; with every other seat Nobody START is on and says that it starts a game for one on this computer;
   * play     START with bots only takes THIS tab to the game page (no new tab): the game's arguments are the room (demo-treasure-4p-<code>), your seat, the plan (a Medium bot in every other seat),
              --start-when 1, your name and the shape; the match starts without a START of the player's after the quick help closes (the "Get ready" dialog), the server's status lists the three bots
@@ -87,32 +87,35 @@ CONTRAST_JS = """(function () {
   return JSON.stringify({ texts: rows.length, lowest: rows.slice(0, 3) });
 })()"""
 
-# What the card shows now: who is You, the choice in every seat's group, the Teams, the invitations, START and the line under it, the note about changed links
+# What the card shows now: who is You, the choice in every seat's group, the Team 1 and Team 2 switches and the line under them, the invitations, START and the line under it, the note about changed links
 CARD_JS = """(function () {
   function el(id) { return document.getElementById(id); }
   return JSON.stringify({
     map: el('map-pick').value,
     you: [0, 1, 2, 3].filter(function (s) { return !el('seat-you-' + s).hidden; }),
     seats: [0, 1, 2, 3].map(function (s) { var r = document.querySelector('input[name=seat-' + s + ']:checked'); return r ? r.value : '?'; }),
-    teams: el('teams').value, teamsShown: !el('teams-line').hidden,
-    teamOptions: Array.prototype.map.call(el('teams').options, function (o) { return o.value; }),
+    switches: [0, 1, 2, 3].map(function (s) { return el('team-set-' + s).hidden ? '' : [1, 2].filter(function (k) { return el('team-' + s + '-' + k).getAttribute('aria-pressed') === 'true'; }).join('') || '-'; }),
+    dimmed: [0, 1, 2, 3].map(function (s) { return [1, 2].filter(function (k) { return el('team-' + s + '-' + k).getAttribute('aria-disabled') === 'true'; }).join(''); }),
+    teamsShown: !el('teams-line').hidden, teamsLine: el('teams-line').textContent,
     invites: el('invite-list').children.length, invitesShown: !el('invites').hidden,
     links: Array.prototype.map.call(el('invite-list').querySelectorAll('input'), function (i) { return i.value; }),
     startOff: el('play').disabled, note: el('start-note').textContent, linksNote: !el('links-note').hidden });
 })()"""
 
-# The layout of the card at the width of the window: the sideways scroll, the two columns, and for every seat that is not You the line of its colour, of its five buttons and of Sit here
+# The layout of the card at the width of the window: the sideways scroll, the two columns, for every seat the place of its two team switches and for every seat that is not You the line of its colour, of its five buttons and of Sit here
 LAYOUT_JS = """(function () {
   function rect(e) { var r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; }
   var left = document.querySelector('.match-grid .left'), right = document.querySelector('.match-grid .right');
   var rows = [];
   for (var s = 0; s < 4; s++) {
     var li = document.getElementById('seat-row-' + s);
-    if (!document.getElementById('seat-you-' + s).hidden) { rows.push({ seat: s, you: true }); continue; }
+    var ts = document.getElementById('team-set-' + s), tb = ts.hidden ? [] : Array.prototype.slice.call(ts.querySelectorAll('.tbtn')).map(rect);
+    var team = tb.length ? { rect: rect(ts), buttons: tb.length, oneLine: Math.abs(tb[0].top - tb[1].top) < 6, inside: tb.every(function (r) { var l = rect(li); return r.left >= l.left - 0.5 && r.right <= l.right + 0.5; }), nm: rect(li.querySelector('.nm')) } : null;
+    if (!document.getElementById('seat-you-' + s).hidden) { rows.push({ seat: s, you: true, team: team }); continue; }
     var labels = Array.prototype.slice.call(li.querySelectorAll('.pair label')).map(rect);
     var pair = li.querySelector('.pair'), sit = document.getElementById('sit-' + s), nm = li.querySelector('.nm');
     var tops = labels.map(function (r) { return r.top; });
-    rows.push({ seat: s, you: false, oneLine: Math.max.apply(null, tops) - Math.min.apply(null, tops) < 6,       /* (the checked button is pressed in by 2 px; a second line would be 30 px lower) */ buttons: labels.length, rowRect: rect(li), pair: rect(pair), sit: rect(sit), nm: rect(nm),
+    rows.push({ seat: s, you: false, team: team, oneLine: Math.max.apply(null, tops) - Math.min.apply(null, tops) < 6,       /* (the checked button is pressed in by 2 px; a second line would be 30 px lower) */ buttons: labels.length, rowRect: rect(li), pair: rect(pair), sit: rect(sit), nm: rect(nm),
                 inside: labels.every(function (r) { var l = rect(li); return r.left >= l.left - 0.5 && r.right <= l.right + 0.5; }) && rect(sit).right <= rect(li).right + 0.5 });
   }
   return JSON.stringify({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, left: rect(left), right: rect(right), rows: rows });
@@ -319,10 +322,10 @@ def main():
                 footer: document.querySelector('footer').textContent, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
             now = card()
             check(info["title"].startswith("Ants (1998)") and info["path"] == "/", "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
-            check(info["cards"] == 1 and info["banner"] == "New match" and not info["host"] and not info["solo"] and info["selects"] == 2, "ONE card, New match (a select for the map and one for the Teams; no Host button, no second card) (%s cards, %r)" % (info["cards"], info["banner"]))
-            check(now["map"] == "treasure" and now["you"] == [0] and now["seats"] == ["friend", "friend", "friend", "friend"] and now["teams"] == "ffa", "a first visit: Treasure, You at Green, a Friend in the other seats, free for all (%s)" % now)
-            check(now["teamsShown"] and now["teamOptions"] == ["ffa", "0+1", "0+2", "0+3"] and now["invitesShown"] and now["invites"] == 3 and not now["startOff"] and now["note"].startswith("Starts when your friends are in"),
-                  "... four seats play: the Teams offer Green with each of the others; an invitation for each Friend; START is on and says that it starts when the friends are in (%r)" % now["note"])
+            check(info["cards"] == 1 and info["banner"] == "New match" and not info["host"] and not info["solo"] and info["selects"] == 1, "ONE card, New match (a select for the map; no Host button, no second card) (%s cards, %r)" % (info["cards"], info["banner"]))
+            check(now["map"] == "treasure" and now["you"] == [0] and now["seats"] == ["friend", "friend", "friend", "friend"] and now["switches"] == ["-", "-", "-", "-"], "a first visit: Treasure, You at Green, a Friend in the other seats, free for all (no switch is on) (%s)" % now)
+            check(now["teamsShown"] and now["dimmed"] == ["", "", "", ""] and now["teamsLine"] == "Free for all. For a team, put two colours on the same team." and now["invitesShown"] and now["invites"] == 3 and not now["startOff"] and now["note"].startswith("Starts when your friends are in"),
+                  "... four seats play: every seat has the two switches (also You), and the line says free for all and how to make a team; an invitation for each Friend; START is on and says that it starts when the friends are in (%r)" % now["note"])
             start = info["start"]
             check(start["text"] == "START!" and start["label"] is None and "url(" not in start["bg"] and 150 <= start["w"] <= 260 and 44 <= start["h"] <= 64,
                   "START is a real button with its own text, drawn by the browser (no picture, so no blocky edges) at a modest size: 150 - 260 x 44 - 64 px, not the 294 x 81 of the original's picture blown up (%s)" % (start,))
@@ -380,6 +383,23 @@ def main():
                 if not two and m["right"]["top"] < m["left"]["bottom"] - 1:
                     problems.append("the seats overlap the map")
                 for r in m["rows"]:
+                    t = r["team"]
+                    if t is None:
+                        problems.append("seat %d: the two team switches are not there (four seats play)" % r["seat"])
+                    else:
+                        if not (t["oneLine"] and t["buttons"] == 2):
+                            problems.append("seat %d: the team switches are not on one line" % r["seat"])
+                        if not t["inside"]:
+                            problems.append("seat %d: a team switch sticks out of its row" % r["seat"])
+                        where, nm = t["rect"], t["nm"]
+                        if width >= 701:                         # under the colour, from its left edge
+                            put = where["top"] >= nm["bottom"] - 3 and abs(where["left"] - nm["left"]) < 4
+                        elif width >= 375:                       # beside the colour (and before Sit here)
+                            put = where["left"] >= nm["right"] - 1 and abs(where["top"] - nm["top"]) < 30 and (r["you"] or r["sit"]["left"] >= where["right"] - 1)
+                        else:                                    # the narrowest phones: a line of their own under the five buttons (under the colour for You, who has none)
+                            put = where["top"] >= (nm["bottom"] if r["you"] else r["pair"]["bottom"]) - 3
+                        if not put:
+                            problems.append("seat %d: the team switches are in the wrong place" % r["seat"])
                     if r["you"]:
                         continue
                     if not (r["oneLine"] and r["buttons"] == 5):
@@ -392,7 +412,7 @@ def main():
                         problems.append("seat %d: %s" % (r["seat"], "the line is not one line" if width >= 701 else "the buttons are not under the colour"))
                 if problems:
                     wrong.append((width, problems[:3]))
-            check(not wrong, "21 widths from 320 to 1600 px: no sideways scroll, the five buttons of a seat on one line, a seat on one line from 701 px and on two under it, two columns from 1100 px (wrong: %s)" % (wrong,))
+            check(not wrong, "21 widths from 320 to 1600 px: no sideways scroll, the five buttons of a seat on one line, a seat on one line from 701 px and on two under it, the two team switches of a seat on one line (under the colour from 701 px, beside it from 375 px, under the five buttons below that), two columns from 1100 px (wrong: %s)" % (wrong,))
             for width, height, name in ((1366, 900, "home_front_1366"), (768, 1000, "home_front_768")):
                 tab.emulate(width, height, 1)
                 time.sleep(0.4)
@@ -436,13 +456,26 @@ def main():
             key("ArrowUp", 38)
             check(card()["seats"][1] == "hard", "ArrowUp is ArrowLeft (%s)" % card()["seats"])
             key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "sit-1", "Tab leaves the group for that seat's Sit here (%s)" % tab.ev("document.activeElement.id"))
+            check(tab.ev("document.activeElement.id") == "team-1-1", "Tab leaves the group for that seat's Team 1 switch (%s)" % tab.ev("document.activeElement.id"))
+            outline = json.loads(value("""(function () { var c = getComputedStyle(document.activeElement); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
+            check(outline[0] != "none" and outline[1] == "3px", "the focused switch shows a visible outline of 3 px (%s)" % outline)
+            key("Enter", 13, "\r")
+            c = card()
+            check(c["switches"] == ["-", "1", "-", "-"] and tab.ev("document.activeElement.id") == "team-1-1" and tab.ev("document.activeElement.getAttribute('aria-pressed')") == "true", "Enter on it puts Red on Team 1 (the switch says that it is on, the focus stays) (%s)" % c["switches"])
+            key("Enter", 13, "\r")
+            check(card()["switches"] == ["-", "-", "-", "-"], "... and Enter on it again takes Red off Team 1 (%s)" % card()["switches"])
+            key("Tab", 9)
+            check(tab.ev("document.activeElement.id") == "team-1-2", "Tab goes on to Team 2 of that seat (%s)" % tab.ev("document.activeElement.id"))
+            key("Tab", 9)
+            check(tab.ev("document.activeElement.id") == "sit-1", "... and then to that seat's Sit here (%s)" % tab.ev("document.activeElement.id"))
             outline = json.loads(value("""(function () { var c = getComputedStyle(document.activeElement); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
             check(outline[0] != "none" and outline[1] == "3px", "the focused Sit here shows a visible outline of 3 px (%s)" % outline)
             key("Tab", 9)
             check(tab.ev("document.activeElement.id") == "seat-2-medium", "Tab goes on to the next seat, at its checked button (%s)" % tab.ev("document.activeElement.id"))
             outline = json.loads(value("""(function () { var l = document.querySelector('label[for=seat-2-medium]'); var c = getComputedStyle(l); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
             check(outline[0] != "none" and outline[1] == "3px", "the focused button shows a visible outline of 3 px (%s)" % outline)
+            key("Tab", 9)
+            key("Tab", 9)
             key("Tab", 9)
             key("Enter", 13, "\r")
             c = card()
@@ -457,14 +490,23 @@ def main():
             real_click("label[for=seat-2-hard]")
             c = card()
             check(c["seats"][1] == "friend" and c["seats"][2] == "hard" and c["invites"] == 1, "a click on Friend (Red) and on Hard (Blue) with the pointer: the choices and one invitation (%s)" % c["seats"])
-            check(c["teamsShown"] and c["teamOptions"] == ["ffa", "0+1", "0+2", "0+3"], "Green, Red, Blue and Black play (You at Black): the Teams offer Green with each of the others (%s)" % c["teamOptions"])
+            check(c["teamsShown"] and c["switches"] == ["-", "-", "-", "-"], "Green, Red, Blue and Black play (You at Black): all four have the two switches, none is on (%s)" % c["switches"])
             tab.ev("document.getElementById('seat-0-nobody').click(); 1")
             c = card()
-            check(c["teamOptions"] == ["ffa", "1+2", "1+3", "2+3"], "Green is Nobody: three seats play (Red, Blue, Black) and the Teams offer the pairs of them (%s)" % c["teamOptions"])
-            tab.ev("var t = document.getElementById('teams'); t.value = '2+3'; t.dispatchEvent(new Event('change')); 1")
+            check(c["switches"] == ["", "-", "-", "-"], "Green is Nobody: three seats play (Red, Blue, Black) and have the switches, Green has none (%s)" % c["switches"])
+            real_click("#team-2-1")
+            real_click("#team-3-1")
             c = card()
             room_code = re.search(r"room=([^&]+)", c["links"][0]).group(1) if c["links"] else ""
-            check(c["teams"] == "2+3" and re.match(r"^demo-treasure-4p-t23-[a-z2-9]{6}$", room_code) is not None, "Blue + Black against Red is a word of the room's code (t23) (%s)" % room_code)
+            check(c["switches"] == ["", "-", "1", "1"] and c["teamsLine"] == "Teams: Blue + Black against Red." and re.match(r"^demo-treasure-4p-t23-[a-z2-9]{6}$", room_code) is not None,
+                  "a click of the pointer on Team 1 of Blue and of Black: Blue + Black against Red, and that is a word of the room's code (t23) (%s, %s)" % (c["teamsLine"], room_code))
+            check(c["dimmed"] == ["", "1", "", ""], "... Team 1 is full: it is dimmed on Red, the only seat that is not in it (%s)" % c["dimmed"])
+            real_click("#team-1-1")
+            c = card()
+            check(c["switches"] == ["", "-", "1", "1"] and c["teamsLine"].startswith("Team 1 has two colours already."), "a click on the dimmed switch changes nothing and the line under the seats says why (%s)" % c["teamsLine"])
+            look = json.loads(value("""(function () { function c(id) { var s = getComputedStyle(document.getElementById(id)); return [s.backgroundColor, s.color, s.opacity]; } return JSON.stringify([c('team-2-1'), c('team-2-2'), c('team-1-1')]); })()"""))
+            check(look[0][0] != look[1][0] and look[0][1] != look[1][1] and float(look[2][2]) < 1 and float(look[0][2]) == 1,
+                  "the switch that is on is drawn as a pressed button (another background and another colour of text than the one that is off), a dimmed one is dimmed (opacity) (%s)" % look)
             link = c["links"][0]
             q = {k: v for k, v in (kv.split("=", 1) for kv in link.split("?", 1)[1].split("&"))}
             check(q.get("seat") == "1" and q.get("fill") == "none,none,hard,none" and q.get("start") == "2" and q.get("aspect") == "16:9" and "name" not in q and "teams" not in q and not re.search(r"key|token", link, re.I),

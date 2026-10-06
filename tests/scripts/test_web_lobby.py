@@ -51,7 +51,7 @@ class TheFrontPageMarkup(PageCase):
 
     def test_the_card_has_four_seats_with_a_group_of_five_buttons_and_sit_here_the_teams_the_invitations_and_start(self):
         self.assertEqual(len(re.findall(r'<section class="card', self.page)), 1)                  # one card: the two of the earlier pages (play against the computer, play online) are gone
-        self.assertEqual(len(re.findall(r'<select ', self.page)), 2)                               # the map and the teams
+        self.assertEqual(len(re.findall(r'<select ', self.page)), 1)                               # the map's (the teams are two switches on each seat, no select)
         for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match', 'Opponents</span>'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
         self.found(self.page, r'<h2 class="banner" id="h-match">New match</h2>')
@@ -60,18 +60,22 @@ class TheFrontPageMarkup(PageCase):
         seats = self.page[self.page.index('<ul class="roster seats4" id="seats"'):]
         seats = seats[:seats.index("</ul>")]
         rows = re.findall(r'<li id="seat-row-(\d)" data-seat="(\d)"><img src="front/ant_(\w+)\.png" alt="" width="23" height="40">\s*<span class="nm"><span class="colour">(\w+)</span><span class="you" id="seat-you-(\d)" hidden> &middot; You</span><small class="seat-name" id="seat-name-(\d)" hidden></small></span>\s*'
-                          r'<fieldset class="seatset" id="seat-set-(\d)"><legend class="sr">(\w+)</legend><span class="pair">(.*?)</span></fieldset>\s*<button type="button" class="btn sm sit" id="sit-(\d)" aria-label="Sit here as (\w+)">Sit here</button></li>', seats, re.S)
+                          r'<fieldset class="seatset" id="seat-set-(\d)"><legend class="sr">(\w+)</legend><span class="pair">(.*?)</span></fieldset>\s*'
+                          r'<span class="teamset" id="team-set-(\d)" role="group" aria-label="(\w+)\'s team" hidden><button type="button" class="tbtn" id="team-(\d)-1" aria-pressed="false">Team 1</button><button type="button" class="tbtn" id="team-(\d)-2" aria-pressed="false">Team 2</button></span>\s*'
+                          r'<button type="button" class="btn sm sit" id="sit-(\d)" aria-label="Sit here as (\w+)">Sit here</button></li>', seats, re.S)
         self.assertEqual([(r[0], r[2], r[3]) for r in rows], [("0", "green", "Green"), ("1", "red", "Red"), ("2", "blue", "Blue"), ("3", "black", "Black")])
-        for n, same, _, name, you, nm, fieldset, legend, body, sit, sit_name in rows:
-            self.assertEqual({n, same, you, nm, sit, fieldset}, {n}, name)                              # (every id of a row is the row's own seat; the buttons come before Sit here, as they stand on a wide page: Tab goes the way the eye does)
-            self.assertEqual({name, sit_name, legend}, {name}, name)
+        for n, same, _, name, you, nm, fieldset, legend, body, teamset, team_name, one, two, sit, sit_name in rows:
+            self.assertEqual({n, same, you, nm, sit, fieldset, teamset, one, two}, {n}, name)           # (every id of a row is the row's own seat; the buttons come before the two team switches and Sit here, as they stand on a wide page: Tab goes the way the eye does)
+            self.assertEqual({name, sit_name, legend, team_name}, {name}, name)
             buttons = re.findall(r'<input type="radio" name="seat-%s" id="seat-%s-(\w+)" value="(\w+)"( checked)?><label for="seat-%s-\1">(\w+)</label>' % (n, n, n), body)
             self.assertEqual([(word, value, text) for word, value, _, text in buttons], [("friend", "friend", "Friend"), ("easy", "easy", "Easy"), ("medium", "medium", "Medium"), ("hard", "hard", "Hard"), ("nobody", "nobody", "Nobody")], name)
             self.assertEqual([word for word, _, checked, _ in buttons if checked], ["friend"], name + ": the markup starts as a first visit does, with a Friend (the script shows the seat of You instead)")
         # what the five words mean, said once under the rows
         self.found(self.page, r'<p class="hint" id="seats-hint">Friend: a seat for a person you invite\. Easy, Medium, Hard: a bot of that level\. Nobody: the seat stays out\.</p>')
-        # the Teams: a line that the script shows when there is a choice, and a select that it fills (the choices depend on the seats that play)
-        self.found(self.page, r'<div class="teamrow" id="teams-line" hidden>\s*<label class="lab" for="teams">Teams</label>\s*<div class="sel"><select id="teams"></select></div>\s*</div>')
+        # the Teams: the two switches of each seat (Team 1, Team 2: shown when three or four seats play, a team is two seats on the same one) and a line that says what they make, with the reason when a press is refused
+        self.found(self.page, r'<p class="hint teamrow" id="teams-line" aria-live="polite" hidden></p>')
+        self.assertNotIn('id="teams"', self.page)
+        self.assertNotIn('<label class="lab" for="teams">', self.page)
         self.found(self.page, r'\.roster li\[hidden\] \{ display: none; \}')                          # (a row is a grid: hidden still hides it)
         # the invitations: a box that the script shows for the Friend seats and fills with a row for each (no markup is made of text), a note about changed links
         self.found(self.page, r'<div class="invites" id="invites" hidden>\s*<span class="lab" id="invites-label">Invite your friends: a link for each seat</span>\s*<div id="invite-list" role="group" aria-labelledby="invites-label"></div>\s*<p class="hint" id="links-note" role="status" hidden>')
@@ -115,7 +119,7 @@ class TheFrontPageMarkup(PageCase):
         steps = self.page[self.page.index('<div class="steps">'):]
         steps = steps[:steps.index("</div>")]
         self.assertEqual(re.findall(r"<h4>(.*?)</h4>", steps), ["New match", "Have a code?", "On the map"])
-        for word in ("<b>You</b>", "<b>Sit here</b>", "<b>Friend</b>", "<b>Easy</b>", "<b>Nobody</b>", "<b>Teams</b>", "<b>START!</b>", "<b>Invite your friends</b>", "<b>Copy link</b>", "<b>Share</b>", "<b>Join</b>"):
+        for word in ("<b>You</b>", "<b>Sit here</b>", "<b>Friend</b>", "<b>Easy</b>", "<b>Nobody</b>", "<b>Team 1</b>", "<b>Team 2</b>", "<b>START!</b>", "<b>Invite your friends</b>", "<b>Copy link</b>", "<b>Share</b>", "<b>Join</b>"):
             self.assertIn(word, steps, word)
         self.assertNotIn("Play vs the computer", steps)
         self.assertIn("You, your friends and the bots are 1 to 4 players.", steps)                 # (a game for one is a game: START is never off)
@@ -125,7 +129,7 @@ class TheFrontPageMarkup(PageCase):
 
     def test_a_first_visit_is_treasure_you_at_green_a_friend_in_the_other_seats_and_the_choices_are_the_cards_own(self):
         self.assertIn("var DEFAULT_MAP_KEY = 'treasure';", self.page)
-        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], teams: 'ffa' }); }", self.page)
+        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], sides: [0, 0, 0, 0], teams: 'ffa' }); }", self.page)
         self.assertIn("var CARD_KEY = 'ants-match';", self.page)
         self.assertIn("var card = cardParse(recall(CARD_KEY)) || cardFromOld({", self.page)                  # (a state of the card's own wins; the earlier pages' keys are for a first visit)
         self.assertIn("remember(CARD_KEY, cardText(card));", self.page)
