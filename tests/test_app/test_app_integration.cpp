@@ -2076,6 +2076,96 @@ void run_suite_7_input_controls() {
         }
     } TEST_END();
 
+    TEST_CASE("7.6i A game for one (--alone): only the local player's colony exists (a seat that nobody takes has no hill, no ants and no eggs, as with --bot), in the setup screen's way, in the direct start and at any seat; without the option the other three colonies stand there") {
+        const std::string treasure = "Original-Ants/Maps/TREASURE.LVL";
+        const auto config = [&](bool alone) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            cfg.default_map_path = treasure;
+            cfg.play_at_once = true;
+            cfg.player_name = "Alice";
+            cfg.alone = alone;
+            return cfg;
+        };
+        const auto ants_of = [](Application& app, uint8_t seat) {
+            size_t n = 0;
+            for (const ants::sim::AntSnapshot& ant : app.sim().get_world_state().ants) n += ant.player_id == seat ? 1u : 0u;
+            return n;
+        };
+        const auto others_of = [&](Application& app, uint8_t own) {      // what the seats other than `own` have: ants, eggs, hills
+            size_t n = 0;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                if (seat == own) continue;
+                n += ants_of(app, seat) + app.sim().get_player_eggs(seat);
+            }
+            return n;
+        };
+        {   // without --alone (the original's single-player game): all four colonies, the other three stand still
+            Application app;
+            ASSERT_TRUE(app.init(config(false)));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().roster_mask(), 0x0F);
+            ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{4});
+            ASSERT_TRUE(others_of(app, 0) > 0);
+            app.shutdown();
+        }
+        {   // --alone, from the setup screen's START (what the web page does): the player's colony only
+            Application app;
+            ASSERT_TRUE(app.init(config(true)));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_TRUE(app.bots() == nullptr);                                                          // no bot, and no bot code
+            ASSERT_EQ(app.sim().roster_mask(), 0x01);
+            ASSERT_EQ(app.hud().roster_mask(), 0x01);                                                    // (one label, no "Red:", "Blue:", "Black:")
+            ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{1});                           // one hill
+            ASSERT_TRUE(ants_of(app, 0) > 0 && app.sim().get_player_eggs(0) > 0);                        // ... and the player's own ants and eggs
+            ASSERT_EQ(others_of(app, 0), size_t{0});                                                     // nothing of the other three
+            app.hud().dismiss_match_start_modal();
+            for (int t = 0; t < 1200; ++t) app.update_simulation(0.05f);                                 // a minute of play: the match goes on, and no colony comes up
+            ASSERT_FALSE(app.sim().is_match_over());
+            ASSERT_EQ(others_of(app, 0), size_t{0});
+            ASSERT_TRUE(ants_of(app, 0) > 0);
+            app.shutdown();
+        }
+        {   // the player's seat is not Green (--player 2): the player's colony is Blue's, and only that
+            Application app;
+            ApplicationConfig cfg = config(true);
+            cfg.local_player_id = 2;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.sim().roster_mask(), 0x04);
+            ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{1});
+            ASSERT_TRUE(ants_of(app, 2) > 0);
+            ASSERT_EQ(others_of(app, 2), size_t{0});
+            app.shutdown();
+        }
+        {   // the direct start of --map (no setup screen): the same game
+            Application app;
+            ApplicationConfig cfg = config(true);
+            cfg.start_in_map_select = false;
+            cfg.play_at_once = false;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().roster_mask(), 0x01);
+            ASSERT_EQ(app.hud().roster_mask(), 0x01);
+            ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{1});
+            ASSERT_EQ(others_of(app, 0), size_t{0});
+            for (int t = 0; t < 200; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(others_of(app, 0), size_t{0});
+            app.shutdown();
+        }
+        {   // --teams cannot be made with one seat: the game starts without teams and says why (the setup screen's status line)
+            Application app;
+            ApplicationConfig cfg = config(true);
+            cfg.teams = LocalTeams{true, 0, 1};
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().roster_mask(), 0x01);
+            ASSERT_EQ(app.sim().get_world_state().player_alliances[0], uint8_t{4});
+            ASSERT_TRUE(app.map_select().room().status.find("does not play in this match") != std::string::npos);
+            app.shutdown();
+        }
+    } TEST_END();
+
     TEST_CASE("7.7 Cursor Simulated in Screen Middle On Game Start (No Unwanted Edge Panning)") {
         Application app;
         ApplicationConfig cfg;

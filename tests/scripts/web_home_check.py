@@ -18,8 +18,8 @@ protocol is spoken with the client of web_hidden_check.py, standard library only
              --start-when 1, your name and the shape; the match starts without a START of the player's after the quick help closes (the "Get ready" dialog), the server's status lists the three bots
              (Bot (Medium), seats 1 - 3) and the player, and the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first (a room is joined) and, with Yes,
              goes back to the front page in the same tab, which remembers its choices;
-  * solo     START with every other seat Nobody takes THIS tab to the game page of a game on this computer, the original's single player (the map and the name, no room, no bot): the match runs
-             with its one colony (a room of the server needs two people), at Green whatever seat was You;
+  * solo     START with every other seat Nobody takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
+             with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs (a room of the server needs two people), at Green whatever seat was You;
   * friend   two people, each a browser of their own: the host sits at Blue, a Friend at Black, nobody else; START takes the host to the room and the room WAITS (the server's status: waiting, one
              player); the friend opens the invitation link (asked for a name first), joins the seat that the link names, and the match starts by itself, with no START pressed after that, for both;
              the server's status lists both seats and the empty ones, no START of a game that does not lead was heard, and the two games' state hashes agree;
@@ -589,14 +589,17 @@ def main():
                 check(pages() == before, "no new tab or window was opened (%d pages before and after)" % before)
                 a = json.loads(tab.ev("JSON.stringify({args: ANTS_ARGS})"))
                 given = [x for x in a["args"] if x != "./this.program"]
-                check("--map" in given and "--play" in given and "--bot" not in given and "--join-url" not in given and "--room" not in given and "--teams" not in given and given[given.index("--name") + 1:][:1] == ["Bob"],
-                      "the game's arguments are a game on this computer with no bot: --map, --play and the name, no --bot, no room, no --teams (%s)" % given)
+                check("--map" in given and "--play" in given and "--alone" in given and "--bot" not in given and "--join-url" not in given and "--room" not in given and "--teams" not in given and given[given.index("--name") + 1:][:1] == ["Bob"],
+                      "the game's arguments are a game for one on this computer: --map, --play, --alone and the name, no --bot, no room, no --teams (%s)" % given)
                 check(not tab.ev("document.getElementById('name-step') && !document.getElementById('name-step').hidden"), "the game does not ask for a name (the front page chose it)")
                 started = start_by_enter()
                 check(started, "the match starts once the quick help is closed (Enter), with the \"Get ready\" dialog, which closes by itself")
                 if started:
                     time.sleep(3.0)
                     check(tab.ev("Module._ants_match_running()") == 1, "... and goes on with its one colony (the match does not end at once)")
+                    seats = [tab.ev("Module._ants_probe(%d)" % n) for n in (20, 21, 22, 23, 24)]
+                    check(seats[0] == 1 and seats[1] > 0 and seats[2:] == [0, 0, 0],
+                          "... and only Green's colony is there: the roster is Green alone (1) and Green has ants, while Red, Blue and Black have none (roster %s, ants of Green, Red, Blue, Black %s)" % (seats[0], seats[1:]))
                     check(not any("out of sync" in d for d in dialogs), "no dialog said that the game was out of sync")
                     shot("home_solo_running")
             else:

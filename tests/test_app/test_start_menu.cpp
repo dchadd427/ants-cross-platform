@@ -2163,6 +2163,35 @@ int main(int argc, char* argv[]) {
 #endif
     } TEST_END();
 
+    TEST_CASE("M9.3b Command line: --alone is a game for one: off by default (a game of this machine without --bot plays all four colonies), a mode (no start menu) that --play and --map leave as they are, and it is refused with --bot, in either order, with the reason") {
+        const auto parse = [](std::vector<std::string> args) {
+            std::vector<std::string> full = {"ants"};
+            full.insert(full.end(), args.begin(), args.end());
+            std::vector<char*> arg_ptrs;
+            for (std::string& a : full) arg_ptrs.push_back(a.data());
+            arg_ptrs.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(full.size()), arg_ptrs.data());
+        };
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        ASSERT_FALSE(parse({}).alone);
+        ASSERT_FALSE(parse({"--map", tiny, "--play"}).alone);                                 // (the original's single player: no option, no change)
+        ApplicationConfig c = parse({"--map", tiny, "--play", "--alone", "--name", "Bob"});
+        ASSERT_TRUE(c.alone && c.play_at_once && c.bots.empty() && c.startup_error.empty());
+        ASSERT_TRUE(c.player_name == "Bob" && c.default_map_path == tiny && c.start_in_map_select);
+        ASSERT_TRUE(c.net_role == ApplicationConfig::NetRole::None);
+#if !defined(__EMSCRIPTEN__)
+        ASSERT_FALSE(c.start_menu);                                                            // --alone chooses the match's seats: no start menu in front of it
+#endif
+        c = parse({"--alone"});
+        ASSERT_TRUE(c.alone && c.startup_error.empty());
+        c = parse({"--alone", "--bot", "1:easy"});
+        ASSERT_EQ(c.startup_error, std::string("--alone cannot be used with --bot: a game for one has no other player."));
+        c = parse({"--bot", "1:easy", "--alone"});
+        ASSERT_EQ(c.startup_error, std::string("--alone cannot be used with --bot: a game for one has no other player."));
+        c = parse({"--bot", "9", "--alone"});
+        ASSERT_TRUE(c.startup_error.find("--bot 9") == 0);                                     // (the first mistake is the one that is told)
+    } TEST_END();
+
     TEST_CASE("M9.2 Command line: --server is read as HOST[:PORT] (it overrides the settings key and the default); a bad one is a start error with the reason and the text; a missing value too; the rig of start_game.sh shows no menu") {
         const auto parse = [](std::vector<std::string> args) {
             std::vector<std::string> full = {"ants"};

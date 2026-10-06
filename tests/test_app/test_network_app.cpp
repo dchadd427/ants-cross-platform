@@ -910,6 +910,27 @@ void run_bot_tests() {
         ASSERT_TRUE(app.bots() == nullptr);
     } TEST_END();
 
+    TEST_CASE("AI6.11b --alone Does Nothing In A Room: A Host With The Option Plays The Seats Of Its Room (Two People: Seats 0 And 1), And The Guest Plays The Same Game; The Option Is For A Game Of One Machine") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.alone = true;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active() && app.net()->is_host());
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start(); }, 8000));
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+        ASSERT_EQ(bob.sim.roster_mask(), 0x03);
+        ASSERT_TRUE(app.bots() == nullptr);
+    } TEST_END();
+
     TEST_CASE("AI6.6 Room With A Bot: The Host's Setup Screen Shows The Bot, Fog Is Refused, START Runs The Bot On The Host's Machine, The Guest Stays Bit-Identical Without Any Bot Code") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;

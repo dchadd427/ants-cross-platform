@@ -166,7 +166,7 @@ try {
     const local = (search, remembered) => P.localArguments(search, remembered).args;
     same('the whole of Play: the map, the setup screen\'s own start, the bots of the other three bases, the name', local('?map=treasure&bots=medium&name=Bob&aspect=16:9'),
          ['--map', 'Original-Ants/Maps/TREASURE.LVL', '--play', ...bots('medium'), '--name', 'Bob']);
-    same('alone (no bots): the map, the start and the name; no --bot at all (the original\'s single player)', local('?map=islands&name=Bob'), ['--map', 'Original-Ants/Maps/ISLANDS.LVL', '--play', '--name', 'Bob']);
+    same('alone (no bots): the map, the start, --alone (a game for one: no colony but the player\'s) and the name; no --bot at all', local('?map=islands&name=Bob'), ['--map', 'Original-Ants/Maps/ISLANDS.LVL', '--play', '--alone', '--name', 'Bob']);
     for (const [key, file] of Object.entries(FILES)) {
         same('the map ' + key + ' is ' + file, local('?map=' + key).slice(0, 3), ['--map', 'Original-Ants/Maps/' + file, '--play']);
         check('... and that file is in the repository (the game will find it in its data)', fs.existsSync(path.join(repo, 'Original-Ants', 'Maps', file)), file);
@@ -180,7 +180,7 @@ try {
     const botArgs = (levels) => levels.flatMap((l, i) => (l ? ['--bot', (i + 1) + ':' + l] : []));
     for (const [text, levels] of [['easy,medium,hard', ['easy', 'medium', 'hard']], ['hard,none,easy', ['hard', '', 'easy']], ['none,none,hard', ['', '', 'hard']], ['none,easy,none', ['', 'easy', '']], ['EASY,Medium,HARD', ['easy', 'medium', 'hard']],
                                   ['medium,medium,medium', ['medium', 'medium', 'medium']], ['None,NONE,none', ['', '', '']], ['easy,none,none', ['easy', '', '']]]) {
-        same('bots=' + text + ': each base has its own bot (seat 1 Red, 2 Blue, 3 Black), and no --bot for a none', local('?map=small&bots=' + text).slice(3), botArgs(levels));
+        same('bots=' + text + ': each base has its own bot (seat 1 Red, 2 Blue, 3 Black), and no --bot for a none (all none: a game for one)', local('?map=small&bots=' + text).slice(3), levels.some(Boolean) ? botArgs(levels) : ['--alone']);
     }
     same('three words and no map: the setup screen with those bots', local('?bots=easy,none,hard'), botArgs(['easy', '', 'hard']));
     same('what the page keeps of the bots, for whoever reads it: one word when all three are alike, else the three words, empty for none',
@@ -188,7 +188,7 @@ try {
     // all or nothing: a text that is not one level word or exactly three words of the four is no bots at all (not the words that happen to be right)
     for (const bad of ['easy,medium', 'easy,medium,hard,easy', 'easy,,hard', ',,', ',easy,medium', 'easy,medium,', 'easy,extreme,hard', 'easy, medium,hard', 'easy,medium ,hard', 'easy;medium;hard', 'easy|medium|hard', 'easy medium hard', 'easy,medium,hard\n',
                       'none', 'none,none', 'none,easy', 'easy,hard,constructor', 'easy,medium,__proto__', 'easy,medium,hard,', 'EASY,MEDIUM,HARD,', ',', 'easy,medium,hard,none', '--bot 1:easy', 'easy,medium,hard --name x']) {
-        same('bots=' + JSON.stringify(bad) + ' is no bots at all', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play']);
+        same('bots=' + JSON.stringify(bad) + ' is no bots at all: a game for one', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play', '--alone']);
     }
 
     // the teams: ffa (the game's default) says nothing; 0+N says --teams 0+N when seat N has a bot (the + comes as a blank unless it is %2B); anything else is ignored
@@ -199,7 +199,7 @@ try {
     same('what the page keeps of the teams', ['?bots=easy,medium,hard&teams=0%2B2', '?bots=easy,medium,hard&teams=0+3', '?bots=easy,medium,hard&teams=ffa', '?bots=easy,medium,none&teams=0%2B3', '?teams=0%2B1'].map((t) => P.localArguments(t, '').teams), ['0+2', '0+3', '', '', '']);
     for (const text of ['ffa', 'FFA', 'Ffa']) same('teams=' + text + ' is free for all: no --teams', local('?map=small&bots=easy,medium,hard&teams=' + text).slice(3), botArgs(['easy', 'medium', 'hard']));
     same('teams for a seat with no bot is ignored (the game would be told about a seat that is empty)', [local('?map=small&bots=easy,medium,none&teams=0%2B3').slice(3), local('?map=small&bots=none,none,hard&teams=0%2B1').slice(3)], [botArgs(['easy', 'medium', '']), botArgs(['', '', 'hard'])]);
-    same('teams with no bots at all (or with bots that are no bots) is ignored', [local('?map=small&teams=0%2B1').slice(3), local('?map=small&bots=junk&teams=0%2B1').slice(3), local('?map=small&bots=easy,medium&teams=0%2B1').slice(3)], [[], [], []]);
+    same('teams with no bots at all (or with bots that are no bots) is ignored: a game for one, no --teams', [local('?map=small&teams=0%2B1').slice(3), local('?map=small&bots=junk&teams=0%2B1').slice(3), local('?map=small&bots=easy,medium&teams=0%2B1').slice(3)], [['--alone'], ['--alone'], ['--alone']]);
     for (const bad of ['', '0', '0+', '+1', '0+0', '0+4', '0+9', '1+2', '2+3', '1+0', '00+1', '0+11', '0++1', '0+1+2', ' 0+1', '0+1 ', '0 +1', '0+ 1', '0\t1', '0+1\n', '0+1\n--name x', '0+1;ls', '0+1&teams=ffa', 'a+b', '0+one', '0+\u0967', 'constructor', '__proto__', 'none', 'true']) {
         same('teams=' + JSON.stringify(bad.slice(0, 20)) + ' is no team: no --teams', local('?map=small&bots=easy,medium,hard&teams=' + encodeURIComponent(bad)).slice(3), botArgs(['easy', 'medium', 'hard']));
     }
@@ -210,7 +210,7 @@ try {
                       'valueOf', 'treasure\n--name x', 'treаsure', 'treasure'.repeat(500), '0', 'Original-Ants/Maps/TREASURE.LVL', '/etc/passwd', 'http://evil/x', 'null', 'undefined'];
     for (const bad of NOT_MAPS) same('a map "' + bad.slice(0, 24) + '" is no map: no --map, no --play', local('?map=' + encodeURIComponent(bad)), []);
     const NOT_LEVELS = ['', 'none', 'extreme', 'medium ', ' medium', 'medium\n', 'medium\n--name x', 'easy,hard', 'medium;--map x', 'medium --name x', 'mediu', 'mediumm', 'constructor', '__proto__', '1', '0', 'true', 'medium'.repeat(300)];
-    for (const bad of NOT_LEVELS) same('a level "' + bad.slice(0, 24).replace(/\n/g, '\\n') + '" is no level: no --bot', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play']);
+    for (const bad of NOT_LEVELS) same('a level "' + bad.slice(0, 24).replace(/\n/g, '\\n') + '" is no level: no --bot, a game for one', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play', '--alone']);
     same('a repeated map parameter: the first one', local('?map=tiny&map=small')[1], 'Original-Ants/Maps/TINY.LVL');
     same('a map that is no text at all (an array in the query) is nothing', local('?map[]=tiny'), []);
     same('an address with no local parameter at all: nothing is given to the game (today\'s front page: the setup screen), whatever the browser remembered', [local('', 'Bob'), local('?aspect=4:3', 'Bob'), local('?x=1&y=2', 'Bob')], [[], [], []]);
@@ -220,7 +220,7 @@ try {
     same('the name of the address', local('?map=tiny&name=Bob').slice(-2), ['--name', 'Bob']);
     same('the name is cut like the game\'s own: printable ASCII only, the blanks at both ends gone, 32 characters at most', [local('?map=tiny&name=' + encodeURIComponent('  Zoë Ann  ')).slice(-2), local('?map=tiny&name=' + 'x'.repeat(40)).slice(-2), local('?map=tiny&name=' + encodeURIComponent('a\tb\nc')).slice(-2)],
          [['--name', 'Zo Ann'], ['--name', 'x'.repeat(32)], ['--name', 'abc']]);
-    same('a name with other characters than ASCII only is cleaned, and one of nothing but those is none', [local('?map=tiny&name=' + encodeURIComponent('名前')), local('?map=tiny&name=' + encodeURIComponent('   '))], [['--map', 'Original-Ants/Maps/TINY.LVL', '--play'], ['--map', 'Original-Ants/Maps/TINY.LVL', '--play']]);
+    same('a name with other characters than ASCII only is cleaned, and one of nothing but those is none', [local('?map=tiny&name=' + encodeURIComponent('名前')), local('?map=tiny&name=' + encodeURIComponent('   '))], [['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'], ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone']]);
     same('with no name in the address the name that this browser remembered is used (a reload keeps it: the page strips the name from its address bar)', local('?map=tiny&bots=easy', 'Maya').slice(-2), ['--name', 'Maya']);
     same('the address\'s name beats the remembered one, an empty address name (a name that was chosen: none) beats it too', [local('?map=tiny&name=Bob', 'Maya').slice(-2), local('?map=tiny&name=', 'Maya').indexOf('--name')], [['--name', 'Bob'], -1]);
     same('a remembered name is cleaned the same way', local('?map=tiny', 'Mäya   ').slice(-2), ['--name', 'Mya']);
@@ -237,7 +237,7 @@ try {
                       'easy,none,hard', 'none,medium,none', 'None,NONE,Easy', 'easy,medium', ',,', '0+1', '0 2', '0+3', '0+9', 'ffa', '--teams', 'none'];
         let seed = 7;
         const rnd = (n) => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) % n; };       // (xorshift32: the product of the old multiplier lost its low bits in a double, and the table was hardly visited)
-        const allowed = new Set(['--map', '--play', '--bot', '--teams', '--name', ...Object.values(FILES).map((f) => 'Original-Ants/Maps/' + f), '1:easy', '2:easy', '3:easy', '1:medium', '2:medium', '3:medium', '1:hard', '2:hard', '3:hard', '0+1', '0+2', '0+3']);
+        const allowed = new Set(['--map', '--play', '--alone', '--bot', '--teams', '--name', ...Object.values(FILES).map((f) => 'Original-Ants/Maps/' + f), '1:easy', '2:easy', '3:easy', '1:medium', '2:medium', '3:medium', '1:hard', '2:hard', '3:hard', '0+1', '0+2', '0+3']);
         for (let i = 0; i < 20000; i++) {
             const parts = [];
             for (const key of ['map', 'bots', 'teams', 'name', 'join', 'room', 'fill', 'x']) if (rnd(3) !== 0) parts.push(key + '=' + encodeURIComponent(pool[rnd(pool.length)] + (rnd(4) === 0 ? pool[rnd(pool.length)] : '')));
@@ -251,14 +251,19 @@ try {
             // the rules between the arguments: a seat has at most one bot, in the order of the seats; --teams comes once, with a seat that has a bot
             const seats = [];
             const teams = [];
+            let alones = 0;
+            let mapped = false;
             for (let k = 0; k < got.length; k++) {
                 if (got[k] === '--name') k++;                                                  // (a name is whatever the rules above allow, even a word that looks like a flag)
                 else if (got[k] === '--bot') seats.push(Number(got[++k][0]));
                 else if (got[k] === '--teams') teams.push(got[++k]);
+                else if (got[k] === '--alone') alones++;
+                else if (got[k] === '--map') mapped = true;
             }
             const ordered = seats.every((n, k) => k === 0 || n > seats[k - 1]);
             const teamsOk = teams.length === 0 || (teams.length === 1 && /^0\+[1-3]$/.test(teams[0]) && seats.indexOf(Number(teams[0][2])) !== -1);
-            if (!ordered || !teamsOk) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(got); }
+            const aloneOk = alones === (mapped && seats.length === 0 ? 1 : 0);                 // a game for one is a game of a map that has no bot, and only that
+            if (!ordered || !teamsOk || !aloneOk) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(got); }
             if (teams.length) teamed++;
             if (seats.length && seats.length < 3 || (seats.length === 3 && new Set(got.filter((a) => /^\d:/.test(a)).map((a) => a.slice(2))).size > 1)) listed++;
         }
@@ -279,7 +284,7 @@ try {
                     for (const shape of ['16:9', '4:3']) {
                         const query = L.localGameQuery(m.key, level, name, shape);
                         const args = local(query);
-                        const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...(level ? bots(level) : []), '--name', name || 'Player'];
+                        const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...(level ? bots(level) : ['--alone']), '--name', name || 'Player'];
                         if (JSON.stringify(args) !== JSON.stringify(want)) { wrong++; if (!sample) sample = query + ' -> ' + JSON.stringify(args); }
                         if (new URLSearchParams(query).get('aspect') !== shape) { wrong++; if (!sample) sample = query; }
                     }
@@ -300,7 +305,7 @@ try {
                     for (const shape of ['16:9', '4:3']) {
                         const query = L.localGameQuery(m.key, levels, name, shape);
                         const args = local(query);
-                        const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...botArgs(levels), '--name', name || 'Player'];
+                        const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...(levels.some(Boolean) ? botArgs(levels) : ['--alone']), '--name', name || 'Player'];
                         made++;
                         if (JSON.stringify(args) !== JSON.stringify(want)) { wrong++; if (!sample) sample = query + ' -> ' + JSON.stringify(args); }
                         if (new URLSearchParams(query).get('aspect') !== shape) { wrong++; if (!sample) sample = query; }

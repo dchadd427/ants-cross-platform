@@ -411,8 +411,12 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
             cfg.play_at_once = true;
             mode_given = true;
+        } else if (std::strcmp(argv[i], "--alone") == 0) {                     // a game for one: only the local player's seat plays (ApplicationConfig::alone)
+            cfg.alone = true;
+            mode_given = true;
         }
     }
+    if (cfg.alone && !cfg.bots.empty() && cfg.startup_error.empty()) cfg.startup_error = "--alone cannot be used with --bot: a game for one has no other player.";
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
 #if !defined(__EMSCRIPTEN__)
     if (menu_forced) {
@@ -448,7 +452,8 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
     const bool local_bots = !config_.bots.empty() && config_.net_role == ApplicationConfig::NetRole::None;
-    local_roster_ = local_bots ? bot_roster(own_seat) : uint8_t{0x0F};
+    const bool local_seats = local_bots || game_for_one();                       // the seats were chosen: you and the bots, or you alone (--alone); every other seat has no colony
+    local_roster_ = local_seats ? bot_roster(own_seat) : uint8_t{0x0F};
 
     // 1. Initialize SDL2
     uint32_t sdl_flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER;
@@ -499,9 +504,9 @@ bool Application::init(const ApplicationConfig& config) {
         }
     }
 
-    // 4. Initialize Simulation Engine. A local game that starts at once with bots plays the seats that are taken (you and the bots): a team nobody plays has no hill
+    // 4. Initialize Simulation Engine. A local game that starts at once with bots (or --alone) plays the seats that are taken (you and the bots): a team nobody plays has no hill
     // and no ants (the setup screen's game does the same in start_game)
-    if (local_bots && !config_.start_in_map_select) {
+    if (local_seats && !config_.start_in_map_select) {
         if (local_roster_ != 0x0F) current_level_ = current_level_.for_roster(local_roster_);
         sim_.init(current_level_, config_.random_seed, local_roster_);
     } else {
@@ -719,7 +724,7 @@ bool Application::init(const ApplicationConfig& config) {
         sync_room_view();
     } else {
         // the names of a local game (the local player's own name too); a bot is called "Bot (Medium)" unless -N / --team-name says otherwise
-        apply_team_names(local_bots ? local_team_names() : config_.team_names, local_bots && !config_.start_in_map_select ? local_roster_ : uint8_t{0x0F});
+        apply_team_names(local_bots ? local_team_names() : config_.team_names, local_seats && !config_.start_in_map_select ? local_roster_ : uint8_t{0x0F});
     }
 
     // The desktop start menu: part of this run when the config asks for it and nothing starts a match or a room at once (never in the web build)
@@ -776,10 +781,10 @@ bool Application::init(const ApplicationConfig& config) {
             scorecard_.update(0.25f);                                // the preview shows the rows, not the waiting label
         }
         form_start_teams();                                          // --teams: the teams are made before the first tick
-        if (local_bots) {                                            // --map with --bot: the game is running already, the bots join it
+        if (local_seats) {                                           // --map with --bot or --alone: the game is running already, the bots (if any) join it
             hud_.set_roster_mask(local_roster_);                     // (the bots are named: every taken seat has its label and its row)
             scorecard_.set_shown_teams(local_roster_);
-            start_local_bots(config_.random_seed);
+            start_local_bots(config_.random_seed);                   // (nothing without bots)
         }
     } else {
         if (!config_.skip_intro && !config_.headless) {
@@ -1079,6 +1084,9 @@ bool Application::start_game(const std::string& map_path) {
         }
         roster = bot_roster(own);
         local_roster_ = roster;
+    } else if (game_for_one()) {                                      // --alone: no other seat plays, so no other colony has a hill, ants or eggs
+        roster = bot_roster(local_player_id_ < 4 ? local_player_id_ : uint8_t{0});
+        local_roster_ = roster;
     }
     if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled())) return false;
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
@@ -1214,6 +1222,10 @@ std::string Application::bot_setup_problem(uint8_t own_seat, bool fog) const {
     info.human_mask = seat_bit(own_seat);
     info.roster = bot_roster(own_seat);
     return ai::check_setup(info);
+}
+
+bool Application::game_for_one() const {
+    return config_.alone && config_.net_role == ApplicationConfig::NetRole::None;
 }
 
 uint8_t Application::bot_roster(uint8_t own_seat) const {
@@ -1634,6 +1646,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
 // 15: reads 0 and starts again). The lines that the way-back overlay shows (the page cannot read the canvas; tests/scripts/web_rejoin_check.py): 16: how many lines there are now (0: none); 10000 + 1000 * line + index:
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
+// The seats of the match, for the page's browser check (tests/scripts/web_home_check.py): 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
+// 21 - 24: the ants of seat 0 - 3 that are alive now (-1 outside a match).
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // Anything else, or no game: -1.
@@ -1679,6 +1693,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             g_frame_work_max_ms = 0.0;
             g_frame_work_frames = 0;
             return 0;
+        case 20: return g_web_app->match_running() ? static_cast<int>(g_web_app->sim().roster_mask()) : -1;
+        case 21: case 22: case 23: case 24: {
+            if (!g_web_app->match_running()) return -1;
+            int alive = 0;
+            for (const ants::sim::AntSnapshot& ant : g_web_app->sim().get_world_state().ants) alive += ant.player_id == what - 21 ? 1 : 0;
+            return alive;
+        }
         case 30: return static_cast<int>(g_web_app->touch().stats().taps);
         case 31: return static_cast<int>(g_web_app->touch().stats().holds);
         case 32: return static_cast<int>(g_web_app->touch().stats().drags);
