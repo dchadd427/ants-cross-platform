@@ -223,8 +223,7 @@ void TcpConnection::pump() {
         state_ = State::Open;
     }
     if (state_ != State::Open) return;
-    // A link that the peer reset still holds what the peer sent before it: a failed write or read is only noted, the bytes that are there are read and parsed, and then the connection fails (a Leave
-    // sent just before a quit during a catch-up used to be lost here, and the server held the seat of a player who had gone).
+    // A reset link still holds what the peer sent before it (Linux): a failed write or read is only noted, what is there is read and parsed, then the connection fails.
     bool reset = false;
     // write what is queued
     while (!out_.empty()) {
