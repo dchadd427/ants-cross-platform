@@ -189,7 +189,25 @@ bool HarvestTask::connected_now(const MapInfo& map, sim::TileCoord tile) const n
     return false;
 }
 
-uint8_t HarvestTask::tier_for(const TaskContext& c, const PileInfo& pile, int32_t own_cost) const {
+bool HarvestTask::held_by_army(const TaskContext& c, sim::TileCoord anchor) const {
+    if (params_.race_army_weight == 0) return false;
+    const BotView& v = c.view;
+    uint32_t enemy = 0;
+    for (const AntView& e : v.others()) {
+        if (v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) continue;
+        if (e.tile.chebyshev_dist(anchor) > 4) continue;
+        if (e.type == sim::AntType::Combat) enemy += 8u;
+        else if (e.state == sim::UnitState::Attacking) enemy += 4u;
+    }
+    if (enemy < params_.race_army_weight) return false;
+    uint32_t own = 0;                                                                        // what the seat has there already (its Combat Ants count double)
+    for (const AntView& a : v.mine()) {
+        if (a.tile.chebyshev_dist(anchor) <= 6) own += a.type == sim::AntType::Combat ? 8u : 4u;
+    }
+    return static_cast<uint64_t>(own) * 100u < static_cast<uint64_t>(enemy) * params_.race_army_percent;
+}
+
+uint8_t HarvestTask::tier_for(const TaskContext& c, const PileInfo& pile, int32_t own_cost, bool first_wins) const {
     const BotView& v = c.view;
     const uint8_t ally = v.ally();
     size_t competitors = 0;                                                          // live enemy teams that reach the pile at a comparable cost
@@ -210,6 +228,7 @@ uint8_t HarvestTask::tier_for(const TaskContext& c, const PileInfo& pile, int32_
         else if (theirs <= mine * params_.contest_high) ++competitors;
     }
     if (competitors >= 2) return static_cast<uint8_t>(PileClass::Multi);
+    if (first && first_wins) return static_cast<uint8_t>(PileClass::Hopeless);          // (the race) one competitor and an enemy that is far nearer: the pile is eaten before the ants get there
     if (competitors == 1 && params_.contest_one_first) return static_cast<uint8_t>(PileClass::One);
     if (competitors == 1) return static_cast<uint8_t>(PileClass::Safe);
     if (first) return static_cast<uint8_t>(PileClass::Hopeless);
@@ -244,6 +263,7 @@ void HarvestTask::step(TaskContext& c) {
         start_ants_known_ = true;
     }
     const uint32_t opening_ants = start_ants_ >= params_.contest_opening_min_ants ? params_.contest_opening_ants : 0u;
+    const bool race_on = params_.race && start_ants_ >= params_.contest_opening_min_ants && (params_.race_ticks == 0 || now < params_.race_ticks);         // a team that cannot spare an ant for a trip across the map has no race (TINY has 3 ants, SMALL 4)
     const auto in_pool_type = [&](sim::AntType type, sim::AntType def) { return type == def || ((params_.extra_types >> static_cast<unsigned>(type)) & 1u) != 0; };
     // The longest an order of ours can take to leave: the reaction delay plus its jitter, then the time to live in the controller's queue. A record that was never answered
     // by a fate (it cannot happen unless a bot is driven without the controller) is dropped after that, so that no ant stays out of the pool for ever.
@@ -465,7 +485,7 @@ void HarvestTask::step(TaskContext& c) {
     };
     std::vector<Candidate> cands;
     for (const PileView& p : v.piles()) {
-        if (blacklisted(p.index, now)) continue;
+        if (blacklisted(p.index, now) || closed_.count(p.index) != 0) continue;
         const PileInfo* info = c.map.pile(p.index);
         if (info == nullptr) continue;                                                      // a lunchbox, or a pile made after the start: not in the analysis
         const PileView* bite = info->bite_index == p.index ? &p : find_pile(v.piles(), info->bite_index);
@@ -495,10 +515,16 @@ void HarvestTask::step(TaskContext& c) {
         if (params_.rank_by_remaining && profile.value_aware_piles) k.rank = static_cast<int64_t>(p.value) * static_cast<int64_t>(bite->remaining) * 100000 / trip;
         k.cap = std::max<uint32_t>(1u, std::min<uint32_t>(profile.max_ants_per_pile, static_cast<uint32_t>(trip) / std::max<uint32_t>(1u, params_.gate_gap_ticks) + 2u));
         for (const auto& e : recs_) k.load += e.second.pile == p.index ? 1u : 0u;
+        const auto limit = limits_.find(p.index);
+        if (limit != limits_.end()) {                                                       // (the island task: a pile over a bridge gets so many ants and no more)
+            if (k.load >= limit->second) continue;
+            k.cap = std::min<uint32_t>(k.cap, limit->second);
+            k.limit = limit->second;
+        }
         k.bite = info->bite_index;
         k.units = bite->remaining;
         k.shut_at_start = shut;
-        if (params_.contest_aware || params_.contest_reactive || opening_ants > 0) {
+        if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on)) {
             const uint8_t cls = tier_for(c, *info, ap.cost);
             const uint8_t safe = static_cast<uint8_t>(PileClass::Safe);
             const uint8_t multi = static_cast<uint8_t>(PileClass::Multi);
@@ -518,15 +544,24 @@ void HarvestTask::step(TaskContext& c) {
                 k.tier = safe;
             }
         }
+        if (race_on) {
+            const uint8_t cls = tier_for(c, *info, ap.cost, true);
+            k.cls = cls;
+            k.race = (cls == static_cast<uint8_t>(PileClass::Multi) || (params_.race_one && cls == static_cast<uint8_t>(PileClass::One))) && !held_by_army(c, info->anchor);
+            if (k.race && params_.race_ants > 0) k.cap = std::max<uint32_t>(1u, std::min<uint32_t>(k.cap, params_.race_ants));
+        }
         cands.push_back(k);
     }
     if (cands.empty()) {
         unplaced_ = pool.size();
         return;
     }
-    if (params_.contest_aware || params_.contest_reactive || opening_ants > 0) {
+    if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on)) {
         tiers_.clear();
         for (const Candidate& k : cands) tiers_[k.pile] = k.tier;
+    } else if (race_on) {
+        tiers_.clear();
+        for (const Candidate& k : cands) tiers_[k.pile] = k.race ? k.cls : static_cast<uint8_t>(PileClass::Safe);     // (the class of a pile that is a race now; the others read as Safe)
     }
     std::stable_sort(cands.begin(), cands.end(), [](const Candidate& x, const Candidate& y) { return x.tier != y.tier ? x.tier < y.tier : x.rank > y.rank; });     // ties: the lower pile index (the view's order)
 
@@ -534,6 +569,28 @@ void HarvestTask::step(TaskContext& c) {
     const int32_t hill_component = c.map.hill_component(c.seat);
     std::vector<std::vector<uint32_t>> groups(cands.size());
     size_t new_this_look = 0;
+    // The race: the gate is full when the ants at work deliver one deposit per race_gap_ticks; the ants after that are surplus and take the piles where a race is open first (Multi before
+    // One, each by points per trip), then the plain order
+    std::vector<size_t> plain_order(cands.size());
+    for (size_t i = 0; i < cands.size(); ++i) plain_order[i] = i;
+    std::vector<size_t> race_order;
+    int64_t fill_micro = 0;                                                                 // deposits per tick of the ants at work, times a million
+    if (race_on) {
+        for (const size_t i : plain_order) {
+            if (cands[i].race) race_order.push_back(i);
+        }
+        std::stable_sort(race_order.begin(), race_order.end(), [&](size_t x, size_t y) { return cands[x].cls != cands[y].cls ? cands[x].cls < cands[y].cls : cands[x].rank > cands[y].rank; });
+        for (const size_t i : plain_order) {
+            if (!cands[i].race) race_order.push_back(i);
+        }
+        for (const auto& e : recs_) {
+            int32_t cost = -1;
+            if (const PileInfo* info = c.map.pile(e.second.pile); info != nullptr && info->approach[c.seat].reachable()) cost = info->approach[c.seat].cost;
+            else if (const auto rn = reach_now_.find(e.second.pile); rn != reach_now_.end()) cost = rn->second.cost;
+            const int32_t trip = MapInfo::trip_ticks_for_cost(cost);
+            fill_micro += 1000000 / std::max<int32_t>(trip > 0 ? trip : 400, 1);
+        }
+    }
     for (const AntView* a : pool) {
         if (new_this_look >= throttle_) break;                                              // the rest of the pool is ordered at the next looks
         const int32_t stands_in = standing_component(c.map, c.seat, a->tile);
@@ -550,8 +607,13 @@ void HarvestTask::step(TaskContext& c) {
         }
         size_t pick = cands.size();
         size_t best = cands.size();
-        for (size_t k = 0; k < cands.size(); ++k) {
+        uint32_t at_race = 0;                                                               // the ants that work (or are sent to) a pile where a race is open
+        for (const Candidate& k : cands) at_race += k.race ? k.load : 0u;
+        const bool surplus = race_on && (fill_micro * static_cast<int64_t>(params_.race_gap_ticks) >= 1000000 * static_cast<int64_t>(params_.race_slack_percent) / 100 || at_race < params_.race_floor);
+        const std::vector<size_t>& order = surplus ? race_order : plain_order;
+        for (const size_t k : order) {
             if (excluded(a->id, cands[k].pile, now)) continue;                              // this ant failed there lately
+            if (cands[k].load >= cands[k].limit) continue;                                  // (a limit holds for the fallback below as well)
             if (!free_now && !cands[k].shut_at_start && !pile_touches(c.map, c.seat, stands_in, *c.map.pile(cands[k].pile))) continue;
             if (best == cands.size()) best = k;
             if (cands[k].load < cands[k].cap) {
@@ -565,6 +627,7 @@ void HarvestTask::step(TaskContext& c) {
             continue;
         }
         ++new_this_look;
+        if (race_on) fill_micro += 1000000 / std::max<int32_t>(cands[pick].trip, 1);
         Rec r;
         r.pile = cands[pick].pile;
         r.decided = now;
@@ -576,7 +639,9 @@ void HarvestTask::step(TaskContext& c) {
         ++cands[pick].load;
         groups[pick].push_back(a->id);
     }
-    for (size_t k = 0; k < cands.size(); ++k) {
+    // the orders leave one by one: with the race the longest trips go first (the contested piles), then the plain order
+    for (size_t i = 0; i < cands.size(); ++i) {
+        const size_t k = race_on ? race_order[i] : i;
         if (groups[k].empty()) continue;
         c.orders.move(groups[k], cands[k].click, Priority::Normal);
         ++orders_issued_;

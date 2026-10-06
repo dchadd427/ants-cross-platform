@@ -34,6 +34,9 @@
 #include <tuple>
 
 #include "ants_ai/bot.hpp"
+#include "ants_ai/island_expedition.hpp"
+#include "ants_ai/island_ferry.hpp"
+#include "ants_ai/island_tasks.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
@@ -67,7 +70,13 @@ private:
           hatch_(kHatch, tactics_),
           gate_(kGate, gate_params(plan)),
           harass_(kHarass, tactics_),
-          sabotage_(kSabotage, tactics_) {}
+          sabotage_(kSabotage, tactics_),
+          island_(kIslands, tactics_, island_params(plan)),
+          expedition_(kExpedition, tactics_),
+          ferry_(kFerry, ferry_params(plan)) {
+        island_.attach(&harvest_);
+        expedition_.attach(&island_);
+    }
 
 public:
     const char* kind() const noexcept override { return "standard"; }
@@ -89,6 +98,11 @@ public:
     const GateTask& gate() const noexcept { return gate_; }
     const HarassTask& harass() const noexcept { return harass_; }
     const SabotageTask& sabotage() const noexcept { return sabotage_; }
+    const IslandTask& islands() const noexcept { return island_; }
+    const ExpeditionTask& expedition() const noexcept { return expedition_; }
+    /// The expedition for a lab that changes its parameters (the plan has no knob for them: AI17.8 gives it a crew larger than the tokens need, AI17.9 a short patience)
+    ExpeditionTask& expedition_for_labs() noexcept { return expedition_; }
+    const FerryTask& ferry() const noexcept { return ferry_; }
     const Tactics& tactics() const noexcept { return tactics_; }
     /// The style that the bot plays (known once start() has run; Random for a bot with a plan of its own)
     Style style() const noexcept { return style_; }
@@ -120,6 +134,9 @@ public:
     static constexpr TaskId kGate = 11;
     static constexpr TaskId kHarass = 12;
     static constexpr TaskId kSabotage = 13;
+    static constexpr TaskId kIslands = 14;
+    static constexpr TaskId kExpedition = 15;
+    static constexpr TaskId kFerry = 16;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -133,6 +150,37 @@ private:
         p.max_staged = plan.gate_max_staged;
         p.predictive = plan.gate_predictive;
         p.user_fail_limit = plan.gate_user_fails;
+        return p;
+    }
+    static IslandTask::Params island_params(const LevelPlan& plan) {
+        IslandTask::Params p;
+        p.swimmers = plan.island_swimmers;
+        p.builders = plan.island_builders;
+        p.bridge_ants = plan.island_bridge_ants;
+        p.guard = plan.island_guard;
+        // the margins grow with the latency of the level (Easy looks every 100 ticks and reacts after 60): its bridges are given up earlier and its ants kept away from them longer
+        switch (plan.level) {
+            case Level::Easy:
+                p.retire_life = 1500;
+                p.hot_life = 700;
+                p.close_margin = 400;
+                p.trigger_extra = 200;
+                p.max_bridges = 2;
+                break;
+            case Level::Medium:
+                break;
+            case Level::Hard:
+                p.retire_life = 350;
+                p.hot_life = 160;
+                p.close_margin = 100;
+                p.max_bridges = 4;
+                break;
+        }
+        return p;
+    }
+    static FerryTask::Params ferry_params(const LevelPlan& plan) {
+        FerryTask::Params p;
+        p.per_pile = plan.island_ferry_per_pile;
         return p;
     }
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
@@ -152,7 +200,17 @@ private:
         p.rank_by_remaining = plan.rank_by_remaining;
         p.contest_one_first = plan.contest_one_first;
         p.contest_reactive = plan.contest_reactive;
+        p.race = plan.race;
+        p.race_gap_ticks = plan.race_gap_ticks;
+        p.race_slack_percent = plan.race_slack_percent;
+        p.race_floor = plan.race_floor;
+        p.race_one = plan.race_one;
+        p.race_ants = plan.race_ants;
+        p.race_ticks = plan.race_ticks;
+        p.race_army_weight = plan.race_army_weight;
+        p.race_army_percent = plan.race_army_percent;
         p.contest_opening_ants = plan.contest_opening_ants;
+        p.contest_opening_ticks = plan.contest_opening_ticks;
         p.contest_opening_min_ants = plan.contest_opening_min_ants;
         return p;
     }
@@ -180,6 +238,9 @@ private:
     GateTask gate_;
     HarassTask harass_;
     SabotageTask sabotage_;
+    IslandTask island_;
+    ExpeditionTask expedition_;
+    FerryTask ferry_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);

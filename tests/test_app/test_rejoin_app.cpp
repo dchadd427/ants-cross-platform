@@ -420,11 +420,41 @@ struct World {
     void pump(float dt) {
         server.pump(now);
         if (between) between();
+        if (!deliver_room.empty()) wait_for_turns();
+        pump_clients(dt);
+    }
+    void pump_clients(float dt) {
         if (app) {
             app->pump_network(dt);
             app->update_simulation(dt);
         }
         for (auto& m : machines) m->frame(now);
+    }
+    // While `deliver_room` names a room whose match runs, a pass gives the clients frames of no length until each has been handed every turn that the room has sealed: a late kernel costs real time, not game
+    // time. A client that is not handed them within the cap ends the waiting until the next assignment (the assertions of the test say what is wrong)
+    std::string deliver_room;
+    bool turns_are_here() const {
+        const uint32_t sealed = status(deliver_room).turns;
+        const auto behind = [sealed](const NetGame* n) {
+            const net::LockstepRunner* r = n != nullptr ? n->runner() : nullptr;
+            return r != nullptr && r->next_turn_expected() < sealed;
+        };
+        if (app && behind(app->net())) return false;
+        for (const auto& m : machines) {
+            if (!m->hung && behind(&m->net)) return false;
+        }
+        return true;
+    }
+    void wait_for_turns() {
+        for (int i = 0; !turns_are_here(); ++i) {
+            if (i == 2000) {
+                deliver_room.clear();
+                return;
+            }
+            server.pump(now);
+            pump_clients(0.0f);
+            if (!turns_are_here()) std::this_thread::sleep_for(std::chrono::milliseconds(1));         // (a loopback that delivers within the pass costs no sleep)
+        }
     }
     // 10 ms of game time per step. The sockets are real and the clock is not: a loopback link delivers within the pass that wrote to it on Linux, but not on every system (a Mac's loopback is handled by a kernel
     // thread: a message can be read a pass or more later, and two messages that were sent in different passes can be read together), so a test that has to see a state between two messages holds the sender back
@@ -797,6 +827,7 @@ void run_use_tests() {
         const ApplicationConfig cfg = w.config_1to1(dir, "RA-4", "Ann");
         Application& first = w.start_app(cfg);
         Machine& bob = w.join("Bob", "RA-4");
+        w.deliver_room = "RA-4";                                                                 // (while the match runs, a late kernel costs real time, not game time: see World::deliver_room)
         ASSERT_TRUE(w.run_until([&]() { return first.state() == AppState::Playing; }, 12000));
         ASSERT_TRUE(first.hud().is_match_start_modal_active() && first.audio_mixer().active_channel_count() >= 1 && chat_has(first, "Game started!") && !first.catch_up_screen_active());      // (a match that starts: the dialog, the start sound, the start news)
         ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
@@ -805,6 +836,7 @@ void run_use_tests() {
         ASSERT_EQ(seat, uint8_t{0});
         ASSERT_TRUE(first.rejoin_store()->entries().size() == 1);
         const net::SeatKey key = first.rejoin_store()->entries()[0].key;
+        w.deliver_room.clear();                                                                  // (a game that dies is handed nothing)
         w.crash_app(dir);                                                                        // the game dies
         ASSERT_TRUE(w.run_until([&]() { return w.status("RA-4").paused; }, 3000));
         ASSERT_TRUE(w.status("RA-4").absent.size() == 1 && w.status("RA-4").absent[0].seat == seat);
@@ -837,6 +869,7 @@ void run_use_tests() {
                 blocked = poke(second, ant);
                 picture_ok = catch_up_picture(grab(second, dir / "ra41.bmp"), second.catch_up_percent(), picture_problem);
             }
+            if (began && !w.status("RA-4").paused) w.deliver_room = "RA-4";                      // (the room runs again: from here on a late kernel costs real time, not game time)
             if (began && !now.catching && !w.status("RA-4").paused) break;
         }
         ASSERT_TRUE(began && poked);
@@ -1471,6 +1504,7 @@ void run_way_back_tests() {
         // the link is cut and the network stays down for three seconds: the match is still what the screen shows, with the words of the way back over it
         app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
         ASSERT_TRUE(w.server.cut_wire(w.app_wire));
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->pause_info().reconnecting; }, 3000));      // (the machine knows of the cut when its kernel hands the close over: a moment of real time, not a number of game seconds)
         w.run(3000);
         ASSERT_TRUE(app.net()->pause_info().reconnecting);
         ASSERT_FALSE(app.catch_up_screen_active());
@@ -1912,6 +1946,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.run_until([&]() { return app.net()->phase() == NetGame::Phase::Room && app.net()->my_seat() == 0; }, 5000));
         ASSERT_TRUE(app.net()->chat("see you in the match"));                                     // (said in the waiting room: the log of the first begin has it)
         Machine& bob = w.join("Bob", "RA-9");
+        w.deliver_room = "RA-9";                                                                  // (while the match runs, a late kernel costs real time, not game time: see World::deliver_room)
         ASSERT_TRUE(w.run_until([&]() { return app.state() == AppState::Playing; }, 12000));
         ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.audio_mixer().active_channel_count() >= 1);          // (the first begin: the dialog and the start sound)
         ASSERT_TRUE(chat_has(app, "see you in the match"));
@@ -1928,6 +1963,7 @@ void run_way_back_tests() {
         // the refusal that makes the machine start from nothing: its Hello says it has turns, the server answers BadRequest, the next link goes to the real server
         w.server.script_reason = net::RejectReason::BadRequest;
         w.server.door = Server::Door::Scripted;
+        w.deliver_room.clear();                                                                   // (a game whose link is cut is handed nothing)
         ASSERT_TRUE(w.server.cut_wire(w.app_wire));
         ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 8000));
         w.server.door = Server::Door::Open;
@@ -1941,6 +1977,7 @@ void run_way_back_tests() {
             looks.push_back(now);
             reloaded = reloaded || now.phase == NetGame::Phase::Connecting || now.phase == NetGame::Phase::Loading;
             if (now.catching) last_catching_tick = now.tick;
+            if (reloaded && !w.status("RA-9").paused) w.deliver_room = "RA-9";                    // (the room runs again: from here on a late kernel costs real time, not game time)
             if (reloaded && now.phase == NetGame::Phase::Playing && !now.catching && !w.status("RA-9").paused && now.tick > last_catching_tick) break;
             if (!slow_begin && now.phase == NetGame::Phase::Loading) {            // the map is loaded and the Begin is a round trip away (here: half a second, as a Mac under load or a far server make it)
                 slow_begin = true;
