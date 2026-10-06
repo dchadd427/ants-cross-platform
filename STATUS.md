@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 19:14 PDT · current release **v0.9.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 19:34 PDT · current release **v0.9.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -11,8 +11,8 @@ _Updated 2026-10-05 19:14 PDT · current release **v0.9.1** · details: [CHANGEL
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- **Source comments cleaned** (pull request #25, comments only): thirteen comments and five test titles in the bot code say what the code does instead of whose notes a rule came from; reviewed, every finding fixed; merges in its turn
-- **Documents, scripts and test banners corrected** (pull request #24, no redeploy): 44 statements that no longer matched the game (23 files) say what the code does now; reviewed, every finding fixed; merges in its turn
+- **Source comments cleaned** (pull request #25, comments only): thirteen comments and five test titles in the bot code say what the code does instead of whose notes a rule came from; reviewed, every finding fixed; merges when its five checks are green
+- **Documents, scripts and test banners corrected** (pull request #24, no redeploy): 44 statements that no longer matched the game (23 files) say what the code does now; reviewed, every finding fixed; merges when its five checks are green
 - Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
 - Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. v0.9.0 no longer orders special actions onto an ant (-95% on Small); draft PR #16 (on main now, checks running) adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 58% on Small Hard and 34 to 45% on Treasure, scores unchanged within noise. The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
@@ -22,6 +22,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 - Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and it merges in its turn
 - **Nobody means nobody** (patch, number to come, no protocol change; PR #27): a game for one has only your colony, no hill, ants or eggs for the empty seats; built and tested here, draft PR open.
+- **Team 1 and Team 2 switches** (in PR #27 with "Nobody means nobody", patch, number to come, no protocol change): each colour on the front page's card has a Team 1 and a Team 2 switch instead of the Teams menu; built and tested here, review running.
 - **Server tests that fail now and then** (tests only, no release; PR #28): two timing checks, S3.100 on Windows and S3.32 on macOS, are being fixed so that they no longer assume a quiet machine; the draft carries extra diagnostics for now, which come out before it merges.
 
 ## On hold (not started; the owner decides when)
@@ -32,7 +33,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
-- **v0.9.1** A player who quits during a catch-up no longer leaves the match paused: the server reads the Leave that came before the reset and drops the seat (native and browser connections) (PR #22, merged 2026-10-05 19:10 PDT)
+- **v0.9.1** A player who quits during a catch-up no longer leaves the match paused: the server reads the Leave that came before the reset and drops the seat (native and browser connections) (PR #22, merged 2026-10-05 19:10 PDT, live 19:14 PDT)
 - **Browser checks without Docker** (no release; PR #13, merged 2026-10-05 19:01 PDT): a session that has no Docker can now build the web pages and run the touch checks and the other browser checks that need no game server; nothing changes for players.
 - **Windows test flake fixed** (no release; PR #20, merged 2026-10-05 18:52 PDT): the prediction CPU-budget tests no longer read the machine's clocks, so the Windows (MSVC 2022) check no longer fails now and then in test_prediction RP7.1, RP7.3, RP7.4 and test_netgame N3.30; nothing changes for players (the beta redeploys with the same version).
 - **v0.9.0** Smarter computer players: a bot races an enemy for the food that both can reach, hunts a wounded ant until it is dead, lights fire walls only where they cannot simply be put out, never clicks a special order onto an ant (far fewer "Can't go there." from the bots' own orders) and plays harder when it is behind; on ISLANDS and the lake of SMALL bots fly a crew over the water with bomb flights, bring Swimmers across and ferry the food home (four bots on ISLANDS used to score nothing, now about 1,000 Easy to 1,400 Hard points a seat) (PR #14, merged 2026-10-05 18:36 PDT, live 18:39 PDT)
