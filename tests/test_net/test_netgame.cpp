@@ -24,6 +24,7 @@
 #include <vector>
 #include "ants_test_paths.hpp"
 #include "manual_clock.hpp"
+#include "../common/ants_test_pause.hpp"
 
 using namespace ants;
 using namespace ants::net;
@@ -146,7 +147,7 @@ struct Table {
             now += 10;
             pump();
             if (each) each(now);
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
         }
     }
     bool run_until(const std::function<bool()>& cond, uint32_t max_ms) {
@@ -948,7 +949,7 @@ void run_reject_tests() {
                         replied = true;
                     }
                 }
-                std::this_thread::sleep_for(std::chrono::microseconds(300));
+                ants_test::short_pause();
             }
             ASSERT_TRUE(replied);
             ASSERT_EQ(net.phase(), NetGame::Phase::Failed);
@@ -1747,7 +1748,7 @@ void run_seat_move_tests() {
                     now += 10;
                     net.update(now);
                     if (!server) server = listener->accept();
-                    std::this_thread::sleep_for(std::chrono::microseconds(300));
+                    ants_test::short_pause();
                 }
                 return cond();
             };
