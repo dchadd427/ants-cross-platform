@@ -375,6 +375,11 @@ public:
     }
     /// The tests: something that runs inside every timed block of the prediction (Prediction::Config::work_hook)
     void set_prediction_work_hook(std::function<void()> hook) { prediction_work_hook_ = std::move(hook); }
+    /// The tests: the clocks that the prediction's timed blocks are measured with, in ns (Prediction::Config::wall_clock, cpu_clock; empty: the real ones), for the NEXT prediction
+    void set_prediction_clocks(std::function<uint64_t()> wall, std::function<uint64_t()> cpu) {
+        prediction_wall_clock_ = std::move(wall);
+        prediction_cpu_clock_ = std::move(cpu);
+    }
     static uint64_t& default_prediction_budget_ns() noexcept;
     /// True while the predicted engine is the one that the screen shows: a match is running, the prediction is on and not suspended, and at least one tick has run
     bool predicting() const noexcept { return prediction_ != nullptr && prediction_->active(); }
@@ -552,6 +557,8 @@ private:
     uint32_t prediction_budget_strikes_{Prediction::Config{}.budget_strikes};
     uint32_t prediction_cooldown_ticks_{Prediction::Config{}.cooldown_ticks};
     std::function<void()> prediction_work_hook_;
+    std::function<uint64_t()> prediction_wall_clock_;
+    std::function<uint64_t()> prediction_cpu_clock_;
 };
 
 }  // namespace ants::net

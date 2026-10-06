@@ -19,6 +19,7 @@
 #include "ants_sim/command.hpp"
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "manual_clock.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -165,8 +166,8 @@ Command random_unpredicted(Lcg& rng, uint8_t seat) {
     return make_command(CommandType::AllianceBreak, seat);
 }
 
-// Work that costs `ns` of the thread's CPU time AND of wall time: a block is charged the smaller of the two (work_cost_ns), and Windows' thread clock moves in steps of about
-// 15.6 ms, so it can read 25 ms after 10 ms of work. A clock that stands still fails the tests instead of hanging them: the spin gives up when the clock has not moved in 100 ms.
+// Work that costs at least `ns` of the thread's CPU time AND of wall time, for RP7.6, the one test on the real clocks (a block is charged the smaller of the two, and Windows' thread clock
+// moves in steps of 15.6 ms). It waits as long as it takes (a thread that was not run reads nothing meanwhile) and gives up after 10 s only, so that a stuck clock fails the test.
 void burn_cpu(uint64_t ns) {
     const uint64_t t0 = thread_cpu_ns();
     const auto wall0 = std::chrono::steady_clock::now();
@@ -174,7 +175,7 @@ void burn_cpu(uint64_t ns) {
         const uint64_t spent = thread_cpu_ns() - t0;
         const auto wall = std::chrono::steady_clock::now() - wall0;
         if (spent >= ns && wall >= std::chrono::nanoseconds(static_cast<std::chrono::nanoseconds::rep>(ns))) return;
-        if (spent == 0 && wall > std::chrono::milliseconds(100)) return;
+        if (wall > std::chrono::seconds(10)) return;
     }
 }
 
@@ -1198,6 +1199,7 @@ void run_cue_tests() {
         const Prediction::Config defaults;
         ASSERT_TRUE(defaults.budget_ns == 12ull * 1000ull * 1000ull && defaults.budget_strikes == 4 && defaults.budget_window_ticks == 200);
         ASSERT_TRUE(defaults.cooldown_ticks == 200 && defaults.cooldown_max_ticks == 3200);
+        ManualClock clock;                                                                    // (the clocks of the budget, moved by hand: a timed block costs what the hook says)
         bool slow = true;                                                                     // the machine is busy: every timed block costs 25 ms of CPU against a budget of 20 ms
         Scenario with;
         with.seed = 97;
@@ -1205,8 +1207,9 @@ void run_cue_tests() {
         with.prediction.budget_ns = 20 * kMs;
         with.prediction.budget_strikes = 4;
         with.prediction.cooldown_ticks = 30;
-        with.prediction.work_hook = [&slow]() {
-            if (slow) burn_cpu(25 * kMs);
+        clock.install(with.prediction);
+        with.prediction.work_hook = [&slow, &clock]() {
+            if (slow) clock.work(25 * kMs);
         };
         Scenario without = with;
         without.predict = false;
@@ -1225,7 +1228,7 @@ void run_cue_tests() {
             if (!was_cooling) {
                 began = a.confirmed().current_tick();
                 at_start = p.stats();
-                slow = false;                                                                 // (the load is gone: the next blocks cost what they cost)
+                slow = false;                                                                 // (the load is gone: the next blocks cost nothing)
             } else {
                 ended = a.confirmed().current_tick();
             }
@@ -1283,12 +1286,14 @@ void run_cue_tests() {
     } TEST_END();
 
     TEST_CASE("RP7.2 The Budget Runs Out In The Middle Of An Order (The Rebuild That The Order Asks For Is The Strike That Starts The Cool-Down): The Order Is Left To The Caller, Nothing Is Touched That The Prediction Has Dropped, The Match Goes On") {
+        ManualClock clock;
         Scenario sc;
         sc.seed = 98;
         sc.down_delay = 0;                                                                     // (a turn arrives in the step that seals it: the step of the test says when)
         sc.prediction.budget_ns = 1;
         sc.prediction.budget_strikes = 2;                                                      // the first tick's copy and replay is one strike; the rebuild that the order asks for is the second
-        sc.prediction.work_hook = []() { burn_cpu(kMs); };                                     // (every timed block costs more than a nanosecond: on any platform's clock)
+        clock.install(sc.prediction);
+        sc.prediction.work_hook = [&clock]() { clock.work(kMs); };                             // (every timed block costs a millisecond on the clocks of the rig, more than the nanosecond of the budget)
         sc.oracle_hashes = false;
         Rig rig(sc);
         Prediction& p = *rig.prediction();
@@ -1310,12 +1315,14 @@ void run_cue_tests() {
     } TEST_END();
 
     TEST_CASE("RP7.3 Strikes That Are Spread Out Do Not Add Up: With A Window Of Nothing Each Strike Is Forgotten At The Next Tick, So That A Prediction Whose Every Tick Is Over The Budget But Whose Ticks Come Alone Never Cools Down (The Window Counts)") {
+        ManualClock clock;
         Scenario sc;
         sc.seed = 99;
         sc.prediction.budget_ns = 1;
         sc.prediction.budget_strikes = 2;
         sc.prediction.budget_window_ticks = 0;
-        sc.prediction.work_hook = []() { burn_cpu(kMs); };
+        clock.install(sc.prediction);
+        sc.prediction.work_hook = [&clock]() { clock.work(kMs); };
         sc.oracle_hashes = false;
         Rig rig(sc);
         rig.run(60);                                                                           // (no foreign command, no order: nothing is rebuilt, one run of ticks for every tick)
@@ -1327,6 +1334,7 @@ void run_cue_tests() {
     } TEST_END();
 
     TEST_CASE("RP7.4 Every Further Cool-Down Of The Match Is Twice As Long As The One Before (cooldown_ticks, twice, four times ...) Up To cooldown_max_ticks, And The Strikes Of One Do Not Count In The Next (Between Two It Is On For The One Tick That It Takes To Collect The Strikes Again)") {
+        ManualClock clock;
         Scenario sc;
         sc.seed = 100;
         sc.oracle_hashes = false;
@@ -1334,7 +1342,8 @@ void run_cue_tests() {
         sc.prediction.budget_strikes = 2;                                                      // the copy that begins it, then the first tick: a cool-down every other tick of life
         sc.prediction.cooldown_ticks = 10;
         sc.prediction.cooldown_max_ticks = 40;
-        sc.prediction.work_hook = []() { burn_cpu(kMs); };
+        clock.install(sc.prediction);
+        sc.prediction.work_hook = [&clock]() { clock.work(kMs); };
         Rig rig(sc);
         Prediction& p = *rig.prediction();
         std::vector<uint64_t> began;                                                           // the confirmed tick at which each cool-down began and ended
@@ -1374,10 +1383,77 @@ void run_cue_tests() {
         ASSERT_EQ(first_ended - first_began, 20u);
     } TEST_END();
 
-    TEST_CASE("RP7.5 The Budget Counts The CPU Time Of The Thread, Not The Time That Went By: A Timed Block In Which The Thread Sleeps 30 ms (A Preempted Or Stalled Process Looks The Same) Is No Strike Against A Budget Of 12 ms, One In Which It Computes For 15 ms Is; The Statistics Keep The Wall Time; A Block Is Never Charged More Than Its Wall Time") {
+    TEST_CASE("RP7.5 The Budget Counts The CPU Time Of The Thread, Not The Time That Went By: A Timed Block In Which The Thread Sleeps 30 ms (A Preempted Or Stalled Process Looks The Same) Is No Strike Against A Budget Of 12 ms, One In Which It Computes For 15 ms Is; The Statistics Keep The Wall Time; A Block Is Never Charged More Than Its Wall Time; A Block That Costs Exactly The Budget Is No Strike, One Nanosecond More Is") {
         ASSERT_EQ(work_cost_ns(100, 15625000), 100u);                                          // a clock that counts in ticks may charge a short block a whole tick: the wall time is the bound
         ASSERT_EQ(work_cost_ns(30 * kMs, 0), 0u);
         ASSERT_EQ(work_cost_ns(7, 7), 7u);
+        {                                                                                      // the thread sleeps 30 ms in every block (or the process is stalled): the time goes by, the CPU time does not
+            ManualClock clock;
+            Scenario sc;
+            sc.seed = 101;
+            sc.oracle_hashes = false;
+            sc.prediction.budget_ns = 12 * kMs;
+            clock.install(sc.prediction);
+            sc.prediction.work_hook = [&clock]() { clock.wait(30 * kMs); };
+            Rig rig(sc);
+            Prediction& p = *rig.prediction();
+            rig.run(14);
+            ASSERT_TRUE(p.active() && !p.cooling_down());
+            ASSERT_TRUE(p.stats().ticks_advanced >= 8);
+            ASSERT_EQ(p.stats().over_budget, 0u);                                              // every block took 30 ms and cost nothing
+            ASSERT_EQ(p.stats().advance_ns_max, 30 * kMs);                                     // (the statistics are about the time that went by)
+        }
+        {                                                                                      // the thread computes for 15 ms in every block
+            ManualClock clock;
+            Scenario sc;
+            sc.seed = 102;
+            sc.oracle_hashes = false;
+            sc.prediction.budget_ns = 12 * kMs;
+            clock.install(sc.prediction);
+            sc.prediction.work_hook = [&clock]() { clock.work(15 * kMs); };
+            Rig rig(sc);
+            Prediction& p = *rig.prediction();
+            rig.run(8);
+            ASSERT_TRUE(p.stats().over_budget >= 4);                                           // every block cost 15 ms
+            ASSERT_TRUE(p.stats().cooldowns >= 1 && !p.active());
+        }
+        {                                                                                      // a thread clock that counts in ticks reads a whole tick (15.625 ms) after 2 ms of work
+            ManualClock clock;
+            Scenario sc;
+            sc.seed = 103;
+            sc.oracle_hashes = false;
+            sc.prediction.budget_ns = 12 * kMs;
+            clock.install(sc.prediction);
+            sc.prediction.work_hook = [&clock]() { clock.move(2 * kMs, 15625000); };
+            Rig rig(sc);
+            Prediction& p = *rig.prediction();
+            rig.run(14);
+            ASSERT_TRUE(p.active() && !p.cooling_down());
+            ASSERT_TRUE(p.stats().ticks_advanced >= 8);
+            ASSERT_EQ(p.stats().over_budget, 0u);                                              // the block is charged its 2 ms, never the tick
+            ASSERT_EQ(p.stats().advance_ns_max, 2 * kMs);
+        }
+        for (const uint64_t cost : {12 * kMs, 12 * kMs + 1}) {                                 // the edge: a block that costs exactly the budget is no strike, one that costs a nanosecond more is
+            ManualClock clock;
+            Scenario sc;
+            sc.seed = 104;
+            sc.oracle_hashes = false;
+            sc.prediction.budget_ns = 12 * kMs;
+            clock.install(sc.prediction);
+            sc.prediction.work_hook = [&clock, cost]() { clock.work(cost); };
+            Rig rig(sc);
+            Prediction& p = *rig.prediction();
+            rig.run(14);
+            if (cost == 12 * kMs) {
+                ASSERT_EQ(p.stats().over_budget, 0u);
+                ASSERT_TRUE(p.active() && !p.cooling_down());
+            } else {
+                ASSERT_TRUE(p.stats().over_budget >= 1);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("RP7.6 The Real Clocks (None Installed): The Budget Reads The Thread's CPU Clock And The Wall Clock; A Timed Block In Which The Thread Computes For 15 ms Is A Strike Against A Budget Of 12 ms On Every Platform, One In Which It Sleeps 30 ms Is None Where The Thread Clock Is Exact (Not Windows, Not The Web Build)") {
         const uint64_t t0 = thread_cpu_ns();
         burn_cpu(3 * kMs);
         const uint64_t t1 = thread_cpu_ns();
@@ -1614,6 +1690,7 @@ void run_cue_tests() {
         ASSERT_EQ(c.cooldown_ticks, 200u);
         ASSERT_EQ(c.cooldown_max_ticks, 3200u);
         ASSERT_TRUE(!c.work_hook);
+        ASSERT_TRUE(!c.wall_clock && !c.cpu_clock);                                              // (the product measures a block with the real clocks: only the tests move them)
     } TEST_END();
 
     TEST_CASE("RP8.4 The Lead That Learns And Is Biased Keeps The Prediction Derived State: 16 Random Matches (a lag that changes, bursts, orders of every kind from every seat), The Predicted Engine Equals The One A Rebuild Would Make At Every Third Frame, And It Converges") {

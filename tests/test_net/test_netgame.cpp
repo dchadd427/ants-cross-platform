@@ -23,6 +23,7 @@
 #include <thread>
 #include <vector>
 #include "ants_test_paths.hpp"
+#include "manual_clock.hpp"
 
 using namespace ants;
 using namespace ants::net;
@@ -1312,19 +1313,6 @@ void run_start_delay_tests() {
 // The prediction of one's own orders (prediction.hpp), in a match of real NetGames
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-// Work that costs `ns` of the thread's CPU time AND of wall time: a block is charged the smaller of the two (work_cost_ns), and Windows' thread clock moves in steps of about
-// 15.6 ms, so it can read 60 ms after 45 ms of work. A clock that stands still fails the test instead of hanging it: the spin gives up when the clock has not moved in 100 ms.
-void burn_cpu(uint64_t ns) {
-    const uint64_t t0 = thread_cpu_ns();
-    const auto wall0 = std::chrono::steady_clock::now();
-    for (;;) {
-        const uint64_t spent = thread_cpu_ns() - t0;
-        const auto wall = std::chrono::steady_clock::now() - wall0;
-        if (spent >= ns && wall >= std::chrono::nanoseconds(static_cast<std::chrono::nanoseconds::rep>(ns))) return;
-        if (spent == 0 && wall > std::chrono::milliseconds(100)) return;
-    }
-}
-
 // The prediction is OFF by default (opt-in): the tests of it ask for it, as the application does when it is told `--prediction on`
 void enable_prediction(Table& t) {
     for (auto& m : t.machines) m->net.set_prediction_enabled(true);
@@ -2059,7 +2047,8 @@ void run_prediction_tests() {
 
     TEST_CASE("N3.30 Prediction: A Machine Whose Prediction Costs More Than Its Budget Loses The Prediction For A While And Nothing Else (A Cool-Down: The Confirmed Engine Is Shown, Orders Go As They Did Before, The Match Runs On And Ends Identical); The Other Machine Goes On Predicting, And When The Cool-Down Is Over It Begins Again") {
         constexpr uint64_t kMs = 1000ull * 1000ull;
-        uint64_t burn = 30 * kMs;                                                                // (declared before the table: the machine's hook holds it) what every timed block costs
+        ManualClock clock;                                                                       // (declared before the table: the machine's clocks and hook hold it) the clocks of Bob's prediction
+        uint64_t burn = 30 * kMs;                                                                // what every timed block costs
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         enable_prediction(t);
@@ -2067,7 +2056,8 @@ void run_prediction_tests() {
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
         bob.net.set_prediction_budget(50 * kMs, 3, 40);                                          // three strikes of more than 50 ms of CPU, a cool-down of 40 ticks (2 s)
-        bob.net.set_prediction_work_hook([&burn]() { burn_cpu(burn); });
+        bob.net.set_prediction_clocks(clock.wall_clock(), clock.cpu_clock());                    // (a spin on the real clocks cannot cost a block what it says on every runner)
+        bob.net.set_prediction_work_hook([&burn, &clock]() { clock.work(burn); });
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(11, hash));
@@ -2077,7 +2067,7 @@ void run_prediction_tests() {
         ASSERT_EQ(bob.net.prediction()->stats().over_budget, 0u);
         burn = 60 * kMs;                                                                         // (a machine that is too slow for it)
         ASSERT_TRUE(t.run_until([&]() { return bob.net.prediction_cooling_down(); }, 2000));
-        burn = 0;                                                                                // (the load is gone: from here on its blocks cost what they cost)
+        burn = 0;                                                                                // (the load is gone: from here on its blocks cost nothing)
         ASSERT_EQ(bob.net.prediction()->stats().over_budget, 3u);                                // three strikes, as many as the machine was given
         ASSERT_FALSE(bob.net.predicting());
         ASSERT_TRUE(&bob.net.view_engine() == &bob.sim);

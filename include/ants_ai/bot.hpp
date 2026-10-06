@@ -136,7 +136,7 @@ public:
     void pick_up(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
     /// A special order (bomb, defuse, fire, extinguish, bridge, thief raid) of ONE ant: the HUD sends it for a single selected ant only
     void special(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
-    void stop(const std::vector<uint32_t>& ants);
+    void stop(const std::vector<uint32_t>& ants, Priority priority = Priority::Normal);
     void hatch();
     void invite(uint8_t other);
     void accept(uint8_t other);
