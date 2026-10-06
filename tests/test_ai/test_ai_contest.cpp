@@ -759,6 +759,18 @@ void run_contest_tests() {
             rig.run(100);
             ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 1u);
             ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 2u);
+            killed = false;                                                                                                            // (and when the last of them is lost the ring is held by nobody and nobody is called either: the hold needs escorts to hold)
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                if (!killed && a.player_id == 0 && a.raw_type == sim::AntType::Combat && tc(a.tile_x, a.tile_y).chebyshev_dist(station) <= 3) {
+                    sim.kill_unit(a.id);
+                    killed = true;
+                }
+            }
+            ASSERT_TRUE(killed);
+            rig.run(100);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts(), 0u);
+            ASSERT_EQ(rig.as<StandardBot>().sabotage().escorts_called(), 2u);
+            ASSERT_TRUE(lit(sim) >= 6);                                                                                                // (the ring still stands)
         }
         {   // (h) escorts that are not at the entrance within plan.sabotage_escort_wait end the attempt at that team for a while: the Fire Ant and the Combat Ants are the economy's again, no wall is ordered
             LevelPlan p = plan;
