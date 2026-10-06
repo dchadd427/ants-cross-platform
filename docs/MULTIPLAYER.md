@@ -156,11 +156,11 @@ The 1:1 core has no computer players: bots live in `ants_ai` only (project rule 
 
 ### What a bot sees and how the bots play
 
-A bot reads the world through `BotView` and `MapInfo`, a copy of what a player of its seat can know. Its own ants are exact; other teams' hit points, carried points, eggs and orders are not in the view at all. [`BOTS.md`](BOTS.md) "Fairness in detail" lists the few things that a bot sees and a person would have to count or guess.
+A bot reads the world through `BotView` and `MapInfo`, a copy of what a player of its seat can know. Its own ants are exact, and every ant's hit points are in the view (a number from 1 to 10, as the screen shows them); other teams' carried points, eggs and orders are not in the view at all. [`BOTS.md`](BOTS.md) "Fairness in detail" lists the few things that a bot sees and a person would have to count or guess.
 
 - **`idle`** stands still and only reads the world (the test bot).
 - **`worker`** only harvests, and never hatches, fights, raids or uses a power-up. It is the fixed yardstick that other bots are measured against.
-- **`standard`** is the bot that people meet: the worker's economy plus the tactics of its level and one of four styles (`aggressive`, `economic`, `raider`, `defensive`; a Hard bot plays only `aggressive` or `raider`, and on Easy a style only moves the numbers). A standard bot draws a style for each match from its seat's own random numbers, or you pin it (`--bot 2:hard:raider`). Its name stays "Bot (Level)".
+- **`standard`** is the bot that people meet: the worker's economy plus the tactics of its level and one of four styles (`aggressive`, `economic`, `raider`, `defensive`; a Hard bot plays only `aggressive` or `raider`, and on Easy a style only moves the numbers). Its tactics include the contest play (a race for contested food, fights for the kill, fire walls lit only where they cannot simply be put out, a harder game when it is behind) and, on ISLANDS and SMALL, the island play (a crew flown over the water by bomb flights, Swimmers that carry the food home). A standard bot draws a style for each match from its seat's own random numbers, or you pin it (`--bot 2:hard:raider`). Its name stays "Bot (Level)".
 
 What each level and style does, how every tactic was judged (the win rate and the margin against opponents that fight) and the tables of numbers: [`BOTS.md`](BOTS.md) "Difficulty levels", "The standard bot" and "Measurements".
 

@@ -29,6 +29,21 @@ Work that is not released yet is written in the same template under a heading th
 - **Nobody means nobody in a game for one:** with every other seat on **Nobody**, START! plays on this computer with only your colony on the map. Red, Blue and Black no longer have a hill, ants or eggs there (v0.8.3 gave them all three and left them standing still). A room was right already: a seat that nobody takes has no colony there. The game takes a new option for it, `--alone` ([`docs/COMMAND_LINE.md`](docs/COMMAND_LINE.md)); the desktop game without it is unchanged.
 - **A Team 1 and a Team 2 switch on each colour:** with three or four players the front page's card has no Teams drop-down menu of sentences any more; every colour that plays has two switches instead. Put two colours on the same team and they start the match allied (with four players the other two colours are the other team, with three the third colour plays alone), and a line under the colours says the plan in words. A team is two colours at most, so a third press on a full team says what to do. The room code, the invitation links and the saved choices work as before (a saved team shows as its two colours on Team 1).
 
+## v0.9.1 - 2026-10-05 - A player who quits during a catch-up no longer pauses the match
+
+**For players:**
+- **A player who quits during a catch-up no longer leaves the match paused:** the server reads the Leave that came before the reset and drops the seat. Quitting while a lot of the server's messages were still unread (the catch-up a rejoining player gets) made the connection reset, the reset lost the Leave, and the server kept the seat, so the others waited for a player who had gone.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cf4e71f...4b81a2c)
+
+## v0.9.0 - 2026-10-05 - Computer players that race, hunt and cross the water
+
+**For players:**
+- **Smarter computer players:** a bot races an enemy for the food that both can reach, hunts a wounded enemy ant until it is dead, lights fire walls at an enemy gate only where the enemy cannot simply put them out, never clicks a special order onto an ant (far fewer "Can't go there." from the bots' own orders), and plays harder when it is behind.
+- **Computer players on ISLANDS and the lake of SMALL:** they fly a crew over the water with bomb flights, bring Swimmers across and ferry the food home. On ISLANDS four bots used to score nothing; they now score about 1,000 (Easy) to 1,400 (Hard) points a seat.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/23dc663...57fa5e4), [the bots](docs/BOTS.md)
+
 ## v0.8.3 - 2026-10-05 - Friend by default, a game for one and a dirtier background
 
 **For players:**

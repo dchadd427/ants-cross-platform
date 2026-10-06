@@ -122,7 +122,8 @@ ants-cross-platform/
 │   ├── test_ai/                        # Computer players: the controller, the idle bot, bot seats in rooms, the
 │   │                                   # view, the map analysis, the match runner; the worker bot and its pinned
 │   │                                   # baselines; the standard bot (power-ups, walls, fights, raids, the gate,
-│   │                                   # styles, teams)
+│   │                                   # styles, teams, the contest play, the island play, the order of the
+│   │                                   # tasks)
 │   ├── test_ctl/                       # JSON library and control HTTP server suites
 │   ├── test_server/                    # Dedicated server suite (map store, rooms, the door, control calls, site
 │   │                                   # statistics) and the way back of the game's NetGame (test_rejoin)
@@ -181,6 +182,8 @@ ants-cross-platform/
 │   │                                   # job's file filter)
 │   ├── deploy_wait.py                  # Waits until the game server is idle (GET /busy) before the deploy job
 │   │                                   # restarts the site
+│   ├── web_without_docker.py           # The web image without Docker (Linux): the Dockerfile's commands on
+│   │                                   # this machine, the pages served with nginx, for the browser checks
 │   ├── deploy_webhook.sh               # Calls the Portainer deploy webhook without ever printing its address
 │   └── front_page_art/                 # Makes the front page's pictures in web/front/ from the game's own assets
 │                                       # (needs Pillow; a developer's tool, in no build or test)
