@@ -35,7 +35,6 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
-#include <map>
 #include <memory>
 #include <random>
 #include <sstream>
@@ -421,11 +420,42 @@ struct World {
     void pump(float dt) {
         server.pump(now);
         if (between) between();
+        if (!deliver_room.empty()) wait_for_turns();
+        pump_clients(dt);
+    }
+    void pump_clients(float dt) {
         if (app) {
             app->pump_network(dt);
             app->update_simulation(dt);
         }
         for (auto& m : machines) m->frame(now);
+    }
+    // While `deliver_room` names the room of a match that runs, a pass gives the clients frames of no length (the clock stands still) until every client has been handed every turn that the room has sealed. A loopback
+    // that delivers within the pass (Linux) needs one such frame; a kernel that holds bytes back for tens of milliseconds, which are seconds of game time on this clock, costs real time here, not a stall, a deeper
+    // jitter buffer and a place behind the others. A client that is not handed them within two seconds ends the waiting for good: the assertions of the test say what is wrong
+    std::string deliver_room;
+    bool turns_are_here() const {
+        const uint32_t sealed = status(deliver_room).turns;
+        const auto behind = [sealed](const NetGame* n) {
+            const net::LockstepRunner* r = n != nullptr ? n->runner() : nullptr;
+            return r != nullptr && r->next_turn_expected() < sealed;
+        };
+        if (app && behind(app->net())) return false;
+        for (const auto& m : machines) {
+            if (!m->hung && behind(&m->net)) return false;
+        }
+        return true;
+    }
+    void wait_for_turns() {
+        for (int i = 0; !turns_are_here(); ++i) {
+            if (i == 2000) {
+                deliver_room.clear();
+                return;
+            }
+            server.pump(now);
+            pump_clients(0.0f);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
     }
     // 10 ms of game time per step. The sockets are real and the clock is not: a loopback link delivers within the pass that wrote to it on Linux, but not on every system (a Mac's loopback is handled by a kernel
     // thread: a message can be read a pass or more later, and two messages that were sent in different passes can be read together), so a test that has to see a state between two messages holds the sender back
@@ -479,47 +509,6 @@ struct World {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         return cond();
-    }
-    // The engines `a` and `b` stand in one state: some tick has been reached by both, and at every tick that both have reached they have the same hash. They are not at one tick at one moment (a
-    // loopback that is late for one of them leaves it behind, and the jitter buffer that the lateness grew keeps it behind a while longer: at ticks 678 and 631, say, and the one that is behind runs
-    // the backlog down), so the hash of every tick that either of them reaches is kept, and a tick that the other reaches later is compared with it. Game time goes on for `max_ms`, then at the speed
-    // of real time for up to two more seconds, so that a kernel that holds turns back has time to hand them over. False: they differ at a tick (`why` says which), or no tick was reached by both
-    bool run_until_same_state(const sim::SimulationEngine& a, const sim::SimulationEngine& b, uint32_t max_ms, std::string& why) {
-        std::map<uint64_t, uint64_t> hash_a;
-        std::map<uint64_t, uint64_t> hash_b;
-        uint64_t differ_at = 0;                                                      // (the tick plus one: 0 is none)
-        const auto keep = [](std::map<uint64_t, uint64_t>& hashes, const sim::SimulationEngine& e) {
-            const uint64_t tick = e.current_tick();
-            if (hashes.find(tick) == hashes.end()) hashes[tick] = e.state_hash().total;
-        };
-        const auto step = [&]() -> bool {                                            // true: both have reached a tick, and at the ticks that both have reached they agree
-            keep(hash_a, a);
-            keep(hash_b, b);
-            bool both = false;
-            for (const uint64_t tick : {a.current_tick(), b.current_tick()}) {
-                const auto in_a = hash_a.find(tick);
-                const auto in_b = hash_b.find(tick);
-                if (in_a == hash_a.end() || in_b == hash_b.end()) continue;
-                if (in_a->second != in_b->second) differ_at = tick + 1;
-                both = true;
-            }
-            return both && differ_at == 0;
-        };
-        bool agree = step();
-        for (uint32_t elapsed = 0; elapsed < max_ms && differ_at == 0 && !agree; elapsed += 10) {
-            run(10);
-            agree = step();
-        }
-        for (int i = 0; i < 2000 && differ_at == 0 && !agree; ++i) {
-            now += 1;
-            pump(0.001f);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            agree = step();
-        }
-        why = differ_at != 0 ? "the hashes differ at tick " + std::to_string(differ_at - 1)
-                             : "no tick was reached by both: ticks " + std::to_string(hash_a.empty() ? 0 : hash_a.begin()->first) + " to " + std::to_string(a.current_tick()) + " and " +
-                                   std::to_string(hash_b.empty() ? 0 : hash_b.begin()->first) + " to " + std::to_string(b.current_tick());
-        return agree;
     }
     server::RoomStatus status(const std::string& code) const { return server.status(code, now); }
     // The match is under way on the application and on every machine given: it plays and has run ticks
@@ -839,6 +828,7 @@ void run_use_tests() {
         const ApplicationConfig cfg = w.config_1to1(dir, "RA-4", "Ann");
         Application& first = w.start_app(cfg);
         Machine& bob = w.join("Bob", "RA-4");
+        w.deliver_room = "RA-4";                                                                 // (while the match runs, a late kernel costs real time, not game time: see World::deliver_room)
         ASSERT_TRUE(w.run_until([&]() { return first.state() == AppState::Playing; }, 12000));
         ASSERT_TRUE(first.hud().is_match_start_modal_active() && first.audio_mixer().active_channel_count() >= 1 && chat_has(first, "Game started!") && !first.catch_up_screen_active());      // (a match that starts: the dialog, the start sound, the start news)
         ASSERT_TRUE(w.run_until([&]() { return w.running({&bob}); }, 12000 + kPre));
@@ -847,6 +837,7 @@ void run_use_tests() {
         ASSERT_EQ(seat, uint8_t{0});
         ASSERT_TRUE(first.rejoin_store()->entries().size() == 1);
         const net::SeatKey key = first.rejoin_store()->entries()[0].key;
+        w.deliver_room.clear();                                                                  // (a game that dies is handed nothing)
         w.crash_app(dir);                                                                        // the game dies
         ASSERT_TRUE(w.run_until([&]() { return w.status("RA-4").paused; }, 3000));
         ASSERT_TRUE(w.status("RA-4").absent.size() == 1 && w.status("RA-4").absent[0].seat == seat);
@@ -881,6 +872,7 @@ void run_use_tests() {
             }
             if (began && !now.catching && !w.status("RA-4").paused) break;
         }
+        w.deliver_room = "RA-4";                                                                 // (the match goes on)
         ASSERT_TRUE(began && poked);
         ASSERT_FALSE(blocked.options || blocked.click || blocked.wheel || blocked.text);
         if (!picture_ok) std::cout << "\n    [the catch-up screen] " << picture_problem;
@@ -916,14 +908,16 @@ void run_use_tests() {
         second.handle_key_down(key_event(SDLK_ESCAPE));                                          // (closes the options again)
         ASSERT_FALSE(chat_has(second, "Game started!"));
         w.run(3000);
-        ASSERT_TRUE(w.run_until([&]() { return second.net()->turns_executed() > sealed + 40; }, 20000));      // and it goes on (a kernel that was late with the turns hands them over in a bunch, which the runner runs down)
+        ASSERT_TRUE(second.net()->turns_executed() > sealed + 40);                               // and it goes on
         // the Welcome of the rejoin said the key again: the file has it, the same one
         ASSERT_TRUE(second.rejoin_store()->entries().size() == 1 && net::key_matches(second.rejoin_store()->entries()[0].key, key) && second.rejoin_store()->entries()[0].seat == seat);
-        // the same state as Bob's, at every tick that both have reached
-        std::string differ;
-        const bool same = w.run_until_same_state(second.sim(), bob.sim, 4000, differ);
-        if (!same) std::cout << "\n    [the state of the application and of Bob] " << differ;
-        ASSERT_TRUE(same);
+        // the same state as Bob's, at a tick that both stand at
+        bool agree = false;
+        for (int i = 0; i < 400 && !agree; ++i) {
+            if (second.sim().current_tick() == bob.sim.current_tick()) agree = second.sim().state_hash() == bob.sim.state_hash();
+            if (!agree) w.run(10);
+        }
+        ASSERT_TRUE(agree);
         ASSERT_FALSE(second.net()->desynced() || bob.net.desynced());
         ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
     } TEST_END();
@@ -1511,7 +1505,7 @@ void run_way_back_tests() {
         // the link is cut and the network stays down for three seconds: the match is still what the screen shows, with the words of the way back over it
         app.net()->set_link_maker_for_test([]() { return std::unique_ptr<net::Connection>(); });
         ASSERT_TRUE(w.server.cut_wire(w.app_wire));
-        ASSERT_TRUE(w.run_until([&]() { return app.net()->pause_info().reconnecting; }, 4000));      // (the machine sees the cut when its kernel hands the close over, which is not a number of game seconds)
+        ASSERT_TRUE(w.run_until([&]() { return app.net()->pause_info().reconnecting; }, 3000));      // (the machine knows of the cut when its kernel hands the close over: a moment of real time, not a number of game seconds)
         w.run(3000);
         ASSERT_TRUE(app.net()->pause_info().reconnecting);
         ASSERT_FALSE(app.catch_up_screen_active());
@@ -1953,6 +1947,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.run_until([&]() { return app.net()->phase() == NetGame::Phase::Room && app.net()->my_seat() == 0; }, 5000));
         ASSERT_TRUE(app.net()->chat("see you in the match"));                                     // (said in the waiting room: the log of the first begin has it)
         Machine& bob = w.join("Bob", "RA-9");
+        w.deliver_room = "RA-9";                                                                  // (while the match runs, a late kernel costs real time, not game time: see World::deliver_room)
         ASSERT_TRUE(w.run_until([&]() { return app.state() == AppState::Playing; }, 12000));
         ASSERT_TRUE(app.hud().is_match_start_modal_active() && app.audio_mixer().active_channel_count() >= 1);          // (the first begin: the dialog and the start sound)
         ASSERT_TRUE(chat_has(app, "see you in the match"));
@@ -1969,6 +1964,7 @@ void run_way_back_tests() {
         // the refusal that makes the machine start from nothing: its Hello says it has turns, the server answers BadRequest, the next link goes to the real server
         w.server.script_reason = net::RejectReason::BadRequest;
         w.server.door = Server::Door::Scripted;
+        w.deliver_room.clear();                                                                   // (a game whose link is cut is handed nothing)
         ASSERT_TRUE(w.server.cut_wire(w.app_wire));
         ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 8000));
         w.server.door = Server::Door::Open;
@@ -1991,6 +1987,7 @@ void run_way_back_tests() {
                 ASSERT_EQ(app.sim().current_tick(), tick_at_load);               // no tick of its own meanwhile: the match is the runner's (the first begin's screen was a local game's, ticking at 20 a second, and a tick here is a state that the replay does not reach: the server refused the machine)
             }
         }
+        w.deliver_room = "RA-9";                                                                  // (the match goes on)
         ASSERT_TRUE(reloaded && slow_begin);
         for (const Look& l : looks) {
             ASSERT_EQ(l.state, AppState::Playing);
@@ -2006,11 +2003,13 @@ void run_way_back_tests() {
         ASSERT_FALSE(app.hud().is_match_start_modal_active());
         ASSERT_TRUE(app.rejoin_store()->entries().size() == 1 && net::key_matches(app.rejoin_store()->entries()[0].key, key));
         w.run(3000);
-        ASSERT_TRUE(w.run_until([&]() { return app.net()->turns_executed() > sealed + 40; }, 20000));
-        std::string differ;
-        const bool same = w.run_until_same_state(app.sim(), bob.sim, 4000, differ);
-        if (!same) std::cout << "\n    [the state of the application and of Bob] " << differ;
-        ASSERT_TRUE(same);
+        ASSERT_TRUE(app.net()->turns_executed() > sealed + 40);
+        bool agree = false;
+        for (int i = 0; i < 400 && !agree; ++i) {
+            if (app.sim().current_tick() == bob.sim.current_tick()) agree = app.sim().state_hash() == bob.sim.state_hash();
+            if (!agree) w.run(10);
+        }
+        ASSERT_TRUE(agree);
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
         ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
     } TEST_END();
