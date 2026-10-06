@@ -21,6 +21,7 @@ import os
 import re
 import struct
 import unittest
+import zlib
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 FRONT = os.path.join(REPO, "web", "front")
@@ -28,7 +29,7 @@ TOOL = os.path.join(REPO, "tools", "front_page_art")
 
 # the pictures of the folder and their sizes (width, height): web/lobby.html gives the same sizes to the <img> that shows each of them
 PICTURES = {
-    "logo.png": (581, 218), "match_view.png": (761, 497), "clay.png": (96, 96),
+    "logo.png": (581, 218), "match_view.png": (761, 497), "clay.png": (256, 256),
     "lbl_pickamap.png": (145, 20), "lbl_mapinfo.png": (99, 22),
     "ant_green.png": (23, 40), "ant_red.png": (23, 40), "ant_blue.png": (23, 40), "ant_black.png": (23, 40),
     "preview_tiny.png": (300, 300), "preview_small.png": (300, 300), "preview_medium.png": (300, 300),
@@ -58,6 +59,56 @@ def png_size(path):
     if head[:8] != b"\x89PNG\r\n\x1a\n" or head[12:16] != b"IHDR":
         return None
     return struct.unpack(">II", head[16:24])
+
+
+def read_png_pixels(path):
+    """(width, height, rows) of a PNG that is not interlaced, each row a list of (r, g, b): a palette of any depth, or 8 bit RGB or RGBA (the standard library only)."""
+    data = read_bytes(os.path.relpath(path, REPO))
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", path
+    pos, idat, palette = 8, b"", []
+    width = height = depth = ctype = 0
+    while pos < len(data):
+        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + length]
+        pos += 12 + length
+        if kind == b"IHDR":
+            width, height, depth, ctype, _, _, interlace = struct.unpack(">IIBBBBB", body)
+            assert interlace == 0 and (ctype == 3 or (ctype in (2, 6) and depth == 8)), "a PNG that this reader does not read: " + path
+        elif kind == b"PLTE":
+            palette = [tuple(body[i:i + 3]) for i in range(0, len(body), 3)]
+        elif kind == b"IDAT":
+            idat += body
+        elif kind == b"IEND":
+            break
+    bits = depth * {3: 1, 2: 3, 6: 4}[ctype]                              # bits of a pixel
+    stride = (bits * width + 7) // 8
+    step = max(1, bits // 8)                                              # the bytes that a filter looks back (a palette of any depth: one)
+    raw = zlib.decompress(idat)
+    rows, above = [], bytearray(stride)
+    for y in range(height):
+        kind = raw[y * (stride + 1)]
+        line = bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        for i in range(stride):
+            left = line[i - step] if i >= step else 0
+            up = above[i]
+            corner = above[i - step] if i >= step else 0
+            if kind == 1:
+                line[i] = (line[i] + left) & 255
+            elif kind == 2:
+                line[i] = (line[i] + up) & 255
+            elif kind == 3:
+                line[i] = (line[i] + ((left + up) >> 1)) & 255
+            elif kind == 4:
+                pa, pb, pc = abs(up - corner), abs(left - corner), abs(left + up - 2 * corner)
+                line[i] = (line[i] + (left if pa <= pb and pa <= pc else up if pb <= pc else corner)) & 255
+        above = line
+        if ctype == 3:
+            mask = (1 << depth) - 1
+            rows.append([palette[(line[(x * depth) // 8] >> (8 - depth - (x * depth) % 8)) & mask] for x in range(width)])
+        else:
+            n = 3 if ctype == 2 else 4
+            rows.append([tuple(line[x * n:x * n + 3]) for x in range(width)])
+    return width, height, rows
 
 
 class TheFolder(unittest.TestCase):
@@ -160,8 +211,56 @@ class TheSharedStylesheet(unittest.TestCase):
         for end in re.findall(r"linear-gradient\(180deg, (#[0-9a-f]{6}), (#[0-9a-f]{6})\)", self.css)[0]:                  # (the footer bar's two ends)
             self.assertGreaterEqual(self.ratio(tone("cream"), end), 4.5, "cream on the footer bar " + end)
             self.assertGreaterEqual(self.ratio("#ffffff", end), 4.5, "the version on the footer bar " + end)
-        for clay in (tone("clay"), "#fb335b"):                                                                          # (the two colours of the clay tile: the text that sits on the bare page)
-            self.assertGreaterEqual(self.ratio(tone("ink"), clay), 4.5, "ink on the clay " + clay)
+        self.assertGreaterEqual(self.ratio(tone("ink"), tone("clay")), 4.5, "ink on the flat clay behind the tile (the tile itself: TheClay)")           # (the text that sits on the bare page)
+
+
+class TheClay(unittest.TestCase):
+    """web/front/clay.png is the background of every page: the orange of the game's menus with a little noise and dirt, so that it is not so clean (tools/front_page_art/artlib.py makes it).
+    The text that sits on the bare page is the ink of the pages, which has to stay readable on every part of it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.width, cls.height, cls.rows = read_png_pixels(os.path.join(FRONT, "clay.png"))
+        css = read("web", "front", "classic.css")
+        cls.flat = tuple(int(re.search(r"--clay: (#[0-9a-f]{6});", css).group(1)[i:i + 2], 16) for i in (1, 3, 5))
+        cls.ink = re.search(r"--ink: (#[0-9a-f]{6});", css).group(1)
+        cls.light = {c: TheColours.luminance("#%02x%02x%02x" % c) for row in cls.rows for c in row}
+        cls.ink_light = TheColours.luminance(cls.ink)
+
+    def test_it_has_noise_and_dirt_and_is_no_flat_orange(self):
+        pixels = [c for row in self.rows for c in row]
+        self.assertGreaterEqual(len(set(pixels)), 20, "the original's tile is two colours: a flat orange")
+        commonest = max(pixels.count(c) for c in set(pixels))
+        self.assertLess(commonest / len(pixels), 0.25, "no one colour fills the tile (the original's fills 96 percent of it)")
+        deepest, lightest = min(self.light.values()), max(self.light.values())
+        self.assertGreater(lightest / deepest, 1.7, "the tile has dirt that is much deeper than its lightest grit")
+
+    def test_its_average_is_the_flat_clay_that_the_pages_name_behind_it(self):
+        pixels = [c for row in self.rows for c in row]
+        for channel, name in enumerate("rgb"):
+            mean = sum(c[channel] for c in pixels) / len(pixels)
+            self.assertLess(abs(mean - self.flat[channel]), 4, "the %s of the tile's average and of --clay: no seam where the flat colour shows" % name)
+
+    def test_the_ink_stays_readable_on_it(self):
+        def ratio(luminance):
+            return (luminance + 0.05) / (self.ink_light + 0.05)
+        self.assertGreaterEqual(ratio(min(self.light.values())), 3.0, "ink on the darkest speck of dirt")
+        w, h = self.width, self.height
+        light = [[self.light[c] for c in row] for row in self.rows]
+        across = [[sum(light[y][(x + d) % w] for d in range(-2, 3)) for x in range(w)] for y in range(h)]               # (the 5 pixels of a row around each pixel, the tile wrapping)
+        worst = min(ratio(sum(across[(y + d) % h][x] for d in range(-2, 3)) / 25) for y in range(h) for x in range(w))
+        self.assertGreaterEqual(worst, 4.5, "ink on the average of the worst 5 x 5 pixels of the tile")
+
+    def test_it_repeats_without_a_seam(self):
+        w, h = self.width, self.height
+
+        def grain(a, b):                       # how much two neighbouring pixels differ, on average
+            return sum(abs(self.light[a[i]] - self.light[b[i]]) for i in range(len(a))) / len(a)
+        columns = [[row[x] for row in self.rows] for x in range(w)]
+        inside_x = sum(grain(columns[x], columns[x + 1]) for x in range(w - 1)) / (w - 1)
+        inside_y = sum(grain(self.rows[y], self.rows[y + 1]) for y in range(h - 1)) / (h - 1)
+        self.assertLess(grain(columns[w - 1], columns[0]), inside_x * 1.5 + 0.002, "the last column does not fit the first")
+        self.assertLess(grain(self.rows[h - 1], self.rows[0]), inside_y * 1.5 + 0.002, "the last row does not fit the first")
 
 
 class TheTool(unittest.TestCase):

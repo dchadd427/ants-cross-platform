@@ -511,7 +511,7 @@ class ThePicturesAndTheFont(PageCase):
 class TheColours(PageCase):
     """The text of the page is at least 4.5:1 against its background, in every state of the buttons and boxes (the browser check measures the whole page; this reads the colours)."""
 
-    CLAY_ENDS = ("#db4b13", "#fb335b")                      # the two ends of the clay tile that the front page's check measures against
+    CLAY_ENDS = ("#d84710", "#e95e24")                      # the two ends of the clay tile (its deepest and its lightest broad shade) that the front page's check measures against
     BAR_ENDS = ("#2b685f", "#2b6b4f")                       # the ends of the footer's gradient
 
     def token(self, name):
