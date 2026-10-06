@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 20:44 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 21:25 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -9,12 +9,12 @@ _Updated 2026-10-05 20:44 PDT · current release **v0.10.0** · details: [CHANGE
 
 Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
 
-A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. The bots' "Can't go there." fix and flower play are small fixes that merge as soon as their checks are green. After these releases: the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
+A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. The bots' gate fix and flower play are small fixes that merge as soon as their checks are green. After these releases: the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
 - Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
 - Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
-- Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. v0.9.0 no longer orders special actions onto an ant (-95% on Small); draft PR #16 (on main now, checks running) adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 58% on Small Hard and 34 to 45% on Treasure, scores unchanged within noise. The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
+- Bots: the gate sometimes sends the next ant into the hill while the last one is still leaving, and the game answers "Can't go there." (the owner heard it); a small fix with no version number is being measured, then its own PR
 - **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): started; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
@@ -30,6 +30,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **Fewer refused orders from the bots** (no release; PR #16, merged 2026-10-05 21:16 PDT, live 21:20 PDT): a bot no longer sends an ant with food into a hill that a ring of fire walls has shut, no longer sends a thief to a hole that one of its own ants holds shut, and waits while its own ant stands on the way into the hill; the arena now counts the "Can't go there." reactions and the refused orders of every seat. Hard bots on Small give 1.2 refused orders a match and seat instead of 2.7 (Treasure 3.7 instead of 5.5); their scores are unchanged within noise. The loops of ants that fire walls shut in are the game's own and stay (the owner's decision).
 - **v0.10.0** The leader of a room can move a player to another colour: press a player's row in the Players' Status box and that player goes to the next colour that nobody holds (never a swap; the leader may move itself and stays the leader); the player is told in the room's chat, the leader's bots follow, and START waits a second at most for the answer (network protocol 14: an older game cannot join, reload the page once; PR #26, merged 2026-10-05 20:33 PDT, live 20:37 PDT)
 - **Two more test flakes fixed** (no release; PR #28, merged 2026-10-05 20:09 PDT): the server tests S3.100 (Windows) and S3.32 (macOS) no longer fail now and then on a slow runner (the first flush of the first test wrote a backlog of 2.4 MB, and the flood test did not allow for the time the drop takes); tests only, nothing changes for players, no redeploy.
 - **Source comments cleaned** (no release; PR #25, merged 2026-10-05 19:44 PDT): fourteen comments and five test titles in the bot code say what the code does instead of whose notes a rule came from; nothing changes for players (the beta redeploys with the same version).
