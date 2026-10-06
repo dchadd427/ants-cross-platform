@@ -195,7 +195,7 @@ class TheLookIsTheFrontPages(PageCase):
 
     def test_the_teal_buttons_are_lit_from_above_on_every_page(self):
         # The owner, 2026-10-05: "make the buttons appear a little less flat". The face of every teal button is its colour with the sheen over it: a light edge at the top and shade toward the bottom.
-        # The same sheen on every page; a chosen (pressed in) button is a flat dark plate, and the hover, the match banner and the disabled START! change only the colour and keep the sheen.
+        # The same sheen on every page; a chosen (pressed in) button is a flat dark plate, and the hover and the match banner change only the colour and keep the sheen.
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         catalogue = style_of(read("asset_catalog", "index.html"))
         sheen = rule(self.lobby_style, ":root")["--sheen"]
@@ -207,7 +207,6 @@ class TheLookIsTheFrontPages(PageCase):
         colour_only = {
             "the front page's hovered button": rule(self.lobby_style, ".btn:hover"),
             "the front page's hovered pair": rule(self.lobby_style, ".pair label:hover"),
-            "the front page's disabled START! under the pointer": rule(self.lobby_style, ".startbtn:disabled:hover"),
             "the front page's match banner": rule(self.lobby_style, ".card.match > .banner"),
             "the game page's hovered button": rule(self.style, ".btn:hover"),
             "the game page's hovered pair": rule(self.style, '.seg button[aria-checked="false"]:hover'),

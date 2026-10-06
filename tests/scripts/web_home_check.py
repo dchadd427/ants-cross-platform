@@ -7,17 +7,19 @@ server. Needs a running web page that has nginx's routes (the web image of this 
 need the site's /ws to lead to a game server: --ws-port is the port that it leads to, and the check starts the native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTools
 protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway headless browser (its own profile and port; nothing of yours is touched). Parts:
 
-  * front    the page at "/" (a first visit: ONE card with Treasure, You at Green, a Medium bot in the other three seats, START on, "Have a code?"; the header links, the footer's version and build,
+  * front    the page at "/" (a first visit: ONE card with Treasure, You at Green, a Friend in the other three seats, START on, "Have a code?"; the header links, the footer's version and build,
              the picture's two buttons, the name field, the font; the line of numbers (not there, or well formed); 21 widths from 320 to 1600 px: no sideways scroll, the five buttons of every seat on
              ONE line, the seat's line (colour, buttons and Sit here on one line from 701 px, two under it), two columns from 1100 px; the contrast of all text at 1440 and 390 px, also with an invitation
              and the note about changed links up);
   * seats    the keyboard and the pointer: the arrows move and check inside a seat's group, Tab goes on to Sit here and the next seat, the focused button shows its outline; Sit here (the key Enter and the
              pointer) moves You and the focus goes to the seat that You left; the Teams offer the pairs of the seats that play; a Friend seat shows its invitation, Copy link puts exactly that link on the
-             clipboard; with fewer than two players START is off, says why and a click on it goes nowhere;
+             clipboard; with every other seat Nobody START is on and says that it starts a game for one on this computer;
   * play     START with bots only takes THIS tab to the game page (no new tab): the game's arguments are the room (demo-treasure-4p-<code>), your seat, the plan (a Medium bot in every other seat),
              --start-when 1, your name and the shape; the match starts without a START of the player's after the quick help closes (the "Get ready" dialog), the server's status lists the three bots
              (Bot (Medium), seats 1 - 3) and the player, and the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first (a room is joined) and, with Yes,
              goes back to the front page in the same tab, which remembers its choices;
+  * solo     START with every other seat Nobody takes THIS tab to the game page of a game on this computer, the original's single player (the map and the name, no room, no bot): the match runs
+             with its one colony (a room of the server needs two people), at Green whatever seat was You;
   * friend   two people, each a browser of their own: the host sits at Blue, a Friend at Black, nobody else; START takes the host to the room and the room WAITS (the server's status: waiting, one
              player); the friend opens the invitation link (asked for a name first), joins the seat that the link names, and the match starts by itself, with no START pressed after that, for both;
              the server's status lists both seats and the empty ones, no START of a game that does not lead was heard, and the two games' state hashes agree;
@@ -51,17 +53,17 @@ from web_aspect_check import Browser, NotReachable, Tab                    # noq
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("front", "seats", "play", "friend", "old", "room", "game")
+PARTS = ("front", "seats", "play", "solo", "friend", "old", "room", "game")
 NEEDS_SERVER = ("play", "friend")                                            # (the parts that play a match need the site's /ws to lead to a game server)
 
-# The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05)); text on the clay tile is measured against the tile's two ends and text in the footer against the ends of
-# its gradient, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
+# The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05)); text on the clay tile is measured against the tile's two ends (its deepest and its lightest broad shade: CLAY_DEEP
+# and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1) and text in the footer against the ends of its gradient, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
 CONTRAST_JS = """(function () {
   function parse(c) { var m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null; var p = m[1].split(',').map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
   function lin(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
   function lum(c) { return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b); }
   function ratio(a, b) { var l1 = lum(a), l2 = lum(b); if (l1 < l2) { var t = l1; l1 = l2; l2 = t; } return (l1 + 0.05) / (l2 + 0.05); }
-  var CLAY = [{ r: 219, g: 75, b: 19 }, { r: 251, g: 51, b: 91 }], BAR = [{ r: 0x2b, g: 0x68, b: 0x5f }, { r: 0x2b, g: 0x6b, b: 0x4f }];
+  var CLAY = [{ r: 216, g: 71, b: 16 }, { r: 233, g: 94, b: 36 }], BAR = [{ r: 0x2b, g: 0x68, b: 0x5f }, { r: 0x2b, g: 0x6b, b: 0x4f }];
   function bgOf(el) {
     for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
       if (e.classList && e.classList.contains('bar')) return BAR;
@@ -318,9 +320,9 @@ def main():
             now = card()
             check(info["title"].startswith("Ants (1998)") and info["path"] == "/", "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
             check(info["cards"] == 1 and info["banner"] == "New match" and not info["host"] and not info["solo"] and info["selects"] == 2, "ONE card, New match (a select for the map and one for the Teams; no Host button, no second card) (%s cards, %r)" % (info["cards"], info["banner"]))
-            check(now["map"] == "treasure" and now["you"] == [0] and now["seats"] == ["medium", "medium", "medium", "medium"] and now["teams"] == "ffa", "a first visit: Treasure, You at Green, a Medium bot in the other seats, free for all (%s)" % now)
-            check(now["teamsShown"] and now["teamOptions"] == ["ffa", "0+1", "0+2", "0+3"] and not now["invitesShown"] and not now["startOff"] and now["note"].startswith("Starts at once"),
-                  "... four seats play: the Teams offer Green with each of the others; no invitation; START is on and says that it starts at once (%r)" % now["note"])
+            check(now["map"] == "treasure" and now["you"] == [0] and now["seats"] == ["friend", "friend", "friend", "friend"] and now["teams"] == "ffa", "a first visit: Treasure, You at Green, a Friend in the other seats, free for all (%s)" % now)
+            check(now["teamsShown"] and now["teamOptions"] == ["ffa", "0+1", "0+2", "0+3"] and now["invitesShown"] and now["invites"] == 3 and not now["startOff"] and now["note"].startswith("Starts when your friends are in"),
+                  "... four seats play: the Teams offer Green with each of the others; an invitation for each Friend; START is on and says that it starts when the friends are in (%r)" % now["note"])
             start = info["start"]
             check(start["text"] == "START!" and start["label"] is None and "url(" not in start["bg"] and 150 <= start["w"] <= 260 and 44 <= start["h"] <= 64,
                   "START is a real button with its own text, drawn by the browser (no picture, so no blocky edges) at a modest size: 150 - 260 x 44 - 64 px, not the 294 x 81 of the original's picture blown up (%s)" % (start,))
@@ -348,18 +350,18 @@ def main():
                 check(found["texts"] > 40 and found["lowest"][0][0] >= 4.5, "%s: the text contrast is at least 4.5:1 for all %d texts (lowest: %s)" % (where, found["texts"], found["lowest"]))
 
             contrast("1440 px")
-            # a Friend seat, an invitation, the note about changed links and a START that is off: every text of them is readable too
-            tab.ev("document.getElementById('seat-1-friend').click(); 1")
+            # the invitations of a first visit, the note about changed links (a copy, then a change) and a START that is for one player: every text of them is readable too
             tab.ev("document.querySelector('#invite-list .btn').click(); 1")
             time.sleep(0.4)
             tab.ev("document.getElementById('seat-2-hard').click(); 1")
             c = card()
-            check(c["invites"] == 1 and c["invitesShown"] and c["linksNote"], "an invitation and, after a copy and a change, the note about changed links are up (%s)" % {k: c[k] for k in ("invites", "linksNote")})
+            check(c["invites"] == 2 and c["invitesShown"] and c["linksNote"], "two invitations and, after a copy and a change, the note about changed links are up (%s)" % {k: c[k] for k in ("invites", "linksNote")})
             contrast("1440 px with an invitation and its note")
             tab.ev("document.getElementById('seat-1-nobody').click(); document.getElementById('seat-2-nobody').click(); document.getElementById('seat-3-nobody').click(); 1")
             c = card()
-            check(c["startOff"] and c["note"].startswith("Pick at least one more seat") and not c["teamsShown"] and not c["invitesShown"], "with no other player START is off and the line under it says why (%r)" % c["note"])
-            contrast("1440 px with START off")
+            check(not c["startOff"] and c["note"] == "Starts at once, on this computer: just you on the map, no opponents." and not c["teamsShown"] and not c["invitesShown"],
+                  "with no other player START stays on and the line under it says that it starts a game for one on this computer (%r)" % c["note"])
+            contrast("1440 px with START for one player")
             clear_storage()
             load(web, settle=1.0)
             # many widths: no sideways scroll at any of them; the five buttons of a seat on ONE line; the seat's line (the colour, the buttons and Sit here on one line from 701 px up, the buttons under the
@@ -416,6 +418,7 @@ def main():
             groups = json.loads(value("""JSON.stringify([0, 1, 2, 3].map(function (n) { var f = document.querySelector('input[name=seat-' + n + ']').closest('fieldset');
                 return [f.querySelector('legend').textContent, Array.prototype.map.call(f.querySelectorAll('input[type=radio]'), function (r) { return r.value; }).join()]; }))"""))
             check(groups == [[c, "friend,easy,medium,hard,nobody"] for c in ("Green", "Red", "Blue", "Black")], "every seat is a fieldset named by its colour (its legend) with the buttons Friend, Easy, Medium, Hard, Nobody (%s)" % groups)
+            tab.ev("[0, 1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-medium').click(); }); 1")          # (a first visit has a Friend in every seat: Medium bots here, also in the seat that You leaves)
             tab.ev("document.getElementById('seat-1-medium').focus(); 1")
             key("ArrowRight", 39)
             c = card()
@@ -499,11 +502,8 @@ def main():
             shot("home_seats")
             tab.ev("['1', '2'].forEach(function (n) { document.getElementById('seat-' + n + '-nobody').click(); }); 1")
             c = card()
-            check(c["startOff"] and c["note"] == "Pick at least one more seat: a friend or a bot." and not c["teamsShown"] and not c["invitesShown"], "everybody else Nobody: START is off, the line says what to do, the Teams and the invitations are gone (%r)" % c["note"])
-            where = tab.ev("location.href")
-            real_click("#play")
-            time.sleep(1.0)
-            check(tab.ev("location.href") == where, "a click on START that is off goes nowhere")
+            check(not c["startOff"] and c["note"] == "Starts at once, on this computer: just you on the map, no opponents. Alone you play Green." and not c["teamsShown"] and not c["invitesShown"],
+                  "everybody else Nobody (You at Black): START is on, the line says that it is a game for one on this computer and that You play Green, the Teams and the invitations are gone (%r)" % c["note"])
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("play") and not can_play:
@@ -513,6 +513,7 @@ def main():
             clear_storage()
             load(web, settle=1.5)
             type_name("Bob")
+            tab.ev("[0, 1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-medium').click(); }); 1")          # (a first visit has a Friend in every seat: Medium bots here)
             before = pages()
             tab.ev("document.getElementById('play').click(); 1")
             ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20)
@@ -569,6 +570,38 @@ def main():
                               "menu: the front page has its choices again and remembers the name (%s)" % {k: remembered[k] for k in ("map", "you", "seats")})
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        if wanted("solo"):
+            print("[web home] START with every other seat Nobody: a game for one on this computer, in this tab")
+            clear_storage()
+            load(web, settle=1.5)
+            type_name("Bob")
+            tab.ev("[1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-nobody').click(); }); 1")
+            c = card()
+            check(not c["startOff"] and c["note"] == "Starts at once, on this computer: just you on the map, no opponents." and not c["teamsShown"] and not c["invitesShown"],
+                  "every other seat Nobody: START is on and says that it is a game for one on this computer (%r)" % c["note"])
+            before = pages()
+            tab.ev("document.getElementById('play').click(); 1")
+            ok = wait_for(lambda: tab.ev("location.pathname") == "/play.html", 20)
+            where = tab.ev("location.pathname + location.search") if ok else ""
+            check(ok and "map=treasure" in where and "bots=" not in where and "join=" not in where and "room=" not in where,
+                  "START takes this tab to /play.html with the map: no bots, no room (the game page takes the name out of the address: it is in the game's arguments) (%s)" % where)
+            if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
+                check(pages() == before, "no new tab or window was opened (%d pages before and after)" % before)
+                a = json.loads(tab.ev("JSON.stringify({args: ANTS_ARGS})"))
+                given = [x for x in a["args"] if x != "./this.program"]
+                check("--map" in given and "--play" in given and "--bot" not in given and "--join-url" not in given and "--room" not in given and "--teams" not in given and given[given.index("--name") + 1:][:1] == ["Bob"],
+                      "the game's arguments are a game on this computer with no bot: --map, --play and the name, no --bot, no room, no --teams (%s)" % given)
+                check(not tab.ev("document.getElementById('name-step') && !document.getElementById('name-step').hidden"), "the game does not ask for a name (the front page chose it)")
+                started = start_by_enter()
+                check(started, "the match starts once the quick help is closed (Enter), with the \"Get ready\" dialog, which closes by itself")
+                if started:
+                    time.sleep(3.0)
+                    check(tab.ev("Module._ants_match_running()") == 1, "... and goes on with its one colony (the match does not end at once)")
+                    check(not any("out of sync" in d for d in dialogs), "no dialog said that the game was out of sync")
+                    shot("home_solo_running")
+            else:
+                check(False, "the game page of a game on this computer is ready")
+
         if wanted("friend") and not can_play:
             note("friend: left out (no game server: give --ws-port)")
         if wanted("friend") and can_play:
