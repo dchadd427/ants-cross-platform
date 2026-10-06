@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- **Nobody means nobody in a game for one:** with every other seat on **Nobody**, START! plays on this computer with only your colony on the map. Red, Blue and Black no longer have a hill, ants or eggs there (v0.8.3 gave them all three and left them standing still), and the score line shows only you. A room was right already: a seat that nobody takes has no colony there. The game takes a new option for it, `--alone` ([`docs/COMMAND_LINE.md`](docs/COMMAND_LINE.md)); the desktop game without it is unchanged.
+- **Nobody means nobody in a game for one:** with every other seat on **Nobody**, START! plays on this computer with only your colony on the map. Red, Blue and Black no longer have a hill, ants or eggs there (v0.8.3 gave them all three and left them standing still). A room was right already: a seat that nobody takes has no colony there. The game takes a new option for it, `--alone` ([`docs/COMMAND_LINE.md`](docs/COMMAND_LINE.md)); the desktop game without it is unchanged.
 
 ## v0.8.3 - 2026-10-05 - Friend by default, a game for one and a dirtier background
 
