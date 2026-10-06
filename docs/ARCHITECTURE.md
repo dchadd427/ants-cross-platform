@@ -182,6 +182,8 @@ ants-cross-platform/
 │   │                                   # job's file filter)
 │   ├── deploy_wait.py                  # Waits until the game server is idle (GET /busy) before the deploy job
 │   │                                   # restarts the site
+│   ├── web_without_docker.py           # The web image without Docker (Linux): the Dockerfile's commands on
+│   │                                   # this machine, the pages served with nginx, for the browser checks
 │   ├── deploy_webhook.sh               # Calls the Portainer deploy webhook without ever printing its address
 │   └── front_page_art/                 # Makes the front page's pictures in web/front/ from the game's own assets
 │                                       # (needs Pillow; a developer's tool, in no build or test)

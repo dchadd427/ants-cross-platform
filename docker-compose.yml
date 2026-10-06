@@ -12,8 +12,6 @@ services:
       - "${ANTS_PORT:-19980}:80"
     networks:
       - proxy-network
-    labels:
-      - "org.playants.version=0.0.9"
 
 networks:
   proxy-network:

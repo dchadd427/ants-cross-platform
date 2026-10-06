@@ -402,6 +402,11 @@ public:
             }
         }
     }
+    // Whether the kernel holds bytes that nobody has read (a socket that is closed with such bytes resets the link)
+    bool unread() const {
+        uint8_t b = 0;
+        return s_ != kBadSock && ::recv(s_, reinterpret_cast<char*>(&b), 1, MSG_PEEK) == 1;
+    }
     bool eof() const { return eof_; }
     size_t waiting() const { return in_.size(); }
     // What is left of the received bytes, as text, taken off (the body of an answer, after take_head)
@@ -2458,6 +2463,31 @@ int main() {
             ASSERT_EQ(posts, 1);
             RawClient after_get;
             ASSERT_TRUE(connect_and_ask(rig, after_get, "GET /stats HTTP/1.1\r\nHost: x\r\n\r\n").find("HTTP/1.1 200 OK\r\n") == 0);
+        }
+    } TEST_END();
+
+    TEST_CASE("W1.26 What a peer sent just before it reset the link (it closed with bytes of ours unread) is delivered before the connection ends, whether the connection reads or writes first and whether a close frame follows it: a Leave is not lost to the reset") {
+        for (const bool close_frame : {false, true}) {
+            for (const bool write_first : {false, true}) {
+                Rig rig;
+                ASSERT_TRUE(rig.start());
+                Link link;
+                ASSERT_TRUE(open_link(rig, link));
+                WsConnection& srv = *link.server;
+                ASSERT_TRUE(srv.send(bytes_of("unread")));
+                ASSERT_TRUE(rig.wait([&]() { return link.client.unread(); }));                         // (the client never reads it: where the kernel answers a close with unread bytes by a reset, the link ends in one)
+                Bytes last = link.client.build_frame(0x82, bytes_of("LEAVE"));
+                if (close_frame) append(last, link.client.build_frame(0x88, ws_close_payload(1001)));   // (a browser that quits says goodbye after its message)
+                ASSERT_TRUE(link.client.send_bytes(last));                                              // (in one write: what is not yet sent goes with the reset)
+                link.client.close();
+                if (write_first) srv.send(bytes_of("turn"));                                            // (a room sends a turn every 50 ms, whether the peer reads or not: the write comes before the read)
+                std::vector<Bytes> got;
+                ASSERT_TRUE(poll_server(rig, srv, got, [&]() { return !srv.is_open(); }));               // (the reset ends the connection)
+#ifdef __linux__
+                ASSERT_TRUE(got.size() == 1 && got[0] == bytes_of("LEAVE"));                            // (macOS and Windows may drop what came before a reset in their kernels: nothing is asked of them here)
+                ASSERT_EQ(srv.state(), close_frame ? Connection::State::Closed : Connection::State::Failed);   // (a close frame among what was read ends it Closed, a reset alone Failed)
+#endif
+            }
         }
     } TEST_END();
 

@@ -745,6 +745,54 @@ int main() {
 #endif
     } TEST_END();
 
+#ifndef _WIN32
+    TEST_CASE("N3.10 TCP: What A Peer Sent Just Before It Reset The Link (It Closed With Bytes Of Ours Unread) Is Delivered Before The Connection Fails, Whether The Connection Reads Or Writes First: A Leave Is Not Lost To The Reset That Follows It") {
+        auto listener = TcpListener::listen(0, true);
+        ASSERT_TRUE(listener != nullptr);
+        for (const bool write_first : {false, true}) {
+            // the peer is a raw socket that leaves a message of ours unread, says LEAVE and closes: where the kernel answers a close with unread bytes by a reset (Linux, the server's system), the link ends in one
+            const int raw = ::socket(AF_INET, SOCK_STREAM, 0);
+            ASSERT_TRUE(raw >= 0);
+            sockaddr_in a;
+            std::memset(&a, 0, sizeof(a));
+            a.sin_family = AF_INET;
+            a.sin_port = htons(listener->port());
+            a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            ASSERT_TRUE(::connect(raw, reinterpret_cast<sockaddr*>(&a), sizeof(a)) == 0);
+            std::unique_ptr<TcpConnection> srv;
+            for (int i = 0; i < 2000 && !srv; ++i) {
+                srv = listener->accept();
+                if (!srv) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            ASSERT_TRUE(srv != nullptr);
+            ASSERT_TRUE(srv->send({1, 2, 3}));
+            uint8_t unread = 0;
+            for (int i = 0; i < 2000 && ::recv(raw, &unread, 1, MSG_PEEK | MSG_DONTWAIT) != 1; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            ASSERT_TRUE(::recv(raw, &unread, 1, MSG_PEEK | MSG_DONTWAIT) == 1);                                // (the bytes are in the peer's socket, which never reads them)
+            const uint8_t leave[9] = {5, 0, 0, 0, 'L', 'E', 'A', 'V', 'E'};
+            ASSERT_TRUE(::send(raw, leave, sizeof(leave), 0) == static_cast<ssize_t>(sizeof(leave)));
+            ::close(raw);
+            std::vector<uint8_t> got;
+            bool arrived = false;
+            for (int i = 0; i < 2000 && !arrived && srv->is_open(); ++i) {
+                if (write_first) srv->send({7, 7, 7});                                                          // (a room sends a turn every 50 ms, whether the peer reads or not)
+                arrived = srv->poll(got);
+                if (!arrived) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            std::vector<uint8_t> rest;
+            for (int i = 0; i < 2000 && srv->is_open(); ++i) {                                                  // (the reset ends the connection)
+                srv->poll(rest);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            ASSERT_FALSE(srv->is_open());
+#ifdef __linux__
+            ASSERT_TRUE(arrived && got.size() == 5 && std::memcmp(got.data(), "LEAVE", 5) == 0);              // (macOS may drop what came before a reset in its kernel: nothing is asked of it here)
+            ASSERT_EQ(srv->state(), Connection::State::Failed);
+#endif
+        }
+    } TEST_END();
+#endif
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

@@ -121,7 +121,7 @@ The numbers are the ones `./run_tests.sh` prints; `./run_tests.sh --list` names 
 | 3.26 Touch in the application | Synthetic finger events through the real event loop of a headless application: a tap, a drag and a hold against the mouse's click, band and right click (point by point), the hold's timing, the pan and the pinch at three zooms, every place where two fingers do nothing, cancels, a press that waited on a dialog that opened, the other screens, SDL's letterbox, an inset picture, the slop's size, and the ring and the pulse in the picture (nothing else of it changes). |
 | 4 E2E (full tier) | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; it links no engine code and still has the early combat rules, see `tests/TEST_INFRA.md`). |
 | 5.1 Version consistency | `tools/check_version_consistency.py`: the file `VERSION`, the top release heading of `CHANGELOG.md`, "current release" in `STATUS.md` and the version line of `README.md` name the same release. |
-| 5.2 Tool and script tests | The python tests of `tests/scripts` (every `test_*.py`): the pages of the site, the version, release, mutation and deploy tools, `run_tests.sh` itself and the CI workflow; the list is below the table. |
+| 5.2 Tool and script tests | The python tests of `tests/scripts` (every `test_*.py`): the pages of the site, the version, release, mutation and deploy tools, the web build without Docker, `run_tests.sh` itself and the CI workflow; the list is below the table. |
 
 `./run_tests.sh` prints every suite's result and its time, and the totals. The CI (see [Continuous Integration](#continuous-integration)) shows pass / fail for every pull request. No per-suite numbers are kept on this page.
 
@@ -136,6 +136,7 @@ Suite 5.2 runs every `tests/scripts/test_*.py`:
 - **The front page's Rejoin button:** its block run by node (`tests/scripts/web_rejoin_block_check.js`) and the pins of `test_web_rejoin.py`. The check in real browsers, `web_rejoin_check.py`, is opt-in.
 - **nginx:** the site's block for `/busy` (`test_nginx_conf.py`), and the routes and the `/stats` routing run against a real nginx where docker works (`test_nginx_routes.py`, `test_nginx_stats.py`).
 - **Version and build:** the version tools (build id, stamp, consistency check), the generated version header on the include path of every target in every configuration, and the compile commands (no folder of the checkout in them: ccache).
+- **The web build without Docker:** `tools/web_without_docker.py` (`test_web_without_docker.py`): the replay of the Dockerfile and of `.dockerignore`, the ports and nginx's file. The tool itself is described in [`WORKFLOW.md`](WORKFLOW.md) ("Browser checks without Docker").
 - **The runners:** `run_tests.sh` (its tiers, the parallel run, the table's resources) and the python runner itself.
 - **Defaults:** the default map (the stack file, the front page and the program name the same one, Treasure).
 - **Release, deploy and CI:** the release, mutation and deploy tools (`tools/release.py`, `tools/mutate.py`, `tools/deploy_filter.py`, `tools/deploy_wait.py`, `tools/deploy_webhook.sh`), the staging stack and its site label, and the CI workflow (the required job names, the deploy job's secrets and its wait).
