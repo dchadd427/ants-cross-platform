@@ -1,12 +1,15 @@
-// The clocks of the prediction's budget (Prediction::Config::wall_clock and cpu_clock), moved by hand: a timed block costs exactly what the work hook of the test says, on every platform and
-// however busy the machine is. A spin on the real clocks cannot say it: Windows' thread clock counts in ticks of about 15.6 ms, charges a whole tick to the thread that runs when it falls and
-// reads nothing for a thread that was stalled, so on a busy runner a block of 25 ms of work was charged anything from nothing to 60 ms, and the tests of the strikes failed now and then.
+// The clocks of the prediction's budget (Prediction::Config::wall_clock and cpu_clock), moved by hand: a timed block costs exactly what the work hook of the test says, on any platform and under any load.
+// A spin on the real clocks cannot: Windows' thread clock counts in ticks of 15.6 ms and reads nothing for a thread that was not running, so the tests of the strikes failed now and then there.
 #pragma once
 
 #include <cstdint>
 #include <functional>
 
 struct ManualClock {
+    ManualClock() = default;
+    ManualClock(const ManualClock&) = delete;               // (the clocks that install() hands out read this object: a copy would leave them on the original)
+    ManualClock& operator=(const ManualClock&) = delete;
+
     uint64_t wall{0};
     uint64_t cpu{0};
 

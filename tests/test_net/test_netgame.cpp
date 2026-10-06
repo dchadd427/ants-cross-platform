@@ -1894,7 +1894,7 @@ void run_prediction_tests() {
         ASSERT_EQ(bob.net.prediction()->stats().over_budget, 0u);
         burn = 60 * kMs;                                                                         // (a machine that is too slow for it)
         ASSERT_TRUE(t.run_until([&]() { return bob.net.prediction_cooling_down(); }, 2000));
-        burn = 0;                                                                                // (the load is gone: from here on its blocks cost what they cost)
+        burn = 0;                                                                                // (the load is gone: from here on its blocks cost nothing)
         ASSERT_EQ(bob.net.prediction()->stats().over_budget, 3u);                                // three strikes, as many as the machine was given
         ASSERT_FALSE(bob.net.predicting());
         ASSERT_TRUE(&bob.net.view_engine() == &bob.sim);

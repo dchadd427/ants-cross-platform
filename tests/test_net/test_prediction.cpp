@@ -16,10 +16,10 @@
 #include "ants_net/lockstep.hpp"
 #include "ants_net/prediction.hpp"
 #include "ants_net/protocol.hpp"
-#include "manual_clock.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "manual_clock.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -166,10 +166,8 @@ Command random_unpredicted(Lcg& rng, uint8_t seat) {
     return make_command(CommandType::AllianceBreak, seat);
 }
 
-// Work that costs at least `ns` of the thread's CPU time AND of wall time, for the one test that runs on the real clocks (RP7.6): a block is charged the smaller of the two (work_cost_ns), and
-// Windows' thread clock moves in steps of about 15.6 ms, so it can read 25 ms after 10 ms of work. The spin waits for both clocks however long that takes: a machine may not run the thread
-// for a while, the clock stands still meanwhile, and a spin that gave up there left a block without a cost. Only a clock that does not move in 10 s ends it, so that it fails the test
-// instead of hanging it.
+// Work that costs at least `ns` of the thread's CPU time AND of wall time, for RP7.6, the one test on the real clocks (a block is charged the smaller of the two, and Windows' thread clock
+// moves in steps of 15.6 ms). It waits as long as it takes (a thread that was not run reads nothing meanwhile) and gives up after 10 s only, so that a stuck clock fails the test.
 void burn_cpu(uint64_t ns) {
     const uint64_t t0 = thread_cpu_ns();
     const auto wall0 = std::chrono::steady_clock::now();
@@ -1230,7 +1228,7 @@ void run_cue_tests() {
             if (!was_cooling) {
                 began = a.confirmed().current_tick();
                 at_start = p.stats();
-                slow = false;                                                                 // (the load is gone: the next blocks cost what they cost)
+                slow = false;                                                                 // (the load is gone: the next blocks cost nothing)
             } else {
                 ended = a.confirmed().current_tick();
             }
