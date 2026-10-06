@@ -196,9 +196,9 @@ static std::filesystem::path temp_path_of_this_run(const std::string& name) {
     return std::filesystem::temp_directory_path() / (name + "_" + std::to_string(pid));
 }
 
-// TINY.LVL with its first start marker of the green team (tile 154) moved to row 21512, written to a temporary file (a byte edit of a shipped map, as the loader
-// tests make their synthetic maps): the file loads, a match with the green team is not playable. Empty path when the shipped map cannot be read.
-static std::filesystem::path write_marker_outside_grid_map() {
+// TINY.LVL with its first start marker of a team (tile 154 green, 155 red, 153 blue, 152 black) moved to row 21512, written to a temporary file (a byte edit of a shipped map,
+// as the loader tests make their synthetic maps): the file loads, a match with that team is not playable. Empty path when the shipped map cannot be read.
+static std::filesystem::path write_marker_outside_grid_map(uint16_t tile = 154) {
     std::ifstream in("Original-Ants/Maps/TINY.LVL", std::ios::binary);
     std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     if (bytes.size() < 19000) return {};
@@ -207,15 +207,15 @@ static std::filesystem::path write_marker_outside_grid_map() {
     const size_t cells = static_cast<size_t>(bytes[dims] | (bytes[dims + 1] << 8)) * static_cast<size_t>(bytes[dims + 4] | (bytes[dims + 5] << 8));
     const size_t records = dims + 8 + cells * 12 + 2;                     // block 1: a word count, then (tile, row, column) words
     const size_t count = static_cast<size_t>(bytes[records - 2] | (bytes[records - 1] << 8));
-    size_t green = 0;
-    for (size_t i = 0; i < count && green == 0; ++i) {
+    size_t marker = 0;
+    for (size_t i = 0; i < count && marker == 0; ++i) {
         const size_t at = records + i * 6;
-        if ((bytes[at] | (bytes[at + 1] << 8)) == 154) green = at;
+        if ((bytes[at] | (bytes[at + 1] << 8)) == tile) marker = at;
     }
-    if (green == 0) return {};
-    bytes[green + 2] = static_cast<uint8_t>(21512 & 0xFF);
-    bytes[green + 3] = static_cast<uint8_t>(21512 >> 8);
-    const std::filesystem::path path = temp_path_of_this_run("ants_unplayable_marker").replace_extension(".lvl");
+    if (marker == 0) return {};
+    bytes[marker + 2] = static_cast<uint8_t>(21512 & 0xFF);
+    bytes[marker + 3] = static_cast<uint8_t>(21512 >> 8);
+    const std::filesystem::path path = temp_path_of_this_run("ants_unplayable_marker_" + std::to_string(tile)).replace_extension(".lvl");
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     return out.good() ? path : std::filesystem::path{};
@@ -2074,6 +2074,159 @@ void run_suite_7_input_controls() {
             ASSERT_EQ(allies_of(app), std::string("1032"));
             app.shutdown();
         }
+    } TEST_END();
+
+    TEST_CASE("7.6i A game for one (--alone): only the local player's colony exists (a seat that nobody takes has no hill, no ants and no eggs, as with --bot), in the setup screen's way, in the direct start and at any seat; without the option the other three colonies stand there") {
+        const std::string treasure = "Original-Ants/Maps/TREASURE.LVL";
+        const auto config = [&](bool alone) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            cfg.default_map_path = treasure;
+            cfg.play_at_once = true;
+            cfg.player_name = "Alice";
+            cfg.alone = alone;
+            return cfg;
+        };
+        const auto ants_of = [](Application& app, uint8_t seat) {
+            size_t n = 0;
+            for (const ants::sim::AntSnapshot& ant : app.sim().get_world_state().ants) n += ant.player_id == seat ? 1u : 0u;
+            return n;
+        };
+        const auto others_of = [&](Application& app, uint8_t own) {      // what the seats other than `own` have: ants, eggs, hills
+            size_t n = 0;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                if (seat == own) continue;
+                n += ants_of(app, seat) + app.sim().get_player_eggs(seat);
+            }
+            return n;
+        };
+        {   // without --alone (the original's single-player game): all four colonies, the other three stand still
+            Application app;
+            ASSERT_TRUE(app.init(config(false)));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().roster_mask(), 0x0F);
+            ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{4});
+            ASSERT_TRUE(others_of(app, 0) > 0);
+            app.shutdown();
+        }
+        {   // --alone, from the setup screen's START (what the web page does): the player's colony only
+            Application app;
+            ASSERT_TRUE(app.init(config(true)));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_TRUE(app.bots() == nullptr);                                                          // no bot, and no bot code
+            ASSERT_EQ(app.sim().roster_mask(), 0x01);
+            ASSERT_EQ(app.hud().roster_mask(), 0x01);                                                    // (one label, no "Red:", "Blue:", "Black:")
+            ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{1});                           // one hill
+            ASSERT_TRUE(ants_of(app, 0) > 0 && app.sim().get_player_eggs(0) > 0);                        // ... and the player's own ants and eggs
+            ASSERT_EQ(others_of(app, 0), size_t{0});                                                     // nothing of the other three
+            app.hud().dismiss_match_start_modal();
+            for (int t = 0; t < 1200; ++t) app.update_simulation(0.05f);                                 // a minute of play: the match goes on, and no colony comes up
+            ASSERT_FALSE(app.sim().is_match_over());
+            ASSERT_EQ(others_of(app, 0), size_t{0});
+            ASSERT_TRUE(ants_of(app, 0) > 0);
+            app.shutdown();
+        }
+        {   // the player's seat is not Green (--player 2): the player's colony is Blue's, and only that
+            Application app;
+            ApplicationConfig cfg = config(true);
+            cfg.local_player_id = 2;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.sim().roster_mask(), 0x04);
+            ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{1});
+            ASSERT_TRUE(ants_of(app, 2) > 0);
+            ASSERT_EQ(others_of(app, 2), size_t{0});
+            app.shutdown();
+        }
+        {   // the direct start of --map (no setup screen): the same game
+            Application app;
+            ApplicationConfig cfg = config(true);
+            cfg.start_in_map_select = false;
+            cfg.play_at_once = false;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().roster_mask(), 0x01);
+            ASSERT_EQ(app.hud().roster_mask(), 0x01);
+            ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{1});
+            ASSERT_EQ(others_of(app, 0), size_t{0});
+            for (int t = 0; t < 200; ++t) app.update_simulation(0.05f);
+            ASSERT_EQ(others_of(app, 0), size_t{0});
+            app.shutdown();
+        }
+        {   // --teams cannot be made with one seat: the game starts without teams and says why (the setup screen's status line)
+            Application app;
+            ApplicationConfig cfg = config(true);
+            cfg.teams = LocalTeams{true, 0, 1};
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_EQ(app.sim().roster_mask(), 0x01);
+            ASSERT_EQ(app.sim().get_world_state().player_alliances[0], uint8_t{4});
+            ASSERT_TRUE(app.map_select().room().status.find("does not play in this match") != std::string::npos);
+            app.shutdown();
+        }
+    } TEST_END();
+
+    TEST_CASE("7.6j A game that starts straight into its match (--map) asks the level about the teams that play, not about all four: the start marker of a seat that nobody takes does not refuse the map (--alone, or a roster of bots), the marker of a seat that plays does, and the original's four colonies refuse either") {
+        const std::filesystem::path black_out = write_marker_outside_grid_map(152);     // the black team's start marker is outside the grid
+        const std::filesystem::path red_out = write_marker_outside_grid_map(155);       // the red team's
+        const std::filesystem::path green_out = write_marker_outside_grid_map(154);     // the green team's
+        ASSERT_FALSE(black_out.empty());
+        ASSERT_FALSE(red_out.empty());
+        ASSERT_FALSE(green_out.empty());
+        const auto config = [](const std::filesystem::path& map, bool alone, uint8_t bot_seats, uint8_t own) {      // bot_seats: the seats that have a bot (a mask)
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = false;
+            cfg.default_map_path = map.string();
+            cfg.alone = alone;
+            cfg.local_player_id = own;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                if (((bot_seats >> seat) & 1u) == 0) continue;
+                ants::ai::BotSpec spec;
+                spec.seat = seat;
+                spec.level = ants::ai::Level::Medium;
+                cfg.bots.push_back(spec);
+            }
+            return cfg;
+        };
+        const auto refused = [&](const ApplicationConfig& cfg) {
+            Application app;
+            const bool started = app.init(cfg);
+            app.shutdown();
+            return !started;
+        };
+        ASSERT_TRUE(refused(config(black_out, false, 0, 0)));                         // the original's single player (four colonies stand there): the black marker refuses the map, as ever
+        ASSERT_TRUE(refused(config(green_out, false, 0, 0)));
+        {   // a game for one: Green alone plays, the black and the red markers are not looked at
+            for (const std::filesystem::path& map : {black_out, red_out}) {
+                Application app;
+                ASSERT_TRUE(app.init(config(map, true, 0, 0)));
+                ASSERT_EQ(app.state(), AppState::Playing);
+                ASSERT_EQ(app.sim().roster_mask(), 0x01);
+                ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{1});
+                app.shutdown();
+            }
+        }
+        ASSERT_TRUE(refused(config(green_out, true, 0, 0)));                          // ... the player's own marker is looked at
+        {   // the player sits at Red (--player 1): Red's marker is the one that counts, and Green's is not looked at
+            Application app;
+            ASSERT_TRUE(app.init(config(green_out, true, 0, 1)));
+            ASSERT_EQ(app.sim().roster_mask(), 0x02);
+            app.shutdown();
+        }
+        ASSERT_TRUE(refused(config(red_out, true, 0, 1)));
+        {   // bots at Red and Blue: three colonies play, Black's marker is not looked at (before: the map was refused for all four)
+            Application app;
+            ASSERT_TRUE(app.init(config(black_out, false, 0x06, 0)));
+            ASSERT_EQ(app.sim().roster_mask(), 0x07);
+            ASSERT_TRUE(app.bots() != nullptr);
+            app.shutdown();
+        }
+        ASSERT_TRUE(refused(config(black_out, false, 0x0E, 0)));                      // ... a bot at the seat whose marker is outside: refused
+        std::error_code ignore;
+        std::filesystem::remove(black_out, ignore);
+        std::filesystem::remove(red_out, ignore);
+        std::filesystem::remove(green_out, ignore);
     } TEST_END();
 
     TEST_CASE("7.7 Cursor Simulated in Screen Middle On Game Start (No Unwanted Edge Panning)") {
