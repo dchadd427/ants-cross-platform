@@ -23,6 +23,8 @@ void StandardBot::start(const BotContext& context) {
         if (tune_) tune_(tactics_.plan);
         harvest_.set_params(harvest_params(tactics_.plan));
         gate_.set_params(gate_params(tactics_.plan));
+        island_.set_params(island_params(tactics_.plan));
+        ferry_.set_params(ferry_params(tactics_.plan));
     }
     ledger_.set_rank(kHarvest, kRankHarvest);
     ledger_.set_rank(kFight, kRankFight);
@@ -34,6 +36,9 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kStrike, kRankWalls);
     ledger_.set_rank(kHarass, kRankWalls);
     ledger_.set_rank(kSabotage, kRankPowerUps);                   // (below the walls of the own thief hole: the Fire Ant is theirs first)
+    ledger_.set_rank(kIslands, kRankPowerUps);                    // (the Swimmers that dig, and the ants that fetch one: nobody else uses them)
+    ledger_.set_rank(kExpedition, kRankPowerUps);                 // (the crew that is flown to the Swimmers and the Bombers that fly it)
+    ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
 void StandardBot::think(const BotView& view, Orders& orders) {
@@ -70,6 +75,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.wants.fill(0);
     tactics_.surplus = harvest_.unplaced();
     tactics_.standing = standing_of(plan, view, *map);
+    tactics_.guard_stance = tactics_.standing.guard;
+    const Standing& st = tactics_.standing;
+    const bool escalating = plan.catchup && st.tier >= 1;                                    // behind the leader enough to escalate (the tiers: tactics.hpp, Standing)
     tactics_.wall_demand = wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
     if (plan.secure_side) {                                       // the power-ups of the own side are taken early: an enemy that steals the Fire can wall the piles in, the Bomber can mine the base, the Thief can raid twice
@@ -91,26 +99,32 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         const Memory& m = tactics_.memory;
         // (or when the economy has workers that stand idle with nothing to harvest: they cost nothing)
         const bool fists = plan.fists_strict ? (m.last_attacked() != 0 && now <= m.last_attacked() + 2400u)
-                                             : (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0 || (plan.strikes && tactics_.standing.behind);
+                                             : (m.last_hit() != 0 && now <= m.last_hit() + 2400u) || m.combat_last_seen() != 0 || m.thief_last_seen() != 0 || (plan.strikes && st.behind) || escalating;
         const bool free_ants = plan.combat_when_idle && tactics_.surplus > 0;
         const bool attacked = m.last_attacked() != 0 && now <= m.last_attacked() + 2400u;
         if (plan.takes_combat && (fists || free_ants || !plan.combat_when_attacked)) {
             tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(plan.max_combat + (attacked ? plan.combat_extra : 0u));
         }
-        // behind the leader, a strike needs its Combat Ants: as many as the force is
-        if (plan.takes_combat && plan.strikes && !plan.strike_workers && tactics_.standing.behind) {
-            tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(std::max<uint32_t>(plan.max_combat, plan.strike_force));
+        // behind the leader, a strike needs its Combat Ants: as many as the force is (from the lift tier on a level that does not take them otherwise takes them too, and a Thief for the raids)
+        if ((plan.takes_combat || st.tier >= plan.catchup_lift_tier) && ((plan.strikes && !plan.strike_workers && st.behind) || (escalating && plan.catchup_wants))) {
+            tactics_.wants[static_cast<size_t>(sim::AntType::Combat)] = static_cast<uint8_t>(std::max<uint32_t>(std::max<uint32_t>(plan.max_combat, plan.strike_force), tactics_.wants[static_cast<size_t>(sim::AntType::Combat)]));
         }
+        if (!plan.takes_thief && st.tier >= plan.catchup_lift_tier && plan.catchup_wants) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = 1;
     }
 
     // 3. the tasks, the one that takes ants from the others first
+    if (plan.islands) island_.step(context);                                                // (idle where nothing lies beyond water; it wants a Swimmer, so it comes before the power-up task)
+    if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
+    if (plan.islands && plan.island_ferry && island_.active()) ferry_.step(context);        // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
     fight_.step(context);
     walls_.step(context);
     powerups_.step(context);
     bombs_.step(context);
-    if (plan.raids && !fallback) raids_.step(context);
+    const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier);
+    raids_.set_launching(raiding);
+    if ((raiding || ledger_.count(kRaids) != 0) && !fallback) raids_.step(context);         // (when the pressure falls the raid under way is seen out: the thief is not kept for ever)
     if (plan.guards) guard_.step(context);
-    if (plan.strikes || plan.wipe_focus) strike_.step(context);
+    if (plan.strikes || plan.wipe_focus || plan.catchup) strike_.step(context);
     if (plan.harass) harass_.step(context);
     if (plan.sabotage) sabotage_.step(context);
     if (plan.hatches) hatch_.step(context);
@@ -121,6 +135,11 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         harvest_.set_params(hp);
     }
     if (!plan.gate || !gate_.usable() || fallback) aid_.step(context);                                              // (the gate task owns every carrier, a hit one included)
+    if (plan.islands) {
+        harvest_.set_closed_piles(island_.closed_piles());                                  // the piles over a bridge that will not last a round trip
+        harvest_.set_pile_limits(island_.pile_limits());                                    // and one ant at a time on a bridge
+        if (island_.take_reask()) harvest_.reask_soon();                                    // a bridge was finished: the economy asks the map again now
+    }
     harvest_.step(context);
 }
 
@@ -216,6 +235,9 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     strike_.on_command(command, fate, tick);
     harass_.on_command(command, fate, tick);
     sabotage_.on_command(command, fate, tick);
+    island_.on_command(command, fate, tick);
+    expedition_.on_command(command, fate, tick);
+    ferry_.on_command(command, fate, tick);
     gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);
