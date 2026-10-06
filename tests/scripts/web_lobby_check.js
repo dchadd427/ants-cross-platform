@@ -3,7 +3,7 @@
 //   * web/lobby.html, the block CARD_BEGIN .. CARD_END: the card's rules. Four seats, exactly one of them You, every other seat Friend, Easy, Medium, Hard or Nobody; who plays and how many people to wait
 //     for; the Teams that the playing seats allow (cardTeamChoices / cardTeam); what is remembered (cardParse / cardText) and what the first visit takes from the keys of the earlier pages (cardFromOld);
 //     Sit here (cardSit); the room's code (cardCode: demo-<map>-4p-[t<a><b>-]<random>, the teams a word of it) and when a code still fits the choices (cardRoomFits); the plan (cardFill) and the addresses
-//     of START and of an invitation (cardQuery); why START is off (cardWhy) and the line under it (cardNote). Every state of the card is checked, and every address that it can make is read by the game
+//     of START and of an invitation (cardQuery); who is alone (cardAlone: START then plays a game for one on this computer) and the line under START (cardNote). Every state of the card is checked, and every address that it can make is read by the game
 //     page (web/shell.html, ANTS_PAGE.joinArguments) as the same seat, the same plan, the same number of people and no teams parameter (they are in the code), with a name only in START's;
 //   * the block LOBBY_BEGIN .. LOBBY_END: what the old addresses mean and what the old pages left in the browser. playersChoice (1 .. 4, else the fallback), hostPlayers (an old stored 1 is 2), soloBots
 //     (nothing remembered is Medium, anything that is no level is none), soloSeats (one level per seat from the new key, else the old one), localGameQuery (the address of a game on THIS computer, which
@@ -60,7 +60,7 @@ const lobbyCode = [
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath),
     between(lobbyText, 'CARD_BEGIN', 'CARD_END', lobbyPath),
-    'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, roomTeamWord: roomTeamWord, codeTeams: codeTeams, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle, CARD_KEY: CARD_KEY, CARD_ROOM_KEY: CARD_ROOM_KEY, CARD_WORDS: CARD_WORDS, cardPlaying: cardPlaying, cardFriends: cardFriends, cardPeople: cardPeople, cardTeamChoices: cardTeamChoices, cardTeam: cardTeam, cardFix: cardFix, cardNew: cardNew, cardParse: cardParse, cardText: cardText, cardFromOld: cardFromOld, cardSit: cardSit, cardSet: cardSet, cardMap: cardMap, cardTeams: cardTeams, cardFill: cardFill, cardCode: cardCode, cardRoomFits: cardRoomFits, cardQuery: cardQuery, cardWhy: cardWhy, cardNote: cardNote };',
+    'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, roomTeamWord: roomTeamWord, codeTeams: codeTeams, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle, CARD_KEY: CARD_KEY, CARD_ROOM_KEY: CARD_ROOM_KEY, CARD_WORDS: CARD_WORDS, cardPlaying: cardPlaying, cardFriends: cardFriends, cardPeople: cardPeople, cardTeamChoices: cardTeamChoices, cardTeam: cardTeam, cardFix: cardFix, cardNew: cardNew, cardParse: cardParse, cardText: cardText, cardFromOld: cardFromOld, cardSit: cardSit, cardSet: cardSet, cardMap: cardMap, cardTeams: cardTeams, cardFill: cardFill, cardCode: cardCode, cardRoomFits: cardRoomFits, cardQuery: cardQuery, cardAlone: cardAlone, cardNote: cardNote };',
 ].join('\n');
 const L = new Function(lobbyCode)();
 
@@ -456,13 +456,14 @@ try {
     {
         const st = (you, seats, teams, map) => ({ map: map || 'treasure', you, seats, teams: teams || 'ffa' });
         const M4 = ['medium', 'medium', 'medium', 'medium'];
+        const F4 = ['friend', 'friend', 'friend', 'friend'];          // (a first visit: a Friend in every seat)
         const COLOURS = ['Green', 'Red', 'Blue', 'Black'];
         const FOUR = [FFA, { value: '0+1', text: 'Green + Red against Blue + Black' }, { value: '0+2', text: 'Green + Blue against Red + Black' }, { value: '0+3', text: 'Green + Black against Red + Blue' }];
         const frozen = (state) => JSON.stringify(state);
 
         same('the card has five choices for a seat, in the order of its buttons, and keeps its choices under ants-match', [L.CARD_WORDS, L.CARD_KEY, L.CARD_ROOM_KEY], [['friend', 'easy', 'medium', 'hard', 'nobody'], 'ants-match', 'ants-match-room']);
-        same('cardNew: Treasure, You at Green, a Medium bot in every seat (the seat of You keeps its choice for later), free for all; a map that is none of the six is Treasure', [L.cardNew('treasure'), L.cardNew('islands').map, L.cardNew(undefined).map, L.cardNew('nowhere').map, L.cardNew('Treasure').map],
-             [st(0, M4), 'islands', 'treasure', 'treasure', 'treasure']);
+        same('cardNew: Treasure, You at Green, a Friend in every seat (the seat of You keeps its choice for later), free for all; a map that is none of the six is Treasure', [L.cardNew('treasure'), L.cardNew('islands').map, L.cardNew(undefined).map, L.cardNew('nowhere').map, L.cardNew('Treasure').map],
+             [st(0, F4), 'islands', 'treasure', 'treasure', 'treasure']);
 
         // who plays, and how many people the room waits for: You, and every seat that is not Nobody; the people are You and the Friends (the bots come with START)
         same('cardPlaying: You and every seat that is not Nobody, in the order of the seats (a Nobody seat that is You plays: You are in it)',
@@ -497,10 +498,10 @@ try {
              Array(10).fill('ffa'));
 
         // a state that is repaired: every part of it is valid
-        same('cardFix: a map that is none of the six is Treasure, You is a seat, a word that is none of the five is Medium, a team that the seats do not allow is free for all, a short list is filled up with Medium',
+        same('cardFix: a map that is none of the six is Treasure, You is a seat, a word that is none of the five is Friend, a team that the seats do not allow is free for all, a short list is filled up with Friend',
              [L.cardFix({ map: 'nowhere', you: 7, seats: ['easy', 'x', 'HARD', null], teams: '0+1' }), L.cardFix({ map: 'small', you: 2, seats: ['easy'], teams: 'junk' }), L.cardFix({ map: 'tiny', you: 3, seats: ['friend', 'friend', 'friend', 'friend'], teams: '0+3' }),
               L.cardFix({ map: 'small', you: 0, seats: ['easy', 'nobody', 'nobody', 'nobody'], teams: '0+1' }), L.cardFix({ map: 'small', you: 0, seats: ['easy', 'nobody', 'friend', 'hard'], teams: '1+2' })],
-             [st(0, ['easy', 'medium', 'medium', 'medium'], '0+1'), st(2, ['easy', 'medium', 'medium', 'medium'], 'ffa', 'small'), st(3, ['friend', 'friend', 'friend', 'friend'], '0+3', 'tiny'),
+             [st(0, ['easy', 'friend', 'friend', 'friend'], '0+1'), st(2, ['easy', 'friend', 'friend', 'friend'], 'ffa', 'small'), st(3, ['friend', 'friend', 'friend', 'friend'], '0+3', 'tiny'),
               st(0, ['easy', 'nobody', 'nobody', 'nobody'], 'ffa', 'small'), st(0, ['easy', 'nobody', 'friend', 'hard'], 'ffa', 'small')]);
         {
             const before = { map: 'small', you: 1, seats: ['easy', 'x', 'x', 'x'], teams: '9' };
@@ -535,21 +536,21 @@ try {
 
         // the first visit, from what the earlier pages left in the browser (read, never written)
         const OLD = (o) => Object.assign({ solo: null, legacy: null, soloTeams: null, map: null, players: null, fill: null, teams: null }, o);
-        same('cardFromOld: nothing remembered is a first visit (and so is nothing at all)', [L.cardFromOld(OLD({})), L.cardFromOld({}), L.cardFromOld(undefined), L.cardFromOld(null)], [st(0, M4), st(0, M4), st(0, M4), st(0, M4)]);
+        same('cardFromOld: nothing remembered is a first visit (and so is nothing at all)', [L.cardFromOld(OLD({})), L.cardFromOld({}), L.cardFromOld(undefined), L.cardFromOld(null)], [st(0, F4), st(0, F4), st(0, F4), st(0, F4)]);
         same('... the map is the last one that was played or hosted (ants-four-map), and Treasure when that is none of the six', [L.cardFromOld(OLD({ map: 'islands' })).map, L.cardFromOld(OLD({ map: 'junk' })).map, L.cardFromOld(OLD({ map: 5 })).map, L.cardFromOld(OLD({ map: 'TINY' })).map], ['islands', 'treasure', 'treasure', 'treasure']);
-        same('a browser that played a game on this computer: the opponents of Red, Blue and Black are its levels (None is Nobody), You at Green, Green\'s own seat Medium',
+        same('a browser that played a game on this computer: the opponents of Red, Blue and Black are its levels (None is Nobody), You at Green, Green\'s own seat a Friend (the first visit\'s)',
              [L.cardFromOld(OLD({ solo: 'easy,none,hard' })), L.cardFromOld(OLD({ solo: 'none,none,none' })), L.cardFromOld(OLD({ solo: 'EASY,Medium,none' }))],
-             [st(0, ['medium', 'easy', 'nobody', 'hard']), st(0, ['medium', 'nobody', 'nobody', 'nobody']), st(0, ['medium', 'easy', 'medium', 'nobody'])]);
+             [st(0, ['friend', 'easy', 'nobody', 'hard']), st(0, ['friend', 'nobody', 'nobody', 'nobody']), st(0, ['friend', 'easy', 'medium', 'nobody'])]);
         same('... the first versions\' key gives its one level to the three seats (none is Nobody in all three), and the newer key beats it', [L.cardFromOld(OLD({ legacy: 'hard' })), L.cardFromOld(OLD({ legacy: 'none' })), L.cardFromOld(OLD({ legacy: 'junk' })), L.cardFromOld(OLD({ solo: 'easy,none,hard', legacy: 'medium' }))],
-             [st(0, ['medium', 'hard', 'hard', 'hard']), st(0, ['medium', 'nobody', 'nobody', 'nobody']), st(0, ['medium', 'nobody', 'nobody', 'nobody']), st(0, ['medium', 'easy', 'nobody', 'hard'])]);
-        same('... a remembered list that is not three levels is not used: the old key is, else Medium (as the old page did)', [L.cardFromOld(OLD({ solo: 'easy,hard', legacy: 'hard' })).seats, L.cardFromOld(OLD({ solo: 'junk' })).seats], [['medium', 'hard', 'hard', 'hard'], M4]);
+             [st(0, ['friend', 'hard', 'hard', 'hard']), st(0, ['friend', 'nobody', 'nobody', 'nobody']), st(0, ['friend', 'nobody', 'nobody', 'nobody']), st(0, ['friend', 'easy', 'nobody', 'hard'])]);
+        same('... a remembered list that is not three levels is not used: the old key is, else Medium (as the old page did)', [L.cardFromOld(OLD({ solo: 'easy,hard', legacy: 'hard' })).seats, L.cardFromOld(OLD({ solo: 'junk' })).seats], [['friend', 'hard', 'hard', 'hard'], ['friend', 'medium', 'medium', 'medium']]);
         same('... and its team (You with a seat that plays) is kept when it is still a choice, else free for all', [L.cardFromOld(OLD({ solo: 'easy,medium,hard', soloTeams: '0+3' })).teams, L.cardFromOld(OLD({ solo: 'easy,none,hard', soloTeams: '0+3' })).teams, L.cardFromOld(OLD({ solo: 'easy,none,hard', soloTeams: '0+2' })).teams, L.cardFromOld(OLD({ solo: 'easy,medium,hard', soloTeams: 'junk' })).teams, L.cardFromOld(OLD({ solo: 'easy,none,none', soloTeams: '0+1' })).teams],
              ['0+3', '0+3', 'ffa', 'ffa', 'ffa']);
         same('a browser that only hosted rooms: the room that it had: a seat of it that had no bot is a Friend, one with a level is that bot, a seat beyond the room is Nobody (a 1 is 2 players; no players is 2)',
              [L.cardFromOld(OLD({ players: '3', fill: 'none,easy,none,hard' })), L.cardFromOld(OLD({ players: '2' })), L.cardFromOld(OLD({ players: '4', fill: 'medium' })), L.cardFromOld(OLD({ players: '1' })), L.cardFromOld(OLD({ fill: 'none,none,none,none' })), L.cardFromOld(OLD({ players: '4', fill: 'none,hard,none,easy' }))],
-             [st(0, ['medium', 'easy', 'friend', 'nobody']), st(0, ['medium', 'friend', 'nobody', 'nobody']), st(0, ['medium', 'medium', 'medium', 'medium']), st(0, ['medium', 'friend', 'nobody', 'nobody']), st(0, ['medium', 'friend', 'nobody', 'nobody']), st(0, ['medium', 'hard', 'friend', 'easy'])]);
+             [st(0, ['friend', 'easy', 'friend', 'nobody']), st(0, ['friend', 'friend', 'nobody', 'nobody']), st(0, ['friend', 'medium', 'medium', 'medium']), st(0, ['friend', 'friend', 'nobody', 'nobody']), st(0, ['friend', 'friend', 'nobody', 'nobody']), st(0, ['friend', 'hard', 'friend', 'easy'])]);
         same('... with its team when the room had one that the card still offers (four players: Green with Black), else free for all (a pair that three seats cannot make)', [L.cardFromOld(OLD({ players: '4', teams: '0+3' })).teams, L.cardFromOld(OLD({ players: '3', teams: '0+3' })).teams, L.cardFromOld(OLD({ players: '3', teams: '0+1' })).teams, L.cardFromOld(OLD({ players: '2', teams: '0+1' })).teams], ['0+3', 'ffa', '0+1', 'ffa']);
-        same('both kinds of key: the game on this computer wins (it was the first card); a junk value for players or fill is the default room', [L.cardFromOld(OLD({ solo: 'easy,easy,easy', players: '4', fill: 'hard' })).seats, L.cardFromOld(OLD({ players: 'x', fill: 'x' })).seats], [['medium', 'easy', 'easy', 'easy'], ['medium', 'friend', 'nobody', 'nobody']]);
+        same('both kinds of key: the game on this computer wins (it was the first card); a junk value for players or fill is the default room', [L.cardFromOld(OLD({ solo: 'easy,easy,easy', players: '4', fill: 'hard' })).seats, L.cardFromOld(OLD({ players: 'x', fill: 'x' })).seats], [['friend', 'easy', 'easy', 'easy'], ['friend', 'friend', 'nobody', 'nobody']]);
 
         // Sit here, and the other changes of the state: each makes a new state and leaves the old one as it was
         {
@@ -600,13 +601,15 @@ try {
             same('cardRoomFits: free for all fits a code with no team word only', [L.cardRoomFits('demo-small-4p-k7m2xq', st(0, M4, 'ffa', 'small')), L.cardRoomFits('demo-small-4p-t01-k7m2xq', st(0, M4, 'ffa', 'small'))], [true, false]);
         }
 
-        // why START is off, and the line under it
-        same('cardWhy: at least two players (You, the Friends and the bots) or the button is off, with the reason', [L.cardWhy(st(0, ['medium', 'nobody', 'nobody', 'nobody'])), L.cardWhy(st(2, ['nobody', 'nobody', 'hard', 'nobody'])), L.cardWhy(st(0, ['medium', 'nobody', 'friend', 'nobody'])), L.cardWhy(st(0, M4))],
-             ['Pick at least one more seat: a friend or a bot.', 'Pick at least one more seat: a friend or a bot.', '', '']);
-        same('cardNote: the reason when START is off; with bots only it starts at once; with one friend or more it waits for them and says what else starts it',
-             [L.cardNote(st(0, ['medium', 'nobody', 'nobody', 'nobody'])), L.cardNote(st(0, M4)), L.cardNote(st(0, ['medium', 'friend', 'nobody', 'nobody'])), L.cardNote(st(0, ['medium', 'friend', 'friend', 'hard'])), L.cardNote(st(1, ['friend', 'friend', 'friend', 'friend']))],
-             ['Pick at least one more seat: a friend or a bot.', 'Starts at once, in this tab. Bots gather food, raid and fight back.', 'Starts when your friend is in (the first player in the room can start sooner).',
-              'Starts when your friends are in (the first player in the room can start sooner).', 'Starts when your friends are in (the first player in the room can start sooner).']);
+        // who is alone, and the line under START
+        same('cardAlone: nobody else plays (every other seat is Nobody; a Friend or a bot is a player, and the choice of the seat of You counts for nothing): START then plays a game for one on this computer',
+             [L.cardAlone(st(0, ['medium', 'nobody', 'nobody', 'nobody'])), L.cardAlone(st(2, ['nobody', 'nobody', 'hard', 'nobody'])), L.cardAlone(st(3, ['nobody', 'nobody', 'nobody', 'nobody'])), L.cardAlone(st(0, ['medium', 'nobody', 'friend', 'nobody'])), L.cardAlone(st(0, M4)), L.cardAlone(st(1, ['friend', 'nobody', 'nobody', 'nobody']))],
+             [true, true, true, false, false, false]);
+        same('cardNote: alone it is a game for one on this computer (Green\'s, which the line says when You sit elsewhere); with bots only it starts at once; with one friend or more it waits for them and says what else starts it',
+             [L.cardNote(st(0, ['medium', 'nobody', 'nobody', 'nobody'])), L.cardNote(st(2, ['nobody', 'nobody', 'hard', 'nobody'])), L.cardNote(st(0, M4)), L.cardNote(st(0, ['medium', 'friend', 'nobody', 'nobody'])), L.cardNote(st(0, ['medium', 'friend', 'friend', 'hard'])), L.cardNote(st(1, ['friend', 'friend', 'friend', 'friend']))],
+             ['Starts at once, on this computer: just you on the map, no opponents.', 'Starts at once, on this computer: just you on the map, no opponents. Alone you play Green.', 'Starts at once, in this tab. Bots gather food, raid and fight back.',
+              'Starts when your friend is in (the first player in the room can start sooner).', 'Starts when your friends are in (the first player in the room can start sooner).', 'Starts when your friends are in (the first player in the room can start sooner).']);
+
 
         // the addresses: START and an invitation
         {
@@ -639,7 +642,7 @@ try {
                     const bots = [0, 1, 2, 3].filter((s) => plan !== '' && plan.split(',')[s] !== 'none');
                     // who is in the match: You, the friends and the bots, each seat once, and no seat that is Nobody
                     if (JSON.stringify([...new Set([you, ...friends, ...bots])].sort()) !== JSON.stringify(playing) || bots.length + people !== playing.length || bots.indexOf(you) !== -1 || friends.some((f) => bots.indexOf(f) !== -1)) note('roster ' + frozen(state));
-                    if ((L.cardWhy(state) === '') !== (playing.length >= 2 && playing.length <= 4)) note('why ' + frozen(state));
+                    if (L.cardAlone(state) !== (playing.length === 1)) note('alone ' + frozen(state));
                     const args = P2.joinArguments(L.cardQuery(state, code, you, 'Ann', '16:9'), true, 'play.test').args;
                     queries++;
                     const want = ['--join-url', 'wss://play.test/ws', '--room', code, '--seat', String(you), ...(plan ? ['--fill-bots', plan] : []), '--start-when', String(people), '--name', 'Ann'];
