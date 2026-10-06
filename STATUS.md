@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 18:48 PDT · current release **v0.9.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 18:57 PDT · current release **v0.9.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -21,9 +21,8 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- **No-Docker browser checks** (pull request #13, tools only, no redeploy): reviewed twice and every finding fixed; main with v0.9.0 is in and the five checks are running; it merges right after the Windows test fix (pull request #20)
+- **No-Docker browser checks** (pull request #13, tools only, no redeploy): reviewed twice and every finding fixed; main with v0.9.0 is in and the five checks are running; it merges as soon as they are green
 - Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and it merges in its turn
-- **Prediction-budget tests (the Windows flake, PR #20):** reviewed, no defect; main with v0.9.0 is merged in and the five checks are running again; it merges next.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
@@ -33,6 +32,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **Windows test flake fixed** (no release; PR #20, merged 2026-10-05 18:52 PDT): the prediction CPU-budget tests no longer read the machine's clocks, so the Windows (MSVC 2022) check no longer fails now and then in test_prediction RP7.1, RP7.3, RP7.4 and test_netgame N3.30; nothing changes for players (the beta redeploys with the same version).
 - **v0.9.0** Smarter computer players: a bot races an enemy for the food that both can reach, hunts a wounded ant until it is dead, lights fire walls only where they cannot simply be put out, never clicks a special order onto an ant (far fewer "Can't go there." from the bots' own orders) and plays harder when it is behind; on ISLANDS and the lake of SMALL bots fly a crew over the water with bomb flights, bring Swimmers across and ferry the food home (four bots on ISLANDS used to score nothing, now about 1,000 Easy to 1,400 Hard points a seat) (PR #14, merged 2026-10-05 18:36 PDT, live 18:39 PDT)
 - PR #19 merged: the macOS flakes of test_rejoin_app (RA1.3, RA4.1, RA9.1) are fixed; tests only, no redeploy
 - **v0.8.3** Friend by default, a game for one and a dirtier background: a first visit to the New match card has a Friend in the three other seats (it was a Medium bot; a browser that saved its choices keeps them), START! is always on and, with every other seat on Nobody, begins a game for one on this computer (no room, no opponent; you play Green), and the orange background has a little noise and dirt (PR #23, merged 2026-10-05 17:58 PDT, live 18:01 PDT; the owner asked for each of the three)
