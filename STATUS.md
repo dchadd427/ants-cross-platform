@@ -1,12 +1,14 @@
 # Status
 
-_Updated 2026-10-05 19:43 PDT · current release **v0.9.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 19:52 PDT · current release **v0.9.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
 | **v0.10.0** the leader of a room can move a player to another colour (network protocol 14) | ██████░░░░ 57% | Mon night | three independent reviews done and every finding fixed (PR #26); the long local checks pass; its release turn has started (version and changelog, then the five checks on the final head); it merges when they are green |
 | **v0.11.0** short room codes (no "demo") and platform / operating system icons (protocol 15) | ░░░░░░░░░░ 0% | Wed or later | planned, starts when v0.10.0 is on main |
+
+Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
@@ -20,8 +22,8 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 - Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and its release turn has started
-- **Nobody means nobody** (patch, number to come, no protocol change; PR #27): a game for one has only your colony, no hill, ants or eggs for the empty seats; built and tested here, draft PR open.
-- **Team 1 and Team 2 switches** (in PR #27 with "Nobody means nobody", patch, number to come, no protocol change): each colour on the front page's card has a Team 1 and a Team 2 switch instead of the Teams menu; built and tested here, review running.
+- **Nobody means nobody** (no version number of its own, no protocol change; PR #27): a game for one has only your colony, no hill, ants or eggs for the empty seats; built and tested here, draft PR open.
+- **Team 1 and Team 2 switches** (in PR #27 with "Nobody means nobody", no version number of its own, no protocol change): each colour on the front page's card has a Team 1 and a Team 2 switch instead of the Teams menu; built and tested here, review running.
 - **Server tests that fail now and then** (tests only, no release; PR #28): two timing checks, S3.100 on Windows and S3.32 on macOS, are being fixed so that they no longer assume a quiet machine; the draft carries extra diagnostics for now, which come out before it merges.
 
 ## On hold (not started; the owner decides when)
