@@ -1901,6 +1901,80 @@ void run_leader_tests() {
         ASSERT_EQ(ann.sim.current_tick(), bob.sim.current_tick());
     } TEST_END();
 
+    TEST_CASE("S3.26b The Leader Moves The Colours (Protocol 14) In A Real Room: Bob Is Put In Black And Cat In Red, Everybody Is Told, The Status Shows The Seats And The Counts, The Match Runs With The Seats As They Are Now (Each Client Plays The Colour It Was Moved To) And The Clients Agree With The Referee; A Player Who Is Not The Leader Moves Nobody; A Press After The Start Is Ignored And Counted") {
+        World w;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("MOVE-1", 4), w.now).ok);
+        Client& ann = w.connect("Ann", "MOVE-1");
+        w.run(100);                                                                        // (one after the other: the order of the Welcomes is the order of the seats and the lead)
+        Client& bob = w.connect("Bob", "MOVE-1");
+        w.run(100);
+        Client& cat = w.connect("Cat", "MOVE-1");
+        for (Client* c : {&ann, &bob, &cat}) c->record_hashes = true;
+        w.run(500);
+        RoomStatus s = w.status("MOVE-1");
+        ASSERT_TRUE(s.state == RoomState::Waiting && s.joined == 3 && s.leader == 0);
+        ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bob" && s.names[2] == "Cat" && s.names[3].empty());
+        ASSERT_TRUE(s.seat_moves == 0 && s.ignored_seat_moves == 0);
+        // Bob does not lead: a press of his (a client that is not the game's) is ignored and counted, and nobody moves
+        bob.end->send(net::encode(net::SeatMoveMsg{2, 3}));
+        w.run(500);
+        s = w.status("MOVE-1");
+        ASSERT_TRUE(s.names[1] == "Bob" && s.names[2] == "Cat" && s.names[3].empty() && s.seat_moves == 0 && s.ignored_seat_moves == 1);
+        ASSERT_EQ(bob.lobby->phase(), net::ClientLobby::Phase::InRoom);
+        for (Client* c : {&ann, &bob, &cat}) c->room_chat.clear();
+        // the leader's press on a colour that a player holds (Cat onto Bob) is ignored and counted: nobody is displaced, nobody is told
+        ASSERT_TRUE(ann.lobby->request_seat_move(2, 1));
+        w.run(500);
+        s = w.status("MOVE-1");
+        ASSERT_TRUE(s.names[1] == "Bob" && s.names[2] == "Cat" && s.seat_moves == 0 && s.ignored_seat_moves == 2);
+        ASSERT_TRUE(ann.room_chat.empty() && bob.room_chat.empty() && cat.room_chat.empty());
+        // Ann puts Bob (red) in black (nobody holds it), then Cat (blue) in red (free now)
+        ASSERT_TRUE(ann.lobby->request_seat_move(1, 3));
+        w.run(300);
+        ASSERT_TRUE(ann.lobby->request_seat_move(2, 1));
+        w.run(500);
+        s = w.status("MOVE-1");
+        ASSERT_TRUE(s.state == RoomState::Waiting && s.joined == 3 && s.leader == 0);
+        ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Cat" && s.names[2].empty() && s.names[3] == "Bob");
+        ASSERT_TRUE(s.seat_moves == 2 && s.ignored_seat_moves == 2);
+        ASSERT_TRUE(ann.lobby->my_seat() == 0 && cat.lobby->my_seat() == 1 && bob.lobby->my_seat() == 3);
+        for (Client* c : {&ann, &bob, &cat}) {                                            // every client sees the room that the server has
+            ASSERT_TRUE(c->lobby->room().slots[0].name == "Ann" && c->lobby->room().slots[1].name == "Cat" && c->lobby->room().slots[3].name == "Bob");
+            ASSERT_TRUE(c->lobby->room().slots[2].state == net::SlotState::Empty && c->lobby->room().leader == 0);
+        }
+        ASSERT_TRUE(ann.room_chat.empty());                                                // the leader is told nothing
+        ASSERT_TRUE(bob.room_chat.size() == 1 && bob.room_chat[0].notice() && bob.room_chat[0].text == "Ann moved you to Black.");
+        ASSERT_TRUE(cat.room_chat.size() == 1 && cat.room_chat[0].notice() && cat.room_chat[0].text == "Ann moved you to Red.");
+        // the match starts from the seats as they are now
+        ASSERT_TRUE(ann.lobby->request_start());
+        w.run(1500);
+        s = w.status("MOVE-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3);
+        ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Cat" && s.names[2].empty() && s.names[3] == "Bob");
+        ASSERT_TRUE(ann.sim.roster_mask() == 0x0B && bob.sim.roster_mask() == 0x0B && cat.sim.roster_mask() == 0x0B);       // green, red and black play
+        ASSERT_TRUE(ann.session != nullptr && bob.session != nullptr && cat.session != nullptr);
+        ASSERT_TRUE(ann.session->player() == 0 && cat.session->player() == 1 && bob.session->player() == 3);              // each client plays the colour it was moved to
+        // the leader's press that crossed the Start: the running match ignores it and counts it, and the match is as it was
+        ann.end->send(net::encode(net::SeatMoveMsg{3, 2}));
+        w.run(500);
+        ASSERT_EQ(w.status("MOVE-1").ignored_seat_moves, 3u);
+        ASSERT_TRUE(w.status("MOVE-1").state == RoomState::Running && ann.session != nullptr && !ann.lost && !bob.lost && !cat.lost);
+        w.run(30000);                                                                      // some 500 turns of play (after the start dialog's five seconds)
+        s = w.status("MOVE-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.ticks > 400 && s.seat_moves == 2 && s.leader == 255);
+        ASSERT_FALSE(ann.session->desynced() || bob.session->desynced() || cat.session->desynced());
+        size_t compared = 0;                                                               // the clients stand where each other stand: every tick that two of them ran has one state
+        for (const auto& pair : {std::make_pair(&ann, &bob), std::make_pair(&ann, &cat), std::make_pair(&bob, &cat)}) {
+            for (const auto& at : pair.first->hash_at) {
+                const auto other = pair.second->hash_at.find(at.first);
+                if (other == pair.second->hash_at.end()) continue;
+                ASSERT_EQ(other->second, at.second);
+                ++compared;
+            }
+        }
+        ASSERT_TRUE(compared > 600);
+    } TEST_END();
+
     TEST_CASE("S3.33 The Leader And The Lag Policy: A Waiting Room Has No Lag And No Notice; A Leader Whose Window Stops After The Start Does Not Hold The Room Up, The Other Player Is Told That It Lags, Its Late Clicks On START Are Counted And Cost It Nothing, It Catches Up (\"Catching Up\") And Is Not Dropped; Both End Bit-Identical") {
         World w;
         ASSERT_TRUE(w.mgr.create_room(spec_of("LEAD-LAG", 4), w.now).ok);
@@ -2158,6 +2232,7 @@ void run_leader_tests() {
         ctl::JsonValue v = json_of(r);
         ASSERT_TRUE(v.get("early_start").is_bool() && v.get("early_start").as_bool_or(false));   // the default: on
         ASSERT_TRUE(v.get("leader").is_null() && v.get("ignored_start_requests").as_int_or(9) == 0);
+        ASSERT_TRUE(v.get("seat_moves").as_int_or(9) == 0 && v.get("ignored_seat_moves").as_int_or(9) == 0);       // (protocol 14: the colours that the leader moved, and the moves that were heard and not done)
         r = call("POST", "/rooms", R"({"map":"TINY.LVL","players":4,"code":"J-2","early_start":false})");
         ASSERT_EQ(r.status, 201);
         v = json_of(r);
@@ -2188,6 +2263,16 @@ void run_leader_tests() {
         bob.end->send(net::encode(net::StartRequestMsg{}));
         w.run(500);
         ASSERT_EQ(json_of(call("GET", "/rooms/J-1")).get("ignored_start_requests").as_int_or(0), 1);
+        bob.end->send(net::encode(net::SeatMoveMsg{1, 3}));                               // the same for a move: Bob does not lead, the press is counted and nobody moves
+        w.run(500);
+        v = json_of(call("GET", "/rooms/J-1"));
+        ASSERT_TRUE(v.get("ignored_seat_moves").as_int_or(0) == 1 && v.get("seat_moves").as_int_or(9) == 0 && v.get("players").size() == 2);
+        ASSERT_TRUE(ann.lobby->request_seat_move(1, 3));                                  // the leader's does move him, and the interface counts it
+        w.run(500);
+        v = json_of(call("GET", "/rooms/J-1"));
+        ASSERT_TRUE(v.get("seat_moves").as_int_or(0) == 1 && v.get("ignored_seat_moves").as_int_or(0) == 1 && v.get("leader").as_int_or(9) == 0);
+        ASSERT_EQ(v.get("players").at(1).get("seat").as_int_or(9), 3);
+        ASSERT_EQ(v.get("players").at(1).get("name").str(), std::string("Bob"));
         ASSERT_TRUE(ann.lobby->request_start());
         w.run(1500);
         v = json_of(call("GET", "/rooms/J-1"));
@@ -2203,6 +2288,7 @@ void run_leader_tests() {
         ASSERT_FALSE(cat.lobby->is_leader());
         // a demo room has the early start on, and its leader can start it
         Client& eve = w.connect("Eve", "demo-small-4p-x1");
+        w.run(100);                                                                       // (Eve is first: the Hellos of two connections made in one tick arrive in either order, by the links' jitter)
         w.connect("Fay", "demo-small-4p-x1");
         w.run(500);
         v = json_of(call("GET", "/rooms/demo-small-4p-x1"));
@@ -5576,11 +5662,11 @@ void run_bot_tests() {
         ASSERT_EQ(raw.size(), size_t{1});                                                    // and the raw client still only the line for all
     } TEST_END();
 
-    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog), 12 (The Release Before The Teams) Or 14 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
+    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog), 12 (The Release Before The Teams), 13 (The Release Before The Colour Moves) Or 15 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
         {   // the door's own check of the protocol, for a code that no room has
             World w;
-            ASSERT_EQ(net::kProtocolVersion, uint16_t{13});                  // (11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
-            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{14}, uint16_t{1}, uint16_t{0}}) {
+            ASSERT_EQ(net::kProtocolVersion, uint16_t{14});                  // (13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
+            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{15}, uint16_t{1}, uint16_t{0}}) {
                 auto ends = w.net.connect({20, 10});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
                 net::HelloMsg hello;

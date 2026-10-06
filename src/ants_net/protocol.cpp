@@ -609,6 +609,15 @@ bool decode(const uint8_t* data, size_t size, StartRequestMsg& out) {
     return true;
 }
 
+std::vector<uint8_t> encode(const SeatMoveMsg& m) { return {static_cast<uint8_t>(MsgType::SeatMove), m.from, m.to}; }
+bool decode(const uint8_t* data, size_t size, SeatMoveMsg& out) {
+    if (data == nullptr || size != 3 || data[0] != static_cast<uint8_t>(MsgType::SeatMove)) return false;          // exactly the type and two seats
+    if (data[1] >= sim::MAX_PLAYERS || data[2] >= sim::MAX_PLAYERS || data[1] == data[2]) return false;            // seats of the room, two of them: a player cannot be moved to where it is
+    out.from = data[1];
+    out.to = data[2];
+    return true;
+}
+
 const char* fill_level_name(FillLevel level) noexcept {
     switch (level) {
         case FillLevel::None: return "none";
@@ -687,11 +696,7 @@ std::vector<std::pair<uint8_t, FillLevel>> plan_fill_seats(const FillPlan& plan,
     return seats;
 }
 
-namespace {
-
 std::string seat_colour_word(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(sim::strings::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
-
-}  // namespace
 
 std::string fill_seats_sentence(const std::vector<std::pair<uint8_t, FillLevel>>& seats) {
     std::string out;
