@@ -165,8 +165,7 @@ LayoutRect MapSelectScreen::player_row_rect(size_t row) const noexcept {
         const SetupLayout& layout = SetupLayout::of(setup_variant());
         return LayoutRect{layout.players_box.x + 4, layout.seat_y - 10 + r * layout.seat_pitch, SetupLayout::kBoxInnerPlayersW, layout.seat_pitch};
     }
-    const int32_t left = PLAYER_PORTRAIT_X - 10;
-    return LayoutRect{left, PLAYER_THUMB_Y - 10 + r * PLAYER_ROW_PITCH, PLAYER_THUMB_X + 40 - left, PLAYER_ROW_PITCH};
+    return LayoutRect{PLAYER_BOX_X, PLAYER_THUMB_Y - 12 + r * PLAYER_ROW_PITCH, PLAYER_BOX_W, PLAYER_ROW_PITCH};
 }
 
 int32_t MapSelectScreen::player_row_at(int32_t screen_x, int32_t screen_y) const noexcept {

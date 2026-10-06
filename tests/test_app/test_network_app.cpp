@@ -2379,6 +2379,14 @@ void run_leader_tests() {
                 const LayoutRect r1 = leader.map_select().player_row_rect(1);
                 ASSERT_TRUE(r0.w > 100 && r0.h > 20 && r1.x == r0.x && r1.w == r0.w && r1.h == r0.h && r1.y == r0.bottom());
                 ASSERT_TRUE(leader.map_select().player_row_rect(3).bottom() == r0.y + 4 * r0.h);
+                // the four rows fill the inside of the black box of the picture and the light stays in it (the classic picture's box measures 200 x 200 from (371, 83) on the screen; the 16:9 page's is its layout's)
+                if (wide) {
+                    const SetupLayout& layout = SetupLayout::of(leader.map_select().setup_variant());
+                    ASSERT_TRUE(r0.x == layout.players_box.x + 4 && r0.w == SetupLayout::kBoxInnerPlayersW && r0.y >= layout.players_box.y + 4);
+                    ASSERT_TRUE(leader.map_select().player_row_rect(3).bottom() <= layout.players_box.y + 4 + SetupLayout::kBoxInnerPlayersH);
+                } else {
+                    ASSERT_TRUE(r0.x == 371 && r0.w == 200 && r0.y == 83 && leader.map_select().player_row_rect(3).bottom() == 283);
+                }
                 const auto at = [&](size_t row) { return row_centre(leader, row); };
                 ASSERT_EQ(leader.map_select().player_row_at(at(0).first, at(0).second), 0);
                 ASSERT_EQ(leader.map_select().player_row_at(at(1).first, at(1).second), 1);

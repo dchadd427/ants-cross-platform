@@ -113,6 +113,8 @@ public:
     static constexpr int32_t PLAYER_THUMB_X = 540;
     static constexpr int32_t PLAYER_THUMB_Y = 95;
     static constexpr int32_t PLAYER_ROW_PITCH = 50;
+    static constexpr int32_t PLAYER_BOX_X = 371;       // the inside of the black box of the picture (200 wide, from y = 83): a row that a press hits is one box wide, the four rows fill it
+    static constexpr int32_t PLAYER_BOX_W = 200;
 
 
     MapSelectScreen();
