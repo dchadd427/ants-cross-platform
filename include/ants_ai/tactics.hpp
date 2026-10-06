@@ -43,19 +43,19 @@ struct LevelPlan {
     uint32_t fight_linger_ticks{100};    // a fight ends this long after the last blow that was seen
     bool carrier_aid{true};              // a carrier that was hit stands idle with its food (the blow cleared its walk): it is sent home at once, as a person would click it
     // the economy
-    bool contest_aware{false};           // the pile order of the owner's playbook: the piles that several enemies reach first, then those that one reaches, the safe ones, those of the ally, the hopeless (HarvestTask::Params::contest_aware)
+    bool contest_aware{false};           // the contest-aware pile order: the piles that several enemies reach first, then those that one reaches, the safe ones, those of the ally, the hopeless (HarvestTask::Params::contest_aware)
     uint32_t contest_low{70};            // an enemy whose cost to a pile is below this percentage of the own cost is there first
     uint32_t contest_high{130};          // ... and above this percentage it is no competitor
     bool rank_by_remaining{false};       // within a class: the points that a pile still holds per tick of the trip (Medium, Hard)
     bool contest_one_first{true};        // the piles that one enemy competes for come before the safe ones
     bool contest_reactive{false};        // the tournaments' experiment: a contested pile first only while an enemy ant is at it
-    uint32_t contest_opening_ants{0};    // the opening: this many ants go to the contested centre of the map at the start (Medium 1, Hard 2), the rest harvest by value per trip (the owner's
-                                         // playbook: strong players contest the centre first; a whole-match duel against the plain order is a tie, docs/BOTS.md); 0: none (Easy)
+    uint32_t contest_opening_ants{0};    // the opening: this many ants go to the contested centre of the map at the start (Medium 1, Hard 2), the rest harvest by value per trip
+                                         // (strong players contest the centre first; a whole-match duel against the plain order is a tie, docs/BOTS.md); 0: none (Easy)
     // the race: contested food first for the ants that the gate cannot use (HarvestTask::Params::race)
     bool race{false};
     uint32_t race_gap_ticks{100};
     uint32_t race_slack_percent{100};    // the ants that the gate can use (about one deposit per race_gap_ticks) harvest in the plain order, the ants beyond that race (0: every ant races: measured worse)
-    uint32_t race_floor{0};              // at least this many ants of the pool go to the piles where a race is open, whatever the gate can use (the owner's playbook: the centre is the starting food)
+    uint32_t race_floor{0};              // at least this many ants of the pool go to the piles where a race is open, whatever the gate can use (the centre is the starting food)
     bool race_one{false};
     uint32_t race_ants{0};
     uint32_t race_ticks{1200};           // the first minute of the match
@@ -64,7 +64,7 @@ struct LevelPlan {
     uint32_t contest_opening_ticks{1200};  // the opening of v0.5.0 (race off) lasts this long
     uint32_t contest_opening_min_ants{6};  // ... only with at least this many ants at the start (TINY has 3, SMALL 4: there the contest of the middle costs and loses; MEDIUM, GAUNTLET and TREASURE have 6 or more)
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
-    bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating", the owner's playbook): 55 to 65 ticks per deposit instead of 93 to 116
+    bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating"): 55 to 65 ticks per deposit instead of 93 to 116
     uint32_t gate_latency{9};            // ticks between a decision and the order's arrival (the profile's reaction delay less its jitter, and the sink)
     uint32_t gate_max_staged{8};         // carriers brought to the doorstep at a time
     bool gate_predictive{true};          // the entrance click is given before the gate is seen free (from the clip that the look showed first)
@@ -77,7 +77,7 @@ struct LevelPlan {
     uint32_t renew_lead_ticks{0};        // a wall is put out and lit again this long before it would burn out (0: it is lit again after it burned out, while the threat lasts)
     // the side's power-ups and the counters of the enemy's fire walls and bombs
     bool secure_side{false};             // (Medium, Hard) the power-ups of secure_kinds on the own side of the map are taken early, so that nobody steals them (docs/BOTS.md)
-    uint8_t secure_kinds{0};             // bit t = AntType t, in the order of value: Fire, Bomber, then Thief, Combat, Swimmer (the owner's playbook: the first moves go to power-ups, not food)
+    uint8_t secure_kinds{0};             // bit t = AntType t, in the order of value: Fire, Bomber, then Thief, Combat, Swimmer (the first moves go to power-ups, not food)
     bool counters{true};                 // enemy fire walls near the hill or a pile are put out by an own Fire Ant, enemy bombs defused by an own Bomber or, without one, set off by a healthy idle worker
     bool ally_help{false};               // the counters and the strike-back reach the ally's hill and piles too, and a blow on an ant of the ally that an own ant is near is answered
     int32_t ally_help_radius{10};        // ... an own ant within this many tiles of the blow answers it (nobody walks across the map)
@@ -99,7 +99,7 @@ struct LevelPlan {
     uint32_t max_thief{0};
     bool steals{false};                  // (Hard) a pick-up trip may go to a power-up on ANOTHER team's side (never the ally's), when no ant of the owner is quicker there: a theft; the other levels take their own side's power-ups only
     // forced fights and hatching (Medium and Hard)
-    bool strikes{false};                 // clearly behind the leader (by the score boxes) and a fight looks winnable: a strike force hunts the leader's carriers (the owner's playbook)
+    bool strikes{false};                 // clearly behind the leader (by the score boxes) and a fight looks winnable: a strike force hunts the leader's carriers
     uint32_t strike_margin{150};         // clearly behind: the leader's box is this many points above the own ...
     uint32_t strike_margin_percent{12};  // ... and at least this percentage of the leader's own
     uint32_t strike_min_leader{300};     // the leader holds at least this many points (below that a fight is not worth the trip)
@@ -233,7 +233,7 @@ struct LevelPlan {
     bool island_expedition{false};       // the expedition is on (ExpeditionTask: a crew is flown to the Swimmers that lie beyond water, bomb by bomb); the tests of the island task switch it off
     bool island_ferry{false};            // the Swimmers that dig no bridge carry food across the water (FerryTask)
     uint32_t island_ferry_per_pile{2};   // Swimmers of the ferry at one pile
-    /// The order of the opening's power-up trips (PowerUpTask): the values of the owner's playbook, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
+    /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
 };

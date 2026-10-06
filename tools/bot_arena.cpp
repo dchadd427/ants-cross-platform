@@ -24,7 +24,7 @@
 //   --repeat N        play every match N times and require identical results (finds any nondeterminism)
 //   --replay-check    re-feed the commands that were applied into a FRESH engine with no bot at all and require the same state hash at every 20th tick and at the end
 //   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did
-//                     (counts of attack orders, raids, walls, ...) to stderr when a match is over (tools/exp.py reads it).
+//                     (counts of attack orders, raids, walls, ...) to stderr when a match is over.
 //   --ally-standard   the first two standard bots of a match team up (the lower seat invites at its first look, the other accepts by its accept rule); --ally-pairs: every two seats
 //                     with the same standard spec team up (2 + 2 for [A, A, B, B]). Test-only: no bot of the game invites.
 //   --threads N       matches played at the same time (default 1; every match is independent, the report is sorted by map, seed and arrangement)

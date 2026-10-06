@@ -175,8 +175,8 @@ public:
         /// Ants of these types (bit t = AntType t) join the pool besides the level's default type: a typed ant harvests like a worker (a Combat Ant punches the enemy that comes within
         /// two tiles of its way as well), so the standard bot lets its Fire and Bomber ants harvest between their jobs. 0 (the worker bot): the default type only.
         uint8_t extra_types{0};
-        /// Contest-aware piles (the standard bot; false for the worker, whose order and pinned numbers stay as they are): the candidates are ordered by CLASS first (the owner's playbook:
-        /// "the center food first, then the contested food on one of the sides, depending on who is teamed up"), then within a class by the rank below. A team COMPETES for a pile when its
+        /// Contest-aware piles (the standard bot; false for the worker, whose order and pinned numbers stay as they are): the candidates are ordered by CLASS first
+        /// (the centre food first, then the contested food on one of the sides, depending on who is teamed up), then within a class by the rank below. A team COMPETES for a pile when its
         /// hill reaches it at a cost between contest_low and contest_high percent of the own cost (the start analysis' costs of every team's hill, PileInfo::approach); an enemy that is
         /// nearer than contest_low percent will have the pile before the ants get there. The classes, in the order they are sent to:
         ///   Multi     at least two live teams that are not allies compete (the centre of TREASURE)
