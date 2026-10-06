@@ -1089,6 +1089,16 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
          [switchesShown(env), switchesDimmed(env), env.$('teams-line').textContent], [['1', '1', '2', '2'], ['2', '2', '1', '1'], 'Teams: Green + Red against Blue + Black.']);
     pressTeam(env, 2, 1);
     same('pressing a dimmed switch changes nothing and says why in the line under the seats (a team is two colours)', [switchesShown(env), env.$('teams-line').textContent, JSON.parse(env.storage.data['ants-match']).sides], [['1', '1', '2', '2'], 'Team 1 has two colours already. Press one of them to take it off first.', [1, 1, 0, 0]]);
+    {   // a person who presses it again asks again: the reason is written again each time (a live region says what is written, not what stays)
+        const line = env.$('teams-line');
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(line), 'textContent');
+        let writes = 0;
+        Object.defineProperty(line, 'textContent', { get() { return descriptor.get.call(line); }, set(v) { writes++; descriptor.set.call(line, v); }, configurable: true });
+        pressTeam(env, 2, 1);
+        pressTeam(env, 2, 1);
+        same('... pressed again it is written again each time', [writes, line.textContent], [2, 'Team 1 has two colours already. Press one of them to take it off first.']);
+        delete line.textContent;
+    }
     choose(env, 2, 'hard');
     same('... and the next choice puts the teams back in the line', env.$('teams-line').textContent, 'Teams: Green + Red against Blue + Black.');
     pressTeam(env, 1, 1);
@@ -1100,10 +1110,27 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     same('... remembered: the team that the switches make, and the switches', [JSON.parse(env.storage.data['ants-match']).teams, JSON.parse(env.storage.data['ants-match']).sides], ['0+2', [1, 0, 1, 0]]);
     const back = runLobby('', env.storage.data);
     same('the next visit comes back with the switches (the two that were pressed are on, the other two show the other team)', [switchesShown(back), back.$('teams-line').textContent], [['1', '2', '1', '2'], 'Teams: Green + Blue against Red + Black.']);
+    choose(back, 3, 'friend');
+    check('a Friend at Black gives the room a code with the word of the team (t02: Green + Blue)', invites(back).length === 1 && /^demo-treasure-4p-t02-[a-z2-9]{6}$/.test(back.param(inviteLinks(back)[0], 'room')), JSON.stringify(inviteLinks(back)));
     pressTeam(back, 3, 2);
     same('pressing the Team 2 that Black shows (nobody pressed it) takes the teams away: no switch is on, free for all', [switchesShown(back), switchesDimmed(back), back.$('teams-line').textContent, JSON.parse(back.storage.data['ants-match']).sides, JSON.parse(back.storage.data['ants-match']).teams], [['-', '-', '-', '-'], ['', '', '', ''], FFA_LINE, [0, 0, 0, 0], 'ffa']);
-    check('... and a code made for those choices has no team word any more', invites(back).length > 0 ? /^demo-treasure-4p-[a-z2-9]{6}$/.test(back.param(inviteLinks(back)[0], 'room')) : true);
-    check('the switches are buttons that say whether they are on (aria-pressed) and are named by their seat (a group named for its colour)', [0, 1, 2, 3].every((x) => [1, 2].every((k) => new RegExp('<button type="button" class="tbtn" id="team-' + x + '-' + k + '" aria-pressed="false">Team ' + k + '</button>').test(lobbyText)) && new RegExp('<span class="teamset" id="team-set-' + x + '" role="group" aria-label="' + ['Green', 'Red', 'Blue', 'Black'][x] + '\'s team" hidden>').test(lobbyText)));
+    check('... and the code made for those choices has no team word any more', invites(back).length === 1 && /^demo-treasure-4p-[a-z2-9]{6}$/.test(back.param(inviteLinks(back)[0], 'room')), JSON.stringify(inviteLinks(back)));
+    check('the switches are buttons that say whether they are on (aria-pressed) and are named by their seat (the button\'s own name: Team 1 for Green; and a group named for its colour)', [0, 1, 2, 3].every((x) => [1, 2].every((k) => new RegExp('<button type="button" class="tbtn" id="team-' + x + '-' + k + '" aria-label="Team ' + k + ' for ' + ['Green', 'Red', 'Blue', 'Black'][x] + '" aria-pressed="false">Team ' + k + '</button>').test(lobbyText)) && new RegExp('<span class="teamset" id="team-set-' + x + '" role="group" aria-label="' + ['Green', 'Red', 'Blue', 'Black'][x] + '\'s team" hidden>').test(lobbyText)));
+    {   // a press that the other seats hold: Team 1 on Green, then Team 2 on Red and Blue show Black on Team 1 as well; a press that is accepted always shows
+        const e = runLobby('', BOTS());
+        pressTeam(e, 0, 1);
+        pressTeam(e, 1, 2);
+        pressTeam(e, 2, 2);
+        same('Team 1 on Green, Team 2 on Red and on Blue: Green + Black against Red + Blue, and Green and Black show Team 1', [switchesShown(e), e.$('teams-line').textContent], [['1', '2', '2', '1'], 'Teams: Green + Black against Red + Blue.']);
+        pressTeam(e, 0, 1);
+        same('... pressing Team 1 on Green (what it pressed is held by the others now) takes the teams away, as Black\'s does: every switch is off', [switchesShown(e), e.$('teams-line').textContent], [['-', '-', '-', '-'], FFA_LINE]);
+        pressTeam(e, 0, 1);
+        pressTeam(e, 1, 1);
+        pressTeam(e, 0, 2);
+        same('Green + Red against Blue + Black: Green cannot take the Team 2 that Blue and Black show (nobody pressed it), and the line says to clear the teams first', [switchesShown(e), e.$('teams-line').textContent], [['1', '1', '2', '2'], 'Team 2 is the other two colours already. Press a lit switch to clear the teams first.']);
+        pressTeam(e, 3, 2);
+        same('... and a press on a lit switch does clear them', [switchesShown(e), e.$('teams-line').textContent], [['-', '-', '-', '-'], FFA_LINE]);
+    }
     const old = runLobby('', { 'ants-match': JSON.stringify({ map: 'treasure', you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: '0+3' }) });
     same('a state of the first versions of the card (a team and no switches) shows its pair on Team 1 and the other two on Team 2', [switchesShown(old), old.$('teams-line').textContent], [['1', '2', '2', '1'], 'Teams: Green + Black against Red + Blue.']);
     const junk = runLobby('', { 'ants-match': JSON.stringify({ map: 'treasure', you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: '0+3', sides: [1, 1, 1, 0] }) });
@@ -1181,13 +1208,13 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
             const line = env.$('teams-line');
             const plays = [0, 1, 2, 3].filter((x) => x === you[0] || words[x] !== 'nobody');
             if (line.hidden !== (plays.length < 3) || sw.some((v, x) => (v === '') !== (plays.indexOf(x) === -1 || plays.length < 3))) wrong += ' switches ' + step;
-            if (!line.hidden && !/^(Free for all\. For a team|Teams: \w+ \+ \w+ against |Team [12] has two colours already\.)/.test(line.textContent)) wrong += ' line ' + step + ' ' + line.textContent;
+            if (!line.hidden && !/^(Free for all\. For a team|Teams: \w+ \+ \w+ against |Team [12] has two colours already\. Press one of them to take it off first\.|Team [12] is the other two colours already\. Press a lit switch to clear the teams first\.)/.test(line.textContent)) wrong += ' line ' + step + ' ' + line.textContent;
             const on = sw.map((v) => (v === '1' || v === '2' ? Number(v) : 0));
             const twos = [1, 2].map((k) => [0, 1, 2, 3].filter((x) => on[x] === k)).filter((list) => list.length === 2);
             if ([1, 2].some((k) => on.filter((v) => v === k).length > 2)) wrong += ' crowded ' + step;
             let word = '';
             if (twos.length) { const pair = plays.length === 4 && twos[0][0] !== 0 ? [0, 1, 2, 3].filter((x) => twos[0].indexOf(x) === -1) : twos[0]; word = 't' + pair[0] + pair[1]; }
-            if (!line.hidden && !/^Team [12] has two colours/.test(line.textContent) && /^Teams: /.test(line.textContent) !== (word !== '')) wrong += ' teamline ' + step;
+            if (!line.hidden && !/^Team [12] (has two|is the other two) colours/.test(line.textContent) && /^Teams: /.test(line.textContent) !== (word !== '')) wrong += ' teamline ' + step;
             for (const link of inviteLinks(env)) if (((/-4p-(t[0-3][0-3])-/.exec(env.param(link, 'room')) || [])[1] || '') !== word) wrong += ' word ' + step + ' ' + env.param(link, 'room');
         }
         if (invites(env).length !== friends.length || env.$('invites').hidden !== (friends.length === 0)) wrong += ' invites ' + step;

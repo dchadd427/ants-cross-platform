@@ -56,13 +56,14 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 PARTS = ("front", "seats", "play", "solo", "friend", "old", "room", "game")
 NEEDS_SERVER = ("play", "friend")                                            # (the parts that play a match need the site's /ws to lead to a game server)
 
-# The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05)); text on the clay tile is measured against the tile's two ends (its deepest and its lightest broad shade: CLAY_DEEP
+# The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05); a text that is faded by an opacity is mixed with what lies behind it, its face too); text on the clay tile is measured against the tile's two ends (its deepest and its lightest broad shade: CLAY_DEEP
 # and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1) and text in the footer against the ends of its gradient, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
 CONTRAST_JS = """(function () {
   function parse(c) { var m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null; var p = m[1].split(',').map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
   function lin(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
   function lum(c) { return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b); }
   function ratio(a, b) { var l1 = lum(a), l2 = lum(b); if (l1 < l2) { var t = l1; l1 = l2; l2 = t; } return (l1 + 0.05) / (l2 + 0.05); }
+  function mix(c, back, t) { return { r: c.r * t + back.r * (1 - t), g: c.g * t + back.g * (1 - t), b: c.b * t + back.b * (1 - t), a: 1 }; }
   var CLAY = [{ r: 216, g: 71, b: 16 }, { r: 233, g: 94, b: 36 }], BAR = [{ r: 0x2b, g: 0x68, b: 0x5f }, { r: 0x2b, g: 0x6b, b: 0x4f }];
   function bgOf(el) {
     for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
@@ -79,8 +80,12 @@ CONTRAST_JS = """(function () {
     if (!t || !el || el.closest('[hidden]') || el.closest('script,style,noscript,option')) continue;
     var cs = getComputedStyle(el), r = el.getBoundingClientRect();
     if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0 || r.width === 0 || r.height === 0 || el.closest('.sr')) continue;
-    var fg = parse(cs.color), worst = 99;
-    bgOf(el).forEach(function (bg) { worst = Math.min(worst, ratio(fg, bg)); });
+    var fg = parse(cs.color), worst = 99, op = 1, owner = null;
+    for (var a = el; a && a.nodeType === 1; a = a.parentElement) { var o = parseFloat(getComputedStyle(a).opacity); if (o < 1) { op *= o; owner = a; } }
+    var behind = owner && owner.parentElement ? bgOf(owner.parentElement) : [null];
+    behind.forEach(function (back) {
+      bgOf(el).forEach(function (bg) { worst = Math.min(worst, ratio(back ? mix(fg, back, op) : fg, back ? mix(bg, back, op) : bg)); });
+    });
     rows.push([Math.round(worst * 100) / 100, t.slice(0, 40)]);
   }
   rows.sort(function (a, b) { return a[0] - b[0]; });
@@ -102,20 +107,24 @@ CARD_JS = """(function () {
     startOff: el('play').disabled, note: el('start-note').textContent, linksNote: !el('links-note').hidden });
 })()"""
 
-# The layout of the card at the width of the window: the sideways scroll, the two columns, for every seat the place of its two team switches and for every seat that is not You the line of its colour, of its five buttons and of Sit here
+# The layout of the card at the width of the window: the sideways scroll, the two columns, for every seat the place of its two team switches and for every seat that is not You the line of its colour, of its five buttons and of Sit here,
+# and the places of the seat's tab stops in the order of the markup (the switches, Sit here, the checked one of the five buttons: its label)
 LAYOUT_JS = """(function () {
   function rect(e) { var r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; }
   var left = document.querySelector('.match-grid .left'), right = document.querySelector('.match-grid .right');
   var rows = [];
+  function stopsOf(li) {
+    return Array.prototype.filter.call(li.querySelectorAll('button, input[type=radio]:checked'), function (e) { return !e.closest('[hidden]'); }).map(function (e) { return rect(e.type === 'radio' ? li.querySelector('label[for=' + e.id + ']') : e); });
+  }
   for (var s = 0; s < 4; s++) {
     var li = document.getElementById('seat-row-' + s);
     var ts = document.getElementById('team-set-' + s), tb = ts.hidden ? [] : Array.prototype.slice.call(ts.querySelectorAll('.tbtn')).map(rect);
     var team = tb.length ? { rect: rect(ts), buttons: tb.length, oneLine: Math.abs(tb[0].top - tb[1].top) < 6, inside: tb.every(function (r) { var l = rect(li); return r.left >= l.left - 0.5 && r.right <= l.right + 0.5; }), nm: rect(li.querySelector('.nm')) } : null;
-    if (!document.getElementById('seat-you-' + s).hidden) { rows.push({ seat: s, you: true, team: team }); continue; }
+    if (!document.getElementById('seat-you-' + s).hidden) { rows.push({ seat: s, you: true, team: team, stops: stopsOf(li) }); continue; }
     var labels = Array.prototype.slice.call(li.querySelectorAll('.pair label')).map(rect);
     var pair = li.querySelector('.pair'), sit = document.getElementById('sit-' + s), nm = li.querySelector('.nm');
     var tops = labels.map(function (r) { return r.top; });
-    rows.push({ seat: s, you: false, team: team, oneLine: Math.max.apply(null, tops) - Math.min.apply(null, tops) < 6,       /* (the checked button is pressed in by 2 px; a second line would be 30 px lower) */ buttons: labels.length, rowRect: rect(li), pair: rect(pair), sit: rect(sit), nm: rect(nm),
+    rows.push({ seat: s, you: false, team: team, oneLine: Math.max.apply(null, tops) - Math.min.apply(null, tops) < 6,       /* (the checked button is pressed in by 2 px; a second line would be 30 px lower) */ buttons: labels.length, rowRect: rect(li), pair: rect(pair), sit: rect(sit), nm: rect(nm), stops: stopsOf(li),
                 inside: labels.every(function (r) { var l = rect(li); return r.left >= l.left - 0.5 && r.right <= l.right + 0.5; }) && rect(sit).right <= rect(li).right + 0.5 });
   }
   return JSON.stringify({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, left: rect(left), right: rect(right), rows: rows });
@@ -263,9 +272,9 @@ def main():
             p = centre(selector)
             tab.click(p["x"], p["y"])
 
-        def key(name, code, text=""):
+        def key(name, code, text="", modifiers=0):
             for kind in ("keyDown", "keyUp"):
-                tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": name, "windowsVirtualKeyCode": code, "text": text if kind == "keyDown" else ""})
+                tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": name, "windowsVirtualKeyCode": code, "text": text if kind == "keyDown" else "", "modifiers": modifiers})
 
         def score_strip(cv):
             """The rectangle of the bottom of the picture where the HUD shows the other players' scores: below the map view, whose last rows show the player's own ants (they move, bots or not), and
@@ -360,6 +369,11 @@ def main():
             c = card()
             check(c["invites"] == 2 and c["invitesShown"] and c["linksNote"], "two invitations and, after a copy and a change, the note about changed links are up (%s)" % {k: c[k] for k in ("invites", "linksNote")})
             contrast("1440 px with an invitation and its note")
+            tab.ev("document.getElementById('team-0-1').click(); document.getElementById('team-1-1').click(); 1")
+            c = card()
+            dimmed = tab.ev("document.querySelectorAll('.tbtn[aria-disabled=true]').length")
+            check(c["switches"] == ["1", "1", "2", "2"] and dimmed == 4, "Green and Red on Team 1: Blue and Black show Team 2, and the four switches that a full team shuts out are dimmed (%s, %s dimmed)" % (c["switches"], dimmed))
+            contrast("1440 px with two colours on a team (the dimmed switches are on screen: no faded letters under 4.5:1)")
             tab.ev("document.getElementById('seat-1-nobody').click(); document.getElementById('seat-2-nobody').click(); document.getElementById('seat-3-nobody').click(); 1")
             c = card()
             check(not c["startOff"] and c["note"] == "Starts at once, on this computer: just you on the map, no opponents." and not c["teamsShown"] and not c["invitesShown"],
@@ -396,8 +410,8 @@ def main():
                             put = where["top"] >= nm["bottom"] - 3 and abs(where["left"] - nm["left"]) < 4
                         elif width >= 375:                       # beside the colour (and before Sit here)
                             put = where["left"] >= nm["right"] - 1 and abs(where["top"] - nm["top"]) < 30 and (r["you"] or r["sit"]["left"] >= where["right"] - 1)
-                        else:                                    # the narrowest phones: a line of their own under the five buttons (under the colour for You, who has none)
-                            put = where["top"] >= (nm["bottom"] if r["you"] else r["pair"]["bottom"]) - 3
+                        else:                                    # the narrowest phones: a line of their own under the colour, with Sit here beside them, over the five buttons (for You, who has neither, under the colour)
+                            put = where["top"] >= nm["bottom"] - 3 and (r["you"] or (where["bottom"] <= r["pair"]["top"] + 3 and abs(r["sit"]["top"] - where["top"]) < 6 and r["sit"]["left"] >= where["right"] - 1))
                         if not put:
                             problems.append("seat %d: the team switches are in the wrong place" % r["seat"])
                     if r["you"]:
@@ -406,13 +420,24 @@ def main():
                         problems.append("seat %d: the buttons are not on one line" % r["seat"])
                     if not r["inside"]:
                         problems.append("seat %d: something sticks out of its row" % r["seat"])
-                    beside = abs(r["pair"]["top"] - r["nm"]["top"]) < 25 and r["sit"]["left"] >= r["pair"]["right"] - 1
+                    beside = abs(r["pair"]["top"] - r["nm"]["top"]) < 25 and r["sit"]["right"] <= r["pair"]["left"] + 1
+                    if width >= 701 and r["team"] is not None:         # Sit here is beside the two switches (under the colour), the five buttons are to the right of both
+                        beside = beside and r["sit"]["left"] >= r["team"]["rect"]["right"] - 1 and abs(r["sit"]["top"] - r["team"]["rect"]["top"]) < 6
                     under = r["pair"]["top"] >= r["nm"]["bottom"] - 3 and r["sit"]["top"] < r["pair"]["top"]
                     if (width >= 701 and not beside) or (width <= 700 and not under):
-                        problems.append("seat %d: %s" % (r["seat"], "the line is not one line" if width >= 701 else "the buttons are not under the colour"))
+                        problems.append("seat %d: %s" % (r["seat"], "Sit here and the five buttons are not in a row after the colour" if width >= 701 else "the buttons are not under the colour"))
+                # Tab goes the way that the eye does: each tab stop of a seat (the switches, Sit here, the checked one of the five buttons: the order of the markup) is to the right of the one before it on its line, or on a later
+                # line, and the next seat's first stop is below the last one of this seat
+                stops = [stop for r in m["rows"] for stop in r["stops"]]
+                if len(stops) != 2 * 4 + 2 * 3:
+                    problems.append("%d tab stops (every seat has its two switches, every seat but You Sit here and a checked button)" % len(stops))
+                for a, b in zip(stops, stops[1:]):
+                    if not (b["left"] >= a["right"] - 2 and min(a["bottom"], b["bottom"]) - max(a["top"], b["top"]) > 4) and not b["top"] >= a["bottom"] - 3:
+                        problems.append("Tab goes from (%d, %d) to (%d, %d): not to the right on the same line, not on a later line" % (a["left"], a["top"], b["left"], b["top"]))
+                        break
                 if problems:
                     wrong.append((width, problems[:3]))
-            check(not wrong, "21 widths from 320 to 1600 px: no sideways scroll, the five buttons of a seat on one line, a seat on one line from 701 px and on two under it, the two team switches of a seat on one line (under the colour from 701 px, beside it from 375 px, under the five buttons below that), two columns from 1100 px (wrong: %s)" % (wrong,))
+            check(not wrong, "21 widths from 320 to 1600 px: no sideways scroll, the five buttons of a seat on one line, from 701 px the colour with its switches and Sit here under it and the five buttons to their right and on two lines under it, the two team switches of a seat on one line (under the colour from 701 px, beside it from 375 px, a line of their own with Sit here below that), the tab stops in reading order, two columns from 1100 px (wrong: %s)" % (wrong,))
             for width, height, name in ((1366, 900, "home_front_1366"), (768, 1000, "home_front_768")):
                 tab.emulate(width, height, 1)
                 time.sleep(0.4)
@@ -456,27 +481,26 @@ def main():
             key("ArrowUp", 38)
             check(card()["seats"][1] == "hard", "ArrowUp is ArrowLeft (%s)" % card()["seats"])
             key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "team-1-1", "Tab leaves the group for that seat's Team 1 switch (%s)" % tab.ev("document.activeElement.id"))
+            check(tab.ev("document.activeElement.id") == "team-2-1", "Tab leaves the group for the next seat's Team 1 switch: a seat's switches and Sit here come before its five buttons, the way they stand (%s)" % tab.ev("document.activeElement.id"))
             outline = json.loads(value("""(function () { var c = getComputedStyle(document.activeElement); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
             check(outline[0] != "none" and outline[1] == "3px", "the focused switch shows a visible outline of 3 px (%s)" % outline)
             key("Enter", 13, "\r")
             c = card()
-            check(c["switches"] == ["-", "1", "-", "-"] and tab.ev("document.activeElement.id") == "team-1-1" and tab.ev("document.activeElement.getAttribute('aria-pressed')") == "true", "Enter on it puts Red on Team 1 (the switch says that it is on, the focus stays) (%s)" % c["switches"])
+            check(c["switches"] == ["-", "-", "1", "-"] and tab.ev("document.activeElement.id") == "team-2-1" and tab.ev("document.activeElement.getAttribute('aria-pressed')") == "true", "Enter on it puts Blue on Team 1 (the switch says that it is on, the focus stays) (%s)" % c["switches"])
             key("Enter", 13, "\r")
-            check(card()["switches"] == ["-", "-", "-", "-"], "... and Enter on it again takes Red off Team 1 (%s)" % card()["switches"])
+            check(card()["switches"] == ["-", "-", "-", "-"], "... and Enter on it again takes Blue off Team 1 (%s)" % card()["switches"])
             key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "team-1-2", "Tab goes on to Team 2 of that seat (%s)" % tab.ev("document.activeElement.id"))
+            check(tab.ev("document.activeElement.id") == "team-2-2", "Tab goes on to Team 2 of that seat (%s)" % tab.ev("document.activeElement.id"))
             key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "sit-1", "... and then to that seat's Sit here (%s)" % tab.ev("document.activeElement.id"))
+            check(tab.ev("document.activeElement.id") == "sit-2", "... and then to that seat's Sit here (%s)" % tab.ev("document.activeElement.id"))
             outline = json.loads(value("""(function () { var c = getComputedStyle(document.activeElement); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
             check(outline[0] != "none" and outline[1] == "3px", "the focused Sit here shows a visible outline of 3 px (%s)" % outline)
             key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "seat-2-medium", "Tab goes on to the next seat, at its checked button (%s)" % tab.ev("document.activeElement.id"))
+            check(tab.ev("document.activeElement.id") == "seat-2-medium", "... and then to the checked one of that seat's five buttons (%s)" % tab.ev("document.activeElement.id"))
             outline = json.loads(value("""(function () { var l = document.querySelector('label[for=seat-2-medium]'); var c = getComputedStyle(l); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
             check(outline[0] != "none" and outline[1] == "3px", "the focused button shows a visible outline of 3 px (%s)" % outline)
-            key("Tab", 9)
-            key("Tab", 9)
-            key("Tab", 9)
+            key("Tab", 9, "", 8)
+            check(tab.ev("document.activeElement.id") == "sit-2", "Shift + Tab goes back to that seat's Sit here (%s)" % tab.ev("document.activeElement.id"))
             key("Enter", 13, "\r")
             c = card()
             check(c["you"] == [2] and tab.ev("document.activeElement.id") == "sit-0", "Enter on Sit here at Blue: You are at Blue, and the focus goes to the Sit here of Green, the seat that You left (%s, %s)" % (c["you"], tab.ev("document.activeElement.id")))
@@ -504,9 +528,17 @@ def main():
             real_click("#team-1-1")
             c = card()
             check(c["switches"] == ["", "-", "1", "1"] and c["teamsLine"].startswith("Team 1 has two colours already."), "a click on the dimmed switch changes nothing and the line under the seats says why (%s)" % c["teamsLine"])
-            look = json.loads(value("""(function () { function c(id) { var s = getComputedStyle(document.getElementById(id)); return [s.backgroundColor, s.color, s.opacity]; } return JSON.stringify([c('team-2-1'), c('team-2-2'), c('team-1-1')]); })()"""))
-            check(look[0][0] != look[1][0] and look[0][1] != look[1][1] and float(look[2][2]) < 1 and float(look[0][2]) == 1,
-                  "the switch that is on is drawn as a pressed button (another background and another colour of text than the one that is off), a dimmed one is dimmed (opacity) (%s)" % look)
+            look = json.loads(value("""(function () { function c(id) { var s = getComputedStyle(document.getElementById(id)); return [s.backgroundColor, s.color, s.opacity, s.borderTopStyle]; } return JSON.stringify([c('team-2-1'), c('team-2-2'), c('team-1-1')]); })()"""))
+            check(look[0][0] != look[1][0] and look[0][1] != look[1][1] and look[2][0] != look[1][0] and look[2][0] != look[0][0] and [look[0][2], look[1][2], look[2][2]] == ["1", "1", "1"] and look[2][3] == "dashed" and look[1][3] == "solid",
+                  "the switch that is on is drawn as a pressed button (another background and another colour of text than the one that is off), a dimmed one has its own flat face and a dashed edge and is not faded: no opacity, its letters keep their contrast (%s)" % look)
+            tab.ev("window.__written = 0; new MutationObserver(function (l) { window.__written += l.length; }).observe(document.getElementById('teams-line'), { childList: true, characterData: true, subtree: true }); 1")
+            real_click("#team-1-1")
+            time.sleep(0.2)
+            first = tab.ev("window.__written")
+            real_click("#team-1-1")
+            time.sleep(0.2)
+            second = tab.ev("window.__written")
+            check(first == 1 and second == 2, "a second press on the dimmed switch writes its reason again (a live region says only what is written, so the person hears it again) (%s, %s writes)" % (first, second))
             link = c["links"][0]
             q = {k: v for k, v in (kv.split("=", 1) for kv in link.split("?", 1)[1].split("&"))}
             check(q.get("seat") == "1" and q.get("fill") == "none,none,hard,none" and q.get("start") == "2" and q.get("aspect") == "16:9" and "name" not in q and "teams" not in q and not re.search(r"key|token", link, re.I),

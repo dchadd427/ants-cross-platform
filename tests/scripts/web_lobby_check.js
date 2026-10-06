@@ -60,7 +60,7 @@ const lobbyCode = [
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath),
     between(lobbyText, 'CARD_BEGIN', 'CARD_END', lobbyPath),
-    'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, roomTeamWord: roomTeamWord, codeTeams: codeTeams, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle, CARD_KEY: CARD_KEY, CARD_ROOM_KEY: CARD_ROOM_KEY, CARD_WORDS: CARD_WORDS, cardPlaying: cardPlaying, cardFriends: cardFriends, cardPeople: cardPeople, cardSidesFix: cardSidesFix, cardSidesOf: cardSidesOf, cardPair: cardPair, cardTeamOf: cardTeamOf, cardShownSides: cardShownSides, cardSideOpen: cardSideOpen, cardSide: cardSide, cardTeamsText: cardTeamsText, cardFix: cardFix, cardNew: cardNew, cardParse: cardParse, cardText: cardText, cardFromOld: cardFromOld, cardSit: cardSit, cardSet: cardSet, cardMap: cardMap, cardTeams: cardTeams, cardFill: cardFill, cardCode: cardCode, cardRoomFits: cardRoomFits, cardQuery: cardQuery, cardAlone: cardAlone, cardNote: cardNote };',
+    'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, roomTeamWord: roomTeamWord, codeTeams: codeTeams, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle, CARD_KEY: CARD_KEY, CARD_ROOM_KEY: CARD_ROOM_KEY, CARD_WORDS: CARD_WORDS, cardPlaying: cardPlaying, cardFriends: cardFriends, cardPeople: cardPeople, cardSidesFix: cardSidesFix, cardSidesOf: cardSidesOf, cardPair: cardPair, cardTeamOf: cardTeamOf, cardShownSides: cardShownSides, cardSideOpen: cardSideOpen, cardRefusal: cardRefusal, cardSide: cardSide, cardTeamsText: cardTeamsText, cardFix: cardFix, cardNew: cardNew, cardParse: cardParse, cardText: cardText, cardFromOld: cardFromOld, cardSit: cardSit, cardSet: cardSet, cardMap: cardMap, cardFill: cardFill, cardCode: cardCode, cardRoomFits: cardRoomFits, cardQuery: cardQuery, cardAlone: cardAlone, cardNote: cardNote };',
 ].join('\n');
 const L = new Function(lobbyCode)();
 
@@ -473,6 +473,8 @@ try {
         // every team that the switches can make for the seats that play, as an independent list: free for all, the three pairs of three seats, Green with each of the others when four play
         const teamsOf = (state) => { const p = L.cardPlaying(state); return p.length === 4 ? ['ffa', '0+1', '0+2', '0+3'] : p.length === 3 ? ['ffa', p[0] + '+' + p[1], p[0] + '+' + p[2], p[1] + '+' + p[2]] : ['ffa']; };
         const frozen = (state) => JSON.stringify(state);
+        // a state with the two seats of a team word on Team 1 (the page keeps the switches; only an older save has a team and no switches, and cardFix makes those)
+        const withTeams = (state, team) => L.cardFix(Object.assign({}, state, { sides: L.cardSidesOf(team, L.cardPlaying(state)) }));
 
         same('the card has five choices for a seat, in the order of its buttons, and keeps its choices under ants-match', [L.CARD_WORDS, L.CARD_KEY, L.CARD_ROOM_KEY], [['friend', 'easy', 'medium', 'hard', 'nobody'], 'ants-match', 'ants-match-room']);
         same('cardNew: Treasure, You at Green, a Friend in every seat (the seat of You keeps its choice for later), free for all; a map that is none of the six is Treasure', [L.cardNew('treasure'), L.cardNew('islands').map, L.cardNew(undefined).map, L.cardNew('nowhere').map, L.cardNew('Treasure').map],
@@ -507,7 +509,8 @@ try {
              [L.cardTeamsText(st(0, M4)), L.cardTeamsText(sideState(0, M4, [1, 2, 0, 0])), L.cardTeamsText(st(0, M4, '0+1')), L.cardTeamsText(st(0, M4, '0+3')), L.cardTeamsText(sideState(0, M4, [0, 1, 1, 0])), L.cardTeamsText(st(0, ONE, '1+2')), L.cardTeamsText(st(1, ['nobody', 'easy', 'hard', 'friend'], '2+3'))],
              ['Free for all. For a team, put two colours on the same team.', 'Free for all. For a team, put two colours on the same team.', 'Teams: Green + Red against Blue + Black.', 'Teams: Green + Black against Red + Blue.', 'Teams: Green + Black against Red + Blue.', 'Teams: Red + Blue against Green.', 'Teams: Blue + Black against Red.']);
 
-        // pressing a switch: one that is on goes off; the one that a pair leaves to the other two seats (shown, not pressed) takes the teams away; one that is off goes on, unless its team has two other seats (then nothing happens)
+        // pressing a switch: one that is off goes on, unless its team has two other seats (then nothing happens); one that is lit goes off, unless the other seats keep it lit (the other team of a pair, or a press that
+        // a pair has made useless): then the teams go away, so that a press that is accepted always shows
         {
             const free = L.cardNew('treasure');
             const g1 = L.cardSide(free, 0, 1);
@@ -532,6 +535,16 @@ try {
             same('three seats play: Team 1 on Green and Blue is Green + Blue against Red (Red plays alone and shows nothing); the third seat cannot press that switch; Red may press Team 2, which makes no difference to the teams',
                  [t3.sides, t3.teams, L.cardShownSides(t3), L.cardSideOpen(t3, 1, 1), L.cardSideOpen(t3, 1, 2), L.cardSide(t3, 1, 2).teams, L.cardTeamsText(t3)], [[1, 0, 1, 0], '0+2', [1, 0, 1, 0], false, true, '0+2', 'Teams: Green + Blue against Red.']);
             same('a seat that does not play has no switch (Black is Nobody): pressing it changes nothing, and with two seats playing nothing can be pressed', [L.cardSide(t3, 3, 1), L.cardSide(st(0, ['medium', 'easy', 'nobody', 'nobody']), 0, 1), L.cardSideOpen(t3, 3, 1), L.cardSideOpen(st(0, ['medium', 'easy', 'nobody', 'nobody']), 1, 2)], [t3, st(0, ['medium', 'easy', 'nobody', 'nobody']), false, false]);
+            // a press that the other seats hold: Team 1 on Green, then Team 2 on Red and on Blue make Green + Black against Red + Blue, and Green's own press is useless now (Black shows the same lit switch):
+            // pressing either of them does the same, it takes the teams away (a press that is accepted shows)
+            const held = L.cardSide(L.cardSide(L.cardSide(free, 0, 1), 1, 2), 2, 2);
+            same('Team 1 on Green, then Team 2 on Red and on Blue: Green + Black against Red + Blue, Black shows Team 1 and Green\'s own press is held by the other two now', [held.sides, held.teams, L.cardShownSides(held)], [[1, 2, 2, 0], '0+3', [1, 2, 2, 1]]);
+            same('... pressing Team 1 on Green and pressing it on Black do the same: every switch goes off (free for all), while Red\'s Team 2 (held by nothing else) goes off alone',
+                 [L.cardSide(held, 0, 1).sides, L.cardSide(held, 3, 1).sides, L.cardSide(held, 0, 1).teams, L.cardSide(held, 1, 2).sides, L.cardSide(held, 1, 2).teams], [[0, 0, 0, 0], [0, 0, 0, 0], 'ffa', [1, 0, 2, 0], 'ffa']);
+            // why a press does nothing: the line under the switches says it. Two colours that were pressed on the switch: take one off. The two that a pair leaves to it: press a lit switch (the teams go)
+            same('cardRefusal: a press that may be made has no reason; a switch of a team that two colours pressed says to take one of them off; the team that a pair leaves to the other two says to clear the teams; a seat with no switch has none',
+                 [L.cardRefusal(g1r1, 0, 1), L.cardRefusal(g1r1, 2, 2), L.cardRefusal(g1r1, 2, 1), L.cardRefusal(g1r1, 0, 2), L.cardRefusal(held, 3, 2), L.cardRefusal(held, 0, 2), L.cardRefusal(st(0, ['medium', 'easy', 'nobody', 'nobody']), 1, 1), L.cardRefusal(sideState(0, ONE, [0, 0, 0, 0]), 3, 1), L.cardRefusal(g1r1, 0, 3)],
+                 ['', '', 'Team 1 has two colours already. Press one of them to take it off first.', 'Team 2 is the other two colours already. Press a lit switch to clear the teams first.', 'Team 2 has two colours already. Press one of them to take it off first.', 'Team 2 has two colours already. Press one of them to take it off first.', '', '', '']);
             const before = frozen(g1r1);
             L.cardSide(g1r1, 2, 2); L.cardSide(g1r1, 0, 1); L.cardShownSides(g1r1);
             check('... and the state that was given is left as it was (cardSide makes a new state)', frozen(g1r1) === before);
@@ -573,17 +586,27 @@ try {
                     if (open !== want) note('open ' + frozen(state) + ' ' + seat + side);
                     if (frozen(L.cardFix(out)) !== frozen(out)) note('closed ' + frozen(state) + ' ' + seat + side);
                     if (out.map !== state.map || out.you !== state.you || frozen(out.seats) !== frozen(state.seats)) note('other parts ' + frozen(state));
+                    const why = L.cardRefusal(state, seat, side);
+                    if (open !== (why === '') && playing.length >= 3 && playing.indexOf(seat) !== -1) note('reason ' + frozen(state) + ' ' + seat + side + ' ' + why);
+                    if (!open && playing.length >= 3 && playing.indexOf(seat) !== -1) {
+                        const pressed = playing.filter((x) => state.sides[x] === side).length;                       // (the colours that were pressed on that switch, not the ones that a pair leaves to it)
+                        if (why !== (pressed === 2 ? 'Team ' + side + ' has two colours already. Press one of them to take it off first.' : 'Team ' + side + ' is the other two colours already. Press a lit switch to clear the teams first.')) note('which reason ' + frozen(state) + ' ' + seat + side + ' ' + why);
+                    }
                     if (!open) { if (frozen(out) !== frozen(state)) note('closed press moved ' + frozen(state) + ' ' + seat + side); continue; }
                     const expected = state.sides.slice();
-                    if (state.sides[seat] === side) expected[seat] = 0;
-                    else if (shown[seat] === side) expected.fill(0);
-                    else expected[seat] = side;
+                    if (shown[seat] !== side) expected[seat] = side;                                    // a switch that is off goes on
+                    else {                                                                             // one that is lit goes off, unless the other seats keep it lit: then the teams go away
+                        expected[seat] = 0;
+                        if (L.cardShownSides(L.cardFix({ map: state.map, you: state.you, seats: state.seats, sides: expected, teams: 'ffa' }))[seat] === side) expected.fill(0);
+                    }
                     if (frozen(out.sides) !== frozen(expected)) note('press ' + frozen(state) + ' ' + seat + side + ' -> ' + frozen(out.sides));
                     const after = L.cardShownSides(out);
+                    if (frozen(after) === frozen(shown)) note('no change ' + frozen(state) + ' ' + seat + side);               // (a press that is accepted always shows: some switch goes on or off)
+                    if (after[seat] !== (shown[seat] === side ? 0 : side)) note('the switch ' + frozen(state) + ' ' + seat + side + ' is not ' + (shown[seat] === side ? 'off' : 'on') + ' after its press');
                     if ([1, 2].some((k) => playing.filter((x) => after[x] === k).length > 2)) note('three ' + frozen(out));
                 }
             }
-            check('every state of the card with any switches (' + states + ' of them, ' + presses + ' presses): the teams are what the switches make (the pair; with four the team of Green; a word for the code), a press is allowed exactly when the seat plays and its team has fewer than two other seats, an allowed press moves only that switch (an off switch goes on, a lit one goes off, a shown one takes every switch off), a refused one changes nothing, the result is a valid state, and no team ever has three seats:' + bad, bad === '' && states === 4 * 81 * 81);
+            check('every state of the card with any switches (' + states + ' of them, ' + presses + ' presses): the teams are what the switches make (the pair; with four the team of Green; a word for the code), a press is allowed exactly when the seat plays and its team has fewer than two other seats, an allowed press always shows (an off switch goes on; a lit one goes off, or takes every switch off when the other seats keep it lit), a refused one changes nothing and says why, the result is a valid state, and no team ever has three seats:' + bad, bad === '' && states === 4 * 81 * 81);
         }
         {   // the way in and the way out: any two seats make a team with two presses, and any state comes back to free for all by pressing the lit switches
             let bad = '';
@@ -630,7 +653,7 @@ try {
             for (const map of L.MAPS) for (let you = 0; you < 4; you++) for (const a of L.CARD_WORDS) for (const b of L.CARD_WORDS) {
                 const state = L.cardFix(st(you, [a, b, 'friend', 'hard'], 'ffa', map.key));
                 for (const team of teamsOf(state)) {
-                    const full = L.cardTeams(state, team);
+                    const full = withTeams(state, team);
                     made++;
                     if (frozen(L.cardParse(L.cardText(full))) !== frozen(full)) bad += ' ' + L.cardText(full);
                     // (and with the switches pressed by hand: Team 2 for the pair, or one switch on its own)
@@ -692,7 +715,7 @@ try {
             same('cardSet: a choice for a seat (the others stay); a word that is none of the five, a seat that is none of the four change nothing; the team goes when the seats no longer allow it',
                  [L.cardSet(base, 2, 'hard'), L.cardSet(base, 3, 'friend'), L.cardSet(base, 2, 'HARD'), L.cardSet(base, 2, 'none'), L.cardSet(base, 5, 'hard'), L.cardSet(base, 1, 'nobody').teams, L.cardSet(st(0, M4, '0+3'), 3, 'nobody').teams],
                  [st(0, ['hard', 'easy', 'hard', 'nobody'], '0+1'), st(0, ['hard', 'easy', 'friend', 'friend'], '0+1'), base, base, base, 'ffa', 'ffa']);
-            same('cardMap and cardTeams: the map (one of the six), the team (one of the choices of the seats that play: Black is Nobody here, so 0+3 is not one; else free for all)', [L.cardMap(base, 'small').map, L.cardMap(base, 'nowhere').map, L.cardMap(base, 'Small').map, L.cardTeams(base, '0+2').teams, L.cardTeams(base, '0+3').teams, L.cardTeams(st(0, M4), '0+3').teams, L.cardTeams(base, 'junk').teams, L.cardTeams(base, 'ffa').teams],
+            same('cardMap, and the switches that a team word makes: the map (one of the six), the team (one of the choices of the seats that play: Black is Nobody here, so 0+3 is not one; else free for all)', [L.cardMap(base, 'small').map, L.cardMap(base, 'nowhere').map, L.cardMap(base, 'Small').map, withTeams(base, '0+2').teams, withTeams(base, '0+3').teams, withTeams(st(0, M4), '0+3').teams, withTeams(base, 'junk').teams, withTeams(base, 'ffa').teams],
                  ['small', 'treasure', 'treasure', '0+2', 'ffa', '0+3', 'ffa', 'ffa']);
             check('... and none of them changed the state that it was given', frozen(base) === before);
         }
@@ -759,7 +782,7 @@ try {
             for (const mapKey of ['treasure', 'tiny']) for (let you = 0; you < 4; you++) for (const a of L.CARD_WORDS) for (const b of L.CARD_WORDS) for (const c of L.CARD_WORDS) for (const d of L.CARD_WORDS) {
                 const base = L.cardFix(st(you, [a, b, c, d], 'ffa', mapKey));
                 for (const team of teamsOf(base)) {
-                    const state = L.cardTeams(base, team);
+                    const state = withTeams(base, team);
                     states++;
                     const code = L.cardCode(state, 'k7m2xq');
                     const plan = L.cardFill(state);
