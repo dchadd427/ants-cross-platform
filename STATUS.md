@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 22:02 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 22:27 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -21,7 +21,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Replays: a match can be saved as a replay file and a tool plays it back to the same result, with a Download replay button under the game after a match; built, waiting for the owner to see the button; no number.
 - Watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
 - Seat drop-down, Human label and blinking ant: built; waiting for the owner to see the pictures; no number.
-- Faster checks: the test waits that crawl on Windows and macOS are shortened and the longest tests start first, which should cut a full run from about 14 minutes to 9 or 10 (PR #30), and a test-runner status file that could be read half-written is fixed (PR #29); both are in review, tests and tooling only, no release.
+- Faster checks: the test waits that crawl on Windows and macOS are shortened and the longest tests start first, which should cut a full run from about 14 minutes to 9 or 10 (PR #30); in review, tests and tooling only, no release.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
@@ -31,6 +31,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **The test runner** no longer reports a passing suite as failed by mistake (no release; PR #29, merged 2026-10-05 22:25 PDT)
 - **Nobody means nobody** in a game for one (only your colony is on the map), and a Team 1 / Team 2 switch on each colour of the front page's card (no release; PR #27, merged 2026-10-05 21:49 PDT, live 21:52 PDT)
 - **Fewer refused orders from the bots** (no release; PR #16, merged 2026-10-05 21:16 PDT, live 21:20 PDT): a bot no longer sends an ant with food into a hill that a ring of fire walls has shut, no longer sends a thief to a hole that one of its own ants holds shut, and waits while its own ant stands on the way into the hill; the arena now counts the "Can't go there." reactions and the refused orders of every seat. Hard bots on Small give 1.2 refused orders a match and seat instead of 2.7 (Treasure 3.7 instead of 5.5); their scores are unchanged within noise. The loops of ants that fire walls shut in are the game's own and stay (the owner's decision).
 - **v0.10.0** The leader of a room can move a player to another colour: press a player's row in the Players' Status box and that player goes to the next colour that nobody holds (never a swap; the leader may move itself and stays the leader); the player is told in the room's chat, the leader's bots follow, and START waits a second at most for the answer (network protocol 14: an older game cannot join, reload the page once; PR #26, merged 2026-10-05 20:33 PDT, live 20:37 PDT)
