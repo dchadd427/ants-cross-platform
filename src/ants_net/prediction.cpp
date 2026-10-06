@@ -25,17 +25,22 @@ uint64_t wall_now_ns() {
 }
 
 // One timed block of work: stop() gives its wall time (the statistics) and what the budget counts (work_cost_ns). The CPU reading is taken inside the wall one, so it is never the larger.
+// The clocks are the real ones unless the config names others (the tests).
 class Timer {
 public:
-    Timer() : wall_(wall_now_ns()), cpu_(thread_cpu_ns()) {}
+    explicit Timer(const Prediction::Config& cfg) : cfg_(cfg), wall_(wall_ns()), cpu_(cpu_ns()) {}
     uint64_t stop(uint64_t& charged_ns) const {
-        const uint64_t cpu = thread_cpu_ns() - cpu_;
-        const uint64_t wall = wall_now_ns() - wall_;
+        const uint64_t cpu = cpu_ns() - cpu_;
+        const uint64_t wall = wall_ns() - wall_;
         charged_ns = work_cost_ns(wall, cpu);
         return wall;
     }
 
 private:
+    uint64_t wall_ns() const { return cfg_.wall_clock ? cfg_.wall_clock() : wall_now_ns(); }
+    uint64_t cpu_ns() const { return cfg_.cpu_clock ? cfg_.cpu_clock() : thread_cpu_ns(); }
+
+    const Prediction::Config& cfg_;
     uint64_t wall_;
     uint64_t cpu_;
 };
@@ -222,7 +227,7 @@ void Prediction::advance_to(uint64_t target) {
         rebuild(target, false);
         return;
     }
-    const Timer timer;
+    const Timer timer(cfg_);
     if (cfg_.work_hook) cfg_.work_hook();
     while (display_ < target) advance_one();
     uint64_t charged = 0;
@@ -258,7 +263,7 @@ uint64_t Prediction::cooldown_ticks_left() const noexcept {
 
 // A copy of the confirmed engine, run to the display tick with the turns in hand and the waiting orders: the prediction as it should be now.
 void Prediction::rebuild(uint64_t target, bool is_start) {
-    const Timer timer;
+    const Timer timer(cfg_);
     if (cfg_.work_hook) cfg_.work_hook();
     std::vector<sim::AntSnapshot> before;
     const bool measure = measure_corrections_ && !is_start && running_;
