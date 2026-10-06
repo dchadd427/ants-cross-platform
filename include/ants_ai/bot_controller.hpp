@@ -17,7 +17,8 @@
 //   priorities      Urgent before Normal before Background, first come first served inside a class
 //   ants            ants that died since the decision are dropped from a command (a command whose ants all died never leaves); at most
 //                   min(Profile::max_ants_per_command, kHudAntCap) ants go into one command, a larger one is split and every part is paid for
-//   HUD parity      nothing a person could not click: no Quit, no Drop, no None, a special order names exactly one ant, no group order outside the map, no
+//   HUD parity      nothing a person could not click: no Quit, no Drop, no None, a special order names exactly one ant and a tile that no visible ant stands on (the cursor shows the
+//                   target cursor only where no ant is under the pointer: a click on an ant selects it or attacks it), no group order outside the map, no
 //                   attack on the tile of an ally, alliance commands name another seat that is in the match and has not dropped out, a break needs an ally,
 //                   an answer needs the invitation it answers, a withdrawal needs the offer it takes back; an ATTACK needs an ant of another team on its tile
 //                   (the attack cursor shows over an enemy ant, and an ant on a hill tile gets the plain move cursor); a click on a power-up tile takes the power-up

@@ -195,7 +195,7 @@ class TheLookIsTheFrontPages(PageCase):
 
     def test_the_teal_buttons_are_lit_from_above_on_every_page(self):
         # The owner, 2026-10-05: "make the buttons appear a little less flat". The face of every teal button is its colour with the sheen over it: a light edge at the top and shade toward the bottom.
-        # The same sheen on every page; a chosen (pressed in) button is a flat dark plate, and the hover, the match banner and the disabled START! change only the colour and keep the sheen.
+        # The same sheen on every page; a chosen (pressed in) button is a flat dark plate, and the hover and the match banner change only the colour and keep the sheen.
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         catalogue = style_of(read("asset_catalog", "index.html"))
         sheen = rule(self.lobby_style, ":root")["--sheen"]
@@ -207,7 +207,6 @@ class TheLookIsTheFrontPages(PageCase):
         colour_only = {
             "the front page's hovered button": rule(self.lobby_style, ".btn:hover"),
             "the front page's hovered pair": rule(self.lobby_style, ".pair label:hover"),
-            "the front page's disabled START! under the pointer": rule(self.lobby_style, ".startbtn:disabled:hover"),
             "the front page's match banner": rule(self.lobby_style, ".card.match > .banner"),
             "the game page's hovered button": rule(self.style, ".btn:hover"),
             "the game page's hovered pair": rule(self.style, '.seg button[aria-checked="false"]:hover'),
@@ -406,7 +405,7 @@ class TheLoadingScreen(PageCase):
             self.assertIn(message, self.page)
 
     def test_the_overlay_is_the_clay_and_the_bar_is_teal_in_a_black_box(self):
-        self.assertEqual(rule(self.style, "#splash-overlay")["background"], 'var(--clay) url("front/clay.png")')
+        self.assertRegex(rule(self.style, "#splash-overlay")["background"], r'^var\(--clay\) url\("front/clay\.png\?v=[0-9a-f]{8}"\)$')     # (the tile's address carries its hash: test_web_front.py)
         fill = rule(self.style, ".progress-bar-fill")
         self.assertEqual(fill["background"], "var(--teal)")
         self.assertIn("var(--teal-lo)", fill["box-shadow"])
@@ -511,7 +510,7 @@ class ThePicturesAndTheFont(PageCase):
 class TheColours(PageCase):
     """The text of the page is at least 4.5:1 against its background, in every state of the buttons and boxes (the browser check measures the whole page; this reads the colours)."""
 
-    CLAY_ENDS = ("#db4b13", "#fb335b")                      # the two ends of the clay tile that the front page's check measures against
+    CLAY_ENDS = ("#d84710", "#e95e24")                      # the two ends of the clay tile (its deepest and its lightest broad shade) that the front page's check measures against
     BAR_ENDS = ("#2b685f", "#2b6b4f")                       # the ends of the footer's gradient
 
     def token(self, name):

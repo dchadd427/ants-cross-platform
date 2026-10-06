@@ -273,13 +273,13 @@ void Orders::pick_up(uint32_t ant, sim::TileCoord tile, Priority priority) {
 
 void Orders::special(uint32_t ant, sim::TileCoord tile, Priority priority) { group(sim::CommandType::GroupSpecial, std::vector<uint32_t>{ant}, tile, priority); }
 
-void Orders::stop(const std::vector<uint32_t>& ants) {
+void Orders::stop(const std::vector<uint32_t>& ants, Priority priority) {
     for (size_t from = 0; from < ants.size(); from += sim::kMaxCommandAnts) {
         const size_t to = std::min(ants.size(), from + sim::kMaxCommandAnts);
         sim::Command c;
         c.type = sim::CommandType::Stop;
         c.ants.assign(ants.begin() + static_cast<std::ptrdiff_t>(from), ants.begin() + static_cast<std::ptrdiff_t>(to));
-        intents_.push_back(Intent{std::move(c), Priority::Normal});
+        intents_.push_back(Intent{std::move(c), priority});
     }
 }
 

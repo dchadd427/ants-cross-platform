@@ -25,6 +25,7 @@ LevelPlan fight_plan(Level level, bool strikes = true, bool hatches = true, bool
     p.strikes = strikes && level != Level::Easy;
     p.hatches = hatches && level != Level::Easy;
     p.wipe_focus = wipe && level == Level::Hard;
+    p.catchup = false;                                                                   // (these tests hold the old trigger, a margin in points: the tiers of the pressure have AI20.9)
     return p;
 }
 

@@ -23,6 +23,23 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.9.0 - 2026-10-05 - Computer players that race, hunt and cross the water
+
+**For players:**
+- **Smarter computer players:** a bot races an enemy for the food that both can reach, hunts a wounded enemy ant until it is dead, lights fire walls at an enemy gate only where the enemy cannot simply put them out, never clicks a special order onto an ant (far fewer "Can't go there." from the bots' own orders), and plays harder when it is behind.
+- **Computer players on ISLANDS and the lake of SMALL:** they fly a crew over the water with bomb flights, bring Swimmers across and ferry the food home. On ISLANDS four bots used to score nothing; they now score about 1,000 (Easy) to 1,400 (Hard) points a seat.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/23dc663...57fa5e4), [the bots](docs/BOTS.md)
+
+## v0.8.3 - 2026-10-05 - Friend by default, a game for one and a dirtier background
+
+**For players:**
+- **Friend is the default seat:** a first visit to the front page starts with You at Green and a Friend in each of the other three seats (it was a Medium bot), so START! makes a room and the card shows the invitation links; pick Easy, Medium or Hard for a seat to play against the computer. A browser that already saved its choices keeps them.
+- **A game for one:** START! is on with nobody else in the match (it was off: "Pick at least one more seat"). With every other seat on **Nobody** it begins a game for one on this computer: no room, no opponent, and you play Green whatever colour the card showed (the line under START! says so).
+- **A dirtier background:** the orange clay behind the pages has a little noise and dirt (patches a little deeper and lighter, grain, pale grit and small brown specks), so it is not so clean. The text on it stays easy to read.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/23dc663...af4e0c1)
+
 ## v0.8.2 - 2026-10-05 - Rounder buttons with a bevel on every edge
 
 **For players:**

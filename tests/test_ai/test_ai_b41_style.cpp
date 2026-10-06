@@ -410,7 +410,9 @@ void run_b41_style_tests() {
             for (const bool economic : {true, false}) {
                 sim::SimulationEngine sim;
                 start_match(sim, "TREASURE", 7, 0x0F);
-                Rig rig(sim, 0, Level::Medium, economic ? Pinned::bot(Level::Medium, Style::Economic) : std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
+                LevelPlan neutral = plan_for(Level::Medium);
+                neutral.race = false;                                                                          // (the opening of v0.5.0: one ant for the neutral Medium; the race of the contest batch has AI20.1)
+                Rig rig(sim, 0, Level::Medium, economic ? Pinned::bot(Level::Medium, Style::Economic) : std::make_unique<StandardBot>(neutral), 4, 4);
                 rig.run(60);
                 size_t at_centre = 0;
                 for (const auto& e : rig.proposed) {
@@ -465,7 +467,9 @@ void run_b41_style_tests() {
             for (const Level level : {Level::Medium, Level::Hard}) {
                 sim::SimulationEngine sim;
                 start_match(sim, "TREASURE", 7, 0x0F);
-                Rig rig(sim, 0, level, Pinned::bot(level, Style::Aggressive), 4, 4);
+                LevelPlan aggressive = Pinned::plan(level, Style::Aggressive);
+                aggressive.race = false;                                                                       // (the opening of v0.5.0: one ant more than the neutral plan; the race of the contest batch has AI20.1)
+                Rig rig(sim, 0, level, std::make_unique<StandardBot>(aggressive), 4, 4);
                 rig.run(60);
                 size_t at_centre = 0;
                 for (const auto& e : rig.proposed) {
