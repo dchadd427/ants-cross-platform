@@ -3249,6 +3249,22 @@ int main() {
             ASSERT_FALSE(lan.host.occupied(lan.guests[bob].lobby->my_seat()));                                 // the same ladder: out at the 24th
             ASSERT_EQ(lan.host.ignored_seat_moves(), 24u);
         }
+        {   // what happened stays as it happened: a Joined that waits to be read keeps the seat that the guest joined at when the owner of the lobby moves the guest; only the START of a leader goes with the lead (the plans, above)
+            Room lan;
+            lan.join_seat("Ann");
+            lan.run(300);
+            lan.host.take_events();
+            const size_t bob = lan.join_seat("Bob");
+            const uint8_t joined_at = lan.guests[bob].lobby->my_seat();
+            ASSERT_TRUE(lan.host.move_seat(joined_at, 3));
+            size_t joins = 0;
+            for (const auto& e : lan.host.take_events()) {
+                if (e.type != HostLobby::Event::Type::Joined) continue;
+                ++joins;
+                ASSERT_EQ(e.seat, joined_at);
+            }
+            ASSERT_EQ(joins, size_t{1});
+        }
         {   // a room that does not allow an early start has no leader: nobody's move is heard
             HostLobby::Config no = keyed_server_config(33);
             no.early_start = false;
