@@ -555,6 +555,26 @@ Every mutant of R1 - R6 was run again against the final tree (R2 - R5 had been r
 
 (The R5 mutants G1 - G8 and N13 of the table above were run against the permanent give-up; their successors are CD1 - CD22.)
 
+### The budget tests on the Windows runners
+
+**Why.** RP7.1, RP7.3, RP7.4 and N3.30 failed on the Windows jobs of CI in about every other run and passed on a rerun. They made their strikes by spinning inside the timed block on the clocks that the budget reads, and Windows' thread clock counts in ticks: on both runners every change of it is exactly 15.625 ms, a spin of 1 ms took 2 - 30 ms of wall time (median 15.6 - 15.8) and always read 15.625 ms, one of 25 ms read 31.25 ms and took 25 - 47 ms; a whole tick goes to the thread that is running when it falls and nothing to one that is not. A spin that saw it stand still for 100 ms gave up and left its block charged nothing: the strike that RP7.1 (`ticks_advanced == 3`), RP7.3 (`over_budget >= 50`) and RP7.4 (`began[i + 1] - ended[i] == 1`) count never came (the same three lines fail on Linux with a simulated tick clock and a spin that gives up). N3.30 failed the other way (`over_budget == 0`, a strike that nobody asked for): its spin of 30 ms took up to 47 ms of wall time on a runner (more on a busy one) and the tick clock credits a tick too many, so a block can be charged more than the budget of 50 ms. Busy loops on a runner (4 processors, three rounds per load) show it: with 8 loops the old RP7 tests failed every round on MSVC 2022, each time on RP7.3's `over_budget >= 50` (the spin gave up 254 - 305 times in about 655); on MSVC 2026 they passed with 8 loops and failed every round with 16 (RP7.3 and RP7.4 each time, 194 - 225 gave-ups). The new RP7 tests passed all 8 rounds that ran.
+
+**What changed.** The clocks of the budget can be set (see the seams above; the product leaves them empty) and the tests wind a `ManualClock` from the work hook, so a block costs what the hook says on every platform and under any load. Nothing a test checked was loosened: the cost rule, the edge of the budget and a thread clock that counts in ticks have a test of their own (RP7.5), RP7.6 is the one test on the real clocks (its spin waits instead of giving up). An independent review ran main's `test_prediction` and the nine prediction cases of `test_netgame` against the new code (all pass unchanged) and the old RP7.1 - RP7.4 against an emulated tick-counting thread clock (40 of 40 runs failed; the new ones passed 60 of 60).
+
+**Mutants** (17, `tools/mutate.py`, edits of `prediction.cpp`, `prediction.hpp`, `netgame.cpp` and `netgame.hpp`; the unmutated tree passed the baselines; the 27 mutants above were run again on the new tests: all killed, the old tests kill 26):
+
+| Mutant | What it does | Result |
+|---|---|---|
+| `CK1_wall_clock_ignored`, `CK2_cpu_clock_ignored` | the timer reads the real wall / CPU clock although the config names one | KILLED by RP7.1, RP7.5 |
+| `CK3_edge_is_a_strike`, `CK3b_edge_needs_more` | a block that costs exactly the budget is a strike / one that costs the budget plus a nanosecond is none | KILLED by RP7.5 (the edge is tested nowhere else) |
+| `CK4_charge_is_cpu`, `CK7_charge_is_cpu_at_the_call` | the budget counts the CPU time alone (in `work_cost_ns` / at the call) | KILLED by RP7.5 |
+| `CK5_charge_is_wall`, `CK8_charge_is_wall_at_the_call` | the budget counts the wall time alone | KILLED by RP7.5, RP7.6 |
+| `CK6_stats_use_cpu` | the statistics take the CPU time | KILLED by RP7.5, RP7.6 |
+| `B1_one_strike_more` | one strike more is needed for a cool-down | KILLED by RP7.1, RP7.2, RP7.4 |
+| `B2_cooldown_never_doubles` | every cool-down is the first one's length | KILLED by RP7.4 |
+| `B3_hook_outside_advance`, `B4_hook_outside_rebuild` | the work hook runs before the timer starts, so its cost is never charged | KILLED by RP7.1, RP7.3 - RP7.6 / RP7.1, RP7.2, RP7.4 |
+| `NG1` - `NG4` | `NetGame` does not give the prediction its wall / CPU clock (`make_prediction` forgets it, the setter drops it) | KILLED by N3.30 |
+
 ### The prediction is made only where it is wanted
 
 **Why.** The object was made at the start of every match and merely suspended when off: a default match carried an idle second engine and ran the application's cue router on every tick. Now a default match has no `Prediction` at all.
