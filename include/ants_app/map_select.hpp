@@ -334,6 +334,7 @@ private:
     std::function<void(uint8_t seat)> on_move_seat_{nullptr};
     int8_t row_hover_{-1};                // the leader's row under the pointer (a row of row_seats), -1 none
     int8_t row_pressed_{-1};              // ... and the one that a press captured
+    int8_t row_pressed_seat_{-1};         // ... with the seat of its player (a release moves that player, and nobody else when the rows closed up meanwhile)
     std::function<void()> on_quit_{nullptr};
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };

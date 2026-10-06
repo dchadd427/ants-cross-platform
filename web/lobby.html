@@ -1020,6 +1020,8 @@ their music and their sound: only the window you are in is heard). The match is 
         var roomMap = '';
         var inFrame = [false, false, false, false];
         var frames = [null, null, null, null];          // the iframe of each seat that plays on this page
+        var frameSeat = [null, null, null, null];       // the seat that the game in each frame plays now, as it reports it: the leader of a room can put a player in another colour (protocol 14), and a game that
+                                                        // comes back has to ask for the seat that holds its key (null: it reported nothing yet, it plays the seat that it was opened for)
         var wins = [null, null, null, null];            // the window of each seat that plays in a window of its own
         var cells = [], labels = [], rows = [];
 
@@ -1068,6 +1070,9 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         window.addEventListener('message', function (e) {
             if (e.origin !== window.location.origin || !e.data || e.data.ants !== 'sync') return;
+            for (var k = 0; k < SEATS.length; k++) {
+                if (e.source && frames[k] && frames[k].contentWindow === e.source && e.data.seat >= 0 && e.data.seat < SEATS.length) frameSeat[k] = e.data.seat;
+            }
             onSync(e.data.seat, e.data.tick, String(e.data.hash));
         });
         var channel = null;
@@ -1119,8 +1124,8 @@ their music and their sound: only the window you are in is heard). The match is 
         function setRowState(seat, text) { if (rows[seat]) rows[seat].state.textContent = text; }
         function playHere(seat) {
             if (!inFrame[seat] && !readName().ok) return false;       // a bad name starts nothing (the field says why)
-            if (inFrame[seat]) {                     // again: reconnect that seat (a frame whose game lost its connection, or a room that was made again)
-                if (frames[seat]) frames[seat].src = gameUrl(seat, true) + '&embed=1';
+            if (inFrame[seat]) {                     // again: reconnect that seat (a frame whose game lost its connection, or a room that was made again), as the seat that its game plays now
+                if (frames[seat]) frames[seat].src = gameUrl(frameSeat[seat] === null ? seat : frameSeat[seat], true) + '&embed=1';
                 setRowState(seat, 'on this page (reconnected)');
                 return true;
             }

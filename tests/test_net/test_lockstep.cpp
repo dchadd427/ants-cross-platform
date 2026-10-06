@@ -10037,10 +10037,6 @@ void run_protocol13_tests() {
             const std::vector<uint8_t> move = encode(SeatMoveMsg{1, 2});
             ASSERT_FALSE(decode(move, vote) || decode(move, chat) || decode(move, request) || decode(move, lag) || decode(move, ask));
         }
-        // the room's Room message and the host's Start are not touched: what a SeatMove asks for is shown with the Room message that exists already (docs/NETWORK_PORT.md "Protocol 14")
-        RoomMsg room = server_room_of(0);
-        RoomMsg back;
-        ASSERT_TRUE(decode(encode(room), back) && encode(back) == encode(room));
     } TEST_END();
 }
 

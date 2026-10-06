@@ -243,6 +243,8 @@ private:
     bool leads() const noexcept { return cfg_.host_seat >= sim::MAX_PLAYERS && cfg_.early_start; }
     /// The leader is the guest with the earliest Welcome among those who are here (recomputed whenever somebody joins or leaves, before the room is broadcast)
     void elect_leader();
+    /// Whether move_seat would move a guest now (the rule alone, no budget): the room is open, both are seats, `from` holds a guest and `to` is empty (so the two are different)
+    bool can_move_seat(uint8_t from, uint8_t to) const noexcept;
 
     Config cfg_;
     RoomMsg room_;

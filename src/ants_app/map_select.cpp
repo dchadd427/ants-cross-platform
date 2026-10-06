@@ -88,6 +88,7 @@ void MapSelectScreen::enter() {
     fow_off_.reset();
     row_hover_ = -1;
     row_pressed_ = -1;
+    row_pressed_seat_ = -1;
 }
 
 // FUN_010133ef shows slot i of the machine's own peer table in row i: the local machine is slot 0 on every machine, a guest's slot 1 is the host (docs 5.50)
@@ -217,6 +218,7 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
     const int32_t row = player_row_at(screen_x, screen_y);                     // (the leader's rows: a press on a player's row captures it, the release moves the player)
     if (row >= 0) {
         row_pressed_ = static_cast<int8_t>(row);
+        row_pressed_seat_ = row_seats(room_)[static_cast<size_t>(row)];        // (the press holds the player, not the place: the rows close up when somebody leaves)
         play_sfx(sim::SoundID::ButtonClick);
     }
     if (is_guest() || started_) return;                                       // (the leader of a server's room has the host's buttons: they act or do not act when released)
@@ -231,10 +233,12 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
 void MapSelectScreen::handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return;
     const int32_t pressed_row = row_pressed_;
+    const int8_t pressed_seat = row_pressed_seat_;
     row_pressed_ = -1;
-    if (pressed_row >= 0 && pressed_row == player_row_at(screen_x, screen_y) && on_move_seat_) {          // (released on the row that it was pressed on)
+    row_pressed_seat_ = -1;
+    if (pressed_row >= 0 && pressed_row == player_row_at(screen_x, screen_y) && on_move_seat_) {          // (released on the row that it was pressed on, and the player of that row is still the one that was pressed)
         const int8_t seat = row_seats(room_)[static_cast<size_t>(pressed_row)];
-        if (seat >= 0) on_move_seat_(static_cast<uint8_t>(seat));
+        if (seat >= 0 && seat == pressed_seat) on_move_seat_(static_cast<uint8_t>(seat));
     }
     if (is_guest()) {                                                         // the buttons that are not on the guest screen get no pointer events either
         for (ScreenButton* b : {&up_, &down_, &start_, &fow_on_, &fow_off_}) b->reset();
@@ -258,6 +262,7 @@ void MapSelectScreen::handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_
 void MapSelectScreen::release_buttons() {
     for (ScreenButton* b : {&up_, &down_, &start_, &quit_, &fow_on_, &fow_off_}) b->reset();
     row_pressed_ = -1;
+    row_pressed_seat_ = -1;
 }
 
 // FUN_01014076: the keys are Up (0xe) and Down (0xf), Enter (0x18), 'S' and 's' (start), 'Q', 'q', 'X' and 'x' (leave); nothing else does anything, Esc included

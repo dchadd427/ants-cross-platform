@@ -2866,6 +2866,16 @@ int main() {
             }
             return seats;
         };
+        const auto leader_plans = [](HostLobby& host) {                  // the LeaderStart events as "seat:levels": the seat of the leader that asked, then the level of each seat ("2:0301": None, Hard, None, Easy ... as numbers)
+            std::vector<std::string> plans;
+            for (const auto& e : host.take_events()) {
+                if (e.type != HostLobby::Event::Type::LeaderStart) continue;
+                std::string plan = std::to_string(static_cast<unsigned>(e.seat)) + ":";
+                for (const FillLevel level : e.fill) plan += std::to_string(static_cast<unsigned>(level));
+                plans.push_back(plan);
+            }
+            return plans;
+        };
         ASSERT_TRUE(seat_colour_word(0) == "Green" && seat_colour_word(1) == "Red" && seat_colour_word(2) == "Blue" && seat_colour_word(3) == "Black" && seat_colour_word(4).empty());
         {   // an empty seat: the leader puts Bob in the Black seat; he moves, nobody else does; he is told, the leader and Cat are not; every guest sees the same seats and knows its own; the leader stays the leader
             Room room(keyed_server_config(21));
@@ -2878,6 +2888,10 @@ int main() {
             const auto bob_rtt = room.host.room().slots[1].rtt_ms;
             ASSERT_TRUE(bob_rtt != kRttUnknown);                         // (the thumb was measured)
             ASSERT_EQ(layout(room.host.room()), "Ann@0 Bob@1 Cat@2");
+            ASSERT_FALSE(room.guests[ann].lobby->request_seat_move(1, 1));                                       // a client sends nothing that is no message: the same seat twice, a number that is no seat
+            ASSERT_FALSE(room.guests[ann].lobby->request_seat_move(1, 4));
+            ASSERT_FALSE(room.guests[ann].lobby->request_seat_move(4, 1));
+            ASSERT_FALSE(room.guests[ann].lobby->request_seat_move(255, 255));
             ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));
             room.run(300);
             ASSERT_EQ(layout(room.host.room()), "Ann@0 Cat@2 Bob@3");
@@ -3075,10 +3089,9 @@ int main() {
             const size_t bob = room.join_seat("Bob");
             room.run(300);
             for (const size_t g : {ann, bob}) room.guests[g].lobby->take_chat();
-            for (int i = 0; i < 30; ++i) {                                                                      // Bob bounces between seat 1 and 2, thirty times in the same millisecond
-                const uint8_t from = i % 2 == 0 ? 1 : 2;
-                const uint8_t to = i % 2 == 0 ? 2 : 1;
-                room.guests[ann].client_end->send(encode(SeatMoveMsg{from, to}));
+            for (int i = 0; i < 30; ++i) {                                                                      // thirty presses in the same millisecond: Bob bounces between seat 1 and 2 six times, and the rest press him on to seat 2 again
+                const bool back = i < 6 && i % 2 == 1;                                                          // (every one of them can be done: the dropped ones leave Bob in seat 1)
+                room.guests[ann].client_end->send(encode(SeatMoveMsg{back ? uint8_t{2} : uint8_t{1}, back ? uint8_t{1} : uint8_t{2}}));
             }
             room.run(300);
             ASSERT_EQ(room.host.seat_moves(), kSeatMoveBurst);
@@ -3134,6 +3147,65 @@ int main() {
             ASSERT_EQ(leader_starts(room.host), (std::vector<uint8_t>{3}));
             ASSERT_TRUE(room.guests[bob].lobby->phase() == ClientLobby::Phase::InRoom && room.host.ignored_start_requests() == 0u);
         }
+        {   // the plan of bots of a START that was heard before a move is by colour, so it goes with the colours: the bot that was for the colour that the player takes is for the colour that it leaves; every START that waits has it, whoever moves, and a START after the move is the client's own
+            using F = FillLevel;
+            Room room(keyed_server_config(34));
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            room.run(300);
+            leader_plans(room.host);
+            const auto ask = [&](F green, F red, F blue, F black) {
+                StartRequestMsg request;
+                request.fill = {green, red, blue, black};
+                room.guests[ann].client_end->send(encode(request));
+            };
+            const auto move = [&](uint8_t from, uint8_t to) { room.guests[ann].client_end->send(encode(SeatMoveMsg{from, to})); };
+            ask(F::None, F::None, F::Hard, F::Easy);                                                            // a Hard bot for Blue, an Easy one for Black ...
+            move(1, 2);                                                                                         // ... and Bob takes Blue: the Hard bot is for Red now, the Easy one is where it was
+            room.run(300);
+            ASSERT_EQ(leader_plans(room.host), (std::vector<std::string>{"0:0301"}));
+            ask(F::Medium, F::None, F::Hard, F::Easy);                                                          // the leader moves itself (Green to Red): the levels of both colours trade places, and the START names the seat that the leader holds now
+            move(0, 1);
+            room.run(300);
+            ASSERT_EQ(leader_plans(room.host), (std::vector<std::string>{"1:0231"}));
+            ask(F::Easy, F::None, F::Hard, F::None);                                                            // two STARTs wait for the same move of somebody else: both are made for the new seats, the leader is where it was
+            ask(F::None, F::Medium, F::None, F::Hard);
+            move(2, 3);                                                                                         // Bob goes on to Black
+            ask(F::Hard, F::Easy, F::Medium, F::None);                                                          // ... and a START that comes after it is made for the seats as they are: it is left as it is
+            room.run(300);
+            ASSERT_EQ(leader_plans(room.host), (std::vector<std::string>{"1:1003", "1:0230", "1:3120"}));
+            ASSERT_TRUE(room.host.seat_moves() == 3u && room.host.ignored_seat_moves() == 0u && room.host.ignored_start_requests() == 0u);
+            ASSERT_EQ(layout(room.host.room()), "Ann@1 Bob@3");
+        }
+        {   // what cannot be done costs no part of the budget of what can: ten requests that the room ignores, in the same tick, leave the leader its six moves, and one that is ignored after the six is counted, not dropped
+            Room room(keyed_server_config(35));
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            room.join_seat("Cat");
+            room.run(300);
+            const auto send = [&](uint8_t from, uint8_t to) { room.guests[ann].client_end->send(encode(SeatMoveMsg{from, to})); };
+            for (int i = 0; i < 10; ++i) send(1, 2);                                                            // Bob (Red) onto Cat's colour (Blue): ignored and counted, ten times
+            send(1, 3);                                                                                         // Bob to Black: done, with a budget that the ten did not touch
+            for (int i = 0; i < 5; ++i) send(i % 2 == 0 ? 3 : 1, i % 2 == 0 ? 1 : 3);                           // five more, Bob there and back: the six of the burst are spent, Bob is on Red again
+            send(3, 0);                                                                                         // nobody sits in Black now: ignored and counted, not dropped
+            send(1, 3);                                                                                         // a seventh move that could be done: dropped, counted by nobody
+            room.run(300);
+            ASSERT_EQ(room.host.seat_moves(), kSeatMoveBurst);
+            ASSERT_EQ(room.host.ignored_seat_moves(), 11u);
+            ASSERT_EQ(layout(room.host.room()), "Ann@0 Bob@1 Cat@2");
+            ASSERT_TRUE(room.host.occupied(0) && room.host.leader() == 0 && room.guests[ann].lobby->phase() == ClientLobby::Phase::InRoom);
+        }
+        {   // a leader who gave no name is "Player 1" in the room's notice, as everywhere in the lobby
+            Room room(keyed_server_config(36));
+            const size_t ann = room.join_seat("");
+            const size_t bob = room.join_seat("Bob");
+            room.run(300);
+            ASSERT_TRUE(room.host.room().slots[0].name.empty());
+            room.guests[bob].lobby->take_chat();
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 2));
+            room.run(300);
+            ASSERT_EQ(notices_of(*room.guests[bob].lobby), (std::vector<std::string>{"Player 1 moved you to Blue."}));
+        }
         {   // the key is the player's: after a move a Hello with it takes over the NEW seat, whatever seat the Hello asks for (a page that was reloaded with the old seat in its address); the seat that was left is free for a new player
             Room room(keyed_server_config(32));
             const size_t ann = room.join_seat("Ann");
@@ -3166,6 +3238,12 @@ int main() {
             ASSERT_FALSE(lan.host.move_seat(0, 2));                                                             // (seat 0 is the host's own: it holds no guest)
             ASSERT_FALSE(lan.host.move_seat(1, 0));
             ASSERT_EQ(lan.host.seat_moves(), 0u);
+            lan.guests[0].lobby->take_chat();
+            ASSERT_TRUE(lan.host.move_seat(1, 3));                                                              // (the owner of a lobby that has no leader moves Ann: the room says so in its own name)
+            lan.run(300);
+            ASSERT_EQ(lan.guests[0].lobby->my_seat(), 3);
+            ASSERT_EQ(notices_of(*lan.guests[0].lobby), (std::vector<std::string>{"The room moved you to Black."}));
+            ASSERT_EQ(lan.host.seat_moves(), 1u);
             for (int i = 0; i < 100; ++i) lan.guests[bob].client_end->send(encode(SeatMoveMsg{1, 2}));
             lan.run(300);
             ASSERT_FALSE(lan.host.occupied(lan.guests[bob].lobby->my_seat()));                                 // the same ladder: out at the 24th

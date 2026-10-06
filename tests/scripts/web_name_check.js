@@ -547,6 +547,31 @@ const openRoom = (search, stored, name) => {
     env.rowButton(2, 'Play here').click();
     check('"Play here" again (a reconnect) keeps the seat\'s name', env.param(env.frameOf(2).src, 'name') === 'Alice');
 }
+{   // the leader of a room can put a player in another colour (protocol 14): the game in a frame reports the seat that it plays now, and "Play here" again brings it back as that seat (its key is kept under it)
+    const env = openRoom('?map=treasure&players=4', {}, 'Alice');
+    env.rowButton(1, 'Play here').click();
+    const frame = env.frameOf(1);
+    const say = (source, seat) => (env.win.listeners.message || []).forEach((fn) => fn({ origin: 'https://play.test', source, data: { ants: 'sync', seat, tick: 40, hash: '0123456789abcdef' } }));
+    frame.contentWindow = null;                                       // (a frame whose window is gone has none, and a window that was closed has no source: they are not the same window)
+    say(null, 3);
+    env.rowButton(1, 'Play here').click();
+    check('a frame that has reported nothing comes back as the seat that it was opened for (a message from a window that is gone is nobody\'s)', env.param(env.frameOf(1).src, 'seat') === '1');
+    frame.contentWindow = {};
+    say(frame.contentWindow, 1);
+    env.rowButton(1, 'Play here').click();
+    check('... and so does one that reports that seat', env.param(env.frameOf(1).src, 'seat') === '1');
+    say({}, 3);
+    say(undefined, 3);
+    env.rowButton(1, 'Play here').click();
+    check('a report from a window that is no frame of this page (or from no window) changes nothing', env.param(env.frameOf(1).src, 'seat') === '1');
+    say(frame.contentWindow, 7);
+    env.rowButton(1, 'Play here').click();
+    check('... and neither does a seat that no room has', env.param(env.frameOf(1).src, 'seat') === '1');
+    say(frame.contentWindow, 3);
+    env.rowButton(1, 'Play here').click();
+    const src = env.frameOf(1).src;
+    check('a game that the leader put in another colour comes back as the seat that it plays now, with the rest of its address as before', env.param(src, 'seat') === '3' && /&embed=1$/.test(src) && env.param(src, 'room') === env.param(frame.src, 'room') && env.param(src, 'join') === '/ws', src);
+}
 {   // the first seat that starts takes the name, whatever its number
     const env = openRoom('?map=treasure&players=4', {}, 'Zed');
     env.rowButton(3, 'Open a window').click();

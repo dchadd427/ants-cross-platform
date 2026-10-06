@@ -241,10 +241,11 @@ public:
     /// True means the request was sent, not that the server will start: it starts at once when it can, otherwise nothing happens.
     bool request_start();
     /// The leader of a server's room puts the player of `seat` in another colour (protocol 14, SeatMove): the next colour that nobody holds (green, red, blue, black, round again; a person goes
-    /// on round with every press, so every arrangement of the people can be had: the colour that is free moves with them). The leader may move itself. One request goes out and the next waits until the
-    /// room shows the change or a second has passed: a double press must not move a player on twice. The bot that the plan of set_fill_bots keeps for the colour that the player takes goes to the colour
-    /// that it leaves (the levels of the two seats swap places in the plan), so the match that START makes has the same people and the same bots as before the move. False (nothing is sent) unless this
-    /// machine leads an open room, the seat holds a person and there is a free colour for it, and no request is waiting for the room's answer.
+    /// on round with every press, so every arrangement of the people can be had: the colour that is free moves with them). The leader may move itself. One request goes out and the next waits: half a
+    /// second at least (a double click is one press; its second one would move the player that the rows close up to), and until the room shows the change or a second has passed. The plan of bots of
+    /// set_fill_bots follows what the room shows (follow_moved_player): when a person has taken a free colour the levels of the two seats trade places, so the match that START makes has the same people
+    /// and the same bots as the leader saw (a START that is pressed before the room's answer has come is for the room as it was seen). False (nothing is sent) unless this machine leads an open room,
+    /// the seat holds a person and there is a free colour for it, and no request is waiting for the room's answer.
     bool request_move_seat(uint8_t seat);
     /// The colour that request_move_seat(seat) asks for: the first seat after `seat` (3 is followed by 0) that nobody holds; 255 when `seat` holds no person or every colour is taken (a room of four
     /// starts when the fourth player comes: a room that waits has a colour free)
@@ -450,6 +451,9 @@ private:
     void announce_room();
     /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
     void collect_room_chat();
+    /// The leader's plan of bots follows a player that the room moved: given the room as it was (room_ is the room as it is now), the levels of the two seats trade places when a person's colour
+    /// is empty now and an empty colour is a person's, and nothing else changed
+    void follow_moved_player(const RoomMsg& before);
     // The way back (see the head of this file)
     /// A new link to the server, made the way the first one was (TCP natively, a WebSocket in the browser); null when none can be made (the session tries again in two seconds). `for_lobby`: the link
     /// is the lobby's, not the session's (a machine that starts the match from nothing): the browser's socket then says the lobby's Hello when it opens
@@ -519,8 +523,8 @@ private:
     std::vector<std::string> prompts_;      // the START prompt of the leader / host in its ways of saying it, longest first (prompt_texts()); empty when the original's prompt stands
     std::vector<ChatLine> pending_chat_;    // the waiting room's lines that take_pregame_chat() has not handed out
     bool chat_status_mirror_{true};         // the lines of the room are shown on the status line too (set_chat_status_mirror)
-    uint64_t move_pending_{0};              // the leader: a SeatMove is out and the room has not shown it yet: how the people sat when it was sent (a hash of the seats' people), 0 when none is out
-    uint32_t move_sent_ms_{0};              // ... and when it went out (the room answers a request that it cannot do with nothing at all: the next press waits a second at most)
+    uint64_t move_pending_{0};              // the leader: the last SeatMove was sent when the people sat like this (a hash of the seats' people), 0 when none was sent
+    uint32_t move_sent_ms_{0};              // ... and when it went out (the next press waits half a second, and for the room's answer: a request that the room cannot do is not answered at all, a second at most)
     bool move_hint_given_{false};           // the leader's status line has said that a tap on a player moves it (once, when the second person is in the room)
 
     std::function<void(const ChatMsg&)> on_chat_;
