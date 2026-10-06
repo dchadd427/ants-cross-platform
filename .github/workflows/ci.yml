@@ -306,6 +306,40 @@ jobs:
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
+      - name: Starvation experiment (diagnostic push, not for merging)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
+        continue-on-error: true
+        timeout-minutes: 25
+        run: |
+          # The prediction-budget tests before (test_prediction_old, with the log of its spins) and after (test_prediction, test_netgame) the manual clock, run on this runner while
+          # busy loops take the processors, as the other test programs of a ctest run do in the field. No -e: a failing test must not end the script.
+          set +e +o pipefail
+          cd build/tests/test_net
+          run() {
+            name=$1; limit=$2; exe=$3; filter=$4
+            rm -f burn_diag_*.txt
+            ANTS_TEST_FILTER=$filter timeout $limit ./$exe > run.log 2>&1
+            rc=$?
+            echo "--- $name: exit=$rc"
+            grep -E "Assertion failed|FAILED!" run.log | sed 's/^ *//' | cut -c1-210 | head -12
+            if ls burn_diag_*.txt > /dev/null 2>&1; then grep -hE "^==|^request|ODD|GAVE" burn_diag_*.txt | cut -c1-330 | head -40; fi
+          }
+          for hogs in 8 16; do
+            pids=""
+            for i in $(seq 1 $hogs); do ( while :; do :; done ) & pids="$pids $!"; done
+            sleep 2
+            echo "##### hogs=$hogs"
+            for round in 1 2 3; do
+              echo "## round $round"
+              run "OLD test_prediction RP7 (hogs=$hogs round=$round)" 240 test_prediction_old.exe RP7
+              run "NEW test_prediction RP7 (hogs=$hogs round=$round)" 240 test_prediction.exe RP7
+              run "NEW test_netgame N3.30 (hogs=$hogs round=$round)" 120 test_netgame.exe N3.30
+            done
+            kill $pids 2>/dev/null
+            wait 2>/dev/null
+          done
+          exit 0
+
       - name: Tool self-tests (map_sweep, bot_arena)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |

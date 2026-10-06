@@ -144,3 +144,18 @@ target_include_directories(test_prediction PRIVATE
 )
 
 add_test(NAME test_prediction COMMAND test_prediction)
+
+# DIAGNOSTIC ONLY, NOT FOR MERGING: the prediction tests as they were before the manual clock, with the logging of their spins (not registered with ctest)
+add_executable(test_prediction_old
+    test_prediction_old.cpp
+)
+
+target_link_libraries(test_prediction_old PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_prediction_old PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
