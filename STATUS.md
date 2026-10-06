@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 19:52 PDT · current release **v0.9.1** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 19:53 PDT · current release **v0.9.1** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -10,10 +10,9 @@ _Updated 2026-10-05 19:52 PDT · current release **v0.9.1** · details: [CHANGEL
 
 Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
 
-A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
+A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. The bots' "Can't go there." fix and flower play are small fixes that merge as soon as their checks are green. After these releases: the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- **Source comments cleaned** (pull request #25, comments only): thirteen comments and five test titles in the bot code say what the code does instead of whose notes a rule came from; reviewed, every finding fixed; merges when its five checks are green
 - Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
 - Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
 - Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. v0.9.0 no longer orders special actions onto an ant (-95% on Small); draft PR #16 (on main now, checks running) adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 58% on Small Hard and 34 to 45% on Treasure, scores unchanged within noise. The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
@@ -34,6 +33,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **Source comments cleaned** (no release; PR #25, merged 2026-10-05 19:44 PDT): fourteen comments and five test titles in the bot code say what the code does instead of whose notes a rule came from; nothing changes for players (the beta redeploys with the same version).
 - **Documents and test banners corrected** (no release; PR #24, merged 2026-10-05 19:35 PDT): about 44 statements in 23 files that no longer matched the game now say what the code, the data and the changelog say; nothing changes for players.
 - **v0.9.1** A player who quits during a catch-up no longer leaves the match paused: the server reads the Leave that came before the reset and drops the seat (native and browser connections) (PR #22, merged 2026-10-05 19:10 PDT, live 19:14 PDT)
 - **Browser checks without Docker** (no release; PR #13, merged 2026-10-05 19:01 PDT): a session that has no Docker can now build the web pages and run the touch checks and the other browser checks that need no game server; nothing changes for players.
