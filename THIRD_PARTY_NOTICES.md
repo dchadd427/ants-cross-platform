@@ -12,7 +12,7 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 - What: the data of the 1998 game *Ants*. This project is a reverse-engineered remake; it does not own the original and cannot license it.
 - Not here: the original game's program (`Ants.exe`) and its decompilation are not part of the repository. They are local references for the
   reverse engineering: an owner of the original game keeps a copy at `Original-Ants/Ants.exe` (and `docs/legacy/Ants.exe.c`), which `.gitignore`
-  keeps out of every commit; the tests do not need them (see "Reverse Engineering" in the README).
+  keeps out of every commit; the tests do not need them (see `docs/ORIGINAL_PROGRAM.md`).
 - Why the data is here: so that the remake can run and so that its tests can compare it with the original. Replacing the original artwork with open
   material is planned as a separate, later project.
 - Pictures made from it: the sprites in `asset_catalog/sprites/` and the pictures of the front page in `web/front/` (cut out of that artwork and of screenshots of the game by

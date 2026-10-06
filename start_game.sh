@@ -123,7 +123,7 @@ if [ "$DRY_RUN" -eq 0 ]; then
     echo "   * The Move and ability pedestals latch (Stop stops and deselects). Hold left on the minimap to scroll."
     echo ""
     echo " CAMERA:"
-    echo "   * Move the pointer to the screen edge to scroll (nothing scrolls with the keyboard or the wheel)."
+    echo "   * Move the pointer to the screen edge to scroll (the wheel zooms; no arrow or letter key scrolls, only Ctrl+N / Ctrl+P bring an ant into view)."
     echo ""
     echo " KEYS (the original's keyboard; the chat box is always active):"
     echo "   * F1 help, F9 - F12 quick chat, Enter sends chat, Esc deselects."
