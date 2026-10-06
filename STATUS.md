@@ -1,28 +1,29 @@
 # Status
 
-_Updated 2026-10-05 18:23 PDT · current release **v0.8.3** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 18:48 PDT · current release **v0.9.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.9.0** the bots: contested food, fights, safe fire-in, island and swimmer play | ███████░░░ 71% | Mon or Tue | PR #14 is the release pull request (both batches joined, both independent reviews answered, version and changelog done); v0.8.3 is out, so main is merged in and the five checks are running again; it merges when they are green and no match is running |
-| **v0.10.0** the leader of a room can move a player to another colour (network protocol 14) | ████░░░░░░ 43% | Mon night or Tue, after v0.9.0 | built and reviewed with every fix done (draft PR #26); the long local checks and the five CI checks are running; it merges after v0.9.0 |
+| **v0.10.0** the leader of a room can move a player to another colour (network protocol 14) | ████░░░░░░ 43% | Mon night or Tue | built and reviewed with every fix done (draft PR #26); the long local checks and the five CI checks are running; it merges in its turn |
 | **v0.11.0** short room codes (no "demo") and platform / operating system icons (protocol 15) | ░░░░░░░░░░ 0% | Wed or later | planned, starts when v0.10.0 is on main |
 
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. After these: the bots' "Can't go there." fix and flower play, the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- **Quitting during a catch-up** (draft pull request #22): a player who quits while their game is catching up no longer leaves the match paused with their seat held; review and checks running; ships as a patch release after v0.9.0
-- Bots: contested food, health-aware fights, the safe fire-in and the island play (bombing a crew over to the swimmers, the ferry on Islands and Small) are joined in PR #14, the v0.9.0 release pull request (both independent code reviews answered and every finding fixed; main with v0.8.3 is merged in and the five checks are running again, then the merge)
-- Bots next: the flower play (swimmers on Treasure too), the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
-- Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. PR #14 (the v0.9.0 candidate) no longer orders special actions onto an ant (-95% on Small); draft PR #16, stacked on it, adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 68% on Small Hard and 35 to 45% on Treasure, scores unchanged within noise (measured before #14's review fixes; #16 is measured again on the merged bot and moves onto main when #14 merges). The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
+- **Quitting during a catch-up** (draft pull request #22): a player who quits while their game is catching up no longer leaves the match paused with their seat held, in the desktop game and in the browser; two independent reviews done and every finding fixed, checks running again; merges in its turn as a patch release
+- **Source comments cleaned** (draft pull request #25, comments only): thirteen comments and five test titles in the bot code say what the code does instead of whose notes a rule came from; reviewed, every finding fixed; merges in its turn
+- **Documents, scripts and test banners corrected** (draft pull request #24, no redeploy): 44 statements that no longer matched the game (23 files) say what the code does now; reviewed, every finding fixed; merges in its turn
+- Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
+- Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
+- Bots: "Can't go there." is mostly the game's own loop for ants shut in by fire walls, not illegal orders. v0.9.0 no longer orders special actions onto an ant (-95% on Small); draft PR #16 (on main now, checks running) adds a counter and the can't-go checks of the gate, the rescue and the raids: the bots' own refused orders fall 58% on Small Hard and 34 to 45% on Treasure, scores unchanged within noise. The loops themselves stay (the owner's decision); a quieter raid rule costs 5% of the score at Medium and is the owner's to choose
 - Short room codes, and the platform and operating system icons (v0.11.0, protocol 15): planned after v0.10.0
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- **No-Docker browser checks** (pull request #13, tools only, no redeploy): main is in and four of its five checks are green; it waits for the Windows test fix (pull request #20) to reach main, then merges
-- Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and it merges after v0.9.0
-- **Prediction-budget tests (the Windows flake, PR #20):** reviewed, no defect; main with v0.8.3 is merged in and the five checks are running again; merges right after v0.9.0.
+- **No-Docker browser checks** (pull request #13, tools only, no redeploy): reviewed twice and every finding fixed; main with v0.9.0 is in and the five checks are running; it merges right after the Windows test fix (pull request #20)
+- Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and it merges in its turn
+- **Prediction-budget tests (the Windows flake, PR #20):** reviewed, no defect; main with v0.9.0 is merged in and the five checks are running again; it merges next.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
@@ -32,6 +33,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **v0.9.0** Smarter computer players: a bot races an enemy for the food that both can reach, hunts a wounded ant until it is dead, lights fire walls only where they cannot simply be put out, never clicks a special order onto an ant (far fewer "Can't go there." from the bots' own orders) and plays harder when it is behind; on ISLANDS and the lake of SMALL bots fly a crew over the water with bomb flights, bring Swimmers across and ferry the food home (four bots on ISLANDS used to score nothing, now about 1,000 Easy to 1,400 Hard points a seat) (PR #14, merged 2026-10-05 18:36 PDT, live 18:39 PDT)
 - PR #19 merged: the macOS flakes of test_rejoin_app (RA1.3, RA4.1, RA9.1) are fixed; tests only, no redeploy
 - **v0.8.3** Friend by default, a game for one and a dirtier background: a first visit to the New match card has a Friend in the three other seats (it was a Medium bot; a browser that saved its choices keeps them), START! is always on and, with every other seat on Nobody, begins a game for one on this computer (no room, no opponent; you play Green), and the orange background has a little noise and dirt (PR #23, merged 2026-10-05 17:58 PDT, live 18:01 PDT; the owner asked for each of the three)
 - **v0.8.2** Rounder buttons with a bevel on every edge: 8 px corners, a face lit from above and a bevel on all four edges, on the front page, the game page, the changelog pages and Sprites and sounds (PR #21, merged 2026-10-05 17:06 PDT, live 17:09 PDT; the owner asked for rounder, less flat buttons, then a bevel on the left edge and slightly smaller corners)
