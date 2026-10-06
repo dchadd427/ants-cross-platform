@@ -222,6 +222,12 @@ public:
         for (const Client& c : clients_) n += c.ignored_start_requests;
         return n;
     }
+    /// The SeatMoves that reached the running match (the leader's press crossed the Start; protocol 14): heard and ignored, all clients together
+    uint32_t ignored_seat_moves() const noexcept {
+        uint32_t n = 0;
+        for (const Client& c : clients_) n += c.ignored_seat_moves;
+        return n;
+    }
     LockstepRunner& runner() noexcept { return *runner_; }
     uint8_t epoch() const noexcept { return cfg_.epoch; }
     uint8_t host_player() const noexcept { return cfg_.host_player; }
@@ -295,6 +301,7 @@ private:
         MessageBudget talk;                 // flood control: every message that the client sends takes one from it
         ChatBudget chat;                    // ... and every line of chat takes one from this one as well (flood.hpp: a burst of 5, then one a second; a line beyond it is dropped)
         uint32_t ignored_start_requests{0}; // its StartRequests that arrived in the running match (the first kIgnoredStartRequestsAllowed are free)
+        uint32_t ignored_seat_moves{0};     // its SeatMoves that arrived in the running match (the first kIgnoredSeatMovesAllowed are free)
         bool lagging{false};                // announced to the others as lagging (a host without a seat)
         uint32_t next_notice_ms{0};         // when the announcement is repeated
         uint32_t acked_seen{0};             // the ack the last progress check saw, and when it moved (lag_drop_idle_ms)

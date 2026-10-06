@@ -158,6 +158,7 @@ void MapSelectScreen::render_wide(IRenderer& renderer, const ants::assets::Asset
             if (rows[r] < 0) continue;
             const size_t seat = static_cast<size_t>(rows[r]);
             const int32_t row = static_cast<int32_t>(r) * layout.seat_pitch;
+            draw_row_light(renderer, r);
             draw_portrait(static_cast<uint8_t>(seat), row);
             std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
             if (name.size() > 16) name.resize(16);

@@ -35,6 +35,8 @@ JsonValue status_to_json(const RoomStatus& s) {
     o.set("early_start", JsonValue::make_bool(s.early_start));
     o.set("leader", s.leader < 4 ? JsonValue::make_int(s.leader) : JsonValue::make_null());
     o.set("ignored_start_requests", JsonValue::make_int(s.ignored_start_requests));
+    o.set("seat_moves", JsonValue::make_int(s.seat_moves));
+    o.set("ignored_seat_moves", JsonValue::make_int(s.ignored_seat_moves));
     JsonValue players = JsonValue::make_array();
     for (size_t seat = 0; seat < s.names.size(); ++seat) {
         if (s.names[seat].empty()) continue;
