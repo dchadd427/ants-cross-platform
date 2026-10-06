@@ -29,8 +29,10 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html { background: var(--clay); }
+        /* The tile's address ends in ?v= and the first 8 hex digits of the file's sha256: the server lets a browser keep a .png for a week without asking, so a changed tile needs a new address
+           (tests/scripts/test_web_front.py keeps the six addresses of the pages equal to the file's) */
         body {
-            background: var(--clay) url("front/clay.png");
+            background: var(--clay) url("front/clay.png?v=ef1e7ee6");
             color: var(--ink);
             font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif;
             font-synthesis: none;
@@ -178,8 +180,6 @@
         .playrow { display: flex; align-items: center; gap: 14px 20px; flex-wrap: wrap; }
         /* START!: the menus' bevelled teal button as a real button, so its letters and edges are drawn at the screen's own resolution (the original's 98 x 27 picture, blown up three times, broke up) */
         .startbtn { min-width: 210px; min-height: 58px; padding: 10px 34px; font-size: 26px; letter-spacing: .05em; text-shadow: 0 2px 0 var(--teal-lo); }
-        .startbtn:disabled { opacity: .5; cursor: not-allowed; filter: grayscale(.6); }
-        .startbtn:disabled:hover { background-color: var(--teal); }                       /* (a button that is off does not answer the pointer) */
         .note { max-width: 34ch; }
         .playrow .note { max-width: 40ch; }
 
@@ -399,7 +399,7 @@
             <label class="lab" for="player-name">Your name</label>
             <input type="text" id="player-name" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="who-hint name-msg">
             <button id="who-go" type="button" class="btn big" hidden>Join</button>
-            <p class="hint" id="who-hint"><span id="who-general"><span class="desk">The name your ants play under. Leave it empty for a random name when you host and Player otherwise. This browser remembers it.</span><span class="mob">Your ants play under this name. Empty: a random one when you host, Player otherwise.</span></span><span id="who-step-hint" hidden></span></p>
+            <p class="hint" id="who-hint"><span id="who-general"><span class="desk">The name your ants play under. Leave it empty for a random name. This browser remembers it.</span><span class="mob">Your ants play under this name. Empty: a random one.</span></span><span id="who-step-hint" hidden></span></p>
             <p class="msg" id="name-msg" role="alert"></p>
             <a id="who-back" class="btn sm who-back" href="/" hidden>&larr; Back to the front page</a>
         </section>
@@ -430,9 +430,9 @@
                             <li id="seat-row-0" data-seat="0"><img src="front/ant_green.png" alt="" width="23" height="40">
                                 <span class="nm"><span class="colour">Green</span><span class="you" id="seat-you-0" hidden> &middot; You</span><small class="seat-name" id="seat-name-0" hidden></small></span>
                                 <fieldset class="seatset" id="seat-set-0"><legend class="sr">Green</legend><span class="pair">
-                                    <input type="radio" name="seat-0" id="seat-0-friend" value="friend"><label for="seat-0-friend">Friend</label>
+                                    <input type="radio" name="seat-0" id="seat-0-friend" value="friend" checked><label for="seat-0-friend">Friend</label>
                                     <input type="radio" name="seat-0" id="seat-0-easy" value="easy"><label for="seat-0-easy">Easy</label>
-                                    <input type="radio" name="seat-0" id="seat-0-medium" value="medium" checked><label for="seat-0-medium">Medium</label>
+                                    <input type="radio" name="seat-0" id="seat-0-medium" value="medium"><label for="seat-0-medium">Medium</label>
                                     <input type="radio" name="seat-0" id="seat-0-hard" value="hard"><label for="seat-0-hard">Hard</label>
                                     <input type="radio" name="seat-0" id="seat-0-nobody" value="nobody"><label for="seat-0-nobody">Nobody</label>
                                 </span></fieldset>
@@ -440,9 +440,9 @@
                             <li id="seat-row-1" data-seat="1"><img src="front/ant_red.png" alt="" width="23" height="40">
                                 <span class="nm"><span class="colour">Red</span><span class="you" id="seat-you-1" hidden> &middot; You</span><small class="seat-name" id="seat-name-1" hidden></small></span>
                                 <fieldset class="seatset" id="seat-set-1"><legend class="sr">Red</legend><span class="pair">
-                                    <input type="radio" name="seat-1" id="seat-1-friend" value="friend"><label for="seat-1-friend">Friend</label>
+                                    <input type="radio" name="seat-1" id="seat-1-friend" value="friend" checked><label for="seat-1-friend">Friend</label>
                                     <input type="radio" name="seat-1" id="seat-1-easy" value="easy"><label for="seat-1-easy">Easy</label>
-                                    <input type="radio" name="seat-1" id="seat-1-medium" value="medium" checked><label for="seat-1-medium">Medium</label>
+                                    <input type="radio" name="seat-1" id="seat-1-medium" value="medium"><label for="seat-1-medium">Medium</label>
                                     <input type="radio" name="seat-1" id="seat-1-hard" value="hard"><label for="seat-1-hard">Hard</label>
                                     <input type="radio" name="seat-1" id="seat-1-nobody" value="nobody"><label for="seat-1-nobody">Nobody</label>
                                 </span></fieldset>
@@ -450,9 +450,9 @@
                             <li id="seat-row-2" data-seat="2"><img src="front/ant_blue.png" alt="" width="23" height="40">
                                 <span class="nm"><span class="colour">Blue</span><span class="you" id="seat-you-2" hidden> &middot; You</span><small class="seat-name" id="seat-name-2" hidden></small></span>
                                 <fieldset class="seatset" id="seat-set-2"><legend class="sr">Blue</legend><span class="pair">
-                                    <input type="radio" name="seat-2" id="seat-2-friend" value="friend"><label for="seat-2-friend">Friend</label>
+                                    <input type="radio" name="seat-2" id="seat-2-friend" value="friend" checked><label for="seat-2-friend">Friend</label>
                                     <input type="radio" name="seat-2" id="seat-2-easy" value="easy"><label for="seat-2-easy">Easy</label>
-                                    <input type="radio" name="seat-2" id="seat-2-medium" value="medium" checked><label for="seat-2-medium">Medium</label>
+                                    <input type="radio" name="seat-2" id="seat-2-medium" value="medium"><label for="seat-2-medium">Medium</label>
                                     <input type="radio" name="seat-2" id="seat-2-hard" value="hard"><label for="seat-2-hard">Hard</label>
                                     <input type="radio" name="seat-2" id="seat-2-nobody" value="nobody"><label for="seat-2-nobody">Nobody</label>
                                 </span></fieldset>
@@ -460,9 +460,9 @@
                             <li id="seat-row-3" data-seat="3"><img src="front/ant_black.png" alt="" width="23" height="40">
                                 <span class="nm"><span class="colour">Black</span><span class="you" id="seat-you-3" hidden> &middot; You</span><small class="seat-name" id="seat-name-3" hidden></small></span>
                                 <fieldset class="seatset" id="seat-set-3"><legend class="sr">Black</legend><span class="pair">
-                                    <input type="radio" name="seat-3" id="seat-3-friend" value="friend"><label for="seat-3-friend">Friend</label>
+                                    <input type="radio" name="seat-3" id="seat-3-friend" value="friend" checked><label for="seat-3-friend">Friend</label>
                                     <input type="radio" name="seat-3" id="seat-3-easy" value="easy"><label for="seat-3-easy">Easy</label>
-                                    <input type="radio" name="seat-3" id="seat-3-medium" value="medium" checked><label for="seat-3-medium">Medium</label>
+                                    <input type="radio" name="seat-3" id="seat-3-medium" value="medium"><label for="seat-3-medium">Medium</label>
                                     <input type="radio" name="seat-3" id="seat-3-hard" value="hard"><label for="seat-3-hard">Hard</label>
                                     <input type="radio" name="seat-3" id="seat-3-nobody" value="nobody"><label for="seat-3-nobody">Nobody</label>
                                 </span></fieldset>
@@ -523,9 +523,9 @@
             <div class="how-body">
                 <div class="steps">
                     <h4>New match</h4>
-                    <p>Four seats: Green, Red, Blue and Black. One is <b>You</b>; press <b>Sit here</b> on another colour to play from there. Every other seat is a <b>Friend</b> (a seat for a person you invite), a bot (<b>Easy</b>, <b>Medium</b> or <b>Hard</b>) or <b>Nobody</b> (the seat stays out). You, your friends and the bots are 2 to 4 players.</p>
+                    <p>Four seats: Green, Red, Blue and Black. One is <b>You</b>; press <b>Sit here</b> on another colour to play from there. Every other seat is a <b>Friend</b> (a seat for a person you invite), a bot (<b>Easy</b>, <b>Medium</b> or <b>Hard</b>) or <b>Nobody</b> (the seat stays out). You, your friends and the bots are 1 to 4 players.</p>
                     <p>With three or four players you can pick <b>Teams</b>: two players start allied.</p>
-                    <p><b>START!</b> takes this tab into the match. With bots only it starts at once. With <b>Friend</b> seats it opens the room and waits: send each friend the link under <b>Invite your friends</b> (<b>Copy link</b>, or <b>Share</b> on a phone). The match starts when they are all in. Until then the first player in the room can start it with START in the waiting room, with the players who are in (that is you, unless a friend connected first); a Friend seat that is still empty then stays empty. Changing the map, the teams or the seats makes new links.</p>
+                    <p><b>START!</b> takes this tab into the match. With bots only it starts at once, and with every other seat on <b>Nobody</b> it is a game for one on this computer, as in the original. With <b>Friend</b> seats it opens the room and waits: send each friend the link under <b>Invite your friends</b> (<b>Copy link</b>, or <b>Share</b> on a phone). The match starts when they are all in. Until then the first player in the room can start it with START in the waiting room, with the players who are in (that is you, unless a friend connected first); a Friend seat that is still empty then stays empty. Changing the map, the teams or the seats makes new links.</p>
                     <h4>Have a code?</h4>
                     <p>Paste the code of a match that somebody else made and press <b>Join</b>: you take the first free seat in this tab. The first player in the room can start the match early with START once at least 2 players are in.</p>
                     <h4>On the map</h4>
@@ -696,17 +696,19 @@ their music and their sound: only the window you are in is heard). The match is 
         // LOBBY_BEGIN (tests/scripts/web_lobby_check.js runs this block on a table)
         // What the addresses of the old pages mean, and what the old pages left in the browser. A match is a room on the game server that this page makes (demo-<map>-<n>p-<random>: the card makes four seats, an
         // address may ask for 2 to 4); with &players=1 an address plays a game on THIS computer (no game server and no room: the game page at its own path, LOCAL_PAGE, with its local parameters, which
-        // web/shell.html's ANTS_PAGE.localArguments reads through a whitelist). The card itself only makes rooms (the block CARD below).
+        // web/shell.html's ANTS_PAGE.localArguments reads through a whitelist). The card makes rooms, and a game on this computer when nobody else is in the match (the block CARD below).
         var LOCAL_PAGE = 'play.html';
         // 1 .. 4 from a text (a remembered value, the address's &players=), else `fallback`
         function playersChoice(text, fallback) { return text === '1' || text === '2' || text === '3' || text === '4' ? Number(text) : fallback; }
         // The players of the Host card of the earlier pages (ants-four-players): 2 .. 4. A 1 that an earlier page remembered (it was the choice of a game on this computer) is 2.
         function hostPlayers(text, fallback) { var n = playersChoice(text, 0); return n === 1 ? 2 : n >= 2 ? n : fallback; }
         // The opponents of a game on this computer, from what the browser remembered by the first versions (the key ants-solo-bots holds 'none' or one level for all three bases): nothing remembered is
-        // Medium (a first visit); anything that is no level is none (the original's single player, alone). That key is read and never written any more: see soloSeats.
+        // Medium (the old page's first visit; the card's own first visit is a Friend, and only reads these keys when one of them is there); anything that is no level is none (the original's single player,
+        // alone). That key is read and never written any more: see soloSeats.
         function soloBots(stored) { return stored === null || stored === undefined ? 'medium' : validFill(stored); }
         // The level of Red, Blue and Black ('' is none: the order of the game's --bot seats 1, 2, 3) from what the browser remembered: the key ants-solo-seats holds three words, none or a level each
-        // ("easy,medium,none"); without it (or with a text that is not three such words) the old key gives its one level to all three seats, and a first visit is Medium for all three.
+        // ("easy,medium,none"); without it (or with a text that is not three such words) the old key gives its one level to all three seats, and with neither it is Medium for all three (the old page's first
+        // visit; cardFromOld only comes here when one of the keys is there).
         function soloSeats(stored, legacy) {
             var words = typeof stored === 'string' ? stored.split(',') : [];
             if (words.length === 3 && words.every(function (w) { return w.toLowerCase() === 'none' || validFill(w) !== ''; })) return words.map(validFill);
@@ -824,17 +826,17 @@ their music and their sound: only the window you are in is heard). The match is 
             for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
             return 'ffa';
         }
-        // The state with every part valid: a map that is none of the six is the default, You is a seat, a choice that is none of the five words is Medium, a team that the seats no longer allow is free for all
+        // The state with every part valid: a map that is none of the six is the default, You is a seat, a choice that is none of the five words is Friend (the first visit's), a team that the seats no longer allow is free for all
         function cardFix(state) {
             var out = cardCopy(state);
             out.map = (mapByKey(out.map) || mapByKey(DEFAULT_MAP_KEY)).key;
             out.you = out.you === 0 || out.you === 1 || out.you === 2 || out.you === 3 ? out.you : 0;
-            out.seats = [0, 1, 2, 3].map(function (s) { return CARD_WORDS.indexOf(out.seats[s]) !== -1 ? out.seats[s] : 'medium'; });
+            out.seats = [0, 1, 2, 3].map(function (s) { return CARD_WORDS.indexOf(out.seats[s]) !== -1 ? out.seats[s] : 'friend'; });
             out.teams = cardTeam(out.teams, out);
             return out;
         }
-        // A first visit: the map (Treasure unless one is asked), You at Green, a Medium bot in the other three seats, free for all
-        function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: 'ffa' }); }
+        // A first visit: the map (Treasure unless one is asked), You at Green, a Friend in the other three seats (START opens the room and waits for the people that you invite), free for all
+        function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], teams: 'ffa' }); }
         // What the browser remembered (the text that cardText wrote): the state, or null for anything else (nothing remembered, another shape, a word that is not one of the five, a map that is none of the six)
         function cardParse(text) {
             var v;
@@ -895,12 +897,12 @@ their music and their sound: only the window you are in is heard). The match is 
             var plan = cardFill(state);
             return '?join=/ws&room=' + encodeURIComponent(code) + '&seat=' + seat + (plan ? '&fill=' + plan : '') + (name === null ? '' : '&name=' + encodeURIComponent(name)) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9') + '&start=' + cardPeople(state);
         }
-        // Why START is not possible, '' when it is: You, the Friends and the bots are 2 to 4 (a match of one is over at once)
-        function cardWhy(state) { return cardPlaying(state).length < 2 ? 'Pick at least one more seat: a friend or a bot.' : ''; }
+        // Does nobody else play (every other seat is Nobody)? START then plays a game for one on this computer, the original's single player: a room of the game server needs two people to start, and
+        // the game page's own game has no other colony to end it (the match goes on until its clock does). That game is always Green's.
+        function cardAlone(state) { return cardPlaying(state).length === 1; }
         // The line under START
         function cardNote(state) {
-            var why = cardWhy(state);
-            if (why) return why;
+            if (cardAlone(state)) return 'Starts at once, on this computer: just you on the map, no opponents.' + (state.you === 0 ? '' : ' Alone you play Green.');
             var friends = cardFriends(state).length;
             if (friends === 0) return 'Starts at once, in this tab. Bots gather food, raid and fight back.';
             return 'Starts when ' + (friends === 1 ? 'your friend is' : 'your friends are') + ' in (the first player in the room can start sooner).';
@@ -1292,12 +1294,12 @@ their music and their sound: only the window you are in is heard). The match is 
         //               with &players=1 a game on this computer (&fill= is then the level of all three opponents)
         // ?fill=... &teams=...   with ?room=: the same choices for a room that was made elsewhere (its links carry them)
         // nothing       the card: the seats, then START takes this tab into the match (an invitation for each Friend seat), or the code of a match that somebody else made
-        // (the old addresses work as they did; the card does not offer a game on this computer any more)
+        // (the old addresses work as they did; the card plays a game on this computer only when nobody else is in the match)
         var params = new URLSearchParams(window.location.search);
 
         // ---- the card (the rules are the block CARD above; this is the page that shows them) ----
-        // It remembers its choices under CARD_KEY (and nothing else of the earlier pages: their keys are read for a first visit and never written). A first visit is Treasure, You at Green and a Medium bot in
-        // each of the other seats; the page writes nothing by being loaded, only a choice is written.
+        // It remembers its choices under CARD_KEY (and nothing else of the earlier pages: their keys are read for a first visit and never written). A first visit is Treasure, You at Green and a Friend in
+        // each of the other seats; the page writes no choice by being loaded, only a choice is written (the room of the invitations is the tab's own, in its session storage: cardEnsureRoom).
         var mapPick = $('map-pick');
         MAPS.forEach(function (m) {
             var o = document.createElement('option');
@@ -1307,7 +1309,7 @@ their music and their sound: only the window you are in is heard). The match is 
         var card = cardParse(recall(CARD_KEY)) || cardFromOld({ solo: recall('ants-solo-seats'), legacy: recall('ants-solo-bots'), soloTeams: recall('ants-solo-teams'), map: recall('ants-four-map'),
                                                               players: recall('ants-four-players'), fill: recall('ants-four-fill'), teams: recall('ants-four-teams') });
         var teamsSelect = $('teams');
-        // The name under You: the typed name, else a random one (the field says so: "Leave it empty for a random name when you host")
+        // The name under You: the typed name, else a random one (the field says so: "Leave it empty for a random name")
         function youName() { var checked = nameCheck(nameInput.value); return checked.ok && checked.name ? checked.name : names[0]; }
         // The room that the invitations and START use, made when the page first needs one (a Friend seat, or START) and kept while the map and the teams stay, since the code holds them: another map or other teams
         // are another room, and the invitations change with it. The tab keeps it until START, so that a reload (the picture's selector reloads the page; a phone may discard a page that was left for the
@@ -1437,9 +1439,8 @@ their music and their sound: only the window you are in is heard). The match is 
             });
             showLinksNote();
         }
-        // START is there with at least two players, and says why not otherwise; the line under it says what it will do
+        // START is always there (a game for one is a game too); the line under it says what it will do
         function showStart() {
-            $('play').disabled = cardWhy(card) !== '';
             var note = cardNote(card);
             if ($('start-note').textContent !== note) $('start-note').textContent = note;       // (a live region says its text again whenever it is written: only a line that changed is)
         }
@@ -1476,10 +1477,10 @@ their music and their sound: only the window you are in is heard). The match is 
         window.addEventListener('pagehide', function () { if (starting) cardRoomForget(); });
         window.addEventListener('pageshow', function (e) { starting = false; if (e && e.persisted) showCard(); });
         showCard();
-        // A game on this computer, for an address that asks for one: this tab goes to the game page (never a new tab) with the map, the opponents, the typed name and the picture's shape (the game page's own parameters)
+        // A game on this computer, for an address that asks for one and for a card with nobody else in the match: this tab goes to the game page (never a new tab) with the map, the opponents, the name that the
+        // card shows under You (the typed one, else the page's random one, as for a room) and the picture's shape (the game page's own parameters)
         function startLocal(mapKey, levels) {
-            var checked = nameCheck(nameInput.value);
-            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, checked.ok ? checked.name : '', aspect), window.location.href).href);
+            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, youName(), aspect), window.location.href).href);
         }
         // What an address that names a map makes: a game on this computer with &players=1 (&fill= is then the level of all three opponents), else a room of 2 to 4 seats with the plan (&fill=) and the teams
         // (&teams=) as text. The code carries the choice (the server reads it: demo-<map>-<n>p-[<team word>-]<random>). Nothing is remembered: the choices that the card remembers are the card's own.
@@ -1552,10 +1553,14 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // START takes THIS tab into the match: the game page with the room, your colour, the plan (a bot for each bot seat), your name and the picture's shape, and the number of people to wait for. The game of the leader
         // of the room presses START by itself when they are in (no Friend seat: at once, against the bots). The room is the match's now and the page lets go of it when it is left (pagehide above), not before:
-        // the game page may be slow to come, and a second click (a held Enter) goes to the same room, so that the links that were sent stay good.
+        // the game page may be slow to come, and a second click (a held Enter) goes to the same room, so that the links that were sent stay good. With nobody else in the match (every other seat is Nobody) it is
+        // a game on this computer instead (the game page at its own path: no room, no links), because a room of the game server needs two people to start. It leaves the tab's room alone: Back brings the same links.
         $('play').addEventListener('click', function () {
             if (!readName().ok) return;               // a bad name starts nothing (the field says why)
-            if (cardWhy(card) !== '') return;         // fewer than two players: the button is off, and the line under it says why
+            if (cardAlone(card)) {
+                startLocal(card.map, []);                  // (not `starting`: this game is in no room, so the tab keeps the room of its invitations when it leaves)
+                return;
+            }
             var code = cardEnsureRoom();
             var query = cardQuery(card, code, card.you, youName(), aspect);
             starting = true;
