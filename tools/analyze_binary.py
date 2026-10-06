@@ -15,7 +15,8 @@ Run it from the repository root (python3 tools/analyze_binary.py; it needs pefil
 and capstone). It needs YOUR OWN COPY of the original program:
 Original-Ants/Ants.exe is not part of the repository (a local reference that
 .gitignore keeps out of every commit; the repository holds only the original's
-data archive, maps and music). Put your own copy of the original Ants.exe in
+data archive, maps and music, and the pictures and sounds made from the
+archive). Put your own copy of the original Ants.exe in
 Original-Ants/; without it the script stops with that message (exit status 1).
 """
 

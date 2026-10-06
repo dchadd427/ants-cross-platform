@@ -488,7 +488,7 @@ void run_file_tests() {
 }
 
 void run_other_store_tests() {
-    TEST_CASE("RS5.1 The Memory Store Has The Rules Of The File: Replace, Newest First, 8 At Most, A Day, Forget By Key (What A Headless Run Without A Settings File Keeps, And Nothing Reaches A Disk)") {
+    TEST_CASE("RS5.1 The Memory Store Has The Rules Of The File: Replace, Newest First, 8 At Most, 3 Hours, Forget By Key (What A Headless Run Without A Settings File Keeps, And Nothing Reaches A Disk)") {
         Clock clock;
         MemoryRejoinStore store(clock.fn());
         ASSERT_TRUE(store.entries().empty() && !store.newest());
