@@ -1198,6 +1198,8 @@ void NetGame::make_prediction() {
     pc.budget_strikes = prediction_budget_strikes_;
     pc.cooldown_ticks = prediction_cooldown_ticks_;
     pc.work_hook = prediction_work_hook_;
+    pc.wall_clock = prediction_wall_clock_;
+    pc.cpu_clock = prediction_cpu_clock_;
     prediction_ = std::make_unique<Prediction>(sim_, *r, pc);
 }
 
