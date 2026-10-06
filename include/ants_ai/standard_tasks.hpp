@@ -312,7 +312,7 @@ private:
 
 // ---- rank 4: the strike -------------------------------------------------------------------------------------------------------------------------------------
 
-/// A player who is losing can swing the game back by forcing a team fight that it can win. When the bot (with its ally, by the score boxes) is
+/// A losing side can try to swing the game back by forcing a team fight that it can win (docs/BOTS.md, "Strategy" 7). When the bot (with its ally, by the score boxes) is
 /// clearly BEHIND the leader (Standing::behind) and a fight looks winnable, a strike force hunts the carriers of the leader near its hill: a blow on a carrier on its way home clears
 /// its walk (it stands idle with its food until its owner sends it on) and costs the leader the time, and a won fight costs it ants (and, at the last ant, an egg). One attack order is
 /// one blow, so a member is ordered again each time it is idle after a blow; between targets the force waits three tiles in front of the leader's hill on the side the carriers come from.

@@ -427,7 +427,7 @@ private:
 };
 
 // The DIAGNOSTIC wrapper of the experiments (arena-only; set BOT_DIAG=1): runs a standard bot and prints, when the match is over and the bot is destroyed, what its tasks did and how many attack
-// orders it proposed (one line of key=value pairs, for tools/exp.py)
+// orders it proposed (one line of key=value pairs)
 class DiagBot final : public Bot {
 public:
     DiagBot(std::unique_ptr<StandardBot> inner, std::string label) : inner_(std::move(inner)), label_(std::move(label)) {}
