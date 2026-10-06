@@ -160,6 +160,10 @@ struct ApplicationConfig {
     /// --bot SEAT[:SPEC] (repeatable): computer players at these seats (docs/BOTS.md). A local game then plays the seats that are taken (the local player and the bots); with
     /// --host the room shows the bots as players and the host's machine runs them. Empty by default: a game without --bot runs no bot code at all.
     std::vector<ai::BotSpec> bots;
+    /// --alone: a game for one on this computer in which only the local player's seat plays: the other three have no hill, no ants and no eggs, as a seat that nobody takes has none in a game
+    /// with --bot (the web page's START with every other seat on Nobody). Without it a game of this machine that has no --bot plays all four colonies, the original's single-player game,
+    /// whose other colours stand still. Not together with --bot (parse_arguments says so); it does nothing in a room, as --play does not.
+    bool alone{false};
     /// --teams ffa | A+B (docs/BOTS.md, "Alliances"): ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the match start with the
     /// original's commands: in a game on this computer by Application::form_start_teams (a pair that cannot be made starts the game without teams and says why), in a room (protocol 13) by every machine
     /// from the Start message, which the room's START puts them into: this player's START (the leader of a server's room, the host of a room on the local network) carries the choice.
@@ -722,6 +726,7 @@ private:
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);
     void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
+    void net_move_seat(uint8_t seat);                     // a press on a player's row of the leader's screen (protocol 14): the request goes to the server, and the plan's bots follow the room's answer
     void sync_room_view();
     void render_net_overlay();
     void render_catch_up_screen();                        // the loading screen's picture with "Catching up N%" instead of the match (page_layout.hpp)
@@ -736,7 +741,8 @@ private:
 
     // Computer players (docs/BOTS.md): a game without --bot never creates any of this
     std::string bot_setup_problem(uint8_t own_seat, bool fog) const;   // "" or why the game may not start with the bots of the command line (ai::check_setup)
-    uint8_t bot_roster(uint8_t own_seat) const;                        // the seats that play a local game with bots: the local player's and the bots'
+    uint8_t bot_roster(uint8_t own_seat) const;                        // the seats that play a local game with bots: the local player's and the bots' (the local player's alone with --alone)
+    bool game_for_one() const;                                         // --alone in a game of this machine (a room leaves the option alone): only the local player's seat plays
     std::array<std::string, 4> local_team_names() const;               // -N / --team-name, and "Bot (Medium)" for a bot seat that has no name of its own
     void show_setup_notice(const std::string& text);                   // a refusal: stderr and the status line of the local setup screen
     bool start_local_bots(uint32_t match_seed);                        // after the simulation was initialised: the controller, one LocalBotSink per seat

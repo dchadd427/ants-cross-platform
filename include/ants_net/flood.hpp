@@ -25,6 +25,15 @@ inline constexpr uint32_t kMessageBurst = 1000;
 /// player of a slow link three times. Up to this many of them from one connection cost nothing; each one after them is a violation, like any message that a guest may not send.
 inline constexpr uint32_t kIgnoredStartRequestsAllowed = 16;
 
+/// The colour moves of a room's leader (protocol 14, SeatMove). One that cannot be done (the sender does not lead, the room is loading or running, the player has left, somebody holds the colour) is no
+/// offence at first, as for a StartRequest: up to kIgnoredSeatMovesAllowed of them per connection cost nothing, each one after those is a violation. One that can be done is shown to the whole room (the Room
+/// message, a notice to each player that was moved), so a person's presses have a budget like a chat's (ChatBudget): a burst of kSeatMoveBurst, then kSeatMovesPerSecond a second (a finger presses a
+/// row twice a second, and the screen waits for the room's answer before it presses again); a move beyond it is dropped, kSeatMoveExcessBurst more are tolerated, and every one after that is a violation.
+inline constexpr uint32_t kIgnoredSeatMovesAllowed = 16;
+inline constexpr uint32_t kSeatMoveBurst = 6;
+inline constexpr uint32_t kSeatMovesPerSecond = 4;
+inline constexpr uint32_t kSeatMoveExcessBurst = 12;
+
 /// The lines of chat that one connection may say (a remake protection: the original has no limit, but nobody types more than a line a second for long). A line is relayed to everybody, so
 /// a flood of them is a flood for the whole room: a burst of kChatBurst lines, then kChatPerSecond a second. A line beyond that is DROPPED (not relayed, not logged, no answer): a person
 /// who pastes six lines loses the sixth. It costs nothing at first, but a connection that goes on saying more than the budget allows is flooding: kChatExcessBurst lines beyond it are tolerated and that allowance

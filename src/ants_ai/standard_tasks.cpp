@@ -33,6 +33,18 @@ bool occupied(const BotView& v, sim::TileCoord tile) noexcept {
     return v.dying_at(tile);
 }
 
+// Whether an ant of any team stands still on the tile (it holds the tile: an ant that walks moves on). The walk of a thief into a thief hole ends in "Can't go there." when the tiles in front of
+// the hole or the raid tile itself are held by ants
+bool held_by_standing_ant(const BotView& v, sim::TileCoord tile) noexcept {
+    for (const AntView& a : v.mine()) {
+        if (a.tile == tile && a.state != sim::UnitState::Walking) return true;
+    }
+    for (const AntView& a : v.others()) {
+        if (a.tile == tile && a.state != sim::UnitState::Walking) return true;
+    }
+    return false;
+}
+
 // A free tile next to `tile` for the ant that stands on it to step to (the ant is the one that is to order a special order onto the tile: a click on a tile with an ant on it, the ordering
 // ant included, is no special order; a person moves the ant aside first): walkable, no ant, no power-up, no fire wall; {-1, -1} when there is none
 sim::TileCoord step_aside(const BotView& v, uint8_t seat, sim::TileCoord tile) {
@@ -1338,7 +1350,19 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     }
     // the cheap checks first: a hill that is not there, or whose hole is shut, is no target, and a thief that looks at the world every few ticks must not search the map for nothing (a full
     // search per look and thief was the most expensive thing that the bot did)
-    teams.erase(std::remove_if(teams.begin(), teams.end(), [&](uint8_t t) { return !c.map.hill(t).present || east_state(grid, c.map.hill(t)).shut(); }), teams.end());
+    teams.erase(std::remove_if(teams.begin(), teams.end(),
+                               [&](uint8_t t) {
+                                   const HillInfo& h = c.map.hill(t);
+                                   if (!h.present) return true;
+                                   // raided with raid_min_free free tiles in front (nothing lit, bombed or solid; with the can't-go fixes no ant on them) and no ant on the raid tile: such an ant shuts the hole
+                                   size_t free_tiles = 0;
+                                   for (const sim::TileCoord& e : east_tiles(h)) {
+                                       const EastTile k = classify_tile(grid, e);
+                                       free_tiles += (k == EastTile::Open || k == EastTile::Bare) && !(plan.cantgo_aware && held_by_standing_ant(v, e)) ? 1u : 0u;
+                                   }
+                                   return free_tiles < plan.raid_min_free || (plan.cantgo_aware && held_by_standing_ant(v, h.raid));
+                               }),
+                teams.end());
     if (teams.empty()) return false;
     std::stable_sort(teams.begin(), teams.end(), [&](uint8_t x, uint8_t y) { return v.rows()[x].score > v.rows()[y].score; });
     const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
@@ -2447,6 +2471,30 @@ void GateTask::choose_slots(TaskContext& c, const Geometry& g) {
     while (n < 3) slot_order_[n++] = -1;
 }
 
+void GateTask::refresh_now(TaskContext& c) {
+    const BotView& v = c.view;
+    const HillInfo& hill = c.map.hill(c.seat);
+    const sim::Grid& grid = v.grid();
+    // which of the eleven tiles round and on the queue row can be walked on: when one of them changed (a wall of fire lit or burnt out, a bomb) the gate may have been shut or opened
+    uint32_t signature = 0;
+    uint32_t bit = 1;
+    for (const sim::TileCoord& t : SabotageTask::ring_of(hill)) {
+        signature |= grid.in_bounds(t) && MapInfo::walkable(grid, c.seat, t, v.walk_context()) ? bit : 0u;
+        bit <<= 1;
+    }
+    for (int32_t i = 0; i < 3; ++i) {
+        const sim::TileCoord t{hill.origin.x + i, hill.origin.y - 1};
+        signature |= grid.in_bounds(t) && MapInfo::walkable(grid, c.seat, t, v.walk_context()) ? bit : 0u;
+        bit <<= 1;
+    }
+    const uint64_t now = v.tick();
+    if (now_made_ && signature == now_signature_ && now < now_at_ + params_.field_ticks) return;
+    now_ = c.map.field_now(grid, c.seat, v.walk_context());
+    now_at_ = now;
+    now_signature_ = signature;
+    now_made_ = true;
+}
+
 void GateTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
@@ -2478,24 +2526,35 @@ void GateTask::step(TaskContext& c) {
         }
     }
     if (slots_walkable < 2 || !buffer_found || blocked(g.entrance, now)) return;       // no room at the doorstep, or no click onto the entrance is accepted: the engine's flow stays
+    // the doorstep must be joined to the hill as the map is NOW: a ring of fire walls round the gate (a sabotage) shuts the carriers out, and every click into the hill would be refused
+    if (params_.cantgo_aware) {
+        refresh_now(c);
+        if (!c.map.reaches_hill(now_, g.buffer)) return;
+    }
     usable_ = true;
     track_exits(c, g);
 
     // what the ants do: a bite that runs, the entrance occupied, a clip that was first seen now
     bool bite = false;
     bool entrance_occupied = false;
+    bool ramp_standing = false;
+    const sim::TileCoord ramp{g.hill.x + 1, g.hill.y};
     std::vector<const AntView*> carriers;
     for (const AntView& a : v.mine()) {
         if (a.state == sim::UnitState::HarvestingFood) bite = true;
         if (a.tile == g.entrance) entrance_occupied = true;
+        if (params_.cantgo_aware && a.tile == ramp && a.state != sim::UnitState::Walking) ramp_standing = true;                          // an own ant that stands on the ramp shuts the way to the entrance
         if (a.state == sim::UnitState::EnteringBase) {
             if (clip_seen_.count(a.id) == 0) {
                 clip_seen_[a.id] = now;
                 pending_free_at_ = static_cast<int64_t>(now) + params_.clip_ticks + params_.exit_ticks;
             }
         }
-        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance) carriers.push_back(&a);          // (a thief with loot banks at the entrance too)
+        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && (!params_.cantgo_aware || c.map.reaches_hill(now_, a.tile, a.type))) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
     }
+    if (!ramp_standing) ramp_since_ = -1;
+    else if (ramp_since_ < 0) ramp_since_ = static_cast<int64_t>(now);
+    const bool ramp_held = ramp_standing && static_cast<int64_t>(now) < ramp_since_ + static_cast<int64_t>(params_.ramp_wait_ticks);        // (an ant that stays longer is not waited for: nothing moves it)
     for (auto it = cmd_.begin(); it != cmd_.end();) {                                // only carriers are ours to place
         bool carrier = false;
         for (const AntView* a : carriers) carrier = carrier || a->id == it->first;
@@ -2551,7 +2610,7 @@ void GateTask::step(TaskContext& c) {
         }
     }
     if (!entrance_occupied) pending_free_at_ = 0;
-    const bool gate_free = !entrance_occupied && !user_active;
+    const bool gate_free = !entrance_occupied && !ramp_held && !user_active;
     const bool predicted = params_.predictive && pending_free_at_ > 0 && !gate_free && static_cast<int64_t>(now) + params_.latency_ticks >= pending_free_at_;
 
     // 2. the queue row as the engine counts it: occupied tiles (any own ant) and own orders onto its tiles that are still on their way
@@ -2828,6 +2887,7 @@ void CarrierAidTask::step(TaskContext& c) {
         if (h.carried && h.hp_now > 0) aid_[h.ant] = Aid{now, 0, 0};
     }
     std::vector<uint32_t> home;
+    MapInfo::NowField joined;                                                            // the walking field of the hill as it is now, made at the first carrier that is due an order
     for (auto it = aid_.begin(); it != aid_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         const bool carrying = a != nullptr && (a->holding || a->carried_points > 0);
@@ -2837,8 +2897,15 @@ void CarrierAidTask::step(TaskContext& c) {
         }
         // the blow's stun lasts about 12 ticks; an ant that is idle after it has lost its walk
         if (now >= blocked_until_ && a->idle() && now >= it->second.hit + 8 && now >= it->second.last_order + 40 && !v.has_pending_path(a->id)) {
-            home.push_back(a->id);
             it->second.last_order = now;
+            if (tactics_.plan.cantgo_aware && v.has_grid()) {                            // a carrier that no walk joins to the hill (a ring of fire walls round its gate) is not sent: it would be refused, and no try is spent on it
+                if (!joined.valid()) joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
+                if (!c.map.reaches_hill(joined, a->tile, a->type)) {
+                    ++it;
+                    continue;
+                }
+            }
+            home.push_back(a->id);
             ++it->second.tries;
         }
         ++it;

@@ -86,6 +86,9 @@ void MapSelectScreen::enter() {
     quit_.reset();
     fow_on_.reset();
     fow_off_.reset();
+    row_hover_ = -1;
+    row_pressed_ = -1;
+    row_pressed_seat_ = -1;
 }
 
 // FUN_010133ef shows slot i of the machine's own peer table in row i: the local machine is slot 0 on every machine, a guest's slot 1 is the host (docs 5.50)
@@ -156,7 +159,34 @@ void MapSelectScreen::trigger_quit() {
     }
 }
 
+// The rows of the Players' Status box are one box wide and one row high: the portrait, the name and the thumb of a player are all on the row
+LayoutRect MapSelectScreen::player_row_rect(size_t row) const noexcept {
+    const int32_t r = static_cast<int32_t>(row);
+    if (wide_) {
+        const SetupLayout& layout = SetupLayout::of(setup_variant());
+        return LayoutRect{layout.players_box.x + 4, layout.seat_y - 10 + r * layout.seat_pitch, SetupLayout::kBoxInnerPlayersW, layout.seat_pitch};
+    }
+    return LayoutRect{PLAYER_BOX_X, PLAYER_THUMB_Y - 12 + r * PLAYER_ROW_PITCH, PLAYER_BOX_W, PLAYER_ROW_PITCH};
+}
+
+int32_t MapSelectScreen::player_row_at(int32_t screen_x, int32_t screen_y) const noexcept {
+    if (!can_move_players()) return -1;
+    const std::array<int8_t, 4> rows = row_seats(room_);
+    for (size_t r = 0; r < rows.size(); ++r) {
+        if (rows[r] >= 0 && player_row_rect(r).contains(screen_x, screen_y)) return static_cast<int32_t>(r);
+    }
+    return -1;
+}
+
+void MapSelectScreen::draw_row_light(IRenderer& renderer, size_t row) const {
+    const bool pressed = row_pressed_ == static_cast<int8_t>(row);
+    if (!pressed && row_hover_ != static_cast<int8_t>(row)) return;
+    const LayoutRect rect = player_row_rect(row);
+    renderer.fill_rect(rect.x, rect.y, rect.w, rect.h, ants::assets::ColorRGBA{239, 231, 223, static_cast<uint8_t>(pressed ? 72 : 36)});      // (the labels' cream, see through)
+}
+
 void MapSelectScreen::handle_mouse_motion(int32_t screen_x, int32_t screen_y) {
+    row_hover_ = static_cast<int8_t>(player_row_at(screen_x, screen_y));
     if (is_guest()) {                                                         // the guest screen has no Up / Down / START / Fog buttons: only Leave (FUN_01014228)
         for (ScreenButton* b : {&up_, &down_, &start_, &fow_on_, &fow_off_}) b->reset();
         quit_.on_move(screen_x, screen_y);
@@ -185,6 +215,12 @@ void MapSelectScreen::start() {
 void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return;
     if (quit_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);       // every player of a room can leave
+    const int32_t row = player_row_at(screen_x, screen_y);                     // (the leader's rows: a press on a player's row captures it, the release moves the player)
+    if (row >= 0) {
+        row_pressed_ = static_cast<int8_t>(row);
+        row_pressed_seat_ = row_seats(room_)[static_cast<size_t>(row)];        // (the press holds the seat of the player, not the row's place: the rows close up when somebody leaves; a newcomer who takes that very seat is the one that moves, as for every SeatMove)
+        play_sfx(sim::SoundID::ButtonClick);
+    }
     if (is_guest() || started_) return;                                       // (the leader of a server's room has the host's buttons: they act or do not act when released)
     if (up_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);
     if (down_.on_press(screen_x, screen_y)) play_sfx(sim::SoundID::ButtonClick);
@@ -196,6 +232,14 @@ void MapSelectScreen::handle_mouse_down(int32_t screen_x, int32_t screen_y, uint
 // The release runs the callback of the button that is still captured
 void MapSelectScreen::handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return;
+    const int32_t pressed_row = row_pressed_;
+    const int8_t pressed_seat = row_pressed_seat_;
+    row_pressed_ = -1;
+    row_pressed_seat_ = -1;
+    if (pressed_row >= 0 && pressed_row == player_row_at(screen_x, screen_y) && on_move_seat_) {          // (released on the row that it was pressed on, and the player of that row is still the one that was pressed)
+        const int8_t seat = row_seats(room_)[static_cast<size_t>(pressed_row)];
+        if (seat >= 0 && seat == pressed_seat) on_move_seat_(static_cast<uint8_t>(seat));
+    }
     if (is_guest()) {                                                         // the buttons that are not on the guest screen get no pointer events either
         for (ScreenButton* b : {&up_, &down_, &start_, &fow_on_, &fow_off_}) b->reset();
         if (quit_.on_release(screen_x, screen_y)) trigger_quit();
@@ -217,6 +261,8 @@ void MapSelectScreen::handle_mouse_up(int32_t screen_x, int32_t screen_y, uint8_
 
 void MapSelectScreen::release_buttons() {
     for (ScreenButton* b : {&up_, &down_, &start_, &quit_, &fow_on_, &fow_off_}) b->reset();
+    row_pressed_ = -1;
+    row_pressed_seat_ = -1;
 }
 
 // FUN_01014076: the keys are Up (0xe) and Down (0xf), Enter (0x18), 'S' and 's' (start), 'Q', 'q', 'X' and 'x' (leave); nothing else does anything, Esc included
@@ -351,6 +397,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
             if (rows[r] < 0) continue;
             const size_t seat = static_cast<size_t>(rows[r]);
             const int32_t row = static_cast<int32_t>(r) * PLAYER_ROW_PITCH;
+            draw_row_light(renderer, r);
             draw_portrait(static_cast<uint8_t>(seat), row);
             std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
             if (name.size() > 16) name.resize(16);

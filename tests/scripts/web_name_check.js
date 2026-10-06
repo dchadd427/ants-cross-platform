@@ -547,6 +547,44 @@ const openRoom = (search, stored, name) => {
     env.rowButton(2, 'Play here').click();
     check('"Play here" again (a reconnect) keeps the seat\'s name', env.param(env.frameOf(2).src, 'name') === 'Alice');
 }
+{   // the leader of a room can put a player in another colour (protocol 14): the game in a frame reports the seat that it plays now, and "Play here" again brings it back as that seat (its key is kept under it)
+    const env = openRoom('?map=treasure&players=4', {}, 'Alice');
+    env.rowButton(1, 'Play here').click();
+    const frame = env.frameOf(1);
+    const opened = frame.src;                                         // (the address that the frame was opened with: a reconnect changes the address of this same element)
+    const say = (source, seat, tick) => (env.win.listeners.message || []).forEach((fn) => fn({ origin: 'https://play.test', source, data: { ants: 'sync', seat, tick: tick || 40, hash: '0123456789abcdef' } }));
+    frame.contentWindow = null;                                       // (a frame whose window is gone has none, and a window that was closed has no source: they are not the same window)
+    say(null, 3);
+    env.rowButton(1, 'Play here').click();
+    check('a frame that has reported nothing comes back as the seat that it was opened for (a message from a window that is gone is nobody\'s)', env.param(env.frameOf(1).src, 'seat') === '1');
+    frame.contentWindow = {};
+    say(frame.contentWindow, 1);
+    env.rowButton(1, 'Play here').click();
+    check('... and so does one that reports that seat', env.param(env.frameOf(1).src, 'seat') === '1');
+    say({}, 3);
+    say(undefined, 3);
+    env.rowButton(1, 'Play here').click();
+    check('a report from a window that is no frame of this page (or from no window) changes nothing', env.param(env.frameOf(1).src, 'seat') === '1');
+    say(frame.contentWindow, 7);
+    env.rowButton(1, 'Play here').click();
+    check('... and neither does a seat that no room has', env.param(env.frameOf(1).src, 'seat') === '1');
+    say(frame.contentWindow, 3, 77);
+    const cell1 = env.$('grid').children.find((c) => c.getAttribute('data-seat') === '1');
+    check('the report of a game that plays another colour is shown on its own frame and row (the first seat of the page), not on the colour that it plays now', cell1.textContent.indexOf('tick 77') !== -1 && env.rows()[1].children[1].textContent === 'tick 77' && env.rows()[3].children[1].textContent !== 'tick 77', JSON.stringify([cell1.textContent, env.rows()[1].children[1].textContent, env.rows()[3].children[1].textContent]));
+    env.rowButton(1, 'Play here').click();
+    const src = env.frameOf(1).src;
+    check('a game that the leader put in another colour comes back as the seat that it plays now, with the rest of its address as before', env.param(src, 'seat') === '3' && /&embed=1$/.test(src) && env.param(src, 'room') === env.param(opened, 'room') && env.param(src, 'join') === '/ws' && env.param(src, 'aspect') === env.param(opened, 'aspect'), src);
+    check('... and under its own name, the one of its row (the typed name, not the name of the colour that it plays now)', env.param(opened, 'name') === 'Alice' && env.param(src, 'name') === 'Alice', src);
+    // two games that the leader put in each other's colours (through the free colours) trade no names: each keeps the name of its row
+    env.rowButton(2, 'Play here').click();
+    const frame2 = env.frameOf(2);
+    const opened2 = frame2.src;
+    frame2.contentWindow = {};
+    say(frame2.contentWindow, 1, 90);
+    env.rowButton(2, 'Play here').click();
+    const src2 = env.frameOf(2).src;
+    check('a second game that plays the seat of the first one\'s row comes back as that seat, under the name of its own row', env.param(src2, 'seat') === '1' && randomName(env.param(opened2, 'name')) && env.param(src2, 'name') === env.param(opened2, 'name') && env.param(src2, 'name') !== 'Alice', src2);
+}
 {   // the first seat that starts takes the name, whatever its number
     const env = openRoom('?map=treasure&players=4', {}, 'Zed');
     env.rowButton(3, 'Open a window').click();
@@ -693,7 +731,7 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobb
 }
 
 // ---- the front page: ONE card, "New match" (the owner, on a phone: "I don't see a way to change colors or send an invite to another person should all be right there. We don't need separate AI and
-// online. Only do online."): a map with its preview, four seats (exactly one of them You, a choice for each of the others), the Teams, an invitation for each Friend seat and START; under it "Have a code?" and Join
+// online. Only do online."): a map with its preview, four seats (exactly one of them You, a choice for each of the others, and a Team 1 and a Team 2 switch), an invitation for each Friend seat and START; under it "Have a code?" and Join
 const lobbyScript = (() => { const all = [...lobbyText.matchAll(/<script>([\s\S]*?)<\/script>/g)]; return all[all.length - 1][1]; })();
 const WORDS5 = ['friend', 'easy', 'medium', 'hard', 'nobody'];
 // A browser that remembered Medium bots for the other three seats: the first visit is Friends, so most of the scenarios below start from the bots, as the card used to (a fresh object each time: the page writes
@@ -705,23 +743,24 @@ const youSeats = (env) => [0, 1, 2, 3].filter((s) => !env.$('seat-you-' + s).hid
 const seatWords = (env) => [0, 1, 2, 3].map((s) => { const on = WORDS5.filter((w) => env.$(seatId(s, w)).checked); return on.length === 1 ? on[0] : '?' + on.length; });
 const choose = (env, seat, word) => env.pick(seatId(seat, word));
 const sit = (env, seat) => env.$('sit-' + seat).click();
-const teamChoices = (env) => env.$('teams').children.map((o) => [o.value, o.textContent]);
+// the Team 1 / Team 2 switches: for each seat '' when it has none (the seat does not play, or fewer than three seats do), else which one is lit ('1', '2') or '-' when neither is; and which are dimmed ('' none, '1', '2', '12')
+const switchesShown = (env) => [0, 1, 2, 3].map((s) => (env.$('team-set-' + s).hidden ? '' : [1, 2].filter((k) => env.$('team-' + s + '-' + k).getAttribute('aria-pressed') === 'true').join('') || '-'));
+const switchesDimmed = (env) => [0, 1, 2, 3].map((s) => [1, 2].filter((k) => env.$('team-' + s + '-' + k).getAttribute('aria-disabled') === 'true').join(''));
+const pressTeam = (env, seat, side) => env.$('team-' + seat + '-' + side).click();
+const FFA_LINE = 'Free for all. For a team, put two colours on the same team.';
 const invites = (env) => env.$('invite-list').children;
 const inviteLinks = (env) => invites(env).map((row) => row.children[1].value);
 const copyOf = (env, i) => invites(env)[i].children[2];
-const pickTeam = (env, value) => { env.$('teams').value = value; env.$('teams').fire('change', {}); };
 const pickMap = (env, key) => { env.$('map-pick').value = key; env.$('map-pick').fire('change', {}); };
-const FFA_ONLY = [['ffa', 'Free for all']];
-const FOUR_TEAMS = [['ffa', 'Free for all'], ['0+1', 'Green + Red against Blue + Black'], ['0+2', 'Green + Blue against Red + Black'], ['0+3', 'Green + Black against Red + Blue']];
 const MAP_KEYS = ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands'];
 const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
 {
     const env = runLobby('', {});
-    same('a first visit: Treasure, You at Green, a Friend in every other seat, free for all', [env.$('map-pick').value, youSeats(env), seatWords(env), env.$('teams').value], ['treasure', [0], ['friend', 'friend', 'friend', 'friend'], 'ffa']);
+    same('a first visit: Treasure, You at Green, a Friend in every other seat, free for all (no switch is on)', [env.$('map-pick').value, youSeats(env), seatWords(env), switchesShown(env)], ['treasure', [0], ['friend', 'friend', 'friend', 'friend'], ['-', '-', '-', '-']]);
     check('... the name under You is one of the page\'s random names (the field is empty: "Leave it empty for a random name"), and the marker says You', randomName(env.$('seat-name-0').textContent) && !env.$('seat-name-0').hidden && [0, 1, 2, 3].every((s) => new RegExp('<span class="you" id="seat-you-' + s + '" hidden> &middot; You</span>').test(lobbyText)));
     same('... the rows of the other seats have a Sit here and a group of five buttons; the row of You has neither', [0, 1, 2, 3].map((s) => [env.$('sit-' + s).hidden, env.$('seat-set-' + s).hidden]), [[true, true], [false, false], [false, false], [false, false]]);
     check('... the seat of You is marked (a class), the others are not', env.$('seat-row-0').classList.contains('is-you') && [1, 2, 3].every((s) => !env.$('seat-row-' + s).classList.contains('is-you')));
-    same('... four seats play: the Teams select offers free for all and Green with each of the others', [env.$('teams-line').hidden, teamChoices(env)], [false, FOUR_TEAMS]);
+    same('... four seats play: every seat has a Team 1 and a Team 2 switch (the one of You too), none is on or dimmed, and the line under the seats says free for all and how to make a team', [env.$('teams-line').hidden, switchesShown(env), switchesDimmed(env), env.$('teams-line').textContent], [false, ['-', '-', '-', '-'], ['', '', '', ''], FFA_LINE]);
     same('... an invitation for each of the three Friends, START is on and says that it waits for them', [env.$('invites').hidden, invites(env).map((r) => r.children[0].textContent), !env.$('play').disabled, env.$('start-note').textContent], [false, ['Red', 'Blue', 'Black'], true, 'Starts when your friends are in (the first player in the room can start sooner).']);
     same('... the preview and the Map Info line are those of Treasure', [env.$('map-preview').src, env.$('map-info').textContent], ['front/preview_treasure.png', "One person's trash... (12 min)"]);
     check('... the card is there with the name field, "Have a code?" and the picture\'s buttons; "How it works" too', !env.$('cards').hidden && !env.$('how').hidden && !!env.$('player-name') && !!env.$('join-code') && !!env.$('aspect-16-9'));
@@ -743,7 +782,7 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     same('Sit here at Blue: You are at Blue (and only there); Green shows the choice that it kept (Medium), Blue\'s own choice (Friend) is kept out of sight, Red and Black keep theirs', [youSeats(env), seatWords(env)], [[2], ['medium', 'hard', 'friend', 'nobody']]);
     same('... Blue has the marker, the name and neither buttons nor Sit here; the others have Sit here and buttons', [[0, 1, 2, 3].map((s) => env.$('sit-' + s).hidden), [0, 1, 2, 3].map((s) => env.$('seat-set-' + s).hidden), [0, 1, 2, 3].map((s) => env.$('seat-name-' + s).hidden)], [[false, false, true, false], [false, false, true, false], [true, true, false, true]]);
     check('... and the focus goes to the Sit here of the seat that You left (the button that was pressed is gone)', env.focused === env.$('sit-0'));
-    same('... what is remembered: You at Blue and the four choices', JSON.parse(env.storage.data['ants-match']), { map: 'treasure', you: 2, seats: ['medium', 'hard', 'friend', 'nobody'], teams: 'ffa' });
+    same('... what is remembered: You at Blue and the four choices', JSON.parse(env.storage.data['ants-match']), { map: 'treasure', you: 2, seats: ['medium', 'hard', 'friend', 'nobody'], teams: 'ffa', sides: [0, 0, 0, 0] });
     sit(env, 0);
     same('... and back at Green: Blue shows its Friend again', [youSeats(env), seatWords(env)], [[0], ['medium', 'hard', 'friend', 'nobody']]);
     const again = runLobby('', env.storage.data);
@@ -833,7 +872,8 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     pickMap(env, 'tiny');
     check('another map after a copy: another room and the note', /^demo-tiny-4p-/.test(env.param(inviteLinks(env)[0], 'room')) && !env.$('links-note').hidden);
     copyOf(env, 0).click();
-    pickTeam(env, '0+1');
+    pressTeam(env, 0, 1);
+    pressTeam(env, 1, 1);
     check('the teams are a word of the code: Green + Red (all four seats play) makes demo-tiny-4p-t01-<six characters>, and the note is up again (the links changed after a copy)', /^demo-tiny-4p-t01-[a-z2-9]{6}$/.test(env.param(inviteLinks(env)[0], 'room')) && !env.$('links-note').hidden);
 }
 {   // two Friends: the note stays up until every link that was sent is the one that is shown for its seat (a seat that was never sent has nothing to be out of date)
@@ -908,7 +948,8 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     choose(env, 2, 'hard');
     sit(env, 3);
     pickMap(env, 'small');
-    pickTeam(env, '0+1');
+    pressTeam(env, 0, 1);
+    pressTeam(env, 1, 1);
     check('choices that leave the line as it is (bots, a seat for You, a map, the teams) do not write it', writes === 0, String(writes));
     choose(env, 1, 'friend');
     same('a Friend seat changes it: one write, with the new text', [writes, note.textContent], [1, 'Starts when your friend is in (the first player in the room can start sooner).']);
@@ -1023,7 +1064,7 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     check('two seats play: START is on and starts a room at once', !env.$('play').disabled && env.$('start-note').textContent === 'Starts at once, in this tab. Bots gather food, raid and fight back.');
     choose(env, 3, 'nobody');
     same('one seat plays (You): START is still on, and the line under it says that it is a game for one on this computer', [!env.$('play').disabled, env.$('start-note').textContent], [true, 'Starts at once, on this computer: just you on the map, no opponents.']);
-    same('... the Teams select is gone (nothing to choose) and there is no invitation', [env.$('teams-line').hidden, teamChoices(env), env.$('invites').hidden], [true, FFA_ONLY, true]);
+    same('... the Team switches are gone (nothing to choose) and there is no invitation', [env.$('teams-line').hidden, switchesShown(env), env.$('invites').hidden], [true, ['', '', '', ''], true]);
     env.type('player-name', 'Ann');
     env.$('play').click();
     const u = env.assigned[0] || '';
@@ -1062,24 +1103,76 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
     env.$('play').click();
     check('... and START plays it (on this computer, as ever)', env.assigned.length === 2 && new URL(env.assigned[1]).pathname === '/play.html' && env.param(env.assigned[1], 'join') === null, JSON.stringify(env.assigned));
 }
-{   // the Teams: the pairs that the playing seats allow; the chosen team is a word of the room's code
+{   // the Teams: a Team 1 and a Team 2 switch on each seat that plays; two seats on the same switch are a team, which is a word of the room's code
     const env = runLobby('', BOTS());
     choose(env, 1, 'nobody');
-    same('Red is Nobody: three seats play (Green, Blue, Black), and the pairs of them are the choices', [env.$('teams-line').hidden, teamChoices(env)], [false, [['ffa', 'Free for all'], ['0+2', 'Green + Blue against Black'], ['0+3', 'Green + Black against Blue'], ['2+3', 'Blue + Black against Green']]]);
-    pickTeam(env, '2+3');
+    same('Red is Nobody: three seats play (Green, Blue, Black) and have the switches, Red has none, and no switch is on', [env.$('teams-line').hidden, switchesShown(env), env.$('teams-line').textContent], [false, ['-', '', '-', '-'], FFA_LINE]);
+    pressTeam(env, 2, 2);
+    same('Team 2 on Blue: one seat on a switch is no team (free for all: the line still says how to make one)', [switchesShown(env), env.$('teams-line').textContent, env.$('team-2-2').getAttribute('aria-pressed'), env.$('team-2-1').getAttribute('aria-pressed')], [['-', '', '2', '-'], FFA_LINE, 'true', 'false']);
+    pressTeam(env, 3, 2);
+    same('... Team 2 on Black too: Blue + Black against Green (Green plays alone, nothing is on for it), and the line says so', [switchesShown(env), env.$('teams-line').textContent], [['-', '', '2', '2'], 'Teams: Blue + Black against Green.']);
+    same('... a team of two is full: Green cannot take Team 2 (dimmed), everybody else can take the switches that they have', [switchesDimmed(env), env.$('team-0-2').getAttribute('aria-disabled'), env.$('team-0-1').getAttribute('aria-disabled')], [['2', '', '', ''], 'true', null]);
     choose(env, 2, 'friend');
-    same('a team stays while it is still one of the choices; a Friend seat gives the room a code with its word (t23)', [env.$('teams').value, /^demo-treasure-4p-t23-[a-z2-9]{6}$/.test(env.param(inviteLinks(env)[0], 'room'))], ['2+3', true]);
+    same('a team stays while its two seats play; a Friend seat gives the room a code with its word (t23)', [env.$('teams-line').textContent, /^demo-treasure-4p-t23-[a-z2-9]{6}$/.test(env.param(inviteLinks(env)[0], 'room'))], ['Teams: Blue + Black against Green.', true]);
     choose(env, 3, 'nobody');
-    same('a seat that leaves the match takes the team with it: two seats play, free for all, a code with no word', [env.$('teams-line').hidden, env.$('teams').value, /^demo-treasure-4p-[a-z2-9]{6}$/.test(env.param(inviteLinks(env)[0], 'room'))], [true, 'ffa', true]);
+    same('a seat that leaves the match takes the team with it: two seats play, the switches are gone, a code with no word', [env.$('teams-line').hidden, switchesShown(env), /^demo-treasure-4p-[a-z2-9]{6}$/.test(env.param(inviteLinks(env)[0], 'room'))], [true, ['', '', '', ''], true]);
     choose(env, 3, 'hard');
-    same('... and it stays free for all when the seat comes back (a team is chosen again by a person)', env.$('teams').value, 'ffa');
+    same('... and it stays free for all when the seat comes back (a team is made again by a person)', [switchesShown(env), env.$('teams-line').textContent], [['-', '', '-', '-'], FFA_LINE]);
     sit(env, 1);
-    check('Sit here changes the seats that play, and the choices follow (Red is You, Green a bot, Blue a Friend, Black Hard: four play)', teamChoices(env).length === 4 && teamChoices(env)[1][1] === 'Green + Red against Blue + Black');
-    pickTeam(env, '0+1');
+    same('Sit here changes the seats that play, and the switches follow (Red is You, Green a bot, Blue a Friend, Black Hard: four play, every seat has them)', [switchesShown(env), env.$('teams-line').hidden], [['-', '-', '-', '-'], false]);
+    pressTeam(env, 0, 1);
+    same('Team 1 on Green: one seat is no team, so nothing is on for the others', [switchesShown(env), switchesDimmed(env)], [['1', '-', '-', '-'], ['', '', '', '']]);
+    pressTeam(env, 1, 1);
+    same('Team 1 on Red (You are at Red): Green + Red against Blue + Black; Blue and Black show Team 2 although nobody pressed it, and Team 1 is dimmed on them (it is full), Team 2 on Green and Red',
+         [switchesShown(env), switchesDimmed(env), env.$('teams-line').textContent], [['1', '1', '2', '2'], ['2', '2', '1', '1'], 'Teams: Green + Red against Blue + Black.']);
+    pressTeam(env, 2, 1);
+    same('pressing a dimmed switch changes nothing and says why in the line under the seats (a team is two colours)', [switchesShown(env), env.$('teams-line').textContent, JSON.parse(env.storage.data['ants-match']).sides], [['1', '1', '2', '2'], 'Team 1 has two colours already. Press one of them to take it off first.', [1, 1, 0, 0]]);
+    {   // a person who presses it again asks again: the reason is written again each time (a live region says what is written, not what stays)
+        const line = env.$('teams-line');
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(line), 'textContent');
+        let writes = 0;
+        Object.defineProperty(line, 'textContent', { get() { return descriptor.get.call(line); }, set(v) { writes++; descriptor.set.call(line, v); }, configurable: true });
+        pressTeam(env, 2, 1);
+        pressTeam(env, 2, 1);
+        same('... pressed again it is written again each time', [writes, line.textContent], [2, 'Team 1 has two colours already. Press one of them to take it off first.']);
+        delete line.textContent;
+    }
+    choose(env, 2, 'hard');
+    same('... and the next choice puts the teams back in the line', env.$('teams-line').textContent, 'Teams: Green + Red against Blue + Black.');
+    pressTeam(env, 1, 1);
+    pressTeam(env, 2, 1);
+    same('to put Blue with Green instead: Red takes its Team 1 off, Blue takes Team 1 (Green + Blue against Red + Black; Red and Black show Team 2)', [switchesShown(env), env.$('teams-line').textContent], [['1', '2', '1', '2'], 'Teams: Green + Blue against Red + Black.']);
     env.$('play').click();
     const u = env.assigned[0] || '';
-    check('START with a team: the room\'s code names it (t01), and there is no teams parameter', /^demo-treasure-4p-t01-[a-z2-9]{6}$/.test(env.param(u, 'room')) && env.param(u, 'teams') === null && !/teams=/.test(u), u);
-    same('... remembered: the team', JSON.parse(env.storage.data['ants-match']).teams, '0+1');
+    check('START with a team: the room\'s code names it (t02), and there is no teams parameter', /^demo-treasure-4p-t02-[a-z2-9]{6}$/.test(env.param(u, 'room')) && env.param(u, 'teams') === null && !/teams=/.test(u), u);
+    same('... remembered: the team that the switches make, and the switches', [JSON.parse(env.storage.data['ants-match']).teams, JSON.parse(env.storage.data['ants-match']).sides], ['0+2', [1, 0, 1, 0]]);
+    const back = runLobby('', env.storage.data);
+    same('the next visit comes back with the switches (the two that were pressed are on, the other two show the other team)', [switchesShown(back), back.$('teams-line').textContent], [['1', '2', '1', '2'], 'Teams: Green + Blue against Red + Black.']);
+    choose(back, 3, 'friend');
+    check('a Friend at Black gives the room a code with the word of the team (t02: Green + Blue)', invites(back).length === 1 && /^demo-treasure-4p-t02-[a-z2-9]{6}$/.test(back.param(inviteLinks(back)[0], 'room')), JSON.stringify(inviteLinks(back)));
+    pressTeam(back, 3, 2);
+    same('pressing the Team 2 that Black shows (nobody pressed it) takes the teams away: no switch is on, free for all', [switchesShown(back), switchesDimmed(back), back.$('teams-line').textContent, JSON.parse(back.storage.data['ants-match']).sides, JSON.parse(back.storage.data['ants-match']).teams], [['-', '-', '-', '-'], ['', '', '', ''], FFA_LINE, [0, 0, 0, 0], 'ffa']);
+    check('... and the code made for those choices has no team word any more', invites(back).length === 1 && /^demo-treasure-4p-[a-z2-9]{6}$/.test(back.param(inviteLinks(back)[0], 'room')), JSON.stringify(inviteLinks(back)));
+    check('the switches are buttons that say whether they are on (aria-pressed) and are named by their seat (the button\'s own name: Team 1 for Green; and a group named for its colour)', [0, 1, 2, 3].every((x) => [1, 2].every((k) => new RegExp('<button type="button" class="tbtn" id="team-' + x + '-' + k + '" aria-label="Team ' + k + ' for ' + ['Green', 'Red', 'Blue', 'Black'][x] + '" aria-pressed="false">Team ' + k + '</button>').test(lobbyText)) && new RegExp('<span class="teamset" id="team-set-' + x + '" role="group" aria-label="' + ['Green', 'Red', 'Blue', 'Black'][x] + '\'s team" hidden>').test(lobbyText)));
+    {   // a press that the other seats hold: Team 1 on Green, then Team 2 on Red and Blue show Black on Team 1 as well; a press that is accepted always shows
+        const e = runLobby('', BOTS());
+        pressTeam(e, 0, 1);
+        pressTeam(e, 1, 2);
+        pressTeam(e, 2, 2);
+        same('Team 1 on Green, Team 2 on Red and on Blue: Green + Black against Red + Blue, and Green and Black show Team 1', [switchesShown(e), e.$('teams-line').textContent], [['1', '2', '2', '1'], 'Teams: Green + Black against Red + Blue.']);
+        pressTeam(e, 0, 1);
+        same('... pressing Team 1 on Green (what it pressed is held by the others now) takes the teams away, as Black\'s does: every switch is off', [switchesShown(e), e.$('teams-line').textContent], [['-', '-', '-', '-'], FFA_LINE]);
+        pressTeam(e, 0, 1);
+        pressTeam(e, 1, 1);
+        pressTeam(e, 0, 2);
+        same('Green + Red against Blue + Black: Green cannot take the Team 2 that Blue and Black show (nobody pressed it), and the line says to clear the teams first', [switchesShown(e), e.$('teams-line').textContent], [['1', '1', '2', '2'], 'Team 2 is the other two colours already. Press a lit switch to clear the teams first.']);
+        pressTeam(e, 3, 2);
+        same('... and a press on a lit switch does clear them', [switchesShown(e), e.$('teams-line').textContent], [['-', '-', '-', '-'], FFA_LINE]);
+    }
+    const old = runLobby('', { 'ants-match': JSON.stringify({ map: 'treasure', you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: '0+3' }) });
+    same('a state of the first versions of the card (a team and no switches) shows its pair on Team 1 and the other two on Team 2', [switchesShown(old), old.$('teams-line').textContent], [['1', '2', '2', '1'], 'Teams: Green + Black against Red + Blue.']);
+    const junk = runLobby('', { 'ants-match': JSON.stringify({ map: 'treasure', you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: '0+3', sides: [1, 1, 1, 0] }) });
+    same('switches that put three seats on one switch are no switches: free for all (the team that was written is not used either)', [switchesShown(junk), junk.$('teams-line').textContent], [['-', '-', '-', '-'], FFA_LINE]);
 }
 {   // the map: its preview and Map Info line, the setup screen's own; it is remembered
     const info = (() => { const m = /var MAP_INFO = \{([\s\S]*?)\};/.exec(lobbyText); return new Function('return {' + m[1] + '};')(); })();
@@ -1103,11 +1196,11 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
 {   // what the earlier pages left in the browser is read for a first visit, and never written
     const old = { 'ants-solo-seats': 'easy,none,hard', 'ants-solo-teams': '0+3', 'ants-four-map': 'small', 'ants-four-players': '4', 'ants-four-fill': 'none,medium,medium,medium', 'ants-four-teams': '0+1' };
     const env = runLobby('', old);
-    same('the opponents of a game on this computer, its team and the last map: Red Easy, Blue Nobody, Black Hard, Green and You with Black as a team, Small', [seatWords(env), youSeats(env), env.$('teams').value, env.$('map-pick').value, env.$('map-preview').src], [['friend', 'easy', 'nobody', 'hard'], [0], '0+3', 'small', 'front/preview_small.png']);
+    same('the opponents of a game on this computer, its team and the last map: Red Easy, Blue Nobody, Black Hard, Green and You with Black as a team (Team 1 for both, three seats play: Red alone), Small', [seatWords(env), youSeats(env), switchesShown(env), env.$('teams-line').textContent, env.$('map-pick').value, env.$('map-preview').src], [['friend', 'easy', 'nobody', 'hard'], [0], ['1', '-', '', '1'], 'Teams: Green + Black against Red.', 'small', 'front/preview_small.png']);
     choose(env, 2, 'friend');
     same('... what the card remembers is its own key; the old keys are left as they were and nothing was added', [Object.keys(env.storage.data).sort(), env.storage.data['ants-solo-seats'], env.storage.data['ants-four-fill']], [Object.keys(old).concat(['ants-match']).sort(), 'easy,none,hard', 'none,medium,medium,medium']);
     const hosted = runLobby('', { 'ants-four-players': '3', 'ants-four-fill': 'none,easy,none,hard', 'ants-four-teams': '0+2', 'ants-four-map': 'tiny' });
-    same('a browser that only hosted rooms: its room is the card (3 players: Red Easy, Blue a Friend, Black Nobody) with its team', [seatWords(hosted), hosted.$('teams').value, hosted.$('map-pick').value, hosted.$('invites').hidden === false && invites(hosted).length === 1 && invites(hosted)[0].children[0].textContent], [['friend', 'easy', 'friend', 'nobody'], '0+2', 'tiny', 'Blue']);
+    same('a browser that only hosted rooms: its room is the card (3 players: Red Easy, Blue a Friend, Black Nobody) with its team', [seatWords(hosted), switchesShown(hosted), hosted.$('teams-line').textContent, hosted.$('map-pick').value, hosted.$('invites').hidden === false && invites(hosted).length === 1 && invites(hosted)[0].children[0].textContent], [['friend', 'easy', 'friend', 'nobody'], ['1', '-', '1', ''], 'Teams: Green + Blue against Red.', 'tiny', 'Blue']);
     const legacy = runLobby('', { 'ants-solo-bots': 'hard' });
     same('the opponents that the first versions remembered (Hard) are in all three seats', seatWords(legacy), ['friend', 'hard', 'hard', 'hard']);
     const legacyNone = runLobby('', { 'ants-solo-bots': 'none' });
@@ -1137,7 +1230,7 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
         if (what < 4) choose(env, rnd(4), WORDS5[rnd(5)]);
         else if (what < 6) sit(env, rnd(4));
         else if (what < 7) pickMap(env, MAP_KEYS[rnd(6)]);
-        else if (what < 8) { const choices = teamChoices(env); pickTeam(env, choices[rnd(choices.length)][0]); }
+        else if (what < 8) { const here = [0, 1, 2, 3].filter((x) => !env.$('team-set-' + x).hidden); if (here.length) pressTeam(env, here[rnd(here.length)], 1 + rnd(2)); }
         else if (what < 9) env.type('player-name', names[rnd(names.length)]);
         else if (invites(env).length) copyOf(env, rnd(invites(env).length)).click();
         // what the card shows now
@@ -1148,6 +1241,20 @@ const CODE = /^demo-([a-z]+)-4p-(t[0-3][0-3]-)?[a-z2-9]{6}$/;
         const bots = [0, 1, 2, 3].filter((s) => s !== you[0] && ['easy', 'medium', 'hard'].indexOf(words[s]) !== -1);
         const playing = 1 + friends.length + bots.length;
         if (env.$('play').disabled) wrong += ' start ' + step;                          // (START is always on: a game for one is a game too)
+        {   // the switches and the line under the seats say what the room's code says (the team that Green is in when four play), and no team has three seats
+            const sw = switchesShown(env);
+            const line = env.$('teams-line');
+            const plays = [0, 1, 2, 3].filter((x) => x === you[0] || words[x] !== 'nobody');
+            if (line.hidden !== (plays.length < 3) || sw.some((v, x) => (v === '') !== (plays.indexOf(x) === -1 || plays.length < 3))) wrong += ' switches ' + step;
+            if (!line.hidden && !/^(Free for all\. For a team|Teams: \w+ \+ \w+ against |Team [12] has two colours already\. Press one of them to take it off first\.|Team [12] is the other two colours already\. Press a lit switch to clear the teams first\.)/.test(line.textContent)) wrong += ' line ' + step + ' ' + line.textContent;
+            const on = sw.map((v) => (v === '1' || v === '2' ? Number(v) : 0));
+            const twos = [1, 2].map((k) => [0, 1, 2, 3].filter((x) => on[x] === k)).filter((list) => list.length === 2);
+            if ([1, 2].some((k) => on.filter((v) => v === k).length > 2)) wrong += ' crowded ' + step;
+            let word = '';
+            if (twos.length) { const pair = plays.length === 4 && twos[0][0] !== 0 ? [0, 1, 2, 3].filter((x) => twos[0].indexOf(x) === -1) : twos[0]; word = 't' + pair[0] + pair[1]; }
+            if (!line.hidden && !/^Team [12] (has two|is the other two) colours/.test(line.textContent) && /^Teams: /.test(line.textContent) !== (word !== '')) wrong += ' teamline ' + step;
+            for (const link of inviteLinks(env)) if (((/-4p-(t[0-3][0-3])-/.exec(env.param(link, 'room')) || [])[1] || '') !== word) wrong += ' word ' + step + ' ' + env.param(link, 'room');
+        }
         if (invites(env).length !== friends.length || env.$('invites').hidden !== (friends.length === 0)) wrong += ' invites ' + step;
         const plan = [0, 1, 2, 3].map((s) => (bots.indexOf(s) !== -1 ? words[s] : 'none')).join(',');
         for (const [k, link] of inviteLinks(env).entries()) {

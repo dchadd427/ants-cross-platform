@@ -416,14 +416,20 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
             cfg.play_at_once = true;
             mode_given = true;
+        } else if (std::strcmp(argv[i], "--alone") == 0) {                     // a game for one: only the local player's seat plays (ApplicationConfig::alone)
+            cfg.alone = true;
+            mode_given = true;
         }
     }
+    if (cfg.alone && !cfg.bots.empty() && cfg.startup_error.empty()) cfg.startup_error = "--alone cannot be used with --bot: a game for one has no other player.";
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
 #if !defined(__EMSCRIPTEN__)
     if (menu_forced) {
-        // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
+        // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it, nor can --alone, which decides who plays (the menu's Single player does)
         if ((direct_match || cfg.net_role != ApplicationConfig::NetRole::None) && cfg.startup_error.empty()) {
             cfg.startup_error = "--start-menu cannot be combined with --map, --open-options, --scorecard, --host, --join or --join-url: they start a match or a room at once";
+        } else if (cfg.alone && cfg.startup_error.empty()) {
+            cfg.startup_error = "--start-menu cannot be combined with --alone: the menu's Single player chooses who plays.";
         }
         cfg.start_menu = true;
     } else {
@@ -453,7 +459,8 @@ bool Application::init(const ApplicationConfig& config) {
         return false;
     }
     const bool local_bots = !config_.bots.empty() && config_.net_role == ApplicationConfig::NetRole::None;
-    local_roster_ = local_bots ? bot_roster(own_seat) : uint8_t{0x0F};
+    const bool local_seats = local_bots || game_for_one();                       // the seats were chosen: you and the bots, or you alone (--alone); every other seat has no colony
+    local_roster_ = local_seats ? bot_roster(own_seat) : uint8_t{0x0F};
 
     // 1. Initialize SDL2
     uint32_t sdl_flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER;
@@ -493,10 +500,10 @@ bool Application::init(const ApplicationConfig& config) {
         if (start_verdict.first_fatal()) std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
         return false;
     }
-    // A game that starts straight into its match (--map, no setup screen, no network) plays all four teams: the level must be playable by them, as load_match demands
-    // of every match that starts from the setup screen (a start marker outside the grid has no behaviour in the original)
+    // A game that starts straight into its match (--map, no setup screen, no network) plays the seats that are taken (all four, or you and the bots, or you alone): the level must be
+    // playable by them, as load_match demands of every match that starts from the setup screen (a start marker outside the grid has no behaviour in the original)
     if (!config_.start_in_map_select && config_.net_role == ApplicationConfig::NetRole::None) {
-        start_verdict = current_level_.validate(0x0F);
+        start_verdict = current_level_.validate(local_roster_);
         if (!start_verdict.playable) {
             std::cerr << "[Application] The level cannot be played: " << config_.default_map_path << std::endl;
             std::cerr << "[Application]   " << start_verdict.reason() << std::endl;
@@ -504,9 +511,9 @@ bool Application::init(const ApplicationConfig& config) {
         }
     }
 
-    // 4. Initialize Simulation Engine. A local game that starts at once with bots plays the seats that are taken (you and the bots): a team nobody plays has no hill
+    // 4. Initialize Simulation Engine. A local game that starts at once with bots (or --alone) plays the seats that are taken (you and the bots): a team nobody plays has no hill
     // and no ants (the setup screen's game does the same in start_game)
-    if (local_bots && !config_.start_in_map_select) {
+    if (local_seats && !config_.start_in_map_select) {
         if (local_roster_ != 0x0F) current_level_ = current_level_.for_roster(local_roster_);
         sim_.init(current_level_, config_.random_seed, local_roster_);
     } else {
@@ -673,6 +680,7 @@ bool Application::init(const ApplicationConfig& config) {
         }
     });
     map_select_.set_on_request_start([this]() { net_request_start(); });
+    map_select_.set_on_move_seat([this](uint8_t seat) { net_move_seat(seat); });
     map_select_.set_on_quit([this]() {
         leave_game();                                         // (a network game that the start menu led to: back to the menu)
     });
@@ -726,7 +734,7 @@ bool Application::init(const ApplicationConfig& config) {
         sync_room_view();
     } else {
         // the names of a local game (the local player's own name too); a bot is called "Bot (Medium)" unless -N / --team-name says otherwise
-        apply_team_names(local_bots ? local_team_names() : config_.team_names, local_bots && !config_.start_in_map_select ? local_roster_ : uint8_t{0x0F});
+        apply_team_names(local_bots ? local_team_names() : config_.team_names, local_seats && !config_.start_in_map_select ? local_roster_ : uint8_t{0x0F});
     }
 
     // The desktop start menu: part of this run when the config asks for it and nothing starts a match or a room at once (never in the web build)
@@ -787,10 +795,10 @@ bool Application::init(const ApplicationConfig& config) {
             use_local_sink();
             begin_local_recording(config_.random_seed, teams_made);
         }
-        if (local_bots) {                                            // --map with --bot: the game is running already, the bots join it
+        if (local_seats) {                                           // --map with --bot or --alone: the game is running already, the bots (if any) join it
             hud_.set_roster_mask(local_roster_);                     // (the bots are named: every taken seat has its label and its row)
             scorecard_.set_shown_teams(local_roster_);
-            start_local_bots(config_.random_seed);
+            start_local_bots(config_.random_seed);                   // (nothing without bots)
         }
     } else {
         if (!config_.skip_intro && !config_.headless) {
@@ -1091,6 +1099,9 @@ bool Application::start_game(const std::string& map_path) {
         }
         roster = bot_roster(own);
         local_roster_ = roster;
+    } else if (game_for_one()) {                                      // --alone: no other seat plays, so no other colony has a hill, ants or eggs
+        roster = bot_roster(local_player_id_ < 4 ? local_player_id_ : uint8_t{0});
+        local_roster_ = roster;
     }
     if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled())) return false;
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
@@ -1228,6 +1239,10 @@ std::string Application::bot_setup_problem(uint8_t own_seat, bool fog) const {
     info.human_mask = seat_bit(own_seat);
     info.roster = bot_roster(own_seat);
     return ai::check_setup(info);
+}
+
+bool Application::game_for_one() const {
+    return config_.alone && config_.net_role == ApplicationConfig::NetRole::None;
 }
 
 uint8_t Application::bot_roster(uint8_t own_seat) const {
@@ -1680,6 +1695,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
 // orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
 // 15: reads 0 and starts again). The lines that the way-back overlay shows (the page cannot read the canvas; tests/scripts/web_rejoin_check.py): 16: how many lines there are now (0: none); 10000 + 1000 * line + index:
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
+// The seats of the match, for the page's browser check (tests/scripts/web_home_check.py): 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
+// 21 - 24: the ants of seat 0 - 3 that are alive now (-1 outside a match).
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // Anything else, or no game: -1.
@@ -1725,6 +1742,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             g_frame_work_max_ms = 0.0;
             g_frame_work_frames = 0;
             return 0;
+        case 20: return g_web_app->match_running() ? static_cast<int>(g_web_app->sim().roster_mask()) : -1;
+        case 21: case 22: case 23: case 24: {
+            if (!g_web_app->match_running()) return -1;
+            int alive = 0;
+            for (const ants::sim::AntSnapshot& ant : g_web_app->sim().get_world_state().ants) alive += ant.player_id == what - 21 ? 1 : 0;
+            return alive;
+        }
         case 30: return static_cast<int>(g_web_app->touch().stats().taps);
         case 31: return static_cast<int>(g_web_app->touch().stats().holds);
         case 32: return static_cast<int>(g_web_app->touch().stats().drags);
@@ -2714,6 +2738,11 @@ void Application::net_request_start() {
     if (!net_ || !net_->request_start()) play_effect(sim::SoundID::CantGo);
 }
 
+// A press on a player's row of the leader's screen (protocol 14): the player goes to the next colour (NetGame::request_move_seat decides, and says nothing when the request is held back).
+void Application::net_move_seat(uint8_t seat) {
+    if (net_) net_->request_move_seat(seat);
+}
+
 // START on the setup screen of a room (host only): the map file's hash goes with the Start message so that every machine checks its own copy.
 void Application::net_start_from_setup(const std::string& map_path) {
     if (!net_ || !net_->is_host()) return;
@@ -2761,6 +2790,9 @@ void Application::handle_net_events() {
                 for (const ai::BotSpec& spec : fill_specs_) net_->remove_bot(spec.seat);      // the room is as it was before the START: the bots that it seated go again
                 fill_specs_.clear();
                 break;
+            case net::NetGame::Event::Type::RoomChanged:             // (protocol 14) a player that the leader moved takes the bot that was for its colour: NetGame moves it in its plan when the room shows the
+                if (net_->is_leader()) config_.fill_bots = net_->fill_bots();      // move, and the application's copy of the plan, which the footer of the setup screen shows, follows
+                break;
             case net::NetGame::Event::Type::Chat:                    // (protocol 11) a line in the waiting room: the log of the program has it; the status line shows it for a few seconds
                 for (const std::string& text : room_chat_log_.take(net_->take_pregame_chat(), static_cast<uint32_t>(net_time_ms_))) {       // (a budget: a flooded room does not flood the log)
                     std::cerr << "[Application] Room chat: " << text << std::endl;
@@ -2781,7 +2813,7 @@ void Application::handle_net_events() {
                 std::cerr << "[Application] The network match is out of sync (turn " << net_->turns_executed() << ")" << std::endl;
                 break;
             default:
-                break;                                        // room changes are shown by sync_room_view, the rest by the overlay and the chat log
+                break;                                        // the rest of the room is shown by sync_room_view, the match by the overlay and the chat log
         }
     }
 }

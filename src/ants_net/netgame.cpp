@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <random>
+#include <utility>
 
 #include "ants_sim/game_strings.hpp"
 
@@ -96,6 +97,25 @@ constexpr const char* kTextNoPlace = "The server cannot make a room for this mat
 
 // "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
 std::string seat_colour(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(str::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
+
+// The leader's tap on a player (request_move_seat). A press within kMoveGapMs of the last request is held back: a double click is one press (its second one would act on the rows as the first one
+// left them, and move the next player on, or the same one twice). The press after that waits for the room's answer, and the answer is a room that seats its people otherwise; a request that the
+// room cannot do is not answered at all, so the wait ends after a second in any case.
+constexpr uint32_t kMoveGapMs = 500;                                                  // (the time of a double click)
+constexpr uint32_t kMoveAnswerMs = 1000;
+constexpr const char* kTextMoveHint = "Tap a player to change their colour.";
+
+// Who sits where, as one number: the state and the name of each seat (FNV-1a), never 0 (0 stands for "no request is out")
+uint64_t seating_hash(const RoomMsg& room) {
+    uint64_t h = 1469598103934665603ull;
+    const auto put = [&h](uint8_t byte) { h = (h ^ static_cast<uint64_t>(byte)) * 1099511628211ull; };
+    for (const RoomMsg::Slot& slot : room.slots) {
+        put(static_cast<uint8_t>(slot.state));
+        for (const char c : slot.name) put(static_cast<uint8_t>(c));
+        put(0);
+    }
+    return h | 1u;
+}
 
 }  // namespace
 
@@ -275,6 +295,8 @@ void NetGame::begin_client(std::unique_ptr<Connection> uplink, uint16_t peer_por
     have_key_ = false;
     rejoin_key_ = RejoinKey{};
     last_mode_ = ClientSession::Mode::Normal;
+    move_pending_ = 0;
+    move_hint_given_ = false;
     if (!key_is_zero(key)) {                                    // (the place that keeps it gave it to this machine: it has to be told when the key is of no use)
         rejoin_key_ = RejoinKey{target_.room, target_.want_seat, key, server_text()};
         have_key_ = true;
@@ -473,10 +495,56 @@ bool NetGame::is_leader() const noexcept {
 
 bool NetGame::request_start() {
     if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
+    if (move_unanswered()) return false;                                              // (the plan of bots is for the colours as the room shows them: it follows the answer of a SeatMove, so a START waits for it)
     size_t players = 0;
     for (const auto& slot : room_.slots) players += slot.state != SlotState::Empty ? 1u : 0u;
     if (players < 2 && plan_fill_seats(fill_, room_, sim::MAX_PLAYERS).empty()) return false;      // "too few players": as the host's START (with bots to seat they make up the rest: one person is enough)
     return client_lobby_->request_start(fill_.level, effective_teams());              // (the room's own teams are the ones its code names: it ignores these when it has any)
+}
+
+uint8_t NetGame::seat_move_target(const RoomMsg& room, uint8_t seat) noexcept {
+    if (seat >= sim::MAX_PLAYERS || room.slots[seat].state != SlotState::Client) return 255;
+    for (uint8_t step = 1; step < sim::MAX_PLAYERS; ++step) {
+        const uint8_t next = static_cast<uint8_t>((seat + step) % sim::MAX_PLAYERS);
+        if (room.slots[next].state == SlotState::Empty) return next;
+    }
+    return 255;                                                                       // every colour is taken: nowhere to go (a room of four starts when the fourth player comes)
+}
+
+// A SeatMove went out and the room has not answered it: the room still seats its people as it did, and less than a second has passed (a request that the room cannot do is not answered at all)
+bool NetGame::move_unanswered() const noexcept {
+    return move_pending_ != 0 && move_pending_ == seating_hash(room_) && now_ - move_sent_ms_ < kMoveAnswerMs;
+}
+
+bool NetGame::request_move_seat(uint8_t seat) {
+    if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
+    const uint8_t target = seat_move_target(room_, seat);
+    if (target >= sim::MAX_PLAYERS) return false;
+    if (move_pending_ != 0 && now_ - move_sent_ms_ < kMoveGapMs) return false;      // a double click is one press
+    if (move_unanswered()) return false;                                              // the last request has not been answered
+    if (!client_lobby_->request_seat_move(seat, target)) return false;
+    move_pending_ = seating_hash(room_);
+    move_sent_ms_ = now_;
+    return true;
+}
+
+// The leader's plan of bots is by colour: a level for each seat, seated in the seats that are empty at START. When the room shows a person in another colour (a colour that a person held is empty
+// now, one that was empty is a person's now, nothing else changed: the leader's SeatMove, whenever its answer comes) the bot that was for the colour that the person took is for the colour that it
+// left, so the match that START makes has the same people and the same bots as the leader saw. The plan follows what the room shows, not what was asked: a request that the room does not do, or
+// does once however many times it was sent, changes nothing here. Each Room message is compared with the one before it (a move is one message; a person who comes or goes is another), however
+// many arrive in one update.
+void NetGame::follow_moved_player(const RoomMsg& before) {
+    uint8_t left = 255;
+    uint8_t took = 255;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        const SlotState was = before.slots[seat].state;
+        const SlotState is = room_.slots[seat].state;
+        if (was == is) continue;
+        if (was == SlotState::Client && is == SlotState::Empty && left == 255) left = seat;
+        else if (was == SlotState::Empty && is == SlotState::Client && took == 255) took = seat;
+        else return;                                                                  // (anything else is no move: somebody came or went, a bot was seated)
+    }
+    if (left < sim::MAX_PLAYERS && took < sim::MAX_PLAYERS) std::swap(fill_.level[left], fill_.level[took]);
 }
 
 // ---- the waiting room's chat (protocol 11) ----------------------------------------------------------------------------------------------------------
@@ -658,19 +726,32 @@ void NetGame::update_client() {
         collect_room_chat();
         for (const ClientLobby::Event& ev : client_lobby_->take_events()) {
             switch (ev.type) {
-                case ClientLobby::Event::Type::RoomChanged:
-                    if (phase_ == Phase::Connecting) {
+                case ClientLobby::Event::Type::RoomChanged: {
+                    const bool first = phase_ == Phase::Connecting;                  // (the first Room message of a session has nothing to be compared with)
+                    if (first) {
                         phase_ = Phase::Room;
                         phase_since_ms_ = now_;
                     }
-                    room_ = client_lobby_->room();
-                    seat_ = client_lobby_->my_seat();
+                    const RoomMsg before = room_;
+                    room_ = ev.room;                                                 // (this event's Room message: update() can read several, and each is compared with the one before it)
+                    seat_ = ev.room.you < sim::MAX_PLAYERS ? ev.room.you : client_lobby_->my_seat();
+                    if (!first && is_leader()) follow_moved_player(before);
+                    if (!move_hint_given_ && is_leader() && notice_until_ms_ <= now_) {        // (the leader's first company: it can put a player in another colour)
+                        size_t people = 0;
+                        for (const RoomMsg::Slot& slot : room_.slots) people += slot.state == SlotState::Client ? 1u : 0u;
+                        if (people >= 2) {
+                            move_hint_given_ = true;
+                            set_notice(kTextMoveHint);
+                        }
+                    }
                     events_.push_back(Event{Event::Type::RoomChanged, 255});
                     break;
+                }
                 case ClientLobby::Event::Type::StartRequested:
                     phase_ = Phase::Loading;
                     phase_since_ms_ = now_;
                     loaded_reported_ = false;
+                    if (notice_ == kTextMoveHint) notice_.clear();     // (the hint is for the waiting room: the screen is locked now, and says that the match loads)
                     seat_ = client_lobby_->my_seat();            // (a machine that is given its match back has no Room message: its seat is the Welcome's)
                     start_ = client_lobby_->start_info();
                     begin_peer_links();                          // the links between guests are made while the map loads

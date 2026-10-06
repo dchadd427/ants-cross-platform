@@ -810,6 +810,8 @@ RoomStatus Room::status(uint32_t now_ms) const {
     if (spec_.teams.set) s.room_teams = sim::start_teams_text(spec_.teams);
     s.leader = state_ == RoomState::Waiting || state_ == RoomState::Loading ? lobby_.leader() : uint8_t{255};      // (the lead means something until the match runs)
     s.ignored_start_requests = lobby_.ignored_start_requests() + (session_ ? session_->ignored_start_requests() : 0u);       // (the late ones of a running match are the session's)
+    s.seat_moves = lobby_.seat_moves();
+    s.ignored_seat_moves = lobby_.ignored_seat_moves() + (session_ ? session_->ignored_seat_moves() : 0u);                 // (the late ones of a running match are the session's)
     s.state = state_;
     s.reason = reason_;
     s.joined = static_cast<uint8_t>(from_record_ ? seats_in(roster_) : lobby_.players());       // (a room made from a record has no lobby that knows its players: the roster of its match does)
