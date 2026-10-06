@@ -904,7 +904,7 @@ void test_suite_8_concurrency(const std::string& chd_path) {
 int main() {
     std::cout << "=======================================================\n"
               << " Ants Native Asset Decoder ADVERSARIAL Suite\n"
-              << " Target: libants-assets (Milestone 1 Challenger)\n"
+              << " Target: ants_assets (Milestone 1 Challenger)\n"
               << "=======================================================\n";
 
     std::string assets_dir = locate_assets_dir();

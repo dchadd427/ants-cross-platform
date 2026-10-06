@@ -1598,7 +1598,7 @@ void test_suite_8_fuzzing(const std::string& chd_path, const std::string& map_di
 int main() {
     std::cout << "=======================================================\n"
               << " Ants Native Asset Decoder Test Suite\n"
-              << " Target: libants-assets (Milestone 1)\n"
+              << " Target: ants_assets (Milestone 1)\n"
               << "=======================================================\n";
 
     std::string assets_dir = locate_assets_dir();

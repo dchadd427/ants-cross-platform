@@ -3,7 +3,7 @@
 tools/analyze_binary.py
 Automated static reverse engineering of Original-Ants/Ants.exe using
 pefile and capstone. Maps:
-  - 1,157 function entry points and call graphs
+  - 1,197 function entry points and call graphs
   - String cross-references (audio files, level formats, UI tokens, network)
   - Audio playback functions & sound dispatch locations
   - Memory offset dereference clusters (AntUnit, GridCell, GameWorld)
