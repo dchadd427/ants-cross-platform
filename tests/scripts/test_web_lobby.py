@@ -67,7 +67,7 @@ class TheFrontPageMarkup(PageCase):
             self.assertEqual({name, sit_name, legend}, {name}, name)
             buttons = re.findall(r'<input type="radio" name="seat-%s" id="seat-%s-(\w+)" value="(\w+)"( checked)?><label for="seat-%s-\1">(\w+)</label>' % (n, n, n), body)
             self.assertEqual([(word, value, text) for word, value, _, text in buttons], [("friend", "friend", "Friend"), ("easy", "easy", "Easy"), ("medium", "medium", "Medium"), ("hard", "hard", "Hard"), ("nobody", "nobody", "Nobody")], name)
-            self.assertEqual([word for word, _, checked, _ in buttons if checked], ["medium"], name + ": the markup starts as a first visit does, with a Medium bot (the script shows the seat of You instead)")
+            self.assertEqual([word for word, _, checked, _ in buttons if checked], ["friend"], name + ": the markup starts as a first visit does, with a Friend (the script shows the seat of You instead)")
         # what the five words mean, said once under the rows
         self.found(self.page, r'<p class="hint" id="seats-hint">Friend: a seat for a person you invite\. Easy, Medium, Hard: a bot of that level\. Nobody: the seat stays out\.</p>')
         # the Teams: a line that the script shows when there is a choice, and a select that it fills (the choices depend on the seats that play)
@@ -75,11 +75,10 @@ class TheFrontPageMarkup(PageCase):
         self.found(self.page, r'\.roster li\[hidden\] \{ display: none; \}')                          # (a row is a grid: hidden still hides it)
         # the invitations: a box that the script shows for the Friend seats and fills with a row for each (no markup is made of text), a note about changed links
         self.found(self.page, r'<div class="invites" id="invites" hidden>\s*<span class="lab" id="invites-label">Invite your friends: a link for each seat</span>\s*<div id="invite-list" role="group" aria-labelledby="invites-label"></div>\s*<p class="hint" id="links-note" role="status" hidden>')
-        # START: the page's own teal button (its text names it for a screen reader; off with fewer than two players), the line under it
+        # START: the page's own teal button (its text names it for a screen reader; it is always on: a game for one is a game too), the line under it
         self.found(self.page, r'<button id="play" class="btn startbtn" type="button" aria-describedby="start-note">START!</button>')
         self.found(self.page, r'<p class="note" id="start-note" aria-live="polite"></p>')
-        self.found(self.page, r'\.startbtn:disabled \{[^}]*cursor: not-allowed')
-        self.found(self.page, r'\.startbtn:disabled:hover \{ background-color: var\(--teal\); \}')           # (a button that is off does not answer the pointer)
+        self.not_found(self.page, r'\.startbtn:disabled')                                              # (START is never off: nothing to style)
 
     def test_start_is_the_pages_own_button_drawn_by_the_browser_at_a_modest_size(self):
         # v0.8.0 showed the original's 98 x 27 picture as the button's background at three times its size (294 x 81 pixels, 196 x 54 on a phone) with image-rendering: pixelated, so its letters and edges were
@@ -119,11 +118,14 @@ class TheFrontPageMarkup(PageCase):
         for word in ("<b>You</b>", "<b>Sit here</b>", "<b>Friend</b>", "<b>Easy</b>", "<b>Nobody</b>", "<b>Teams</b>", "<b>START!</b>", "<b>Invite your friends</b>", "<b>Copy link</b>", "<b>Share</b>", "<b>Join</b>"):
             self.assertIn(word, steps, word)
         self.assertNotIn("Play vs the computer", steps)
+        self.assertIn("You, your friends and the bots are 1 to 4 players.", steps)                 # (a game for one is a game: START is never off)
+        self.assertNotIn("are 2 to 4 players", steps)
+        self.assertIn("with every other seat on <b>Nobody</b> it is a game for one on this computer", steps)
         self.assertNotIn("setup-hint", self.page)                                              # (the long hints of the old form are in "How it works" and the room panel)
 
-    def test_a_first_visit_is_treasure_you_at_green_a_medium_bot_in_the_other_seats_and_the_choices_are_the_cards_own(self):
+    def test_a_first_visit_is_treasure_you_at_green_a_friend_in_the_other_seats_and_the_choices_are_the_cards_own(self):
         self.assertIn("var DEFAULT_MAP_KEY = 'treasure';", self.page)
-        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: 'ffa' }); }", self.page)
+        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], teams: 'ffa' }); }", self.page)
         self.assertIn("var CARD_KEY = 'ants-match';", self.page)
         self.assertIn("var card = cardParse(recall(CARD_KEY)) || cardFromOld({", self.page)                  # (a state of the card's own wins; the earlier pages' keys are for a first visit)
         self.assertIn("remember(CARD_KEY, cardText(card));", self.page)
