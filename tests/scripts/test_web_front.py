@@ -439,7 +439,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertRegex(self.style, r"\.cols \{ max-width: 1060px; \}")                                  # (a card of 1060 px at most: its rows are not stretched over a wide window)
 
     def test_a_seat_is_one_line_from_701_px_and_two_lines_on_a_phone_with_five_buttons_that_fit_320_px(self):
-        self.assertIn('.seats4 li { grid-template-columns: 30px 140px minmax(0, 1fr) auto; grid-template-areas: "ant who pick sit";', self.style)       # (the ant, the colour, the five buttons, Sit here)
+        self.assertIn('.seats4 li { grid-template-columns: 30px 140px auto minmax(0, 1fr); grid-template-areas: "ant who sit pick";', self.style)       # (the ant, the colour, Sit here, the five buttons: the order that Tab goes in; test_web_lobby.py pins the rest)
         phone = re.search(r"@media \(max-width: 700px\) \{(.*?)\n        \}", self.style, re.S).group(1)
         self.assertIn('.seats4 li { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "ant who sit" "pick pick pick";', phone)      # (the colour and Sit here, then the buttons under the whole row)
         self.assertIn(".roster.seats4 .pair label { flex: 0 0 auto; min-width: 0; padding: 5px 4px; font-size: 13px; }", phone)
