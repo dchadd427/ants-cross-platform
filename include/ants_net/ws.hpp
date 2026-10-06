@@ -27,7 +27,8 @@
 //              1014 but 1004 - 1006, or 3000 - 4999) and an UTF-8 reason (1007).
 //   close      the peer's close frame is answered with a close frame that echoes its status, then the socket is closed (state Closed); a protocol error is
 //              answered with a close frame that carries the status, then the socket is closed (state Failed). A ping is answered with a pong at once.
-//              A reset link still delivers what the peer sent before it (where the kernel keeps it): a failed write or read is noted, what is there is read, then it fails.
+//              A reset link still delivers what the peer sent before it (where the kernel keeps it): a failed write or read is only noted, what is there
+//              is read (within the inbox bounds and the 16 reads of a pump), then the connection fails (Failed; Closed if a close frame was among it).
 //   keep-alive this class never closes an idle connection (the game has its own silence timeout), but when nothing has been sent for
 //              WsServerOptions::ping_interval_ms (20 s) it sends a ping, so that a proxy does not drop a connection that is merely quiet.
 //   write path non-blocking with an output buffer, like TcpConnection: never blocks, never SIGPIPE; when more than kWsMaxBacklogBytes (1 MB) are waiting
