@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.9.0 - 2026-10-05 - Computer players that race, hunt and cross the water
+
+**For players:**
+- **Smarter computer players:** a bot races an enemy for the food that both can reach, hunts a wounded enemy ant until it is dead, lights fire walls at an enemy gate only where the enemy cannot simply put them out, never clicks a special order onto an ant (far fewer "Can't go there." from the bots' own orders), and plays harder when it is behind.
+- **Computer players on ISLANDS and the lake of SMALL:** they fly a crew over the water with bomb flights, bring Swimmers across and ferry the food home. On ISLANDS four bots used to score nothing; they now score about 1,000 (Easy) to 1,400 (Hard) points a seat.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/23dc663...57fa5e4), [the bots](docs/BOTS.md)
+
 ## v0.8.3 - 2026-10-05 - Friend by default, a game for one and a dirtier background
 
 **For players:**

@@ -122,7 +122,8 @@ ants-cross-platform/
 │   ├── test_ai/                        # Computer players: the controller, the idle bot, bot seats in rooms, the
 │   │                                   # view, the map analysis, the match runner; the worker bot and its pinned
 │   │                                   # baselines; the standard bot (power-ups, walls, fights, raids, the gate,
-│   │                                   # styles, teams)
+│   │                                   # styles, teams, the contest play, the island play, the order of the
+│   │                                   # tasks)
 │   ├── test_ctl/                       # JSON library and control HTTP server suites
 │   ├── test_server/                    # Dedicated server suite (map store, rooms, the door, control calls, site
 │   │                                   # statistics) and the way back of the game's NetGame (test_rejoin)
