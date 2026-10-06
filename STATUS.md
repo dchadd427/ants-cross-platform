@@ -1,10 +1,11 @@
 # Status
 
-_Updated 2026-10-05 18:59 PDT · current release **v0.9.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-05 19:06 PDT · current release **v0.9.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
+| **v0.9.1** a player who quits during a catch-up no longer pauses the match (PR #22) | ██████░░░░ 57% | Mon night | two independent reviews done and every finding fixed (PR #22); it merges when its five checks are green |
 | **v0.10.0** the leader of a room can move a player to another colour (network protocol 14) | ████░░░░░░ 43% | Mon night or Tue | built and reviewed with every fix done (draft PR #26); the long local checks and the five CI checks are running; it merges in its turn |
 | **v0.11.0** short room codes (no "demo") and platform / operating system icons (protocol 15) | ░░░░░░░░░░ 0% | Wed or later | planned, starts when v0.10.0 is on main |
 
@@ -21,7 +22,6 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - Replays and watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- **No-Docker browser checks** (pull request #13, tools only, no redeploy): reviewed twice and every finding fixed; main with v0.9.0 is in and the five checks are running; it merges as soon as they are green
 - Host colours (v0.10.0, network protocol 14): the leader of a room taps a player's row to move that player to the next free colour; built and reviewed, draft PR #26; the long local checks and the five CI checks are running, and it merges in its turn
 - **Nobody means nobody** (patch, number to come, no protocol change; PR #27): a game for one has only your colony, no hill, ants or eggs for the empty seats; built and tested here, draft PR open.
 - **Server tests that fail now and then** (tests only, no release; PR #28): two timing checks, S3.100 on Windows and S3.32 on macOS, are being fixed so that they no longer assume a quiet machine; the draft carries extra diagnostics for now, which come out before it merges.
@@ -34,6 +34,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **Browser checks without Docker** (no release; PR #13, merged 2026-10-05 19:01 PDT): a session that has no Docker can now build the web pages and run the touch checks and the other browser checks that need no game server; nothing changes for players.
 - **Windows test flake fixed** (no release; PR #20, merged 2026-10-05 18:52 PDT): the prediction CPU-budget tests no longer read the machine's clocks, so the Windows (MSVC 2022) check no longer fails now and then in test_prediction RP7.1, RP7.3, RP7.4 and test_netgame N3.30; nothing changes for players (the beta redeploys with the same version).
 - **v0.9.0** Smarter computer players: a bot races an enemy for the food that both can reach, hunts a wounded ant until it is dead, lights fire walls only where they cannot simply be put out, never clicks a special order onto an ant (far fewer "Can't go there." from the bots' own orders) and plays harder when it is behind; on ISLANDS and the lake of SMALL bots fly a crew over the water with bomb flights, bring Swimmers across and ferry the food home (four bots on ISLANDS used to score nothing, now about 1,000 Easy to 1,400 Hard points a seat) (PR #14, merged 2026-10-05 18:36 PDT, live 18:39 PDT)
 - PR #19 merged: the macOS flakes of test_rejoin_app (RA1.3, RA4.1, RA9.1) are fixed; tests only, no redeploy
