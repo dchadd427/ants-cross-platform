@@ -550,6 +550,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "leash") { p.leash_tiles = static_cast<int32_t>(v); return true; }
     if (key == "linger") { p.fight_linger_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "aid") return flag(p.carrier_aid);
+    if (key == "cg") return flag(p.cantgo_aware);                                    // the can't-go fixes of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before them)
     if (key == "styled") return true;                                                // not a field of the plan: a tuned bot of a spec with no style draws its style like the registry's bot (arena_factory)
     if (key == "contest") return flag(p.contest_aware);
     if (key == "clow") { p.contest_low = static_cast<uint32_t>(v); return true; }
@@ -626,6 +627,11 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ambushdist") { p.ambush_distance = static_cast<int32_t>(v); return true; }
     if (key == "ambushn") { p.ambush_thieves = static_cast<uint32_t>(v); return true; }
     if (key == "raidmin") { p.raid_min_loot = static_cast<uint32_t>(v); return true; }
+    if (key == "raidfree") {                                                                           // the free tiles in front of a hole that a raid needs (1: any; 2: the quiet variant of "The can't-go loop")
+        if (v < 1 || v > 3) { err = "raidfree is the number of free tiles (1 to 3) that a raid needs"; return false; }
+        p.raid_min_free = static_cast<uint32_t>(v);
+        return true;
+    }
     if (key == "raidblack") { p.raid_black_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "sabotage") return flag(p.sabotage);
     if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }
@@ -1042,7 +1048,8 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
         if (x.spec.seat != y.spec.seat || x.runs != y.runs || x.score != y.score || x.shown_score != y.shown_score || x.ants != y.ants || x.eggs != y.eggs || x.hatched != y.hatched ||
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
-            x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls) {
+            x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
+            x.orders != y.orders || x.refused_orders != y.refused_orders) {
             return false;
         }
     }
@@ -1228,7 +1235,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
     JsonWriter j(&out);
     j.begin_object();
     j.field("tool", "bot_arena");
-    j.field("format", uint64_t{2});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0)
+    j.field("format", uint64_t{3});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat
     j.field("note", kKindsNote);
     j.key("options");
     j.begin_object();
@@ -1283,6 +1290,10 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("kills", uint64_t{s.kills});
             j.field("losses", uint64_t{s.losses});
             j.field("stalls", uint64_t{s.stalls});
+            j.field("orders", uint64_t{s.orders});
+            j.field("refused_orders", uint64_t{s.refused_orders});
+            j.field("cantgo", uint64_t{s.cantgo});
+            j.field("cantgo_began", uint64_t{s.cantgo_began});
             j.field("decisions", uint64_t{s.stats.decisions});
             j.field("intents", uint64_t{s.stats.intents});
             j.field("released", uint64_t{s.stats.released});
@@ -1399,6 +1410,23 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
     const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
     std::fprintf(g_out, "bot_arena: %zu match(es), %llu ticks, %.2f s%s\n", reports.size(), static_cast<unsigned long long>(ticks), seconds, failures == 0 ? ", every check passed" : "");
     if (failures != 0) std::fprintf(g_out, "bot_arena: %zu match(es) FAILED (not played, replay or repeat differs)\n", failures);
+    {
+        // what the seats' ants said "Can't go there." (docs/BOTS.md, "The can't-go loop"): all reactions, the first of each, the orders given and the orders that were refused
+        uint64_t cantgo = 0, began = 0, orders = 0, refused = 0;
+        for (const MatchReport& r : reports) {
+            for (const ai::ArenaSeatResult& s : r.result.seats) {
+                cantgo += s.cantgo;
+                began += s.cantgo_began;
+                orders += s.orders;
+                refused += s.refused_orders;
+            }
+        }
+        if (cantgo != 0 || orders != 0) {
+            std::fprintf(g_out, "bot_arena: can't-go: %llu reactions (%llu first ones, the rest repeats), %llu orders, %llu refused (%.1f per 1,000 orders)\n", static_cast<unsigned long long>(cantgo),
+                         static_cast<unsigned long long>(began), static_cast<unsigned long long>(orders), static_cast<unsigned long long>(refused),
+                         orders == 0 ? 0.0 : 1000.0 * static_cast<double>(refused) / static_cast<double>(orders));
+        }
+    }
     if (report.is_open()) {
         // written match by match, then flushed and CLOSED, and only then judged: a failure that comes at the flush (a full disk, a size limit) is a failure, not a truncated file
         // with exit code 0
@@ -1693,6 +1721,10 @@ void selftest_wiring(SelfTest& t, const LoadedMap& tiny) {
             {"decisions", [](ai::ArenaResult& r) { ++r.seats[0].stats.decisions; }},
             {"rejected", [](ai::ArenaResult& r) { ++r.seats[1].stats.rejected; }},
             {"stalls", [](ai::ArenaResult& r) { ++r.seats[0].stalls; }},
+            {"can't-go reactions", [](ai::ArenaResult& r) { ++r.seats[0].cantgo; }},
+            {"first can't-go reactions", [](ai::ArenaResult& r) { ++r.seats[1].cantgo_began; }},
+            {"orders", [](ai::ArenaResult& r) { ++r.seats[1].orders; }},
+            {"refused orders", [](ai::ArenaResult& r) { ++r.seats[0].refused_orders; }},
             {"audio events", [](ai::ArenaResult& r) { ++r.audio_events; }},
             {"units left on reachable piles", [](ai::ArenaResult& r) { ++r.reachable_units_left; }},
             {"seat count", [](ai::ArenaResult& r) { r.seats.pop_back(); }},
@@ -1869,7 +1901,7 @@ void selftest_tool(SelfTest& t) {
     t.check(!text.empty() && JsonChecker(text).valid() && JsonReader(text).parse(tree), "the report file is there, valid JSON, and reads back");
     const JsonValue* matches = tree.get("matches");
     const JsonValue* summary = tree.get("summary");
-    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 2 && matches != nullptr && matches->items.size() == 1 &&
+    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 3 && matches != nullptr && matches->items.size() == 1 &&
                 summary != nullptr && summary->get("matches") != nullptr && summary->get("matches")->u64() == 1 && summary->get("failures") != nullptr && summary->get("failures")->u64() == 0,
             "the tool, the format and the summary");
     // the numbers of the report are the numbers of the match: play the same match in-process and compare every field
@@ -1893,6 +1925,7 @@ void selftest_tool(SelfTest& t) {
             const auto num = [&s](const char* key) { return s.get(key) != nullptr ? s.get(key)->i64() : int64_t{-12345}; };
             fields_ok = num("seat") == r.spec.seat && num("score") == r.score && num("shown_score") == r.shown_score && num("ants") == r.ants && num("eggs") == r.eggs && num("hatched") == r.hatched &&
                         num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("stalls") == r.stalls && num("decisions") == r.stats.decisions &&
+                        num("orders") == r.orders && num("refused_orders") == r.refused_orders && num("cantgo") == r.cantgo && num("cantgo_began") == r.cantgo_began &&
                         num("released") == r.stats.released && num("intents") == r.stats.intents && num("expired") == r.stats.expired && num("rejected") == r.stats.rejected &&
                         s.get("bot") != nullptr && s.get("bot")->text == spec_text(r.spec) && s.get("runs") != nullptr && s.get("runs")->text == r.runs;
         }
@@ -2029,6 +2062,11 @@ int selftest() {
                     probe.repeat_window == 600 && apply_tune(probe, "fallback", 700, tune_err) && probe.fallback_ticks == 700 && apply_tune(probe, "gatefails", 4, tune_err) && probe.gate_user_fails == 4 &&
                     !apply_tune(probe, "stal", 1, tune_err),
                 "the tuning keys of the stall detector and of the gate's pause (stall, repeat, repwindow, fallback, gatefails) set the plan; a misspelt key is refused");
+        ai::LevelPlan cg = ai::plan_for(ai::Level::Hard);
+        t.check(cg.cantgo_aware && apply_tune(cg, "cg", 0, tune_err) && !cg.cantgo_aware && apply_tune(cg, "cg", 1, tune_err) && cg.cantgo_aware, "the key cg switches the can't-go fixes of the plan (on by default)");
+        t.check(cg.raid_min_free == 1u && apply_tune(cg, "raidfree", 2, tune_err) && cg.raid_min_free == 2u && apply_tune(cg, "raidfree", 1, tune_err) && cg.raid_min_free == 1u &&
+                    !apply_tune(cg, "raidfree", 0, tune_err) && !apply_tune(cg, "raidfree", 4, tune_err) && cg.raid_min_free == 1u,
+                "the key raidfree sets the free tiles in front of a hole that a raid needs (1 by default, 1 to 3 allowed)");
     }
 
     t.section("the table of baselines (tests/test_ai/baselines.inc)");
