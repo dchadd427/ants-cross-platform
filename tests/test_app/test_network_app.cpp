@@ -2522,6 +2522,53 @@ void run_leader_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("N5.92 Leader, The Colours (Protocol 14): One Request Waits For The Room's Answer; The Press After It Goes Out When The Room Shows The Change, Or When A Second Has Passed (A Request That The Room Cannot Do Is Not Answered At All); A Guest Sends Nothing") {
+        Server server;
+        ASSERT_TRUE(server.make_room("MOVE-LATCH", 4));
+        Application leader;
+        ASSERT_TRUE(leader.init(join_config(server, "MOVE-LATCH", "Ann")));
+        Hall hall{server, &leader, {}};
+        ASSERT_TRUE(hall.until([&]() { return leader.net()->phase() == net::NetGame::Phase::Room && leader.net()->is_leader(); }, 8000));
+        Application guest;
+        ASSERT_TRUE(guest.init(join_config(server, "MOVE-LATCH", "Gus")));
+        hall.second = &guest;
+        ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room && leader.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
+        hall.step(100);
+        ASSERT_EQ(guest.net()->my_seat(), 1);
+        ASSERT_TRUE(guest.net()->room().leader == 0 && !guest.net()->is_leader());
+        ASSERT_FALSE(guest.net()->request_move_seat(0));                                   // a guest sends nothing, whoever it asks for
+        ASSERT_FALSE(guest.net()->request_move_seat(1));
+        ASSERT_FALSE(leader.net()->request_move_seat(2));                                  // nobody sits in Blue
+        ASSERT_FALSE(leader.net()->request_move_seat(255));
+        hall.step(100);
+        ASSERT_TRUE(server.status("MOVE-LATCH").seat_moves == 0 && server.status("MOVE-LATCH").ignored_seat_moves == 0);
+
+        // the first press is sent (Gus to Blue, the next free colour) and the second waits: nothing has answered it yet
+        ASSERT_TRUE(leader.net()->request_move_seat(1));
+        ASSERT_FALSE(leader.net()->request_move_seat(1));
+        // the server does not run, so no answer comes: a request that the room cannot do is not answered either; the wait is a second at most
+        for (int i = 0; i < 9; ++i) leader.pump_network(0.1f);                              // 900 ms of the leader's clock
+        ASSERT_FALSE(leader.net()->request_move_seat(1));
+        for (int i = 0; i < 2; ++i) leader.pump_network(0.1f);                              // 1100 ms
+        ASSERT_TRUE(leader.net()->request_move_seat(1));                                    // (the same request again: the room still seats its people as it did)
+        ASSERT_FALSE(leader.net()->request_move_seat(1));                                   // ... and that one is waited for in its turn
+        // the server runs: it moves Gus once, and the second request finds Red empty: ignored and counted, no offence
+        hall.step(300);
+        ASSERT_TRUE(leader.net()->room().slots[2].name == "Gus" && leader.net()->room().slots[1].state == net::SlotState::Empty && guest.net()->my_seat() == 2);
+        {
+            const server::RoomStatus s = server.status("MOVE-LATCH");
+            ASSERT_TRUE(s.seat_moves == 1 && s.ignored_seat_moves == 1 && s.names[2] == "Gus" && s.leader == 0);
+            ASSERT_TRUE(leader.net()->phase() == net::NetGame::Phase::Room && guest.net()->phase() == net::NetGame::Phase::Room);
+        }
+        // the room shows the change, so the next press goes out at once (a second has not passed since the last one): Gus goes on to Black
+        ASSERT_TRUE(leader.net()->request_move_seat(2));
+        hall.step(300);
+        ASSERT_TRUE(leader.net()->room().slots[3].name == "Gus" && leader.net()->room().slots[2].state == net::SlotState::Empty && guest.net()->my_seat() == 3);
+        ASSERT_TRUE(server.status("MOVE-LATCH").seat_moves == 2 && server.status("MOVE-LATCH").ignored_seat_moves == 1);
+        leader.quit();
+        guest.quit();
+    } TEST_END();
+
     TEST_CASE("N5.75 The \"Get Ready\" Dialog In A Server's Room (Protocol 12): A Leader Who Starts A Room With Bots Sees The Dialog For The 5 s Before The Referee's First Turn, Up Exactly While No Tick Has Run And Gone The Step The First One Ran; The Referee Seals Nothing And Runs Nothing Meanwhile, The Screen Says Nothing, The Bots Look And Send Nothing; A Click Selects Nothing Until It Is Gone") {
         Server server;
         ASSERT_TRUE(server.make_room("DIALOG-APP", 4));
