@@ -2549,8 +2549,14 @@ void run_socket_tests() {
             if (kind == "ping") {
                 // the pings need at least 16 updates (64 of a connection per update) to use up the budget, so the seat is seen, and then the drop: within two seconds
                 ASSERT_TRUE(seated);
+                // a second's worth was answered, not the millions that were sent: the burst, and what the budget gave back while the flood lasted (kMessagesPerSecond a second of the clock: the drain took 0.1 to 0.7 s
+                // on the macOS runners, 1,100 to 1,600 pongs, and the loop may stall for 400 ms below, which gives back all it lasts in one update); the clock above (timer_b) began before the flooder did (its connect and
+                // its Hello are inside the time), and the pongs that the reset takes away are not counted, so the bound is a little wide
+                const double most_pongs = net::kMessageBurst + net::kMessagesPerSecond * dropped_after + 2;
+                std::cout << "\n      [measured] the flooder was answered with " << pongs << " pongs (from " << net::kMessageBurst << " to " << most_pongs << ") and dropped after " << dropped_after << " s" << std::flush;
                 ASSERT_TRUE(dropped_after >= 0.0 && dropped_after < 2.0);
-                ASSERT_TRUE(pongs >= net::kMessageBurst && pongs <= net::kMessageBurst + 300);        // a second's worth was answered, not the millions that were sent
+                ASSERT_TRUE(pongs >= net::kMessageBurst);
+                ASSERT_TRUE(pongs <= most_pongs);
             }
             const double flood_rate = (ticks_of_victim() - ticks_a) / flood_seconds;
             // after the drop the loop has nothing to digest: it is idle again, the victim keeps its clock, and nothing grew
@@ -7796,26 +7802,48 @@ void run_persist_server_tests_6() {
             const double write_seconds = seconds_since(t0);
             ASSERT_EQ(writer->turns(), turns);
             const double write_us = write_seconds * 1e6 / turns;
-            double worst_sync_ms = 0;
-            double total_sync_ms = 0;
+            // The 100,000 turns are in the operating system's cache, and the first flush writes all of them out (2.4 MB): it is no flush of a second's turns, which are about 20, so it is made first and told apart
+            const auto b0 = std::chrono::steady_clock::now();
+            ASSERT_TRUE(writer->sync());
+            const double backlog_ms = seconds_since(b0) * 1000.0;
+            // A flush of a second's turns: 30 of them are a trial. Noise only adds time, so the cost of the flush is the cheapest trial's, and a trial is cheap when its mean and its worst are: a shared runner's disk has
+            // slow moments (the backlog took 3 to 5 s on the Windows ones now and then, and the flushes after it were slow for a few seconds, 340 ms at the worst), and what is slow now is quick again a little later,
+            // so the flush is cheap if one of three trials, two seconds apart, is
+            const double mean_limit_ms = 100.0;
+            const double worst_limit_ms = 2000.0;
             const int syncs = 30;
-            for (int i = 0; i < syncs; ++i) {
-                for (uint32_t n = 0; n < 20; ++n) {
-                    net::TurnMsg t = prepared[n];
-                    t.turn = writer->turns();
-                    ASSERT_TRUE(writer->append_turn(t));
+            double mean_sync_ms = 0;
+            double worst_sync_ms = 0;
+            std::string slow_trials;                                                      // what the trials that were not cheap measured, so that a failure shows all of them
+            int trials = 0;
+            while (trials < 3 && (trials == 0 || mean_sync_ms >= mean_limit_ms || worst_sync_ms >= worst_limit_ms)) {
+                if (trials > 0) {
+                    slow_trials += "; trial " + std::to_string(trials) + " took " + std::to_string(static_cast<int>(mean_sync_ms)) + " ms on average, " + std::to_string(static_cast<int>(worst_sync_ms)) + " ms at the worst";
+                    std::this_thread::sleep_for(std::chrono::seconds(2));
                 }
-                const auto s0 = std::chrono::steady_clock::now();
-                ASSERT_TRUE(writer->sync());
-                const double ms = seconds_since(s0) * 1000.0;
-                worst_sync_ms = std::max(worst_sync_ms, ms);
-                total_sync_ms += ms;
+                ++trials;
+                double total_sync_ms = 0;
+                worst_sync_ms = 0;
+                for (int i = 0; i < syncs; ++i) {
+                    for (uint32_t n = 0; n < 20; ++n) {
+                        net::TurnMsg t = prepared[n];
+                        t.turn = writer->turns();
+                        ASSERT_TRUE(writer->append_turn(t));
+                    }
+                    const auto s0 = std::chrono::steady_clock::now();
+                    ASSERT_TRUE(writer->sync());
+                    const double ms = seconds_since(s0) * 1000.0;
+                    worst_sync_ms = std::max(worst_sync_ms, ms);
+                    total_sync_ms += ms;
+                }
+                mean_sync_ms = total_sync_ms / syncs;
             }
-            std::cout << "\n      [measured] writing a turn costs " << write_us << " microseconds (100,000 turns in " << write_seconds << " s, " << writer->bytes() / 1024 << " KiB); a flush of a second's turns costs "
-                      << total_sync_ms / syncs << " ms on average, " << worst_sync_ms << " ms at the worst of " << syncs << std::flush;
+            std::cout << "\n      [measured] writing a turn costs " << write_us << " microseconds (100,000 turns in " << write_seconds << " s, " << writer->bytes() / 1024 << " KiB); the first flush, of all of them, " << backlog_ms
+                      << " ms; a flush of a second's turns costs " << mean_sync_ms << " ms on average, " << worst_sync_ms << " ms at the worst of " << syncs << " (the limits are " << mean_limit_ms << " and " << worst_limit_ms << ")" << (trials > 1 ? " (trial " + std::to_string(trials) + slow_trials + ")" : std::string()) << std::flush;
             ASSERT_TRUE(write_us < 1000.0);
-            ASSERT_TRUE(total_sync_ms / syncs < 100.0);                                   // (the flush is cheap: 15 ms on average on a CI runner)
-            ASSERT_TRUE(worst_sync_ms < 2000.0);                                          // (a shared runner's disk has slow moments, 340 ms on a Windows one: the worst only says that no flush blocks for seconds)
+            ASSERT_TRUE(backlog_ms < 30000.0);                                            // (the backlog of 2.4 MB is printed and not judged, a disk may take seconds for it; it only has to end)
+            ASSERT_TRUE(mean_sync_ms < mean_limit_ms);                                    // (the flush is cheap)
+            ASSERT_TRUE(worst_sync_ms < worst_limit_ms);                                  // (the worst only says that no flush blocks for seconds)
         }
         // the time to bring a match back
         {
