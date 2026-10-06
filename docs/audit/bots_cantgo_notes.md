@@ -21,16 +21,15 @@ The owner heard "Can't go there." a lot ("it keeps trying to do illegal moves"; 
 
 ## The mutants
 
-71 faults of the new code, one at a time; the unmutated tree was built and tested before the first fault, every 25 faults and after the last (all passed). All 71 were caught:
+84 faults of the new code, one at a time; the unmutated tree was built and tested before the first fault, every 25 faults and after the last (all passed). All 84 were caught:
 
 | Fix | Faults | Caught by |
 |---|---|---|
-| The counter: what is counted (both texts, the window of 10 ticks, began against repeated, orders, refused) | 17 | AI22.1 (5), AI22.2, AI22.3 (3), AI22.4 (2), AI22.5, AI22.9 (5) |
+| The counter: what is counted (both texts, the window of 10 ticks, began against repeated, orders, refused) | 17 | AI22.1 (4), AI22.2, AI22.3 (3), AI22.4 (2), AI22.5, AI22.7, AI22.9 (5) |
 | CG1, the map as it is now: the field, `reaches_hill`, the gate, the rescue, the aid, the Swimmer | 18 | AI1.23 (7), AI10.8 (3), AI10.9 (2), AI10.10, AI10.11, AI10.13 (4) |
 | CG2, the raid rule and `raid_min_free` | 20 | AI12.4 (19), the self-test of `bot_arena` (the key `raidfree`) |
 | CG5, the ramp | 5 | AI10.12 (5) |
-| The switch and its plumbing: `cantgo_aware` handed to the gate and to the economy, the plain economy of the stall detector, the defaults | 11 | AI10.14 (6), AI7.29 (2), AI10.10, AI12.4, AI22.10 |
+| The switch and its plumbing: `cantgo_aware` handed to the gate and to the economy, the plain economy of the stall detector, the defaults | 11 | AI10.14 (6), AI7.29 (2), AI10.10, AI12.4 (2) |
+| The review's additions: the counter's look only on a flagged tick, the wait for an ant on the ramp, the aid's tries, the range of the key `raidfree` | 13 | AI22.11 (6), AI10.12 (4), AI10.11, the self-test of `bot_arena` (2) |
 
-Two of the 71 did not count at the first run and were run again with a corrected spec, and both were caught: one fault could not be built (an unused parameter under `-Werror`), one was run with a test that cannot see it (that the economy is handed the flag is seen by AI10.10, not by AI10.14, which plays the switch off). An earlier fault of the raid rule that survived was an equivalent one (a clamp of the minimum to at least 1: a hole with no free tile has no walk into it); the clamp was removed.
-
-
+Two of the 84 did not count at the first run and were run again with a corrected spec, and both were caught: one fault could not be built (an unused parameter under `-Werror`), one was run with a test that cannot see it (that the economy is handed the flag is seen by AI10.10, not by AI10.14, which plays the switch off). Three survived the run on the tree of the review's fixes and were caught once a test saw them: a wait on the ramp that is not started again for the next ant that comes to stand there (AI10.12, e), a ramp check that ignores the switch (AI10.14, e: the click comes at the first look), and the default of the switch in the plans (AI12.4). An earlier fault of the raid rule that survived was an equivalent one (a clamp of the minimum to at least 1: a hole with no free tile has no walk into it); the clamp was removed.

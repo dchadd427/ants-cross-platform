@@ -344,6 +344,7 @@ void run_b41_offence_tests() {
         uint64_t reactions = 0;
         ASSERT_EQ(plan_for(Level::Medium).raid_min_free, 1u);                                                 // (the shipped plans raid a hole with one free tile: two cost strength on TREASURE)
         ASSERT_EQ(plan_for(Level::Hard).raid_min_free, 1u);
+        ASSERT_TRUE(plan_for(Level::Easy).cantgo_aware && plan_for(Level::Medium).cantgo_aware && plan_for(Level::Hard).cantgo_aware);          // (the shipped plans keep the can't-go fixes on: cg=0 turns them off)
         for (const uint32_t min_free : {1u, 2u}) {
             // `free` is the number of free tiles in front of the hole: it is raided when free >= min_free
             // (a) two walls and a Combat Ant on the third tile: no free tile (the ant holds the last one): not raided, whatever the minimum, and nothing is refused

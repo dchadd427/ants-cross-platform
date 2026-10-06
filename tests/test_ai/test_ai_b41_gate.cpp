@@ -762,6 +762,29 @@ void run_b41_gate_tests() {
             ASSERT_TRUE(rig.as<StandardBot>().gate().entrance_clicks() >= 1);
             ASSERT_TRUE(tally.seat(0).refused >= 1);                                                            // (what the wait spares: the engine refuses it)
         }
+        {   // (e) the wait of 200 ticks starts again with every ant that comes to stand on the ramp: one stood there for 100 ticks and went (the carrier banked); at tick 400 another one stands there and
+            // a second carrier waits: the gate clicks nobody in the first 150 ticks of that wait, as it did for the first ant
+            sim::SimulationEngine sim;
+            world(sim);
+            const uint32_t first = sim.spawn_unit(0, sim::AntType::Worker, ramp);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.run(100);
+            ASSERT_EQ(rig.as<StandardBot>().gate().entrance_clicks(), 0u);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {first}, 20, 18));
+            rig.run(300);
+            ASSERT_TRUE(sim.get_player_score(0) >= 25);                                                         // (the premise: the first carrier banked)
+            const uint32_t clicks = rig.as<StandardBot>().gate().entrance_clicks();
+            const uint32_t second = sim.spawn_unit(0, sim::AntType::Worker, ramp);
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{27, 20});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            rig.run(150);
+            ASSERT_TRUE(sim.get_unit(second).pos.x == ramp.x && sim.get_unit(second).pos.y == ramp.y);          // (the premise: it stands there all along)
+            ASSERT_TRUE(sim.get_unit(carrier).holding != 0);
+            ASSERT_EQ(rig.as<StandardBot>().gate().entrance_clicks(), clicks);
+            ASSERT_EQ(tally.seat(0).refused, 0u);
+        }
     } TEST_END();
 
     TEST_CASE("AI10.13 A Swimmer Is Not Cut Off By Water: A Carrier On An Island That No Walk Joins To The Hill Is Named In No Order (The Gate, The Rescue, The Aid Of A Hit Carrier), A Swimmer That Stands There Is Named In All Three (It Swims Home; Before: It Was Left Where It Was)")
@@ -894,7 +917,7 @@ void run_b41_gate_tests() {
                 ASSERT_TRUE(tally.seat(0).refused >= 1);
             }
         }
-        {   // (e) an own ant stands on the ramp (AI10.12): the entrance is clicked and the click is refused
+        {   // (e) an own ant stands on the ramp (AI10.12): the entrance is clicked at the first look, not after the 200 ticks that the fix waits, and the click is refused
             const TileCoord hill{26, 26};
             sim::SimulationEngine sim;
             sim.init_test_world(60, 60, 5, 14400u * sim::TICK_MS);
@@ -913,6 +936,11 @@ void run_b41_gate_tests() {
             rig.run(400);
             ASSERT_TRUE(rig.as<StandardBot>().gate().entrance_clicks() >= 1);
             ASSERT_TRUE(tally.seat(0).refused >= 1);
+            uint64_t first_click = 0;
+            for (const auto& e : rig.proposed) {
+                if (first_click == 0 && e.second.type == CommandType::GroupMove && e.second.tile_x == hill.x + 1 && e.second.tile_y == hill.y + 1) first_click = e.first;
+            }
+            ASSERT_TRUE(first_click >= 1 && first_click < 100);                                                 // (the first look is at tick 1; AI10.12 (d) has the click after the 200 ticks of the wait)
         }
         {   // (f) the worker bot, the frozen yardstick, is not changed by the fixes: its rescue still sends a carrier into a hill that a ring shuts
             sim::SimulationEngine sim;
