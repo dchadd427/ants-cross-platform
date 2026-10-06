@@ -122,7 +122,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".copy-btn.active { color: var(--pressed-ink) !important; }", STYLE)
         self.assertIn("color:#34d399", SCRIPT.replace(" ", ""))                                                                           # (the script still has them: it is not touched)
         self.assertRegex(STYLE, r"\.sprites-toolbar \{[^}]*background: var\(--inset\) !important;")
-        self.assertRegex(STYLE, r"#btn-load-all \{ background: var\(--teal-hi\) !important; \}")
+        self.assertRegex(STYLE, r"#btn-load-all \{ background-color: var\(--teal-hi\) !important; \}")
         self.assertRegex(STYLE, r"\.stage-select \{[^}]*padding-right: 30px !important;")
 
     def test_sprites_stay_on_a_dark_backdrop_never_on_the_clay(self):
@@ -146,6 +146,7 @@ class ThePairs(unittest.TestCase):
 
     def colour(self, value):
         value = value.strip().replace("!important", "").strip()
+        value = re.sub(r"\s+var\(--sheen(?:, none)?\)$", "", value)                  # (a button's face is its colour with the sheen over it: the light of the sheen stays above the words, test_web_game checks that)
         var = re.fullmatch(r"var\(--([a-z-]+)\)", value)
         if var:
             return self.colour(self.tokens[var.group(1)])
