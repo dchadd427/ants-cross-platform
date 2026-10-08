@@ -114,6 +114,7 @@ HostLobby::HostLobby(Config config) : cfg_(std::move(config)) {
     // the Room message would be one that no decoder takes)
     cfg_.lobby_room = cfg_.lobby_room && leads() && cfg_.leader_starts && cfg_.max_players >= sim::MAX_PLAYERS && static_cast<bool>(cfg_.make_key);
     if (cfg_.lobby_room) room_.flags = static_cast<uint8_t>(room_.flags | kRoomLobby);
+    cfg_.silence_ms = std::max<uint32_t>(cfg_.silence_ms, std::max<uint32_t>(3u * cfg_.ping_every_ms, 1000u));        // (a client answers each ping: a link that is alive is never quiet for longer than three of them)
     // room_.map_name stays empty until the host chooses a map (the setup screen lists what the Maps folder holds; no map is named in the program)
 }
 
@@ -426,11 +427,12 @@ uint8_t HostLobby::seat_of_key(const SeatKey& key) const noexcept {
 // A Hello with the key of a seated guest while the room is open: the new connection is that guest from now on. The seat keeps everything that is its own (its name, its key, its place in the
 // order of the Welcomes, so that the leader stays the leader; its violations and its message budget: a connection that is thrown out cannot start again by coming back), the thumb is
 // measured again, the old connection is told that it was replaced (it must not try to come back: Superseded) and closed. The Welcome is the one of the seat, with its key.
-void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello) {
+void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint32_t now_ms) {
     Guest& g = guests_[seat];
     Connection* old = g.conn;
     g.conn = p.conn;
     g.held = false;                                              // (protocol 16: a seat that was held has its person back)
+    g.heard_ms = now_ms;
     g.kind = hello.client_kind;                                  // (and a page that goes to the game page comes back as a game)
     g.address = p.address;
     g.listen_port = hello.listen_port;
@@ -454,7 +456,7 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello) {
     broadcast_room();
 }
 
-void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t /*now_ms*/, bool& consumed, bool created) {
+void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t now_ms, bool& consumed, bool created) {
     consumed = true;                                 // whatever happens, this connection is not pending any more
     if (peek_type(msg) != MsgType::Hello) {          // the first message must be Hello
         p.conn->close();
@@ -473,7 +475,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     if (hello.client_kind == kClientPage && !cfg_.lobby_room) return reject(RejectReason::BadRequest);       // (protocol 16: a page cannot play a match, and only a lobby room seats one)
     if (phase_ == Phase::Room && !key_is_zero(hello.key)) {                                  // the key of a seated guest: that guest, on a new connection (a key that fits no seat: a new player)
         const uint8_t holder = seat_of_key(hello.key);
-        if (holder != 255) return take_over(holder, p, hello);
+        if (holder != 255) return take_over(holder, p, hello, now_ms);
     }
     if (phase_ != Phase::Room) return reject(RejectReason::MatchRunning);                    // (a key in a match that loads or runs is the session's business, not the lobby's)
     if (starting_.active) return reject(RejectReason::MatchRunning);                         // (a lobby room whose START waits for the games takes no newcomer)
@@ -496,6 +498,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].join_order = ++joins_;
     guests_[seat].key = key;
     guests_[seat].kind = hello.client_kind;
+    guests_[seat].heard_ms = now_ms;
     room_.slots[seat].state = SlotState::Client;
     room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
     room_.slots[seat].platform = hello.platform;
@@ -675,9 +678,14 @@ void HostLobby::update(uint32_t now_ms) {
         std::vector<uint8_t> msg;
         int budget = 64;                                       // at most this many messages of one guest per update: the rest waits (a flood is held back in the connection)
         while (budget-- > 0 && guests_[s].conn != nullptr && guests_[s].conn->poll(msg)) {
+            guests_[s].heard_ms = now_ms;
             if (msg.size() > kMaxMessageBytes) violation(s);
             else if (!guests_[s].talk.take(now_ms, cfg_.message_burst, cfg_.messages_per_second)) violation(s);       // more than a client can have to say: not even looked at
             else handle_guest_message(s, msg, now_ms);
+        }
+        if (cfg_.lobby_room && phase_ == Phase::Room && guests_[s].conn != nullptr && guests_[s].conn->is_open() && now_ms - guests_[s].heard_ms >= cfg_.silence_ms) {
+            ++silences_;                                       // (protocol 16: nothing has come from it for silence_ms, and a live client answers a ping every second: the link is dead, and its seat is held as for any connection that ends)
+            guests_[s].conn->close();
         }
         if (guests_[s].conn != nullptr && !guests_[s].conn->is_open()) {
             if (cfg_.lobby_room && phase_ == Phase::Room && !key_is_zero(guests_[s].key)) hold_guest(s, now_ms);       // (protocol 16: the seat waits for its key, when it has one; a match that loads is cancelled for a leaver as ever)

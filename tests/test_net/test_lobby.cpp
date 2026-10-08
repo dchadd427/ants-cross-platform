@@ -79,6 +79,7 @@ struct Room {
         Connection* host_end{nullptr};
         Connection* client_end{nullptr};
         std::unique_ptr<ClientLobby> lobby;
+        bool frozen{false};                      // the machine is asleep: its link is open and it says nothing (its lobby is not run)
     };
     std::vector<Guest> guests;
     uint32_t now{0};
@@ -110,7 +111,9 @@ struct Room {
             now += 10;
             net.set_time(now);
             host.update(now);
-            for (auto& g : guests) g.lobby->update(now);
+            for (auto& g : guests) {
+                if (!g.frozen) g.lobby->update(now);
+            }
         }
     }
 };
@@ -4389,6 +4392,87 @@ int main() {
             ClientLobby::Config page = page_config("Pia");
             ASSERT_EQ(page.client_kind, kClientPage);
             ASSERT_EQ(ClientLobby::Config{}.client_kind, kClientGame);
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.32 The Silence (Protocol 16): A Link Of A Lobby Room From Which Nothing Has Come For silence_ms Is Closed And Its Seat Is Held Like Any Other Link That Ends, A Client That Answers The Room's Pings Is Never Closed, And A Room That Is No Lobby Room, Or Is Loading, Does Not Close A Quiet Link") {
+        {   // a page whose machine went to sleep: its link is open and says nothing; the room closes it after 30 s and holds the seat for the key
+            Room room(lobby_room_config(90));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            room.guests[bob].frozen = true;
+            room.run(29000);
+            ASSERT_TRUE(room.host.in_game(1));
+            ASSERT_EQ(room.host.silences(), 0u);
+            room.run(2000);
+            ASSERT_EQ(room.host.silences(), 1u);
+            ASSERT_TRUE(room.host.held(1) && room.host.occupied(1));
+            ASSERT_EQ(room.host.holds(), 1u);
+            ASSERT_FALSE(room.guests[bob].host_end->is_open());
+            ASSERT_EQ(room.host.leader(), 0);
+            ASSERT_TRUE(room.guests[ann].lobby->is_leader());
+            const size_t bob2 = join_keyed(room, "Bob", bob_key);                   // the machine wakes up and comes back with the key
+            room.run(300);
+            ASSERT_EQ(room.guests[bob2].lobby->my_seat(), 1);
+            ASSERT_TRUE(room.host.in_game(1) && !room.host.held(1));
+            ASSERT_EQ(room.host.takeovers(), 1u);
+        }
+        {   // a client that answers the pings is never quiet: five minutes in the room, nobody is closed or held
+            Room room(lobby_room_config(91));
+            room.join_seat("Ann");
+            room.join_seat("Bob");
+            room.run(300000);
+            ASSERT_EQ(room.host.silences(), 0u);
+            ASSERT_EQ(room.host.holds(), 0u);
+            ASSERT_EQ(room.host.players(), 2u);
+        }
+        {   // the time is the room's setting; a seat that was given no key has nothing to wait for and goes at once
+            HostLobby::Config hc = lobby_room_config(92);
+            hc.silence_ms = 5000;
+            const auto calls = std::make_shared<int>(0);
+            const std::function<bool(SeatKey&)> maker = hc.make_key;
+            hc.make_key = [calls, maker](SeatKey& key) { return ++*calls <= 1 && maker(key); };       // (the first guest has a key, the others none)
+            Room room(hc);
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            ASSERT_TRUE(key_is_zero(room.guests[bob].lobby->key()));
+            room.guests[bob].frozen = true;
+            room.run(4000);
+            ASSERT_TRUE(room.host.occupied(1));
+            room.run(2000);
+            ASSERT_FALSE(room.host.occupied(1));
+            ASSERT_EQ(room.host.silences(), 1u);
+            ASSERT_EQ(room.host.holds(), 0u);
+        }
+        {   // a setting below what a live client needs (it answers a ping a second) is lifted: a room is never configured to close every link
+            HostLobby::Config hc = lobby_room_config(93);
+            hc.silence_ms = 0;
+            Room room(hc);
+            room.join_seat("Ann");
+            room.join_seat("Bob");
+            room.run(60000);
+            ASSERT_EQ(room.host.silences(), 0u);
+            ASSERT_EQ(room.host.players(), 2u);
+        }
+        {   // a room that is no lobby room never closes a quiet link
+            Room room(keyed_server_config(94));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.guests[bob].frozen = true;
+            room.run(120000);
+            ASSERT_EQ(room.host.silences(), 0u);
+            ASSERT_TRUE(room.host.occupied(1) && room.guests[bob].host_end->is_open());
+        }
+        {   // while a match loads, a quiet link is the load timeout's business
+            Room room(lobby_room_config(95));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            ASSERT_TRUE(room.host.start(5, 6, room.now));
+            room.guests[bob].frozen = true;
+            room.run(40000);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Loading);
+            ASSERT_EQ(room.host.silences(), 0u);
         }
     } TEST_END();
 

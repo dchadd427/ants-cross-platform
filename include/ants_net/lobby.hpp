@@ -41,7 +41,8 @@
 // it asked for when that is one); Easy, Medium, Hard and Nobody colours are never taken by a joiner, no such colour is Full, and a room whose START waits is MatchRunning. (2) The PLAN (PlanMsg, the leader's):
 // the map, what each colour is and the teams; every change is shown to everybody in the Room message, and the plan decides the START (a StartRequest's own fill and teams are not looked at). (3) A SeatMove
 // exchanges the two colours completely: the person (all that is its own), the colour's kind and the team pair, so that a team goes with its player and a bot with its level. (4) A guest whose connection
-// ends keeps its seat for `hold_ms` (it counts as present, a Hello with its key takes the seat back, the leader that is held stays the leader); one that says Leave goes at once. (5) The START: the leader's
+// ends keeps its seat for `hold_ms` (it counts as present, a Hello with its key takes the seat back, the leader that is held stays the leader); one that says Leave goes at once. A connection from which nothing at
+// all has come for `silence_ms` has ended too (a live client answers the room's ping every second; a link that died without a word is closed, and its seat is held). (5) The START: the leader's
 // StartRequest is kept as a request (RoomMsg flag kRoomStarting) until every person is a GAME (a Hello of kClientGame holds the seat: the pages go to the game and take their seats over), and then the owner is
 // given the LeaderStart; a request that waits longer than `start_wait_ms`, or whose leader is not the leader any more, is dropped (the leader is told which game did not come in time). A held seat keeps its hold
 // while the request waits.
@@ -66,6 +67,8 @@ namespace ants::net {
 /// A lobby room (protocol 16) holds the seat of a guest whose connection ended this long, and its leader's START waits this long for every person's game (HostLobby::Config::hold_ms, start_wait_ms)
 inline constexpr uint32_t kLobbyHoldMs = 60u * 1000u;
 inline constexpr uint32_t kLobbyStartWaitMs = 90u * 1000u;
+/// ... and a connection of a lobby room from which nothing has come for this long is closed (HostLobby::Config::silence_ms): a client that is alive answers a ping every second
+inline constexpr uint32_t kLobbySilenceMs = 30u * 1000u;
 
 /// One line of the waiting room's chat (protocol 11). `seat` is the sender's seat, kRoomSender (255) for a line that the room itself said (a notice); `name` is the sender's name as the
 /// room showed it when the line arrived ("" for a notice).
@@ -122,6 +125,9 @@ public:
         bool lobby_room{false};
         uint32_t hold_ms{kLobbyHoldMs};
         uint32_t start_wait_ms{kLobbyStartWaitMs};
+        /// A lobby room closes the connection of a guest from which nothing has come for this long while the room is open (its seat is held then, as for any connection that ends): no TCP or proxy tells a server that a
+        /// browser which went to sleep is gone, and a room that lives while a person is in it must not live for ever on a link that died.
+        uint32_t silence_ms{kLobbySilenceMs};
         /// Flood control (flood.hpp): the messages that one guest may send, a token bucket. A message beyond it is not handled and is a violation (eight throw the guest out).
         uint32_t message_burst{kMessageBurst};
         uint32_t messages_per_second{kMessagesPerSecond};
@@ -252,6 +258,8 @@ public:
     uint32_t plan_changes() const noexcept { return plan_changes_; }
     uint32_t holds() const noexcept { return holds_; }
     uint32_t hold_expiries() const noexcept { return hold_expiries_; }
+    /// Connections that were closed for their silence (silence_ms)
+    uint32_t silences() const noexcept { return silences_; }
 
     std::vector<Event> take_events();
 
@@ -277,6 +285,7 @@ private:
         uint8_t kind{kClientGame};               // protocol 16: what the Hello said (a game, or a lobby page that cannot play a match)
         bool held{false};                        // a lobby room: the connection ended and the seat waits for its key (conn is null) since held_since_ms
         uint32_t held_since_ms{0};
+        uint32_t heard_ms{0};                    // a lobby room: when a message of this guest was last read (or it was welcomed): the silence of a link is counted from here
         ChatBudget plans;                        // the PlanMsgs of this guest that could be heard (flood.hpp: a burst of kPlanBurst, then kPlansPerSecond a second)
         uint32_t ignored_plans{0};               // ... and those that were ignored (the first kIgnoredPlansAllowed are free)
     };
@@ -297,7 +306,7 @@ private:
     void handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t now_ms, bool& consumed, bool created = false);
     SeatKey new_key() const;
     uint8_t seat_of_key(const SeatKey& key) const noexcept;
-    void take_over(uint8_t seat, Pending& p, const HelloMsg& hello);
+    void take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint32_t now_ms);
     void handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg, uint32_t now_ms);
     void relay_chat(uint8_t sender, const std::string& text);
     void check_all_loaded();
@@ -341,6 +350,7 @@ private:
     uint32_t plan_changes_{0};
     uint32_t holds_{0};
     uint32_t hold_expiries_{0};
+    uint32_t silences_{0};
     ChatLog chat_;
     std::function<void(const StartMsg&, uint32_t)> before_start_;
     std::function<std::string(const std::string&)> map_choice_;

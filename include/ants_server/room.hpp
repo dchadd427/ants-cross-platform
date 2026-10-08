@@ -40,12 +40,20 @@
 // lost link), the bots sit down again at the restored tick (their tasks are soft: they look at the world and go on), and the room keeps its code, so that the players' clients find it. A record that cannot be restored (another network protocol, a map that has changed, a replay that does not
 // agree with the hashes, too old) ends the room with the reason (Room::refused: a failed room that the status shows and the log reports). A finished or failed room deletes its record; a server that is told
 // to stop (RoomManager::shutdown) makes the records durable and leaves them where they are.
+//
+// Lobby rooms (protocol 16, docs/NETWORK_PORT.md "Protocol 16"). A room made with RoomSpec::lobby is the room that the front page waits in from its first second: a visitor's page makes it with a create block
+// and invites the others with the link. It has four seats, a leader that starts it and keys, and the rules of HostLobby's lobby room (the leader's plan decides what a START seats, a seat whose connection
+// ended is held for a minute, the START waits for the games of all its people). It has no wait_ms and is not full: it lives while a person is in it (a held seat counts as one) and is forgotten, without a word
+// in the log or a result file, `empty_close_ms` after the last person has gone. The leader's START reaches the room in every pass while every person is a game: the room loads the plan's map (the server
+// offers the maps of --demo-maps), checks that the seats which play can play it, asks the server whether it has a place for another match, and then seats the plan's bots and starts like any room; what it
+// cannot do ends the START with a notice to the leader (HostLobby::end_start) and the room goes on waiting. A failed start never fails the room. A match that a lobby room has begun is a room like the others.
 
 #include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ants_ai/bot.hpp"
@@ -83,6 +91,14 @@ struct RoomSpec {
     /// Protocol 15: the room does not start by itself when every seat is taken: only its leader's START starts the match (the leader can arrange the seats first). It needs a leader, so it is
     /// for a room with `early_start` (a room that has none ignores it).
     bool leader_starts{false};
+    /// Protocol 16: a lobby room (see the paragraph at the top; RoomManager::make_lobby_room makes it from a page's create block). It needs four players, an early start, a leader that starts it and reconnect
+    /// (the keys), and no Fog of War, bots or teams of its own (the leader's plan decides): create_room refuses it otherwise. `hold_ms`: a seat whose connection ended is held this long; `start_wait_ms`: the
+    /// leader's START waits this long for every person's game; `silence_ms`: a connection that says nothing for this long is closed; `empty_close_ms`: the room is forgotten this long after the last person has gone.
+    bool lobby{false};
+    uint32_t hold_ms{net::kLobbyHoldMs};
+    uint32_t start_wait_ms{net::kLobbyStartWaitMs};
+    uint32_t silence_ms{net::kLobbySilenceMs};
+    uint32_t empty_close_ms{60u * 1000u};
     bool has_seed{false};
     uint32_t seed{1};                       // the match's random seed (the server draws one when the spec has none)
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
@@ -150,6 +166,10 @@ struct RoomStatus {
     bool early_start{true};                 // the room allows the leader's early start
     bool public_room{false};                // made by a visitor's create block (protocol 15): for the tests, not shown by the control interface
     bool leader_starts{false};              // the full room waits for its leader's START (protocol 15): for the tests, not shown by the control interface
+    bool lobby{false};                      // a lobby room (protocol 16): for the tests, not shown by the control interface
+    bool starting{false};                   // ... whose leader's START waits for the games
+    uint8_t games{0};                       // ... the seats (bit s) that hold a game: a page, a seat that is held and an empty seat do not
+    std::string plan;                       // ... the plan: the kind of each colour as a letter (o open, e easy, m medium, h hard, n nobody) and the team pair ("oehn 0+3", "-" for none)
     uint8_t leader{255};                    // the seat of the leader while the room waits or loads (255: none: nobody has joined yet, the room does not allow an early start, or the match runs)
     uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start, a late click of a match that runs)
     uint32_t seat_moves{0};                 // the colours that the leader moved a player to (protocol 14: each one that the room carried out)
@@ -224,6 +244,16 @@ struct RoomStatus {
     uint64_t restored_hash{0};              // ... and the referee's state hash (StateHash::total) was this at the restored tick
 };
 
+/// What a lobby room asks of the server that runs it (protocol 16; RoomManager gives it to the rooms it makes). The room has no maps folder of its own and does not know the server's limits.
+struct LobbyServices {
+    /// The file name that the server gives a map of a leader's plan ("" when it offers none by that name: the map of the room stays)
+    std::function<std::string(const std::string& name)> choose_map;
+    /// Loads that file for a match (false: it is gone or cannot be played by this engine)
+    std::function<bool(const std::string& file, MapEntry& entry, assets::LevelData& level)> load_map;
+    /// Whether the server has a place for one more match now (and makes one when an abandoned match can give its place up)
+    std::function<bool(uint32_t now_ms)> match_place;
+};
+
 class Room {
 public:
     static constexpr size_t kMaxConnections = 32;           // RoomSpec::max_connections of a room that says nothing: everything that ever said Hello to it (rejected ones included): a flood is refused beyond this
@@ -240,6 +270,8 @@ public:
     /// The server's restart records (restart_record.hpp; it must outlive the room): a room that holds seats and whose match starts keeps a record there. Set it right after the room is made, before its
     /// match is started. Null (the default): the room keeps none.
     void set_restart_store(RestartStore* store) noexcept { restart_store_ = store; }
+    /// What a lobby room asks of its server (see LobbyServices): set it right after the room is made. A room that is no lobby room never asks.
+    void set_lobby_services(LobbyServices services);
     /// Bringing a match back from a record, first half (RoomManager replays the queue in slices from update(), so that the server serves meanwhile). begin_replay() does everything before the turns: the
     /// bots, the engine, the session with its keys. The room must be fresh (Waiting, made from room_spec_of(record.head)) and `record` must stay alive until replay_step() has said Replayed or Refused.
     /// Refused, with the reason in `why`: the room holds a half-built match and is thrown away. `restart_vote_after_ms`: how long the others wait before they may vote on a seat that has not come back.
@@ -272,6 +304,15 @@ public:
     const std::string& code() const noexcept { return spec_.code; }
     /// Made by a visitor's create block (protocol 15): one of the server's public rooms
     bool public_room() const noexcept { return spec_.public_room; }
+    /// A lobby room (protocol 16) ...
+    bool lobby() const noexcept { return spec_.lobby; }
+    /// ... that waits (no match has been started): it is in the server's pool of lobbies, and holds no place of the public rooms
+    bool lobby_waiting() const noexcept { return spec_.lobby && state_ == RoomState::Waiting; }
+    /// A waiting lobby room that has had nobody in it since the last pass (a held seat is somebody), and for how long (0 for every other room)
+    bool empty_lobby() const noexcept { return lobby_waiting() && empty_; }
+    uint32_t empty_ms(uint32_t now_ms) const noexcept { return empty_lobby() ? now_ms - empty_since_ms_ : 0u; }
+    /// The owner forgets the room at once, without a word in the log or a result file (the server needs the place of a lobby that nobody is in): its clients are dropped
+    void forget(uint32_t now_ms);
     RoomState state() const noexcept { return state_; }
     /// True while a client may still join (Waiting)
     bool accepting() const noexcept { return state_ == RoomState::Waiting; }
@@ -283,7 +324,8 @@ public:
 
     /// A client of this room: its first message (the Hello, already checked by the caller) goes to the lobby, which answers it. On success the room owns the
     /// connection (the pointer is moved from); on false (the room takes no more connections) the caller still holds it and rejects it.
-    bool add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms);
+    /// `created`: this very Hello made the room (the Welcome of its new seat says so, protocol 16)
+    bool add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms, bool created = false);
     /// A Hello with a key reaches a match that runs (the door: RoomManager) when the room holds seats and the match runs: the session decides (HostSession::accept_rejoin). True: the room
     /// owns the connection (the session points at it until it has been replaced). False: the room takes nothing; the session has answered with a Reject and closed the connection, which the
     /// caller keeps until the answer has arrived. A room that keeps max_connections connections that are all in use answers Full (it never keeps more).
@@ -324,6 +366,10 @@ private:
     void unseat_fill();
     void notify_people(const std::string& text);             // the room says a line to every person in it (a notice)
     bool start_bots(uint32_t seed, std::string& why);
+    // Starting the match from the waiting room (the full room, the leader's START, a lobby room's plan)
+    uint8_t roster_with(const std::vector<std::pair<uint8_t, net::FillLevel>>& fill_seats) const;
+    bool start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::pair<uint8_t, net::FillLevel>>& fill_seats, const sim::StartTeams& wanted);
+    void lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::array<net::FillLevel, sim::MAX_PLAYERS>& asked_fill, const sim::StartTeams& asked_teams);
 
     RoomSpec spec_;
     MapEntry map_;
@@ -338,6 +384,10 @@ private:
     uint32_t retry_at_ms_{0};                // after a cancelled start the room waits a moment before it tries again (a client that cannot load the map does not make a tight loop)
 
     net::HostLobby lobby_;
+    LobbyServices services_;                 // protocol 16: what a lobby room asks of its server
+    bool empty_{false};                      // a lobby room: nobody is in it, since empty_since_ms_
+    uint32_t empty_since_ms_{0};
+    bool forgotten_{false};                  // the owner forgot the room (forget): it is expired at once
     std::vector<ai::BotSpec> bot_specs_;     // the bots that sit in the room now, by seat (the specification's and the fill's)
     uint8_t fill_seats_{0};                  // bit s: seat s holds a bot that the leader's START seated (it goes again when the start is cancelled)
     sim::StartTeams start_teams_;            // the teams of the match's Start (protocol 13): every engine of the match made them before its first tick
