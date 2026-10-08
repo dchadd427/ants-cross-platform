@@ -5157,6 +5157,40 @@ int main() {
             room.run(100);
             ASSERT_FALSE(leader_starts(room.host).empty());
         }
+        {   // ... and a person whose link has ended, whose seat is held, is removed as well: the START waits for the person, not for the minute of the hold, so it goes on without them at once, and the hold does not run out later
+            HostLobby::Config hc = lobby_room_config(112);
+            hc.start_wait_ms = 20000;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = join_with(room, page_config("Bob"));
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));      // (a bot in the last colour: one person is enough for the match)
+            room.run(100);
+            room.guests[bob].client_end->close();
+            room.run(100);
+            ASSERT_TRUE(room.host.held(1));
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_TRUE(leader_starts(room.host).empty());                                                   // (Bob's seat is held: the START waits for him)
+            ASSERT_TRUE(room.host.held(1));
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));                                          // (the leader's screen still shows Bob)
+            room.run(100);
+            ASSERT_FALSE(room.host.occupied(1));
+            ASSERT_FALSE(room.host.held(1));
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0"));
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_FALSE(leader_starts(room.host).empty());                                                  // (every person who is left is a game: the owner is given the START)
+            ASSERT_EQ(room.host.removals(), 1u);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);
+            ASSERT_EQ(room.host.hold_expiries(), 0u);
+            ASSERT_TRUE(room.host.add_bot(3, "Bot (Easy)"));
+            ASSERT_TRUE(room.host.start(5, 6, room.now));
+            room.run(100);
+            ASSERT_EQ(room.guests[ann].lobby->phase(), ClientLobby::Phase::Loading);
+            ASSERT_EQ(room.host.holds(), 1u);
+            ASSERT_EQ(room.host.hold_expiries(), 0u);
+        }
         {   // the budget: a burst of kRemoveBurst removals, then one a second. One beyond it is dropped (the person stays, nobody is told, nothing is counted as ignored), and a second after the burst was spent it is done
             Room room(lobby_room_config(106));
             const size_t ann = room.join_seat("Ann");

@@ -264,8 +264,8 @@ public:
     uint32_t ignored_names() const noexcept { return ignored_names_; }
     /// Names that changed (a NameMsg that gave a person a name that was not theirs already)
     uint32_t renames() const noexcept { return renames_; }
-    /// RemoveMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room, the seating is not the one the guard was made for, the seat holds nobody to remove or the leader):
-    /// no offence up to kIgnoredRemovesAllowed per guest, a violation each after those
+    /// RemoveMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room or its match loads, the seating is not the one the guard was made for, the seat holds nobody to remove or the leader):
+    /// no offence up to kIgnoredRemovesAllowed per guest, a violation each after those (a Remove that reaches a match that runs is the running session's, and a violation there)
     uint32_t ignored_removes() const noexcept { return ignored_removes_; }
     /// People that the leader removed (a RemoveMsg that was done)
     uint32_t removals() const noexcept { return removals_; }
