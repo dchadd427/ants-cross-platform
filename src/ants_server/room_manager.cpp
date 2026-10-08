@@ -29,13 +29,21 @@ RoomSpec RoomManager::default_spec() const {
     return spec;
 }
 
-std::string RoomManager::new_code() {
-    // eight characters without the look-alikes (no 0 / O, 1 / I / L): easy to read out and to type
+std::string draw_room_code(std::mt19937& rng) {
+    // six characters (as the game's own codes) without the look-alikes (no 0 / O, 1 / I / L): easy to read out and to type. The first is a letter, so that every code of the control interface has a capital and a visitor's
+    // block can never take its name (make_public_room: a visitor's room takes a code with no capital)
+    static const char kLetters[] = "ABCDEFGHJKMNPQRSTUVWXYZ";
     static const char kAlphabet[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    std::string code;
+    code.push_back(kLetters[rng() % (sizeof(kLetters) - 1)]);
+    for (size_t i = 1; i < kDrawnRoomCodeChars; ++i) code.push_back(kAlphabet[rng() % (sizeof(kAlphabet) - 1)]);
+    return code;
+}
+
+std::string RoomManager::new_code() {
     static std::mt19937 rng{std::random_device{}()};
     for (int attempt = 0; attempt < 64; ++attempt) {
-        std::string code;
-        for (int i = 0; i < 8; ++i) code.push_back(kAlphabet[rng() % (sizeof(kAlphabet) - 1)]);
+        std::string code = draw_room_code(rng);
         if (rooms_.find(code) == rooms_.end() && !restoring_has(code)) return code;
     }
     return "R" + std::to_string(++code_counter_);
@@ -118,13 +126,6 @@ bool iequals(const std::string& a, const std::string& b) {
     return true;
 }
 
-// A visitor's room takes a code with no upper-case letter, which is what the pages and the menu make. The codes of the control interface can keep out of its way: the server draws upper-case ones
-// (new_code), and an operator who chooses one by hand gives it a capital. Without this a Hello with a block could take any code that is free, "ROOM-1" before a lobby's POST /rooms, and the
-// players who come for that room with no block would be seated in the visitor's (v0.10.0 kept the two apart with its lower-case "demo-" prefix).
-bool has_upper_case(const std::string& code) {
-    return std::any_of(code.begin(), code.end(), [](char c) { return c >= 'A' && c <= 'Z'; });
-}
-
 // What a create block chooses (protocol 15): the map, when the server offers it (a name that it does not offer, or none: its default map), and the seats, 2 to 4. The match is the room's: a block never
 // chooses what the server does not allow. The old way (the code's words, "demo-<map>-<n>p-...") is gone: a code is only a name.
 struct PublicChoice {
@@ -146,7 +147,10 @@ PublicChoice public_choice_of(const net::CreateBlock& block, const ServerLimits&
 }  // namespace
 
 bool RoomManager::make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms) {
-    if (limits_.demo_rooms == 0 || limits_.demo_map.empty() || !net::valid_room_code(code) || code.empty() || has_upper_case(code) || !net::valid_create_block(block)) return false;
+    // A visitor's room takes a code with no upper-case letter (net::public_room_code), which is what the pages and the menu make. The codes of the control interface keep out of its way: the server draws
+    // them with a capital (draw_room_code), and an operator who chooses one by hand gives it one. Without this a Hello with a block could take any code that is free, "ROOM-1" before a lobby's
+    // POST /rooms, and the players who come for that room with no block would be seated in the visitor's (v0.10.0 kept the two apart with its lower-case "demo-" prefix).
+    if (limits_.demo_rooms == 0 || limits_.demo_map.empty() || !net::public_room_code(code) || !net::valid_create_block(block)) return false;
     size_t places = 0;
     for (const auto& kv : rooms_) places += kv.second->public_room() ? 1u : 0u;
     for (const Restoring& r : restoring_) places += r.head.public_room ? 1u : 0u;

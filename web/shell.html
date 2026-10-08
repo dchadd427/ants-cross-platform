@@ -1186,7 +1186,7 @@
         //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
         //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
-        //   joinArguments the arguments of ?join= &room= &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= &seat= &name= &fill= &teams= &start= &embed=; asksForName / withoutName the name step of a shared link, codeText the room code that its title shows (two groups of four);
+        //   joinArguments the arguments of ?join= &room= &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= &seat= &name= &fill= &teams= &start= &embed=; asksForName / withoutName the name step of a shared link, codeText the room code that its title shows (two groups of three);
         //   badDownload whether a download is not the game data
         //   localArguments the arguments of a game on THIS computer (?map= &bots= &teams= &name=: the front page's Play), through a whitelist
         var ANTS_PAGE = (function () {
@@ -1517,11 +1517,11 @@
                 if (!(room && /^[A-Za-z0-9_-]{1,32}$/.test(room))) return false;
                 return q.get('embed') !== '1' && !q.has('name');
             }
-            // A room code as a screen shows it: eight characters in two groups of four, "k7m2xq9p" as "k7m2 xq9p" (easier to read out and to copy by eye), any other length as it is. The front page's codeText
+            // A room code as a screen shows it: six characters in two groups of three, "k7m2xq" as "k7m 2xq" (easier to read out and to copy by eye), any other length as it is. The front page's codeText
             // (web/lobby.html: the room panel, the Rejoin button, the name step of a room link) says the same. Only a screen shows a code so: addresses, fields and the game's arguments keep the plain code.
             function codeText(code) {
                 var text = typeof code === 'string' ? code : '';
-                return text.length === 8 ? text.slice(0, 4) + ' ' + text.slice(4) : text;
+                return text.length === 6 ? text.slice(0, 3) + ' ' + text.slice(3) : text;
             }
             // The address without its `name` parameter: a game that was given a name by the page that opened it must not hand that name on to whoever is sent the address from its address bar
             // (the person that opens the copy is asked, like for any shared link).
@@ -1599,7 +1599,7 @@
         // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>[&roommap=<key>][&roomseats=<2-4>][&roomteams=A+B][&roomleaderstart=1][&platform=<word>]&seat=<0-3>&name=<name>[&fill=<plan>]
         //                                                                         [&teams=A+B][&start=<1-4>][&embed=1] (ANTS_PAGE.joinArguments reads it)
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
-        //   room   the room code, a name and nothing more (letters, digits, _ and -, up to 32; the front page makes eight characters of its own: k7m2xq9p); seat 0 green, 1 red, 2 blue, 3 black;
+        //   room   the room code, a name and nothing more (letters, digits, _ and -, up to 32; the front page makes six characters of its own: k7m2xq); seat 0 green, 1 red, 2 blue, 3 black;
         //          name: printable ASCII, up to 32 characters
         //   roommap, roomseats, roomteams, roomleaderstart   the room's create block (protocol 15): what the server makes the room of when it has none of this code, so every link of a room made by the
         //          front page carries it; only the first Hello of a code is read, and a code that has a room keeps its own. The map by its key (tiny, small, medium, gauntlet, treasure or islands, any case:
@@ -1802,7 +1802,7 @@
                 show: function () {
                     var room = '';
                     try { room = new URLSearchParams(window.location.search).get('room') || ''; } catch (e) { /* no address to read */ }
-                    document.getElementById('name-step-title').textContent = 'Join the match ' + ANTS_PAGE.codeText(room);      // (text: the room code passed asksForName's rule; shown in two groups of four)
+                    document.getElementById('name-step-title').textContent = 'Join the match ' + ANTS_PAGE.codeText(room);      // (text: the room code passed asksForName's rule; shown in two groups of three)
                     card.hidden = false;
                     try { ui.input.focus(); } catch (e) { /* nothing to focus */ }
                 },

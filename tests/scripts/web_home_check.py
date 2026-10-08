@@ -14,20 +14,24 @@ protocol is spoken with the client of web_hidden_check.py, standard library only
   * seats    the keyboard and the pointer: the arrows move and check inside a seat's group, Tab goes on to Sit here and the next seat, the focused button shows its outline; Sit here (the key Enter and the
              pointer) moves You and the focus goes to the seat that You left; the Team 1 and Team 2 switches of the seats that play make the teams (two seats on one switch, the other two on the other); a Friend seat shows its invitation, Copy link puts exactly that link on the
              clipboard; with every other seat Nobody START is on and says that it starts a game for one on this computer;
-  * play     START with bots only takes THIS tab to the game page (no new tab): the game's arguments are the room (a code of eight characters, a name and no more) with the room's choices (--room-map
+  * play     START with bots only takes THIS tab to the game page (no new tab): the game's arguments are the room (a code of six characters, a name and no more) with the room's choices (--room-map
              treasure, --room-seats 4), your seat, the plan (a Medium bot in every other seat), --start-when 1, your name and the shape; the address bar of that page keeps the code and the same choices;
              the match starts without a START of the player's after the quick help closes (the "Get ready" dialog), the server's status lists the three bots
              (Bot (Medium), seats 1 - 3) and the player, and the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first (a room is joined) and, with Yes,
              goes back to the front page in the same tab, which remembers its choices;
   * solo     START with every other seat Nobody takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
              with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs (a room of the server needs two people), at Green whatever seat was You;
+  * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game
+             button takes THIS tab back to the front page (no new tab); the same for a match in a room of the server (one Medium bot); the quit dialog's Yes with three opponents left (the quit
+             ends a match only when one is left) takes the tab to the front page at once, and the server drops the seat now (a room with nobody left ends); the front page does not offer to
+             rejoin a match that was left on purpose;
   * friend   two people, each a browser of their own: the host sits at Blue, a Friend at Black, nobody else; START takes the host to the room and the room WAITS (the server's status: waiting, one
              player); the friend opens the invitation link (asked for a name first), joins the seat that the link names, and the match starts by itself, with no START pressed after that, for both;
              the server's status lists both seats and the empty ones, no START of a game that does not lead was heard, and the two games' state hashes agree;
   * old      the old addresses: /?join=...&room=... and /?embed=1 open the game page (a shared link asks for a name), /four.html?room=... goes to /?room=... and the front page asks for the name of a
              shared link (with its way back to the front page), /play.html with nothing is today's front page (the setup screen, no arguments), /?map=...&players=1 asks for a name and plays a game on
              this computer;
-  * room     an address that hosts a match (/?map=treasure&players=3&fill=easy&teams=0+1) makes the room panel (a new eight-character code shown in two groups of four; the map, the seats and the
+  * room     an address that hosts a match (/?map=treasure&players=3&fill=easy&teams=0+1) makes the room panel (a new six-character code shown in two groups of three; the map, the seats and the
              team are the room's own choices, which every link of it carries), and "Play in this tab" takes this tab to the game page with the room, its choices, the name and the bots of the
              leader's START;
   * game     the GAME PAGE in the front page's look (web/shell.html at /play.html): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure
@@ -55,8 +59,8 @@ from web_aspect_check import Browser, NotReachable, Tab                    # noq
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("front", "seats", "play", "solo", "friend", "old", "room", "game")
-NEEDS_SERVER = ("play", "friend")                                            # (the parts that play a match need the site's /ws to lead to a game server)
+PARTS = ("front", "seats", "play", "solo", "leave", "friend", "old", "room", "game")
+NEEDS_SERVER = ("play", "leave", "friend")                                   # (the parts that play a match in a room need the site's /ws to lead to a game server)
 
 # The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05); a text that is faded by an opacity is mixed with what lies behind it, its face too); text on the clay tile is measured against the tile's two ends (its deepest and its lightest broad shade: CLAY_DEEP
 # and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1) and text in the footer against the ends of its gradient, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
@@ -187,7 +191,7 @@ def main():
     work = None
     if plays:
         if not args.ws_port:
-            note("no --ws-port: the parts that play (%s) are left out" % ", ".join(NEEDS_SERVER))
+            note("no --ws-port: the games in a room of the game server (parts %s) are left out" % ", ".join(NEEDS_SERVER))
         elif not os.path.isfile(args.server) or not os.access(args.server, os.X_OK):
             print("  SKIP: the game server program is not there (build the target ants_server, or give --server)")
             return 3
@@ -347,7 +351,7 @@ def main():
             check(len(info["faces"]) >= 10 and all("linear-gradient" in f and "url(" not in f for f in info["faces"]) and info["chosen"] and all(f == "none" for f in info["chosen"]),
                   "... and their faces are lit from above (a gradient over the teal, %d of them), while a chosen two-state button is a flat dark plate (%d)" % (len(info["faces"]), len(info["chosen"])))
             check(info["shown"] == [True, True] and info["code"] and info["haveCode"] == "Have a code?", "\"How it works\" and \"Have a code?\" with its field and Join are there (%r)" % (info["haveCode"],))
-            check(info["example"] == "k7m2 xq9p", "... the field shows what a code looks like: eight characters in two groups of four (%r)" % (info["example"],))
+            check(info["example"] == "k7m 2xq", "... the field shows what a code looks like: six characters in two groups of three (%r)" % (info["example"],))
             check(info["name"] == "" and info["aspect"] == "16:9", "no name yet, the picture is 16:9")
             hrefs = [l[1] for l in info["links"]]
             check("/asset_catalog/" in hrefs and "/changelog.html" in hrefs and any("github.com" in h and "issues" not in h for h in hrefs) and any(h.endswith("/issues") for h in hrefs),
@@ -526,8 +530,8 @@ def main():
             real_click("#team-3-1")
             c = card()
             room_code = re.search(r"room=([^&]+)", c["links"][0]).group(1) if c["links"] else ""
-            check(c["switches"] == ["", "-", "1", "1"] and c["teamsLine"] == "Teams: Blue + Black against Red." and re.match(r"^[a-z2-9]{8}$", room_code) is not None,
-                  "a click of the pointer on Team 1 of Blue and of Black: Blue + Black against Red, and the room has a code of eight characters (%s, %s)" % (c["teamsLine"], room_code))
+            check(c["switches"] == ["", "-", "1", "1"] and c["teamsLine"] == "Teams: Blue + Black against Red." and re.match(r"^[a-z2-9]{6}$", room_code) is not None,
+                  "a click of the pointer on Team 1 of Blue and of Black: Blue + Black against Red, and the room has a code of six characters (%s, %s)" % (c["teamsLine"], room_code))
             check(c["dimmed"] == ["", "1", "", ""], "... Team 1 is full: it is dimmed on Red, the only seat that is not in it (%s)" % c["dimmed"])
             real_click("#team-1-1")
             c = card()
@@ -545,9 +549,9 @@ def main():
             check(first == 1 and second == 2, "a second press on the dimmed switch writes its reason again (a live region says only what is written, so the person hears it again) (%s, %s writes)" % (first, second))
             link = c["links"][0]
             q = {k: v for k, v in (kv.split("=", 1) for kv in link.split("?", 1)[1].split("&"))}
-            check(re.match(r"^[a-z2-9]{8}$", room_code) is not None and q.get("roommap") == "treasure" and q.get("roomseats") == "4" and q.get("roomteams") == "2%2B3",
-                  "Blue + Black against Red is part of the room's create block in the link (roomteams=2%%2B3, with its map and its four seats); the code is only a name, eight characters (%s)" % link.split("?", 1)[1])
-            check(re.match(r"^[^?]*\?join=/ws&room=[a-z2-9]{8}&roommap=treasure&roomseats=4&roomteams=2%2B3&seat=1&", link) is not None,
+            check(re.match(r"^[a-z2-9]{6}$", room_code) is not None and q.get("roommap") == "treasure" and q.get("roomseats") == "4" and q.get("roomteams") == "2%2B3",
+                  "Blue + Black against Red is part of the room's create block in the link (roomteams=2%%2B3, with its map and its four seats); the code is only a name, six characters (%s)" % link.split("?", 1)[1])
+            check(re.match(r"^[^?]*\?join=/ws&room=[a-z2-9]{6}&roommap=treasure&roomseats=4&roomteams=2%2B3&seat=1&", link) is not None,
                   "... and the block comes right after the code, before the seat (%s)" % link.split("?", 1)[1])
             check(q.get("seat") == "1" and q.get("fill") == "none,none,hard,none" and q.get("start") == "2" and q.get("aspect") == "16:9" and "name" not in q and "teams" not in q and not re.search(r"key|token", link, re.I),
                   "the link of the Friend at Red: its seat, the plan (a Hard bot at Blue; none for You, the friend and Nobody), two people to wait for, the shape; no name, no teams (the block has them), no key (%s)" % link.split("?", 1)[1])
@@ -569,7 +573,7 @@ def main():
             tab.ev("var m = document.getElementById('map-pick'); m.value = 'small'; m.dispatchEvent(new Event('change')); 1")
             c = card()
             other_code = re.search(r"room=([^&]+)", c["links"][0]).group(1) if c["links"] else ""
-            check(c["linksNote"] and re.match(r"^[a-z2-9]{8}$", other_code) is not None and other_code != room_code and "&roommap=small&roomseats=4&roomteams=2%2B3&" in c["links"][0],
+            check(c["linksNote"] and re.match(r"^[a-z2-9]{6}$", other_code) is not None and other_code != room_code and "&roommap=small&roomseats=4&roomteams=2%2B3&" in c["links"][0],
                   "another map after a copy: a new room (another code, the block of the new map with the same team), new links, and the note says to copy them again (%s)" % c["linksNote"])
             # two Friends (Blue is one too): the note stays up until every link that was sent is the one that is shown for its seat
             tab.ev("document.getElementById('seat-2-friend').click(); 1")
@@ -608,8 +612,8 @@ def main():
                 a = json.loads(tab.ev("JSON.stringify({args: ANTS_ARGS, search: location.search})"))
                 arg = lambda name: a["args"][a["args"].index(name) + 1] if name in a["args"] else None
                 code = arg("--room") or ""
-                check(re.match(r"^[a-z2-9]{8}$", code) is not None and arg("--room-map") == "treasure" and arg("--room-seats") == "4" and arg("--seat") == "0" and arg("--fill-bots") == "none,medium,medium,medium" and arg("--start-when") == "1" and arg("--name") == "Bob" and arg("--aspect") == "16:9",
-                      "the game's arguments: the room (%s: eight characters, a name and no more) with its map and its four seats (the room's create block), seat 0, the plan none,medium,medium,medium, --start-when 1, the name and the shape (%s)" % (code, [x for x in a["args"] if x != "./this.program"]))
+                check(re.match(r"^[a-z2-9]{6}$", code) is not None and arg("--room-map") == "treasure" and arg("--room-seats") == "4" and arg("--seat") == "0" and arg("--fill-bots") == "none,medium,medium,medium" and arg("--start-when") == "1" and arg("--name") == "Bob" and arg("--aspect") == "16:9",
+                      "the game's arguments: the room (%s: six characters, a name and no more) with its map and its four seats (the room's create block), seat 0, the plan none,medium,medium,medium, --start-when 1, the name and the shape (%s)" % (code, [x for x in a["args"] if x != "./this.program"]))
                 order = [a["args"].index(n) for n in ("--join-url", "--room", "--room-map", "--room-seats", "--seat", "--fill-bots", "--start-when", "--name", "--aspect") if n in a["args"]]
                 check(len(order) == 9 and order == sorted(order), "... in the order that the page's rule gives them: the door, the room, its map and seats, the seat, the plan, the number of people, the name, and the shape last (%s)" % order)
                 check("--map" not in a["args"] and "--play" not in a["args"] and "--bot" not in a["args"] and "--teams" not in a["args"] and "--room-teams" not in a["args"] and "--room-leader-start" not in a["args"] and "--platform" not in a["args"],
@@ -692,6 +696,106 @@ def main():
             else:
                 check(False, "the game page of a game on this computer is ready")
 
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        if wanted("leave"):
+            print("[web home] Leave game: the results' button and the quit dialog's Yes take this tab back to the front page")
+            if not can_play:
+                note("leave: the games in a room of the game server are left out (no game server: give --ws-port)")
+
+            def press(name, code, vk, text="", modifiers=0):
+                for kind in ("keyDown", "keyUp"):
+                    tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": code, "windowsVirtualKeyCode": vk, "text": text if kind == "keyDown" else "", "modifiers": modifiers})
+
+            def quit_dialog_yes():
+                """Ctrl+Q opens the game's quit dialog (the Control key goes down first, as on a keyboard) and Y answers Yes. Whether the dialog was up."""
+                tab.ev("document.getElementById('canvas').focus(); 1")
+                tab.call("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Control", "code": "ControlLeft", "windowsVirtualKeyCode": 17, "modifiers": 2})
+                press("q", "KeyQ", 81, modifiers=2)
+                tab.call("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Control", "code": "ControlLeft", "windowsVirtualKeyCode": 17, "modifiers": 0})
+                opened = bool(wait_for(lambda: tab.ev("Module._ants_probe(5)") == 1, 5))
+                press("y", "KeyY", 89, "y")
+                return opened
+
+            def leave_button(shape):
+                """Where a person clicks Leave Game on the results, in the canvas's own pixels (the middle of the button): the original's rectangle (ScorecardModal::QUIT_BTN_*, read from the source, so
+                that the check follows the layout) moved right by the extra width of the wide page."""
+                with open(os.path.join(REPO, "include", "ants_app", "scorecard.hpp"), encoding="utf-8") as f:
+                    header = f.read()
+                found = {n: re.search(r"QUIT_BTN_%s\s*=\s*(\d+);" % n, header) for n in "XYWH"}
+                missing = [n for n, m in found.items() if m is None]
+                if missing:
+                    raise RuntimeError("include/ants_app/scorecard.hpp has no QUIT_BTN_%s: this check reads the Leave Game button from it" % ", QUIT_BTN_".join(missing))
+                x, y, w, h = (int(found[n].group(1)) for n in "XYWH")
+                return x + (shape[0] - 640) + w / 2, y + h / 2
+
+            def at_front_page():
+                """The tab is on the front page itself: its path "/" with no arguments, and its name field."""
+                return bool(wait_for(lambda: tab.ev("location.pathname") == "/" and tab.ev("location.search") == "" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20))
+
+            def leave_from_results(shape, what):
+                """The quit dialog's Yes with one opponent left ends the match and the results are up; a click on Leave Game. Whether the tab is on the front page after it."""
+                check(quit_dialog_yes(), "%s: Ctrl+Q opens the quit dialog" % what)
+                ended = bool(wait_for(lambda: tab.ev("Module._ants_match_running()") == 0, 15))
+                check(ended, "%s: Yes, with one opponent left, ends the match: the results are up" % what)
+                if not ended:
+                    return False
+                time.sleep(1.5)                                                       # (the results build their rows 250 ms later, and the Leave Game button comes with them)
+                shot("home_leave_results_%s" % what.replace(" ", "_").replace(":", "x"))
+                lx, ly = leave_button(shape)
+                x, y = aspect.screen_of_canvas(tab.geometry(), lx, ly, shape[0], shape[1])
+                before = pages()
+                tab.click(x, y)
+                went = at_front_page()
+                check(went and pages() == before, "%s: Leave Game takes this tab back to the front page, the menu of the site (no new tab; now %s)" % (what, tab.ev("location.pathname + location.search") if went else "elsewhere"))
+                return went
+
+            for shape_name, shape in (("16:9", (960, 540)), ("4:3", (640, 480))):             # a game on this computer against one Easy bot, each shape of the picture (the button is in another place)
+                clear_storage()
+                load(web + "play.html?map=tiny&bots=easy,none,none&name=Bob&aspect=" + shape_name, ready=True, settle=1.5)
+                started = start_by_enter()
+                check(started, "a game on this computer against one bot (%s) starts" % shape_name)
+                if started:
+                    leave_from_results(shape, "game on this computer %s" % shape_name)
+
+            if can_play:
+                # a match in a room of the game server: the card's START with one Medium bot (the other seats Nobody)
+                clear_storage()
+                load(web, settle=1.5)
+                type_name("Bob")
+                tab.ev("document.getElementById('seat-1-medium').click(); document.getElementById('seat-2-nobody').click(); document.getElementById('seat-3-nobody').click(); 1")
+                tab.ev("document.getElementById('play').click(); 1")
+                ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20) and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout)
+                check(ok, "START with one bot takes this tab to the game page of a room")
+                if ok:
+                    code = tab.ev("(function () { var a = ANTS_ARGS; return a[a.indexOf('--room') + 1]; })()")
+                    started = bool(close_quick_help() and wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 30) and wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 60, 0.5))
+                    check(started, "the match against the bot starts by itself (room %s)" % code)
+                    if started and leave_from_results((960, 540), "match in a room"):
+                        offered = tab.ev("document.getElementById('rejoin') ? !document.getElementById('rejoin').hidden : false")
+                        check(not offered, "... and the front page does not offer to rejoin the match that was left")
+                # the quit dialog's Yes with three opponents left (a match goes on without the player): the game leaves for the front page at once, and the seat is dropped, not held
+                clear_storage()
+                load(web, settle=1.5)
+                type_name("Bob")
+                tab.ev("[1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-medium').click(); }); 1")
+                tab.ev("document.getElementById('play').click(); 1")
+                ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20) and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout)
+                check(ok, "START with three bots takes this tab to the game page of a room")
+                if ok:
+                    code = tab.ev("(function () { var a = ANTS_ARGS; return a[a.indexOf('--room') + 1]; })()")
+                    started = bool(close_quick_help() and wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 30) and wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 60, 0.5))
+                    check(started, "the match against three bots starts by itself (room %s)" % code)
+                    if started:
+                        check((server.room(code) or {}).get("joined") == 4, "the room lists the player and the three bots")
+                        before = pages()
+                        check(quit_dialog_yes(), "match in a room with three bots: Ctrl+Q opens the quit dialog")
+                        went = at_front_page()
+                        check(went and pages() == before, "... and Yes takes this tab back to the front page at once (no new tab)")
+                        dropped = bool(wait_for(lambda: (server.room(code) or {}).get("state") == "finished", 10))
+                        status = server.room(code) or {}
+                        check(dropped and status.get("reason") == "everybody left", "... the seat is dropped on the server at once, not held for a page that is gone: with nobody left the room ends (%s: %s)" % (status.get("state"), status.get("reason")))
+                        check(went and not tab.ev("document.getElementById('rejoin') ? !document.getElementById('rejoin').hidden : false"), "... and the front page does not offer to rejoin it")
+
         if wanted("friend") and not can_play:
             note("friend: left out (no game server: give --ws-port)")
         if wanted("friend") and can_play:
@@ -710,8 +814,8 @@ def main():
                   "the host sits at Blue, a Friend at Black, Green and Red are Nobody: one invitation, START on, and the line says that it waits for the friend (%s)" % {k: seats[k] for k in ("you", "seats", "invites")})
             invite = seats["links"][0]
             room_code = re.search(r"room=([^&]+)", invite).group(1)
-            check(re.match(r"^[a-z2-9]{8}$", room_code) is not None and "&roommap=treasure&roomseats=4&seat=3&" in invite and "start=2" in invite and "name=" not in invite and "fill=" not in invite and "roomteams=" not in invite,
-                  "the invitation: the room (a code of eight characters) and its create block (the map and four seats, no teams), seat 3, two people to wait for, no name, no plan (no bots) (%s)" % invite.split("?", 1)[1])
+            check(re.match(r"^[a-z2-9]{6}$", room_code) is not None and "&roommap=treasure&roomseats=4&seat=3&" in invite and "start=2" in invite and "name=" not in invite and "fill=" not in invite and "roomteams=" not in invite,
+                  "the invitation: the room (a code of six characters) and its create block (the map and four seats, no teams), seat 3, two people to wait for, no name, no plan (no bots) (%s)" % invite.split("?", 1)[1])
             host.ev("document.getElementById('play').click(); 1")
             ready = wait_for(lambda: "join=" in host.ev("location.search") and host.ev("!!window.isReadyToPlay"), args.ready_timeout)
             check(bool(ready), "START takes the host's tab to the game page of the room")
@@ -793,10 +897,10 @@ def main():
             check(not any(x in info["args"] for x in ("--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform")), "... none of --room-map, --room-seats, --room-teams, --room-leader-start and --platform is made up")
             load(web + "?embed=1&aspect=16:9", ready=False, settle=1.5)
             check(tab.ev("!!document.getElementById('game-stage') && document.body.classList.contains('embed')"), "/?embed=1 opens the game page as a frame's game")
-            load(web + "four.html?room=k7m2xq9p&roommap=small&roomseats=2&fill=medium", ready=False, settle=2.0)
+            load(web + "four.html?room=k7m2xq&roommap=small&roomseats=2&fill=medium", ready=False, settle=2.0)
             info = json.loads(value("JSON.stringify({path: location.pathname, search: location.search, lobby: !!document.getElementById('player-name'), ask: !document.getElementById('who-go').hidden, title: document.getElementById('who-title').textContent, back: !document.getElementById('who-back').hidden && document.getElementById('who-back').getAttribute('href')})"))
-            check(info["path"] == "/" and info["search"].startswith("?room=k7m2xq9p&roommap=small&roomseats=2&fill=medium") and info["lobby"], "/four.html?room=... goes to /?room=... for good, with its whole query (%s%s)" % (info["path"], info["search"]))
-            check(info["ask"] and info["title"] == "Join the match k7m2 xq9p" and info["back"] == "/", "... and the front page asks for the name of the shared link (its code in two groups of four), with its way back to the front page (%r)" % info["title"])
+            check(info["path"] == "/" and info["search"].startswith("?room=k7m2xq&roommap=small&roomseats=2&fill=medium") and info["lobby"], "/four.html?room=... goes to /?room=... for good, with its whole query (%s%s)" % (info["path"], info["search"]))
+            check(info["ask"] and info["title"] == "Join the match k7m 2xq" and info["back"] == "/", "... and the front page asks for the name of the shared link (its code in two groups of three), with its way back to the front page (%r)" % info["title"])
             load(web + "play.html", ready=True, settle=1.0)
             info = json.loads(value("JSON.stringify({args: ANTS_ARGS})"))
             given = [a for a in info["args"] if a != "./this.program"]                             # (the runtime puts the program's own name in front)
@@ -820,7 +924,7 @@ def main():
             tab.ev("document.getElementById('who-go').click(); 1")
             time.sleep(0.8)
             room = tab.ev("document.getElementById('room-code').textContent")
-            check(tab.ev("!document.getElementById('room-panel').hidden") and re.match(r"^[a-z2-9]{4} [a-z2-9]{4}$", room) is not None, "the address makes the room panel, and the room's code is a new one of eight characters, shown in two groups of four (%s)" % room)
+            check(tab.ev("!document.getElementById('room-panel').hidden") and re.match(r"^[a-z2-9]{3} [a-z2-9]{3}$", room) is not None, "the address makes the room panel, and the room's code is a new one of six characters, shown in two groups of three (%s)" % room)
             code = room.replace(" ", "")
             check(tab.ev("document.getElementById('room-map').textContent") == "Treasure map, 3 players" and tab.ev("location.search") == "?room=%s&roommap=treasure&roomseats=3&roomteams=0%%2B1&fill=easy" % code,
                   "... the room's choices are in its create block, which the address bar of the page keeps with the plain code, the bots and no &teams= (%s, %s)" % (tab.ev("document.getElementById('room-map').textContent"), tab.ev("location.search")))
@@ -1087,7 +1191,7 @@ def main():
                 check(False, "the local game started (Enter at the quick help)")
             answer["accept"] = True
             dialogs.clear()
-            tab.open(play + "?join=/ws&room=k7m2xq9p&roommap=small&roomseats=2&name=Ann&aspect=16:9", wait=False)
+            tab.open(play + "?join=/ws&room=k7m2xq&roommap=small&roomseats=2&name=Ann&aspect=16:9", wait=False)
             time.sleep(2.0)
             answer["accept"] = False
             tab.ev("document.getElementById('logo-link').click(); 1")
@@ -1100,7 +1204,7 @@ def main():
             clear_storage()
             for label, width, height, dpr, mobile in (("1440 px", 1440, 900, 1, False), ("390 px", 390, 844, 2, True)):
                 tab.emulate(width, height, dpr, mobile)
-                tab.open(play + "?join=/ws&room=k7m2xq9p&roommap=small&roomseats=2&aspect=16:9", wait=False)
+                tab.open(play + "?join=/ws&room=k7m2xq&roommap=small&roomseats=2&aspect=16:9", wait=False)
                 shown = wait_for(lambda: tab.ev("!document.getElementById('name-step').hidden"), 20)
                 step = json.loads(value("""JSON.stringify((function () {
                     var c = document.querySelector('.name-step'), r = c.getBoundingClientRect(), i = document.getElementById('name-step-input'), b = document.getElementById('name-step-go'), t = document.getElementById('name-step-title');
@@ -1109,7 +1213,7 @@ def main():
                 })())""")) if shown else {}
                 check(bool(shown) and step["inside"] and "front/clay.png" in step["bg"] and step["field"] == "rgb(7, 11, 15)" and step["button"] == "rgb(43, 99, 87)" and step["title"] == "rgb(43, 99, 87)",
                       "the name step of a shared link at %s: a clay card with a teal banner, the black field and the teal Join button, whole in the window (%s)" % (label, step))
-                check(bool(shown) and step["text"] == "Join the match k7m2 xq9p", "... its title names the room by its code in two groups of four, as the front page does (%r)" % step.get("text"))
+                check(bool(shown) and step["text"] == "Join the match k7m 2xq", "... its title names the room by its code in two groups of three, as the front page does (%r)" % step.get("text"))
                 contrast_of("the name step at %s" % label, 4)
                 tab.ev("var i = document.getElementById('name-step-input'); i.value = 'Zo\\u00eb'; document.getElementById('name-step-go').click(); 1")
                 time.sleep(0.3)

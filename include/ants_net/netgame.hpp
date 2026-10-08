@@ -303,9 +303,9 @@ public:
     const std::vector<std::string>& prompt_texts() const noexcept { return prompts_; }
     /// The words of a refusal, as the status line shows them when a join fails (the original's text for a dropped machine, the remake's for the rest). `in_browser`: the game runs in a web page,
     /// where reloading the page is how a player gets the current version (a tab that was opened before the server was updated is the old game), so the refusal for another version says so; every
-    /// other refusal is the same words everywhere (the desktop start menu has texts of its own, Application::menu_failure_text). `made_a_room`: the Hello carried a create block (the server makes the
-    /// room of such a Hello when somebody comes): NoSuchRoom then says that the server cannot make a room now, which is a full cap of public rooms or a server that makes none; for a Hello without a block it says
-    /// that there is no such room.
+    /// other refusal is the same words everywhere (the desktop start menu has texts of its own, Application::menu_failure_text). `made_a_room`: the Hello carried a create block for a code that a block
+    /// can make a room of (public_room_code; the server makes the room of such a Hello when somebody comes): NoSuchRoom then says that the server cannot make a room now, which is a full cap of public rooms or a
+    /// server that makes none; for a Hello without a block, and for a block with the code of a room of the control interface (it has a capital), it says that there is no such room.
     static std::string reject_text(RejectReason reason, bool in_browser, bool made_a_room = false);
 
     // ---- the waiting room's chat (protocol 11) ------------------------------------------------------------------------------------------------------

@@ -159,7 +159,7 @@ void Application::process_menu_request(const MenuRequest& request) {
             set_start_teams(LocalTeams{});                                // (the Teams choice is not the START's: it is in the room's create block, below, and the room makes the teams every time)
             static std::random_device entropy;
             const std::function<uint32_t()> random = config_.room_code_random ? config_.room_code_random : std::function<uint32_t()>([]() { return static_cast<uint32_t>(entropy()); });
-            const std::string code = make_room_code(random);              // (only a name: 8 random letters and numbers)
+            const std::string code = make_room_code(random);              // (only a name: 6 random letters and numbers)
             const net::CreateBlock block = make_create_block(menu_map(static_cast<size_t>(request.map)), request.players, request.teams);
             begin_menu_connection(true, code, request.name, request.players, request.map, nullptr, nullptr, &block);
             break;
@@ -313,7 +313,7 @@ void Application::pump_menu_connection() {
 // The player is in the server's room (the first Room message arrived)
 void Application::menu_connected() {
     if (menu_conn_.hosting && !net_->is_leader()) {
-        // The server had a room with this code already (a one in ~850 billion chance): the player joined somebody else's room instead of making one. Leave it.
+        // The server had a room with this code already (a one in ~890 million chance): the player joined somebody else's room instead of making one. Leave it.
         menu_connection_failed("That room code was taken already. Please try again.");
         return;
     }

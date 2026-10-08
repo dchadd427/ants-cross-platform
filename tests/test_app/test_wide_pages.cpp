@@ -467,11 +467,11 @@ StartMenu make_menu(MenuPanel panel, bool wide) {
         case MenuPanel::Connecting: {
             click(MenuId::JoinWithCode);
             click(MenuId::Code);
-            menu.on_text("x7k2m9pq");
+            menu.on_text("x7k2m9");
             click(MenuId::Join);
             break;
         }
-        case MenuPanel::Room: menu.show_room("x7k2m9pq", 1, 4); break;
+        case MenuPanel::Room: menu.show_room("x7k2m9", 1, 4); break;
     }
     // the control that the mock-ups show lit: the first panel's Single player, the first seat, the map, Cancel and Copy under the pointer, the name field clicked on (a field takes the focus by a
     // click or a key, not by the pointer: the Join panel itself selects the room code when the name is there)
@@ -1306,7 +1306,7 @@ void test_host_panel(const assets::AssetArchive& arc) {
                     settings.host_fill.level[3] = static_cast<L>(plan / 16);
                     settings.host_teams = teams;
                     menu.set_settings(settings);
-                    menu.show_room("b7x2qk4m", 1, players);
+                    menu.show_room("b7x2qk", 1, players);
                     for (const MenuElement& e : menu.elements()) {
                         if (e.kind == MenuKind::Text && e.font == FontSize::Px18 && (e.text.rfind("Empty seats", 0) == 0 || e.text.rfind("At START", 0) == 0 || e.text.rfind("Room teams:", 0) == 0)) {
                             fits_line(e, e.rect.w, "the room's sentence");
@@ -1867,7 +1867,7 @@ constexpr Golden kGolden[] = {
     // so its draw calls (224 -> 296), its pixels outside the text (the mock-up's digest above is the panel as it is now), its notice state and the control under every pixel changed.
     {"screen.wide.pages.menu_host", 0xa96cf288b285f6c6, 296ull},
     {"screen.wide.pages.menu_connecting", 0x9baf3e53f92d4060, 128ull},
-    {"screen.wide.pages.menu_room", 0x2e25645a53ee1772, 164ull},
+    {"screen.wide.pages.menu_room", 0x06c87b0b905546b1, 164ull},
     {"px.wide.pages.loading.t0", 0xc849e041f5dc9132, 518400ull},
     {"px.wide.pages.loading.t14", 0x94eabba28aea947e, 518400ull},
     {"px.wide.pages.loading.t25", 0x059faca4c56039ba, 518400ull},

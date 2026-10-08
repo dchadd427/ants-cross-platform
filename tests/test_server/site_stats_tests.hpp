@@ -154,7 +154,7 @@ void run_site_stats_tests() {
         ASSERT_TRUE(stats.online().day == 0 && stats.online().total == 0 && stats.local().day == 0 && stats.local().total == 0);
         stats.count_ended(ended_room("MATCH-1", RoomState::Finished, 1200));                  // a match that was played to its end
         ASSERT_TRUE(stats.online().day == 1 && stats.online().total == 1);
-        stats.count_ended(ended_room("k7m2xq9p", RoomState::Finished, 5000));                  // a public room (every web match is one)
+        stats.count_ended(ended_room("k7m2xq", RoomState::Finished, 5000));                  // a public room (every web match is one)
         ASSERT_TRUE(stats.online().day == 2 && stats.online().total == 2);
         stats.count_ended(ended_room("MATCH-2", RoomState::Failed, 777));                      // it ran and then failed (closed by the owner, a desync, the room's limit): it was played
         ASSERT_TRUE(stats.online().day == 3 && stats.online().total == 3);

@@ -158,7 +158,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn('with-teams', self.page[self.page.index("function showTeams"):])                  # (the script puts the class on the list when the switches show)
 
     def test_the_card_has_a_line_to_join_a_match_that_somebody_else_made_with_the_old_ids(self):
-        self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="k7m2 xq9p" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
+        self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="k7m 2xq" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
         self.assertLess(self.page.index('id="start-note"'), self.page.index('class="havecode"'))          # under the card's match, inside the card
         card = self.page[self.page.index('<section class="card match"'):]
         self.assertIn('class="havecode"', card[:card.index("</section>")])
@@ -233,12 +233,12 @@ class TheFrontPageMarkup(PageCase):
         self.assertNotIn("four.html", self.page)
 
     def test_a_code_is_only_a_name_and_the_rooms_choices_are_its_create_block_that_every_link_carries(self):
-        # protocol 15: the code is eight random characters of an alphabet without look-alikes (tests/test_app/test_start_menu.cpp reads the alphabet from the page); what the room is (its map, its seats, its teams)
+        # protocol 15: the code is six random characters of an alphabet without look-alikes (tests/test_app/test_start_menu.cpp reads the alphabet from the page); what the room is (its map, its seats, its teams)
         # is its create block, &roommap= &roomseats= [&roomteams=] [&roomleaderstart=1] right after &room=<code>, which ONE function makes and every link of the page uses
         self.assertIn("var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';", self.page)
-        self.assertIn("var buf = new Uint32Array(8);", self.page)
-        self.assertIn("for (var i = 0; i < 8; i++) out += chars.charAt(buf[i] % chars.length);", self.page)
-        self.assertIn("return text.length === 8 ? text.slice(0, 4) + ' ' + text.slice(4) : text;", self.page)                       # (codeText: the screens' two groups of four; links, fields and arguments keep the plain code)
+        self.assertIn("var buf = new Uint32Array(6);", self.page)
+        self.assertIn("for (var i = 0; i < 6; i++) out += chars.charAt(buf[i] % chars.length);", self.page)
+        self.assertIn("return text.length === 6 ? text.slice(0, 3) + ' ' + text.slice(3) : text;", self.page)                       # (codeText: the screens' two groups of three; links, fields and arguments keep the plain code)
         self.assertIn("return (map ? '&roommap=' + map : '') + '&roomseats=' + seats + (teams ? '&roomteams=' + encodeURIComponent(teams) : '') + (block.leaderStart === true ? '&roomleaderstart=1' : '');", self.page)
         self.assertEqual(len(re.findall(r"roomBlockQuery\(", self.page)), 5)                       # the definition and the four makers of an address: the card's START and invitations, the room's links, the room's own address, Play in this tab
         for maker in ("'?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(cardBlock(state)) + '&seat=' + seat",                   # cardQuery
@@ -257,10 +257,10 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("$('room-code').textContent = codeText(room);", self.page)                                 # (the room panel)
         self.assertIn("var code = codeText(offer.room);", self.page)                                              # (the Rejoin button's words)
         self.assertIn("'Join the match ' + codeText(wanted)", self.page)                                         # (the name step of a shared link)
-        self.assertIn("var code = $('join-code').value.replace(/\\s+/g, '');", self.page)                         # (the blank of "k7m2 xq9p" goes before the code is tested; the code is tested as it was)
-        self.assertIn("hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like k7m2 xq9p.';", self.page)
+        self.assertIn("var code = $('join-code').value.replace(/\\s+/g, '');", self.page)                         # (the blank of "k7m 2xq" goes before the code is tested; the code is tested as it was)
+        self.assertIn("hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like k7m 2xq.';", self.page)
         self.assertIn("if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {", self.page)
-        self.assertIn("return !!room && typeof room === 'object' && typeof room.code === 'string' && /^[a-z2-9]{8}$/.test(room.code) && room.map === state.map && room.teams === state.teams;", self.page)       # (cardRoomFits: a kept room of the old kind does not fit)
+        self.assertIn("return !!room && typeof room === 'object' && typeof room.code === 'string' && /^[a-z2-9]{6}$/.test(room.code) && room.map === state.map && room.teams === state.teams;", self.page)       # (cardRoomFits: a kept room of the old kind does not fit)
 
     def test_the_frames_note_is_shown_only_where_games_run(self):
         self.found(self.page, r'<p id="frames-note" class="frames-note" hidden>')
@@ -349,7 +349,7 @@ class TheGamePage(PageCase):
     def test_the_name_step_names_the_room_by_its_code_in_two_groups_of_four_as_the_front_page_does(self):
         # (the same function on both pages: tests/scripts/web_lobby_check.js runs the two on a table of texts and they must agree)
         self.assertIn("function codeText(code) {", self.page[self.page.index("ANTS_PAGE_BEGIN"):self.page.index("// ANTS_PAGE_END")])
-        self.assertIn("return text.length === 8 ? text.slice(0, 4) + ' ' + text.slice(4) : text;", self.page)
+        self.assertIn("return text.length === 6 ? text.slice(0, 3) + ' ' + text.slice(3) : text;", self.page)
         self.assertIn("asksForName: asksForName, codeText: codeText, withoutName: withoutName", self.page)
         self.assertIn("document.getElementById('name-step-title').textContent = 'Join the match ' + ANTS_PAGE.codeText(room);", self.page)
 
@@ -398,9 +398,9 @@ class TheDocuments(unittest.TestCase):
             self.assertNotIn(stale, readme + page + notes, stale)
 
     def test_the_browser_page_says_what_a_code_is_and_what_the_create_block_and_its_parameters_are(self):
-        # protocol 15: a code is only a name (eight characters, shown in two groups of four) and the room's choices are the create block that every link carries
+        # protocol 15: a code is only a name (six characters, shown in two groups of three) and the room's choices are the create block that every link carries
         page = read("docs", "PLAY_IN_BROWSER.md")
-        for needle in ("### The room's code and its create block", "(#the-rooms-code-and-its-create-block)", "is **only a name**", "`abcdefghjkmnpqrstuvwxyz23456789`", "`k7m2 xq9p`", "`k7m2xq9p`",
+        for needle in ("### The room's code and its create block", "(#the-rooms-code-and-its-create-block)", "is **only a name**", "`abcdefghjkmnpqrstuvwxyz23456789`", "`k7m 2xq`", "`k7m2xq`",
                        "There is no such room on this server.", "**every link of a room that this page made carries the block, right after the code**", "**with none it is a room that was made some other way**",
                        "`&roomteams=A%2BB`", "`&roomleaderstart=1`", "`&platform=`", "`&roomteams=0%2B1`"):
             self.assertIn(needle, page, needle)

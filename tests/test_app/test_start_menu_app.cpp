@@ -676,7 +676,7 @@ int make_shots(const std::string& dir, bool wide) {
     shot(app, dir + "/17_join_old_code_selected.png");
     press(app, SDLK_ESCAPE);
     app.start_menu().set_clipboard([]() { return std::string(); }, [](const std::string&) { return false; });
-    app.start_menu().show_room("k3n7pq2x", 2, 4);
+    app.start_menu().show_room("k3n7pq", 2, 4);
     click(app, MenuId::Copy);
     shot(app, dir + "/18_room_copy_failed.png");
     app.start_menu().show_main();
@@ -1393,7 +1393,7 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(hall.identical(app.sim(), ann.sim));
     } TEST_END();
 
-    TEST_CASE("A4.1 Host an online match: the code is eight characters of the page's alphabet and says nothing else (the block of the Hello made the room), shown in two groups of four with Copy; the player is the first in the room and its leader; a second client joins with the code; Continue leads to the leader's screen and START starts a two-player match; both machines stay identical") {
+    TEST_CASE("A4.1 Host an online match: the code is six characters of the page's alphabet and says nothing else (the block of the Hello made the room), shown in two groups of three with Copy; the player is the first in the room and its leader; a second client joins with the code; Continue leads to the leader's screen and START starts a two-player match; both machines stay identical") {
         TempDir temp;
         write_no_quick_help(temp.file("s.ini"));
         Server server;
@@ -1411,7 +1411,7 @@ int main(int argc, char** argv) {
         ASSERT_EQ(app.start_menu().panel(), MenuPanel::Connecting);
         ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
         const std::string code = shown_code(app);
-        ASSERT_EQ(code.size(), kRoomCodeChars);                                              // the page's grammar: eight characters, no map and no seats in them
+        ASSERT_EQ(code.size(), kRoomCodeChars);                                              // the page's grammar: six characters, no map and no seats in them
         for (const char c : code) ASSERT_TRUE(std::string(kRoomCodeAlphabet).find(c) != std::string::npos);
         ASSERT_EQ(app.window_title(), "Ants - room " + code);                               // from the moment the player is in the room
         ASSERT_EQ(app.hud().get_player_name(), std::string("Hostess"));                      // and the name typed for the room is the player's name on the HUD
@@ -1423,7 +1423,7 @@ int main(int argc, char** argv) {
         for (const MenuElement& e : app.start_menu().elements()) {
             if (e.kind == MenuKind::Code) big = e;
         }
-        ASSERT_EQ(big.text, room_code_display(code));                                        // (two groups of four: "k7m2 xq9p")
+        ASSERT_EQ(big.text, room_code_display(code));                                        // (two groups of three: "k7m 2xq")
         click(app, MenuId::Copy);
         ASSERT_TRUE(copied.size() == 1 && copied[0] == code);                                // (the plain code is what is copied)
         // a second client joins with the code: the count on the panel follows
@@ -1535,10 +1535,10 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(app.net() == nullptr);
     } TEST_END();
 
-    TEST_CASE("A4.4 Host: when the server holds a room with the very code that the menu made (one in 850 billion), the player would be a guest of somebody else's room, not its leader: the menu says so, leaves the room again and nothing stays") {
+    TEST_CASE("A4.4 Host: when the server holds a room with the very code that the menu made (one in 890 million), the player would be a guest of somebody else's room, not its leader: the menu says so, leaves the room again and nothing stays") {
         TempDir temp;
         Server server;
-        const std::string taken = "aaaaaaaa";                                                // the code that a random source of all zeros makes: 'a' is the first character of the alphabet
+        const std::string taken = "aaaaaa";                                                  // the code that a random source of all zeros makes: 'a' is the first character of the alphabet
         ASSERT_TRUE(server.make_room(taken, 4));
         Peer owner;
         Application app;
@@ -1592,7 +1592,7 @@ int main(int argc, char** argv) {
             click(app, MenuId::Host);
             ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
             const std::string code = shown_code(app);
-            ASSERT_EQ(code.size(), kRoomCodeChars);                                          // the page's grammar: eight characters; the map is in the Hello's block
+            ASSERT_EQ(code.size(), kRoomCodeChars);                                          // the page's grammar: six characters; the map is in the Hello's block
             const server::RoomStatus made = server.status(code);
             ASSERT_TRUE(made.map == "TREASURE.LVL" && made.expected == 4 && made.joined == 1 && made.leader == 0);
         }
@@ -1802,10 +1802,10 @@ int main(int argc, char** argv) {
         ASSERT_HAS(app.start_menu().message(), "already started");
         ASSERT_TRUE(app.net() == nullptr);
         // a code that nobody made on a server that makes no public rooms
-        fill(app, MenuId::Code, "k7m2 xq9p");
+        fill(app, MenuId::Code, "k7m 2xq");
         click(app, MenuId::Join);
-        ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("k7m2xq9p") != std::string::npos; }, 8000));
-        ASSERT_HAS(app.start_menu().message(), "no room with the code k7m2xq9p");
+        ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("k7m2xq") != std::string::npos; }, 8000));
+        ASSERT_HAS(app.start_menu().message(), "no room with the code k7m2xq");
         // hosting there is refused in the words of a busy server
         press(app, SDLK_ESCAPE);
         menu_host(app, "Hostess", 0, 0);
@@ -2040,7 +2040,7 @@ int main(int argc, char** argv) {
     TEST_CASE("A9.1 The clipboard: Cmd+V / Ctrl+V pastes what the system clipboard holds into the code (through the key events of the window), Copy hands the room's code to the system clipboard; a clipboard that fails says so") {
         TempDir temp;
         Server server;
-        std::string clipboard = "  k7m2xq9p \n";
+        std::string clipboard = "  k7m2xq \n";
         std::vector<std::string> written;
         bool writable = true;
         Application app;
@@ -2055,7 +2055,7 @@ int main(int argc, char** argv) {
         click(app, MenuId::JoinWithCode);
         click(app, MenuId::Code);
         press(app, SDLK_v, KMOD_GUI);
-        ASSERT_EQ(app.start_menu().code(), std::string("k7m2xq9p"));
+        ASSERT_EQ(app.start_menu().code(), std::string("k7m2xq"));
         press(app, SDLK_a, KMOD_CTRL);
         clipboard = "another-1";
         press(app, SDLK_v, KMOD_CTRL);
@@ -2080,11 +2080,11 @@ int main(int argc, char** argv) {
         Application app;
         Hall hall{&server, &app, {}, nullptr, false};
         ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("s.ini"))));         // no clipboard hooks: the defaults, SDL's own
-        ASSERT_EQ(SDL_SetClipboardText("  k7m2xq9p \n"), 0);
+        ASSERT_EQ(SDL_SetClipboardText("  k7m2xq \n"), 0);
         click(app, MenuId::JoinWithCode);
         click(app, MenuId::Code);
         press(app, SDLK_v, KMOD_GUI);
-        ASSERT_EQ(app.start_menu().code(), std::string("k7m2xq9p"));
+        ASSERT_EQ(app.start_menu().code(), std::string("k7m2xq"));
         press(app, SDLK_ESCAPE);
         menu_host(app, "Hostess", 0, 1);
         ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));

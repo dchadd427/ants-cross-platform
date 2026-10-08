@@ -319,18 +319,18 @@ PURE_CHECKS = r"""
   eq(ja('?embed=1&join=/ws&room=r'), ['--audio-focus', '--join-url', 'ws://play.example/ws', '--room', 'r'], 'embed and join together');
   // the room's create block (protocol 15: the first Hello of a code that has no room makes the room out of it) and the platform word: each through its own test, only with a valid door, in the game's order: the door, the
   // room, --room-map, --room-seats, --room-teams, --room-leader-start, --platform, then the seat; the tested lower case text comes back, never the text of the address
-  var BASE = ['--join-url', 'ws://play.example/ws', '--room', 'k7m2xq9p'];
-  eq(ja('?join=/ws&room=k7m2xq9p&roommap=small&roomseats=2&roomteams=0%2B1&roomleaderstart=1&platform=browser-linux&seat=1'), BASE.concat(['--room-map', 'small', '--room-seats', '2', '--room-teams', '0+1', '--room-leader-start', '--platform', 'browser-linux', '--seat', '1']), 'the create block of a room and the platform, in the order of the game');
-  eq(ja('?join=/ws&room=k7m2xq9p&roommap=TINY&roomseats=4'), BASE.concat(['--room-map', 'tiny', '--room-seats', '4']), 'the map comes back in lower case');
+  var BASE = ['--join-url', 'ws://play.example/ws', '--room', 'k7m2xq'];
+  eq(ja('?join=/ws&room=k7m2xq&roommap=small&roomseats=2&roomteams=0%2B1&roomleaderstart=1&platform=browser-linux&seat=1'), BASE.concat(['--room-map', 'small', '--room-seats', '2', '--room-teams', '0+1', '--room-leader-start', '--platform', 'browser-linux', '--seat', '1']), 'the create block of a room and the platform, in the order of the game');
+  eq(ja('?join=/ws&room=k7m2xq&roommap=TINY&roomseats=4'), BASE.concat(['--room-map', 'tiny', '--room-seats', '4']), 'the map comes back in lower case');
   eq(ja('?roommap=small&roomseats=2&roomteams=0%2B1&roomleaderstart=1&platform=linux'), [], 'a create block and a platform without a door are not passed on');
-  ['nowhere', '', 'small ', 'TINY.LVL', '../x', '--room-map'].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq9p&roommap=' + encodeURIComponent(v)), BASE, 'the map ' + JSON.stringify(v) + ' is no --room-map'); });
-  ['2', '3', '4'].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq9p&roomseats=' + v), BASE.concat(['--room-seats', v]), 'the seats ' + v + ' are --room-seats'); });
-  ['1', '5', '0', '04', '', '3 ', 'x'].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq9p&roomseats=' + encodeURIComponent(v)), BASE, 'the seats ' + JSON.stringify(v) + ' are no --room-seats'); });
-  eq(ja('?join=/ws&room=k7m2xq9p&roomteams=1%2B2'), BASE.concat(['--room-teams', '1+2']), 'a pair of teams');
-  eq(ja('?join=/ws&room=k7m2xq9p&roomteams=1+2'), BASE.concat(['--room-teams', '1+2']), 'the same pair where the plus came as a blank');
-  ['1%2B1', '4%2B1', 'ffa', '0%2B1%2B2', ''].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq9p&roomteams=' + v), BASE, 'the teams ' + v + ' are no --room-teams'); });
-  eq(ja('?join=/ws&room=k7m2xq9p&roomleaderstart=1'), BASE.concat(['--room-leader-start']), 'the flag that a full room waits for its leader is exactly 1');
-  ['0', 'true', 'yes', '', '11', '1 '].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq9p&roomleaderstart=' + encodeURIComponent(v)), BASE, 'the flag ' + JSON.stringify(v) + ' is no --room-leader-start'); });
+  ['nowhere', '', 'small ', 'TINY.LVL', '../x', '--room-map'].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq&roommap=' + encodeURIComponent(v)), BASE, 'the map ' + JSON.stringify(v) + ' is no --room-map'); });
+  ['2', '3', '4'].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq&roomseats=' + v), BASE.concat(['--room-seats', v]), 'the seats ' + v + ' are --room-seats'); });
+  ['1', '5', '0', '04', '', '3 ', 'x'].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq&roomseats=' + encodeURIComponent(v)), BASE, 'the seats ' + JSON.stringify(v) + ' are no --room-seats'); });
+  eq(ja('?join=/ws&room=k7m2xq&roomteams=1%2B2'), BASE.concat(['--room-teams', '1+2']), 'a pair of teams');
+  eq(ja('?join=/ws&room=k7m2xq&roomteams=1+2'), BASE.concat(['--room-teams', '1+2']), 'the same pair where the plus came as a blank');
+  ['1%2B1', '4%2B1', 'ffa', '0%2B1%2B2', ''].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq&roomteams=' + v), BASE, 'the teams ' + v + ' are no --room-teams'); });
+  eq(ja('?join=/ws&room=k7m2xq&roomleaderstart=1'), BASE.concat(['--room-leader-start']), 'the flag that a full room waits for its leader is exactly 1');
+  ['0', 'true', 'yes', '', '11', '1 '].forEach(function (v) { eq(ja('?join=/ws&room=k7m2xq&roomleaderstart=' + encodeURIComponent(v)), BASE, 'the flag ' + JSON.stringify(v) + ' is no --room-leader-start'); });
   ['windows', 'macos', 'linux', 'android', 'ios', 'other', 'browser-windows', 'browser-macos', 'browser-linux', 'browser-android', 'browser-ios', 'browser-other', 'Linux'].forEach(function (v) { eq(ja('?join=/ws&platform=' + v), ['--join-url', 'ws://play.example/ws', '--platform', v.toLowerCase()], 'the platform ' + v + ' is passed on in lower case'); });
   ['', 'plan9', 'browser-', 'browser-browser-linux', 'linux ', '--platform', 'win32'].forEach(function (v) { eq(ja('?join=/ws&platform=' + encodeURIComponent(v)), ['--join-url', 'ws://play.example/ws'], 'the platform ' + JSON.stringify(v) + ' is not passed on'); });
   // is a download the game data? (a captive portal answers every address with "200 OK")

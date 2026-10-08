@@ -512,7 +512,7 @@
                 </div>
                 <div class="havecode">
                     <label class="lab" for="join-code">Have a code?</label>
-                    <input type="text" id="join-code" placeholder="k7m2 xq9p" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
+                    <input type="text" id="join-code" placeholder="k7m 2xq" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
                     <button id="join-go" type="button" class="btn">Join</button>
                     <p class="hint" id="join-hint"></p>
                 </div>
@@ -553,7 +553,7 @@
                     <p>With three or four players every colour has a <b>Team 1</b> and a <b>Team 2</b> switch: put two colours on the same team and they start allied (with four players the other two are the other team).</p>
                     <p><b>START!</b> takes this tab into the match. With bots only it starts at once, and with every other seat on <b>Nobody</b> it is a game for one on this computer: only your colony is on the map. With <b>Friend</b> seats it opens the room and waits: send each friend the link under <b>Invite your friends</b> (<b>Copy link</b>, or <b>Share</b> on a phone). The match starts when they are all in. Until then the first player in the room can start it with START in the waiting room, with the players who are in (that is you, unless a friend connected first); a Friend seat that is still empty then stays empty. Changing the map, the teams or the seats makes new links.</p>
                     <h4>Have a code?</h4>
-                    <p>Type or paste the code of a match that somebody else made, as it is shown (<code>k7m2 xq9p</code>), and press <b>Join</b>: you take the first free seat in this tab. A code works once somebody is in the room; the match's link works at any time. The first player in the room can start the match early with START once at least 2 players are in.</p>
+                    <p>Type or paste the code of a match that somebody else made, as it is shown (<code>k7m 2xq</code>), and press <b>Join</b>: you take the first free seat in this tab. A code works once somebody is in the room; the match's link works at any time. The first player in the room can start the match early with START once at least 2 players are in.</p>
                     <h4>On the map</h4>
                     <p>Gather food for your hill, pick up power-ups and keep your ants alive. The original's own help sheets are shown with this text.</p>
                 </div>
@@ -693,13 +693,13 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         nameInput.addEventListener('input', function () { nameMsg.textContent = ''; nameInput.removeAttribute('aria-invalid'); });
         var seatNames = makeSeatNames(function () { var checked = nameCheck(nameInput.value); return checked.ok ? checked.name : ''; }, names);
-        // The code of a room that this page makes: eight characters of an alphabet without look-alikes (31 symbols: no i, l, o, 0 or 1) from the browser's random numbers. It is a name and nothing more:
-        // what the room is (its map, seats and teams) is its create block, which every link of the room carries (roomBlockQuery below). Screens show it in two groups of four (codeText below).
+        // The code of a room that this page makes: six characters of an alphabet without look-alikes (31 symbols: no i, l, o, 0 or 1) from the browser's random numbers. It is a name and nothing more:
+        // what the room is (its map, seats and teams) is its create block, which every link of the room carries (roomBlockQuery below). Screens show it in two groups of three (codeText below).
         function randomCode() {
             var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';
-            var buf = new Uint32Array(8);
+            var buf = new Uint32Array(6);
             (window.crypto || window.msCrypto).getRandomValues(buf);
-            for (var i = 0; i < 8; i++) out += chars.charAt(buf[i] % chars.length);
+            for (var i = 0; i < 6; i++) out += chars.charAt(buf[i] % chars.length);
             return out;
         }
         function mapByKey(key) {
@@ -793,6 +793,15 @@ their music and their sound: only the window you are in is heard). The match is 
             for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
             return 'ffa';
         }
+        // The teams of a room as the page shows them. With four seats a pair that has no Green is the same two teams as the pair of the other two seats, which has ("1+2" is Red + Blue against Green + Black, "0+3":
+        // the game's room_team_choices lists the pairs with Green); a block of a hand-made address or of the command line can name either, and the room plays both. Any other pair, and a pair that its seats cannot
+        // make, comes back as it is (`teams` is validRoomTeams's text or '': the lower seat first).
+        function shownRoomTeams(teams, players) {
+            var m = /^([1-3])\+([1-3])$/.exec(teams);
+            if (!m || players !== 4) return teams;
+            var rest = [0, 1, 2, 3].filter(function (s) { return String(s) !== m[1] && String(s) !== m[2]; });
+            return rest[0] + '+' + rest[1];
+        }
         // The teams of an address (?teams= and ?roomteams=): two different seats 0 - 3 as A+B (a "+" that came as a blank is one), the lower seat first (a pair has one spelling, as in the create block: "1+0" is "0+1"),
         // else none ('' : free for all). The tested text comes back, never the address's.
         function validRoomTeams(value) {
@@ -800,11 +809,11 @@ their music and their sound: only the window you are in is heard). The match is 
             if (!m || m[1] === m[2]) return '';
             return m[1] < m[2] ? m[1] + '+' + m[2] : m[2] + '+' + m[1];
         }
-        // A room code as a screen shows it (the room panel, the Rejoin button, the name step of a Join): eight characters in two groups of four, "k7m2xq9p" as "k7m2 xq9p", which is easier to read out and to copy by
+        // A room code as a screen shows it (the room panel, the Rejoin button, the name step of a Join): six characters in two groups of three, "k7m2xq" as "k7m 2xq", which is easier to read out and to copy by
         // eye; any other length as it is. Only screens show it so: a link, a field's value and the game's arguments keep the plain code (the Join box drops the blank that a typed or pasted code has).
         function codeText(code) {
             var text = typeof code === 'string' ? code : '';
-            return text.length === 8 ? text.slice(0, 4) + ' ' + text.slice(4) : text;
+            return text.length === 6 ? text.slice(0, 3) + ' ' + text.slice(3) : text;
         }
         // The CREATE BLOCK of a room (protocol 15), as the page holds it: { map: one of the six keys, or '' for the server's own, seats: 2 - 4, teams: A+B or '' for free for all, leaderStart: a full room waits for its
         // leader's START instead of starting by itself }. It is what the game server makes the room of when it has none of the code, and the first Hello of a code is the one that is read, so EVERY link that this page
@@ -996,10 +1005,10 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // The create block of the card's room (the code is only a name; see roomBlockQuery): the card's map, always four seats, the card's teams (ffa is none: '') and not the leader-starts flag (a full room starts by itself)
         function cardBlock(state) { return { map: state.map, seats: 4, teams: state.teams === 'ffa' ? '' : state.teams, leaderStart: false }; }
-        // Does the room that the tab kept, { code, map, teams, used }, hold what the card has chosen? Its code is one that this page makes (eight characters of its alphabet) and its map and teams are the card's (ffa for
+        // Does the room that the tab kept, { code, map, teams, used }, hold what the card has chosen? Its code is one that this page makes (six characters of its alphabet) and its map and teams are the card's (ffa for
         // none): the create block that its links carry is made of them. A room of other choices does not fit, and neither does one that an earlier page kept in another shape: the card makes another.
         function cardRoomFits(room, state) {
-            return !!room && typeof room === 'object' && typeof room.code === 'string' && /^[a-z2-9]{8}$/.test(room.code) && room.map === state.map && room.teams === state.teams;
+            return !!room && typeof room === 'object' && typeof room.code === 'string' && /^[a-z2-9]{6}$/.test(room.code) && room.map === state.map && room.teams === state.teams;
         }
         // The address of a game of the room: ?join=/ws&room=<code><the create block>&seat=<seat>[&fill=<plan>][&name=<name>]&aspect=<shape>&start=<people>. The same block, plan and number of people are in every link
         // of the room (the invitations and START): the first Hello of a code makes the room from the block, and whoever connects first leads the room and only the leader's game presses START. `name`: null in an
@@ -1093,7 +1102,7 @@ their music and their sound: only the window you are in is heard). The match is 
         // THE WAY BACK to a match that is still running (the Rejoin button at the top of the front page): where the keys are looked for, what the button says and where it goes.
         // This site's game server as the game page joins it (web/shell.html, ANTS_PAGE.joinArguments: the scheme of the page, its host, the door /ws): what an entry's "s" says when the game page wrote it
         function rejoinServer(secure, host) { return (secure ? 'wss://' : 'ws://') + host + '/ws'; }
-        // The words of the button and of the note under it (text only: a room code has letters, digits, - and _), with the code as a screen shows it (codeText: "k7m2 xq9p"); the query below keeps the plain code
+        // The words of the button and of the note under it (text only: a room code has letters, digits, - and _), with the code as a screen shows it (codeText: "k7m 2xq"); the query below keeps the plain code
         function rejoinWords(offer) {
             var code = codeText(offer.room);
             return { button: 'Rejoin your match (' + code + ')', note: 'Your match in room ' + code + ' is still running: go back to your seat.' };
@@ -1344,8 +1353,9 @@ their music and their sound: only the window you are in is heard). The match is 
             // The room's teams: the ones that its create block names (the server makes them for every start), else what the address asked for. A block that names teams that its seats cannot make is the
             // server's to judge at the start (the match starts without teams and the room says "No teams: ..."): the address's teams do not replace them, and the page does not announce them.
             var named = block ? block.teams : '';
-            teamsInBlock = named !== '' && hostTeam(named, seatCount) === named;
-            roomTeams = teamsInBlock ? named : (named ? '' : validRoomTeams(teams));
+            var shown = shownRoomTeams(named, seatCount);
+            teamsInBlock = shown !== '' && hostTeam(shown, seatCount) === shown;
+            roomTeams = teamsInBlock ? shown : (named ? '' : validRoomTeams(teams));
             try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it (with its create block, so that a room that has ended is made again)
                 history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fill ? '&fill=' + fill : '') + (roomTeams && !teamsInBlock ? '&teams=' + encodeURIComponent(roomTeams) : '') + (aspectFromAddress ? '&aspect=' + aspect : ''));
             } catch (e) { /* not essential */ }
@@ -1356,7 +1366,7 @@ their music and their sound: only the window you are in is heard). The match is 
             $('how').hidden = true;
             document.body.classList.add('in-room');   // (and the header is a smaller one)
             $('room-panel').hidden = false;
-            $('room-code').textContent = codeText(room);        // (the code as a screen shows it: two groups of four; the links and the fields keep the plain code)
+            $('room-code').textContent = codeText(room);        // (the code as a screen shows it: two groups of three; the links and the fields keep the plain code)
             $('room-map').textContent = (mapName ? mapName + ' map' : block ? 'the server\'s own map' : 'a room made some other way') + ', ' + seatCount + ' players';
             $('subtitle').textContent = 'One match, ' + seatCount + ' seats (' + seats.map(function (x) { return x.name; }).join(', ') + '), all connected to the game server through /ws. Share a link (the code alone works once somebody is in the room); the match starts when every seat is taken, or earlier: the first player in the room can start it with START once at least 2 players are in.';
             var fillHint = $('fill-hint');
@@ -1698,13 +1708,13 @@ their music and their sound: only the window you are in is heard). The match is 
         });
 
         // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat, under the name of the field above (the game
-        // page gets the name's parameter even when it is empty: the name was chosen here, so it is not asked for again). The blanks of the typed text are dropped first (a code is shown in two groups of four,
-        // "k7m2 xq9p", and is typed or pasted as it is shown). The page does not know what such a room is, so it sends no create block: a code that no room has is answered "There is no such room on this server."
+        // page gets the name's parameter even when it is empty: the name was chosen here, so it is not asked for again). The blanks of the typed text are dropped first (a code is shown in two groups of three,
+        // "k7m 2xq", and is typed or pasted as it is shown). The page does not know what such a room is, so it sends no create block: a code that no room has is answered "There is no such room on this server."
         function joinNow() {
             var code = $('join-code').value.replace(/\s+/g, '');
             var hint = $('join-hint');
             if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {
-                hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like k7m2 xq9p.';
+                hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like k7m 2xq.';
                 hint.classList.add('bad');
                 return;
             }
