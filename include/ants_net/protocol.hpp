@@ -328,6 +328,13 @@ inline constexpr const char* kNoticeFillMap = "This map cannot be played by ever
 /// The room's notice when the teams that the leader chose cannot be made for the seats that play (protocol 13): "No teams: " and the reason (sim::StartTeamsPlan::short_why), sent to every person in the room
 /// as the match starts without teams; at most kMaxChatChars (the reasons are written to fit).
 inline constexpr const char* kNoticeNoTeams = "No teams: ";
+/// The notices of a lobby room's START (protocol 16; to its leader, each at most kMaxChatChars): a player's game that did not come in time ("Priya's game did not come in time.", for several "These games
+/// did not come in time: Priya, Sam."), a map that cannot be loaded, a map that the colours cannot play, and a server that has no place for another match
+inline constexpr const char* kNoticeGameLate = "'s game did not come in time.";
+inline constexpr const char* kNoticeGamesLate = "These games did not come in time: ";
+inline constexpr const char* kNoticeMapLost = "This map could not be loaded: choose another map.";
+inline constexpr const char* kNoticeMapColours = "This map cannot be played with these colours.";
+inline constexpr const char* kNoticeNoPlace = "The server has no place for another match right now: try again in a minute.";
 
 struct RoomMsg {
     struct Slot {

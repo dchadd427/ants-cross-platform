@@ -45,6 +45,25 @@ std::string human_name(const std::string& raw, const std::string& fallback) {
     return bot_like(name) ? fallback : name;
 }
 
+// The team pair after two seats changed places (a lobby room's SeatMove): a seat of the pair that was `a` is `b` now and the other way round; the pair is written with the lower seat first (a pair has one spelling)
+void swap_team_seats(uint8_t& team_a, uint8_t& team_b, uint8_t a, uint8_t b) {
+    if (team_a == kNoTeam && team_b == kNoTeam) return;
+    const auto moved = [a, b](uint8_t seat) { return seat == a ? b : seat == b ? a : seat; };
+    const uint8_t x = moved(team_a);
+    const uint8_t y = moved(team_b);
+    team_a = std::min(x, y);
+    team_b = std::max(x, y);
+}
+
+// What the leader is told when the games did not come in time ("Priya's game did not come in time." / "These games did not come in time: Priya and Sam."); the names are the room's own, printable
+std::string late_notice(const std::vector<std::string>& names) {
+    if (names.empty()) return std::string();
+    if (names.size() == 1) return names[0] + kNoticeGameLate;
+    std::string list;
+    for (size_t i = 0; i < names.size(); ++i) list += std::string(i == 0 ? "" : i + 1 == names.size() ? " and " : ", ") + names[i];
+    return std::string(kNoticeGamesLate) + list + ".";
+}
+
 // A bot's name always carries the marker: a name that does not start with "Bot (" is wrapped ("Zed" becomes "Bot (Zed)"), an empty one is "Bot"
 std::string bot_name(const std::string& raw) {
     const std::string name = trimmed(printable(raw, kMaxNameChars));
@@ -91,6 +110,10 @@ HostLobby::HostLobby(Config config) : cfg_(std::move(config)) {
         room_.team_b = cfg_.room_teams.b;
     }
     room_.flags = cfg_.leader_starts ? kRoomLeaderStarts : uint8_t{0};
+    // a lobby room (protocol 16) is a server's room that has a leader, waits for it to start, has all four colours and gives keys (a seat is held for its key); without those it is no lobby room (and
+    // the Room message would be one that no decoder takes)
+    cfg_.lobby_room = cfg_.lobby_room && leads() && cfg_.leader_starts && cfg_.max_players >= sim::MAX_PLAYERS && static_cast<bool>(cfg_.make_key);
+    if (cfg_.lobby_room) room_.flags = static_cast<uint8_t>(room_.flags | kRoomLobby);
     // room_.map_name stays empty until the host chooses a map (the setup screen lists what the Maps folder holds; no map is named in the program)
 }
 
@@ -167,11 +190,11 @@ void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const st
     if (connection != nullptr) pending_.push_back(Pending{connection, now_ms, address});
 }
 
-void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message) {
+void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message, bool created) {
     if (connection == nullptr) return;
     Pending p{connection, now_ms, address};
     bool consumed = false;
-    handle_hello(p, hello_message, now_ms, consumed);
+    handle_hello(p, hello_message, now_ms, consumed, created);
 }
 
 void HostLobby::broadcast(const std::vector<uint8_t>& msg) {
@@ -180,7 +203,17 @@ void HostLobby::broadcast(const std::vector<uint8_t>& msg) {
     }
 }
 
+// What the Room message of a lobby room shows besides the seats (protocol 16): which seats a game holds, and whether the leader's START waits for the games. Nothing for a room that is no lobby room.
+void HostLobby::sync_room_flags() {
+    if (!cfg_.lobby_room) return;
+    uint8_t games = 0;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) games = static_cast<uint8_t>(games | (in_game(s) ? 1u << s : 0u));
+    room_.in_game = games;
+    room_.flags = starting_.active ? static_cast<uint8_t>(room_.flags | kRoomStarting) : static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomStarting));
+}
+
 void HostLobby::broadcast_room() {
+    sync_room_flags();
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (guests_[s].conn == nullptr || !guests_[s].conn->is_open()) continue;
         RoomMsg m = room_;
@@ -223,7 +256,7 @@ void HostLobby::elect_leader() {
     uint8_t best = kNoLeader;
     if (leads()) {
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
-            if (guests_[s].conn == nullptr || room_.slots[s].state != SlotState::Client) continue;
+            if (!person(s) || room_.slots[s].state != SlotState::Client) continue;               // (a guest whose connection ended and whose seat is held leads still: it counts as present)
             if (best == kNoLeader || guests_[s].join_order < guests_[best].join_order) best = s;
         }
     }
@@ -231,10 +264,11 @@ void HostLobby::elect_leader() {
 }
 
 void HostLobby::remove_guest(uint8_t seat, bool notify_reject, RejectReason reason) {
-    if (seat >= sim::MAX_PLAYERS || guests_[seat].conn == nullptr) return;
-    Connection* c = guests_[seat].conn;
-    if (notify_reject && c->is_open()) c->send(encode(RejectMsg{reason}));
-    if (c->is_open()) c->close();
+    if (seat >= sim::MAX_PLAYERS || !person(seat)) return;
+    if (Connection* c = guests_[seat].conn) {                    // (a held seat has no connection)
+        if (notify_reject && c->is_open()) c->send(encode(RejectMsg{reason}));
+        if (c->is_open()) c->close();
+    }
     guests_[seat] = Guest{};
     room_.slots[seat] = RoomMsg::Slot{};
     elect_leader();                                              // the leader that left is replaced before anybody is told
@@ -253,7 +287,7 @@ void HostLobby::kick(uint8_t seat) {
 // arranged); a colour that a bot or the host holds is not taken from them. A press that crossed a newcomer's Hello on the wire cannot push the newcomer out of its colour or swap it by mistake: the
 // SeatMove carries the guard of the seats as the leader saw them (seating_hash), and the room acts only when they are still so.
 bool HostLobby::can_move_seat(uint8_t from, uint8_t to) const noexcept {
-    return phase_ == Phase::Room && from < sim::MAX_PLAYERS && to < sim::MAX_PLAYERS && from != to
+    return phase_ == Phase::Room && !starting_.active && from < sim::MAX_PLAYERS && to < sim::MAX_PLAYERS && from != to
         && room_.slots[from].state == SlotState::Client                                                   // (an empty seat, the host's and a bot's do not move)
         && (room_.slots[to].state == SlotState::Empty || room_.slots[to].state == SlotState::Client);     // (a free colour, or a guest's: a bot's and the host's stay)
 }
@@ -263,6 +297,10 @@ bool HostLobby::move_seat(uint8_t from, uint8_t to) {
     const bool swapped = room_.slots[to].state == SlotState::Client;                                      // (two guests change places)
     std::swap(guests_[from], guests_[to]);                                                                // (an empty seat is a Guest{} and a Slot{}: the swap is the move)
     std::swap(room_.slots[from], room_.slots[to]);
+    if (cfg_.lobby_room) {                                                                                // (protocol 16: the colours are exchanged completely: what each colour is, and the team pair, go with the person)
+        std::swap(room_.plan[from], room_.plan[to]);
+        swap_team_seats(room_.team_a, room_.team_b, from, to);
+    }
     ++seat_moves_;
     // A START that was heard earlier in this pass was made for the room as it was: its plan of bots is by colour, so when a player takes an empty colour the bot that was to fill that colour fills the
     // colour that the player left (a swap leaves the same colours empty: the plan stays), and its sender, the leader, is where it sits now (the owner compares the seat with leader()): the lead goes
@@ -310,6 +348,7 @@ void HostLobby::cancel() {
 
 bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms, const sim::StartTeams& teams) {
     if (!can_start()) return false;
+    if (cfg_.lobby_room && !everyone_in_game()) return false;    // (a page cannot load a map, and a seat that is held has no machine: the owner starts when every person is a game)
     if (room_.fog && has_bot()) return false;                    // (set_fog and add_bot keep this from happening: the last line of defence)
     uint8_t roster = 0;
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) roster = static_cast<uint8_t>(roster | (room_.slots[s].state != SlotState::Empty ? 1u << s : 0u));
@@ -330,6 +369,8 @@ bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms, const s
         }
     }
     phase_ = Phase::Loading;
+    starting_ = Starting{};                                      // (a lobby room: the leader's request is done)
+    room_.flags = static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomStarting));
     host_loaded_ = false;
     load_started_ms_ = now_ms;
     for (auto& g : guests_) g.loaded = false;
@@ -376,8 +417,8 @@ SeatKey HostLobby::new_key() const {
 uint8_t HostLobby::seat_of_key(const SeatKey& key) const noexcept {
     uint8_t found = 255;
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
-        const bool held = guests_[s].conn != nullptr && key_matches(guests_[s].key, key);
-        found = held ? s : found;
+        const bool holds = person(s) && key_matches(guests_[s].key, key);                  // (a seat that is held answers to its key as a connected one does)
+        found = holds ? s : found;
     }
     return found;
 }
@@ -389,6 +430,8 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello) {
     Guest& g = guests_[seat];
     Connection* old = g.conn;
     g.conn = p.conn;
+    g.held = false;                                              // (protocol 16: a seat that was held has its person back)
+    g.kind = hello.client_kind;                                  // (and a page that goes to the game page comes back as a game)
     g.address = p.address;
     g.listen_port = hello.listen_port;
     g.measured = false;
@@ -411,7 +454,7 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello) {
     broadcast_room();
 }
 
-void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t /*now_ms*/, bool& consumed) {
+void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t /*now_ms*/, bool& consumed, bool created) {
     consumed = true;                                 // whatever happens, this connection is not pending any more
     if (peek_type(msg) != MsgType::Hello) {          // the first message must be Hello
         p.conn->close();
@@ -427,16 +470,22 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     if (hello.version != kProtocolVersion) return reject(RejectReason::VersionMismatch);      // the layout of another version is not read
     if (!decode(msg, hello)) return reject(RejectReason::BadRequest);                        // this version's layout, in full
     if (hello.room != cfg_.room_code) return reject(RejectReason::NoSuchRoom);               // a Hello for another room (or for none)
+    if (hello.client_kind == kClientPage && !cfg_.lobby_room) return reject(RejectReason::BadRequest);       // (protocol 16: a page cannot play a match, and only a lobby room seats one)
     if (phase_ == Phase::Room && !key_is_zero(hello.key)) {                                  // the key of a seated guest: that guest, on a new connection (a key that fits no seat: a new player)
         const uint8_t holder = seat_of_key(hello.key);
         if (holder != 255) return take_over(holder, p, hello);
     }
     if (phase_ != Phase::Room) return reject(RejectReason::MatchRunning);                    // (a key in a match that loads or runs is the session's business, not the lobby's)
-    if (players() >= cfg_.max_players) return reject(RejectReason::Full);
+    if (starting_.active) return reject(RejectReason::MatchRunning);                         // (a lobby room whose START waits for the games takes no newcomer)
     uint8_t seat = 255;
-    if (hello.want_seat < sim::MAX_PLAYERS && room_.slots[hello.want_seat].state == SlotState::Empty) seat = hello.want_seat;     // the seat it asked for, when it is free
-    for (uint8_t s = 0; seat == 255 && s < sim::MAX_PLAYERS; ++s) {
-        if (room_.slots[s].state == SlotState::Empty) seat = s;                        // else the first free one
+    if (cfg_.lobby_room) {
+        seat = joiner_seat(hello.want_seat);                                                 // (protocol 16: the colour it asked for or the lowest one that nobody holds and the plan calls Open)
+    } else {
+        if (players() >= cfg_.max_players) return reject(RejectReason::Full);
+        if (hello.want_seat < sim::MAX_PLAYERS && room_.slots[hello.want_seat].state == SlotState::Empty) seat = hello.want_seat;     // the seat it asked for, when it is free
+        for (uint8_t s = 0; seat == 255 && s < sim::MAX_PLAYERS; ++s) {
+            if (room_.slots[s].state == SlotState::Empty) seat = s;                        // else the first free one
+        }
     }
     if (seat == 255) return reject(RejectReason::Full);
     const SeatKey key = new_key();
@@ -446,6 +495,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].listen_port = hello.listen_port;
     guests_[seat].join_order = ++joins_;
     guests_[seat].key = key;
+    guests_[seat].kind = hello.client_kind;
     room_.slots[seat].state = SlotState::Client;
     room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
     room_.slots[seat].platform = hello.platform;
@@ -454,6 +504,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     welcome.player = seat;
     welcome.players = sim::MAX_PLAYERS;
     welcome.key = key;
+    welcome.flags = created && !key_is_zero(key) ? kWelcomeCreated : uint8_t{0};             // (protocol 16: this Hello made the room; the flag needs a key)
     p.conn->send(encode(welcome));
     events_.push_back(Event{Event::Type::Joined, seat});
     broadcast_room();
@@ -490,6 +541,17 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
         case MsgType::StartRequest: {
             StartRequestMsg m;
             if (!decode(msg, m)) return violation(seat);                  // exactly the type and a fill level (0 .. 3): anything else is garbage
+            if (cfg_.lobby_room) {
+                // A lobby room (protocol 16): the PLAN decides what a START seats and which teams it makes, so the request only asks, and the leader's is kept until every person is a game (pump_start).
+                // One that cannot be honoured, or a second one while the first waits, is ignored and counted like any other.
+                if (phase_ == Phase::Room && !starting_.active && seat == room_.leader && start_possible()) {
+                    arm_start(seat, now_ms);
+                } else {
+                    ++ignored_start_requests_;
+                    if (++guests_[seat].ignored_start_requests > kIgnoredStartRequestsAllowed) violation(seat);
+                }
+                return;
+            }
             // Only the leader of a server's room is heard, and only while the room is open and could start now (with the empty seats filled when the request asks for bots: then one person is
             // enough). A request that cannot be honoured is no offence at first (the leader's second click on START arrives when the match is loading already; a host that holds a seat has
             // no leader; a player is told who leads): it is ignored and counted. A connection that sends more of them than a person ever could (kIgnoredStartRequestsAllowed) is flooding:
@@ -524,6 +586,23 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             }
             ++ignored_seat_moves_;
             if (++guests_[seat].ignored_seat_moves > kIgnoredSeatMovesAllowed) violation(seat);
+            return;
+        }
+        case MsgType::Plan: {                                             // (protocol 16) the leader's plan of a lobby room
+            PlanMsg m;
+            if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room has no plan: the message is garbage there)
+            // Only the leader is heard, only while the room is open and its START does not wait; the plan is shown to everybody, so it has the budget of a person's clicks. As for the colour moves: one that
+            // cannot be heard is no offence at first (the leader's click crossed the Start), every one after kIgnoredPlansAllowed is a violation; one beyond the budget is dropped, and a connection that
+            // goes on beyond it is flooding.
+            if (phase_ == Phase::Room && !starting_.active && seat == room_.leader) {
+                switch (guests_[seat].plans.take(now_ms, kPlanBurst, kPlansPerSecond, kPlanExcessBurst)) {
+                    case ChatBudget::Verdict::Relay: apply_plan(m); return;
+                    case ChatBudget::Verdict::Drop: return;
+                    case ChatBudget::Verdict::Offence: return violation(seat);
+                }
+            }
+            ++ignored_plans_;
+            if (++guests_[seat].ignored_plans > kIgnoredPlansAllowed) violation(seat);
             return;
         }
         case MsgType::Chat: {                                             // (protocol 11) a line for the room: in the waiting room and while the map loads
@@ -576,7 +655,14 @@ void HostLobby::update(uint32_t now_ms) {
     }
     // the seated guests
     for (uint8_t s = 0; s < sim::MAX_PLAYERS && phase_ != Phase::Begun; ++s) {
-        if (guests_[s].conn == nullptr) continue;
+        if (guests_[s].conn == nullptr) {
+            // a held seat (a lobby room): its hold runs out, but not while the leader's START waits (that has its time: the games are on their way, and a page that goes to the game closes its link first)
+            if (guests_[s].held && !starting_.active && now_ms - guests_[s].held_since_ms >= cfg_.hold_ms) {
+                ++hold_expiries_;
+                remove_guest(s, false, RejectReason::Kicked);
+            }
+            continue;
+        }
         Guest& g = guests_[s];
         if (g.conn->is_open() && (g.ping_nonce == 0 || time_reached(now_ms, g.next_ping_ms))) {        // measure the round trip: the thumb beside the name
             PingMsg ping;
@@ -593,7 +679,10 @@ void HostLobby::update(uint32_t now_ms) {
             else if (!guests_[s].talk.take(now_ms, cfg_.message_burst, cfg_.messages_per_second)) violation(s);       // more than a client can have to say: not even looked at
             else handle_guest_message(s, msg, now_ms);
         }
-        if (guests_[s].conn != nullptr && !guests_[s].conn->is_open()) remove_guest(s, false, RejectReason::Kicked);
+        if (guests_[s].conn != nullptr && !guests_[s].conn->is_open()) {
+            if (cfg_.lobby_room && phase_ == Phase::Room && !key_is_zero(guests_[s].key)) hold_guest(s, now_ms);       // (protocol 16: the seat waits for its key, when it has one; a match that loads is cancelled for a leaver as ever)
+            else remove_guest(s, false, RejectReason::Kicked);
+        }
     }
     if (phase_ == Phase::Loading && now_ms - load_started_ms_ > cfg_.load_timeout_ms) {
         uint8_t slow = cfg_.host_seat;
@@ -606,6 +695,124 @@ void HostLobby::update(uint32_t now_ms) {
         events_.push_back(Event{Event::Type::LoadFailed, slow});
         cancel_with(CancelMsg::Reason::LoadFailed, slow);
     }
+    if (cfg_.lobby_room) pump_start(now_ms);
+}
+
+// ------------------------------------------------------------------------------------------------
+// The lobby room (protocol 16)
+// ------------------------------------------------------------------------------------------------
+
+// The connection of a guest ended while the room is open. The seat stays for hold_ms with all that is its own (name, colour, key, place in the order of the Welcomes, so a held leader leads still); it counts
+// as present, it is no game any more, and its thumb is not known.
+void HostLobby::hold_guest(uint8_t seat, uint32_t now_ms) {
+    Guest& g = guests_[seat];
+    g.conn = nullptr;
+    g.held = true;
+    g.held_since_ms = now_ms;
+    g.measured = false;
+    g.rtt_ms = 0;
+    g.ping_nonce = 0;
+    g.next_ping_ms = 0;
+    for (uint32_t& sent : g.ping_sent) sent = 0;
+    room_.slots[seat].rtt_ms = kRttUnknown;
+    ++holds_;
+    broadcast_room();
+}
+
+// The colour a joiner takes: the one it asked for when nobody holds it and the plan calls it Open, else the lowest such colour; 255 when there is none (the room is Full for it)
+uint8_t HostLobby::joiner_seat(uint8_t want) const noexcept {
+    const auto takes = [this](uint8_t s) { return room_.slots[s].state == SlotState::Empty && room_.plan[s] == PlanKind::Open; };
+    if (want < sim::MAX_PLAYERS && takes(want)) return want;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (takes(s)) return s;
+    }
+    return 255;
+}
+
+// The plan has a bot for a colour that nobody holds: then one person is enough to start (can_start_filled), as for a leader's fill
+bool HostLobby::plan_asks_bots() const noexcept {
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (room_.slots[s].state == SlotState::Empty && plan_fill_level(room_.plan[s]) != FillLevel::None) return true;
+    }
+    return false;
+}
+
+// The room could start now with whom it holds (held seats count as players; the plan's bots are counted when they would be seated)
+bool HostLobby::start_possible() const noexcept {
+    return plan_asks_bots() ? can_start_filled() : can_start();
+}
+
+// Every person is a game (a seat that is held has no machine, a page cannot play): the match can be started
+bool HostLobby::everyone_in_game() const noexcept {
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (room_.slots[s].state == SlotState::Client && !in_game(s)) return false;
+    }
+    return true;
+}
+
+// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each colour is, the teams. The room is shown to everybody when something changed.
+void HostLobby::apply_plan(const PlanMsg& plan) {
+    bool changed = false;
+    if (!plan.map_name.empty()) {                                // ("" keeps the map; a map that the server does not offer keeps it too)
+        const std::string file = map_choice_ ? map_choice_(plan.map_name) : plan.map_name;
+        if (!file.empty() && valid_map_name(file) && file != room_.map_name) {
+            room_.map_name = file;
+            changed = true;
+        }
+    }
+    if (room_.plan != plan.plan) {
+        room_.plan = plan.plan;
+        changed = true;
+    }
+    if (room_.team_a != plan.team_a || room_.team_b != plan.team_b) {
+        room_.team_a = plan.team_a;
+        room_.team_b = plan.team_b;
+        changed = true;
+    }
+    if (!changed) return;
+    ++plan_changes_;
+    broadcast_room();
+}
+
+// The leader asked to start: the request stands until every person is a game, and everybody is shown that the room waits (RoomMsg flag kRoomStarting)
+void HostLobby::arm_start(uint8_t seat, uint32_t now_ms) {
+    starting_.active = true;
+    starting_.leader_order = guests_[seat].join_order;
+    starting_.since_ms = now_ms;
+    broadcast_room();
+}
+
+// The request is looked at at the end of every update of a lobby room. It ends, silently, when its leader does not lead any more or the room could not start with whom it has left; it ends with a notice to the
+// leader when it has waited start_wait_ms for a game that did not come; and while every person is a game it is given to the owner in every pass (the owner may be in its pause after a cancelled start,
+// or have a map to load: it starts the match, which ends the request, or drops it with end_start).
+void HostLobby::pump_start(uint32_t now_ms) {
+    if (!starting_.active) return;
+    const bool still_leads = phase_ == Phase::Room && room_.leader < sim::MAX_PLAYERS && guests_[room_.leader].join_order == starting_.leader_order;
+    if (!still_leads || !start_possible()) return end_start(std::string());
+    if (everyone_in_game()) {
+        Event start{Event::Type::LeaderStart, room_.leader};
+        for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) start.fill[s] = plan_fill_level(room_.plan[s]);
+        start.teams = room_.teams();
+        events_.push_back(start);
+        return;
+    }
+    if (now_ms - starting_.since_ms < cfg_.start_wait_ms) return;
+    std::vector<std::string> late;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (room_.slots[s].state == SlotState::Client && !in_game(s)) late.push_back(room_.slots[s].name);
+    }
+    end_start(late_notice(late));
+}
+
+void HostLobby::end_start(const std::string& notice) {
+    if (!starting_.active) return;
+    const uint8_t leader = room_.leader;
+    starting_ = Starting{};
+    for (Guest& g : guests_) {
+        if (g.held) g.held_since_ms = last_update_ms_;           // (a hold that ran during the wait begins again: nobody loses a seat to the wait itself)
+    }
+    broadcast_room();
+    if (!notice.empty() && leader < sim::MAX_PLAYERS) notify(leader, notice);
 }
 
 std::vector<HostLobby::Event> HostLobby::take_events() {
@@ -650,6 +857,11 @@ bool ClientLobby::request_seat_move(uint8_t from, uint8_t to) {
     return conn_->send(encode(SeatMoveMsg{from, to, seating_hash(room_)}));            // (the guard: the seats as this machine shows them)
 }
 
+bool ClientLobby::request_plan(const PlanMsg& plan) {
+    if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !room_.lobby() || !conn_->is_open()) return false;
+    return conn_->send(encode(plan));
+}
+
 bool ClientLobby::chat(const std::string& text) {
     if (conn_ == nullptr || !conn_->is_open() || (phase_ != Phase::InRoom && phase_ != Phase::Loading && phase_ != Phase::Loaded)) return false;
     ChatMsg m;
@@ -671,6 +883,7 @@ void ClientLobby::send_hello() {
     h.token = cfg_.token;
     h.key = cfg_.key;                                // (have_turns stays 0: this lobby starts from nothing; a key that is zero makes the Hello that of a new player)
     h.platform = valid_platform(cfg_.platform) ? cfg_.platform : kPlatformUnknown;
+    h.client_kind = cfg_.client_kind == kClientPage ? kClientPage : kClientGame;
     if (cfg_.create && valid_create_block(*cfg_.create)) h.create = cfg_.create;             // (a block that no server would read is left out: the Hello then joins)
     conn_->send(encode(h));
     phase_ = Phase::Joining;
@@ -707,6 +920,7 @@ void ClientLobby::update(uint32_t now_ms) {
                     seat_ = w.player;
                     key_ = w.key;
                     rejoined_ = (w.flags & kWelcomeRejoin) != 0;
+                    created_ = (w.flags & kWelcomeCreated) != 0;
                     phase_ = Phase::InRoom;
                 }
                 break;

@@ -34,6 +34,14 @@ inline constexpr uint32_t kSeatMoveBurst = 6;
 inline constexpr uint32_t kSeatMovesPerSecond = 4;
 inline constexpr uint32_t kSeatMoveExcessBurst = 12;
 
+/// The plans of a lobby room's leader (protocol 16, PlanMsg), with the same two rules: one that cannot be heard (the sender does not lead, the room is no open lobby room) is no offence at first, up to kIgnoredPlansAllowed
+/// per connection, each one after those is a violation; one that can be heard is shown to the whole room, so a person's clicks have a budget of their own (a burst of kPlanBurst, then kPlansPerSecond a second), and
+/// one beyond it is dropped, kPlanExcessBurst more are tolerated and every one after that is a violation.
+inline constexpr uint32_t kIgnoredPlansAllowed = 16;
+inline constexpr uint32_t kPlanBurst = 6;
+inline constexpr uint32_t kPlansPerSecond = 4;
+inline constexpr uint32_t kPlanExcessBurst = 12;
+
 /// The lines of chat that one connection may say (a remake protection: the original has no limit, but nobody types more than a line a second for long). A line is relayed to everybody, so
 /// a flood of them is a flood for the whole room: a burst of kChatBurst lines, then kChatPerSecond a second. A line beyond that is DROPPED (not relayed, not logged, no answer): a person
 /// who pastes six lines loses the sixth. It costs nothing at first, but a connection that goes on saying more than the budget allows is flooding: kChatExcessBurst lines beyond it are tolerated and that allowance
