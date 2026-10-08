@@ -2538,12 +2538,14 @@ void GateTask::step(TaskContext& c) {
     bool bite = false;
     bool entrance_occupied = false;
     bool ramp_standing = false;
+    bool leaver_on_ramp = false;
     const sim::TileCoord ramp{g.hill.x + 1, g.hill.y};
     std::vector<const AntView*> carriers;
     for (const AntView& a : v.mine()) {
         if (a.state == sim::UnitState::HarvestingFood) bite = true;
         if (a.tile == g.entrance) entrance_occupied = true;
         if (params_.cantgo_aware && a.tile == ramp && a.state != sim::UnitState::Walking) ramp_standing = true;                          // an own ant that stands on the ramp shuts the way to the entrance
+        if (params_.cantgo_aware && a.tile == ramp && !a.holding) leaver_on_ramp = true;                                                                         // an ant that has been in the hill still leaves over the ramp (the view draws it walking while the ants ahead of it hold it up)
         if (a.state == sim::UnitState::EnteringBase) {
             if (clip_seen_.count(a.id) == 0) {
                 clip_seen_[a.id] = now;
@@ -2555,6 +2557,9 @@ void GateTask::step(TaskContext& c) {
     if (!ramp_standing) ramp_since_ = -1;
     else if (ramp_since_ < 0) ramp_since_ = static_cast<int64_t>(now);
     const bool ramp_held = ramp_standing && static_cast<int64_t>(now) < ramp_since_ + static_cast<int64_t>(params_.ramp_wait_ticks);        // (an ant that stays longer is not waited for: nothing moves it)
+    if (!leaver_on_ramp) leaver_since_ = -1;
+    else if (leaver_since_ < 0) leaver_since_ = static_cast<int64_t>(now);
+    const bool leaver_hold = leaver_on_ramp && static_cast<int64_t>(now) < leaver_since_ + static_cast<int64_t>(params_.leaver_wait_ticks);        // (a click while it is there meets it head on in the one-wide way out; one that stays longer is not waited for)
     for (auto it = cmd_.begin(); it != cmd_.end();) {                                // only carriers are ours to place
         bool carrier = false;
         for (const AntView* a : carriers) carrier = carrier || a->id == it->first;
@@ -2649,7 +2654,7 @@ void GateTask::step(TaskContext& c) {
         }
     }
     uint32_t click = 0;
-    if ((gate_free || predicted) && best != nullptr) {
+    if ((gate_free || predicted) && !leaver_hold && best != nullptr) {
         const bool hold = bite && bite_waited_ < params_.bite_wait_max;
         if (hold) ++bite_waited_;
         else {

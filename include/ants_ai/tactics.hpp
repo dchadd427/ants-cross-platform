@@ -70,6 +70,7 @@ struct LevelPlan {
     uint32_t gate_latency{9};            // ticks between a decision and the order's arrival (the profile's reaction delay less its jitter, and the sink)
     uint32_t gate_max_staged{8};         // carriers brought to the doorstep at a time
     bool gate_predictive{true};          // the entrance click is given before the gate is seen free (from the clip that the look showed first)
+    uint32_t gate_leaver_ticks{0};       // the entrance click waits at most this long while an own ant without food stands on the ramp (mostly one that has banked and leaves; 0: it does not wait)
     uint32_t gate_gap_ticks{47};         // with the gate guided the hill banks a deposit per 47 ticks per pile slot: the economy's cap of ants per pile follows (trip / gap + 1)
     bool typed_harvest{true};            // Fire and Bomber ants harvest between their jobs (HarvestTask::Params::extra_types)
     bool combat_harvests{false};         // Combat Ants harvest too (and punch what comes within two tiles of their way) instead of standing on a guard post
