@@ -31,7 +31,7 @@ DEPLOYS = [
     "Original-Ants/ants.chd", "Original-Ants/Maps/TINY.LVL", "Original-Ants/INTRO.mp3", "asset_catalog/index.html", "asset_catalog/sprites/s1.png",
 ]
 SKIPS = [
-    "STATUS.md", "README.md", "AGENTS.md", "THIRD_PARTY_NOTICES.md", "LICENSE", "docs/WORKFLOW.md", "docs/BOTS.md", "docs/NETWORK_PORT.md", "docs/audit/B3_notes.md",
+    "README.md", "AGENTS.md", "THIRD_PARTY_NOTICES.md", "LICENSE", "docs/WORKFLOW.md", "docs/BOTS.md", "docs/NETWORK_PORT.md", "docs/audit/B3_notes.md",
     "docs/reverse_engineering/notes.txt", ".github/workflows/ci.yml", ".github/dependabot.yml",
     "tests/test_sim/test_sim_rules.cpp", "tests/scripts/test_run_tests.py", "tests/data/edge_scroll_samples.csv", "tests/common/ants_test_paths.hpp", "tests/TEST_INFRA.md",
     "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py", "tools/deploy_wait.py", "tools/deploy_webhook.sh",
@@ -114,17 +114,17 @@ class Pushes(unittest.TestCase):
         return result.stdout.strip()
 
     def test_documents_only_is_skipped(self):
-        out = self.verdict(["STATUS.md", "README.md", "docs/WORKFLOW.md", "AGENTS.md", ".github/workflows/ci.yml", "tests/scripts/x.py"])
+        out = self.verdict(["THIRD_PARTY_NOTICES.md", "README.md", "docs/WORKFLOW.md", "AGENTS.md", ".github/workflows/ci.yml", "tests/scripts/x.py"])
         self.assertTrue(out.startswith("skip:"), out)
         self.assertIn("6 file(s)", out)
 
     def test_one_file_that_counts_deploys_the_whole_push(self):
-        out = self.verdict(["STATUS.md", "docs/BOTS.md", "src/ants_ai/bot.cpp", "tests/test_ai/x.cpp"])
+        out = self.verdict(["THIRD_PARTY_NOTICES.md", "docs/BOTS.md", "src/ants_ai/bot.cpp", "tests/test_ai/x.cpp"])
         self.assertTrue(out.startswith("deploy: src/ants_ai/bot.cpp changed"), out)
         self.assertIn("copied into an image", out)
 
     def test_a_count_of_the_others_is_given(self):
-        out = self.verdict(["src/a.cpp", "web/shell.html", "STATUS.md"])
+        out = self.verdict(["src/a.cpp", "web/shell.html", "THIRD_PARTY_NOTICES.md"])
         self.assertIn("and 1 more file(s) count", out)
 
     def test_nothing_changed_is_skipped(self):
@@ -143,8 +143,8 @@ class Pushes(unittest.TestCase):
         self.assertTrue(self.verdict(["docker-compose.stack.yml"], "--compose", "docker-compose.staging.yml").startswith("skip:"))
 
     def test_explain_names_every_file(self):
-        result = run_tool("--files", "--explain", stdin="STATUS.md\nsrc/a.cpp\n")
-        self.assertIn("skip    STATUS.md", result.stdout)
+        result = run_tool("--files", "--explain", stdin="THIRD_PARTY_NOTICES.md\nsrc/a.cpp\n")
+        self.assertIn("skip    THIRD_PARTY_NOTICES.md", result.stdout)
         self.assertIn("DEPLOY  src/a.cpp", result.stdout)
 
     def test_windows_separators_and_dot_slash_are_understood(self):
