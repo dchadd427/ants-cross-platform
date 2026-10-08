@@ -102,6 +102,8 @@ public:
     const ExpeditionTask& expedition() const noexcept { return expedition_; }
     /// The expedition for a lab that changes its parameters (the plan has no knob for them: AI17.8 gives it a crew larger than the tokens need, AI17.9 a short patience)
     ExpeditionTask& expedition_for_labs() noexcept { return expedition_; }
+    /// The ledger for a lab that puts an ant in the hands of another task (AI23.31)
+    AntLedger& ledger_for_labs() noexcept { return ledger_; }
     const FerryTask& ferry() const noexcept { return ferry_; }
     const Tactics& tactics() const noexcept { return tactics_; }
     /// The style that the bot plays (known once start() has run; Random for a bot with a plan of its own)

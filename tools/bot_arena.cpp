@@ -550,6 +550,12 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "leash") { p.leash_tiles = static_cast<int32_t>(v); return true; }
     if (key == "linger") { p.fight_linger_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "aid") return flag(p.carrier_aid);
+    if (key == "flowers") { p.flower_sides = p.flower_fire = p.flower_recover = p.flower_recall = p.flower_watch = v != 0; return true; }       // the flower play of docs/BOTS.md, "The flowers" (0: the bot as it was): every rule at once
+    if (key == "fside") return flag(p.flower_sides);
+    if (key == "ffire") return flag(p.flower_fire);
+    if (key == "frecover") return flag(p.flower_recover);
+    if (key == "frecall") return flag(p.flower_recall);
+    if (key == "fwatch") return flag(p.flower_watch);
     if (key == "cg") return flag(p.cantgo_aware);                                    // the can't-go fixes of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before them)
     if (key == "styled") return true;                                                // not a field of the plan: a tuned bot of a spec with no style draws its style like the registry's bot (arena_factory)
     if (key == "contest") return flag(p.contest_aware);
@@ -1044,7 +1050,7 @@ struct MatchReport {
 bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
     if (a.error != b.error || a.ticks != b.ticks || a.steps != b.steps || a.hash != b.hash || a.match_over != b.match_over || a.initial_ticks != b.initial_ticks ||
         a.checkpoints != b.checkpoints || a.seats.size() != b.seats.size() || a.news_events != b.news_events || a.audio_events != b.audio_events || a.peak_queue != b.peak_queue ||
-        a.reachable_units_left != b.reachable_units_left) {
+        a.reachable_units_left != b.reachable_units_left || a.landings != b.landings || a.landed != b.landed) {
         return false;
     }
     for (size_t i = 0; i < a.seats.size(); ++i) {
@@ -1054,7 +1060,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.refused_orders != y.refused_orders) {
+            x.orders != y.orders || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers) {
             return false;
         }
     }
@@ -1235,12 +1241,18 @@ std::string seeds_text(const std::vector<uint32_t>& seeds) {
     return out;
 }
 
+// The names of the power-up kinds in the report, by sim::AntType (1 Bomber .. 5 Swimmer)
+const char* kind_name(size_t kind) {
+    static const char* const kNames[6] = {"worker", "bomber", "fire", "thief", "combat", "swimmer"};
+    return kind < 6 ? kNames[kind] : "?";
+}
+
 // Writes the report to `out` one match at a time (nothing is built as one big string); false when the stream is not good afterwards
 bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedMap>& maps, const std::vector<MatchReport>& reports) {
     JsonWriter j(&out);
     j.begin_object();
     j.field("tool", "bot_arena");
-    j.field("format", uint64_t{3});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat
+    j.field("format", uint64_t{4});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat)
     j.field("note", kKindsNote);
     j.key("options");
     j.begin_object();
@@ -1277,6 +1289,11 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
         j.field("match_ticks", r.result.initial_ticks);
         j.field_bool("match_over", r.result.match_over);
         j.field("hash", hex64(r.result.hash));
+        j.field("landings", uint64_t{r.result.landings});
+        j.key("landed");                                                    // by the kind of ant that the landing makes
+        j.begin_object();
+        for (size_t k = 1; k < r.result.landed.size(); ++k) j.field(kind_name(k), uint64_t{r.result.landed[k]});
+        j.end_object();
         j.key("seats");
         j.begin_array();
         for (const ai::ArenaSeatResult& s : r.result.seats) {
@@ -1299,6 +1316,11 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("refused_orders", uint64_t{s.refused_orders});
             j.field("cantgo", uint64_t{s.cantgo});
             j.field("cantgo_began", uint64_t{s.cantgo_began});
+            j.key("took");                                                  // the power-ups the seat's ants took, by the kind of ant they became
+            j.begin_object();
+            for (size_t k = 1; k < s.took.size(); ++k) j.field(kind_name(k), uint64_t{s.took[k]});
+            j.end_object();
+            j.field("took_at_flowers", uint64_t{s.took_at_flowers});
             j.field("decisions", uint64_t{s.stats.decisions});
             j.field("intents", uint64_t{s.stats.intents});
             j.field("released", uint64_t{s.stats.released});
@@ -1430,6 +1452,21 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
             std::fprintf(g_out, "bot_arena: can't-go: %llu reactions (%llu first ones, the rest repeats), %llu orders, %llu refused (%.1f per 1,000 orders)\n", static_cast<unsigned long long>(cantgo),
                          static_cast<unsigned long long>(began), static_cast<unsigned long long>(orders), static_cast<unsigned long long>(refused),
                          orders == 0 ? 0.0 : 1000.0 * static_cast<double>(refused) / static_cast<double>(orders));
+        }
+    }
+    {
+        // the droplets that landed on the flowers and what the seats' ants took of them (docs/BOTS.md, "The flowers")
+        uint64_t landings = 0, took = 0, at_flowers = 0;
+        for (const MatchReport& r : reports) {
+            landings += r.result.landings;
+            for (const ai::ArenaSeatResult& s : r.result.seats) {
+                for (size_t k = 1; k < s.took.size(); ++k) took += s.took[k];
+                at_flowers += s.took_at_flowers;
+            }
+        }
+        if (landings != 0) {
+            std::fprintf(g_out, "bot_arena: flowers: %llu landings, %llu power-ups taken by the seats' ants, %llu of them at a flower (%.1f per 100 landings)\n", static_cast<unsigned long long>(landings),
+                         static_cast<unsigned long long>(took), static_cast<unsigned long long>(at_flowers), 100.0 * static_cast<double>(at_flowers) / static_cast<double>(landings));
         }
     }
     if (report.is_open()) {
@@ -1730,6 +1767,10 @@ void selftest_wiring(SelfTest& t, const LoadedMap& tiny) {
             {"first can't-go reactions", [](ai::ArenaResult& r) { ++r.seats[1].cantgo_began; }},
             {"orders", [](ai::ArenaResult& r) { ++r.seats[1].orders; }},
             {"refused orders", [](ai::ArenaResult& r) { ++r.seats[0].refused_orders; }},
+            {"power-ups taken", [](ai::ArenaResult& r) { ++r.seats[1].took[2]; }},
+            {"power-ups taken at a flower", [](ai::ArenaResult& r) { ++r.seats[0].took_at_flowers; }},
+            {"landings", [](ai::ArenaResult& r) { ++r.landings; }},
+            {"the kinds that landed", [](ai::ArenaResult& r) { ++r.landed[5]; }},
             {"audio events", [](ai::ArenaResult& r) { ++r.audio_events; }},
             {"units left on reachable piles", [](ai::ArenaResult& r) { ++r.reachable_units_left; }},
             {"seat count", [](ai::ArenaResult& r) { r.seats.pop_back(); }},
@@ -1906,7 +1947,7 @@ void selftest_tool(SelfTest& t) {
     t.check(!text.empty() && JsonChecker(text).valid() && JsonReader(text).parse(tree), "the report file is there, valid JSON, and reads back");
     const JsonValue* matches = tree.get("matches");
     const JsonValue* summary = tree.get("summary");
-    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 3 && matches != nullptr && matches->items.size() == 1 &&
+    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 4 && matches != nullptr && matches->items.size() == 1 &&
                 summary != nullptr && summary->get("matches") != nullptr && summary->get("matches")->u64() == 1 && summary->get("failures") != nullptr && summary->get("failures")->u64() == 0,
             "the tool, the format and the summary");
     // the numbers of the report are the numbers of the match: play the same match in-process and compare every field
@@ -1923,7 +1964,8 @@ void selftest_tool(SelfTest& t) {
     if (fields_ok) {
         const JsonValue& m = matches->items[0];
         fields_ok = m.get("map") != nullptr && m.get("map")->text == "TINY" && m.get("ok") != nullptr && m.get("ok")->b && m.get("ticks") != nullptr && m.get("ticks")->u64() == played.ticks &&
-                    m.get("hash") != nullptr && m.get("hash")->text == hex64(played.hash) && m.get("seats") != nullptr && m.get("seats")->items.size() == played.seats.size();
+                    m.get("hash") != nullptr && m.get("hash")->text == hex64(played.hash) && m.get("seats") != nullptr && m.get("seats")->items.size() == played.seats.size() &&
+                    m.get("landings") != nullptr && m.get("landings")->u64() == played.landings && m.get("landed") != nullptr && m.get("landed")->get("swimmer") != nullptr;
         for (size_t i = 0; fields_ok && i < played.seats.size(); ++i) {
             const JsonValue& s = m.get("seats")->items[i];
             const ai::ArenaSeatResult& r = played.seats[i];
@@ -1931,6 +1973,7 @@ void selftest_tool(SelfTest& t) {
             fields_ok = num("seat") == r.spec.seat && num("score") == r.score && num("shown_score") == r.shown_score && num("ants") == r.ants && num("eggs") == r.eggs && num("hatched") == r.hatched &&
                         num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("stalls") == r.stalls && num("decisions") == r.stats.decisions &&
                         num("orders") == r.orders && num("refused_orders") == r.refused_orders && num("cantgo") == r.cantgo && num("cantgo_began") == r.cantgo_began &&
+                        num("took_at_flowers") == r.took_at_flowers && s.get("took") != nullptr && s.get("took")->get("fire") != nullptr && s.get("took")->get("fire")->u64() == r.took[2] &&
                         num("released") == r.stats.released && num("intents") == r.stats.intents && num("expired") == r.stats.expired && num("rejected") == r.stats.rejected &&
                         s.get("bot") != nullptr && s.get("bot")->text == spec_text(r.spec) && s.get("runs") != nullptr && s.get("runs")->text == r.runs;
         }
@@ -1939,6 +1982,36 @@ void selftest_tool(SelfTest& t) {
     }
     t.check(fields_ok, "every field of the report equals the match it describes (scores, counts, hash, replay)");
     t.check(played.seats.size() == 3 && played.seats[0].score > 0 && played.seats[0].banked == static_cast<uint32_t>(played.seats[0].score) && played.seats[2].score == 0, "(and the harvesting seats really scored, so the fields above are not all zero)");
+    // a map with flowers: the landings are counted, and every kind is written under its own name (TINY has no flower, so every value above is 0)
+    Options flowers = o;
+    flowers.maps = {"SMALL"};
+    flowers.ticks = 1500;
+    flowers.replay_check = false;
+    flowers.out = dir.file("flowers.json");
+    const ToolRun flower_run = run_tool_quietly(flowers, dir, factory);
+    JsonValue flower_tree;
+    const std::string flower_text = read_file(flowers.out);
+    bool flowers_ok = flower_run.code == 0 && JsonReader(flower_text).parse(flower_tree) && flower_tree.get("matches") != nullptr && flower_tree.get("matches")->items.size() == 1;
+    if (flowers_ok) {
+        const std::vector<LoadedMap> flower_maps = load_maps(flowers);
+        ai::ArenaSpec flower_spec;
+        flower_spec.level = &flower_maps[0].level;
+        flower_spec.seed = 1;
+        flower_spec.bots = flowers.seats;
+        flower_spec.max_ticks = flowers.ticks;
+        flower_spec.latency_ticks = flowers.latency;
+        flower_spec.factory = factory;
+        const ai::ArenaResult flower_played = ai::play_match(flower_spec);
+        const JsonValue& m = flower_tree.get("matches")->items[0];
+        const JsonValue* landed = m.get("landed");
+        uint64_t sum = 0;
+        for (size_t k = 1; k < flower_played.landed.size(); ++k) sum += flower_played.landed[k];
+        flowers_ok = landed != nullptr && m.get("landings") != nullptr && m.get("landings")->u64() == flower_played.landings && flower_played.landings > 4 && sum == flower_played.landings &&
+                     landed->get("bomber") != nullptr && landed->get("bomber")->u64() == flower_played.landed[1] && landed->get("fire") != nullptr && landed->get("fire")->u64() == flower_played.landed[2] &&
+                     landed->get("thief") != nullptr && landed->get("thief")->u64() == flower_played.landed[3] && landed->get("combat") != nullptr && landed->get("combat")->u64() == flower_played.landed[4] &&
+                     landed->get("swimmer") != nullptr && landed->get("swimmer")->u64() == flower_played.landed[5];
+    }
+    t.check(flowers_ok, "on SMALL the landings of the flowers are counted, and the report writes every kind under its own name (Bomber 1, Fire 2, Thief 3, Combat 4, Swimmer 5)");
     // the defaults of the command line mean four standard bots at medium level
     Options d;
     std::string err;
@@ -2075,6 +2148,18 @@ int selftest() {
         t.check(cg.gate_leaver_ticks == 60u && apply_tune(cg, "gatehold", 0, tune_err) && cg.gate_leaver_ticks == 0u && apply_tune(cg, "gatehold", 7, tune_err) && cg.gate_leaver_ticks == 7u &&
                     !apply_tune(cg, "gatehold", -1, tune_err) && !apply_tune(cg, "gatehold", 1001, tune_err) && cg.gate_leaver_ticks == 7u,
                 "the key gatehold sets the ticks that the gate's click waits for an ant that leaves over the ramp (60 at Hard, 0: no wait, 0 to 1000 allowed)");
+        ai::LevelPlan fl = ai::plan_for(ai::Level::Hard);
+        const auto rules = [&fl]() {                                                                     // the five flower rules of the plan, as five digits: sides, fire, recover, recall, watch
+            const bool on[5] = {fl.flower_sides, fl.flower_fire, fl.flower_recover, fl.flower_recall, fl.flower_watch};
+            std::string digits;
+            for (const bool b : on) digits += b ? '1' : '0';
+            return digits;
+        };
+        const char* const flower_keys[5] = {"fside", "ffire", "frecover", "frecall", "fwatch"};
+        const char* const flower_alone[5] = {"10000", "01000", "00100", "00010", "00001"};
+        bool flower_ok = rules() == "11111" && apply_tune(fl, "flowers", 0, tune_err) && rules() == "00000";
+        for (int k = 0; k < 5; ++k) flower_ok = flower_ok && apply_tune(fl, flower_keys[k], 1, tune_err) && rules() == flower_alone[k] && apply_tune(fl, flower_keys[k], 0, tune_err) && rules() == "00000";
+        t.check(flower_ok && apply_tune(fl, "flowers", 1, tune_err) && rules() == "11111", "the key flowers switches the five flower rules of the plan together (Hard has all five) and fside, ffire, frecover, frecall and fwatch one each");
     }
 
     t.section("the table of baselines (tests/test_ai/baselines.inc)");
