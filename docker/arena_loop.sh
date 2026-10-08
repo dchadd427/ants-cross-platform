@@ -24,6 +24,7 @@ log() { printf '%s arena: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
 case $EVERY in
     ''|*[!0-9]*) log "ANTS_ARENA_EVERY_MIN='$EVERY' is not a whole number: using 60"; EVERY=60 ;;
+    ??????????*) log "ANTS_ARENA_EVERY_MIN='$EVERY' is more than 1440: using 1440"; EVERY=1440 ;;       # (ten digits or more: too long for the arithmetic below, which would wrap around)
 esac
 EVERY=$((10#$EVERY))
 if (( EVERY < 5 )); then log "ANTS_ARENA_EVERY_MIN=$EVERY is less than 5: using 5"; EVERY=5; fi
@@ -31,7 +32,7 @@ if (( EVERY > 1440 )); then log "ANTS_ARENA_EVERY_MIN=$EVERY is more than 1440: 
 
 case ${ANTS_ARENA_SEED:-} in
     '') RANDOM=$(( $(date +%s) & 32767 )) ;;
-    *[!0-9]*) log "ANTS_ARENA_SEED='${ANTS_ARENA_SEED}' is not a whole number: taking the clock"; RANDOM=$(( $(date +%s) & 32767 )) ;;
+    *[!0-9]*|??????????*) log "ANTS_ARENA_SEED='${ANTS_ARENA_SEED}' is not a whole number of nine digits or less: taking the clock"; RANDOM=$(( $(date +%s) & 32767 )) ;;
     *) RANDOM=$((10#${ANTS_ARENA_SEED} & 32767)) ;;
 esac
 
@@ -70,6 +71,7 @@ while (( stop == 0 )); do
     (( stop )) && break
     sleep $((EVERY * 60)) &
     sleeper=$!
+    (( stop )) && kill "$sleeper" 2>/dev/null        # (a SIGTERM between the check above and the line before this one would have found no sleeper to end)
     wait "$sleeper" 2>/dev/null
     sleeper=0
 done

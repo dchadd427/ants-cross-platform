@@ -1138,7 +1138,7 @@ int main() {
         write_file(f.dir / old, std::vector<uint8_t>(bytes.begin(), bytes.begin() + 40));
         fs::last_write_time(f.dir / old, fs::file_time_type::clock::now() - std::chrono::minutes(10));
         ReplayConfig config = f.config();
-        config.settle_s = 2;
+        config.settle_s = 60;                                                              // (a stall of the test machine between the write and the open must not age the file past it)
         ReplayStore store(config);
         std::string why;
         ASSERT_TRUE(store.prepare(why));

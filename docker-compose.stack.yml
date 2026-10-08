@@ -97,7 +97,7 @@ services:
   # The bot arena: every ANTS_ARENA_EVERY_MIN minutes (60 by default) it plays ONE match of two to four computer players headless (about a second of one processor) and keeps it as a
   # replay in /results/replays, the folder of the game server in the volume below; the server looks at its folder again every 30 seconds, so the match shows in the site's list
   # (web/watch.html) as "Bot (Medium)" / "Bot (Hard)" without a restart. These files count like the others: the server's ANTS_REPLAY_DAYS and ANTS_REPLAY_MAX_MB purge the oldest first
-  # (a match is 4 to 8 KB), and the list shows the newest 200 files, so one match an hour (24 a day) leaves room for the matches of players of the last week and more. The log says
+  # (a match is 4 to 8 KB), and the list shows the newest 200 files of all kinds together, so one match an hour (24 a day, 168 a week) leaves room for the matches of players of the last week while they make about 4 a day or fewer: a longer ANTS_ARENA_EVERY_MIN keeps more of theirs on the list. The log says
   # the map, the seats and the seed of each match: bot_arena with the same arguments plays it again bit for bit (docker/arena_loop.sh, docs/BOTS.md).
   # The program needs nothing but the volume and the maps: no network at all, no ports, no secret.
   ants-arena:
