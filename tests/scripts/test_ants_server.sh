@@ -116,7 +116,7 @@ check "web/lobby.html puts the plan into every game link of a room and into its 
 TEAM_BLOCK=1
 if grep -qF "var wantedBlock = roomBlockOf(window.location.search);" "$FOUR_PAGE" && grep -qF "var roomTeam = hostTeam(validRoomTeams(teams), players);" "$FOUR_PAGE" \
     && grep -qF "startRoom(randomCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');" "$FOUR_PAGE" \
-    && grep -qF "roomTeams = teamsInBlock ? named : (named ? '' : validRoomTeams(teams));" "$FOUR_PAGE" && grep -qF "joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams)" "$FOUR_PAGE" \
+    && grep -qF "var shown = shownRoomTeams(named, seatCount);" "$FOUR_PAGE" && grep -qF "roomTeams = teamsInBlock ? shown : (named ? '' : validRoomTeams(teams));" "$FOUR_PAGE" && grep -qF "joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams)" "$FOUR_PAGE" \
     && grep -qF "hostTeam(wantedTeams, wantedBlock.seats).replace('ffa', '')" "$FOUR_PAGE" && grep -qF "roomBlockQuery(cardBlock(state)) + '&seat='" "$FOUR_PAGE"; then TEAM_BLOCK=0; fi
 check "web/lobby.html puts the teams that the Team 1 and Team 2 switches make into the room's create block (roommap, roomseats and roomteams in every link; the card's room is always for four seats), reads the block of an address (roomBlockOf), lets the block's teams win over the address's &teams=, and narrows an address's &teams= to the seats that the block names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_BLOCK"
 FILL_SHELL=1
@@ -503,7 +503,7 @@ def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
     return bytes([len(b)]) + b
-hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0)     # (protocol 10: no key, no turns)
+hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0])     # (protocol 10: no key, no turns; protocol 15: the platform byte, 0 = not told, and no create block)
 message = bytes([24, 0, 0, 0, 0, 255, 255]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)       # (protocol 13: a StartRequest is the type, a fill level for each of the four seats, 0 = none, and the two team bytes, 255 = none)
 sock = socket.create_connection(('127.0.0.1', port), timeout=5)
 sock.sendall(frame(hello))
@@ -1202,8 +1202,8 @@ def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
     return bytes([len(b)]) + b
-# a Hello (HelloMsg, include/ants_net/protocol.hpp): type 1, protocol, name, listen port 0, any seat (255), the room's code, no token, no key, no turns
-hello = bytes([1]) + struct.pack('<H', protocol) + str8('Newcomer') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0)
+# a Hello (HelloMsg, include/ants_net/protocol.hpp): type 1, protocol, name, listen port 0, any seat (255), the room's code, no token, no key, no turns, the platform byte (protocol 15: 0 = not told; no create block)
+hello = bytes([1]) + struct.pack('<H', protocol) + str8('Newcomer') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0])
 hello_seconds, welcome_seconds, welcome = 99.0, 99.0, False
 if made:
     asked = time.time()

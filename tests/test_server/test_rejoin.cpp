@@ -1666,7 +1666,8 @@ void run_way_back_tests() {
         Machine& a = w.join("Ann", "RJ-14", 1);                                          // Ann asks for seat 1 and has it
         const std::string odd = std::string("B\xC3\xA9") + "b\x01 " + std::string(40, 'x');      // not printable ASCII, and longer than a name may be
         const uint8_t bobs_platform = static_cast<uint8_t>(net::kPlatformBrowser | net::kOsLinux);
-        Machine& b = w.join(odd, "RJ-14", 1, "tok-14", nullptr, bobs_platform);          // Bob asks for the same seat: the first free one is his (seat 0)
+        const net::CreateBlock bobs_block = block_of("", 2);                             // (Bob's link carries a block: the room is there already, so the server ignores it; the way back must not carry it)
+        Machine& b = w.join(odd, "RJ-14", 1, "tok-14", &bobs_block, bobs_platform);      // Bob asks for the same seat: the first free one is his (seat 0)
         ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
         ASSERT_TRUE(a.net.my_seat() == 1 && b.net.my_seat() == 0);
         const net::JoinTarget& target = b.net.join_target();                             // how the first link was made: what the way back makes its links from
@@ -1682,7 +1683,7 @@ void run_way_back_tests() {
         ASSERT_EQ(hello.room, std::string("RJ-14"));
         ASSERT_EQ(hello.token, std::string("tok-14"));
         ASSERT_EQ(hello.platform, bobs_platform);                                        // (protocol 15: what the machine runs on goes with it on the way back, as it went the first time)
-        ASSERT_FALSE(hello.create.has_value());                                          // (and a Hello with a key never makes a room: no create block)
+        ASSERT_FALSE(hello.create.has_value());                                          // (and a Hello with a key never makes a room: no create block, though the first link of this machine had one)
         ASSERT_EQ(hello.want_seat, uint8_t{0});                                          // its own seat: the key decides, but this is what anybody's Hello says
         ASSERT_TRUE(net::key_matches(hello.key, b.keys_given[0].key) && hello.have_turns > 0 && hello.version == net::kProtocolVersion);
         ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Over; }, 3000));

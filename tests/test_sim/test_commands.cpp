@@ -1404,7 +1404,7 @@ void run_start_team_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N1.25 start_teams_for: Which Teams A Start Asks For (The Room's Own, Which Its Code Names, For Every Start; A Leader's Request Only When It Is What Starts The Match And Only In A Room That Has None Of Its Own), Over Every Combination") {
+    TEST_CASE("N1.25 start_teams_for: Which Teams A Start Asks For (The Room's Own, From The Create Block That Made It, For Every Start; A Leader's Request Only When It Is What Starts The Match And Only In A Room That Has None Of Its Own), Over Every Combination") {
         const StartTeams none;
         const StartTeams own_a{true, 0, 1};
         const StartTeams own_b{true, 2, 3};

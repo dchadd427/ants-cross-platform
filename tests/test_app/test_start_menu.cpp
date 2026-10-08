@@ -964,7 +964,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(bare.code().empty());
     } TEST_END();
 
-    TEST_CASE("M3.3 Join: a name that looks like a computer player's is refused on the panel with the reason, whatever its blanks and case; so are an empty name and a bad or empty code; nothing is asked of the application, the panel stays, the can't-go cue plays") {
+    TEST_CASE("M3.3 Join: a name that looks like a computer player's is refused on the panel with the reason, whatever its blanks and case; so are an empty name and a bad or empty code; nothing is asked of the application, the panel stays, the can't-go cue plays; a code typed as it is shown (two groups of four, with a blank between) is the same code without the blank") {
         const std::vector<std::string> bot_names = {"Bot (Hard)", "bot (x)", "BOT (Easy)", " Bot (x)", "B o t (x)", "bot(x)", "Bot (", "  bOt(  "};
         for (const std::string& name : bot_names) {
             Rig r;

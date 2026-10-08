@@ -88,7 +88,8 @@ constexpr bool kInBrowser = false;
 #endif
 
 // A Hello with a create block is one that the server makes the room of when somebody comes (the front page's card and the start menu send them): the server answers NoSuchRoom when it cannot,
-// so it is a place that is missing (the cap of public rooms, the server's limit, a server that makes none), never a room that does not exist
+// so it is mostly a place that is missing (the cap of public rooms, the server's limit, a server that makes none). The text is told only for a code that a block can make a room of
+// (public_room_code): a code with a capital is the name of a room of the control interface, which a block never makes, and the answer for it is a room that does not exist (or is over)
 constexpr const char* kTextNoPlace = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
 
 // "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
@@ -784,7 +785,7 @@ void NetGame::update_client() {
                         status_ = way_back_text(reject_reason_);
                         if (way_back_forgets(reject_reason_)) forget_key();
                     } else {
-                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser, create_.has_value());
+                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser, create_.has_value() && public_room_code(target_.room));
                     }
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;

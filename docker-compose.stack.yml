@@ -53,7 +53,7 @@ services:
     # The page web/lobby.html (the front page) makes rooms of its own: its Hello carries a create block (the map, the seats, the teams) and a code of eight lower-case characters: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
     # (default 48) on the map ANTS_DEMO_MAP (default TREASURE.LVL) unless the block names one of ANTS_DEMO_MAPS (the page's choice; the maps folder must hold them
     # all). A code with an upper-case letter makes no such room (the control interface draws those). Whoever reaches a game port (the site, or TCP port 4001) can fill these rooms; rooms of the control interface keep their own places.
-    # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least).
+    # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least, or one alone with bots).
     # --log-mb 4: one room's turn log (what a returning player is given) is at most 4 MiB (a busy 30-minute match logs 0.65 MB), so that the demo rooms alone cannot use up the 256 MiB that
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).
     command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4"]

@@ -793,6 +793,15 @@ their music and their sound: only the window you are in is heard). The match is 
             for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
             return 'ffa';
         }
+        // The teams of a room as the page shows them. With four seats a pair that has no Green is the same two teams as the pair of the other two seats, which has ("1+2" is Red + Blue against Green + Black, "0+3":
+        // the game's room_team_choices lists the pairs with Green); a block of a hand-made address or of the command line can name either, and the room plays both. Any other pair, and a pair that its seats cannot
+        // make, comes back as it is (`teams` is validRoomTeams's text or '': the lower seat first).
+        function shownRoomTeams(teams, players) {
+            var m = /^([1-3])\+([1-3])$/.exec(teams);
+            if (!m || players !== 4) return teams;
+            var rest = [0, 1, 2, 3].filter(function (s) { return String(s) !== m[1] && String(s) !== m[2]; });
+            return rest[0] + '+' + rest[1];
+        }
         // The teams of an address (?teams= and ?roomteams=): two different seats 0 - 3 as A+B (a "+" that came as a blank is one), the lower seat first (a pair has one spelling, as in the create block: "1+0" is "0+1"),
         // else none ('' : free for all). The tested text comes back, never the address's.
         function validRoomTeams(value) {
@@ -1344,8 +1353,9 @@ their music and their sound: only the window you are in is heard). The match is 
             // The room's teams: the ones that its create block names (the server makes them for every start), else what the address asked for. A block that names teams that its seats cannot make is the
             // server's to judge at the start (the match starts without teams and the room says "No teams: ..."): the address's teams do not replace them, and the page does not announce them.
             var named = block ? block.teams : '';
-            teamsInBlock = named !== '' && hostTeam(named, seatCount) === named;
-            roomTeams = teamsInBlock ? named : (named ? '' : validRoomTeams(teams));
+            var shown = shownRoomTeams(named, seatCount);
+            teamsInBlock = shown !== '' && hostTeam(shown, seatCount) === shown;
+            roomTeams = teamsInBlock ? shown : (named ? '' : validRoomTeams(teams));
             try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it (with its create block, so that a room that has ended is made again)
                 history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fill ? '&fill=' + fill : '') + (roomTeams && !teamsInBlock ? '&teams=' + encodeURIComponent(roomTeams) : '') + (aspectFromAddress ? '&aspect=' + aspect : ''));
             } catch (e) { /* not essential */ }

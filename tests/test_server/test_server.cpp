@@ -1312,6 +1312,29 @@ void run_demo_tests() {
         ASSERT_EQ(w.mgr.room_count(), size_t{2});
     } TEST_END();
 
+    TEST_CASE("S3.10c The Codes That The Control Interface Draws Always Have A Capital (The Review's Second Round: About One Draw In 50,800 Had None), Eight Characters Of The Alphabet Without The Look-Alikes, So That A Visitor's Block, Which Takes Only A Code With No Capital, Never Takes The Name Of A Room That Is Yet To Be Made; net::public_room_code Is That Rule") {
+        std::mt19937 rng(20261008);
+        const std::string alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+        for (int i = 0; i < 20000; ++i) {
+            const std::string code = draw_room_code(rng);
+            ASSERT_EQ(code.size(), size_t{8});
+            ASSERT_TRUE(net::valid_room_code(code));
+            ASSERT_TRUE(code[0] >= 'A' && code[0] <= 'Z');                                // the first is a letter: a capital in every code, not in all but a few
+            for (const char c : code) ASSERT_TRUE(alphabet.find(c) != std::string::npos);
+            ASSERT_FALSE(net::public_room_code(code));                                    // so no visitor's block makes a room of it
+        }
+        {   // the draws are not all the same (a generator that is not asked)
+            std::set<std::string> seen;
+            for (int i = 0; i < 200; ++i) seen.insert(draw_room_code(rng));
+            ASSERT_TRUE(seen.size() > 190);
+        }
+        // the rule: a valid code of one or more characters with no upper-case letter
+        for (const char* open : {"k7m2xq9p", "a", "room_7", "a-b", "0123456789", "demo-treasure-4p-t01-k7m2xq"}) ASSERT_TRUE(net::public_room_code(open));
+        for (const char* closed : {"", "ROOM-1", "k7m2Xq9p", "Aa", "a b", "a.b", "caf\xC3\xA9", "r\n"}) ASSERT_FALSE(net::public_room_code(closed));
+        ASSERT_TRUE(net::public_room_code(std::string(net::kMaxRoomCodeChars, 'r')));
+        ASSERT_FALSE(net::public_room_code(std::string(net::kMaxRoomCodeChars + 1, 'r')));
+    } TEST_END();
+
     TEST_CASE("S3.23 A Create Block Can Choose Its Map: A File Name That The Server Lists Makes The Room On That Map, In Any Case; Every Other Name, And None, Keeps The Default Map; Without A List Nothing Changes") {
         ServerLimits limits;
         limits.demo_rooms = 13;

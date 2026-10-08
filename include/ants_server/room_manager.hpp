@@ -19,6 +19,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,11 @@ inline constexpr uint32_t kDemoMaxPauseMs = 10u * 60u * 1000u;
 /// given to the new room (RoomManager::make_public_room). A room with a person at its match, or in its lobby, is never ended for that. The floor keeps a blip of every link at once (a proxy that
 /// restarts) from costing a match.
 inline constexpr uint32_t kDemoAbandonedMs = 60u * 1000u;
+
+/// A room code as the control interface draws it when a room is made without one (RoomManager::new_code): eight characters without the look-alikes (no 0 / O, 1 / I / L), the first an upper-case letter, so
+/// that a code of the control interface always has a capital and a visitor's block never takes its name (net::public_room_code). `rng` is the generator to draw from (the manager's own, seeded from the
+/// operating system; a test passes its own).
+std::string draw_room_code(std::mt19937& rng);
 
 /// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running with a person in it (a room that a restart brought back also for its first minutes: Room::busy),
 /// and the people (bots are not people) in the rooms that wait, load or run. Plain counts: no name, no code; exactly these two fields (tools/deploy_wait.py accepts nothing else).

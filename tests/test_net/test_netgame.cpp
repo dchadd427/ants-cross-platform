@@ -905,7 +905,7 @@ void run_migration_tests() {
 
 // A client that is refused: every reason of a Reject ends the join with its own text on the screen
 void run_reject_tests() {
-    TEST_CASE("N3.17 Rejections (Protocol 10): Dropped Is The Original's Text For A Dropped Machine (String 94), RejoinFailed And Superseded Say What Happened, Each Ends The Join With Its Own Line; The Texts Of The Older Reasons Are What They Were; (Protocol 15) The Hello Of Each Join Tells The Machine's Platform And Carries A Create Block Only When It Was Given One, And NoSuchRoom For A Hello With A Block Says That The Server Cannot Make The Room") {
+    TEST_CASE("N3.17 Rejections (Protocol 10): Dropped Is The Original's Text For A Dropped Machine (String 94), RejoinFailed And Superseded Say What Happened, Each Ends The Join With Its Own Line; The Texts Of The Older Reasons Are What They Were; (Protocol 15) The Hello Of Each Join Tells The Machine's Platform And Carries A Create Block Only When It Was Given One, And NoSuchRoom For A Hello With A Block Says That The Server Cannot Make The Room, Unless Its Code Has A Capital (A Room Of The Control Interface: A Block Never Makes It, So It Does Not Exist)") {
         struct Case {
             RejectReason reason;
             std::string text;
@@ -923,13 +923,14 @@ void run_reject_tests() {
         };
         ASSERT_EQ(sim::strings::text(sim::strings::kDroppedFromGame), std::string("Sorry, you have been dropped from the game.  Hit OK to exit the program."));
         // A Hello that carries a create block is one that the server makes the room of when somebody comes: NoSuchRoom for it is the place that is missing (the cap of public rooms), not a room
-        // that does not exist, and it is told so; every other refusal, and NoSuchRoom for a Hello without a block, is as it was. The Hello also tells what the machine runs on (protocol 15): its
+        // that does not exist, and it is told so; every other refusal, and NoSuchRoom for a Hello without a block, is as it was. So is NoSuchRoom for a block with a code that has a capital (variant 3: the
+        // name of a room of the control interface, which a block never makes: a room that does not exist, not a place that is missing). The Hello also tells what the machine runs on (protocol 15): its
         // own platform unless it was told another (variant 0: never set; 1: the web's word, with a block; 2: a byte that is no platform, so the machine's own)
         const std::string no_place = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
-        for (const Case& c : cases) for (const int variant : {0, 1, 2}) {
-            const bool with_block = variant == 1;
+        for (const Case& c : cases) for (const int variant : {0, 1, 2, 3}) {
+            const bool with_block = variant == 1 || variant == 3;
             const uint8_t told = variant == 1 ? static_cast<uint8_t>(kPlatformBrowser | kOsMacos) : native_platform();
-            const std::string room = "k7m2xq9p";
+            const std::string room = variant == 3 ? "Party-1" : "k7m2xq9p";
             auto listener = TcpListener::listen(0, true);
             ASSERT_TRUE(listener != nullptr);
             sim::SimulationEngine sim;
@@ -965,7 +966,7 @@ void run_reject_tests() {
             }
             ASSERT_TRUE(replied);
             ASSERT_EQ(net.phase(), NetGame::Phase::Failed);
-            ASSERT_EQ(net.status_text(), with_block && c.reason == RejectReason::NoSuchRoom ? no_place : c.text);
+            ASSERT_EQ(net.status_text(), variant == 1 && c.reason == RejectReason::NoSuchRoom ? no_place : c.text);
             bool failed = false;
             for (const NetGame::Event& e : net.take_events()) failed = failed || e.type == NetGame::Event::Type::Failed;
             ASSERT_TRUE(failed);
@@ -1922,6 +1923,19 @@ void run_seat_move_tests() {
                 ASSERT_TRUE(server->send(encode(room_of(kinds, leader_of(kinds)))));
                 ASSERT_TRUE(run_until([&]() { return shows(kinds); }));
             };
+            // The windows of the press rule (half a second between two presses, a second for the room's answer) are counted in the machine's game time, and a step of game time lasts a fraction of a
+            // millisecond of real time, so a late kernel could use the window up while a wait for a message goes on (the review's second round). A wait that a window assertion follows therefore lets
+            // the real clock run and the game clock stand still: one pass over the machine and the script's server for each millisecond, up to two seconds.
+            const auto pass_still = [&]() {
+                net.update(now);
+                if (!server) server = listener->accept();
+                read();
+            };
+            const auto wait_sent = [&](size_t count) { return ants_test::real_time_tail([&]() { return sent.size() >= count; }, pass_still); };
+            const auto say_still = [&](const std::string& kinds) {
+                ASSERT_TRUE(server->send(encode(room_of(kinds, leader_of(kinds)))));
+                ASSERT_TRUE(ants_test::real_time_tail([&]() { return shows(kinds); }, pass_still));
+            };
             ASSERT_TRUE(run_until([&]() { return hello_heard; }));
             ASSERT_TRUE(server->send(encode(WelcomeMsg{0, 4})));
             say("CCC.");
@@ -1951,7 +1965,7 @@ void run_seat_move_tests() {
             ASSERT_EQ(sent_so_far(), size_t{0});
             // a free colour: one SeatMove, with the guard of the seats that the machine shows
             ASSERT_TRUE(net.request_move_seat(1, 3));
-            ASSERT_TRUE(run_until([&]() { return !sent.empty(); }));
+            ASSERT_TRUE(wait_sent(1));
             ASSERT_EQ(sent.size(), size_t{1});
             ASSERT_TRUE(sent[0].from == 1 && sent[0].to == 3 && sent[0].guard == seated && sent[0].guard != 0u);
             // the next press waits: a double click is one press (half a second), and the answer of the room (a second at most: a request that the room cannot do is not answered at all)
@@ -1963,10 +1977,10 @@ void run_seat_move_tests() {
             ASSERT_EQ(sent_so_far(), size_t{1});
             run_for(500);                                                                                           // more than a second: the room is not going to answer, and the leader may press again
             ASSERT_TRUE(net.request_move_seat(1, 0));                                                               // a guest's colour: the leader's own, so the leader goes to red and the guest to green
-            ASSERT_TRUE(run_until([&]() { return sent.size() == 2; }));
+            ASSERT_TRUE(wait_sent(2));
             ASSERT_TRUE(sent[1].from == 1 && sent[1].to == 0 && sent[1].guard == seated);                          // (the same seats as shown: the same guard)
             // the room answers with the seats as they are: the guard of the next press is the new room's, and it may go out when half a second has passed
-            say("CC.C");
+            say_still("CC.C");
             const uint32_t after = seating_hash(room_of("CC.C", 0));
             ASSERT_TRUE(after != seated && seating_hash(net.room()) == after);
             ASSERT_FALSE(net.request_move_seat(1, 2));                                                              // (the room's answer came a moment after the press: still one press)

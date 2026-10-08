@@ -94,6 +94,14 @@ bool valid_room_code(const std::string& code) noexcept {
     return true;
 }
 
+bool public_room_code(const std::string& code) noexcept {
+    if (code.empty() || !valid_room_code(code)) return false;
+    for (char c : code) {
+        if (c >= 'A' && c <= 'Z') return false;
+    }
+    return true;
+}
+
 bool valid_create_block(const CreateBlock& block) noexcept {
     if (!block.map_name.empty() && !valid_map_name(block.map_name)) return false;
     if (block.seats < 2 || block.seats > sim::MAX_PLAYERS) return false;

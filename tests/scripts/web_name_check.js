@@ -1542,6 +1542,11 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
         ['?room=k7m2xq9p&roommap=treasure&roomseats=4&teams=2%2B3', BLOCKED, null, null, '/?room=k7m2xq9p&roommap=treasure&roomseats=4', ''],
         ['?room=k7m2xq9p&roommap=treasure&roomseats=4&roomteams=0%2B1&teams=0%2B2', BLOCKED + '&roomteams=0%2B1', null, null, '/?room=k7m2xq9p&roommap=treasure&roomseats=4&roomteams=0%2B1',
          'Teams of this room: Green + Red against Blue + Black. They are part of the room (set when it was made), so the match starts with them every time: when the room fills up as well as at START.'],
+        // with four seats a block's pair without Green is the same two teams as the pair of the other two (a hand-made address, or the game's --room-teams): the room plays them, so the panel announces them as the pair with Green
+        ['?room=k7m2xq9p&roommap=treasure&roomseats=4&roomteams=1%2B2&teams=0%2B1', BLOCKED + '&roomteams=1%2B2', null, null, '/?room=k7m2xq9p&roommap=treasure&roomseats=4&roomteams=1%2B2',
+         'Teams of this room: Green + Black against Red + Blue. They are part of the room (set when it was made), so the match starts with them every time: when the room fills up as well as at START.'],
+        ['?room=k7m2xq9p&roommap=treasure&roomseats=4&roomteams=1%2B3', BLOCKED + '&roomteams=1%2B3', null, null, '/?room=k7m2xq9p&roommap=treasure&roomseats=4&roomteams=1%2B3', 'Teams of this room: Green + Blue against Red + Black.'],
+        ['?room=k7m2xq9p&roommap=treasure&roomseats=4&roomteams=2%2B3', BLOCKED + '&roomteams=2%2B3', null, null, '/?room=k7m2xq9p&roommap=treasure&roomseats=4&roomteams=2%2B3', 'Teams of this room: Green + Red against Blue + Black.'],
         ['?room=k7m2xq9p&roommap=small&roomseats=3&teams=1%2B2', '&roommap=small&roomseats=3', '1+2', null, '/?room=k7m2xq9p&roommap=small&roomseats=3&teams=1%2B2', AT_START('Red + Blue against Green')],
         ['?room=k7m2xq9p&roommap=small&roomseats=3&teams=2%2B3', '&roommap=small&roomseats=3', null, null, '/?room=k7m2xq9p&roommap=small&roomseats=3', ''],
         ['?room=k7m2xq9p&roommap=small&roomseats=2&teams=0%2B1', '&roommap=small&roomseats=2', null, null, '/?room=k7m2xq9p&roommap=small&roomseats=2', ''],
