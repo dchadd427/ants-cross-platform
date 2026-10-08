@@ -41,6 +41,7 @@
 #include <thread>
 #include <vector>
 #include "ants_test_paths.hpp"
+#include "../common/ants_test_pause.hpp"
 
 using namespace ants;
 using namespace ants::app;
@@ -155,7 +156,7 @@ struct Duo {
             app.update_simulation(0.010f);
             peer.now += 10;
             peer.update();
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
         }
     }
     bool until(const std::function<bool()>& cond, uint32_t max_ms) {
@@ -187,7 +188,7 @@ struct Trio {
             first.update();
             second.now += 10;
             second.update();
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
         }
     }
     bool until(const std::function<bool()>& cond, uint32_t max_ms) {
@@ -264,7 +265,7 @@ struct Hall {
             }
             server.now += 10;
             server.update();
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
         }
     }
     bool until(const std::function<bool()>& cond, uint32_t max_ms) {
@@ -311,8 +312,9 @@ bool start_three(Peer& host, Peer& bob, Application& app, const std::string& app
         host.update();
         bob.now += 10;
         bob.update();
-        std::this_thread::sleep_for(std::chrono::microseconds(300));
+        ants_test::short_pause();
     }
+    ants_test::real_time_tail([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, [&]() { host.update(); bob.update(); });
     if (bob.net.phase() != net::NetGame::Phase::Room || bob.net.my_seat() != 1) return false;
     ApplicationConfig cfg = headless_config();
     cfg.net_role = ApplicationConfig::NetRole::Join;
@@ -1598,8 +1600,9 @@ void run_guest_tests() {
             host.update();
             bob.now += 10;
             bob.update();
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
         }
+        ants_test::real_time_tail([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, [&]() { host.update(); bob.update(); });
         ASSERT_TRUE(bob.net.phase() == net::NetGame::Phase::Room && bob.net.my_seat() == 1);
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Join;
@@ -3130,7 +3133,7 @@ void run_latency_tests() {
         for (int i = 0; i < 40; ++i) {
             host.now += 10;
             host.update();
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
         }
         const uint32_t before = app.net()->turns_executed();
         app.run_frame_with_delta(0.4f);                                                   // the frame that follows the hitch: 400 ms of real time
@@ -3164,7 +3167,7 @@ void run_latency_tests() {
             for (uint32_t t = 0; t < ms; t += 10) {
                 app.pump_network(0.010f);
                 app.update_simulation(0.010f);
-                std::this_thread::sleep_for(std::chrono::microseconds(300));
+                ants_test::short_pause();
             }
         };
         guest_only(1500);
@@ -3310,7 +3313,7 @@ void host_runs(Peer& host, uint32_t ms) {
     for (uint32_t t = 0; t < ms; t += 10) {
         host.now += 10;
         host.update();
-        std::this_thread::sleep_for(std::chrono::microseconds(300));
+        ants_test::short_pause();
     }
 }
 
@@ -3329,7 +3332,7 @@ struct HiddenDuo {
         for (uint32_t t = 0; t < ms; t += 10) {
             peer.now += 10;
             peer.update();
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
             advance_clock(clock, 0.010);
             clock_ms += 10;
             if (clock_ms % net::kTurnMs == 0 && app.background_pump_after(static_cast<float>(net::kTurnMs) / 1000.0f)) ++wakes;
@@ -3340,7 +3343,7 @@ struct HiddenDuo {
             if (cond()) return true;
             step(10);
         }
-        return cond();
+        return ants_test::real_time_tail(cond, [&]() { peer.update(); app.background_pump_after(0.0f); });       // (real time for a late kernel, the clocks standing still: see Duo)
     }
 };
 
@@ -3374,7 +3377,7 @@ double hidden_ticks_per_second(Peer& host, Application& app, VirtualClock& vc, u
         vc.advance(0.010);
         host.now += 10;
         host.update();
-        std::this_thread::sleep_for(std::chrono::microseconds(300));
+        ants_test::short_pause();
         if (frame_ms > 0 && (t + 30) % frame_ms == 0) app.run_frame();                   // a frame comes (its phase is not the turns': they are two clocks)
         if (t % net::kTurnMs == 0) app.background_pump();                                // a message of the server wakes the page (one just after a frame: it stands down)
     }
@@ -3844,7 +3847,7 @@ void run_hidden_page_tests() {
                         server->now += 10;
                         server->update();
                     }
-                    std::this_thread::sleep_for(std::chrono::microseconds(300));
+                    ants_test::short_pause();
                     clock_ms += 10;
                     if (clock_ms % net::kTurnMs == 0) app.background_pump_after(static_cast<float>(turn_seconds()));
                 }
@@ -3853,6 +3856,7 @@ void run_hidden_page_tests() {
             ASSERT_EQ(app.state(), AppState::Playing);
             server.reset();                                                               // the server goes away under the hidden page: its connection closes
             for (int i = 0; i < 300 && app.state() != AppState::MapSelect; ++i) hidden_step(10);
+            ants_test::real_time_tail([&]() { return app.state() == AppState::MapSelect; }, [&]() { bob.update(); app.background_pump_after(0.0f); });
             ASSERT_EQ(app.state(), AppState::MapSelect);                                  // the step noticed it: the setup screen is back ...
             ASSERT_EQ(app.audio_mixer().music_filepath(), piece);                         // ... and no music was started: the piece of the match plays on
             app.set_page_hidden(false);
@@ -4401,13 +4405,17 @@ void run_room_bot_tests() {
             net::HelloMsg hello;
             hello.name = "Mute";
             bool sent = false;
-            for (int i = 0; i < 800 && app.net()->room().slots[1].state != net::SlotState::Client; ++i) {
-                app.pump_network(0.010f);
+            const auto pass = [&](float dt) {
+                app.pump_network(dt);
                 std::vector<uint8_t> unread;
                 mute->poll(unread);                                                          // (it reads the host's pings and never answers them)
                 if (!sent && mute->is_open()) sent = mute->send(net::encode(hello));
-                std::this_thread::sleep_for(std::chrono::microseconds(300));
+            };
+            for (int i = 0; i < 800 && app.net()->room().slots[1].state != net::SlotState::Client; ++i) {
+                pass(0.010f);
+                ants_test::short_pause();
             }
+            ants_test::real_time_tail([&]() { return app.net()->room().slots[1].state == net::SlotState::Client; }, [&]() { pass(0.0f); });
             ASSERT_TRUE(app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms == net::kRttUnknown);
             const size_t channels = app.audio_mixer().active_channel_count();
             app.map_select().handle_key_down(SDLK_RETURN);
@@ -4418,8 +4426,9 @@ void run_room_bot_tests() {
             mute->close();
             for (int i = 0; i < 800 && app.net()->room().slots[1].state != net::SlotState::Empty; ++i) {
                 app.pump_network(0.010f);
-                std::this_thread::sleep_for(std::chrono::microseconds(300));
+                ants_test::short_pause();
             }
+            ants_test::real_time_tail([&]() { return app.net()->room().slots[1].state == net::SlotState::Empty; }, [&]() { app.pump_network(0.0f); });
             ASSERT_TRUE(app.net()->room().slots[1].state == net::SlotState::Empty);
         }
         Peer bob;

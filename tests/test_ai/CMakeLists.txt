@@ -42,6 +42,8 @@ target_include_directories(test_ai PRIVATE
 target_link_libraries(test_ai PRIVATE ants_test_paths)
 
 add_test(NAME test_ai COMMAND test_ai)
+# COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
+set_tests_properties(test_ai PROPERTIES COST 120)
 
 # The island matches (run_tests.sh suite 2.28): whole matches of four standard bots on ISLANDS and SMALL at every level (the expedition, the bridges and the ferry). Kept apart from test_ai: it plays
 # about a minute of matches.
@@ -94,3 +96,4 @@ target_include_directories(test_ai_worker PRIVATE
 target_link_libraries(test_ai_worker PRIVATE ants_test_paths)
 
 add_test(NAME test_ai_worker COMMAND test_ai_worker)
+set_tests_properties(test_ai_worker PROPERTIES COST 60)

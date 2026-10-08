@@ -34,6 +34,7 @@
 #include "ants_sim/sim_engine.hpp"
 
 #include "ants_test_paths.hpp"
+#include "../common/ants_test_pause.hpp"
 
 namespace zoomtest {
 
@@ -585,7 +586,7 @@ struct Duo {
             app.update_simulation(0.010f);
             peer.now += 10;
             peer.update();
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
         }
     }
     bool until(const std::function<bool()>& cond, uint32_t max_ms) {

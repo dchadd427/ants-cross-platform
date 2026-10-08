@@ -234,3 +234,5 @@ target_link_libraries(test_engine_copy PRIVATE ants_test_paths)
 
 # (one ctest entry per test program, which tests/scripts/test_ci_workflow.py holds the CI to: the CI's run is the quick tests AND the whole matches; run_tests.sh has them as two suites, 2.25 and 2.26)
 add_test(NAME test_engine_copy COMMAND test_engine_copy --all)
+# COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
+set_tests_properties(test_engine_copy PROPERTIES COST 50)

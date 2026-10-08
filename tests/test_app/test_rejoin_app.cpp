@@ -23,6 +23,7 @@
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
+#include "../common/ants_test_pause.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -463,7 +464,7 @@ struct World {
         for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {
             now += 10;
             pump(0.010f);
-            if ((++steps_ & 15u) == 0) std::this_thread::sleep_for(std::chrono::microseconds(300));
+            if ((++steps_ & 15u) == 0) ants_test::short_pause();
             else std::this_thread::yield();
         }
     }

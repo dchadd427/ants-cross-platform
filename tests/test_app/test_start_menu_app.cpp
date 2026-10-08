@@ -42,6 +42,7 @@
 #include <thread>
 #include <vector>
 #include "ants_test_paths.hpp"
+#include "../common/ants_test_pause.hpp"
 
 using namespace ants;
 using namespace ants::app;
@@ -303,7 +304,8 @@ struct Hall {
                 server->update();
             }
             if (raw != nullptr) raw->update();
-            std::this_thread::sleep_for(real_time ? std::chrono::milliseconds(10) : std::chrono::microseconds(300));
+            if (real_time) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            else ants_test::short_pause();
         }
     }
     bool until(const std::function<bool()>& cond, uint32_t max_ms) {
