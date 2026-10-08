@@ -230,7 +230,7 @@ struct RoomStatus {
     uint64_t restored_hash{0};              // ... and the referee's state hash (StateHash::total) was this at the restored tick
 };
 
-/// The name that a replay file keeps for a person's seat, from the name that the room showed everybody (the Start message's): the name as it is, in printable ASCII (any other character becomes a '?'), at most
+/// The name that a replay file keeps for a person's seat, from the name that the room showed everybody (the Start message's): the name as it is, in printable ASCII (every byte of anything else becomes a '?': a letter with an accent, two bytes of UTF-8, gives two), at most
 /// 32 characters, the blanks at both ends cut. The words that the game itself uses for a seat that has no name of its own give "" (the readers then show the colour: "Green", not "Green (Player)"): "Player"
 /// (what a game proposes and sends when nothing was typed), "Player 1" to "Player 4" (what the lobby calls a person whose name looks like a bot's, and what every screen shows for a seat without a name), and
 /// nothing at all. A name that only starts like them ("Players", "Player 5", "player") is a name.
