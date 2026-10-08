@@ -1,11 +1,11 @@
 # Status
 
-_Updated 2026-10-07 21:55 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-07 23:06 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | █░░░░░░░░░ 14% | Thu | pages are in and the branch is pushed; next: tests, sanitizers, mutation checks, browser checks, three reviews and the five checks; platform icons, documents and a rename follow as a separate small change |
+| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | ██████░░░░ 57% | Thu | draft PR #34 is open; review findings fixed; five checks and second-round reviews running |
 
 Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
 
@@ -16,13 +16,13 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
 - Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions), a bot that walks over power-ups on its way (one ant takes several; noticed by the owner on the islands map on 2026-10-07)
 - Bots: the gate sometimes sends the next ant into the hill while the last one is still leaving, and the game answers "Can't go there." (the owner heard it); a small fix with no version number is being measured, then its own PR
-- **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): pages are in; the three independent reviews are back and the findings are being fixed; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
+- **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): draft PR #34 is open; review findings fixed; five checks and second-round reviews running; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - **Replays**: building the server's 30-day store of finished matches (public list and download); a viewer in the web player is being drawn for approval.
 - Watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- **Front page as a game lobby**: pictures with the owner for approval; nothing built.
-- **Leave game on the web scorecard** goes back to the front page and a new game can start again (PR #32): review and the five checks are running.
+- **Game lobby for the front page** (no release yet): the redrawn design was approved on 2026-10-07 22:50 PDT; it is being built next to v0.11.0 and merges after it.
+- **Windows timing fix for the checks** (no release; PR #33, in review): two server timing tests read the thread's cycle counter on Windows, because one Windows runner host type charges CPU time in lumps and made the Windows 2022 check fail at random.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
@@ -32,6 +32,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **Leave Game goes to the front page** (no release; PR #32, merged 2026-10-07 23:03 PDT): in the browser, Leave Game and the quit dialog's Yes go back to the site's front page, a game in a frame returns to a setup screen that starts a new game again, and a match left early no longer counts as a game on this computer.
 - **Faster checks** (no release; PR #30, merged 2026-10-07 21:48 PDT): The automatic checks of a pull request now finish in about 9 minutes instead of about 14: the network tests pause as briefly on Windows and macOS as on Linux, and the longest test programs start first.
 - **The test runner** no longer reports a passing suite as failed by mistake (no release; PR #29, merged 2026-10-05 22:25 PDT)
 - **Nobody means nobody** in a game for one (only your colony is on the map), and a Team 1 / Team 2 switch on each colour of the front page's card (no release; PR #27, merged 2026-10-05 21:49 PDT, live 21:52 PDT)
