@@ -5,6 +5,8 @@
 #include <climits>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <set>
 #include <system_error>
 
 #include "ants_replay/player.hpp"
@@ -232,6 +234,7 @@ bool ReplayStore::summarize(const std::vector<uint8_t>& bytes, ReplayEntry& out,
     }
     out.map = rep.head.map_name;
     out.rules = rep.head.engine_rules;
+    out.sim_rules = replay::sim_rules_of(rep.head);
     out.game = rep.head.game_version;
     out.turns = rep.total_turns;
     out.finished = rep.match_over;
@@ -241,6 +244,28 @@ bool ReplayStore::summarize(const std::vector<uint8_t>& bytes, ReplayEntry& out,
     }
     out.readable = true;
     return true;
+}
+
+// What the store knows of a file of its folder with a name of its own kind: the name, the size, and what the head and the end say when the file can be read
+ReplayEntry ReplayStore::read_entry(const std::string& name, uint64_t size) const {
+    ReplayEntry entry;
+    ParsedName parsed;
+    if (parse_name(name, parsed)) {
+        entry.ended_s = parsed.seconds;
+        entry.sequence = parsed.same_second;
+    }
+    entry.file = name;
+    entry.bytes = size;
+    std::vector<uint8_t> bytes;
+    std::string reason;
+    if (!read_whole(path_of(name), size, bytes) || !summarize(bytes, entry, reason)) entry.readable = false;
+    return entry;
+}
+
+int64_t ReplayStore::folder_stamp() const {
+    std::error_code ec;
+    const auto stamp = fs::last_write_time(cfg_.dir, ec);
+    return ec ? 0 : static_cast<int64_t>(stamp.time_since_epoch().count());
 }
 
 bool ReplayStore::prepare(std::string& why) {
@@ -260,6 +285,7 @@ bool ReplayStore::prepare(std::string& why) {
     }
     size_t temps = 0;
     size_t unreadable = 0;
+    folder_stamp_ = folder_stamp();                                                  // (before the folder is read: a file that arrives meanwhile moves it again)
     fs::directory_iterator it(cfg_.dir, ec);
     if (ec) {
         why = "the replays folder '" + cfg_.dir + "' cannot be read: " + ec.message();
@@ -277,23 +303,13 @@ bool ReplayStore::prepare(std::string& why) {
             ++temps;
             continue;
         }
-        ReplayEntry entry;
         ParsedName parsed;
         if (!parse_name(name, parsed)) continue;                                    // (not a name of ours: left alone, not counted)
-        entry.ended_s = parsed.seconds;
-        entry.sequence = parsed.same_second;
-        entry.file = name;
         const uintmax_t size = it->file_size(entry_ec);
         if (entry_ec) continue;
-        entry.bytes = size;
-        std::vector<uint8_t> bytes;
-        std::string reason;
-        if (!read_whole(path_of(name), size, bytes) || !summarize(bytes, entry, reason)) {
-            entry.readable = false;
-            ++unreadable;
-        } else {
-            ++readable_;
-        }
+        ReplayEntry entry = read_entry(name, size);
+        if (entry.readable) ++readable_;
+        else ++unreadable;
         total_ += entry.bytes;
         entries_.push_back(std::move(entry));
     }
@@ -307,6 +323,7 @@ bool ReplayStore::prepare(std::string& why) {
     std::sort(entries_.begin(), entries_.end(), older);
     ready_ = true;
     next_purge_s_ = now_s() + kPurgeEveryS;
+    next_rescan_s_ = now_s() + kRescanEveryS;
     std::string line = "replays in " + cfg_.dir + ": " + std::to_string(entries_.size()) + " file(s), " + std::to_string(total_ / 1024) + " KiB; kept " + std::to_string(cfg_.keep_days) + " days, at most " +
                        std::to_string(cfg_.max_bytes / (1024 * 1024)) + " MiB";
     if (temps > 0) line += "; " + std::to_string(temps) + " half-written file(s) of an interrupted write deleted";
@@ -369,6 +386,70 @@ void ReplayStore::update() {
         purge();
         next_purge_s_ = now + kPurgeEveryS;
     }
+    if (now >= next_rescan_s_ || now + kRescanEveryS < next_rescan_s_) {
+        rescan();
+        next_rescan_s_ = now + kRescanEveryS;
+    }
+}
+
+// A file that somebody else put in the folder (the bot arena's --save-replays, a copy by hand) is listed too, and one that was taken away is not. The folder's change time is looked at (update(), every
+// kRescanEveryS) and only a folder that changed is read again; a file that is known already is not read again, and at most kRescanBatch new ones are read at a time.
+size_t ReplayStore::rescan() {
+    if (!ready_) return 0;
+    const int64_t stamp = folder_stamp();
+    if (stamp == folder_stamp_ && !rescan_more_) return 0;
+    folder_stamp_ = stamp;
+    rescan_more_ = false;
+    std::error_code ec;
+    std::set<std::string> present;                                                   // the names of the store's own kind that are regular files now
+    std::map<std::string, uintmax_t> sizes;
+    fs::directory_iterator it(cfg_.dir, ec);
+    if (ec) return 0;
+    for (const fs::directory_iterator end; it != end; it.increment(ec)) {
+        if (ec) return 0;                                                            // (a folder that cannot be read to the end changes nothing)
+        std::error_code entry_ec;
+        const fs::file_status status = it->symlink_status(entry_ec);
+        if (entry_ec || status.type() != fs::file_type::regular) continue;
+        const std::string name = it->path().filename().string();
+        ParsedName parsed;
+        if (!parse_name(name, parsed)) continue;                                     // (a half-written ".tmp" of another writer is not ours to delete or to list)
+        const uintmax_t size = it->file_size(entry_ec);
+        if (entry_ec) continue;
+        present.insert(name);
+        sizes[name] = size;
+    }
+    size_t changed = 0;
+    size_t kept = 0;
+    for (size_t i = 0; i < entries_.size(); ++i) {
+        if (present.count(entries_[i].file) == 0) {                                  // (taken away: forgotten, nothing is deleted)
+            total_ -= entries_[i].bytes;
+            if (entries_[i].readable) --readable_;
+            ++changed;
+            continue;
+        }
+        if (kept != i) entries_[kept] = std::move(entries_[i]);
+        ++kept;
+    }
+    entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(kept), entries_.end());
+    size_t added = 0;
+    for (const std::string& name : present) {
+        if (find(name) != nullptr) continue;
+        if (added >= kRescanBatch) {
+            rescan_more_ = true;                                                     // (the rest at the next look)
+            break;
+        }
+        ReplayEntry entry = read_entry(name, sizes[name]);
+        total_ += entry.bytes;
+        if (entry.readable) ++readable_;
+        entries_.insert(std::upper_bound(entries_.begin(), entries_.end(), entry, older), std::move(entry));
+        ++added;
+    }
+    if (added > 0 || changed > 0) {
+        note("replays: " + std::to_string(added) + " file(s) found in " + cfg_.dir + " that the store did not know" + (changed > 0 ? ", " + std::to_string(changed) + " that are not there any more" : std::string()) + "; " +
+             std::to_string(entries_.size()) + " listed, " + std::to_string(total_ / 1024) + " KiB");
+        purge();                                                                     // (the limits hold for files that came from outside too)
+    }
+    return added + changed;
 }
 
 ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {

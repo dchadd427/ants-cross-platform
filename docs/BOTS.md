@@ -495,6 +495,7 @@ ants --player 2 --bot 0:hard --bot 1:easy --bot 3:easy             # three bots
 ants --host --bot 2:medium                                         # a room on the local network whose seat 2 is a bot
 ants --map Original-Ants/Maps/TINY.LVL --bot 1 --bot 2 --bot 3 --teams 0+1        # you and the red bot against the blue and the black bot
 bot_arena --map TINY,MEDIUM --seeds 1..8 --seat 0=standard:hard --seat 1=standard:easy --rotate --out report.json    # B2: cmake --build build --target bot_arena
+bot_arena --map TREASURE --seeds 1 --seat 0=standard:hard --seat 1=standard:medium --save-replays DIR   # every match kept as a replay (docs/REPLAYS.md "Matches of computer players"): the site's list shows them
 ```
 
 - `--bot SEAT[:SPEC]` may be repeated. SEAT is 0 to 3 (green, red, blue, black), not the local player's own seat. SPEC is `easy`, `medium` (default), `hard`, `idle`, `worker` or `standard`, or `KIND:LEVEL`, and for the standard bot `LEVEL:STYLE` or `KIND:LEVEL:STYLE` (`2:hard:raider`, `1:medium:defensive`: the styles are `aggressive`, `economic`, `raider`, `defensive` and `random`; Hard plays aggressive or raider only; a bot without a style draws its own at the start of every match from its seat's random generator, see "Styles"; the bot's name stays "Bot (Level)"). Refused at startup with a message on stderr: a spec that does not parse, a bot on your own seat, two bots on one seat, `--join`. A game started from the setup screen checks again at START (Fog of War is chosen there): the refusal appears on the setup screen's prompt line.

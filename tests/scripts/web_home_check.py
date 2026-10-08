@@ -1132,7 +1132,7 @@ def main():
             shot("game_1440")
             footer = json.loads(value("""JSON.stringify({text: document.querySelector('footer').innerText.replace(/\\s+/g, ' '), ids: [!!document.getElementById('game-version'), !!document.getElementById('game-build-id')],
                 links: Array.prototype.map.call(document.querySelectorAll('footer nav a'), function (a) { return a.innerText; }), bg: getComputedStyle(document.querySelector('footer')).backgroundImage})"""))
-            check("Version" in footer["text"] and "build" in footer["text"] and "@@" not in footer["text"] and footer["ids"] == [True, True] and "linear-gradient" in footer["bg"] and footer["links"] == ["Menu", "Sprites and sounds", "Changelog", "GitHub", "Feedback"],
+            check("Version" in footer["text"] and "build" in footer["text"] and "@@" not in footer["text"] and footer["ids"] == [True, True] and "linear-gradient" in footer["bg"] and footer["links"] == ["Menu", "Watch replays", "Sprites and sounds", "Changelog", "GitHub", "Feedback"],
                   "the footer is the front page's emerald bar with the version, the build and the links (%r)" % footer["text"][:90])
             contrast_of("the game page at 1440 px", 60, "document.querySelectorAll('#info-panel details').forEach(function (d) { d.open = true; })")
 

@@ -110,7 +110,8 @@ std::string with_commas(uint64_t n) {
 void print_info(std::ostream& out, const Replay& r, size_t file_bytes, const std::string& path) {
     const Header& h = r.head;
     out << "File:      " << path << " (" << with_commas(file_bytes) << " bytes)\n";
-    out << "Format:    " << h.format_version << ", rules: network protocol " << h.engine_rules << (h.engine_rules == net::kProtocolVersion ? " (the one this build plays)" : " (this build plays protocol " + std::to_string(net::kProtocolVersion) + ")") << "\n";
+    out << "Format:    " << h.format_version << ", rules: simulation " << (sim_rules_of(h) == 0 ? std::string("unknown") : std::to_string(sim_rules_of(h))) << ", network protocol " << h.engine_rules
+        << (plays_here(h) ? " (this build plays it)" : " (this build plays simulation rules " + std::to_string(kSimRules) + ")") << "\n";
     out << "Made by:   " << (h.game_version.empty() ? "unknown" : h.game_version) << (h.build_id.empty() ? "" : " (build " + h.build_id + ")") << "\n";
     if (!h.venue.empty()) out << "Played as: " << h.venue << (h.recorder_seat < sim::MAX_PLAYERS ? ", recorded at " + seat_label(h, h.recorder_seat) : std::string()) << "\n";
     out << "Map:       " << h.map_name << " (hash " << hex64(h.map_hash) << "), seed " << h.seed << ", Fog of War " << (h.fog ? "on" : "off") << "\n";
@@ -543,7 +544,7 @@ int selftest() {
         t.check(has(r.out, "Seats:     Green, Red (Bot (Hard)), Blue (Ann), Black"), "info lists the seats, with the names that were typed (a seat without one is its colour)");
         t.check(has(r.out, "Length:    450 turns (0:22.5)") && has(r.out, "Commands:  " + count) && has(r.out, "Hashes:    4 (one every 100 turns)"), "info gives the length, the commands and the hashes");
         t.check(has(r.out, "End:       the match was not over, final state hash " + hex64(sample.final_hash)), "info gives the end");
-        t.check(has(r.out, "network protocol " + std::to_string(net::kProtocolVersion) + " (the one this build plays)") && has(r.out, "Made by:   v0.0.0 (build selftest)"), "info says which rules and which game");
+        t.check(has(r.out, "rules: simulation " + std::to_string(kSimRules) + ", network protocol " + std::to_string(net::kProtocolVersion) + " (this build plays it)") && has(r.out, "Made by:   v0.0.0 (build selftest)"), "info says which rules and which game");
     }
 
     // verify
@@ -682,12 +683,12 @@ int selftest() {
 
         // a recording of other rules: it reads, it is not played
         Replay other = sample;
-        other.head.engine_rules = static_cast<uint16_t>(net::kProtocolVersion + 1);
+        other.head.sim_rules = static_cast<uint16_t>(kSimRules + 1);
         t.check(write_bytes(dir.file("other.antsrep"), encode(other, error)), "a file of other rules is written");
         const Run rules_info = run_words({"info", dir.file("other.antsrep")});
-        t.check(rules_info.status == 0 && has(rules_info.out, "this build plays protocol " + std::to_string(net::kProtocolVersion)), "info reads it and says which rules it needs");
+        t.check(rules_info.status == 0 && has(rules_info.out, "this build plays simulation rules " + std::to_string(kSimRules)), "info reads it and says which rules it needs");
         const Run rules_verify = run_words({"verify", dir.file("other.antsrep")});
-        t.check(rules_verify.status == 1 && has(rules_verify.err, std::to_string(net::kProtocolVersion + 1)) && has(rules_verify.err, std::to_string(net::kProtocolVersion)), "verify does not play it, exit 1, and names both numbers");
+        t.check(rules_verify.status == 1 && has(rules_verify.err, "simulation rules " + std::to_string(kSimRules + 1)) && has(rules_verify.err, "simulation rules " + std::to_string(kSimRules)), "verify does not play it, exit 1, and names both numbers");
 
         // a recording that is not what was played: the hashes say so
         Replay changed = sample;

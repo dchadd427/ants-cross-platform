@@ -979,15 +979,107 @@
                 grid-template-columns: repeat(3, minmax(0, 1fr));
             }
         }
+
+        /* ================= REPLAY MODE (docs/REPLAYS.md "Watching"): the page opened as play.html?replay=<file>. Everything above is the game page as it is; this block and the markup marked "rep-only"
+           are the new part. The page puts `replay` on <body> (the first line of the body) and the pieces that belong to the other mode are hidden here. ================= */
+        :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
+        body:not(.replay) .rep-only { display: none !important; }
+        body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }
+        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden] { display: none !important; }
+
+        /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
+        body.replay header { align-items: center; }
+        body.replay .header-actions.rep-only { flex: 0 0 auto; flex-wrap: nowrap; }
+        .rhead { flex: 1 1 0; min-width: 0; display: grid; gap: 5px; line-height: 1.15; align-content: center; }
+        .rhead h2 { font-size: 26px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; color: var(--ink); }
+        .rhead h2 small { font-size: 15px; font-weight: 500; }
+        .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 5px 7px; }
+        .chip { --c: #7d8a84; display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; padding: 1px 10px 1px 7px; font-size: 14px; line-height: 1.5; color: var(--cream); background: #0d171f; border: 1px solid #1c3a30; border-radius: 3px; white-space: nowrap; }
+        .chip i { width: 12px; height: 12px; border-radius: 2px; background: var(--c); box-shadow: 0 0 0 1px #000; flex: none; }
+        .chip .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .chip[data-c="Green"] { --c: var(--c-green); } .chip[data-c="Red"] { --c: var(--c-red); } .chip[data-c="Blue"] { --c: var(--c-blue); } .chip[data-c="Black"] { --c: var(--c-black); }
+        .pill { display: inline-block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.5; padding: 0 6px; border-radius: 3px; vertical-align: 2px; white-space: nowrap; }
+        .pill.cut { color: #f2c48c; background: #2a1d08; border: 1px solid #6b4a14; }
+
+        /* on the picture: what the page says over the game (small, so that the game's own bars stay clear) */
+        body.replay #game-container { container-type: inline-size; }
+        .rtag { position: absolute; top: 1.4cqw; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 1cqw; padding: .12cqw 1cqw; font-size: max(10px, 1.2cqw); line-height: 1.5; white-space: nowrap; color: var(--cream); background: rgba(5, 10, 8, .86); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
+        .rtag b { font-weight: 500; letter-spacing: .16em; color: var(--gold); }
+        .rtag span { font-variant-numeric: tabular-nums; }
+        .endnote { position: absolute; left: 3%; right: 3%; width: fit-content; margin: 0 auto; top: 4cqw; z-index: 4; padding: .7cqw 1.6cqw; font-size: max(11px, 1.5cqw); line-height: 1.35; text-align: center; color: var(--cream); background: var(--inset); border: 3px solid var(--gold); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); pointer-events: none; }
+        .veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5, 10, 8, .55); z-index: 4; }
+        .veil .card { display: grid; gap: 10px; justify-items: center; padding: 14px 24px 16px; min-width: min(78%, 330px); font-size: max(12px, 1.8cqw); color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+        .veil .progress-bar-container { display: block; width: 100%; height: 16px; margin: 0; }
+
+        /* the replay bar: in the place of the picture bar (Picture, Fullscreen mouse), the same width as the picture */
+        .rbar { width: min(100%, 1280px, calc((100vh - var(--chrome)) * 16 / 9)); width: min(100%, 1280px, calc((100dvh - var(--chrome)) * 16 / 9)); min-width: min(100%, 320px); margin: 22px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; }
+        body:not(.replay) .rbar { display: none; }
+        .rbar .rplay { grid-area: play; min-width: 64px; min-height: 50px; padding: 6px 14px; }
+        .rbar .rplay svg { width: 24px; height: 24px; fill: currentColor; display: block; }
+        .rbar .rplay .lbl { font-size: 16px; }
+        .tl { grid-area: tl; position: relative; height: 52px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+        .tl .rail { position: absolute; left: 11px; right: 11px; top: 0; bottom: 0; }
+        .tl .track { position: absolute; left: 0; right: 0; top: 9px; height: 20px; background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); overflow: hidden; }
+        .tl .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--teal); box-shadow: inset 0 1px 0 #f4f4ff, inset 0 -3px 0 var(--teal-lo); }
+        .tl .ticks { position: absolute; left: 0; right: 0; top: 40px; height: 10px; }
+        .tl .tick { position: absolute; top: 0; width: 2px; height: 5px; margin-left: -1px; background: rgba(12, 8, 5, .55); }
+        .tl .tick.m5 { height: 9px; background: var(--ink); }
+        .tl .thumb { position: absolute; top: 1px; left: 0; width: 22px; height: 36px; margin-left: -11px; background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 5px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
+        .tl:focus-visible { outline: none; } .tl:focus-visible .thumb { outline: 3px solid var(--gold); outline-offset: 2px; }
+        .clock { grid-area: clock; font-variant-numeric: tabular-nums; font-size: 20px; white-space: nowrap; text-align: right; min-width: 118px; }
+        .clock small { font-size: 17px; opacity: .72; }
+        .rbar .speed { grid-area: speed; }
+        .rbar .fsx { grid-area: fsx; display: none; min-width: 44px; padding: 6px 10px; }
+        .rbar .fsx svg { width: 22px; height: 22px; fill: currentColor; display: block; }
+
+        /* a message in place of the picture: the card of the name step (a card over the whole page, so that it fits any screen) */
+        .rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); }
+        .rm-card p b { font-weight: 500; color: #fff; }
+        .rm-card .rm-why { margin: 2px 0 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
+        .rm-card .rm-sub { font-size: 15px; }
+        .rm-btns { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+        .rm-btns .btn { flex: 1 1 auto; }
+        .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 1100; background: #0b1117; color: var(--cream); border: 3px solid var(--gold); border-radius: 6px; padding: 10px 18px; max-width: min(520px, 92vw); text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
+        footer.bar a[aria-current] { color: var(--gold); text-decoration: underline; text-underline-offset: 4px; }
+
+        /* fullscreen: the bar lies over the bottom of the picture (the page moves it into the picture's box) and goes away by itself while the pointer rests */
+        .rbar.over { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(94%, 1180px); min-width: 0; margin: 0; padding: 8px 16px; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); z-index: 60; transition: opacity .25s ease; }
+        .rbar.over.idle { opacity: 0; pointer-events: none; }
+        .rbar.over .fsx { display: inline-flex; }
+        .rbar.over .tl .tick { background: #486a5f; } .rbar.over .tl .tick.m5 { background: var(--muted); }
+
+        /* a narrow window (a phone upright): the title goes to a row of its own, and the bar to three rows */
+        @media (max-width: 700px) {
+            body.replay header { flex-wrap: wrap; }
+            .rhead { order: 3; flex: 1 1 100%; }
+            .rhead h2 { font-size: 22px; } .rhead h2 small { font-size: 14px; }
+            .rbar { margin: 18px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl" "play clock fsx" "speed speed speed"; gap: 4px 12px; }
+            .rbar .clock { text-align: left; font-size: 19px; }
+            .rbar .speed { justify-self: stretch; display: flex; } .rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }
+        }
+        /* a phone on its side, or any short window: the title keeps one row, and in fullscreen the bar is one thin row */
+        @media (max-height: 520px) {
+            #r-meta { display: none; }
+            .rbar { width: 100%; max-width: 1280px; }
+            .rhead h2 { font-size: 20px; } .rhead h2 small { font-size: 13px; }
+            .rbar.over { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; bottom: 8px; gap: 0 10px; padding: 4px 10px; width: 96%; }
+            .rbar.over .clock { text-align: right; font-size: 16px; min-width: 0; }
+            .rbar.over .speed { justify-self: auto; display: inline-flex; } .rbar.over .speed button { flex: none; min-width: 34px; min-height: 32px; font-size: 14px; padding: 3px 6px; }
+            .rbar.over .rplay { min-width: 48px; min-height: 40px; padding: 4px 10px; } .rbar.over .rplay svg { width: 20px; height: 20px; }
+            .rbar.over .tl { height: 40px; } .rbar.over .tl .ticks { display: none; } .rbar.over .tl .track { top: 8px; }
+            .rbar.over .tl .thumb { height: 30px; }
+        }
     </style>
 </head>
 <body>
+    <script>if (/(^|[?&])replay=/.test(window.location.search)) document.body.className += ' replay';</script>
 
     <header>
         <h1 class="sr">Ants (1998)</h1>
         <a href="/" id="logo-link" class="logo" title="Back to the menu (in this tab): play on this computer, host a match or join one">
             <img src="front/logo.png" alt="ants! - back to the menu" width="581" height="218">
         </a>
+        <div class="rhead rep-only"><h2 id="r-title"></h2><div id="r-meta"></div></div>
         <div class="header-actions">
             <a href="/" id="menu-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Menu</a>
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
@@ -1007,11 +1099,28 @@
                 </div>
             </details>
         </div>
+        <div class="header-actions rep-only">
+            <a href="/watch.html" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
+            <button id="copy-btn" type="button" class="btn sm wide-only" title="Copy the link to this match">Copy link</button>
+            <a href="#" data-dl="" class="btn sm wide-only" title="Download the recording (.antsrep)">Download</a>
+            <button id="fullscreen-btn-r" type="button" class="btn sm" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
+            <details class="more">
+                <summary><span class="btn sm">More</span></summary>
+                <div class="more-list">
+                    <button id="copy-more" type="button" class="btn sm">Copy link</button>
+                    <a href="#" data-dl="" class="btn sm">Download</a>
+                </div>
+            </details>
+        </div>
     </header>
 
     <div id="game-stage" data-aspect="16:9">
         <div id="game-container">
             <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+            <div class="rtag rep-only" id="rtag" hidden><b>REPLAY</b><span id="rtag-s">1&times;</span></div>
+            <div class="endnote rep-only" id="endnote" hidden>The recording ends here. The match was left or closed before it ended.</div>
+            <div class="veil rep-only" id="veil" hidden><div class="card"><span id="veil-t">Jumping&hellip;</span><div class="progress-bar-container"><div class="progress-bar-fill" id="veil-f"></div></div></div></div>
 
             <div id="splash-overlay">
                 <div class="splash-card">
@@ -1041,6 +1150,13 @@
         </div>
     </div>
 
+    <div class="name-modal rm-modal" id="rm" role="dialog" aria-modal="true" aria-labelledby="rm-title" hidden>
+        <div class="name-step rm-card">
+            <div class="name-step-title banner" id="rm-title"></div>
+            <div id="rm-body"></div>
+        </div>
+    </div>
+
     <div class="view-bar" id="view-bar">
         <span id="view-bar-label">Picture</span>
         <div class="seg" role="radiogroup" aria-labelledby="view-bar-label">
@@ -1052,6 +1168,14 @@
             <button type="button" role="radio" id="lock-on" data-lock="on" aria-checked="true" title="Fullscreen holds the mouse inside the game: your cursor cannot leave the picture, and on a Mac the Dock and the menu bar stay away. In Chrome and Edge Esc goes to the game (hold it to leave fullscreen); in other browsers Esc gives the mouse back first.">Locked</button>
             <button type="button" role="radio" id="lock-off" data-lock="off" aria-checked="false" title="Fullscreen as the browser makes it: the mouse is free (a mouse over the black bars still scrolls the map at the picture's edge)">Free</button>
         </div>
+    </div>
+
+    <div class="rbar rep-only" id="rbar">
+        <button class="btn rplay" type="button" id="b-play" title="Play or pause (Space)" aria-label="Play"></button>
+        <div class="tl" id="tl" role="slider" tabindex="0" aria-label="Position in the match" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="rail" id="rail"><div class="track"><div class="fill" id="tl-fill"></div></div><div class="ticks" id="tl-ticks"></div><div class="thumb" id="tl-thumb"></div></div></div>
+        <div class="clock" id="clock"><b id="t-now">0:00</b> <small id="t-all">/ 0:00</small></div>
+        <div class="seg speed" role="radiogroup" aria-label="Speed" id="speed"><button type="button" role="radio" data-s="0.5" aria-checked="false">&frac12;&times;</button><button type="button" role="radio" data-s="1" aria-checked="true">1&times;</button><button type="button" role="radio" data-s="2" aria-checked="false">2&times;</button><button type="button" role="radio" data-s="4" aria-checked="false">4&times;</button><button type="button" role="radio" data-s="8" aria-checked="false">8&times;</button></div>
+        <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
     </div>
 
     <div class="mobile-tip-banner" id="mobile-tip-banner">
@@ -1156,6 +1280,7 @@
             <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
             <nav aria-label="Footer links">
                 <a href="/" id="menu-link">Menu</a>
+                <a href="/watch.html" id="watch-link">Watch replays</a>
                 <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
                 <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
                 <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -1164,6 +1289,9 @@
         </div>
     </footer>
 
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <script src="replay_page.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1281,7 +1409,7 @@
             }
             // The page's own controls: a pointer over one of them is on the page and never at the game's edge (hovering a button, a link or a selector near the game must not scroll the map). `target` is
             // the element under the pointer; anything inside a control counts.
-            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"]';
+            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], .rbar';
             function overControl(target) {
                 return !!(target && typeof target.closest === 'function' && target.closest(CONTROLS));
             }
@@ -1618,7 +1746,12 @@
         //   embed  the page is a frame of another page (lobby.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
         var ANTS_EMBED = false;
+        // Watching a replay: play.html?replay=<file> (docs/REPLAYS.md "Watching"). The name of the file is checked by web/replay_page.js (an address with replay= and no valid name is "that replay is gone"). The
+        // game gets nothing else from the address then (no room, no map, no bots, no name): its arguments are the 16:9 picture and --replay, which the page's replay block adds once the recording is here.
+        var ANTS_REPLAY_MODE = /(^|[?&])replay=/.test(window.location.search);
+        var ANTS_REPLAY_FILE = ANTS_REPLAY_MODE ? window.AntsReplay.fileOf(window.location.search) : null;
         (function () {
+            if (ANTS_REPLAY_MODE) return;
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
             ANTS_EMBED = joined.embed;
             if (ANTS_EMBED) document.body.classList.add('embed');
@@ -1642,6 +1775,7 @@
             var remembered = null;
             try { fromAddress = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             try { remembered = window.localStorage.getItem(ANTS_ASPECT_KEY); } catch (e) { /* private window: nothing was remembered */ }
+            if (ANTS_REPLAY_MODE) { fromAddress = '16:9'; remembered = null; }      // (a recording is shown in the wide picture only)
             var chosen = ANTS_PAGE.resolveAspect(fromAddress, ANTS_EMBED ? null : remembered);
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
@@ -2118,7 +2252,7 @@
         // The height of everything on the page that is not the game's box: the slot's CSS size is what is left of the window (--chrome, see the style above)
         function measureChrome() {
             if (ANTS_EMBED || isFullscreen()) return;
-            var bar = document.getElementById('view-bar');
+            var bar = document.getElementById(ANTS_REPLAY_MODE ? 'rbar' : 'view-bar');
             var bodyStyle = window.getComputedStyle(document.body);
             var barStyle = bar ? window.getComputedStyle(bar) : null;
             var barHeight = bar ? bar.offsetHeight + (parseFloat(barStyle.marginTop) || 0) + (parseFloat(barStyle.marginBottom) || 0) : 0;
@@ -2168,6 +2302,7 @@
             window.requestAnimationFrame(function () { snapPending = false; snapBox(); });
         }, { passive: true });
         function relayout(force) {
+            if (window.antsReplayPlaceBar) window.antsReplayPlaceBar();         // (a replay's bar lies over the picture while the page is fullscreen)
             measureChrome();
             layoutBox(force);
         }
@@ -2177,6 +2312,7 @@
             observer.observe(stageElement);
             observer.observe(document.querySelector('header'));
             observer.observe(document.getElementById('view-bar'));
+            observer.observe(document.getElementById('rbar'));
         }
         ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) {
             document.addEventListener(name, function () {
@@ -2408,7 +2544,7 @@
         // leaves fullscreen, as the browser says; elsewhere Esc gives the pointer back first (and Safari leaves fullscreen with it).
         function requestLock(startAt) {                                     // true: the lock was asked for
             var request = canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock;
-            if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;
+            if (ANTS_REPLAY_MODE || !ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;          // (a recording is watched with a free mouse: its bar is under the pointer)
             lockStartAt = startAt || null;
             try {
                 var result = request.call(canvas);
@@ -2487,7 +2623,7 @@
         ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) {
             document.addEventListener(name, function () {
                 if (!isRealFullscreen()) { fullscreenEnded(); return; }
-                if (!ANTS_POINTER_LOCK) return;
+                if (!ANTS_POINTER_LOCK || ANTS_REPLAY_MODE) return;
                 lockKeys(true);
                 requestLock(null);                                          // (the request of the click may have come too early for this browser: once more, the click's gesture is still valid)
             });
@@ -2757,6 +2893,329 @@
             if (ANTS_PAGE.cancelsBrowserKey(e)) e.preventDefault();
         }, false);
     </script>
+    <!-- BEGIN replay glue (tests/scripts/test_web_replay.py reads it) -->
+    <script>
+        // ---- Watching a replay (docs/REPLAYS.md "Watching"; only when the address is play.html?replay=<file>) ----
+        // The page fetches the recording from the server's public door (GET /replays/<file>, the shape of the name is checked first: web/replay_page.js), puts it in the game's file system as /replay.antsrep and starts
+        // the game with --replay: the game plays the match from the file on its own engine, without the Fog of War and with every order of the HUD discarded (Application::replay_*). The game is the player; this
+        // block is its remote control: the header (what is playing), the bar (play and pause, the timeline, the clock, the speed, fullscreen), the end of the match, and the cards for a file that cannot be shown.
+        // It reads the game through two exported functions (ants_replay_get: the state, the turn, the length, the speed, how far a jump is; ants_replay_do: pause, speed, jump, again) and is told by the game, with
+        // window.antsReplayReport(info), what the file is (its map, its players, which game made it) or why it cannot be shown.
+        (function () {
+            'use strict';
+            if (!ANTS_REPLAY_MODE) return;
+            var R = window.AntsReplay;
+            var $ = function (id) { return document.getElementById(id); };
+            var STATE = { playing: 2, paused: 3, jumping: 4, ended: 5, cut: 6, failed: 7 };       // include/ants_app/replay_view.hpp ReplayState
+            var VALUE = { state: 0, turn: 1, total: 2, speed: 3, jump: 4, failure: 5, target: 6 };  // ... ReplayValue
+            var DO = { toggle: 0, paused: 1, speed: 2, seek: 3, again: 4 };                         // ... ReplayControl
+            var FAIL = { unreadable: 1, older: 2, newer: 3, nomap: 4, diverged: 5 };                // ... ReplayFailure
+            var TPS = 20;                                                                          // turns per second
+            var FILE = ANTS_REPLAY_FILE;
+            var info = null;                 // what the game reported about the file
+            var shown = null;                // the card that is up ('' none)
+            var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
+            var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
+            var ICON = {
+                play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z"/></svg>',
+                pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 3.5h5v17h-5zM13.5 3.5h5v17h-5z"/></svg>',
+                again: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 8.2 10.7l-2.6-.7A5.9 5.9 0 1 1 12 6.1c1.6 0 3 .6 4.1 1.6L13 10.8h8V2.8l-2.8 2.8A8.5 8.5 0 0 0 12 3.5z"/></svg>'
+            };
+
+            function get(what) {
+                try { return Module._ants_replay_get ? Module._ants_replay_get(what) : -1; } catch (e) { return -1; }
+            }
+            function command(what, value) {
+                try { if (Module._ants_replay_do) Module._ants_replay_do(what, value || 0); } catch (e) { /* the game does not answer: nothing happens */ }
+            }
+            function el(tag, className, text) {
+                var node = document.createElement(tag);
+                if (className) node.className = className;
+                if (text !== undefined) node.textContent = text;
+                return node;
+            }
+            function say(text) {
+                var toast = $('toast');
+                toast.textContent = text;
+                toast.hidden = false;
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(function () { toast.hidden = true; }, 2400);
+            }
+            function pageVersion() {
+                var text = ($('game-version') || {}).textContent || '';
+                return text.indexOf('@') === -1 && text ? text : (info && info.version ? 'v' + info.version : 'this version');
+            }
+            function replayUrl() { return window.location.origin + '/play.html?replay=' + encodeURIComponent(FILE); }
+
+            // ---- the header: what is playing ----
+            function lengthSeconds() { return info && info.turns ? Math.floor(info.turns / TPS) : 0; }
+            function setHeader() {
+                var title = $('r-title'), meta = $('r-meta');
+                title.textContent = '';
+                meta.textContent = '';
+                if (!FILE) { title.textContent = 'A match to watch'; return; }
+                var map = info && info.map ? info.map : (/^ants-([A-Za-z0-9_]+)-/.exec(FILE) || [])[1] || '';
+                title.appendChild(document.createTextNode(R.mapTitle(map) || 'A match to watch'));
+                var small = el('small');
+                var when = R.whenText(R.endedOf(FILE), new Date());
+                var parts = [];
+                if (when) parts.push(when);
+                if (info && info.turns) parts.push(R.lengthText(lengthSeconds()));
+                small.appendChild(document.createTextNode(parts.join(' · ')));
+                if (info && info.turns && !info.over) { small.appendChild(document.createTextNode(' ')); small.appendChild(el('span', 'pill cut', 'Cut short')); }
+                title.appendChild(small);
+                if (info && typeof info.roster === 'number') meta.appendChild(R.chipsOf(document, R.playersOf(info.roster, info.names)));
+                [].forEach.call(document.querySelectorAll('[data-dl]'), function (a) {
+                    a.setAttribute('href', '/replays/' + encodeURIComponent(FILE));
+                    a.setAttribute('download', FILE);
+                });
+            }
+
+            // ---- the card for a file that cannot be shown ----
+            function card(kind, why) {
+                var title, body = $('rm-body');
+                body.textContent = '';
+                var paragraph = function (parts, className) {
+                    var p = el('p', className);
+                    parts.forEach(function (part) { p.appendChild(typeof part === 'string' ? document.createTextNode(part) : part); });
+                    body.appendChild(p);
+                };
+                var bold = function (text) { return el('b', '', text); };
+                var buttons = el('div', 'rm-btns');
+                var download = function () {
+                    var a = el('a', 'btn', 'Download the file');
+                    a.href = '/replays/' + encodeURIComponent(FILE);
+                    a.setAttribute('download', FILE);
+                    buttons.appendChild(a);
+                };
+                var all = function () {
+                    var a = el('a', 'btn', '‹ All matches');
+                    a.href = '/watch.html';
+                    buttons.appendChild(a);
+                };
+                var made = info && info.game ? info.game : 'a version of the game';
+                if (kind === 'older') {
+                    title = 'Recorded by an older version';
+                    paragraph(['This match was played on ', bold(made), '. The rules of the game have changed since, and a replay only plays on a version with the same rules, so this version (', bold(pageVersion()), ') can’t show it.']);
+                    paragraph(['You can still download the file.'], 'rm-sub');
+                    download(); all();
+                } else if (kind === 'newer') {
+                    title = 'Recorded by a newer version';
+                    paragraph(['This match was played on ', bold(made), ', and this page is ', bold(pageVersion()), '. Load the page again to get the newer version.']);
+                    var again = el('a', 'btn', 'Load the page again');
+                    again.href = '#';
+                    again.addEventListener('click', function (ev) { ev.preventDefault(); window.location.reload(); });
+                    buttons.appendChild(again);
+                    all();
+                } else if (kind === 'gone') {
+                    title = 'That replay is gone';
+                    paragraph(['Matches are kept for 30 days. This one is older than that, or it was taken away.']);
+                    all();
+                } else {
+                    title = 'This replay can’t be played here';
+                    paragraph(['The match could not be set up on this page.']);
+                    if (why) paragraph([why.charAt(0).toUpperCase() + why.slice(1) + (/[.!?]$/.test(why) ? '' : '.')], 'rm-why');
+                    if (FILE) { paragraph(['You can still download the file.'], 'rm-sub'); download(); }
+                    all();
+                }
+                body.appendChild(buttons);
+                $('rm-title').textContent = title;
+                $('rm').hidden = false;
+                shown = kind;
+                $('rbar').hidden = true;
+                $('splash-overlay').style.display = 'none';
+                setHeader();
+            }
+            function cardFor(failure, text) {
+                if (failure === FAIL.older) card('older');
+                else if (failure === FAIL.newer) card('newer');
+                else card('cant', text);
+            }
+
+            // ---- the bar ----
+            function ticks(total) {
+                var h = '', step = total > 540 ? 60 : 30;
+                for (var s = step; s < total; s += step) h += '<i class="tick' + (s % 300 === 0 ? ' m5' : '') + '" style="left:' + (100 * s / total) + '%"></i>';
+                $('tl-ticks').innerHTML = h;                      // (numbers only: nothing from the file)
+            }
+            function paint(seconds, total) {
+                var p = total > 0 ? Math.min(1, seconds / total) * 100 : 0;
+                $('tl-fill').style.width = p + '%';
+                $('tl-thumb').style.left = p + '%';
+                $('t-now').textContent = R.lengthText(seconds);
+                $('t-all').textContent = '/ ' + R.lengthText(total);
+                var tl = $('tl');
+                tl.setAttribute('aria-valuenow', String(Math.floor(seconds)));
+                tl.setAttribute('aria-valuemax', String(total));
+                tl.setAttribute('aria-valuetext', R.lengthText(seconds) + ' of ' + R.lengthText(total));
+            }
+            var ticked = -1;
+            function tick() {
+                var ready = isReadyToPlay && get(VALUE.state) !== -1;
+                var state = ready ? get(VALUE.state) : 0;
+                var total = ready ? Math.floor(get(VALUE.total) / TPS) : lengthSeconds();
+                if (ready && state === STATE.failed && !shown) { cardFor(get(VALUE.failure), info && info.text); return; }
+                if (shown) return;
+                if (total !== ticked) { ticked = total; ticks(total || 1); }
+                var turn = ready ? get(VALUE.turn) : 0;
+                var jumping = state === STATE.jumping;
+                var seconds = dragging ? dragTurn / TPS : jumping ? get(VALUE.target) / TPS : turn / TPS;
+                var speed = ready ? get(VALUE.speed) : 100;
+                var done = state === STATE.ended || state === STATE.cut;
+                var key = [ready, state, speed, Math.floor(seconds * 4), total, jumping ? get(VALUE.jump) : '', dragging].join('|');
+                if (key === lastKey) return;
+                lastKey = key;
+                paint(seconds, total);
+                var running = state === STATE.playing;
+                $('b-play').innerHTML = done ? ICON.again + '<span class="lbl">Watch again</span>' : running ? ICON.pause : ICON.play;
+                $('b-play').setAttribute('aria-label', done ? 'Watch again' : running ? 'Pause' : 'Play');
+                $('rtag-s').textContent = state === STATE.paused ? 'Paused' : (speed === 50 ? '½' : speed / 100) + '×';
+                $('rtag').hidden = !ready || done;
+                $('endnote').hidden = state !== STATE.cut;
+                [].forEach.call($('speed').querySelectorAll('button'), function (b) { b.setAttribute('aria-checked', String(Math.round(parseFloat(b.dataset.s) * 100) === speed)); });
+                $('rbar').style.opacity = ready ? '' : '.55';
+                $('rbar').style.pointerEvents = ready ? '' : 'none';
+                if (jumping) {                                    // (a jump that takes a moment says so: a quick one is no flash)
+                    if (!jumpSince) jumpSince = Date.now();
+                    if (Date.now() - jumpSince > 300 && !$('veil').dataset.on) { $('veil').dataset.on = '1'; $('veil').hidden = false; }
+                    if (!$('veil').hidden) {
+                        $('veil-t').textContent = 'Jumping to ' + R.lengthText(get(VALUE.target) / TPS) + '…';
+                        $('veil-f').style.width = Math.max(0, Math.min(100, get(VALUE.jump))) + '%';
+                    }
+                } else {
+                    jumpSince = 0;
+                    delete $('veil').dataset.on;
+                    $('veil').hidden = true;
+                }
+                var st = get(VALUE.state);
+                if (st !== wokeState) { wokeState = st; wake(); }     // (the bar's idle fade starts and stops with the play state; the pointer and the keys wake it besides)
+            }
+            function toggle() {
+                var state = get(VALUE.state);
+                if (state === STATE.ended || state === STATE.cut) command(DO.again);
+                else if (state === STATE.playing || state === STATE.paused) command(DO.toggle);
+                lastKey = '';
+                tick();
+            }
+            function seek(seconds) {
+                var total = get(VALUE.total);
+                var turn = Math.max(0, Math.min(total, Math.round(seconds * TPS)));
+                command(DO.seek, turn);
+                lastKey = '';
+                tick();
+            }
+            function turnAt(ev) {
+                var r = $('rail').getBoundingClientRect();
+                return Math.round(get(VALUE.total) * Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width))));
+            }
+
+            // ---- fullscreen: the bar lies over the picture, so it moves into the picture's box while the page is fullscreen ----
+            window.antsReplayPlaceBar = function () {
+                var bar = $('rbar');
+                var over = isFullscreen();
+                if (over && bar.parentNode !== stageElement) { stageElement.appendChild(bar); bar.classList.add('over'); wake(); }
+                else if (!over && bar.parentNode === stageElement) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
+            };
+            function wake() {
+                var bar = $('rbar');
+                bar.classList.remove('idle');
+                clearTimeout(idleTimer);
+                if (bar.classList.contains('over') && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(function () { bar.classList.add('idle'); }, 3000);
+            }
+
+            // ---- what the game tells the page ----
+            window.antsReplayReport = function (report) {
+                if (!report || typeof report !== 'object') return;
+                info = report;
+                lastKey = '';
+                setHeader();
+                if (report.failure) cardFor(report.failure, report.text);
+            };
+            window.antsReplayLeave = function () { window.location.assign('/watch.html'); };
+
+            // ---- the wiring ----
+            $('b-play').addEventListener('click', toggle);
+            $('speed').addEventListener('click', function (ev) {
+                var b = ev.target.closest('button');
+                if (b) { command(DO.speed, Math.round(parseFloat(b.dataset.s) * 100)); lastKey = ''; tick(); }
+            });
+            var copy = function () {
+                var url = replayUrl();
+                var done = function () { say('Link to this match copied.'); };
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy the link to this match:', url); }); return; }
+                } catch (e) { /* the prompt below */ }
+                window.prompt('Copy the link to this match:', url);
+            };
+            $('copy-btn').addEventListener('click', copy);
+            $('copy-more').addEventListener('click', copy);
+            $('fullscreen-btn-r').addEventListener('click', function () { $('fullscreen-btn').click(); });
+            $('b-fsx').addEventListener('click', function () { $('fullscreen-btn').click(); });
+            var tl = $('tl');
+            tl.addEventListener('pointerdown', function (ev) {
+                if (!isReadyToPlay || shown) return;
+                dragging = true;
+                try { tl.setPointerCapture(ev.pointerId); } catch (e) { /* no capture: the moves still come while the pointer is over */ }
+                dragTurn = turnAt(ev);
+                lastKey = '';
+                tick();
+            });
+            tl.addEventListener('pointermove', function (ev) { if (dragging) { dragTurn = turnAt(ev); lastKey = ''; tick(); } });
+            tl.addEventListener('pointerup', function (ev) {
+                if (!dragging) return;
+                dragging = false;
+                seek(turnAt(ev) / TPS);
+            });
+            tl.addEventListener('pointercancel', function () { dragging = false; lastKey = ''; });
+            tl.addEventListener('keydown', function (ev) {
+                var now = get(VALUE.turn) / TPS, total = get(VALUE.total) / TPS;
+                var to = ev.key === 'ArrowRight' ? now + 10 : ev.key === 'ArrowLeft' ? now - 10 : ev.key === 'Home' ? 0 : ev.key === 'End' ? total : null;
+                if (to === null) return;
+                ev.preventDefault();
+                seek(to);
+            });
+            window.addEventListener('keydown', function (ev) {
+                wake();
+                if (ev.key === ' ' && !shown && isReadyToPlay && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test((ev.target && ev.target.tagName) || '')) {
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();                // (the key is the bar's: the game does not get it)
+                    toggle();
+                }
+            }, true);
+            ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) { document.addEventListener(name, wake, { passive: true }); });
+
+            // ---- the file: fetched now, handed to the game when it starts ----
+            // The game starts when the data and the file are both here (antsAfterReplay, used by the data block below); a file that is not there or cannot be fetched is a card and the game does not start.
+            var fetched;
+            if (!FILE) {
+                fetched = Promise.resolve({ error: 'gone' });
+            } else if (!window.fetch || !window.Promise) {
+                fetched = Promise.resolve({ error: 'load', text: 'this browser cannot fetch the recording' });
+            } else {
+                fetched = fetch('/replays/' + FILE, { cache: 'no-store', credentials: 'same-origin' }).then(function (response) {
+                    if (response.status === 404 || response.status === 410) return { error: 'gone' };
+                    if (!response.ok) return { error: 'load', text: 'the server answered ' + response.status + ' for the recording' };
+                    return response.arrayBuffer().then(function (buffer) { return { bytes: new Uint8Array(buffer) }; });
+                }, function () { return { error: 'load', text: 'the recording could not be loaded: check the connection and try again' }; });
+            }
+            window.antsAfterReplay = function (start) {
+                fetched.then(function (got) {
+                    if (got.error === 'gone') { card('gone'); return; }
+                    if (got.error) { card('cant', got.text); return; }
+                    Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', got.bytes); });
+                    ANTS_ARGS.push('--replay', '/replay.antsrep');
+                    start();
+                });
+            };
+            // a file that is gone is said at once, while the game's data is still coming (the card covers the loading screen)
+            fetched.then(function (got) { if (got.error === 'gone') card('gone'); else if (got.error) card('cant', got.text); });
+            setHeader();
+            window.antsReplayPlaceBar();
+            setInterval(tick, 100);
+            tick();
+        })();
+    </script>
+    <!-- END replay glue -->
     <script>
         // ---- The game's data (index.data, about 15 MB) ----
         // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; two or four frames of web/lobby.html asked for the same file at the same
@@ -2789,7 +3248,12 @@
                     if (!isReadyToPlay) showDownloadError(new Error('the game did not start within ' + Math.round(START_TIMEOUT_MS / 1000) + ' s'), 'program');
                 }, START_TIMEOUT_MS);
             }
-            if (!window.fetch || !window.Promise || !window.Uint8Array) { ANTS_NAME_GATE.when(startGame); return; }
+            // (a recording starts the game once the file is here too: the replay block above)
+            function begin() {
+                if (ANTS_REPLAY_MODE) window.antsAfterReplay(function () { ANTS_NAME_GATE.when(startGame); });
+                else ANTS_NAME_GATE.when(startGame);
+            }
+            if (!window.fetch || !window.Promise || !window.Uint8Array) { begin(); return; }
 
             function rememberedSize() {
                 if (ANTS_DATA_SIZE > 0) return ANTS_DATA_SIZE;
@@ -2881,7 +3345,7 @@
                 progressFill.style.width = '100%';
                 antsDataPackage = bytes;
                 if (ANTS_NAME_GATE.pending() && statusElement) statusElement.textContent = 'The game is ready. Choose your name to join the match.';
-                ANTS_NAME_GATE.when(startGame);                              // (a link that somebody shared waits for the name: the game does not connect before)
+                begin();                                                     // (a link that somebody shared waits for the name: the game does not connect before)
             }, function(error) {
                 console.error('[download] the game data could not be downloaded:', error);
                 showDownloadError(error, 'data');

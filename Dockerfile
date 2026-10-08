@@ -13,12 +13,12 @@ COPY src/ ./src/
 COPY web/ ./web/
 COPY Original-Ants/ ./Original-Ants/
 
-# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text (the file VERSION) into shell.html (the game page) and lobby.html (the front page: its footer)
+# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text (the file VERSION) into shell.html (the game page), lobby.html (the front page: its footer) and watch.html (the list of the replays: its footer)
 RUN BUILD_TIME=$(date +%s) && \
     GAME_VERSION="v$(head -n 1 VERSION | tr -d '[:space:]')" && \
     case "${GAME_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION is not MAJOR.MINOR.PATCH: ${GAME_VERSION}" >&2; exit 1 ;; esac && \
-    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html web/lobby.html && \
-    ! grep -q '@@GAME_VERSION@@' web/shell.html web/lobby.html
+    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html web/lobby.html web/watch.html && \
+    ! grep -q '@@GAME_VERSION@@' web/shell.html web/lobby.html web/watch.html
 
 # Configure and compile using default Makefiles
 RUN emcmake cmake -B build_web \
@@ -52,10 +52,11 @@ COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
     echo "${BUILD_ID}" > /src/build_id.txt && \
     PAGE=/src/build_web/src/ants_app/index.html && \
-    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g" "$PAGE" /src/web/lobby.html && \
-    ! grep -q '@@BUILD_ID@@' "$PAGE" /src/web/lobby.html && \
+    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g" "$PAGE" /src/web/lobby.html /src/web/watch.html && \
+    ! grep -q '@@BUILD_ID@@' "$PAGE" /src/web/lobby.html /src/web/watch.html && \
     grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" "$PAGE" && \
-    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/lobby.html
+    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/lobby.html && \
+    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/watch.html
 
 # The site label (the build argument ANTS_SITE_LABEL, empty for the production site, "staging" for the staging stack: docker-compose.staging.yml): a non-empty label is put in the title
 # and in the footer of the game page and of the front page (the lobby), so that nobody takes the staging site for the production one. Empty, the two placeholders become nothing and the
@@ -64,7 +65,8 @@ RUN SITE_LABEL="${ANTS_SITE_LABEL}" && \
     case "${SITE_LABEL}" in *[!A-Za-z0-9._-]*) echo "ANTS_SITE_LABEL may hold letters, digits, dot, dash and underscore only: ${SITE_LABEL}" >&2; exit 1 ;; esac && \
     if [ -n "${SITE_LABEL}" ]; then SITE_TITLE=" (${SITE_LABEL})"; SITE_FOOTER="<strong id=\"site-label\">${SITE_LABEL}</strong>\&#8197;\&bull;\&#8197;"; else SITE_TITLE=""; SITE_FOOTER=""; fi && \
     cp /src/web/lobby.html /src/lobby.html && \
-    for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html; do \
+    cp /src/web/watch.html /src/watch.html && \
+    for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/watch.html; do \
         sed -i "s|@@SITE_TITLE@@|${SITE_TITLE}|g; s|@@SITE_FOOTER@@|${SITE_FOOTER}|g" "$PAGE" || exit 1; \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
@@ -104,6 +106,11 @@ COPY web/front/ /usr/share/nginx/html/front/
 # The front page, the lobby (lobby.html): play on this computer alone or against bots, host a match on the game server or join one by its code (it embeds the game page for the seats that play on it),
 # with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
 COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
+
+# The replays (docs/REPLAYS.md "Watching"): the list of the matches that the game server keeps (watch.html, linked from the footer of the front page and of the game page, with the site label, the version and the
+# build put in), and the helpers that it shares with the game page (replay_page.js). The game page plays one as play.html?replay=<file>.
+COPY --from=builder /src/watch.html /usr/share/nginx/html/watch.html
+COPY web/replay_page.js /usr/share/nginx/html/replay_page.js
 
 # The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other); they are in the Classic look of the front page: they link
 # /front/classic.css and show /front/logo.png, which the web/front/ copy above puts in the image

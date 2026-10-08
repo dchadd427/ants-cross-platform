@@ -273,6 +273,99 @@ std::unique_ptr<Duo> start_duo(Application& app, Peer& host, uint32_t seed) {
     return duo;
 }
 
+
+// ---- watching a replay (ApplicationConfig::replay_path) ------------------------------------------------------------------------------------------------------------------
+
+// A match of two on TINY made by hand: seat 0 (Ann) moves a worker now and then, seat 1 is the computer player "Bot (Medium)"; the Fog of War is ON in the file (a viewer shows the whole map).
+// `quit_at_end`: seat 1 quits after the last tick, which ends the match by the rules (the file's end says so); otherwise the match is left standing (a recording that ends before its match did).
+struct Handmade {
+    std::vector<uint8_t> bytes;
+    replay::Replay file;
+    std::vector<uint64_t> hash_at;        // the state hash after turn t, for t = 0 .. turns (index 0: the start)
+};
+
+Handmade make_handmade(uint32_t turns, bool quit_at_end, uint32_t seed = 21) {
+    Handmade out;
+    assets::LevelData level;
+    const std::string path = maps_dir() + "/TINY.LVL";
+    uint64_t map_hash = 0;
+    if (!level.load_from_file(path) || !net::hash_file(path, map_hash)) return out;
+    const uint8_t roster = 0x03;
+    level = level.for_roster(roster);
+    replay::Header head;
+    head.game_version = "v0.0.0";
+    head.build_id = "test";
+    head.venue = "local game";
+    head.map_name = "TINY.LVL";
+    head.map_hash = map_hash;
+    head.seed = seed;
+    head.roster = roster;
+    head.fog = true;
+    head.names[0] = "Ann";
+    head.names[1] = "Bot (Medium)";
+    sim::SimulationEngine engine;
+    engine.set_fog_of_war_enabled(true);
+    engine.init(level, seed, roster);
+    replay::Recorder rec(head);
+    out.hash_at.push_back(engine.state_hash().total);
+    for (uint32_t turn = 0; turn < turns; ++turn) {
+        if (turn % 60 == 5) {
+            const std::vector<uint32_t> own = ants_of(engine, static_cast<uint8_t>(turn % 120 == 5 ? 0 : 1));
+            if (!own.empty()) {
+                Command c;
+                c.type = CommandType::GroupMove;
+                c.issuer = static_cast<uint8_t>(turn % 120 == 5 ? 0 : 1);
+                c.tile_x = static_cast<int16_t>(8 + static_cast<int>(turn % 17));
+                c.tile_y = static_cast<int16_t>(9 + static_cast<int>(turn % 13));
+                c.ants = {own[0]};
+                rec.on_command(c);
+                engine.apply_command(c);
+            }
+        }
+        engine.tick();
+        engine.clear_news_events();
+        engine.clear_audio_events();
+        rec.on_tick(engine);
+        out.hash_at.push_back(engine.state_hash().total);
+    }
+    if (quit_at_end) {
+        Command quit;
+        quit.type = CommandType::Quit;
+        quit.issuer = 1;
+        rec.on_command(quit);
+        engine.apply_command(quit);
+    }
+    std::string error;
+    out.bytes = rec.finish(engine, error);
+    if (!out.bytes.empty() && !replay::decode(out.bytes.data(), out.bytes.size(), out.file, error)) out.bytes.clear();
+    return out;
+}
+
+// An application that watches `bytes` (written to a file of its own folder)
+struct Viewer {
+    ScratchRoot root;
+    Application app;
+    bool ok{false};
+    explicit Viewer(const std::vector<uint8_t>& bytes, const std::string& name = "match.antsrep") {
+        const fs::path file = root.path() / name;
+        {
+            std::ofstream out(file, std::ios::binary);
+            out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        }
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.lan_port = 0;
+        cfg.maps_dir = maps_dir();
+        cfg.replay_path = file.string();
+        ok = app.init(cfg);
+    }
+    void frames(int n, float dt = 0.05f) {
+        for (int i = 0; i < n; ++i) app.update_simulation(dt);
+    }
+    uint32_t turn() const { return static_cast<uint32_t>(app.replay_value(ReplayValue::Turn)); }
+    ReplayState state() const { return app.replay_state(); }
+};
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -849,6 +942,204 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(app.last_replay().empty());
         ASSERT_TRUE(app.last_replay_name().empty());
         app.shutdown();
+    } TEST_END();
+
+
+    // ---- watching a replay ----
+
+    TEST_CASE("RA7.1 A recording is watched: the match of the file plays turn by turn on the engine, whole map shown, names kept; it ends in the recorded state and the results open (a match that the rules ended)") {
+        const Handmade made = make_handmade(700, true);
+        ASSERT_FALSE(made.bytes.empty());
+        ASSERT_TRUE(made.file.complete && made.file.match_over);
+        Viewer v(made.bytes);
+        ASSERT_TRUE(v.ok);
+        ASSERT_TRUE(v.app.replay_mode() && v.app.replay_failure() == ReplayFailure::None);
+        ASSERT_TRUE(v.state() == ReplayState::Playing && v.turn() == 0);
+        ASSERT_EQ(v.app.replay_value(ReplayValue::Total), 700);
+        ASSERT_EQ(v.app.replay_value(ReplayValue::Speed), 100);
+        ASSERT_FALSE(v.app.sim().is_fog_of_war_enabled());                              // (the file has the fog on: a viewer sees everything, and the fog is no part of any hash)
+        ASSERT_EQ(v.app.sim().get_player_name(0), std::string("Ann"));
+        ASSERT_EQ(v.app.sim().get_player_name(1), std::string("Bot (Medium)"));
+        ASSERT_TRUE(v.app.recorder() == nullptr && v.app.last_replay().empty());        // (a viewer records nothing)
+        v.frames(1);
+        ASSERT_EQ(v.turn(), 1u);                                                        // (no "Get ready" dialog: the first turn runs at once)
+        v.frames(99);
+        ASSERT_EQ(v.turn(), 100u);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.hash_at[100]);                   // (the same state as the recorded match had at that turn)
+        v.frames(2000);
+        ASSERT_TRUE(v.state() == ReplayState::Ended);
+        ASSERT_EQ(v.turn(), 700u);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);
+        ASSERT_TRUE(v.app.sim().is_match_over());
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA7.2 The HUD's orders do nothing while a recording is watched: an ant that is ordered to stop and moved on every turn changes nothing of the match") {
+        const Handmade made = make_handmade(400, false);
+        ASSERT_FALSE(made.bytes.empty());
+        Viewer v(made.bytes);
+        ASSERT_TRUE(v.ok);
+        v.frames(150);
+        const std::vector<uint32_t> own = ants_of(v.app.sim(), 0);
+        ASSERT_FALSE(own.empty());
+        v.app.hud().select_ant(own[0]);
+        v.app.hud().stop_selected(v.app.sim());                                          // (what a click on Stop does: it goes to the HUD's sink, which is nowhere)
+        v.app.hud().stop_selected(v.app.sim());
+        ASSERT_EQ(v.app.sim().state_hash().total, made.hash_at[150]);
+        v.frames(400);
+        ASSERT_TRUE(v.state() == ReplayState::CutShort);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.hash_at[400]);
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA7.3 Pause, speed, jump, jump back, watch again: each lands in the state that the recorded match had at that turn") {
+        const Handmade made = make_handmade(700, true);
+        ASSERT_FALSE(made.bytes.empty());
+        Viewer v(made.bytes);
+        ASSERT_TRUE(v.ok);
+        v.frames(40);
+        v.app.replay_control(ReplayControl::TogglePause, 0);
+        ASSERT_TRUE(v.state() == ReplayState::Paused);
+        v.frames(100);
+        ASSERT_EQ(v.turn(), 40u);                                                       // (nothing runs while it is paused)
+        v.app.replay_control(ReplayControl::SetPaused, 0);
+        v.app.replay_control(ReplayControl::SetSpeed, 800);
+        ASSERT_EQ(v.app.replay_value(ReplayValue::Speed), 800);
+        v.frames(10);
+        ASSERT_TRUE(v.turn() >= 118u && v.turn() <= 120u);                              // (8 turns for each 50 ms of the clock; a turn that the float clock has not quite reached comes with the next frame)
+        const uint32_t before_slow = v.turn();
+        v.app.replay_control(ReplayControl::SetSpeed, 50);
+        v.frames(10);
+        ASSERT_TRUE(v.turn() >= before_slow + 4u && v.turn() <= before_slow + 5u);       // (half speed: 5 turns in half a second)
+        v.app.replay_control(ReplayControl::SetSpeed, 100);
+        // a jump ahead plays on, without a picture, to the turn: the frames of the jump are visible as the state Jumping, and it ends playing
+        v.app.replay_control(ReplayControl::Seek, 500);
+        ASSERT_TRUE(v.state() == ReplayState::Jumping);
+        ASSERT_EQ(v.app.replay_value(ReplayValue::JumpTarget), 500);
+        v.frames(1);
+        ASSERT_TRUE(v.state() == ReplayState::Playing);
+        ASSERT_EQ(v.turn(), 500u);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.hash_at[500]);
+        // back: the match is played again from its first turn, to the same state as the way forward
+        v.app.replay_control(ReplayControl::Seek, 200);
+        v.frames(1);
+        ASSERT_EQ(v.turn(), 200u);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.hash_at[200]);
+        v.frames(1);
+        ASSERT_EQ(v.turn(), 201u);
+        // to the end by a jump: the results are there, as when it was played
+        v.app.replay_control(ReplayControl::Seek, 100000);
+        v.frames(2);
+        ASSERT_TRUE(v.state() == ReplayState::Ended);
+        ASSERT_EQ(v.turn(), 700u);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);
+        // watch again
+        v.app.replay_control(ReplayControl::Restart, 0);
+        ASSERT_TRUE(v.state() == ReplayState::Playing && v.turn() == 0);
+        v.frames(30);
+        ASSERT_EQ(v.turn(), 30u);
+        // a pause survives a jump
+        v.app.replay_control(ReplayControl::SetPaused, 1);
+        v.app.replay_control(ReplayControl::Seek, 90);
+        v.frames(1);
+        ASSERT_TRUE(v.state() == ReplayState::Paused && v.turn() == 90u);
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA7.4 A recording that ends before its match did stops on its last picture (CutShort) and says so; a jump to its end ends the same way") {
+        const Handmade made = make_handmade(300, false);
+        ASSERT_FALSE(made.bytes.empty());
+        ASSERT_TRUE(made.file.complete && !made.file.match_over);
+        Viewer v(made.bytes);
+        ASSERT_TRUE(v.ok);
+        v.frames(1000);
+        ASSERT_TRUE(v.state() == ReplayState::CutShort);
+        ASSERT_EQ(v.turn(), 300u);
+        ASSERT_FALSE(v.app.sim().is_match_over());
+        v.app.replay_control(ReplayControl::Seek, 10);                                  // (back from the end: played again from the start)
+        v.frames(1);
+        ASSERT_TRUE(v.state() == ReplayState::Playing && v.turn() == 10u);
+        v.app.replay_control(ReplayControl::Seek, 300);
+        v.frames(1);
+        ASSERT_TRUE(v.state() == ReplayState::CutShort && v.turn() == 300u);
+        // a file that has no end (a cut copy) plays as far as it goes
+        std::vector<uint8_t> cut = made.bytes;
+        cut.resize(cut.size() - 33);                                                    // (the ENDS chunk: 8 + 13 + 4 + ... bytes; whatever is cut, the file stops early)
+        replay::Replay probe;
+        std::string why;
+        if (replay::decode(cut.data(), cut.size(), probe, why)) {
+            ASSERT_FALSE(probe.complete);
+            Viewer w(cut, "cut.antsrep");
+            ASSERT_TRUE(w.ok);
+            w.frames(2000);
+            ASSERT_TRUE(w.state() == ReplayState::CutShort);
+            ASSERT_EQ(w.turn(), probe.total_turns);
+        }
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA7.5 A file that cannot be shown leaves the game idle with the reason: not a replay, older or newer rules, a map that is not here, a match that does not play out the same") {
+        const Handmade made = make_handmade(400, true);
+        ASSERT_FALSE(made.bytes.empty());
+        const auto failure_of = [&](const std::vector<uint8_t>& bytes, ReplayFailure expected) {
+            Viewer v(bytes, "bad.antsrep");
+            if (!v.ok || (v.app.replay_failure() != expected && expected != ReplayFailure::Diverged)) return false;
+            if (expected == ReplayFailure::Diverged) v.frames(500);
+            const bool failed = v.state() == ReplayState::Failed && v.app.replay_failure() == expected && !v.app.replay_failure_text().empty();
+            const uint32_t before = v.turn();
+            v.app.replay_control(ReplayControl::Seek, 100);                          // (the bar does nothing to a replay that cannot be shown)
+            v.app.replay_control(ReplayControl::Restart, 0);
+            v.frames(20);
+            const bool idle = v.turn() == before;
+            v.app.shutdown();
+            return failed && idle;
+        };
+        const auto edited = [&](const std::function<void(replay::Replay&)>& edit) {
+            replay::Replay r = made.file;
+            edit(r);
+            std::string error;
+            return replay::encode(r, error);
+        };
+        ASSERT_TRUE(failure_of(std::vector<uint8_t>{'n', 'o', 't', ' ', 'a', ' ', 'r', 'e', 'p', 'l', 'a', 'y'}, ReplayFailure::Unreadable));
+        ASSERT_TRUE(failure_of(std::vector<uint8_t>{}, ReplayFailure::Unreadable));
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = static_cast<uint16_t>(replay::kSimRules + 1); }), ReplayFailure::Newer));
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = 0; r.head.engine_rules = 14; }), ReplayFailure::Older));
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = 0; r.head.engine_rules = 200; }), ReplayFailure::Newer));
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.map_hash ^= 1u; }), ReplayFailure::NoMap));
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.map_name = "NOWHERE.LVL"; }), ReplayFailure::NoMap));
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.seed += 1; }), ReplayFailure::Diverged));
+        // an older file that the table of protocol numbers knows plays (the field is absent, protocol 15)
+        {
+            replay::Replay r = made.file;
+            r.head.sim_rules = 0;
+            r.head.engine_rules = 15;
+            std::string error;
+            Viewer v(replay::encode(r, error));
+            ASSERT_TRUE(v.ok && v.state() == ReplayState::Playing && v.app.replay_failure() == ReplayFailure::None);
+            v.app.shutdown();
+        }
+        // the page's own questions on an application that shows no replay
+        Application plain;
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.lan_port = 0;
+        ASSERT_TRUE(plain.init(cfg));
+        ASSERT_TRUE(!plain.replay_mode() && plain.replay_state() == ReplayState::None);
+        plain.replay_control(ReplayControl::Seek, 5);
+        plain.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA7.6 Quit and Leave Game leave the viewer (back to the page's list): the dialog's Yes does not quit a match, it ends the viewing") {
+        const Handmade made = make_handmade(300, false);
+        ASSERT_FALSE(made.bytes.empty());
+        Viewer v(made.bytes);
+        ASSERT_TRUE(v.ok);
+        v.frames(50);
+        ASSERT_TRUE(v.app.is_running());
+        quit_match(v.app);                                                               // (Ctrl+Q and Yes: a match would end by the quit command, a viewer is left)
+        ASSERT_FALSE(v.app.is_running());
+        ASSERT_FALSE(v.app.sim().is_match_over());                                      // (no Quit command reached the engine)
+        v.app.shutdown();
     } TEST_END();
 
     std::cout << "\nreplay application tests: " << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

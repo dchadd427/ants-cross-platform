@@ -55,7 +55,8 @@ struct ReplayEntry {
     uint32_t sequence{1};                            // 1 for the first match of a map that ended in that second, 2, 3 ... for the later ones (the "-2" of the name): the order of matches that ended together
     bool readable{false};                            // the file is a replay that this build can read (false: damaged, or made by a newer format; it is kept until it is old, and only its owner sees it)
     std::string map;                                 // the map's file name as the match named it
-    uint16_t rules{0};                               // net::kProtocolVersion of the build that recorded it: a build plays a file only when it has the same number
+    uint16_t rules{0};                               // net::kProtocolVersion of the build that recorded it (information: a file plays on its sim_rules)
+    uint16_t sim_rules{0};                           // the rules number of the simulation that the match needs (replay::sim_rules_of: the head's own, else the table's; 0: unknown): a build plays a file only when it has the same number
     std::string game;                                // "v0.10.1"
     uint32_t turns{0};
     bool finished{false};                            // the rules ended the match (false: it was left, or it ran into the room's time limit)
@@ -75,6 +76,8 @@ public:
     static constexpr const char* kExtension = ".antsrep";
     static constexpr const char* kTempExtension = ".tmp";
     static constexpr int64_t kPurgeEveryS = 3600;    // the age limit is looked at this often (and before every save, together with the size limit)
+    static constexpr int64_t kRescanEveryS = 30;     // the folder's change time is looked at this often (update()): a file that somebody else put there, or took away, is noticed then
+    static constexpr size_t kRescanBatch = 100;      // at most this many new files are read in one look (the rest at the next one: a big drop must not hold the server's loop)
     static constexpr int64_t kRepeatReportEveryS = 3600;   // a line that keeps coming (a disk that refuses every match) is told once, and how often it came again at most this often
 
     explicit ReplayStore(ReplayConfig config);
@@ -90,8 +93,11 @@ public:
     /// it is not written when the hour's limit is spent, the disk would be left with less than min_free_bytes, or the file is bigger than the whole store may be.
     ReplaySave save(const std::vector<uint8_t>& bytes);
 
-    /// The ages are looked at when kPurgeEveryS have passed since the last look. Call it every pass of the server's loop.
+    /// The ages are looked at when kPurgeEveryS have passed since the last look, and the folder when kRescanEveryS have. Call it every pass of the server's loop.
     void update();
+    /// Reads the folder again when its change time moved: files of the store's own kind that somebody else put there (bot_arena --save-replays) are listed, files that were taken away are forgotten (nothing is deleted
+    /// from the disk), and the limits are applied. A file that is known is not read again. Returns how many files were added or forgotten. update() calls it; the tests call it too.
+    size_t rescan();
     /// Deletes the files that are older than keep_days and, when the files together pass max_bytes, the oldest ones. Returns how many files it deleted.
     size_t purge();
 
@@ -129,6 +135,8 @@ private:
     int64_t now_s() const;
     std::string path_of(const std::string& file) const;
     bool summarize(const std::vector<uint8_t>& bytes, ReplayEntry& out, std::string& why) const;
+    ReplayEntry read_entry(const std::string& name, uint64_t size) const;
+    int64_t folder_stamp() const;                    // the folder's change time as a number (0: it cannot be asked)
 
     ReplayConfig cfg_;
     bool ready_{false};
@@ -137,6 +145,9 @@ private:
     size_t readable_{0};
     std::vector<int64_t> saved_at_;                  // when the last files were kept (the hour's budget)
     int64_t next_purge_s_{0};
+    int64_t next_rescan_s_{0};
+    int64_t folder_stamp_{0};                        // the folder's change time when it was last read
+    bool rescan_more_{false};                        // a look stopped at kRescanBatch: the next one goes on even if the folder did not change
     std::vector<std::string> notes_;
     std::string last_note_;
     size_t repeats_{0};                              // how often last_note_ came again since it was told

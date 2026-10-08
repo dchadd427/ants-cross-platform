@@ -25,6 +25,7 @@ constexpr uint32_t kFieldTeams = 12;
 constexpr uint32_t kFieldRecorderSeat = 13;
 constexpr uint32_t kFieldVenue = 14;
 constexpr uint32_t kFieldHashPeriod = 15;
+constexpr uint32_t kFieldSimRules = 16;               // optional (a reader that does not know it skips it)
 
 const std::array<uint32_t, 256>& crc_table() {
     static const std::array<uint32_t, 256> table = [] {
@@ -155,6 +156,11 @@ std::vector<uint8_t> head_payload(const Header& h) {
     std::vector<uint8_t> period;
     put_u32(period, h.hash_period);
     put_field(p, kFieldHashPeriod, period.data(), period.size());
+    if (h.sim_rules != 0) {
+        std::vector<uint8_t> rules;
+        put_u16(rules, h.sim_rules);
+        put_field(p, kFieldSimRules, rules.data(), rules.size());
+    }
     return p;
 }
 
@@ -227,6 +233,7 @@ bool read_head(const uint8_t* payload, size_t size, Header& h, std::string& erro
         return false;
     }
     h = Header{};
+    h.sim_rules = 0;                                                       // (unless the file says)
     h.format_version = format;
     h.engine_rules = rules;
     bool have_name = false;
@@ -295,6 +302,11 @@ bool read_head(const uint8_t* payload, size_t size, Header& h, std::string& erro
                 if (length != 4 || !f.u32(h.hash_period)) { error = field + " has the wrong length"; return false; }
                 break;
             }
+            case kFieldSimRules: {
+                Cursor f{bytes, length};
+                if (length != 2 || !f.u16(h.sim_rules) || h.sim_rules == 0) { error = field + " has the wrong length or is 0"; return false; }
+                break;
+            }
             default:
                 if (id >= kFieldName0 && id < kFieldName0 + sim::MAX_PLAYERS) {
                     if (!known_text(bytes, length, h.names[id - kFieldName0])) { error = field + " is not printable text"; return false; }
@@ -315,6 +327,27 @@ bool read_head(const uint8_t* payload, size_t size, Header& h, std::string& erro
 }
 
 }  // namespace
+
+namespace {
+// The protocol numbers of files that were made before the head said its sim_rules, and the rules number of the simulation they were recorded on. 15 and 16 share one: protocol 16 (the lobby
+// rooms) changed messages only; src/ants_sim, the map reader and the assets are the same files in both (a comment aside) and every golden hash is the same. Add a line only for a number that
+// has been proved the same way (a reference file recorded under the older number, played to its final hash under this build).
+struct ProtocolRules {
+    uint16_t protocol;
+    uint16_t sim_rules;
+};
+constexpr ProtocolRules kKnownProtocols[] = {{15, 1}, {16, 1}};
+}  // namespace
+
+uint16_t sim_rules_of(const Header& head) noexcept {
+    if (head.sim_rules != 0) return head.sim_rules;
+    for (const ProtocolRules& known : kKnownProtocols) {
+        if (known.protocol == head.engine_rules) return known.sim_rules;
+    }
+    return 0;
+}
+
+bool plays_here(const Header& head) noexcept { return sim_rules_of(head) == kSimRules; }
 
 uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc) noexcept {
     const std::array<uint32_t, 256>& table = crc_table();

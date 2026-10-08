@@ -1446,8 +1446,8 @@ rp_public_ok() {      # rp_public_ok FILE: the public list holds the same replay
 import sys, json
 d = json.load(sys.stdin)
 r = d["replays"][0] if d["replays"] else {}
-ok = sorted(d) == ["count", "keep_days", "replays"] and d["count"] == 1 and len(d["replays"]) == 1 and d["keep_days"] == 30
-ok = ok and sorted(r) == ["bytes", "ended", "file", "finished", "game", "map", "players", "rules", "seconds", "turns"]
+ok = sorted(d) == ["count", "keep_days", "replays", "sim_rules"] and d["sim_rules"] >= 1 and d["count"] == 1 and len(d["replays"]) == 1 and d["keep_days"] == 30
+ok = ok and sorted(r) == ["bytes", "ended", "file", "finished", "game", "map", "players", "rules", "seconds", "sim_rules", "turns"]
 ok = ok and r["file"] == sys.argv[1] and r["map"] == "TINY.LVL" and r["players"] in (["Green (Typed1)", "Red (Typed2)"], ["Green (Typed2)", "Red (Typed1)"]) and r["finished"] is False and r["turns"] >= 600
 ok = ok and sys.argv[2] not in json.dumps(d)
 sys.exit(0 if ok else 1)' "$1" "$RP_CODE"
@@ -1473,7 +1473,7 @@ head, body = text.split("\n\n", 1)
 lines = head.split("\n")
 ok = lines[0] == "HTTP/1.1 200 OK" and any(l.lower() == "cache-control: no-store" for l in lines) and any(l.lower() == "content-type: application/json" for l in lines)
 d = json.loads(body)
-ok = ok and d == {"replays": [], "count": 0, "keep_days": 30}
+ok = ok and d.pop("sim_rules", 0) >= 1 and d == {"replays": [], "count": 0, "keep_days": 30}
 sys.exit(0 if ok else 1)'; echo $?)"
 # a match of two real games
 curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$RP_CODE\",\"seed\":7}" "$CTL/rooms" > /dev/null
@@ -1555,7 +1555,7 @@ RP_OTHER="$WORK/rp_other_folder"
 rp_server --replay-port "$RP_PUB" --replay-any-interface --replays-dir "$RP_OTHER" --replays-days 7 --replays-max-mb 5 --replay-demo
 check "a server with its own replays folder, 7 days, 5 MiB and --replay-demo says so in its log, and makes the folder" "$(grep -q "replays kept in $RP_OTHER for 7 days, at most 5 MiB; the matches of demo rooms are kept too (--replay-demo)" "$WORK/rp_server.log" && [ -d "$RP_OTHER" ]; echo $?)"
 check "with --replay-any-interface the log says that the door is open to every interface, and (where the machine has an address) it answers there" "$(grep -q "public replays on port $RP_PUB (all interfaces: the host must restrict it)" "$WORK/rp_server.log" && { [ -z "$RP_HOST_IP" ] || [ "$(code_of "http://$RP_HOST_IP:$RP_PUB/replays")" = "200" ]; }; echo $?)"
-check "... and the control interface and the public door both say 7 days (and the first one 5 MiB) for a list that is empty" "$(rp_auth "$CTL/replays" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if d["enabled"] is True and d["count"] == 0 and d["keep_days"] == 7 and d["max_bytes"] == 5 * 1024 * 1024 else 1)' && curl -s -m 5 "$RP_PUBURL/replays" | python3 -c 'import sys, json; sys.exit(0 if json.load(sys.stdin) == {"replays": [], "count": 0, "keep_days": 7} else 1)'; echo $?)"
+check "... and the control interface and the public door both say 7 days (and the first one 5 MiB) for a list that is empty" "$(rp_auth "$CTL/replays" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if d["enabled"] is True and d["count"] == 0 and d["keep_days"] == 7 and d["max_bytes"] == 5 * 1024 * 1024 else 1)' && curl -s -m 5 "$RP_PUBURL/replays" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if d.pop("sim_rules", 0) >= 1 and d == {"replays": [], "count": 0, "keep_days": 7} else 1)'; echo $?)"
 stop_server
 fi
 

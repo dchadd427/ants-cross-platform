@@ -277,7 +277,7 @@ class TheLookIsTheFrontPages(PageCase):
                        'id="lock-off" data-lock="off" aria-checked="false"'):
             self.assertIn(markup, self.page)
         self.assertEqual(len(re.findall(r'<button type="button" role="radio" id="(?:aspect-16-9|aspect-4-3|lock-on|lock-off)"', self.page)), 4)
-        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 2)
+        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 3)           # (the picture and the mouse, and the replay bar's speed: TheReplayPage)
 
     def test_the_black_boxes_are_the_front_pages(self):
         theirs = rule(self.lobby_style, ".infobox")
@@ -445,9 +445,11 @@ class TheFooter(PageCase):
     def test_the_links_are_the_front_pages_and_the_menu_comes_first(self):
         nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.page, re.S).group(1)
         found = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', nav)
-        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog.html", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback")])
+        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/watch.html", "Watch replays"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog.html", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback")])
         self.assertIn('id="menu-link"', found[0][1])
         self.assertNotIn("target=", found[0][1])
+        self.assertIn('id="watch-link"', found[1][1])                                                           # (the replays are the site's own page: this tab, not a new one)
+        self.assertNotIn("target=", found[1][1])
         lobby_nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.lobby, re.S).group(1)
         self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], [text for _, _, text in found[1:]])
 
@@ -457,7 +459,7 @@ class TheEmbedModeIsOnlyTheGame(PageCase):
         body = rule(self.style, "body.embed")
         self.assertEqual((body["padding"], body["min-height"], body["background"], body["overflow"]), ("0", "0", "#000", "hidden"))
         self.assertEqual(rule(self.style, "body.embed::after")["display"], "none")                                  # (the green frame is the page's, not the game's)
-        gone = [s for s, d in blocks(self.style) if d.get("display") == "none !important"]
+        gone = [s for s, d in blocks(self.style) if d.get("display") == "none !important" and "body.embed" in s]
         self.assertEqual(len(gone), 1)
         for part in ("header", "footer", ".mobile-tip-banner", ".view-bar", ".info-panel-wrapper"):
             self.assertIn("body.embed " + part, gone[0], part)

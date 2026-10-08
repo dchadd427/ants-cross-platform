@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -1050,6 +1052,79 @@ int main() {
         const size_t gone = store.purge();
         ASSERT_TRUE(gone > 20 && gone < 260 && store.count() == names.size() - gone && store.readable_count() == store.count());
         for (size_t i = 0; i < names.size(); ++i) ASSERT_EQ(store.find(names[i]) != nullptr, f.now - ended_at[i] < 30 * kDay);
+    } TEST_END();
+
+    TEST_CASE("RS9.1 A File That Somebody Else Puts In The Folder (The Bot Arena's --save-replays, A Copy By Hand) Is Listed At The Next Look, One That Is Taken Away Is Forgotten (Nothing Is Deleted For It), A Half-Written \".tmp\" Of Another Writer And A Foreign File Are Left Alone") {
+        Fixture f;
+        ReplayStore store(f.config());
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        ASSERT_TRUE(store.save(make_file()).kept);
+        // (a folder's change time can be the same for two changes that are made one after the other: the test sets it, so that every change is one that a look can see)
+        int touches = 0;
+        const auto touch = [&]() { fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(100000 + ++touches))); };
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{0});                                            // (the folder looks changed; the same files are found: nothing is added)
+        ASSERT_EQ(store.count(), size_t{1});
+        const std::string second = "ants-TINY-20261007-120000Z.antsrep";
+        const std::string cut = "ants-TINY-20261006-120000Z.antsrep";
+        write_file(f.dir / second, make_file("TINY.LVL", 900, false, 0, 7));
+        write_text(f.dir / cut, "this is not a replay");
+        write_text(f.dir / "ants-TINY-20261007-120000Z-2.antsrep.tmp", "half");
+        write_text(f.dir / "notes.txt", "private notes");
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{2});
+        ASSERT_TRUE(store.count() == 3 && store.readable_count() == 2);
+        const std::vector<ReplayEntry> listed = store.list();
+        ASSERT_TRUE(listed.size() == 3 && listed[0].file == kName0 && listed[1].file == second && listed[2].file == cut);
+        ASSERT_TRUE(listed[1].readable && listed[1].map == "TINY.LVL" && listed[1].turns == 900 && !listed[1].finished && !listed[2].readable);
+        ASSERT_EQ(store.total_bytes(), listed[0].bytes + listed[1].bytes + listed[2].bytes);
+        ASSERT_TRUE(fs::exists(f.dir / "ants-TINY-20261007-120000Z-2.antsrep.tmp") && fs::exists(f.dir / "notes.txt") && store.find("notes.txt") == nullptr);
+        ASSERT_TRUE(any_line_has(store.take_notes(), "2 file(s) found"));
+        std::vector<uint8_t> out;
+        ASSERT_TRUE(store.read(second, out) && out == slurp(f.dir / second));
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{0});                                                // (known files are not read again, and nothing changed)
+        // a file that was taken away
+        fs::remove(f.dir / second);
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.count() == 2 && store.readable_count() == 1 && store.find(second) == nullptr && store.find(kName0) != nullptr && fs::exists(f.dir / kName0) && fs::exists(f.dir / cut));
+        ASSERT_EQ(store.total_bytes(), listed[0].bytes + listed[2].bytes);
+        // a file that is older than the store keeps goes at once (the limits hold for files that came from outside too)
+        write_file(f.dir / "ants-TINY-20260101-000000Z.antsrep", make_file("TINY.LVL", 700, true, 0, 9));
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.count() == 2 && !fs::exists(f.dir / "ants-TINY-20260101-000000Z.antsrep") && store.find("ants-TINY-20260101-000000Z.antsrep") == nullptr);
+        // the store's own look: update() every kRescanEveryS
+        write_file(f.dir / second, make_file("TINY.LVL", 900, false, 0, 7));
+        touch();
+        f.now += ReplayStore::kRescanEveryS - 1;
+        store.update();
+        ASSERT_EQ(store.count(), size_t{2});
+        f.now += 2;
+        store.update();
+        ASSERT_TRUE(store.count() == 3 && store.find(second) != nullptr);
+    } TEST_END();
+
+    TEST_CASE("RS9.2 A Big Drop Is Read A Hundred Files At A Time (The Server's Loop Is Held Up For No More Than That), The Next Look Goes On Without A New Change Of The Folder, And A Folder That Is Gone Is No Reason To Forget Anything Wrongly") {
+        Fixture f;
+        ReplayStore store(f.config());
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        for (int i = 0; i < 130; ++i) {
+            char name[64];
+            std::snprintf(name, sizeof name, "ants-TINY-20261001-%02d%02d%02dZ.antsrep", 0, i / 60, i % 60);
+            write_file(f.dir / name, make_file("TINY.LVL", 700, true, 0, static_cast<uint32_t>(i + 1)));
+        }
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200000)));
+        ASSERT_EQ(store.rescan(), ReplayStore::kRescanBatch);
+        ASSERT_EQ(store.count(), ReplayStore::kRescanBatch);
+        ASSERT_EQ(store.rescan(), size_t{30});                                               // (the folder's time did not move; the first look stopped at the batch)
+        ASSERT_TRUE(store.count() == 130 && store.readable_count() == 130);
+        const std::vector<ReplayEntry> listed = store.list();
+        for (size_t i = 1; i < listed.size(); ++i) ASSERT_TRUE(listed[i - 1].ended_s > listed[i].ended_s);      // (newest first, whatever the order in which they were read)
+        ASSERT_EQ(store.rescan(), size_t{0});
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures

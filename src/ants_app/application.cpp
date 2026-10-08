@@ -479,6 +479,10 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (!parse_local_teams(argv[++i], cfg.teams, why) && cfg.startup_error.empty()) {
                 cfg.startup_error = "--teams " + std::string(argv[i]) + ": " + why;
             }
+        } else if (std::strcmp(argv[i], "--replay") == 0 && i + 1 < argc) {   // the match of a .antsrep file (ApplicationConfig::replay_path)
+            cfg.replay_path = argv[++i];
+            cfg.start_in_map_select = false;
+            mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
             cfg.play_at_once = true;
             mode_given = true;
@@ -486,6 +490,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.alone = true;
             mode_given = true;
         }
+    }
+    if (!cfg.replay_path.empty() && cfg.startup_error.empty() && (cfg.net_role != ApplicationConfig::NetRole::None || !cfg.bots.empty() || cfg.alone || cfg.play_at_once)) {
+        cfg.startup_error = "--replay shows a recorded match: it cannot be combined with --host, --join, --join-url, --bot, --alone or --play.";
     }
     if (cfg.alone && !cfg.bots.empty() && cfg.startup_error.empty()) cfg.startup_error = "--alone cannot be used with --bot: a game for one has no other player.";
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
@@ -551,6 +558,9 @@ bool Application::init(const ApplicationConfig& config) {
         std::cerr << "[Application] Failed to load CHD archive: " << config_.chd_path << std::endl;
         return false;
     }
+
+    // A replay (--replay): the file is read and checked here, before any screen; whatever is wrong with it is the replay's failure, the game starts either way (the page tells the player)
+    if (!config_.replay_path.empty()) prepare_replay();
 
     // 3. Load Map Level: the list is what the Maps folder holds; a game that starts without the setup screen plays --map, else the map that the setup screen highlights (TREASURE.LVL when the folder
     // holds it, else the first map of the list: MapSelectScreen::init)
@@ -819,7 +829,12 @@ bool Application::init(const ApplicationConfig& config) {
     }
 
     // Determine initial AppState & audio lifecycle
-    if (!config_.start_in_map_select) {
+    if (replay_mode_) {
+        audio_mixer_.stop_music();
+        midi_player_.stop();
+        config_.label_unnamed_teams = true;                          // (every seat of the match is shown, by its name or its colour)
+        start_replay();
+    } else if (!config_.start_in_map_select) {
         state_ = AppState::Playing;
         match_started_ = true;
         audio_mixer_.stop_music();
@@ -1448,6 +1463,10 @@ void Application::leave_network_match() {
 }
 
 void Application::quit() {
+    if (replay_mode_) {                                        // (the results' Leave Game, the quit dialog's Yes: back to the page's list of matches)
+        leave_replay();
+        return;
+    }
     if (menu_enabled_) start_menu_.flush();                    // (a name that was typed and not written yet)
 #if defined(__EMSCRIPTEN__)
     // The browser leaves a game for the site's front page, where the page's Menu button goes too: a room is left at once (the seat is dropped, not held for a page that is gone). A game in a frame of
@@ -1758,9 +1777,21 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel() {
 }
 
 // For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The selector of the picture under the game restarts the game
-// (the picture is made when the game starts), so it asks the player first when this says 1.
+// (the picture is made when the game starts), so it asks the player first when this says 1. A recording that is watched is no match to lose: 0.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
-    return (g_web_app != nullptr && g_web_app->match_running()) ? 1 : 0;
+    return (g_web_app != nullptr && !g_web_app->replay_mode() && g_web_app->match_running()) ? 1 : 0;
+}
+
+// For the page's replay bar (web/shell.html, docs/REPLAYS.md "Watching"): what the game shows of the recording. `what` is a ReplayValue (replay_view.hpp): the state, the turn, the turns of the recording, the
+// speed times 100, how far a jump is, why the file cannot be shown, the turn of the jump. -1 when there is no game or it shows no replay.
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_replay_get(int what) {
+    if (g_web_app == nullptr || !g_web_app->replay_mode()) return -1;
+    return g_web_app->replay_value(static_cast<ants::app::ReplayValue>(what));
+}
+
+// ... and what the bar asks of it: a ReplayControl (replay_view.hpp) and its value (pause 0 or 1, the speed times 100, the turn to jump to)
+extern "C" EMSCRIPTEN_KEEPALIVE void ants_replay_do(int what, int value) {
+    if (g_web_app != nullptr && g_web_app->replay_mode()) g_web_app->replay_control(static_cast<ants::app::ReplayControl>(what), value);
 }
 
 // For the page's browser check (tests/scripts/web_edge_check.py): what the game believes about the pointer and the view, read-only. 0 and 1: the pointer's x and y on the picture (what the
@@ -2440,7 +2471,9 @@ void Application::update_simulation(float dt) {
         return;
     }
 
-    if (network_active() && net_->phase() == net::NetGame::Phase::Playing) {
+    if (replay_mode_) {
+        run_replay(dt);
+    } else if (network_active() && net_->phase() == net::NetGame::Phase::Playing) {
         // The ticks come from the lock-step runner (pump_network); only what shows between two ticks is advanced here
         tick_accumulator_ = static_cast<float>(net_->sub_tick_ms()) / 1000.0f;
         // The "Get ready" dialog of the match's start: no tick runs while it is up (the host seals the first turn kMatchStartDelayMs after the match began) and it ends with the first turn that
@@ -2575,6 +2608,10 @@ void Application::update_results(float dt) {
 // quitter, whose row goes last on every results screen, and the results (with Leave) follow. With more sides left the original sends the drop message and
 // exits; here the player leaves the same way as before (the network announces the departure to the others).
 void Application::confirm_quit() {
+    if (replay_mode_) {                                          // (a recording is not a match to leave: back to the list)
+        leave_replay();
+        return;
+    }
     // A match that is held (a seat is missing, the countdown runs, this machine is on its way back) seals no turn, and no session plays in the lobby phases of a match that starts again after a BadRequest (the
     // catch-up screen is up): a Quit command would be lost and the player would stay. The player leaves for good instead (NetGame::leave: the key is let go of, the others are told when the link is up).
     if (network_active() && (net_->paused() || catch_up_screen_active())) {

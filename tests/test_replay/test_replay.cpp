@@ -144,7 +144,7 @@ Command make_command(CommandType type, uint8_t issuer, int16_t x, int16_t y, std
 }
 
 bool same_head(const Header& a, const Header& b) {
-    return a.format_version == b.format_version && a.engine_rules == b.engine_rules && a.game_version == b.game_version && a.build_id == b.build_id && a.venue == b.venue &&
+    return a.format_version == b.format_version && a.engine_rules == b.engine_rules && a.sim_rules == b.sim_rules && a.game_version == b.game_version && a.build_id == b.build_id && a.venue == b.venue &&
            a.map_name == b.map_name && a.map_hash == b.map_hash && a.seed == b.seed && a.roster == b.roster && a.fog == b.fog && a.names == b.names && a.teams == b.teams &&
            a.recorder_seat == b.recorder_seat && a.hash_period == b.hash_period;
 }
@@ -786,17 +786,24 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(!o.ok && contains(o.error, "ended differently"));
     } TEST_END();
 
-    TEST_CASE("RP2.4 A Replay Of Other Rules Is Not Played: The Error Names Both Protocol Numbers And The Game That Made It; The Head Of Any Rules Still Reads") {
+    TEST_CASE("RP2.4 A Replay Of Other Simulation Rules Is Not Played: The Error Names Both Numbers And The Game That Made It; The Head Of Any Rules Still Reads; Another Protocol Number Alone Is No Reason") {
         Played p = play_scripted(tiny, 31, 150);
-        p.replay.head.engine_rules = static_cast<uint16_t>(net::kProtocolVersion - 1);
+        p.replay.head.sim_rules = static_cast<uint16_t>(kSimRules + 1);
         p.replay.head.game_version = "v0.1.2";
         const std::vector<uint8_t> bytes = encoded(p.replay);
         const Decoded d = decoded(bytes);
-        ASSERT_TRUE(d.ok && d.replay.head.engine_rules == net::kProtocolVersion - 1);
+        ASSERT_TRUE(d.ok && d.replay.head.sim_rules == kSimRules + 1);
         const Outcome o = play(d.replay, tiny.level);
         ASSERT_TRUE(!o.ran && !o.ok);
-        ASSERT_TRUE(contains(o.error, "protocol " + std::to_string(net::kProtocolVersion - 1)) && contains(o.error, "protocol " + std::to_string(net::kProtocolVersion)) && contains(o.error, "v0.1.2"));
+        ASSERT_TRUE(contains(o.error, "simulation rules " + std::to_string(kSimRules + 1)) && contains(o.error, "simulation rules " + std::to_string(kSimRules)) && contains(o.error, "v0.1.2"));
         ASSERT_EQ(o.turns, 0u);
+        // a protocol number that moved while the simulation did not: the file still plays (RP7.1)
+        Played q = play_scripted(tiny, 31, 150);
+        q.replay.head.engine_rules = static_cast<uint16_t>(net::kProtocolVersion + 5);
+        const Decoded e = decoded(encoded(q.replay));
+        ASSERT_TRUE(e.ok);
+        const Outcome ok = play(e.replay, tiny.level);
+        ASSERT_TRUE(ok.ok && ok.hash == q.hash);
     } TEST_END();
 
     TEST_CASE("RP2.5 An Incomplete File Plays As Far As It Goes (And Says So); It Is Not A Failure That It Has No End") {
@@ -1189,6 +1196,84 @@ int main(int argc, char* argv[]) {
         h.map_hash = broken_hash;
         ASSERT_FALSE(load_map(h, dir.path.string(), level, error));
         ASSERT_TRUE(contains(error, "cannot be loaded"));
+    } TEST_END();
+
+    // ---- the rules number of the simulation (kSimRules) ---------------------------------------------------------------------------
+
+    TEST_CASE("RP7.1 The Head Says The Rules Number Of The Simulation, As An Optional Field: Written Always, Read Back; A File Without It Is Judged By The Table Of Protocol Numbers (15 And 16 Are The Same Simulation, Any Other Is Unknown)") {
+        Played p = play_scripted(tiny, 33, 120);
+        ASSERT_EQ(p.replay.head.sim_rules, kSimRules);
+        ASSERT_TRUE(plays_here(p.replay.head));
+        // a file that was made before the field (the head of PR 31's writer: no field 16): sim_rules reads 0 and the table of protocol numbers decides
+        std::vector<Chunk> chunks = chunks_of(p.file);
+        std::vector<uint8_t>& head = chunks[0].payload;
+        ASSERT_TRUE(head.size() > 4 && head[head.size() - 4] == 16 && head[head.size() - 3] == 2);                  // (the field is the last: id 16, length 2, the number)
+        head.resize(head.size() - 4);
+        const Decoded old = decoded(file_of(chunks));
+        ASSERT_TRUE(old.ok && old.replay.head.sim_rules == 0);
+        for (const uint16_t protocol : {uint16_t{15}, uint16_t{16}}) {
+            Header h = old.replay.head;
+            h.engine_rules = protocol;
+            ASSERT_EQ(sim_rules_of(h), 1u);
+            ASSERT_TRUE(plays_here(h) == (kSimRules == 1));
+        }
+        for (const uint16_t protocol : {uint16_t{0}, uint16_t{1}, uint16_t{14}, uint16_t{17}, uint16_t{200}}) {
+            Header h = old.replay.head;
+            h.engine_rules = protocol;
+            ASSERT_EQ(sim_rules_of(h), 0u);
+            ASSERT_FALSE(plays_here(h));
+        }
+        // the field wins over the table
+        Header h = old.replay.head;
+        h.engine_rules = 15;
+        h.sim_rules = 7;
+        ASSERT_EQ(sim_rules_of(h), 7u);
+        // a field of the wrong size or 0 is refused; the played file of the old kind plays (its hashes are the simulation's)
+        const Outcome o = play(old.replay, tiny.level);
+        ASSERT_TRUE(o.ok && o.hash == p.hash);
+    } TEST_END();
+
+    TEST_CASE("RP7.2 A Head Field Of The Rules Number That Is 0 Or Of The Wrong Size Is Refused With The Field Named") {
+        Played p = play_scripted(tiny, 33, 120);
+        const std::vector<Chunk> chunks = chunks_of(p.file);
+        const auto refused = [&](const std::vector<uint8_t>& head) {
+            std::vector<Chunk> edited = chunks;
+            edited[0].payload = head;
+            const Decoded d = decoded(file_of(edited));
+            return !d.ok && contains(d.error, "field 16");
+        };
+        std::vector<uint8_t> zero = chunks[0].payload;
+        zero[zero.size() - 2] = 0;
+        zero[zero.size() - 1] = 0;
+        ASSERT_TRUE(refused(zero));
+        std::vector<uint8_t> three = chunks[0].payload;
+        three[three.size() - 3] = 3;
+        three.push_back(0);
+        ASSERT_TRUE(refused(three));
+    } TEST_END();
+
+    // The reference match: a scripted match on TINY (orders from the engine's own state, no bot) and the state hash that it ends in, for each rules number that has existed. A change that moves the
+    // hash without moving kSimRules strands nothing visible today and everything tomorrow: this test says so. When it fails because the match plays out differently on purpose: raise kSimRules, add the
+    // new line here (keep the old ones), and say in docs/REPLAYS.md which protocol numbers share which rules.
+    struct ReferenceHash {
+        uint16_t sim_rules;
+        uint64_t hash;
+    };
+    constexpr ReferenceHash kReferenceHashes[] = {{1, 0x7a96df7831c965e0ull}};
+
+    TEST_CASE("RP7.3 The Reference Match Ends In The Hash That Its Rules Number Says: The Simulation Cannot Change Without kSimRules") {
+        const Played p = play_scripted(tiny, 31, 1500);
+        ASSERT_TRUE(p.replay.commands.size() > 20);
+        const ReferenceHash* line = nullptr;
+        for (const ReferenceHash& r : kReferenceHashes) {
+            if (r.sim_rules == kSimRules) line = &r;
+        }
+        if (line == nullptr || line->hash != p.hash) std::cout << "\n    the reference match ends in " << std::hex << p.hash << std::dec << " (kSimRules " << kSimRules << ")\n";
+        ASSERT_TRUE(line != nullptr);
+        ASSERT_EQ(line->hash, p.hash);
+        // and the replay of that match, played by the player, ends there too
+        const Outcome o = play(p.replay, tiny.level);
+        ASSERT_TRUE(o.ok && o.hash == line->hash);
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

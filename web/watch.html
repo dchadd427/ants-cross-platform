@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Watch replays — Ants (1998)@@SITE_TITLE@@</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
+    <style>
+        /* The list of the matches that the game server keeps (docs/REPLAYS.md "Watching"), in the look of the front page (web/lobby.html): the orange clay, the thin green frame, teal bevelled buttons
+           with a red shadow, black inset boxes, the game's own font and the "ants!" logo, all from web/front/. Nothing is loaded from another site. */
+        @font-face { font-family: "Libre Franklin"; src: url("front/LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
+        :root {
+            --clay: #db4b13; --ink: #0c0805; --teal: #2b6357; --teal-hi: #31765f; --teal-lo: #17382f; --edge: #050a08; --cream: #f4ece2; --inset: #070b0f;
+            --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b; --shadow: #9d0d17; --gold: #f6d058; --muted: #8fb3a6;
+            --sheen: linear-gradient(180deg, rgba(255, 255, 255, .24) 0, rgba(255, 255, 255, 0) 4px, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, .32) 100%);
+            --bevel: inset 1px 1px 0 #f4f4ff, inset 2px 2px 0 #5dc2a0, inset 4px 4px 2px #3d9a7d, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -3px -4px 2px var(--teal-lo);
+            --bevel-sm: inset 1px 1px 0 #f4f4ff, inset 2px 2px 0 #5dc2a0, inset 3px 3px 1px #3d9a7d, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -2px -3px 1px var(--teal-lo);
+            --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { background: var(--clay); }
+        body { background: var(--clay) url("front/clay.png?v=ef1e7ee6"); color: var(--ink); font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif; font-synthesis: none; -webkit-text-size-adjust: 100%; }
+        a { color: inherit; }
+        img { display: block; max-width: 100%; height: auto; }
+        [hidden] { display: none !important; }
+        button { font: inherit; color: inherit; }
+        :focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+        /* the thin green frame around the whole screen, as on every screen of the game */
+        .screen { position: relative; min-height: 100vh; display: flex; flex-direction: column; }
+        .screen::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 40; box-shadow: inset 0 0 0 5px #2b5f43, inset 0 0 0 7px var(--frame-lo), inset 0 0 0 10px rgba(157, 13, 23, .9); }
+        .wrap { width: 100%; max-width: 1220px; margin: 0 auto; padding: 16px 30px 0; flex: 1; }
+
+        /* ---- buttons: the teal bevel of the game ---- */
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 18px; font-size: 16px; line-height: 1.1; text-decoration: none; cursor: pointer; white-space: nowrap;
+            background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
+        .btn:hover { background-color: var(--teal-hi); }
+        .btn:active { transform: translate(2px, 3px); box-shadow: var(--bevel), 1px 1px 0 var(--shadow); }
+        .btn.sm { min-height: 38px; padding: 6px 14px; font-size: 15px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
+        .dl { color: var(--cream); font-size: 15px; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; padding: 6px 2px; }
+        .dl:hover { color: var(--gold); }
+
+        /* ---- the mast: the logo and a line ---- */
+        .mast { display: flex; align-items: center; gap: 22px; min-height: 68px; margin-bottom: 14px; }
+        .mast .logo img { width: 168px; height: auto; display: block; }
+        .mast p { display: grid; gap: 2px; line-height: 1.2; }
+        .mast .tag { font-size: 20px; } .mast .sub { font-size: 15px; max-width: 64ch; }
+        .mast .grow { flex: 1 1 20px; }
+        .sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+        /* ---- the black boxes ---- */
+        .panel { background: var(--inset); color: var(--cream); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); padding: 20px 22px 18px; }
+        .panel h2 { font-size: 22px; font-weight: 500; line-height: 1.2; }
+        .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+        .count { font-size: 15px; color: var(--muted); white-space: nowrap; }
+
+        /* ---- who played: the colour's square and the name that the player typed (the colour word where nothing was typed, "Bot (Medium)" for a computer player) ---- */
+        .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 8px; }
+        .chip { --c: #7d8a84; display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; padding: 2px 10px 2px 7px; font-size: 14px; line-height: 1.5; color: var(--cream); background: #0d171f; border: 1px solid #1c3a30; border-radius: 3px; white-space: nowrap; }
+        .chip i { width: 12px; height: 12px; border-radius: 2px; background: var(--c); box-shadow: 0 0 0 1px #000; flex: none; }
+        .chip .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .chip[data-c="Green"] { --c: var(--c-green); } .chip[data-c="Red"] { --c: var(--c-red); } .chip[data-c="Blue"] { --c: var(--c-blue); } .chip[data-c="Black"] { --c: var(--c-black); }
+        .pill { display: inline-block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.5; padding: 0 6px; border-radius: 3px; vertical-align: 2px; white-space: nowrap; }
+        .pill.cut { color: #f2c48c; background: #2a1d08; border: 1px solid #6b4a14; }
+
+        /* ---- the list ---- */
+        .entries { list-style: none; display: grid; gap: 14px; }
+        .entry { display: grid; grid-template-columns: 112px minmax(0, 1fr) 86px auto; grid-template-areas: "pic info len acts" "pic chips chips acts"; gap: 6px 22px; align-items: center; padding: 12px 18px 12px 12px; background: linear-gradient(180deg, #0f1820, #080c11); border: 2px solid var(--edge); border-radius: 6px; box-shadow: inset 0 0 0 1px #17382f; }
+        .entry .tv { grid-area: pic; margin: 0; width: 112px; border: 2px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--edge), 3px 4px 0 4px var(--shadow); }
+        .entry .tv img, .entry .tv .blank { display: block; width: 100%; height: auto; aspect-ratio: 1; background: #20262a; }
+        .entry .info { grid-area: info; min-width: 0; display: grid; gap: 1px; align-content: end; }
+        .entry h3 { font-size: 24px; font-weight: 500; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .entry .when { font-size: 15px; color: var(--muted); }
+        .entry .when .l, .entry .when .pill { display: none; }
+        .entry .len { grid-area: len; text-align: right; display: grid; gap: 0; justify-items: end; align-content: end; }
+        .lab { font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+        .entry .len b { font-weight: 500; font-size: 24px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+        .entry .len .pill { margin-top: 2px; }
+        .entry .chips { grid-area: chips; align-self: start; padding-top: 2px; }
+        .entry .acts { grid-area: acts; display: flex; align-items: center; gap: 16px; justify-content: flex-end; }
+        .entry .cant { font-size: 14px; color: var(--muted); text-align: right; line-height: 1.3; }
+        .entry.old { background: #0a0e12; box-shadow: none; }
+        .entry.old .tv { box-shadow: 0 0 0 2px #26493b, 0 0 0 4px var(--edge); }
+        .entry.old .tv img { filter: grayscale(1) brightness(.62); }
+        .entry.old h3, .entry.old .len b { color: #a8c2b8; }
+        .more { display: flex; justify-content: center; gap: 14px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+        .legend { margin-top: 14px; font-size: 14px; color: var(--muted); text-align: center; }
+        .older { margin-top: 22px; padding: 14px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; background: #0a1016; border: 2px dashed #2b6b4f; border-radius: 6px; }
+        .older p { flex: 1 1 320px; font-size: 15px; color: #c3d6cd; }
+        .older p b { font-weight: 500; color: var(--cream); }
+        .older-list { margin-top: 14px; }
+
+        /* a plain notice in the list's place: nothing yet, cannot load, no replays here */
+        .note { display: grid; justify-items: start; gap: 10px; padding: 8px 2px 4px; }
+        .note p { max-width: 62ch; color: #d7e5de; }
+        .note b { font-weight: 500; color: #fff; }
+
+        /* ---- footer: the emerald bar of the match screen, as at the foot of the front page ---- */
+        .bar { margin: 24px 0 0; padding: 16px 30px 18px; color: var(--cream); font-size: 14px; background: linear-gradient(180deg, #2b685f, #2b6b4f); border-top: 3px solid var(--frame-hi); box-shadow: inset 0 3px 0 var(--frame-lo); position: relative; z-index: 2; }
+        .bar-in { max-width: 1280px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
+        .bar .ver { font-variant-numeric: tabular-nums; background: var(--edge); padding: 3px 12px; border-radius: 2px; color: #fff; }
+        .bar strong { font-weight: 500; color: var(--gold); margin-right: 10px; }
+        .bar .grow { flex: 1 1 280px; }
+        .bar a { text-decoration: none; padding: 2px 4px; }
+        .bar a:hover { text-decoration: underline; }
+        .bar a[aria-current] { color: var(--gold); text-decoration: underline; text-underline-offset: 4px; }
+        .bar nav { display: flex; gap: 6px 18px; flex-wrap: wrap; }
+
+        /* ---- narrower windows ---- */
+        @media (max-width: 720px) {
+            .wrap { padding: 14px 16px 0; }
+            .mast { min-height: 50px; margin-bottom: 12px; gap: 8px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "logo btn" "text text"; align-items: center; }
+            .mast .logo { grid-area: logo; } .mast .logo img { width: 120px; } .mast p { grid-area: text; } .mast .btn { grid-area: btn; justify-self: end; } .mast .grow { display: none; }
+            .mast .tag { font-size: 18px; } .mast .sub { font-size: 14px; }
+            .panel { padding: 14px 14px 12px; }
+            .head { margin-bottom: 10px; flex-wrap: wrap; }
+            .entries { gap: 12px; }
+            .entry { grid-template-columns: 78px minmax(0, 1fr); grid-template-areas: "pic info" "chips chips" "acts acts"; gap: 8px 14px; padding: 10px 10px 12px; align-items: start; }
+            .entry .tv { width: 78px; }
+            .entry h3 { font-size: 22px; } .entry .info { align-content: center; align-self: center; }
+            .entry .len { display: none; } .entry .when .l, .entry .when .pill { display: inline; }
+            .entry .acts { justify-content: space-between; } .entry .acts .btn { flex: 1 1 0; } .entry .acts .dl { padding: 10px 6px; }
+            .entry .cant { max-width: none; text-align: left; flex: 1 1 100%; }
+            .older { padding: 12px 12px; } .older .btn { width: 100%; }
+            .bar { padding: 16px 18px calc(20px + env(safe-area-inset-bottom, 0px)); }
+            .bar nav { gap: 4px 10px; }
+        }
+    </style>
+</head>
+<body>
+<div class="screen">
+<main class="wrap">
+    <header class="mast">
+        <h1 class="sr">Ants (1998): watch replays</h1>
+        <a class="logo" href="/" title="Back to the front page"><img src="front/logo.png" alt="ants! - the front page" width="581" height="218"></a>
+        <p><span class="tag">Watch a match again.</span><span class="sub" id="sub">Every match played here that ran 30 seconds or more is kept for 30 days, with the names the players typed.</span></p>
+        <span class="grow"></span>
+        <a class="btn sm" href="/">Play a match</a>
+    </header>
+    <section class="panel" aria-labelledby="list-h">
+        <div class="head"><h2 id="list-h">Matches to watch</h2><span class="count" id="list-count" aria-live="polite"></span></div>
+        <div id="list-body" aria-live="polite"></div>
+    </section>
+</main>
+
+<footer class="bar">
+    <div class="bar-in">
+        <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span></span>
+        <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
+        <nav aria-label="Footer links">
+            <a href="/watch.html" id="watch-link" aria-current="page">Watch replays</a>
+            <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
+            <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a>
+        </nav>
+    </div>
+</footer>
+</div>
+
+<script src="replay_page.js"></script>
+<script>
+(function () {
+    'use strict';
+    var R = window.AntsReplay;
+    var PAGE_SIZE = 10;                       // matches shown at first, and each time "Show more" is pressed
+    var $ = function (id) { return document.getElementById(id); };
+    var state = { current: [], older: [], shown: PAGE_SIZE, olderOpen: false, count: 0, capped: false };
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    function button(label, className, onclick) {
+        var b = el('a', className, label);
+        b.href = '#';
+        b.addEventListener('click', function (ev) { ev.preventDefault(); onclick(b); });
+        return b;
+    }
+    function pluralMatches(n) { return n + (n === 1 ? ' match' : ' matches'); }
+
+    // ---- one match of the list ----
+    function entryNode(e, old) {
+        var now = new Date();
+        var li = el('li', old ? 'entry old' : 'entry');
+        var tv = el('figure', 'tv');
+        var key = R.mapKey(e.map);
+        if (key) {
+            var img = el('img');
+            img.src = 'front/preview_' + key + '.png';
+            img.alt = '';
+            img.width = 300; img.height = 300;
+            tv.appendChild(img);
+        } else {
+            tv.appendChild(el('div', 'blank'));
+        }
+        li.appendChild(tv);
+        var length = R.lengthText(e.seconds);
+        var info = el('div', 'info');
+        info.appendChild(el('h3', '', R.mapTitle(e.map)));
+        var when = el('p', 'when', R.whenText(e.ended, now));
+        when.appendChild(el('span', 'l', ' · ' + length));
+        if (!e.finished) { when.appendChild(document.createTextNode(' ')); when.appendChild(el('span', 'pill cut', 'Cut short')); }
+        info.appendChild(when);
+        li.appendChild(info);
+        var len = el('div', 'len');
+        len.appendChild(el('span', 'lab', 'Length'));
+        len.appendChild(el('b', '', length));
+        if (!e.finished) len.appendChild(el('span', 'pill cut', 'Cut short'));
+        li.appendChild(len);
+        li.appendChild(R.chipsOf(document, e.players));
+        var acts = el('div', 'acts');
+        if (old) {
+            var cant = el('span', 'cant');
+            cant.appendChild(document.createTextNode('Recorded by ' + (e.game || 'an earlier version') + '.'));
+            cant.appendChild(el('br'));
+            cant.appendChild(document.createTextNode('Can’t be played here.'));
+            acts.appendChild(cant);
+        } else {
+            var watch = el('a', 'btn', 'Watch');
+            watch.href = '/play.html?replay=' + encodeURIComponent(e.file);
+            acts.appendChild(watch);
+        }
+        var dl = el('a', 'dl', 'Download');
+        dl.href = '/replays/' + encodeURIComponent(e.file);
+        dl.setAttribute('download', e.file);
+        acts.appendChild(dl);
+        li.appendChild(acts);
+        return li;
+    }
+    function entriesNode(list, old) {
+        var ul = el('ul', old ? 'entries older-list' : 'entries');
+        list.forEach(function (e) { ul.appendChild(entryNode(e, old)); });
+        return ul;
+    }
+
+    // ---- the page ----
+    function notice(html, linkLabel, href) {
+        var note = el('div', 'note');
+        var p = el('p');
+        p.appendChild(el('b', '', html[0]));
+        p.appendChild(document.createTextNode(' ' + html[1]));
+        note.appendChild(p);
+        if (linkLabel) {
+            var a = href ? el('a', 'btn', linkLabel) : button(linkLabel, 'btn', function () { load(); });
+            if (href) a.href = href;
+            note.appendChild(a);
+        }
+        return note;
+    }
+    function olderBox() {
+        var box = el('div');
+        var n = state.older.length;
+        var info = el('div', 'older');
+        var p = el('p');
+        p.appendChild(el('b', '', 'Earlier versions (' + n + ').'));
+        p.appendChild(document.createTextNode(' These matches were recorded by earlier versions of the game. This version can’t play them, but you can still download them.'));
+        info.appendChild(p);
+        var list = entriesNode(state.older, true);
+        list.hidden = !state.olderOpen;
+        var toggle = button(state.olderOpen ? 'Hide them' : 'Show them', 'btn sm', function (b) {
+            state.olderOpen = !state.olderOpen;
+            list.hidden = !state.olderOpen;
+            b.textContent = state.olderOpen ? 'Hide them' : 'Show them';
+        });
+        info.appendChild(toggle);
+        box.appendChild(info);
+        box.appendChild(list);
+        return box;
+    }
+    function render() {
+        var body = $('list-body'), count = $('list-count');
+        body.textContent = '';
+        var n = state.current.length;
+        if (n === 0) {
+            count.textContent = '';
+            body.appendChild(notice(['Nothing to watch yet.', 'A match that ran 30 seconds or more shows up here, and stays for 30 days.'], 'Play a match', '/'));
+        } else {
+            count.textContent = (state.capped ? 'The newest ' + pluralMatches(n) : pluralMatches(n)) + ', newest first';
+            var shown = Math.min(state.shown, n);
+            body.appendChild(entriesNode(state.current.slice(0, shown), false));
+            if (shown < n) {
+                var more = el('div', 'more');
+                more.appendChild(button('Show more', 'btn', function () { state.shown += PAGE_SIZE; render(); }));
+                more.appendChild(el('span', 'count', 'Showing ' + shown + ' of ' + n));
+                body.appendChild(more);
+            }
+            if (state.current.some(function (e) { return !e.finished; })) {
+                var legend = el('p', 'legend');
+                legend.appendChild(el('span', 'pill cut', 'Cut short'));
+                legend.appendChild(document.createTextNode(' The match was left or closed before it ended. You can watch up to that point.'));
+                body.appendChild(legend);
+            }
+        }
+        if (state.older.length) body.appendChild(olderBox());
+    }
+    function fail() {
+        $('list-count').textContent = '';
+        var body = $('list-body');
+        body.textContent = '';
+        body.appendChild(notice(['The list can’t be loaded right now.', 'Try again in a moment.'], 'Try again'));
+    }
+    function nothingKept() {
+        $('list-count').textContent = '';
+        $('sub').textContent = '';
+        var body = $('list-body');
+        body.textContent = '';
+        body.appendChild(notice(['This server doesn’t keep replays.', 'Matches played here are not saved.'], 'Play a match', '/'));
+    }
+
+    // What the server's public list gives (docs/SERVER.md "Replays"): { replays: [{ file, ended, map, players, seconds, finished, game, sim_rules }], count, keep_days, sim_rules }. A match is playable when
+    // it needs the rules that this server's build plays; the others are the "Earlier versions" (an entry with no number is one that nobody can tell: it is shown there too).
+    function show(data) {
+        var rules = typeof data.sim_rules === 'number' ? data.sim_rules : 0;
+        var list = (data.replays || []).filter(function (e) { return e && typeof e.file === 'string' && R.FILE_RE.test(e.file); });
+        state.current = list.filter(function (e) { return rules !== 0 && e.sim_rules === rules; });
+        state.older = list.filter(function (e) { return !(rules !== 0 && e.sim_rules === rules); });
+        state.capped = typeof data.count === 'number' && data.count > list.length;
+        state.shown = PAGE_SIZE;
+        render();
+    }
+    function load() {
+        $('list-count').textContent = 'Loading…';
+        var done = false;
+        var give = function (fn) { if (!done) { done = true; fn(); } };
+        var request;
+        try { request = fetch('/replays', { cache: 'no-store' }); } catch (e) { fail(); return; }
+        request.then(function (response) {
+            if (response.status === 404) { give(nothingKept); return; }
+            if (!response.ok) { give(fail); return; }
+            return response.json().then(function (data) {
+                if (!data || typeof data !== 'object' || !Array.isArray(data.replays)) { give(fail); return; }
+                give(function () { show(data); });
+            });
+        }).catch(function () { give(fail); });
+    }
+
+    // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
+    if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
+    else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
+    load();
+})();
+</script>
+</body>
+</html>
