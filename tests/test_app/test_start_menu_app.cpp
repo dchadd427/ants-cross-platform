@@ -1577,7 +1577,7 @@ int main(int argc, char** argv) {
     TEST_CASE("A4.6 Host: with no map stored the panel opens on Treasure and a room that is made without choosing a map is a Treasure room (the block of the Hello names it, the server makes it on TREASURE.LVL for four players); the default is not written to the settings; a map that is stored wins after a restart (the room is made on it)") {
         TempDir temp;
         const std::string settings = ini(temp, "t.ini");
-        {   // nothing stored (the fixture server's own default map is TINY.LVL: a Treasure room can only come from the code that the menu made)
+        {   // nothing stored (the fixture server's own default map is TINY.LVL: a Treasure room can only come from the block that the menu made)
             Server server;
             Application app;
             Hall hall{&server, &app, {}, nullptr, false};

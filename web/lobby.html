@@ -793,10 +793,12 @@ their music and their sound: only the window you are in is heard). The match is 
             for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
             return 'ffa';
         }
-        // The teams of an address (?teams= and ?roomteams=): two different seats 0 - 3 as A+B (a "+" that came as a blank is one), else none ('' : free for all). The tested text comes back, never the address's.
+        // The teams of an address (?teams= and ?roomteams=): two different seats 0 - 3 as A+B (a "+" that came as a blank is one), the lower seat first (a pair has one spelling, as in the create block: "1+0" is "0+1"),
+        // else none ('' : free for all). The tested text comes back, never the address's.
         function validRoomTeams(value) {
             var m = typeof value === 'string' ? /^([0-3])[+ ]([0-3])$/.exec(value) : null;
-            return m && m[1] !== m[2] ? m[1] + '+' + m[2] : '';
+            if (!m || m[1] === m[2]) return '';
+            return m[1] < m[2] ? m[1] + '+' + m[2] : m[2] + '+' + m[1];
         }
         // A room code as a screen shows it (the room panel, the Rejoin button, the name step of a Join): eight characters in two groups of four, "k7m2xq9p" as "k7m2 xq9p", which is easier to read out and to copy by
         // eye; any other length as it is. Only screens show it so: a link, a field's value and the game's arguments keep the plain code (the Join box drops the blank that a typed or pasted code has).

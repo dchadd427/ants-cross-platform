@@ -170,6 +170,18 @@ size_t join_keyed(Room& r, const std::string& name, const SeatKey& key, uint8_t 
     return r.guests.size() - 1;
 }
 
+// A guest with a configuration of its own (a platform, a create block ...), joined to the room like Room::join does; returns its index
+size_t join_with(Room& r, const ClientLobby::Config& cc) {
+    auto ends = r.net.connect({10, 0});
+    r.guests.emplace_back();
+    Room::Guest& g = r.guests.back();
+    g.host_end = ends.first;
+    g.client_end = ends.second;
+    g.lobby = std::make_unique<ClientLobby>(ends.second, cc);
+    r.host.add_connection(ends.first, r.now);
+    return r.guests.size() - 1;
+}
+
 // A raw client (no lobby behind it) that has said Hello: what the host answers can be read from `end`
 struct RawClient {
     Connection* host_end{nullptr};
@@ -3585,9 +3597,132 @@ int main() {
                 Room room(config);
                 const size_t ann = room.join_seat("Ann");
                 room.run(300);
+                ASSERT_EQ(room.guests[ann].lobby->phase(), ClientLobby::Phase::InRoom);
+                ASSERT_EQ(room.guests[ann].lobby->room().slots[0].name, std::string("Ann"));        // (a Room message did arrive: "none" is what it says, not what an empty screen shows)
+                ASSERT_TRUE(room.host.room().team_a == kNoTeam && room.host.room().team_b == kNoTeam && !room.host.room().teams().set);      // the room itself, before any decoder sees it
                 ASSERT_EQ(rules_of(*room.guests[ann].lobby), std::string("none 0"));
                 ASSERT_TRUE(!room.guests[ann].lobby->room().leader_starts() && !room.guests[ann].lobby->room().teams().set);
             }
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.25 The Platforms (Protocol 15): What A Guest Tells In Its Hello Is In The Room Message At Its Seat For Everybody; It Is Taken Anew When The Guest Takes Its Seat Back From Another Machine; The Start Carries The Platform Of Every Seat That Plays; A Host With A Seat Tells Its Own; A Byte Or A Create Block That No Server Reads Never Leaves A Client") {
+        const auto platforms_of = [](const RoomMsg& r) {                  // "<seat 0> <seat 1> <seat 2> <seat 3>": the byte of each seat
+            std::string out;
+            for (const RoomMsg::Slot& s : r.slots) out += (out.empty() ? "" : " ") + std::to_string(static_cast<unsigned>(s.platform));
+            return out;
+        };
+        const auto start_platforms_of = [](const StartMsg& s) {
+            std::string out;
+            for (const uint8_t p : s.platforms) out += (out.empty() ? "" : " ") + std::to_string(static_cast<unsigned>(p));
+            return out;
+        };
+        const uint8_t mac_page = static_cast<uint8_t>(kPlatformBrowser | kOsMacos);                 // 18
+        const uint8_t android_page = static_cast<uint8_t>(kPlatformBrowser | kOsAndroid);           // 20
+        const auto config_of = [](const std::string& name, uint8_t platform) {
+            ClientLobby::Config cc;
+            cc.name = name;
+            cc.platform = platform;
+            return cc;
+        };
+        {   // the Hello's byte reaches the seat, in the room and in what every guest is shown; a guest that says nothing is 0
+            Room room(keyed_server_config(50));
+            const size_t ann = join_with(room, config_of("Ann", kOsWindows));
+            room.run(100);
+            const size_t bob = join_with(room, config_of("Bob", mac_page));
+            room.run(100);
+            const size_t cat = join_with(room, config_of("Cat", kPlatformUnknown));
+            room.run(300);
+            ASSERT_EQ(platforms_of(room.host.room()), std::string("1 18 0 0"));
+            for (const size_t g : {ann, bob, cat}) ASSERT_EQ(platforms_of(room.guests[g].lobby->room()), std::string("1 18 0 0"));
+            // Bob's page is reloaded on another machine: a Hello with its key takes the seat over, and what it says now is the seat's platform (and everybody is told)
+            ClientLobby::Config again = config_of("Bob", kOsLinux);
+            again.key = room.guests[bob].lobby->key();
+            const size_t bob2 = join_with(room, again);
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_EQ(platforms_of(room.host.room()), std::string("1 3 0 0"));
+            for (const size_t g : {ann, cat, bob2}) ASSERT_EQ(platforms_of(room.guests[g].lobby->room()), std::string("1 3 0 0"));
+            ClientLobby::Config silent = config_of("Bob", kPlatformUnknown);                         // ... and a machine that says nothing leaves the seat with none
+            silent.key = room.guests[bob].lobby->key();
+            const size_t bob3 = join_with(room, silent);
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 2u);
+            ASSERT_EQ(platforms_of(room.host.room()), std::string("1 0 0 0"));
+            ASSERT_EQ(platforms_of(room.guests[ann].lobby->room()), std::string("1 0 0 0"));
+            ASSERT_EQ(platforms_of(room.guests[bob3].lobby->room()), std::string("1 0 0 0"));
+        }
+        {   // the Start: the platform of each seat that plays, 0 for a seat that does not, and every guest is handed the same
+            Room room(keyed_server_config(51));
+            const size_t ann = join_with(room, config_of("Ann", kOsWindows));
+            room.run(100);
+            const size_t bob = join_with(room, config_of("Bob", mac_page));
+            room.run(100);
+            const size_t cat = join_with(room, config_of("Cat", android_page));
+            room.run(300);
+            ASSERT_TRUE(room.host.start(5, 6, room.now));
+            room.run(300);
+            ASSERT_EQ(start_platforms_of(room.host.start_info()), std::string("1 18 20 0"));
+            for (const size_t g : {ann, bob, cat}) ASSERT_EQ(start_platforms_of(room.guests[g].lobby->start_info()), std::string("1 18 20 0"));
+        }
+        {   // a seat that holds a bot, and an empty seat, say 0 in the Start; the people keep theirs
+            Room room(keyed_server_config(52));
+            const size_t ann = join_with(room, config_of("Ann", kOsLinux));
+            room.run(100);
+            join_with(room, config_of("Bob", android_page));
+            room.run(300);
+            ASSERT_TRUE(room.host.add_bot(3, "Bot (Easy)"));
+            room.run(100);
+            ASSERT_EQ(platforms_of(room.host.room()), std::string("3 20 0 0"));
+            ASSERT_TRUE(room.host.start(7, 8, room.now));
+            room.run(300);
+            ASSERT_EQ(start_platforms_of(room.host.start_info()), std::string("3 20 0 0"));
+            ASSERT_EQ(start_platforms_of(room.guests[ann].lobby->start_info()), std::string("3 20 0 0"));
+        }
+        {   // a host that holds a seat (a LAN or direct host) tells its own, and so does a host that told a byte that no one reads: none
+            HostLobby::Config hc;
+            hc.host_seat = 0;
+            hc.host_name = "Hal";
+            hc.host_platform = static_cast<uint8_t>(kPlatformBrowser | kOsLinux);
+            Room room(hc);
+            ASSERT_EQ(platforms_of(room.host.room()), std::string("19 0 0 0"));
+            const size_t ann = join_with(room, config_of("Ann", kOsWindows));
+            room.run(300);
+            ASSERT_EQ(room.guests[ann].lobby->my_seat(), 1);
+            ASSERT_EQ(platforms_of(room.guests[ann].lobby->room()), std::string("19 1 0 0"));
+            ASSERT_TRUE(room.host.start(9, 10, room.now));
+            room.run(300);
+            ASSERT_EQ(start_platforms_of(room.guests[ann].lobby->start_info()), std::string("19 1 0 0"));
+            HostLobby::Config bad = hc;
+            bad.host_platform = 0xFF;
+            ASSERT_EQ(platforms_of(Room(bad).host.room()), std::string("0 0 0 0"));
+            bad.host_platform = kPlatformUnknown;
+            ASSERT_EQ(platforms_of(Room(bad).host.room()), std::string("0 0 0 0"));
+        }
+        {   // a client leaves out a platform byte and a create block that no server would read: the Hello would be refused as garbage, and the guest would never be seated
+            Room room(keyed_server_config(53));
+            ClientLobby::Config odd = config_of("Ann", 0xFF);
+            const size_t ann = join_with(room, odd);
+            room.run(300);
+            ASSERT_EQ(room.guests[ann].lobby->phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(platforms_of(room.guests[ann].lobby->room()), std::string("0 0 0 0"));
+            CreateBlock block;
+            block.map_name = "TINY.LVL";
+            block.seats = 9;                                                                          // no such room
+            ASSERT_FALSE(valid_create_block(block));
+            ClientLobby::Config odd_block = config_of("Bob", kOsWindows);
+            odd_block.create = block;
+            const size_t bob = join_with(room, odd_block);
+            room.run(300);
+            ASSERT_EQ(room.guests[bob].lobby->phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(platforms_of(room.guests[bob].lobby->room()), std::string("0 1 0 0"));
+            block.seats = 3;                                                                          // an honest block is sent, and a lobby that is no room for the public ignores it
+            ASSERT_TRUE(valid_create_block(block));
+            ClientLobby::Config honest = config_of("Cat", kOsMacos);
+            honest.create = block;
+            const size_t cat = join_with(room, honest);
+            room.run(300);
+            ASSERT_EQ(room.guests[cat].lobby->phase(), ClientLobby::Phase::InRoom);
         }
     } TEST_END();
 

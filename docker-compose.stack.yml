@@ -11,7 +11,7 @@
 #   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional; the browser page does not use it)
 #   ANTS_BUILD_ID=<text>                            which build this is (the page's footer, the changelog pages, `ants_server --version`); optional: without it the images
 #                                                   take the commit that the clone's .git/HEAD and .git/refs name, and the UTC build time when the clone has no such files
-#   ANTS_DEMO_ROOMS=48 ANTS_DEMO_MAP=TREASURE.LVL   how many demo rooms the page web/lobby.html may make at a time, and the map of a room whose code names none
+#   ANTS_DEMO_ROOMS=48 ANTS_DEMO_MAP=TREASURE.LVL   how many demo rooms the page web/lobby.html may make at a time, and the map of a room whose create block names none
 #                                                   (optional; TREASURE.LVL, the map that is played most, is the default). ANTS_DEMO_ROOMS must be 1 to 255: 0, or
 #                                                   256 and more, make the server exit at its start, and with restart: unless-stopped it then restarts again and
 #                                                   again. There is no variable that switches the demo rooms off: delete the three demo options from the command
@@ -50,9 +50,9 @@ services:
     # (docs/NETWORK_PORT.md "Restart records"; only rooms that hold seats keep a record: every room of this server does, unless it is started with --no-reconnect). 15 s is the default 10 s and room for a slow volume: 256 rooms at 30 ms for a flush are 7.7 s. KEEP THE
     # VOLUME ants-server-results: a stack that is removed with its volumes loses the records.
     stop_grace_period: 15s
-    # The page web/lobby.html (the front page) joins rooms named "demo-..." that it makes itself: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
-    # (default 48) on the map ANTS_DEMO_MAP (default TREASURE.LVL) unless the code names one of ANTS_DEMO_MAPS (the page's choice; the maps folder must hold them
-    # all). Whoever reaches a game port (the site, or TCP port 4001) can fill these rooms; rooms of the control interface keep their own places.
+    # The page web/lobby.html (the front page) makes rooms of its own: its Hello carries a create block (the map, the seats, the teams) and a code of eight lower-case characters: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
+    # (default 48) on the map ANTS_DEMO_MAP (default TREASURE.LVL) unless the block names one of ANTS_DEMO_MAPS (the page's choice; the maps folder must hold them
+    # all). A code with an upper-case letter makes no such room (the control interface draws those). Whoever reaches a game port (the site, or TCP port 4001) can fill these rooms; rooms of the control interface keep their own places.
     # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least).
     # --log-mb 4: one room's turn log (what a returning player is given) is at most 4 MiB (a busy 30-minute match logs 0.65 MB), so that the demo rooms alone cannot use up the 256 MiB that
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).

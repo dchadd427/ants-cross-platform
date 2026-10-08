@@ -1477,7 +1477,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(StartMenu::host_teams_text(green_black, 4), std::string("Green + Black against Red + Blue"));
         ASSERT_EQ(StartMenu::host_teams_text(green_red, 3), std::string("Green + Red against Blue"));
         ASSERT_EQ(StartMenu::host_teams_text(red_blue, 3), std::string("Red + Blue against Green"));
-        ASSERT_EQ(room_teams_sentence(green_red, 4), std::string("Room teams: Green + Red against Blue + Black."));        // (they are the room's: its code names them)
+        ASSERT_EQ(room_teams_sentence(green_red, 4), std::string("Room teams: Green + Red against Blue + Black."));        // (they are the room's: its create block names them)
         ASSERT_EQ(room_teams_sentence(ffa, 4), std::string());
         ASSERT_EQ(room_teams_sentence(green_black, 3), std::string());                         // (a choice that the room does not offer is no teams)
         ASSERT_EQ(room_teams_sentence(green_red, 2), std::string());

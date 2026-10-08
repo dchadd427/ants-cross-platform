@@ -89,7 +89,7 @@ constexpr bool kInBrowser = false;
 
 // A Hello with a create block is one that the server makes the room of when somebody comes (the front page's card and the start menu send them): the server answers NoSuchRoom when it cannot,
 // so it is a place that is missing (the cap of public rooms, the server's limit, a server that makes none), never a room that does not exist
-constexpr const char* kTextNoPlace = "The server cannot make a room for this match now. Try again in a few minutes.";
+constexpr const char* kTextNoPlace = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
 
 // "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
 std::string seat_colour(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(str::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
@@ -187,6 +187,7 @@ bool NetGame::host(uint16_t port, const std::string& name, bool loopback_only) {
     HostLobby::Config cfg;
     cfg.host_name = name;
     cfg.host_seat = 0;
+    cfg.host_platform = platform_;                                // (protocol 15: the host's own seat shows what this machine runs on, as a guest's does)
     host_lobby_ = std::make_unique<HostLobby>(cfg);
     role_ = Role::Host;
     phase_ = Phase::Room;

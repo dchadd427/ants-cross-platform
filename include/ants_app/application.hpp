@@ -134,7 +134,7 @@ struct ApplicationConfig {
     /// web page's address gives them as `roommap`, `roomseats`, `roomteams` and `roomleaderstart` (web/shell.html). Without any of them the Hello only joins a room that exists.
     std::optional<net::CreateBlock> net_create;
     /// --platform [browser-]windows|macos|linux|android|ios|other (protocol 15): what this game tells the room about itself (an icon beside its name; cosmetic). 0, the default: the platform that the build is for
-    /// (net::native_platform()); the web page says what its browser is (`platform` in its address).
+    /// (net::native_platform(); a web game says "another system, in a browser"); web/shell.html passes the `platform` of its address on (no page of the site writes it yet).
     uint8_t net_platform{0};
     /// --fill-bots none|easy|medium|hard, or four of them joined by commas for the seats 0 - 3 (protocol 11; a level for each seat since 13): the bots that this player's START seats in the empty
     /// seats of its room when it can start one: the leader of a server's room (the request goes to the server, which seats them and runs them) and the host of a room on the local network

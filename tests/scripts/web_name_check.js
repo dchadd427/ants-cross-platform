@@ -194,6 +194,9 @@ for (const [label, search, want] of ASK) check('asksForName: ' + label + ' (' + 
 same('joinArguments is as it was for a shared link (the name step puts --name in later)', P.joinArguments('?join=/ws&room=ABC', false, 'h').args, ['--join-url', 'ws://h/ws', '--room', 'ABC']);
 same('... and a shared link of a room that the front page made carries its create block to the game, after the room (the game makes the room of it when it has none)', P.joinArguments('?join=/ws&room=k7m2xq9p&roommap=small&roomseats=2&roomteams=0%2B1&seat=1&fill=easy&start=2', false, 'h').args,
      ['--join-url', 'ws://h/ws', '--room', 'k7m2xq9p', '--room-map', 'small', '--room-seats', '2', '--room-teams', '0+1', '--seat', '1', '--fill-bots', 'easy', '--start-when', '2']);
+same('... the create block goes with a room only: with no room, or a room that is no room code, the game gets the door and the rest (the platform, the seat), and no map, seats, teams or flag',
+     [P.joinArguments('?join=/ws&roommap=small&roomseats=2&roomteams=0%2B1&roomleaderstart=1&platform=linux&seat=1', false, 'h').args, P.joinArguments('?join=/ws&room=a%20b&roommap=small&roomseats=2&roomleaderstart=1', false, 'h').args],
+     [['--join-url', 'ws://h/ws', '--platform', 'linux', '--seat', '1'], ['--join-url', 'ws://h/ws']]);
 const STRIP = [
     ['?join=/ws&room=ABC&name=Bob', '?join=/ws&room=ABC'], ['?name=Bob&join=/ws', '?join=/ws'], ['?join=/ws&name=Bob&room=ABC', '?join=/ws&room=ABC'],
     ['?name=Bob', ''], ['?join=/ws&name=', '?join=/ws'], ['?join=/ws&room=ABC', '?join=/ws&room=ABC'], ['', ''], ['?username=Bob&join=/ws', '?username=Bob&join=/ws'],

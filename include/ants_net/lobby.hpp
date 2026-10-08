@@ -321,9 +321,10 @@ public:
     bool request_start(const std::array<FillLevel, sim::MAX_PLAYERS>& fill = {}, const sim::StartTeams& teams = sim::StartTeams{});
     /// The same level in every seat (protocol 11's single choice)
     bool request_start(FillLevel level);
-    /// The leader asks the server to put the player of seat `from` in the empty seat `to` (SeatMove, protocol 14). False (nothing is sent) unless this machine leads an open room (InRoom) and the
-    /// seats are two different ones of 0 - 3. True means the request was sent, not that the server did it: it answers with the Room message that shows the new seats, and says nothing to a request
-    /// that it cannot honour (the player left, somebody took the colour, the room started meanwhile).
+    /// The leader asks the server to put the player of seat `from` in seat `to` (SeatMove; a free colour since protocol 14, a guest's colour, a swap, since 15). False (nothing is sent) unless this
+    /// machine leads an open room (InRoom) and the seats are two different ones of 0 - 3. The request carries the guard of the seating as this machine shows it (seating_hash). True means the request
+    /// was sent, not that the server did it: it answers with the Room message that shows the new seats, and says nothing to a request that it cannot honour (a bot's or the host's colour, the seating
+    /// has changed, the room started meanwhile).
     bool request_seat_move(uint8_t from, uint8_t to);
     /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
     /// (a longer line is cut), not empty. The room relays it to everybody, this machine included: the line comes back through take_chat(). False when nothing was sent.

@@ -2,7 +2,7 @@
 
 What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page. The long notes of every release up to v0.1.0, with their measured numbers and sources, are the detailed history, [`docs/CHANGELOG_ARCHIVE.md`](docs/CHANGELOG_ARCHIVE.md) (on the site: `/changelog_archive.html`).
 
-An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. Merged work that is not released yet is collected under **Next** (a section headed `## Next`, above the newest release); `tools/release.py` turns it into the next entry when `VERSION` moves.
+An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. Work that is merged without a release number is written up in the "Changelog entry" section of its pull request's description; the pull request of the next release collects those sections, and its own, under **Next** (a section headed `## Next`, above the newest release), and `tools/release.py` turns it into the entry when `VERSION` moves.
 
 <!--
 Template of an entry (copy it, keep the labels and the order, leave out a paragraph that has nothing to say):
@@ -22,6 +22,24 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
+
+## Next
+
+**For players:**
+- **A room's code is eight characters that can be said aloud:** `k7m2 xq9p`, in two groups of four, from an alphabet without `i`, `l`, `o`, `0` and `1`. The front page and the desktop menu make it, show it so, and take it typed or pasted as it is shown. The code is only a name: it works once somebody is in the room, while the match's link works at any time.
+- **One link makes the room:** every link of a match carries what the room is (its map, its seats and its teams), so the first friend who opens it makes the room and the others walk into it, from the front page and from the desktop menu alike. A code that no room has makes none, and a link or bookmark of an earlier release (`demo-small-2p-x7k2`) no longer makes a room: it says that there is no such room.
+- **The leader can swap two players' colours:** a press on a player's row in the Players' Status box still moves that player to the next free colour, and when every colour is held it now changes places with the next player (never with a bot). A press that was made for a room that has changed meanwhile does nothing, so a tap only ever moves the player that was tapped.
+- **Nobody means nobody in a game for one:** with every other seat on **Nobody**, START! plays on this computer with only your colony on the map. Red, Blue and Black no longer have a hill, ants or eggs there (v0.8.3 gave them all three and left them standing still). The game takes a new option for it, `--alone` ([`docs/COMMAND_LINE.md`](docs/COMMAND_LINE.md)).
+- **A Team 1 and a Team 2 switch on each colour:** with three or four players the front page's card has no Teams drop-down menu of sentences any more; every colour that plays has two switches instead. Two colours on the same team start the match allied (with four players the other two colours are the other team, with three the third colour plays alone), and a line under the colours says the plan in words.
+- **Computer players give fewer orders that cannot work:** a bot no longer sends an ant with food toward a hill that a ring of fire walls has cut off, no longer sends a thief to a hole that one of its own ants holds shut, and waits when its own ant stands on the way into the hill. Hard bots on SMALL have about half as many refused orders ("Can't go there.") as before (2.7 to 1.2 a match and seat), on TREASURE about a third fewer; their scores stay where they were.
+
+**Rules / network:** network protocol 15, so a game of an earlier release cannot join (reload the page once after the update). A player's Hello carries the platform of the game (told, never checked) and, for a join that makes a room, the room's create block; the Room message carries every seat's platform, the room's teams and its rules; the leader's SeatMove carries a 32-bit check of the seating that the room compares with its own seats. No rule of the simulation changes.
+
+**Fixes:**
+- For developers: the test runner no longer reports a passing suite as failed by mistake ([#29](https://github.com/dchadd427/ants-cross-platform/pull/29)).
+- For developers: the checks of a pull request finish in about 9 to 10 minutes instead of about 14 ([#30](https://github.com/dchadd427/ants-cross-platform/pull/30)).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1561b21...PRE_RELEASE_HEAD), merged earlier without a release: [#16](https://github.com/dchadd427/ants-cross-platform/pull/16) (the bots), [#27](https://github.com/dchadd427/ants-cross-platform/pull/27) (Nobody and the Team switches), [detailed notes](docs/NETWORK_PORT.md#protocol-15-one-link-makes-a-room-short-room-codes-and-the-leaders-swap-v0110)
 
 ## v0.10.0 - 2026-10-05 - The leader of a room can move a player to another colour
 

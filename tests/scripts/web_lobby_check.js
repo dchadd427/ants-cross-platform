@@ -392,7 +392,7 @@ try {
               '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4',
               '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4',
               '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4']);
-        same('roomBlockQuery: a pair of seats the wrong way round is read as it is (the game puts the lower seat first)', L.roomBlockQuery(BLOCK('tiny', 4, '3+1', false)), '&roommap=tiny&roomseats=4&roomteams=3%2B1');
+        same('roomBlockQuery: a pair of seats the wrong way round is written with the lower seat first (a pair has one spelling, as in the block)', L.roomBlockQuery(BLOCK('tiny', 4, '3+1', false)), '&roommap=tiny&roomseats=4&roomteams=1%2B3');
         same('the six keys are the six map files by the game\'s rule for --room-map (the word in capitals and .LVL)', L.MAPS.map((m) => m.key.toUpperCase() + '.LVL').sort(), Object.values(FILES).sort());
         same('roomBlockOf: the block of the page\'s own links is read back (the key in any case, the seats 2 - 4, the teams as A+B, a + that came as a blank, the flag exactly 1)',
              [L.roomBlockOf('?join=/ws&room=k7m2xq9p&roommap=treasure&roomseats=4'), L.roomBlockOf('?room=k7m2xq9p&roommap=TINY&roomseats=2'), L.roomBlockOf('?room=k7m2xq9p&roommap=Islands&roomseats=3&roomteams=0%2B2'), L.roomBlockOf('?room=k7m2xq9p&roommap=small&roomseats=3&roomteams=1+2'),
@@ -440,7 +440,7 @@ try {
         for (const bad of ['easy,hard', 'easy,hard,easy', 'none,easy,none,hard,none', 'none,easy,,hard', 'none, easy,none,hard', 'none,easy,none,loud', ',,,', ',', 'none;easy;none;hard', 'easy hard', 'none,easy,none,hard\n', 'none,easy,none,hard&seat=1', 'none,easy,none,--room x', 'none,easy,none,hard,', 5, {}, ['easy'], 'hard,'.repeat(2000)]) {
             same('validFillPlan: ' + JSON.stringify(bad).slice(0, 40) + ' is no plan', L.validFillPlan(bad), '');
         }
-        same('validRoomTeams: two different seats 0 - 3 as A+B (a + that came as a blank too): the tested text', [L.validRoomTeams('0+1'), L.validRoomTeams('0 1'), L.validRoomTeams('1+2'), L.validRoomTeams('3+0'), L.validRoomTeams('2 3')], ['0+1', '0+1', '1+2', '3+0', '2+3']);
+        same('validRoomTeams: two different seats 0 - 3 as A+B, the lower seat first (a + that came as a blank too): the tested text', [L.validRoomTeams('0+1'), L.validRoomTeams('0 1'), L.validRoomTeams('1+2'), L.validRoomTeams('3+0'), L.validRoomTeams('2 3'), L.validRoomTeams('1+0'), L.validRoomTeams('3 1')], ['0+1', '0+1', '1+2', '0+3', '2+3', '0+1', '1+3']);
         for (const bad of ['', 'ffa', 'FFA', '0+0', '2+2', '0+4', '4+0', '01', '0++1', '0+1+2', ' 0+1', '0+1 ', '0 +1', '0+ 1', '0\t1', '0+1\n', '0+1&teams=ffa', 'a+b', '0+१', '0+１', 'constructor', null, undefined, 1, {}, ['0+1']]) {
             same('validRoomTeams: ' + JSON.stringify(bad) + ' is no team', L.validRoomTeams(bad), '');
         }
@@ -524,9 +524,9 @@ try {
                   P.joinArguments('?join=/other&room=abc&roommap=small&roomseats=2&platform=linux', true, 'play.test').args, P.joinArguments('?join=//evil/ws&room=abc&roommap=small&platform=linux', true, 'play.test').args, P.joinArguments('?join=/ws/../x&room=abc&roomseats=2&platform=linux', true, 'play.test').args],
                  Array(5).fill([]));
         }
-        {   // 20000 random addresses of a join: whatever the pool puts into the parameters, every argument that comes out is a flag of the table with a value that passed its own test, once, in the order that the game is given them
+        {   // 60000 random addresses of a join: whatever the pool puts into the parameters, every argument that comes out is a flag of the table with a value that passed its own test, once, in the order that the game is given them
             const pools = {
-                join: ['/ws', '/ws', '/ws', '/ws/a', '/other', '//evil/ws', '/ws/../x', 'ws://evil/', ''], room: ['abc', 'k7m2xq9p', 'a b', '', 'x'.repeat(33), 'a&b'],
+                join: ['/ws', '/ws', '/ws', '/ws/a', '/other', '//evil/ws', '/ws/../x', 'ws://evil/', ''], room: ['abc', 'k7m2xq9p', 'my_room-1', 'ABC', 'a b', '', 'x'.repeat(33), 'a&b'],
                 roommap: ['treasure', 'TINY', 'Small', 'islands', 'nowhere', '../x', 'gauntlet ', '', 'treasure.lvl', '--room-map', 'constructor'], roomseats: ['2', '3', '4', '5', '0', '1', '04', ' 3', '', '3 ', '\n4'],
                 roomteams: ['0+1', '1 2', '3+0', '0+0', 'ffa', '0+4', '', '0+1 --name x'], roomleaderstart: ['1', '0', 'true', '11', '', ' 1'], platform: ['linux', 'Browser-Windows', 'macos', 'browser-', 'windows ', 'ios', 'OTHER', '', '--name x', 'browser-other'],
                 seat: ['0', '1', '2', '3', '4', '-1', '', '1 '], fill: ['easy', 'none,none,easy,hard', 'none,none,none,none', 'x', '', 'EASY'], teams: ['0+1', '1 2', 'ffa', '0+0', ''], start: ['1', '2', '3', '4', '5', '', '2 '],
@@ -547,7 +547,7 @@ try {
             let teamed = 0;
             let flagged = 0;
             let rich = 0;
-            for (let i = 0; i < 20000; i++) {
+            for (let i = 0; i < 60000; i++) {
                 const parts = [];
                 for (const key of keys) if (rnd(4) !== 0) parts.push(key + '=' + encodeURIComponent(pools[key][rnd(pools[key].length)] + (rnd(8) === 0 ? pools[key][rnd(pools[key].length)] : '')));
                 const search = '?' + parts.join('&');
@@ -564,12 +564,13 @@ try {
                 }
                 if (bad) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(args); }
                 if (args.indexOf('--room-map') !== -1 || args.indexOf('--room-seats') !== -1 || args.indexOf('--room-teams') !== -1 || args.indexOf('--room-leader-start') !== -1) blocks++;
+                if (args.indexOf('--room') === -1 && args.some((a) => ['--room-map', '--room-seats', '--room-teams', '--room-leader-start'].indexOf(a) !== -1)) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(args) + ' (a create block with no room)'; }
                 if (args.indexOf('--room-teams') !== -1) teamed++;
                 if (args.indexOf('--room-leader-start') !== -1) flagged++;
                 if (['--room-map', '--room-seats', '--platform', '--seat'].every((f) => args.indexOf(f) !== -1)) rich++;
                 if (args.indexOf('--join-url') === -1 && args.some((a) => a !== '--audio-focus')) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(args) + ' (no door)'; }
             }
-            check('20000 random addresses of a join: every argument is a flag of the table, in its place, once, with a value that passed its own test; none without a door (' + sample + ')', wrong === 0);
+            check('60000 random addresses of a join: every argument is a flag of the table, in its place, once, with a value that passed its own test; none without a door (' + sample + ')', wrong === 0);
             check('... and the random addresses do reach the create block (' + blocks + ' with a part of it, ' + teamed + ' with teams, ' + flagged + ' with the leader-starts flag, ' + rich + ' with the map, the seats, the platform and a seat), so the rules above are not empty', blocks > 1000 && teamed > 100 && flagged > 100 && rich > 20);
         }
     }

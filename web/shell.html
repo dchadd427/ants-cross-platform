@@ -1376,10 +1376,12 @@
                 }
                 return levels.every(function (l) { return l === 'none'; }) ? '' : levels.join(',');
             }
-            // The teams of the leader's START, from the address: two different seats 0 - 3 as A+B (the "+" of an address arrives as a blank: both are read), what the game's --teams takes; '' for anything else
+            // The teams of the leader's START and of a room's create block, from the address: two different seats 0 - 3 as A+B (the "+" of an address arrives as a blank: both are read), the lower seat first (a pair has
+            // one spelling: "1+0" is "0+1", as the front page reads it), what the game's --teams and --room-teams take; '' for anything else
             function antsTeamsArg(value) {
                 var m = typeof value === 'string' ? /^([0-3])[+ ]([0-3])$/.exec(value) : null;
-                return m && m[1] !== m[2] ? m[1] + '+' + m[2] : '';
+                if (!m || m[1] === m[2]) return '';
+                return m[1] < m[2] ? m[1] + '+' + m[2] : m[2] + '+' + m[1];
             }
             // How many people must be in the room before the leader's game presses START by itself (the front page's card: 1 + its Friend rows), from the address: one digit 1 - 4, what the game's --start-when
             // takes ('' for anything else: no hook). Only the leader's game acts on it (a game that does not lead sends nothing); the tested digit comes back, never the text of the address.
@@ -1412,7 +1414,7 @@
             // What the address says about joining a game server (docs/NETWORK_PORT.md): the arguments to give the game and whether the page is a frame of another page. `search` is the
             // address's query, `secure` says https (wss), `host` is the site's host. Only a door on THIS site counts: /ws or a path below it, no //, no ..; a room code, the room's create block (map, seats,
             // teams, leader starts), the platform word, a seat, a fill level, the teams, the number of people to wait for (start) and a name that do not fit their rule are left out (the game checks them too).
-            // Without a valid join nothing about a room goes to the game. The arguments come in this order: the door, the room, the create block, the platform, the seat, the fill, the teams, the start, the name.
+            // Without a valid join nothing about a room goes to the game, and without a valid room nothing of the create block. The arguments come in this order: the door, the room, the create block, the platform, the seat, the fill, the teams, the start, the name.
             function joinArguments(search, secure, host) {
                 var out = { embed: false, args: [] };
                 var q;
@@ -1433,11 +1435,13 @@
                 if (out.embed) out.args.push('--audio-focus');
                 if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
                     out.args.push('--join-url', (secure ? 'wss://' : 'ws://') + host + join);
-                    if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) out.args.push('--room', room);
-                    if (roomMap) out.args.push('--room-map', roomMap);
-                    if (roomSeats) out.args.push('--room-seats', roomSeats);
-                    if (roomTeams) out.args.push('--room-teams', roomTeams);
-                    if (roomLeaderStart) out.args.push('--room-leader-start');
+                    if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) {
+                        out.args.push('--room', room);
+                        if (roomMap) out.args.push('--room-map', roomMap);                // (the create block is the room's: with no room to make there is nothing to give it to)
+                        if (roomSeats) out.args.push('--room-seats', roomSeats);
+                        if (roomTeams) out.args.push('--room-teams', roomTeams);
+                        if (roomLeaderStart) out.args.push('--room-leader-start');
+                    }
                     if (platform) out.args.push('--platform', platform);
                     if (seat && /^[0-3]$/.test(seat)) out.args.push('--seat', seat);
                     if (fill) out.args.push('--fill-bots', fill);

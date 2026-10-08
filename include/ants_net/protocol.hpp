@@ -40,8 +40,9 @@
 // The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"; the swap and the guard are protocol 15's). A colour is a seat, and a guest took the seat that it asked for in its Hello or
 // the first free one: nothing moved it afterwards. SeatMove (leader -> server, [31][from][to][guard]) asks the room to put the player of seat `from` in seat `to`: when `to` is empty the player goes
 // there, when a guest holds it the two guests change places (a bot's seat and the host's never move). `guard` is the number that seating_hash gives for the seats as the leader's screen shows them
-// (who sits where): the room acts only when it still seats its people exactly so, so a press can never move or swap a player that it did not mean (the one who meant to be moved has left and a newcomer
-// sits there, the Room message that would have told the leader is still on its way); a stale press is ignored and counted. Only the leader of a server's room, while the room is open, is heard; the
+// (who sits where, by state and name): the room acts only when it still seats its people so, so a press never moves or swaps a player that the leader's screen did not show in that seat (the one who
+// was meant has left and a newcomer sits there, the Room message that would have told the leader is still on its way; a newcomer of the same name in the same seat looks the same on that screen and
+// is the one who moves); a stale press is ignored and counted. Only the leader of a server's room, while the room is open, is heard; the
 // room moves the guests with all that is their own (key, name, place in the order of the Welcomes) and answers every guest with the Room message that shows the new seats (each with its own
 // `you`) and each player that was moved with a notice. Nothing in the match changes: the Start that follows is made from the seats as they are.
 
@@ -151,8 +152,8 @@ inline constexpr uint8_t kOsOther = 6;
 inline constexpr uint8_t kPlatformBrowser = 0x10;
 /// True for a byte that an honest client would tell: an operating system 0 - kOsOther, with or without the browser bit
 inline constexpr bool valid_platform(uint8_t platform) noexcept { return (platform & 0xE0u) == 0 && (platform & 0x0Fu) <= kOsOther; }
-/// The platform of this build of the game (protocol 15): the operating system that it was built for; a WebAssembly build is told by its page instead (the page's --platform argument) and says
-/// kPlatformBrowser | kOsOther here
+/// The platform of this build of the game (protocol 15): the operating system that it was built for; a WebAssembly build says kPlatformBrowser | kOsOther here, unless a word of its address
+/// names a system (the game's --platform argument; web/shell.html passes the `platform` of the address on, and no page of the site writes it yet)
 uint8_t native_platform() noexcept;
 /// The words of the --platform argument and of the page's address: "windows", "macos", "linux", "android", "ios" or "other", with "browser-" in front for a game in a web page ("browser-macos"),
 /// in any case. False, and `out` untouched, for any other text (kPlatformUnknown has no word: leave the argument out)

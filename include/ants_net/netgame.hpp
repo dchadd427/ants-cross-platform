@@ -158,9 +158,9 @@ public:
     /// be used or there is no WebSocket (every native build: it joins with TCP). A server's room has no host migration and no links between guests.
     bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
                   const SeatKey& key = SeatKey{});
-    /// Before join() / join_url() (protocol 15): what this machine tells the room about itself and about the room it would make. `set_platform`: the platform byte of the Hello (net::kOs..., with
-    /// kPlatformBrowser for a game in a page), which the room hands on to everybody as an icon beside the name; cosmetic, nothing is decided by it; the default is net::native_platform(), the page says
-    /// what its browser is. `set_create`: the CREATE BLOCK of the Hello: the map, the seats, the teams and the leader-starts flag of the room if the server has none of this code yet (a server that
+    /// Before join() / join_url() / host() (protocol 15): what this machine tells the room about itself and about the room it would make. `set_platform`: the platform byte of the Hello (net::kOs...,
+    /// with kPlatformBrowser for a game in a page), or of the host's own seat when it hosts, which the room hands on to everybody as an icon beside the name; cosmetic, nothing is decided by it; the
+    /// default is net::native_platform() (a web game: a system in a browser, unless its address says another). `set_create`: the CREATE BLOCK of the Hello: the map, the seats, the teams and the leader-starts flag of the room if the server has none of this code yet (a server that
     /// makes public rooms makes it from the block; the room that exists ignores it). Not set: the Hello only joins, and a room that is not there is NoSuchRoom ("There is no such room on this server.").
     /// A block that net::valid_create_block() refuses is left out of the Hello. Both stay set for the way back's links.
     void set_platform(uint8_t platform) noexcept { platform_ = valid_platform(platform) ? platform : native_platform(); }
@@ -304,8 +304,8 @@ public:
     /// The words of a refusal, as the status line shows them when a join fails (the original's text for a dropped machine, the remake's for the rest). `in_browser`: the game runs in a web page,
     /// where reloading the page is how a player gets the current version (a tab that was opened before the server was updated is the old game), so the refusal for another version says so; every
     /// other refusal is the same words everywhere (the desktop start menu has texts of its own, Application::menu_failure_text). `made_a_room`: the Hello carried a create block (the server makes the
-    /// room of such a Hello when somebody comes): NoSuchRoom then says that the server cannot make a room now, which is what a full cap of public rooms is; for a Hello without a block it says that
-    /// there is no such room.
+    /// room of such a Hello when somebody comes): NoSuchRoom then says that the server cannot make a room now, which is a full cap of public rooms or a server that makes none; for a Hello without a block it says
+    /// that there is no such room.
     static std::string reject_text(RejectReason reason, bool in_browser, bool made_a_room = false);
 
     // ---- the waiting room's chat (protocol 11) ------------------------------------------------------------------------------------------------------

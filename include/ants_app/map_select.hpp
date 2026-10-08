@@ -232,7 +232,7 @@ public:
     /// START on the leader's screen (button, Enter, S, s): the leader asks the server to start now. Nothing else fires on that screen but Leave.
     void set_on_request_start(std::function<void()> cb) { on_request_start_ = std::move(cb); }
     /// The leader of a server's room moves a player to another colour by pressing the player's row of the Players' Status box (protocol 14): `seat` is the seat of the player whose row was pressed and let
-    /// go of on the same row. The press lights the row and plays the click of the buttons; the action comes with the release, as for the buttons. Rows are the leader's alone, and only while the room
+    /// go of on the same row, still the player of that name (a player who leaves while the press is held, and a newcomer in the seat: nobody is moved). The press lights the row and plays the click of the buttons; the action comes with the release, as for the buttons. Rows are the leader's alone, and only while the room
     /// is open and the screen has shown its players (can_move_players()); a guest's presses on them do nothing.
     void set_on_move_seat(std::function<void(uint8_t seat)> cb) { on_move_seat_ = std::move(cb); }
     bool can_move_players() const noexcept { return leads_server_room() && !started_ && refreshed(); }
@@ -335,6 +335,7 @@ private:
     int8_t row_hover_{-1};                // the leader's row under the pointer (a row of row_seats), -1 none
     int8_t row_pressed_{-1};              // ... and the one that a press captured
     int8_t row_pressed_seat_{-1};         // ... with the seat of its player (a release moves that player, and nobody else when the rows closed up meanwhile)
+    std::string row_pressed_name_;        // ... and the name that the row showed (a player who left and a newcomer in the same seat while the press was held: the press is void)
     std::function<void()> on_quit_{nullptr};
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };

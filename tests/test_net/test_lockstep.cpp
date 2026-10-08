@@ -10066,6 +10066,18 @@ void run_protocol13_tests() {
             room.map_name = "TINY.LVL";
             const uint32_t base = seating_hash(room);
             ASSERT_TRUE(base != 0);
+            // the number itself is protocol 15's: FNV-1a (offset basis 2166136261, prime 16777619) over [state, the name's bytes, 0] of each of the four seats, worked out apart from the code (a machine of
+            // another build has to agree on it, or every press of its leader would be ignored)
+            ASSERT_EQ(base, 0xAD2C9B12u);
+            ASSERT_EQ(seating_hash(RoomMsg{}), 0x9BE17165u);                                        // four seats of (Empty, "")
+            {
+                RoomMsg hosted;
+                hosted.slots[0] = {SlotState::Host, "Hal", 0, 0};
+                hosted.slots[1] = {SlotState::Client, "Ann", 30, 0};
+                hosted.slots[2] = {SlotState::Client, "Bob", 40, 0};
+                hosted.slots[3] = {SlotState::Client, "Cat", 50, 0};
+                ASSERT_EQ(seating_hash(hosted), 0xB5063C85u);
+            }
             RoomMsg copy;
             ASSERT_TRUE(decode(encode(room), copy));
             ASSERT_EQ(seating_hash(copy), base);                                                    // (what travelled is what was hashed)

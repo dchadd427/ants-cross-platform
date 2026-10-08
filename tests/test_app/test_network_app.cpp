@@ -4190,6 +4190,96 @@ void run_room_bot_tests() {
         ASSERT_EQ(c.net_say, std::string("hello there"));
     } TEST_END();
 
+    TEST_CASE("N5.86 Command Line (Protocol 15): --room-map, --room-seats, --room-teams And --room-leader-start Make The Create Block Of A Join, --platform The Platform Byte Of Its Hello; Not Given Is No Block And No Byte (The Hello Only Joins); Anything Else Refuses To Start") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parse = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            return Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        };
+        const std::vector<std::string> join = {"ants", "--join", "127.0.0.1:4001", "--room", "k7m2xq9p"};
+        const auto with = [&](std::vector<std::string> more) {
+            std::vector<std::string> all = join;
+            all.insert(all.end(), more.begin(), more.end());
+            return parse(all);
+        };
+        ApplicationConfig c = parse(join);
+        ASSERT_TRUE(!c.net_create.has_value() && c.net_platform == 0 && c.startup_error.empty());          // not given: the Hello only joins, and says the build's own platform
+        // --room-map: a plain word is the original's file of that name (any case), a name with an extension is kept as it is, and the block's other fields stay what a block has by default
+        const std::pair<const char*, const char*> maps[] = {{"treasure", "TREASURE.LVL"}, {"ISLANDS", "ISLANDS.LVL"}, {"Tiny", "TINY.LVL"}, {"my-map.lvl", "my-map.lvl"}, {"BIG MAP.LVL", "BIG MAP.LVL"}, {"x y", "X Y.LVL"}};
+        for (const auto& m : maps) {
+            c = with({"--room-map", m.first});
+            ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value());
+            ASSERT_EQ(c.net_create->map_name, std::string(m.second));
+            ASSERT_TRUE(c.net_create->seats == 4 && c.net_create->team_a == net::kNoTeam && c.net_create->team_b == net::kNoTeam && c.net_create->flags == 0);
+            ASSERT_TRUE(net::valid_create_block(*c.net_create));
+        }
+        for (const char* bad : {"", "a/b", "a\\b", "a:b", "a?b", "a*b", "a\"b", "a<b", "a>b", "a|b", ".hidden.lvl", "my.map", "x.txt", "caf\xC3\xA9"}) {
+            c = with({"--room-map", bad});
+            ASSERT_TRUE(c.startup_error.find("--room-map") != std::string::npos && !c.net_create.has_value());
+        }
+        c = with({"--room-map"});                                                                           // no value
+        ASSERT_TRUE(c.startup_error.find("--room-map") != std::string::npos);
+        // --room-seats: 2, 3 or 4 and nothing else (one digit: "3x" and "2.5" are no number of seats)
+        for (const int seats : {2, 3, 4}) {
+            c = with({"--room-seats", std::to_string(seats)});
+            ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value() && c.net_create->seats == seats && c.net_create->map_name.empty());
+        }
+        for (const char* bad : {"1", "5", "0", "9", "-3", "3x", "2.5", "22", " 3", "three", ""}) {
+            c = with({"--room-seats", bad});
+            ASSERT_TRUE(c.startup_error.find("--room-seats") != std::string::npos && !c.net_create.has_value());
+        }
+        c = with({"--room-seats"});
+        ASSERT_TRUE(c.startup_error.find("--room-seats") != std::string::npos);
+        // --room-teams: ffa, or two different seats of 0 to 3 (the lower one first in the block: a pair has one spelling); the room judges the pair against the seats that play
+        const std::pair<const char*, std::pair<int, int>> teams[] = {{"0+1", {0, 1}}, {"1+0", {0, 1}}, {"2+3", {2, 3}}, {"0+3", {0, 3}}, {"ffa", {255, 255}}, {"FFA", {255, 255}}};
+        for (const auto& t : teams) {
+            c = with({"--room-teams", t.first});
+            ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value());
+            ASSERT_TRUE(c.net_create->team_a == t.second.first && c.net_create->team_b == t.second.second);
+            ASSERT_TRUE(net::valid_create_block(*c.net_create));
+        }
+        for (const char* bad : {"0+0", "0+4", "4+0", "01", "0-1", "x+y", "0+1+2", "", "none"}) {
+            c = with({"--room-teams", bad});
+            ASSERT_TRUE(c.startup_error.find("--room-teams") != std::string::npos && !c.net_create.has_value());
+        }
+        c = with({"--room-teams"});
+        ASSERT_TRUE(c.startup_error.find("--room-teams") != std::string::npos);
+        // --room-leader-start: a flag, and the only one that a block has
+        c = with({"--room-leader-start"});
+        ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value() && c.net_create->flags == net::kCreateLeaderStarts && c.net_create->leader_starts() && net::valid_create_block(*c.net_create));
+        // all four, in any order: one block
+        net::CreateBlock expect;
+        expect.map_name = "SMALL.LVL";
+        expect.seats = 3;
+        expect.team_a = 0;
+        expect.team_b = 1;
+        expect.flags = net::kCreateLeaderStarts;
+        c = with({"--room-leader-start", "--room-teams", "1+0", "--room-seats", "3", "--room-map", "small"});
+        ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value() && *c.net_create == expect);
+        c = with({"--room-map", "small", "--room-seats", "3", "--room-teams", "0+1", "--room-leader-start"});
+        ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value() && *c.net_create == expect);
+        // --platform: the six systems, and "browser-" before one for a game in a page (any case)
+        const std::pair<const char*, uint8_t> platforms[] = {
+            {"windows", net::kOsWindows}, {"macos", net::kOsMacos}, {"Linux", net::kOsLinux}, {"ANDROID", net::kOsAndroid}, {"ios", net::kOsIos}, {"other", net::kOsOther},
+            {"browser-windows", static_cast<uint8_t>(net::kPlatformBrowser | net::kOsWindows)}, {"Browser-Linux", static_cast<uint8_t>(net::kPlatformBrowser | net::kOsLinux)},
+            {"browser-other", static_cast<uint8_t>(net::kPlatformBrowser | net::kOsOther)}};
+        for (const auto& p : platforms) {
+            c = with({"--platform", p.first});
+            ASSERT_TRUE(c.startup_error.empty() && c.net_platform == p.second && net::valid_platform(c.net_platform) && !c.net_create.has_value());
+        }
+        for (const char* bad : {"plan9", "", "browser", "browser-", "browser-plan9", "win", "windows ", "0"}) {
+            c = with({"--platform", bad});
+            ASSERT_TRUE(c.startup_error.find("--platform") != std::string::npos && c.net_platform == 0);
+        }
+        c = with({"--platform"});
+        ASSERT_TRUE(c.startup_error.find("--platform") != std::string::npos);
+        // a game that is told something wrong refuses to start, with the reason on stderr
+        c = with({"--room-seats", "7"});
+        Application refuses;
+        ASSERT_FALSE(refuses.init(c));
+    } TEST_END();
+
     TEST_CASE("N5.46 Leader With --fill-bots And --say: The Line Is Said Once When Two Players Are In The Room (The Other Player Hears It With The Leader's Name, The Leader Hears The Reply), The Leader's START Seats Bots In The Two Empty Seats (The Leader Did Not Need A Third Person), The Match Runs With Four Teams And The Two Machines Stay Identical; The Lines Of The Waiting Room Are Kept") {
         Server server;
         ASSERT_TRUE(server.make_room("FILL-APP", 4));
@@ -5612,7 +5702,7 @@ void run_room_chat_ui_tests() {
     TEST_CASE("N5.76b The Refusal For A Room That The Server Cannot Make (A Hello That Carried A Create Block, NoSuchRoom: The Cap Of Public Rooms Is Full) Says So And What To Do, Not That There Is No Such Room, In Words That Fit The Setup Screen's Status Box In Two Lines On Both Pages; A Hello Without A Block Is Told As Before") {
         using net::NetGame;
         using net::RejectReason;
-        const std::string no_place = "The server cannot make a room for this match now. Try again in a few minutes.";
+        const std::string no_place = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
         const std::string no_room = "There is no such room on this server.";
         for (const bool browser : {false, true}) {
             ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, true), no_place);               // (the Hello carried a create block: the server would have made the room, and cannot now)

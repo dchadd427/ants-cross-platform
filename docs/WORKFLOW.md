@@ -32,7 +32,7 @@ A new test must fail without the code it tests (change the code back and see it 
 6. `main` stays releasable: never merge a state in which `./run_tests.sh --fast` or CI fails.
 7. **Finished work goes to `staging` for the owner to try** (the staging site, below); the pull request to `main` follows when the owner is happy.
 
-**Releasing.** `tools/release.py X.Y.Z "title" [--date YYYY-MM-DD] [--dry-run]` writes `VERSION`, turns the top `## Next` section of `CHANGELOG.md` (the draft, see below) into `## vX.Y.Z - date - title`, updates the README's version line and the "current release" of `STATUS.md` with a Pacific time stamp, and runs `tools/check_version_consistency.py` (before and after; it refuses, with a message and with nothing written, when there is no draft or the files disagree). `--dry-run` shows the diff; `--open-pr [--try TEXT ...] [--draft]` then runs `gh pr create` with the title and the entry. The tool is tested on scratch copies of the files (`tests/scripts/test_release_tool.py`).
+**Releasing.** `tools/release.py X.Y.Z "title" [--date YYYY-MM-DD] [--dry-run]` writes `VERSION`, turns the top `## Next` section of `CHANGELOG.md` (the draft that the release's own pull request holds, see below) into `## vX.Y.Z - date - title`, updates the README's version line and the "current release" of `STATUS.md` with a Pacific time stamp, and runs `tools/check_version_consistency.py` (before and after; it refuses, with a message and with nothing written, when there is no draft or the files disagree). `--dry-run` shows the diff; `--open-pr [--try TEXT ...] [--draft]` then runs `gh pr create` with the title and the entry. The tool is tested on scratch copies of the files (`tests/scripts/test_release_tool.py`).
 
 ## Deploy from CI and the staging site
 
@@ -79,7 +79,7 @@ The version is the single line of the file [`VERSION`](../VERSION) (`MAJOR.MINOR
 **Details:** [commits](link to the commit range), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
 ```
 
-An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. Work that is merged but not yet released is collected under a section headed exactly `## Next` (the same template, no version, no date) above the newest release; `tools/release.py` turns it into the next entry. The detailed history of every release up to v0.1.0 is [`docs/CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md) (frozen). The site builds both files into `changelog.html` (the short page, the default) and `changelog_archive.html` with `tools/changelog_to_html.py`, linked to each other and from the game page.
+An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. A pull request that is merged without a release number leaves `CHANGELOG.md` alone and carries its entry (the same template, for players) in a "Changelog entry" section of its description; the pull request of the next release collects those sections, and its own, under a section headed exactly `## Next` (no version, no date) above the newest release, and `tools/release.py` turns that section into the entry. The detailed history of every release up to v0.1.0 is [`docs/CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md) (frozen). The site builds both files into `changelog.html` (the short page, the default) and `changelog_archive.html` with `tools/changelog_to_html.py`, linked to each other and from the game page.
 
 ## Speed: compiler caches
 

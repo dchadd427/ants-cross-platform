@@ -904,7 +904,7 @@ void run_migration_tests() {
 
 // A client that is refused: every reason of a Reject ends the join with its own text on the screen
 void run_reject_tests() {
-    TEST_CASE("N3.17 Rejections (Protocol 10): Dropped Is The Original's Text For A Dropped Machine (String 94), RejoinFailed And Superseded Say What Happened, Each Ends The Join With Its Own Line; The Texts Of The Older Reasons Are What They Were") {
+    TEST_CASE("N3.17 Rejections (Protocol 10): Dropped Is The Original's Text For A Dropped Machine (String 94), RejoinFailed And Superseded Say What Happened, Each Ends The Join With Its Own Line; The Texts Of The Older Reasons Are What They Were; (Protocol 15) The Hello Of Each Join Tells The Machine's Platform And Carries A Create Block Only When It Was Given One, And NoSuchRoom For A Hello With A Block Says That The Server Cannot Make The Room") {
         struct Case {
             RejectReason reason;
             std::string text;
@@ -924,7 +924,7 @@ void run_reject_tests() {
         // A Hello that carries a create block is one that the server makes the room of when somebody comes: NoSuchRoom for it is the place that is missing (the cap of public rooms), not a room
         // that does not exist, and it is told so; every other refusal, and NoSuchRoom for a Hello without a block, is as it was. The Hello also tells what the machine runs on (protocol 15): its
         // own platform unless it was told another (variant 0: never set; 1: the web's word, with a block; 2: a byte that is no platform, so the machine's own)
-        const std::string no_place = "The server cannot make a room for this match now. Try again in a few minutes.";
+        const std::string no_place = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
         for (const Case& c : cases) for (const int variant : {0, 1, 2}) {
             const bool with_block = variant == 1;
             const uint8_t told = variant == 1 ? static_cast<uint8_t>(kPlatformBrowser | kOsMacos) : native_platform();
@@ -968,6 +968,35 @@ void run_reject_tests() {
             bool failed = false;
             for (const NetGame::Event& e : net.take_events()) failed = failed || e.type == NetGame::Event::Type::Failed;
             ASSERT_TRUE(failed);
+        }
+    } TEST_END();
+
+    TEST_CASE("N3.17b A Host With A Seat Tells Its Own Platform (Protocol 15): The Seat Of A LAN Or Direct Host Shows What The Machine Says It Runs On, For The Host And For Every Guest; A Host That Told Nothing Is The Machine It Runs On, And So Is One That Told A Byte That Is No Platform") {
+        const uint8_t told = static_cast<uint8_t>(kPlatformBrowser | kOsLinux);
+        {
+            Table t;
+            Machine& host = t.add("Alice");
+            host.net.set_platform(told);
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            Machine& bob = t.add("Bob");
+            bob.net.set_platform(kOsMacos);
+            ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
+            ASSERT_TRUE(t.run_until([&]() { return bob.net.phase() == NetGame::Phase::Room && bob.net.my_seat() == 1; }, 3000));
+            t.run(300);
+            ASSERT_EQ(static_cast<unsigned>(host.net.room().slots[0].platform), static_cast<unsigned>(told));
+            ASSERT_EQ(static_cast<unsigned>(bob.net.room().slots[0].platform), static_cast<unsigned>(told));       // a guest sees where the host runs
+            ASSERT_EQ(static_cast<unsigned>(host.net.room().slots[1].platform), static_cast<unsigned>(kOsMacos));
+            ASSERT_EQ(static_cast<unsigned>(bob.net.room().slots[1].platform), static_cast<unsigned>(kOsMacos));
+        }
+        for (const bool set_invalid : {false, true}) {
+            Table t;
+            Machine& host = t.add("Dan");
+            if (set_invalid) host.net.set_platform(0xFF);
+            ASSERT_TRUE(host.net.host(0, "Dan", true));
+            t.run(100);
+            ASSERT_EQ(static_cast<unsigned>(host.net.room().slots[0].platform), static_cast<unsigned>(native_platform()));
+            ASSERT_TRUE(valid_platform(host.net.room().slots[0].platform));
         }
     } TEST_END();
 }
@@ -1538,7 +1567,7 @@ void run_team_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N3.36 Protocol 13, The Room's Own Teams (Protocol 15: The Room Message Names Them, A Create Block Chose Them): The Host Of A LAN Room, And A Client That Has Been Told No Room Yet, Have None And The Machine's Own Choice Counts; The Leader's Prompt And Footer Say That The Teams Are The Room's (A Client Of A Room That Has Them: RJ1.22)") {
+    TEST_CASE("N3.36 Protocol 13, The Room's Own Teams (Protocol 15: The Room Message Names Them, A Create Block Chose Them): The Host Of A LAN Room, And A Client That Has Been Told No Room Yet, Have None And The Machine's Own Choice Counts; The Leader's Prompt And Footer Say That The Teams Are The Room's (A Client Of A Room That Has Them: RJ1.26)") {
         // ---- no room teams: the machine's own choice ----
         {
             Table t;

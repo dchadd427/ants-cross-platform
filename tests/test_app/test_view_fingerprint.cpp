@@ -4014,8 +4014,12 @@ const Golden kGoldens[] = {
     // The host-panel rows below moved deliberately in bot games part B (network protocol 13: the owner asked for a level for each bot and for teams chosen before the start): the panel has a row for
     // each seat after the leader's (the bot that START puts there) and, with three or four players, the Teams row, in rows of 18 px text, with the caption under them (the line says what the standard bot
     // does: "Bots gather food, raid and fight back."). screen.menu.room.fill_medium did NOT move: the room's panel for the same level in every seat is what it was; the rows with seats_and_teams and
-    // three_players are new. The two room panels with teams moved once more in the review fixes of part B, deliberately: the teams are a word of the room's code now (the room makes them for every
-    // start), so the sentence says "Room teams: Green + Red against Blue + Black." where it said "Teams: ..." (same draw calls, one string longer).
+    // three_players are new. The two room panels with teams moved once more in the review fixes of part B, deliberately: the teams are the room's own now (a word of its code in protocol 13, its create
+    // block's since 15: the room makes them for every start), so the sentence says "Room teams: Green + Red against Blue + Black." where it said "Teams: ..." (same draw calls, one string longer).
+    // Nine of the menu rows moved again in v0.11.0 (protocol 15): join.typed, join.caret_off, join.name_refused, join.error, room.code, room.full, room.fill_medium, room.seats_and_teams and
+    // room.three_players. Their scenarios now type and show the codes that the menu makes ("k7m2xq9p", "b7x2qk4m", where they had "demo-small-2p-x7k2" and the like), and the room panel shows a
+    // code of eight characters in two groups of four ("b7x2 qk4m"; room_code_display). The draw calls are the same (the counts did not move), the string in them is another; a code of another length
+    // is shown as it is, so screen.menu.room.longest_code did not move.
     {"screen.menu.host.default", 0x18b4d4169368ccd1, 282},
     {"screen.menu.host.map_and_players", 0x3a08eeb197374920, 210},
     {"screen.menu.room.code", 0x50fb18c432600b30, 150},

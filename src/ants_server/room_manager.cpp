@@ -118,6 +118,13 @@ bool iequals(const std::string& a, const std::string& b) {
     return true;
 }
 
+// A visitor's room takes a code with no upper-case letter, which is what the pages and the menu make. The codes of the control interface can keep out of its way: the server draws upper-case ones
+// (new_code), and an operator who chooses one by hand gives it a capital. Without this a Hello with a block could take any code that is free, "ROOM-1" before a lobby's POST /rooms, and the
+// players who come for that room with no block would be seated in the visitor's (v0.10.0 kept the two apart with its lower-case "demo-" prefix).
+bool has_upper_case(const std::string& code) {
+    return std::any_of(code.begin(), code.end(), [](char c) { return c >= 'A' && c <= 'Z'; });
+}
+
 // What a create block chooses (protocol 15): the map, when the server offers it (a name that it does not offer, or none: its default map), and the seats, 2 to 4. The match is the room's: a block never
 // chooses what the server does not allow. The old way (the code's words, "demo-<map>-<n>p-...") is gone: a code is only a name.
 struct PublicChoice {
@@ -139,7 +146,7 @@ PublicChoice public_choice_of(const net::CreateBlock& block, const ServerLimits&
 }  // namespace
 
 bool RoomManager::make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms) {
-    if (limits_.demo_rooms == 0 || limits_.demo_map.empty() || !net::valid_room_code(code) || code.empty() || !net::valid_create_block(block)) return false;
+    if (limits_.demo_rooms == 0 || limits_.demo_map.empty() || !net::valid_room_code(code) || code.empty() || has_upper_case(code) || !net::valid_create_block(block)) return false;
     size_t places = 0;
     for (const auto& kv : rooms_) places += kv.second->public_room() ? 1u : 0u;
     for (const Restoring& r : restoring_) places += r.head.public_room ? 1u : 0u;

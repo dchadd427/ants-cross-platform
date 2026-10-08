@@ -528,9 +528,10 @@ struct World {
         return *machines.back();
     }
     // A new machine joins the room (the TCP link is made at once; the room answers as the clock runs); `create`: the block of its Hello (protocol 15), which makes the room on a server that offers public ones
-    Machine& join(const std::string& name, const std::string& room, uint8_t want_seat = 255, const std::string& token = std::string(), const net::CreateBlock* create = nullptr) {
+    Machine& join(const std::string& name, const std::string& room, uint8_t want_seat = 255, const std::string& token = std::string(), const net::CreateBlock* create = nullptr, uint8_t platform = 0) {
         Machine& m = add_machine(name);
         if (create != nullptr) m.net.set_create(*create);
+        if (platform != 0) m.net.set_platform(platform);                      // (what the machine says it runs on; 0: the build's own)
         if (!m.net.join("127.0.0.1", server.port(), name, want_seat, room, token)) throw std::runtime_error("join failed");
         const uint32_t before = server.accepted;
         run_until([&]() { return server.accepted > before; }, 2000);          // (the machine's link is the newest one that the door accepted: a test can cut it)
@@ -1663,7 +1664,8 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-14"), w.server_now()).ok);
         Machine& a = w.join("Ann", "RJ-14", 1);                                          // Ann asks for seat 1 and has it
         const std::string odd = std::string("B\xC3\xA9") + "b\x01 " + std::string(40, 'x');      // not printable ASCII, and longer than a name may be
-        Machine& b = w.join(odd, "RJ-14", 1, "tok-14");                                  // Bob asks for the same seat: the first free one is his (seat 0)
+        const uint8_t bobs_platform = static_cast<uint8_t>(net::kPlatformBrowser | net::kOsLinux);
+        Machine& b = w.join(odd, "RJ-14", 1, "tok-14", nullptr, bobs_platform);          // Bob asks for the same seat: the first free one is his (seat 0)
         ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
         ASSERT_TRUE(a.net.my_seat() == 1 && b.net.my_seat() == 0);
         const net::JoinTarget& target = b.net.join_target();                             // how the first link was made: what the way back makes its links from
@@ -1678,6 +1680,8 @@ void run_way_back_tests() {
         ASSERT_EQ(hello.name, "Bb " + std::string(29, 'x'));                             // what the lobby's Hello said: printable, 32 characters
         ASSERT_EQ(hello.room, std::string("RJ-14"));
         ASSERT_EQ(hello.token, std::string("tok-14"));
+        ASSERT_EQ(hello.platform, bobs_platform);                                        // (protocol 15: what the machine runs on goes with it on the way back, as it went the first time)
+        ASSERT_FALSE(hello.create.has_value());                                          // (and a Hello with a key never makes a room: no create block)
         ASSERT_EQ(hello.want_seat, uint8_t{0});                                          // its own seat: the key decides, but this is what anybody's Hello says
         ASSERT_TRUE(net::key_matches(hello.key, b.keys_given[0].key) && hello.have_turns > 0 && hello.version == net::kProtocolVersion);
         ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Over; }, 3000));
@@ -2032,6 +2036,31 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.status("scrm0002").state == RoomState::Finished && w.status("scrm0002").reason == "everybody left");
     } TEST_END();
 
+    TEST_CASE("RJ1.19b A Room Of The Control Interface That Nobody Comes Back To Is No Public Place To Take (Protocol 15): Only A Room That A Visitor's Block Made Is Ended For Another Visitor's, However Long The Other Room Has Been Abandoned") {
+        ServerLimits limits;
+        limits.demo_rooms = 1;
+        limits.demo_map = "TINY.LVL";
+        limits.reconnect = true;
+        limits.resume_countdown_ms = 0;
+        World w(nullptr, limits);
+        ASSERT_TRUE(w.server.start(w.now));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("CTRL-AB", 2), w.server_now()).ok);
+        Machine& c1 = w.join("Cat", "CTRL-AB");
+        Machine& c2 = w.join("Dan", "CTRL-AB");
+        Machine& a = w.join_creating("Ann", "pubab001", block_of("", 2));                  // the one public place, with two people at it
+        Machine& b = w.join("Bob", "pubab001");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&c1, &c2, &a, &b}); }, 14000 + kPre));
+        for (Machine* gone : {&c1, &c2}) w.machines.erase(std::remove_if(w.machines.begin(), w.machines.end(), [gone](const std::unique_ptr<Machine>& p) { return p.get() == gone; }), w.machines.end());
+        w.run(90000);                                                                      // a minute and a half: the control interface's room has been abandoned for longer than the floor
+        ASSERT_TRUE(w.status("CTRL-AB").state == RoomState::Running && w.status("CTRL-AB").paused && w.status("CTRL-AB").absent.size() == 2);
+        (void)w.server.mgr->take_ended(w.server_now());
+        Machine& e = w.join_creating("Eve", "pubab002", block_of("", 2));                 // a visitor wants a public place: none is free, and the only room that qualifies is a public one
+        ASSERT_TRUE(w.run_until([&]() { return e.net.phase() != NetGame::Phase::Connecting; }, 4000));
+        ASSERT_TRUE(e.net.phase() == NetGame::Phase::Failed && e.net.reject_reason() == net::RejectReason::NoSuchRoom);
+        ASSERT_TRUE(w.status("CTRL-AB").state == RoomState::Running && w.status("pubab001").state == RoomState::Running && w.status("pubab002").code.empty());
+        ASSERT_TRUE(w.server.mgr->room_count() == 2 && w.server.mgr->take_ended(w.server_now()).empty());                // nobody was ended for it
+    } TEST_END();
+
     TEST_CASE("RJ1.20 A Room With A Person At It Is Never Ended For A Public Place (One Person Is Enough: Its Partner's Seat Is Held, The Match Is Paused, And The Room Stays); A Room That Waits Is Not Ended Either; When No Room Qualifies The Hello Is Answered As Before, And The Room That Is Abandoned Later Is Ended Then") {
         ServerLimits limits;
         limits.demo_rooms = 2;
@@ -2059,7 +2088,7 @@ void run_way_back_tests() {
         Machine& d = w.join_creating("Fay", "prrm0004", block_of("", 2));
         ASSERT_TRUE(w.run_until([&]() { return d.net.phase() != NetGame::Phase::Connecting; }, 4000));
         ASSERT_TRUE(d.net.phase() == NetGame::Phase::Failed && d.net.reject_reason() == net::RejectReason::NoSuchRoom);
-        ASSERT_EQ(d.net.status_text(), std::string("The server cannot make a room for this match now. Try again in a few minutes."));      // (a Hello with a block: it is the place that is missing, not a room that does not exist)
+        ASSERT_EQ(d.net.status_text(), std::string("The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes."));      // (a Hello with a block: it is the place that is missing, not a room that does not exist)
         ASSERT_TRUE(w.status("prrm0001").state == RoomState::Running && w.status("prrm0003").state == RoomState::Waiting && w.server.mgr->room_count() == 2);
         ASSERT_TRUE(a1.net.phase() == NetGame::Phase::Playing && !w.server.mgr->take_ended(w.server_now()).empty());      // (Ann is still in her match: pr2's end was the only one)
         // Ann closes her tab: pr1 is abandoned from now on; for half a minute it is not ended, after a minute it is
@@ -2113,7 +2142,7 @@ void run_way_back_tests() {
             ASSERT_TRUE(s.status("strm0003").code.empty() && s.server.mgr->room_count() == 2 && s.server.mgr->rooms_created() == 2 && s.server.mgr->take_ended(s.server_now()).empty());
             ASSERT_TRUE(s.run_until([&]() { return eve.net.phase() == NetGame::Phase::Failed; }, 4000));
             ASSERT_TRUE(eve.net.reject_reason() == net::RejectReason::NoSuchRoom);       // the answer that it always was when no place is free
-            ASSERT_EQ(eve.net.status_text(), std::string("The server cannot make a room for this match now. Try again in a few minutes."));
+            ASSERT_EQ(eve.net.status_text(), std::string("The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes."));
         }
     } TEST_END();
 

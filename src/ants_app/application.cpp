@@ -330,15 +330,16 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else {
                 const std::string file = room_map_file(argv[++i]);
                 if (!net::valid_map_name(file)) {
-                    if (cfg.startup_error.empty()) cfg.startup_error = "--room-map " + std::string(argv[i]) + ": not a map name (letters, digits, '-' and '_', or a file name that ends in .LVL)";
+                    if (cfg.startup_error.empty()) cfg.startup_error = "--room-map " + std::string(argv[i]) + ": not a map name (a word like treasure, or a file name that ends in .LVL and has none of / \\ : * ? \" < > | in it)";
                 } else {
                     if (!cfg.net_create) cfg.net_create.emplace();
                     cfg.net_create->map_name = file;
                 }
             }
         } else if (std::strcmp(argv[i], "--room-seats") == 0) {
-            const int seats = i + 1 < argc ? std::atoi(argv[i + 1]) : 0;
-            if (i + 1 >= argc || seats < 2 || seats > 4) {
+            const std::string text = i + 1 < argc ? argv[i + 1] : "";
+            const int seats = text.size() == 1 && text[0] >= '2' && text[0] <= '4' ? text[0] - '0' : 0;      // (one digit: "3x" and "2.5" are no number of seats)
+            if (i + 1 >= argc || seats == 0) {
                 if (cfg.startup_error.empty()) cfg.startup_error = "--room-seats needs 2, 3 or 4";
                 if (i + 1 < argc) ++i;
             } else {
@@ -737,7 +738,7 @@ bool Application::init(const ApplicationConfig& config) {
         hook_rejoin_store();
         net_->set_discovery(config_.lan_port);                                          // an open room announces itself to the local network (ants_net/lan.hpp)
         net_->set_game_version(std::string(VERSION_STRING));
-        if (config_.net_platform != 0) net_->set_platform(config_.net_platform);        // (the page tells what its browser is; else the build's own)
+        if (config_.net_platform != 0) net_->set_platform(config_.net_platform);        // (--platform, or the word of the page's address; else the build's own)
         if (config_.net_create) net_->set_create(*config_.net_create);                  // (the room that a server makes when it has none of the code: --room-map, --room-seats, ...)
         const bool host_role = config_.net_role == ApplicationConfig::NetRole::Host;
         // A join that names a room of a server joins with the key of the seat that this machine had there, when the store has a fresh one (a game that was closed, a page that was reloaded): the

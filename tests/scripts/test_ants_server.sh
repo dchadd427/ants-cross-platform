@@ -772,7 +772,8 @@ check "a block that names a map that is not in the list (medium) makes the room 
 expected_of_room() { curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("expected", ""))' 2> /dev/null; }
 check "a block with --room-map small --room-seats 2 makes the room on SMALL.LVL for two players, another block for four" "$([ "$(map_of_room pick-small2)" = "SMALL.LVL" ] && [ "$(expected_of_room pick-small2)" = "2" ] && [ "$(expected_of_room pick-small)" = "4" ]; echo $?)"
 for _ in $(seq 1 100); do kill -0 "$PICK_NOBODY_PID" 2> /dev/null || break; sleep 0.2; done
-check "a Hello with no create block makes no room (the code is only a name; 404 for it, and the game was refused)" "$([ "$(code_of -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/pick-nobody")" = "404" ]; echo $?)"
+check "a Hello with no create block makes no room (the code is only a name: the control interface has no such room, 404)" "$([ "$(code_of -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/pick-nobody")" = "404" ]; echo $?)"
+check "... and the server refused that game, and no other (the control interface counts one refused connection)" "$([ "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/stats" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("refused", ""))' 2> /dev/null)" = "1" ]; echo $?)"
 for p in $PICK_PIDS $PICK_NOBODY_PID; do kill "$p" 2> /dev/null; done
 stop_server
 
