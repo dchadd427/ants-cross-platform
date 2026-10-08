@@ -27,6 +27,8 @@ if(NOT WIN32)
 endif()
 
 add_test(NAME test_server COMMAND test_server)
+# COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
+set_tests_properties(test_server PROPERTIES COST 150)
 
 # The way back of the game's NetGame (docs/NETWORK_PORT.md "Reconnect"): real NetGames over loopback sockets against a real RoomManager, so it needs the server's library as test_server does
 add_executable(test_rejoin
@@ -43,6 +45,7 @@ target_include_directories(test_rejoin PRIVATE
 )
 
 add_test(NAME test_rejoin COMMAND test_rejoin)
+set_tests_properties(test_rejoin PROPERTIES COST 25)
 
 # The store of the matches that the server keeps (ants_server/replay_store.hpp): the file names, the age and size limits, the free space, a folder that holds other things. No network and no match
 add_executable(test_replay_store
@@ -58,3 +61,4 @@ target_include_directories(test_replay_store PRIVATE
 )
 
 add_test(NAME test_replay_store COMMAND test_replay_store)
+set_tests_properties(test_replay_store PROPERTIES COST 3)

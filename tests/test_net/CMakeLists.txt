@@ -13,6 +13,8 @@ target_include_directories(test_lockstep PRIVATE
 )
 
 add_test(NAME test_lockstep COMMAND test_lockstep)
+# COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
+set_tests_properties(test_lockstep PROPERTIES COST 170)
 
 add_executable(test_tcp
     test_tcp.cpp
@@ -144,3 +146,4 @@ target_include_directories(test_prediction PRIVATE
 )
 
 add_test(NAME test_prediction COMMAND test_prediction)
+set_tests_properties(test_prediction PROPERTIES COST 35)

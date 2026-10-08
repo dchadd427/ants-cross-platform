@@ -271,7 +271,8 @@ if(WIN32)
 endif()
 
 add_test(NAME test_network_app COMMAND test_network_app)
-set_tests_properties(test_network_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+# COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
+set_tests_properties(test_network_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" COST 200)
 
 # The prediction of one's own orders in the application (R3 of the rollback): what the match screen reads. A headless Application plays a real match against a bare machine over loopback
 add_executable(test_prediction_app
@@ -680,7 +681,7 @@ endif()
 target_link_libraries(test_zoom_view PRIVATE ants_test_paths)
 
 add_test(NAME test_zoom_view COMMAND test_zoom_view)
-set_tests_properties(test_zoom_view PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+set_tests_properties(test_zoom_view PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" COST 30)
 
 # Zoom fingerprint (M4): the pictures of the world pass and of whole frames, the minimap's frame, the pointer's edge scroll, cursor and clicks, and the camera's conversions at the zoom levels 0.5 and 2,
 # classic and wide, pinned as golden numbers
