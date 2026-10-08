@@ -36,6 +36,18 @@
 // is a guest's own goes with it (its key, its name, its place in the order of the Welcomes, so that the leader stays the leader, its violations and its budgets); every guest is sent the Room message
 // (each with its own `you`), and a guest whose colour changed is told so with a notice of the room ("Ann moved you to Red.").
 //
+// The lobby room (protocol 16, docs/NETWORK_PORT.md "Protocol 16"). A server's room that was made with kCreateLobby (HostLobby::Config::lobby_room) is the room that the front page waits in from its first
+// second; everything below is for it alone, and a room that is not one is exactly what it was. (1) Joining: a Hello without a key takes the lowest colour that nobody holds and the plan calls Open (the colour
+// it asked for when that is one); Easy, Medium, Hard and Nobody colours are never taken by a joiner, no such colour is Full, and a room whose START waits is MatchRunning. (2) The PLAN (PlanMsg, the leader's):
+// the map, what each colour is and the teams; every change is shown to everybody in the Room message, and the plan decides the START (a StartRequest's own fill and teams are not looked at). (3) A SeatMove
+// exchanges the two colours completely: the person (all that is its own), the colour's kind and the team pair, so that a team goes with its player and a bot with its level. (4) A guest whose connection
+// ends keeps its seat for `hold_ms` (it counts as present, a Hello with its key takes the seat back, the leader that is held stays the leader); one that says Leave goes at once. A connection from which nothing at
+// all has come for `silence_ms` has ended too (a live client answers the room's ping every second; a link that died without a word is closed, and its seat is held). (5) The START: the leader's
+// StartRequest is kept as a request (RoomMsg flag kRoomStarting) until every person is a GAME (a Hello of kClientGame holds the seat: the pages go to the game and take their seats over), and then the owner is
+// given the LeaderStart; a request that waits longer than `start_wait_ms`, or whose leader is not the leader any more, is dropped (the leader is told which game did not come in time). A held seat keeps its hold
+// while the request waits. (6) Any person can change the name they go by (NameMsg), and the leader can take another person out of the room (RemoveMsg: with the guard of a SeatMove, so that it acts on the person
+// that the leader's screen showed; the person is sent the rejection Kicked, their colour is free at once and their key is forgotten; it is heard while the START waits too, for a person whose game never opens).
+//
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
 
@@ -52,6 +64,14 @@
 #include "ants_net/transport.hpp"
 
 namespace ants::net {
+
+/// A lobby room (protocol 16) holds the seat of a guest whose connection ended this long, and its leader's START waits this long for every person's game (HostLobby::Config::hold_ms, start_wait_ms)
+inline constexpr uint32_t kLobbyHoldMs = 60u * 1000u;
+inline constexpr uint32_t kLobbyStartWaitMs = 90u * 1000u;
+/// ... and a connection of a lobby room from which nothing has come for this long is closed (HostLobby::Config::silence_ms): a client that is alive answers a ping every second
+inline constexpr uint32_t kLobbySilenceMs = 30u * 1000u;
+/// ... and a guest of a lobby room is forgiven one violation and one ignored request of each kind this often (HostLobby::Config::forgive_ms): a lobby lives as long as its people stay
+inline constexpr uint32_t kLobbyForgiveMs = 60u * 1000u;
 
 /// One line of the waiting room's chat (protocol 11). `seat` is the sender's seat, kRoomSender (255) for a line that the room itself said (a notice); `name` is the sender's name as the
 /// room showed it when the line arrived ("" for a notice).
@@ -102,6 +122,18 @@ public:
         /// starts it (the owner does that too; it needs a leader, so it is for a server's room that allows an early start).
         sim::StartTeams room_teams{};
         bool leader_starts{false};
+        /// Protocol 16: the room is a LOBBY ROOM (see the paragraph above). It needs a server's host that has a leader and waits for it to start (host_seat = kNoSeat, early_start and leader_starts), all four colours
+        /// (max_players) and keys (make_key), or no seat could be held: without any of them this is taken for false. `hold_ms`: a guest whose connection ends keeps its seat this long; `start_wait_ms`: the
+        /// leader's START waits this long for every person's game.
+        bool lobby_room{false};
+        uint32_t hold_ms{kLobbyHoldMs};
+        uint32_t start_wait_ms{kLobbyStartWaitMs};
+        /// A lobby room closes the connection of a guest from which nothing has come for this long while the room is open (its seat is held then, as for any connection that ends): no TCP or proxy tells a server that a
+        /// browser which went to sleep is gone, and a room that lives while a person is in it must not live for ever on a link that died.
+        uint32_t silence_ms{kLobbySilenceMs};
+        /// A lobby room lives as long as its people stay, so what a person got wrong is not held against them for ever: every `forgive_ms` each guest's violations, and each of its counts of ignored requests (START,
+        /// colour moves, plans, renames, removals), go down by one. A connection that offends faster than that is thrown out as ever (eight violations are more than one in forgive_ms). Any other room forgives nothing, and so does 0.
+        uint32_t forgive_ms{kLobbyForgiveMs};
         /// Flood control (flood.hpp): the messages that one guest may send, a token bucket. A message beyond it is not handled and is a violation (eight throw the guest out).
         uint32_t message_burst{kMessageBurst};
         uint32_t messages_per_second{kMessagesPerSecond};
@@ -151,8 +183,9 @@ public:
     /// A connection that the listener accepted; it becomes a seat when its Hello is accepted. `address` is where the connection came from (the host
     /// part only): with the port the guest announces it tells the other guests where to reach it during the match (host migration).
     void add_connection(Connection* connection, uint32_t now_ms, const std::string& address = std::string());
-    /// The same for a connection whose first message (its Hello) was read already: a server reads it to find the room by its code, then hands both over.
-    void add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message);
+    /// The same for a connection whose first message (its Hello) was read already: a server reads it to find the room by its code, then hands both over. `created`: this very Hello made the room (the
+    /// server's door made it for the Hello): the Welcome of a new seat says so (kWelcomeCreated, protocol 16; it needs a key).
+    void add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message, bool created = false);
     void update(uint32_t now_ms);
 
     Phase phase() const noexcept { return phase_; }
@@ -199,6 +232,8 @@ public:
     /// Called by start() once the start message is built (start_info() is it, the keys are known) and BEFORE the first byte of it is sent to anybody: a server's room makes its restart record here, so that
     /// the record of a match exists before any machine can act on its Start. It must not call start() or cancel(). Unset (the default): nothing is called.
     void set_before_start(std::function<void(const StartMsg& start, uint32_t now_ms)> fn) { before_start_ = std::move(fn); }
+    /// Protocol 16: the file name that the server gives a map of a PlanMsg ("" when it offers none by that name: the plan's map is then not taken, the rest of the plan is). Unset (the default): any valid_map_name.
+    void set_map_choice(std::function<std::string(const std::string&)> fn) { map_choice_ = std::move(fn); }
     void host_loaded(bool ok);
     /// The host abandons the start (Cancel to everybody, back to the room)
     void cancel();
@@ -210,6 +245,40 @@ public:
     SeatKey key_of(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS ? guests_[seat].key : SeatKey{}; }
     /// How many times a connection took a seat over with its key (the old one was closed)
     uint32_t takeovers() const noexcept { return takeovers_; }
+
+    /// Protocol 16 (a lobby room: Config::lobby_room, after the constructor has checked what it needs). The leader's START waits for every person's game (RoomMsg::flags kRoomStarting): the request stands until the
+    /// games are in (then the owner is given LeaderStart, again in every pass until it starts the match or drops the request with end_start), until it has waited Config::start_wait_ms, or until it cannot be
+    /// honoured any more (the leader is another guest, or the room could not start with whom it has left). While it stands, no newcomer is taken (MatchRunning) and neither the plan nor the colours move.
+    bool lobby_room() const noexcept { return cfg_.lobby_room; }
+    bool starting() const noexcept { return starting_.active; }
+    /// The seat holds a person whose connection ended and whose hold runs (the person counts as present: it can lead, and a Hello with its key takes the seat back) ...
+    bool held(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && guests_[seat].held; }
+    /// ... and the seat holds a person whose connection is a game (a Hello of kClientGame): the games are what a match is started with
+    bool in_game(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && guests_[seat].conn != nullptr && guests_[seat].kind == kClientGame; }
+    /// The owner drops the leader's START (it cannot honour it: the map, the colours, a place for the match): the flag goes, everybody is sent the Room message, the leader is sent `notice` (not when it is
+    /// empty), and the holds that ran during the wait begin again from now. Nothing happens when no START waits.
+    void end_start(const std::string& notice);
+    /// PlanMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room, the START waits): no offence up to kIgnoredPlansAllowed per guest, a violation each after those
+    uint32_t ignored_plans() const noexcept { return ignored_plans_; }
+    /// NameMsgs that were heard and not acted on (the room is no open lobby room, the START waits): no offence up to kIgnoredNamesAllowed per guest, a violation each after those
+    uint32_t ignored_names() const noexcept { return ignored_names_; }
+    /// Names that changed (a NameMsg that gave a person a name that was not theirs already)
+    uint32_t renames() const noexcept { return renames_; }
+    /// RemoveMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room or its match loads, the seating is not the one the guard was made for, the seat holds nobody to remove or the leader):
+    /// no offence up to kIgnoredRemovesAllowed per guest, a violation each after those (a Remove that reaches a match that runs is the running session's, and a violation there)
+    uint32_t ignored_removes() const noexcept { return ignored_removes_; }
+    /// People that the leader removed (a RemoveMsg that was done)
+    uint32_t removals() const noexcept { return removals_; }
+    /// Plans that changed the room (a map, a kind, a team), seats that were held after their connection ended, and holds that ran out
+    uint32_t plan_changes() const noexcept { return plan_changes_; }
+    uint32_t holds() const noexcept { return holds_; }
+    uint32_t hold_expiries() const noexcept { return hold_expiries_; }
+    /// Connections that were closed for their silence (silence_ms)
+    uint32_t silences() const noexcept { return silences_; }
+    /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a colour moves, the plan or a name changes, a person is removed, a line of chat is said, a START is asked for
+    /// (a ping, a link that comes back, a seat that is held or gives up are not). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the owner may give
+    /// the place of such a room up when it needs it.
+    uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + chat_.total()); }
 
     std::vector<Event> take_events();
 
@@ -232,6 +301,22 @@ private:
         uint32_t ignored_start_requests{0};      // the StartRequests of this guest that were ignored (the first kIgnoredStartRequestsAllowed are free)
         ChatBudget moves;                        // the SeatMoves of this guest that could be done (flood.hpp: a burst of kSeatMoveBurst, then kSeatMovesPerSecond a second; the budget of chat, with these numbers)
         uint32_t ignored_seat_moves{0};          // the SeatMoves of this guest that were ignored (the first kIgnoredSeatMovesAllowed are free)
+        uint8_t kind{kClientGame};               // protocol 16: what the Hello said (a game, or a lobby page that cannot play a match)
+        bool held{false};                        // a lobby room: the connection ended and the seat waits for its key (conn is null) since held_since_ms
+        uint32_t held_since_ms{0};
+        uint32_t heard_ms{0};                    // a lobby room: when a message of this guest was last read (or it was welcomed): the silence of a link is counted from here
+        ChatBudget plans;                        // the PlanMsgs of this guest that could be heard (flood.hpp: a burst of kPlanBurst, then kPlansPerSecond a second)
+        uint32_t ignored_plans{0};               // ... and those that were ignored (the first kIgnoredPlansAllowed are free)
+        ChatBudget names;                        // the NameMsgs of this guest that could be heard (flood.hpp: a burst of kNameBurst, then kNamesPerSecond a second)
+        uint32_t ignored_names{0};               // ... and those that were ignored (the first kIgnoredNamesAllowed are free)
+        ChatBudget removes;                      // the RemoveMsgs of this guest that could be done (flood.hpp: a burst of kRemoveBurst, then kRemovesPerSecond a second)
+        uint32_t ignored_removes{0};             // ... and those that were ignored (the first kIgnoredRemovesAllowed are free)
+        uint32_t forgive_at_ms{0};               // a lobby room: when one violation and one ignored request of each kind are forgiven next
+    };
+    struct Starting {                            // the leader's START of a lobby room, while it waits for every person's game
+        bool active{false};
+        uint32_t leader_order{0};                // the join order of the guest whose request it is (a guest keeps it when its seat changes)
+        uint32_t since_ms{0};
     };
     struct Pending {
         Connection* conn;
@@ -242,10 +327,10 @@ private:
     void broadcast(const std::vector<uint8_t>& msg);
     void remove_guest(uint8_t seat, bool notify_reject, RejectReason reason);
     void violation(uint8_t seat);
-    void handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t now_ms, bool& consumed);
+    void handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t now_ms, bool& consumed, bool created = false);
     SeatKey new_key() const;
     uint8_t seat_of_key(const SeatKey& key) const noexcept;
-    void take_over(uint8_t seat, Pending& p, const HelloMsg& hello);
+    void take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint32_t now_ms);
     void handle_guest_message(uint8_t seat, const std::vector<uint8_t>& msg, uint32_t now_ms);
     void relay_chat(uint8_t sender, const std::string& text);
     void check_all_loaded();
@@ -256,6 +341,23 @@ private:
     void elect_leader();
     /// Whether move_seat would move a guest now (the rule alone, no guard, no budget): the room is open, both are different seats, `from` holds a guest and `to` is empty or holds a guest
     bool can_move_seat(uint8_t from, uint8_t to) const noexcept;
+    /// Whether the leader could take the person of `target` out of the room now (the rule alone, no guard, no budget): the room is open (a START that waits does not forbid it), and the seat holds a person
+    /// who is not the leader (an empty seat and a bot's hold nobody)
+    bool can_remove(uint8_t target) const noexcept;
+    // The lobby room (protocol 16)
+    /// A guest sits in the seat: connected or held
+    bool person(uint8_t seat) const noexcept { return guests_[seat].conn != nullptr || guests_[seat].held; }
+    void hold_guest(uint8_t seat, uint32_t now_ms);
+    void forgive(Guest& g, uint32_t now_ms) const noexcept;
+    void apply_plan(const PlanMsg& plan);
+    void rename(uint8_t seat, const std::string& raw);                    // protocol 16: the person of `seat` goes by this name (a name that looks like a bot's is not taken)
+    uint8_t joiner_seat(uint8_t want) const noexcept;
+    bool plan_asks_bots() const noexcept;
+    bool everyone_in_game() const noexcept;
+    bool start_possible() const noexcept;
+    void arm_start(uint8_t seat, uint32_t now_ms);
+    void pump_start(uint32_t now_ms);
+    void sync_room_flags();
 
     Config cfg_;
     RoomMsg room_;
@@ -272,8 +374,20 @@ private:
     uint32_t ignored_seat_moves_{0};
     uint32_t seat_moves_{0};
     uint32_t takeovers_{0};
+    Starting starting_;
+    uint32_t ignored_plans_{0};
+    uint32_t ignored_names_{0};
+    uint32_t renames_{0};
+    uint32_t ignored_removes_{0};
+    uint32_t removals_{0};
+    uint32_t plan_changes_{0};
+    uint32_t holds_{0};
+    uint32_t hold_expiries_{0};
+    uint32_t silences_{0};
+    uint32_t start_arms_{0};                 // the STARTs that were asked for and stood (arm_start)
     ChatLog chat_;
     std::function<void(const StartMsg&, uint32_t)> before_start_;
+    std::function<std::string(const std::string&)> map_choice_;
 };
 
 class ClientLobby {
@@ -289,6 +403,7 @@ public:
         SeatKey key{};                       // protocol 10: the key of the seat that this machine had (a page that was reloaded, a game that was started again): the Hello shows it and the
                                              // server gives the seat back. All zero: a new player. Its turns (Hello::have_turns) are 0: this lobby starts from nothing
         uint8_t platform{0};                 // protocol 15: what this machine runs on, told in the Hello (valid_platform; 0: not told)
+        uint8_t client_kind{kClientGame};    // protocol 16: what this machine is, told in the Hello: a game (kClientGame), or the front page's lobby (kClientPage), which cannot play a match and is only seated in a lobby room
         std::optional<CreateBlock> create;   // protocol 15: the choices of the room that this Hello makes when the room does not exist (a server's public rooms); none: the Hello joins a room
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
@@ -326,6 +441,17 @@ public:
     /// was sent, not that the server did it: it answers with the Room message that shows the new seats, and says nothing to a request that it cannot honour (a bot's or the host's colour, the seating
     /// has changed, the room started meanwhile).
     bool request_seat_move(uint8_t from, uint8_t to);
+    /// The leader of a lobby room (protocol 16) tells the server its plan: the map, what each colour is, the teams (PlanMsg). False (nothing is sent) unless this machine leads an open room that the last Room
+    /// message shows as a lobby room. True means the request was sent, not that the server did it: the Room message shows the plan that the room has (it says nothing to a plan that it cannot hear).
+    bool request_plan(const PlanMsg& plan);
+    /// A person of a lobby room (protocol 16) tells the server the name they go by from now on (NameMsg): printable ASCII, at most kMaxNameChars characters, no space at either end (a longer or
+    /// otherwise written name is cut or cleaned by the same rule as the Hello's, and an empty one sends nothing). False (nothing is sent) unless this machine sits in an open room that the last Room message shows as
+    /// a lobby room. True means the request was sent, not that the server did it: the Room message shows the name that the room has (it says nothing to a name that it cannot hear).
+    bool request_name(const std::string& name);
+    /// The leader of a lobby room (protocol 16) asks the server to take the person of `seat` out of the room (RemoveMsg, with the guard of the seating as this machine shows it). False (nothing is sent) unless
+    /// this machine leads an open room that the last Room message shows as a lobby room and the seat holds a person who is not this machine's own (a bot's and an empty seat hold nobody). True means the request
+    /// was sent, not that the server did it: the Room message shows the seat free when it did (it says nothing to a request that it cannot honour: the seating has changed, a match loads).
+    bool request_remove(uint8_t seat);
     /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
     /// (a longer line is cut), not empty. The room relays it to everybody, this machine included: the line comes back through take_chat(). False when nothing was sent.
     bool chat(const std::string& text);
@@ -345,6 +471,8 @@ public:
     /// no Room message comes, and the flow is Welcome -> Start -> report_loaded -> Begin -> Begun as for anybody. False after the Welcome of a seat in the room (also one that took its
     /// seat over in the waiting room: the room follows).
     bool rejoined() const noexcept { return rejoined_; }
+    /// The Welcome said that this very Hello made the room (kWelcomeCreated, protocol 16): a visitor whose link led to no room, and was given a new one
+    bool created() const noexcept { return created_; }
     CancelMsg::Reason cancel_reason() const noexcept { return cancel_reason_; }
     /// The seat that caused the cancel (a player who left, a machine that could not load the map), 255 when unknown
     uint8_t cancel_player() const noexcept { return cancel_player_; }
@@ -366,6 +494,7 @@ private:
     uint8_t seat_{255};
     SeatKey key_{};
     bool rejoined_{false};
+    bool created_{false};
     RejectReason reject_{RejectReason::BadRequest};
     CancelMsg::Reason cancel_reason_{CancelMsg::Reason::HostCancelled};
     uint8_t cancel_player_{255};

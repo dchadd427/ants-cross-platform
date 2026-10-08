@@ -24,6 +24,11 @@
 //   --demo-map NAME    the map of the public rooms whose block names none that the server offers (a file name of the maps folder; required with --demo-rooms)
 //   --demo-maps LIST   the maps a create block may choose, file names of the maps folder separated by commas (blanks around a name are dropped; the block's map is compared
 //                      with them in any case); a block that names another map (or none) gets --demo-map (needs --demo-rooms). A public room waits ten minutes for its players.
+//   --demo-lobbies N   for the front page's lobby (network protocol 16): a lobby page's Hello with a lobby create block for a room that does not exist makes a LOBBY ROOM, a room that lives while a person is in it
+//                      and begins its match when its leader says so (docs/SERVER.md "Lobby rooms"), at most N waiting at a time (the one that has been empty the longest gives its place up to a new one;
+//                      when every one has a person in it the page is told NoSuchRoom). A waiting lobby holds no place among the --demo-rooms: the match it begins does, from its START on. N is 0 to
+//                      --max-rooms - --demo-rooms - 1 (0: no lobby rooms). Without the option a server with --demo-rooms and reconnect has 200 (fewer where --max-rooms leaves no more room); a value
+//                      above 0 needs --demo-rooms, --demo-map and reconnect (a lobby holds the seat of a link that dropped), or the server stops at startup
 //   --reconnect, --no-reconnect
 //                      a room holds the seat of a player whose connection is lost (protocol 10): the match is paused for everybody, the seat comes back with its key, the others
 //                      may vote to go on without it, the match's total pause is capped. ON by default (the game's own clients come back by themselves: release B); --no-reconnect turns it
@@ -73,6 +78,7 @@
 // permissions of its folder), so a container needs no setup: the secret is printed once, the moment it is made (before anything else can stop the server); later it is read
 // from the file (docker exec <container> cat /results/control-secret). A secret in the environment wins. A file that exists is used as it is (secret.hpp).
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -101,6 +107,8 @@ namespace {
 std::atomic<bool> g_stop{false};
 void on_signal(int) { g_stop = true; }
 
+constexpr size_t kDefaultDemoLobbies = 200;           // lobby rooms that may wait at a time when --demo-lobbies is not given (docs/SERVER.md "Lobby rooms")
+
 struct Options {
     std::string maps_dir;
     uint16_t port{4001};
@@ -116,6 +124,8 @@ struct Options {
     std::string demo_map;
     std::vector<std::string> demo_maps;
     bool demo_maps_given{false};
+    size_t demo_lobbies{0};                    // --demo-lobbies (protocol 16)
+    bool demo_lobbies_given{false};
     bool reconnect{ants::server::kReconnectByDefault};
     long hold_vote_s{30};
     long max_pause_s{1800};
@@ -139,7 +149,7 @@ void usage(FILE* to) {
     std::fprintf(to,
                  "usage: ants_server --maps DIR [--port 4001] [--ws-port N] [--ctl-port N] [--public] [--ws-any-interface] [--ctl-any-interface]\n"
                  "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N]\n"
-                 "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...]]\n"
+                 "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...] [--demo-lobbies N]]\n"
                  "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
                  "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
@@ -241,6 +251,16 @@ int main(int argc, char** argv) {
                 return 2;
             }
             o.demo_rooms = static_cast<size_t>(n);
+        } else if (a == "--demo-lobbies") {
+            const char* text = value("--demo-lobbies");
+            char* end = nullptr;
+            const long n = std::strtol(text, &end, 10);
+            if (end == text || *end != '\0' || n < 0 || n > 1000000) {
+                std::fprintf(stderr, "--demo-lobbies takes a number (0 switches the lobby rooms off)\n");
+                return 2;
+            }
+            o.demo_lobbies = static_cast<size_t>(n);
+            o.demo_lobbies_given = true;
         } else if (a == "--reconnect") {
             o.reconnect = true;
         } else if (a == "--no-reconnect") {
@@ -389,6 +409,25 @@ int main(int argc, char** argv) {
     limits.demo_rooms = o.demo_rooms;
     limits.demo_map = o.demo_map;
     limits.demo_maps = o.demo_maps;
+    // Lobby rooms (protocol 16) have a pool of their own beside the public rooms, and the two together leave a place for the rooms of the control interface. A value that is given is kept or refused; without one
+    // a server that has public rooms and keeps seats offers the default number, as many of it as --max-rooms leaves room for (none when it leaves none).
+    if (o.demo_lobbies_given && o.demo_lobbies > 0) {
+        if (o.demo_rooms == 0) {
+            std::fprintf(stderr, "--demo-lobbies needs --demo-rooms (and --demo-map)\n");
+            return 2;
+        }
+        if (!o.reconnect) {
+            std::fprintf(stderr, "--demo-lobbies needs reconnect: a lobby room holds the seat of a link that dropped (it cannot go with --no-reconnect)\n");
+            return 2;
+        }
+        if (o.demo_rooms + o.demo_lobbies >= o.max_rooms) {
+            std::fprintf(stderr, "--demo-rooms (%zu) and --demo-lobbies (%zu) together must be smaller than --max-rooms (%zu), so that rooms made by the control interface keep their places\n", o.demo_rooms, o.demo_lobbies, o.max_rooms);
+            return 2;
+        }
+        limits.demo_lobbies = o.demo_lobbies;
+    } else if (!o.demo_lobbies_given && o.demo_rooms > 0 && o.reconnect) {
+        limits.demo_lobbies = std::min(kDefaultDemoLobbies, o.max_rooms - o.demo_rooms - 1);      // (demo_rooms < max_rooms was checked above)
+    }
     limits.reconnect = o.reconnect;
     limits.hold_vote_ms = static_cast<uint32_t>(o.hold_vote_s * 1000);
     limits.max_pause_ms = static_cast<uint32_t>(o.max_pause_s * 1000);
@@ -420,6 +459,8 @@ int main(int argc, char** argv) {
         std::string chooseable;
         for (const std::string& name : o.demo_maps) chooseable += (chooseable.empty() ? "" : ", ") + name;
         log("public rooms on: up to " + std::to_string(o.demo_rooms) + " at a time, made by a Hello's create block (its seats and teams), map " + o.demo_map + (chooseable.empty() ? std::string() : " unless the block names one of " + chooseable));
+        log(limits.demo_lobbies > 0 ? "lobby rooms on: up to " + std::to_string(limits.demo_lobbies) + " waiting at a time, made by a lobby page's Hello (a lobby holds no public place until its leader starts the match)"
+                                    : std::string("lobby rooms off") + (o.demo_lobbies_given ? " (--demo-lobbies 0)" : !o.reconnect ? " (--no-reconnect)" : " (--max-rooms leaves no place for them beside --demo-rooms)"));
     }
 
     if (ws) {                                                    // GET /busy on the WebSocket port: how many matches run (a deploy waits for none), no name, no code, no secret
