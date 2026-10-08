@@ -5,7 +5,7 @@ _Updated 2026-10-08 11:07 PDT · current release **v0.12.0** · details: [CHANGE
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.12.0** game lobby on the front page (network protocol 16) | ██████░░░░ 57% | Thursday | PR #40 is open and its five checks are running; it merges when they are green |
+| none | none | not yet set | no release is scheduled yet |
 
 Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
 
@@ -17,7 +17,6 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - **Replays** (PR #31, open and not a draft): the server will keep every online match of 30 seconds or more for 30 days, with a public list, download and the players' typed names (letters outside plain ASCII show as ??); the names are in and all five checks were green before v0.11.0 landed, so main is being merged in and the checks run again; the PR will not merge until that is green, the owner has answered one question about a notice line, and the beta is idle; the viewer for watching a replay on the website follows as a separate pull request, and its pictures wait for the owner's yes
 - Watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- **Lobby on the server** (network protocol 16, v0.12.0): the rooms' server side is built, tested and reviewed, including the host removing a player; PR #40 is open and its checks are running; no page uses it yet
 - **Front page ants in the game's own team colours** (no release; PR #37, in review): the ants on the room page are drawn in the game's team colours, as in the approved lobby pictures; it follows the lobby server pull request (#40).
 
 ## On hold (not started; the owner decides when)
@@ -29,6 +28,8 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - **Room codes, part two** (no release): the platform icons, the desktop game's Rejoin button and refusal lines for the new codes, and the rename of the demo-room names; it waits until the lobby server and replays pull requests have merged, and the icons and the desktop screens need the owner's pictures first
 
 ## Recently done
+- **AGENTS.md is a short list of rules** (no release; PR #41, merged 2026-10-08 10:55 PDT): documents only, nothing redeployed
+- **v0.12.0** The server's lobby rooms (network protocol 16; no page uses them yet) (PR #40, merged 2026-10-08 09:50 PDT, live 09:54 PDT)
 - **v0.11.0** Six-character room codes and one link that makes the room (network protocol 15; the swap of two players' colours is in the game but no page uses it yet, the lobby page will) (PR #34, merged 2026-10-08 09:05 PDT, live 09:09 PDT)
 - **The Hard bots watch the flowers** (no release; PR #38, merged 2026-10-08 01:57 PDT, live 02:01 PDT): the Hard bots see the flower droppers on Small, Medium and Gauntlet, know whose drop a landing is, take the Fire, Bomber and Thief power-ups that land on their side, repair a pick-up trip that went wrong and keep one ant beside the drop tile to take the landing; in 3,240 whole matches of Hard bots against Hard bots, a bot with the rules scores about 33 points more a match than one without (the gain is on the Medium map); Medium and Easy bots play none of it
 - **Rejoin test steadied** (no release; PR #35, merged 2026-10-08 01:14 PDT): a Mac's checks no longer fail at random when a player leaves while catching up.
