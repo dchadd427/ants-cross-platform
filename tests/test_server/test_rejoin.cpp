@@ -1644,7 +1644,9 @@ void run_way_back_tests() {
                 for (const NetGame::Event& e : m->events) left = left || (e.type == NetGame::Event::Type::PlayerLeft && e.seat == cat);
                 ASSERT_TRUE(left);
             }
-            ASSERT_TRUE(w.status("RJ-13C").absent.empty() && w.status("RJ-13C").rejoins == 0);
+            // Cat's CaughtUp is usually out already when the test sees it catch up (the stream is short, so both go out in one frame) and the Leave follows it. The server reads both in one pass and the Leave ends the attempt before the states
+            // are compared (no rejoin: 0), or, when the loopback hands it the CaughtUp a pass before the Leave (a Mac's can, see World::run), it compares the states, gives the seat back and drops it at the Leave a pass later (one rejoin: 1). The ending is the same.
+            ASSERT_TRUE(w.status("RJ-13C").absent.empty() && w.status("RJ-13C").rejoins <= 1);
         }
     } TEST_END();
 
