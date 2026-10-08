@@ -1,7 +1,7 @@
 # Audit: is the remake identical to the original?
 
 Status: commit 4aa985f (v0.0.50 plus the cleanup pass), audit of 2026-09-30. When it was written nothing in this list had been changed yet; section 0 logs the fixes that followed. It is the list of what differs, in the
-order in which it is proposed to be fixed. The owner decides (AGENTS.md rule 9).
+order in which it is proposed to be fixed. The owner decides.
 
 ## 0. Progress (updated with every release)
 * v0.0.51: shortcuts that the original did not have removed (owner request), hit-point numbers on by default (owner tweak).

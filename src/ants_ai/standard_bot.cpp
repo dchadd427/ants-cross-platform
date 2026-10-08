@@ -24,6 +24,7 @@ void StandardBot::start(const BotContext& context) {
         harvest_.set_params(harvest_params(tactics_.plan));
         gate_.set_params(gate_params(tactics_.plan));
         island_.set_params(island_params(tactics_.plan));
+        expedition_.set_params(expedition_params(tactics_.plan));
         ferry_.set_params(ferry_params(tactics_.plan));
     }
     ledger_.set_rank(kHarvest, kRankHarvest);

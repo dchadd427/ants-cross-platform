@@ -237,6 +237,7 @@ struct LevelPlan {
     bool island_expedition{false};       // the expedition is on (ExpeditionTask: a crew is flown to the Swimmers that lie beyond water, bomb by bomb); the tests of the island task switch it off
     bool island_ferry{false};            // the Swimmers that dig no bridge carry food across the water (FerryTask)
     uint32_t island_ferry_per_pile{2};   // Swimmers of the ferry at one pile
+    bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
     // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
     bool flower_sides{false};            // a landed drop has a side, the nearest team's (MapInfo::flowers: the walking cost of every hill to the drop tile, as for a power-up of the start): the secure_kinds of the own side apply to it
     bool flower_fire{false};             // a bot without a Fire Ant takes a Fire drop that lies within reach, whoever's side it is (the Fire Ant at home: on SMALL, MEDIUM and GAUNTLET Fire only comes from a flower); the contest check decides who goes

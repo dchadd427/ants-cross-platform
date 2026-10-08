@@ -292,7 +292,7 @@ class Documents(unittest.TestCase):
     def test_the_required_checks_are_named_where_a_person_decides_about_merging(self):
         for name in ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten, Docker image)"):
             self.assertIn(name, self.workflow)
-            self.assertIn(name, self.agents)
+        self.assertIn("(Linux GCC, macOS Apple clang, Windows MSVC 2022, Windows MSVC 2026, Web)", self.agents)   # (AGENTS.md names the same five in short form, in this order)
         for name in ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten, Docker image)"):   # (the table of docs/TESTING.md has a row for each)
             self.assertIn("| " + name + " |", self.testing)
 
@@ -320,7 +320,7 @@ class Documents(unittest.TestCase):
             self.assertIn(variable, self.workflow)
 
     def test_the_agents_rules_say_what_the_workflow_says(self):
-        for needle in ("pull request", "CI Is the One Full Gate", "merge commit", "tools/mutate.py", "AddressSanitizer and UBSan", "Short Documents"):
+        for needle in ("pull request", "CI is the full gate", "merge commit", "tools/mutate.py", "`./run_tests.sh --asan`, CI has none", "Documents and comments say what and why, briefly"):
             self.assertIn(needle, self.agents)
         for stale in ("Push to `origin main`", "fast-forward", "Mandatory Dual Local", "Mandatory Docker Web Build"):
             self.assertNotIn(stale, self.agents)

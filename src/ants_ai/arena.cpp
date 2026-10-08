@@ -211,6 +211,22 @@ void FlowerTally::scan(const sim::SimulationEngine& sim) {
     }
 }
 
+ExpeditionResult read_expedition(const ExpeditionTask& e) noexcept {
+    ExpeditionResult r;
+    r.planned = e.planned();
+    r.given_up = e.given_up();
+    r.planted = e.planted();
+    r.hops = e.hops();
+    r.landings = e.landings();
+    r.duds = e.duds();
+    r.taken = e.taken();
+    r.swimmers_taken = e.swimmers_taken();
+    r.first_plant = e.first_plant();
+    r.first_landing = e.first_landing();
+    r.first_swimmer = e.first_swimmer();
+    return r;
+}
+
 void read_seat_result(const sim::SimulationEngine& sim, uint8_t seat, ArenaSeatResult& out) {
     out.score = sim.get_player_score(seat);
     out.shown_score = sim.get_display_score(seat);
@@ -310,6 +326,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         if (const StandardBot* sb = dynamic_cast<const StandardBot*>(bot)) {
             r.style = style_name(sb->style());
             r.stalls = sb->stalls();
+            r.expedition = read_expedition(sb->expedition());
         }
         read_seat_result(sim, b.seat, r);
         r.banked = ledger.banked(b.seat);

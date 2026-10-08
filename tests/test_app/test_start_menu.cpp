@@ -533,7 +533,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(r.element(MenuId::Seat3).value, std::string("Hard bot"));                // and back round
         r.key(SDLK_LEFT);
         ASSERT_EQ(r.element(MenuId::Seat3).value, std::string("Medium bot"));
-        ASSERT_TRUE(has_text(r.menu.elements(), "Bots play without fog of war."));         // rule 8: a bot never sees through the fog
+        ASSERT_TRUE(has_text(r.menu.elements(), "Bots play without fog of war."));         // rule 5: a bot never sees through the fog
         r.click(MenuId::Seat1);                                                            // Red: Easy
         const std::vector<ai::BotSpec> bots = r.menu.bots();
         ASSERT_EQ(bots.size(), static_cast<size_t>(2));
