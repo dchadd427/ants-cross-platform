@@ -1524,6 +1524,8 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
     if (!o.save_replays.empty()) {                    // (opened before the first match, like the report file: a folder that cannot be used is found in a moment)
         server::ReplayConfig rc;
         rc.dir = o.save_replays;
+        rc.keep_days = 3650;                          // (the arena's store never deletes: the folder may be the server's, whose own limits are its own to apply)
+        rc.max_bytes = 4096ull * 1024ull * 1024ull;
         rc.max_saves_per_hour = 1000000;              // (a run of many matches is one person's doing, not a flood of the server's rooms)
         rc.game_version = std::string(ants::VERSION_STRING);
         rc.build_id = std::string(ants::BUILD_ID).substr(0, replay::kMaxTextBytes);
@@ -2190,6 +2192,16 @@ void selftest_tool(SelfTest& t) {
         const replay::Outcome outcome = mapped ? replay::play(back, level) : replay::Outcome{};
         t.check(mapped && outcome.ran && outcome.ok && outcome.complete && outcome.hash == played.hash && outcome.turns == played.steps,
                 "... and plays back to the very hash and length of the match that the arena played (" + why + outcome.error + ")");
+        // the arena's store deletes nothing: an old file of somebody else's (the server's folder) is still there afterwards
+        {
+            Options shared = saving;
+            shared.save_replays = dir.file("shared");
+            std::error_code made;
+            fs::create_directories(dir.path / "shared", made);
+            std::ofstream(dir.path / "shared" / "ants-TINY-20200101-000000Z.antsrep") << "an old file of the server's own";
+            const ToolRun shared_run = run_tool_quietly(shared, dir, factory);
+            t.check(shared_run.code == 0 && fs::exists(dir.path / "shared" / "ants-TINY-20200101-000000Z.antsrep", made), "a folder with an old file of the server's: the run does not delete it (the arena's store keeps everything)");
+        }
         // a match under 30 seconds is not kept (the server keeps none, its list is of matches of 30 seconds or more)
         Options brief = saving;
         brief.ticks = 500;

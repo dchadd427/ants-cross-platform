@@ -665,6 +665,8 @@ void run_replay_tests() {
         ASSERT_TRUE(j.get("replays").at(0).get("file").str() == now.file && j.get("replays").at(0).get("rules").as_int_or(0) == net::kProtocolVersion);
         ASSERT_TRUE(j.get("replays").at(1).get("file").str() == before.file && j.get("replays").at(1).get("rules").as_int_or(0) == older);
         ASSERT_TRUE(j.get("sim_rules").as_int_or(0) == replay::kSimRules && j.get("replays").at(0).get("sim_rules").as_int_or(0) == replay::kSimRules && j.get("replays").at(1).get("sim_rules").as_int_or(0) == replay::kSimRules);     // (the entry says the simulation's rules: a protocol number that moved alone is no other rules)
+        const ctl::JsonValue owner = replay_json_of(replay_call(mgr, "GET", "/replays"));                // (the owner's list says the same: the entry's and its own build's number)
+        ASSERT_TRUE(owner.get("sim_rules").as_int_or(0) == replay::kSimRules && owner.get("replays").at(1).get("sim_rules").as_int_or(0) == replay::kSimRules);
         ASSERT_EQ(public_call(mgr, "GET", "/replays/" + before.file).status, 200);
     } TEST_END();
 

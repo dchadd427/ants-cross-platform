@@ -375,7 +375,7 @@ class TheImageAndTheCi(PageCase):
         ci = read(".github", "workflows", "ci.yml")
         self.assertNotIn("four.html page", ci)
         self.assertIn("ls -l index.html play.html lobby.html", ci)
-        self.assertIn('for page in index.html play.html lobby.html; do grep -q "(staging)</title>" $page', ci)
+        self.assertIn('for page in index.html play.html lobby.html watch.html; do grep -q "(staging)</title>" $page', ci)
         self.assertIn("! grep -qi staging index.html play.html lobby.html", ci)
         self.assertIn("python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/", ci)
 

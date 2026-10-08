@@ -293,7 +293,7 @@ void Application::report_replay_to_page() {
     std::string json = "{\"failure\":" + std::to_string(static_cast<int>(replay_failure_)) + ",\"text\":" + json_text(replay_failure_text_) + ",\"version\":" + json_text(std::string(VERSION_STRING)) + ",\"rules\":" + std::to_string(replay::kSimRules);
     if (replay_file_) {
         const replay::Header& head = replay_file_->head;
-        json += ",\"map\":" + json_text(head.map_name) + ",\"game\":" + json_text(head.game_version) + ",\"made_rules\":" + std::to_string(replay::sim_rules_of(head)) + ",\"roster\":" + std::to_string(head.roster) +
+        json += ",\"map\":" + json_text(head.map_name) + ",\"game\":" + json_text(head.game_version) + ",\"roster\":" + std::to_string(head.roster) +
                 ",\"turns\":" + std::to_string(replay_file_->total_turns) + ",\"complete\":" + (replay_file_->complete ? "true" : "false") + ",\"over\":" + (replay_file_->match_over ? "true" : "false") + ",\"names\":[";
         for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) json += (p == 0 ? "" : ",") + json_text(head.names[p]);
         json += "]";

@@ -217,6 +217,7 @@ struct Fixture {
             return free_known;
         };
         c.min_free_bytes = 0;
+        c.settle_s = 0;                                  // (the test sets the times of its files itself: RS9.3 asks for the real wait)
         return c;
     }
 };
@@ -1125,6 +1126,86 @@ int main() {
         const std::vector<ReplayEntry> listed = store.list();
         for (size_t i = 1; i < listed.size(); ++i) ASSERT_TRUE(listed[i - 1].ended_s > listed[i].ended_s);      // (newest first, whatever the order in which they were read)
         ASSERT_EQ(store.rescan(), size_t{0});
+    } TEST_END();
+
+    TEST_CASE("RS9.3 A File That Is Still Being Copied Is Not Listed As A Damaged One: A File (Or A Folder) That Changed Less Than settle_s Ago Waits For The Next Look, And A Known File That Could Not Be Read Or Whose Size Moved Is Read Again") {
+        Fixture f;
+        ReplayConfig config = f.config();
+        config.settle_s = 2;
+        ReplayStore store(config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const auto ago = [](int seconds) { return fs::file_time_type::clock::now() - std::chrono::seconds(seconds); };
+        int touches = 0;
+        const auto touch = [&]() { fs::last_write_time(f.dir, ago(100 + ++touches)); };       // (a folder that changed long ago: only the files are young)
+        const std::string name = "ants-TINY-20261007-120000Z.antsrep";
+        const std::vector<uint8_t> whole = make_file("TINY.LVL", 900, false, 0, 7);
+        write_file(f.dir / name, std::vector<uint8_t>(whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(whole.size() / 2)));      // (half of it: a copy under way)
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{0});                                                // (written a moment ago: not read, not listed as damaged)
+        ASSERT_TRUE(store.count() == 0 && store.find(name) == nullptr);
+        ASSERT_EQ(store.rescan(), size_t{0});                                                // (the next look comes without a change of the folder: the file is still young)
+        write_file(f.dir / name, whole);                                                     // (the copy ends: the folder's time does not move when a file grows)
+        ASSERT_EQ(store.rescan(), size_t{0});                                                // (still young: the look after a grown file waits too)
+        fs::last_write_time(f.dir / name, ago(10));
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.count() == 1 && store.readable_count() == 1 && store.find(name) != nullptr && store.find(name)->readable && store.find(name)->bytes == whole.size());
+        // a file that was listed as unreadable when it was old (a damaged one), and then was replaced by a good one of another size: read again at the next change of the folder
+        const std::string other = "ants-TINY-20261006-120000Z.antsrep";
+        write_text(f.dir / other, "damaged");
+        fs::last_write_time(f.dir / other, ago(10));
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.count() == 2 && store.readable_count() == 1 && !store.find(other)->readable);
+        const std::vector<uint8_t> good = make_file("TINY.LVL", 700, true, 0, 3);
+        write_file(f.dir / other, good);
+        fs::last_write_time(f.dir / other, ago(10));
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.count() == 2 && store.readable_count() == 2 && store.find(other)->readable && store.find(other)->bytes == good.size());
+        ASSERT_EQ(store.total_bytes(), whole.size() + good.size());
+        const std::vector<ReplayEntry> listed = store.list();
+        ASSERT_TRUE(listed.size() == 2 && listed[0].file == name && listed[1].file == other);
+        // a folder that changed a moment ago is looked at again, because a second change within the grain of its time would not show
+        fs::last_write_time(f.dir, fs::file_time_type::clock::now());
+        const std::string third = "ants-TINY-20261005-120000Z.antsrep";
+        write_file(f.dir / third, make_file("TINY.LVL", 650, true, 0, 5));
+        fs::last_write_time(f.dir / third, ago(10));
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_EQ(store.count(), size_t{3});
+        {
+            const auto t = fs::file_time_type::clock::now();                                // (the same time twice: the second change is within the grain of the first)
+            fs::last_write_time(f.dir, t);
+            ASSERT_EQ(store.rescan(), size_t{0});
+            const std::string fourth = "ants-TINY-20261004-120000Z.antsrep";
+            write_file(f.dir / fourth, make_file("TINY.LVL", 640, true, 0, 6));
+            fs::last_write_time(f.dir / fourth, ago(10));
+            fs::last_write_time(f.dir, t);
+            ASSERT_EQ(store.rescan(), size_t{1});
+            ASSERT_EQ(store.count(), size_t{4});
+        }
+        // a readable file that was replaced by another of a different size is read again, and a damaged one that was replaced by a good one of just its size too
+        const std::vector<uint8_t> longer = make_file("TINY.LVL", 900, false, 3000, 7);
+        ASSERT_TRUE(longer.size() != whole.size());
+        write_file(f.dir / name, longer);
+        fs::last_write_time(f.dir / name, ago(10));
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.find(name)->readable && store.find(name)->bytes == longer.size());
+        const std::vector<uint8_t> sized = make_file_of_size(good.size() + 17, 11);
+        ASSERT_FALSE(sized.empty());
+        const std::string fifth = "ants-TINY-20261003-120000Z.antsrep";
+        write_file(f.dir / fifth, std::vector<uint8_t>(sized.size(), 'x'));
+        fs::last_write_time(f.dir / fifth, ago(10));
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_FALSE(store.find(fifth)->readable);
+        write_file(f.dir / fifth, sized);
+        fs::last_write_time(f.dir / fifth, ago(10));
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.find(fifth)->readable && store.find(fifth)->bytes == sized.size());
+        ASSERT_EQ(store.readable_count(), store.count());
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures

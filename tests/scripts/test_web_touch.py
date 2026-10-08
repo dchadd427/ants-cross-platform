@@ -94,6 +94,9 @@ class TheStyle(PageCase):
         controls = [(sel.strip(), body) for sel, body in rules if "cursor: pointer" in body]
         self.assertGreaterEqual(len(controls), 6, "the page has controls that this test must see")
         for selector, body in controls:
+            if selector == ".tl":                                                                          # (the replay timeline is dragged with a finger: touch-action: none, by design)
+                self.assertIn("touch-action: none", body)
+                continue
             self.assertIn("touch-action: manipulation", body, selector + " is a control without touch-action: manipulation (no double-tap zoom on a phone)")
         # the buttons that the script makes itself
         for text in re.findall(r"cursor:pointer[^'\"]*", self.page):

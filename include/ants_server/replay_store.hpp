@@ -45,6 +45,9 @@ struct ReplayConfig {
     std::function<void(const std::string& path, std::error_code& ec)> remove_file;
     /// Gives a finished temporary file its name, `ec` set when it cannot (empty: std::filesystem::rename); the tests make a rename fail
     std::function<void(const std::string& from, const std::string& to, std::error_code& ec)> rename_file;
+    /// A file (or the folder) that changed less than this many seconds ago is not trusted yet by rescan(): a copy that is still growing would be read as a damaged file, and a folder that changed within
+    /// the time stamp's grain may change again unseen. It is looked at again at the next look. The tests set 0.
+    uint32_t settle_s{2};
 };
 
 /// What the store knows about one file: from its name, and from its head and end (read once, when the file was made or the store was opened)

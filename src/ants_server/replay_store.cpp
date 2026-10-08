@@ -398,15 +398,22 @@ size_t ReplayStore::rescan() {
     if (!ready_) return 0;
     const int64_t stamp = folder_stamp();
     if (stamp == folder_stamp_ && !rescan_more_) return 0;
-    folder_stamp_ = stamp;
     rescan_more_ = false;
     std::error_code ec;
+    const auto fs_now = fs::file_time_type::clock::now();
+    const auto settle = std::chrono::seconds(cfg_.settle_s);
+    const auto young = [&](const fs::path& path) {                                  // (changed a moment ago: it may still be growing, or change again unseen)
+        if (cfg_.settle_s == 0) return false;
+        std::error_code stat_ec;
+        const auto when = fs::last_write_time(path, stat_ec);
+        return !stat_ec && fs_now - when < settle;
+    };
     std::set<std::string> present;                                                   // the names of the store's own kind that are regular files now
     std::map<std::string, uintmax_t> sizes;
     fs::directory_iterator it(cfg_.dir, ec);
-    if (ec) return 0;
+    if (ec) return 0;                                                                // (nothing is remembered of a look that did not end: the next one starts again)
     for (const fs::directory_iterator end; it != end; it.increment(ec)) {
-        if (ec) return 0;                                                            // (a folder that cannot be read to the end changes nothing)
+        if (ec) return 0;
         std::error_code entry_ec;
         const fs::file_status status = it->symlink_status(entry_ec);
         if (entry_ec || status.type() != fs::file_type::regular) continue;
@@ -418,6 +425,8 @@ size_t ReplayStore::rescan() {
         present.insert(name);
         sizes[name] = size;
     }
+    folder_stamp_ = stamp;
+    if (cfg_.settle_s != 0 && young(cfg_.dir)) rescan_more_ = true;                  // (the folder changed within the grain of its time: look again)
     size_t changed = 0;
     size_t kept = 0;
     for (size_t i = 0; i < entries_.size(); ++i) {
@@ -433,12 +442,26 @@ size_t ReplayStore::rescan() {
     entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(kept), entries_.end());
     size_t added = 0;
     for (const std::string& name : present) {
-        if (find(name) != nullptr) continue;
+        const ReplayEntry* known = find(name);
+        // a known file is read again only when it cannot have been the whole file: it could not be read, or its size is not the one that was indexed (a copy that was still growing when it was found)
+        const bool again = known != nullptr && (!known->readable || known->bytes != sizes[name]);
+        if (known != nullptr && !again) continue;
+        if (young(path_of(name))) {
+            rescan_more_ = true;                                                     // (it may still be growing: the next look)
+            continue;
+        }
         if (added >= kRescanBatch) {
             rescan_more_ = true;                                                     // (the rest at the next look)
             break;
         }
         ReplayEntry entry = read_entry(name, sizes[name]);
+        if (again && entry.readable == known->readable && entry.bytes == known->bytes) continue;      // (still the damaged file that it was: nothing changed)
+        if (again) {
+            const size_t at = static_cast<size_t>(known - entries_.data());
+            total_ -= entries_[at].bytes;
+            if (entries_[at].readable) --readable_;
+            entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(at));
+        }
         total_ += entry.bytes;
         if (entry.readable) ++readable_;
         entries_.insert(std::upper_bound(entries_.begin(), entries_.end(), entry, older), std::move(entry));
@@ -447,7 +470,7 @@ size_t ReplayStore::rescan() {
     if (added > 0 || changed > 0) {
         note("replays: " + std::to_string(added) + " file(s) found in " + cfg_.dir + " that the store did not know" + (changed > 0 ? ", " + std::to_string(changed) + " that are not there any more" : std::string()) + "; " +
              std::to_string(entries_.size()) + " listed, " + std::to_string(total_ / 1024) + " KiB");
-        purge();                                                                     // (the limits hold for files that came from outside too)
+        purge();                                                                     // (the limits hold for files that came from outside too: a file older than keep_days that is put here is deleted again)
     }
     return added + changed;
 }
