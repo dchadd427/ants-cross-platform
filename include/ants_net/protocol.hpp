@@ -208,7 +208,7 @@ bool valid_create_block(const CreateBlock& block) noexcept;
 /// Dropped (protocol 10): the key is right and the seat was dropped (by the others' vote, by the cap on the pauses, by a violation): the player is told it is out ("Sorry, you
 /// have been dropped from the game", the original's own text). RejoinFailed: the key is right but the way back is closed (the server's turn log is not usable, or it cannot tell a
 /// machine that has nothing how to load the match, or that machine could not load the map, or the seat has used up what a key holder may ask of the server: the catch-up time of the
-/// absence, three attempts a minute, three times the log's size in ten minutes; and on the machine's side, a stream that does not fit its announcement or the server's verdict that its
+/// absence, twelve attempts a minute, three times the log's size in ten minutes; and on the machine's side, a stream that does not fit its announcement or the server's verdict that its
 /// state differs from the referee's: the session ends with this reason). The seat stays held: the others may vote and the cap applies as for any absent seat.
 /// Superseded: a newer connection with the key took the seat; sent to the older one just before it is closed, so that the older window stops trying.
 enum class RejectReason : uint8_t { Full = 1, VersionMismatch = 2, MatchRunning = 3, Kicked = 4, BadRequest = 5, NoSuchRoom = 6, Dropped = 7, RejoinFailed = 8, Superseded = 9 };

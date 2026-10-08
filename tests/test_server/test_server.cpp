@@ -3648,7 +3648,7 @@ void run_reconnect_tests() {
         RClient& c = w.connect("Cat", "P-1");
         w.run(4000 + kPre);
         RClient* const seats[3] = {&b, &c, &a};
-        // (a seat may be taken back three times a minute: the three of them take turns, one cut every 7 s, so that each is cut every 21 s)
+        // (a seat may be taken back twelve times a minute: the three of them take turns, one cut every 7 s, so that each is cut every 21 s)
         for (int i = 0; i < 80 && w.status("P-1").connections != Room::kMaxConnections - 1; ++i) {        // until the room keeps 31 connections: the next one fills it
             w.cut(*seats[i % 3]);
             ASSERT_TRUE(w.until([&]() { return !w.status("P-1").paused && w.status("P-1").rejoins == static_cast<uint32_t>(i + 1); }, 6000));
@@ -3688,7 +3688,7 @@ void run_reconnect_tests() {
         ASSERT_TRUE(w.status("P-1").connections < static_cast<uint32_t>(Room::kMaxConnections));    // the closed ones were pruned (the table is not full any more)
     } TEST_END();
 
-    TEST_CASE("S3.43 Connections That Are Cut 40 Times (Three Players Take Turns, Each Is Cut Every 21 s: A Seat May Be Taken Back Three Times A Minute): Every Return Is Verified, The Closed Connections Are Pruned And The Live Ones Never Are, The Match Ends Identical (Each Pause Counts 5 s Toward The Cap At Least, The Cap Is Far Away)") {
+    TEST_CASE("S3.43 Connections That Are Cut 40 Times (Three Players Take Turns, Each Is Cut Every 21 s: A Seat May Be Taken Back Twelve Times A Minute): Every Return Is Verified, The Closed Connections Are Pruned And The Live Ones Never Are, The Match Ends Identical (Each Pause Counts 5 s Toward The Cap At Least, The Cap Is Far Away)") {
         RWorld w;
         ASSERT_TRUE(w.mgr.create_room(held_spec("F-1", 3), w.now).ok);
         RClient& a = w.connect("Ann", "F-1");
@@ -3699,7 +3699,7 @@ void run_reconnect_tests() {
         for (int i = 0; i < 40; ++i) {
             w.cut(*seats[i % 3]);
             ASSERT_TRUE(w.until([&]() { return !w.status("F-1").paused && w.status("F-1").rejoins == static_cast<uint32_t>(i + 1); }, 6000));
-            w.run(7000);                                                                 // (the next seat's turn: this one is cut again 21 s from now, which is within three a minute)
+            w.run(7000);                                                                 // (the next seat's turn: this one is cut again 21 s from now, which is within twelve a minute)
         }
         const RoomStatus s = w.status("F-1");
         ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 40 && s.drops_by_vote == 0 && s.drops_by_cap == 0 && s.rejoins_refused == 0);
@@ -4462,7 +4462,7 @@ void run_reconnect_tests() {
         ASSERT_TRUE(st.rejoins == 0);
         ASSERT_TRUE(st.vote_seat == cat);                                                            // and the others are asked about it
         while (w.now - cut_at < 40000) step();
-        ASSERT_TRUE(w.status("W-1").rejoins_refused >= 1);                                           // (the Hello of 36 s: the fourth in a minute, and a seat whose budget is spent)
+        ASSERT_TRUE(w.status("W-1").rejoins_refused >= 1);                                           // (the Hello of 36 s: a seat whose catch-up budget is spent)
         while (w.now - cut_at < 80000) step();
         st = w.status("W-1");
         ASSERT_TRUE(st.paused && st.ticks <= ticks_at_pause + 2);

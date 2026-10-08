@@ -47,7 +47,7 @@
 // THE BUDGETS of a seat, so that a key holder cannot hold the room or the server's bandwidth (docs/NETWORK_PORT.md):
 //   - the CATCH-UP TIME of one absence (max_catch_up_ms, 5 minutes): the time that the seat spent CatchingUp, over all the attempts of the absence. When it is used up update() fails the
 //     catch-up (the seat is Absent: the vote and the cap apply) and returning() refuses
-//   - at most rejoin_attempts (3) accepted Hellos per rejoin_window_ms (a minute), and at most stream_factor (3) times the log's size streamed per stream_window_ms (10 minutes), at least
+//   - at most rejoin_attempts (12) accepted Hellos per rejoin_window_ms (a minute), and at most stream_factor (3) times the log's size streamed per stream_window_ms (10 minutes), at least
 //     stream_floor_bytes (1 MiB) of it: returning() refuses beyond either (RejoinFailed). A refused Hello changes nothing and counts nothing against the seat
 //
 // THE RESUME COUNTDOWN. When a pause ends (a seat is back and verified, or a vote or the cap dropped the last seat that was missing) after at least resume_min_pause_ms, the match is held
@@ -81,7 +81,7 @@ inline constexpr uint32_t kCatchUpStallMs = 20000;          // a seat that is ca
 inline constexpr uint32_t kMinAbsenceMs = 5000;             // an absence that is over counts at least this much toward the seat's total away time, and toward the match's pauses
 inline constexpr uint32_t kMaxPauseMs = 30u * 60u * 1000u;  // the match's pauses may last this long in all
 inline constexpr uint32_t kMaxCatchUpMs = 5u * 60u * 1000u; // one absence may spend this long catching up in all, over all its attempts
-inline constexpr uint32_t kRejoinAttempts = 3;              // Hellos with a seat's key that are accepted per kRejoinWindowMs ...
+inline constexpr uint32_t kRejoinAttempts = 12;             // Hellos with a seat's key that are accepted per kRejoinWindowMs ...
 inline constexpr uint32_t kRejoinWindowMs = 60000;
 inline constexpr uint32_t kStreamFactor = 3;                // ... and bytes of the log that are streamed to one seat per kStreamWindowMs: this many times the log's size ...
 inline constexpr uint32_t kStreamWindowMs = 600000;
@@ -111,7 +111,7 @@ public:
         uint32_t resume_countdown_ms = 0;                       // the library's default is no countdown (a room's is kResumeCountdownMs: ants_server)
         uint32_t resume_min_pause_ms = kResumeMinPauseMs;
     };
-    static constexpr uint32_t kMaxRejoinAttempts = 8;
+    static constexpr uint32_t kMaxRejoinAttempts = 16;
     static constexpr uint32_t kMaxFlapLosses = 8;
     enum class State : uint8_t { Empty, Present, Absent, CatchingUp, Dropped };
     /// What returning() / rejoin_check() say about a Hello with a seat's key
