@@ -224,6 +224,7 @@ public:
     static std::string transcript_stamp(std::time_t time);
 
     bool is_running() const noexcept { return is_running_; }
+    /// The program ends; in the browser the room is left and the page goes to the site's front page (a game in a frame of another page has no menu: it returns to its setup screen)
     void quit();
 
 
@@ -621,7 +622,7 @@ private:
     PendingMusic pending_music_{PendingMusic::None};       // what a background step wanted of the music, done by the next frame or when the page is shown (the last wish counts)
     std::function<uint64_t()> clock_;                      // set_clock: a virtual clock for the tests (empty: SDL's performance counter)
     std::function<void()> on_local_match_started_;         // set_on_local_match_started: told at the first tick of a game on this computer
-    bool local_match_reported_{false};                     // ... and it was told for this match (enter_match starts the next match with it false)
+    bool local_match_reported_{false};                     // ... and it was told for this match (enter_match starts a game here with it false, a match of a room with it true: that one never tells)
     uint64_t last_frame_run_{0};                           // when a frame last ran (performance counter; 0: none since the page was hidden): the wake-ups stand down while frames come
     uint64_t hidden_since_{0};                             // this hidden period: when it began (performance counter), the wake-ups that stepped in it and the ticks that ran in it
     uint32_t hidden_wakes_{0};
@@ -700,7 +701,7 @@ private:
     bool room_has_chosen_map() const;                     // hosting: the room that the server made is on the map that the player chose
     void show_opening_screens();                          // after the menu (or the loading screen of a game without one): the quick help when the option asks for it, else the setup screen
     void return_to_start_menu(const std::string& notice); // a network game is over (left, ended, lost): back to the menu, nothing of it stays
-    void leave_game();                                    // Leave of a network game's screens: back to the menu when this run has one, else the program ends as always
+    void leave_game();                                    // Leave of a network game's screens: back to the menu when this run has one, else the program ends as always (the browser: the front page)
     void attach_net();                                    // the tick, chat and HUD hooks of a NetGame that the application owns
     void make_rejoin_store();                             // where the keys of the seats are kept (rejoin_store.hpp)
     void hook_rejoin_store();                             // the NetGame's key callbacks write to it (before the join: a Hello that shows a key may be refused at once)
