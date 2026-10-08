@@ -13,6 +13,7 @@
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
+#include "../common/ants_test_pause.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -537,12 +538,12 @@ struct World {
     }
     // 10 ms of game time per step. The sockets are real and the clock is not: a loopback link delivers within the pass that wrote to it on Linux, but not on every system (a Mac's loopback is handled by a kernel thread: a message can be read a pass or
     // more later, and two messages that were sent in different passes can be read together), so a test that has to see a state between two messages holds the sender back (World::between); now and then (every 16th step) the test gives the kernel a moment
-    // of real time, and the others yield (a test of many minutes of game time must not be paid for in sleeps: a sleep may cost a whole timer tick on some systems)
+    // of real time, and the others yield (a test of many minutes of game time must not be paid for in pauses: they add up)
     void run(uint32_t ms) {
         for (uint32_t elapsed = 0; elapsed < ms; elapsed += 10) {            // (counted, not compared with an end time: the clock of a test may wrap)
             now += 10;
             pump();
-            if ((++steps_ & 15u) == 0) std::this_thread::sleep_for(std::chrono::microseconds(300));
+            if ((++steps_ & 15u) == 0) ants_test::short_pause();
             else std::this_thread::yield();
         }
     }
