@@ -90,6 +90,11 @@ LevelPlan plan_for(Level level) noexcept {
             p.contest_opening_ants = 2;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
+            p.flower_sides = true;
+            p.flower_fire = true;
+            p.flower_recover = true;
+            p.flower_recall = true;
+            p.flower_watch = true;
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;
@@ -246,26 +251,37 @@ EastState east_state(const sim::Grid& grid, const HillInfo& hill) noexcept {
 
 // ---- the sides of the map -----------------------------------------------------------------------------------------------------------------------------
 
+namespace {
+// The team that reaches a target at the least cost, strictly less than every other team of the match (-1: none reaches it, or two reach it equally well)
+int nearest_team(const std::array<Approach, sim::MAX_PLAYERS>& approach, uint8_t present) noexcept {
+    int best = -1;
+    int32_t best_cost = 0;
+    bool tie = false;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        if (((present >> t) & 1u) == 0 || !approach[t].reachable()) continue;
+        const int32_t cost = approach[t].cost;
+        if (best < 0 || cost < best_cost) {
+            best = t;
+            best_cost = cost;
+            tie = false;
+        } else if (cost == best_cost) {
+            tie = true;
+        }
+    }
+    return tie ? -1 : best;
+}
+}  // namespace
+
 int power_up_side(const MapInfo& map, sim::TileCoord tile, uint8_t present) noexcept {
     for (const PowerUpInfo& p : map.powerups()) {
-        if (p.tile != tile) continue;
-        int best = -1;
-        int32_t best_cost = 0;
-        bool tie = false;
-        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
-            if (((present >> t) & 1u) == 0 || !p.approach[t].reachable()) continue;
-            const int32_t cost = p.approach[t].cost;
-            if (best < 0 || cost < best_cost) {
-                best = t;
-                best_cost = cost;
-                tie = false;
-            } else if (cost == best_cost) {
-                tie = true;
-            }
-        }
-        return tie ? -1 : best;
+        if (p.tile == tile) return nearest_team(p.approach, present);
     }
     return -1;
+}
+
+int drop_side(const MapInfo& map, sim::TileCoord tile, uint8_t present) noexcept {
+    const FlowerInfo* f = map.flower_at(tile);
+    return f != nullptr ? nearest_team(f->approach, present) : -1;
 }
 
 // ---- the memory ---------------------------------------------------------------------------------------------------------------------------------------
@@ -354,6 +370,24 @@ void Memory::update(const BotView& v, const MapInfo& map) {
     }
     enemy_tile_ = std::move(thief_now);
 
+    // the flowers: a droplet in the air is counted once (the landing tick it implies is about the same at every look of its fall)
+    for (const FlowerView& f : v.flowers()) {
+        if (!f.falling) continue;
+        const uint64_t lands = v.tick() + kFlowerFallTicks - std::min<uint64_t>(f.age, kFlowerFallTicks);
+        FlowerLog* log = nullptr;
+        for (FlowerLog& l : flowers_) log = l.drop == f.drop ? &l : log;
+        if (log == nullptr) {
+            flowers_.emplace_back();
+            log = &flowers_.back();
+            log->drop = f.drop;
+        }
+        if (lands <= log->last) continue;
+        log->before_last = log->last;
+        log->last = lands;
+        ++log->landings;
+        ++log->by_kind[static_cast<size_t>(f.kind)];
+    }
+
     // the walls in front of the own thief hole: the tick of the first look that saw each
     const HillInfo& hill = map.hill(v.seat());
     if (hill.present && v.has_grid()) {
@@ -363,6 +397,25 @@ void Memory::update(const BotView& v, const MapInfo& map) {
             else wall_seen_.erase(key);
         }
     }
+}
+
+const FlowerLog* Memory::flower(sim::TileCoord drop) const noexcept {
+    for (const FlowerLog& l : flowers_) {
+        if (l.drop == drop) return &l;
+    }
+    return nullptr;
+}
+
+uint32_t FlowerLog::chance(uint32_t kinds) const noexcept {
+    uint32_t hit = 0;
+    uint32_t all = 0;
+    for (size_t k = 1; k < by_kind.size(); ++k) {                                   // Bomber .. Swimmer
+        const bool wanted = ((kinds >> k) & 1u) != 0;
+        const uint32_t n = landings < 3 ? 1u : by_kind[k];
+        all += n;
+        hit += wanted ? n : 0u;
+    }
+    return all == 0 ? 0u : hit * 1000u / all;
 }
 
 // ---- the standing -------------------------------------------------------------------------------------------------------------------------------------------

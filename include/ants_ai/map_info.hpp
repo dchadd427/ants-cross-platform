@@ -81,6 +81,14 @@ struct PowerUpInfo {
     std::array<Approach, sim::MAX_PLAYERS> approach{};
 };
 
+/// One flower dropper of the map (a plant whose record drops, as the engine's table lists them at the start), with how far its drop tile is for each team. The drop tile holds nothing at
+/// the start, so the approach is the one onto a tile that a power-up will lie on (like PowerUpInfo's): the walk onto the cell, from the walkable tiles next to it
+struct FlowerInfo {
+    sim::TileCoord plant{};
+    sim::TileCoord drop{};
+    std::array<Approach, sim::MAX_PLAYERS> approach{};
+};
+
 class MapInfo {
 public:
     /// The engine's A* gives up when the f value (g + h) of the node it pops reaches this (path_planner.hpp kFailF): a walk costing more is never found. It is also the
@@ -210,8 +218,17 @@ public:
 
     const std::vector<PowerUpInfo>& powerups() const noexcept { return powerups_; }
 
+    // ---- flower droppers -----------------------------------------------------------------------------------------------------------------------------------------
+
+    /// The flowers that drop, as the engine's table lists them when the analysis is made from an engine (empty for an analysis made from a grid alone, and on a map without one: TINY, TREASURE;
+    /// the plants whose record is switched off are not listed). Static for the whole match
+    const std::vector<FlowerInfo>& flowers() const noexcept { return flowers_; }
+    /// The flower whose drop tile is `tile`, null when none is
+    const FlowerInfo* flower_at(sim::TileCoord tile) const noexcept;
+
 private:
     void build(const sim::Grid& grid);
+    void add_flowers(const sim::Grid& grid, const std::vector<sim::FlowerDropperSnapshot>& droppers);
     size_t at(sim::TileCoord t) const noexcept { return static_cast<size_t>(t.y) * static_cast<size_t>(w_) + static_cast<size_t>(t.x); }
     bool inside(sim::TileCoord t) const noexcept { return t.x >= 0 && t.y >= 0 && t.x < w_ && t.y < h_; }
     /// The cheapest way onto a cell of a target for the team whose cost field is `field`: the best walkable tile next to any cell of `cells` that the engine lets the team's ants
@@ -227,6 +244,7 @@ private:
     std::array<int32_t, sim::MAX_PLAYERS> comp_count_{};
     std::vector<PileInfo> piles_;
     std::vector<PowerUpInfo> powerups_;
+    std::vector<FlowerInfo> flowers_;
 };
 
 }  // namespace ants::ai
