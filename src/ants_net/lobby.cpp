@@ -785,7 +785,7 @@ bool HostLobby::everyone_in_game() const noexcept {
     return true;
 }
 
-// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each colour is, the teams. The room is shown to everybody when something changed.
+// A new name of a person (already heard: an open room, within the budget): the room is shown to everybody when the name changed
 void HostLobby::rename(uint8_t seat, const std::string& raw) {
     const std::string name = human_name(raw, room_.slots[seat].name);       // (a name that looks like a bot's is not taken: the person keeps the name they have)
     if (name == room_.slots[seat].name) return;
@@ -794,6 +794,7 @@ void HostLobby::rename(uint8_t seat, const std::string& raw) {
     broadcast_room();
 }
 
+// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each colour is, the teams. The room is shown to everybody when something changed.
 void HostLobby::apply_plan(const PlanMsg& plan) {
     bool changed = false;
     if (!plan.map_name.empty()) {                                // ("" keeps the map; a map that the server does not offer keeps it too)

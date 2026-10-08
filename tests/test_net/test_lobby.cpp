@@ -4673,51 +4673,6 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.35 A Flood Of STARTs In A Lobby Room (Protocol 16): Those That Cannot Be Honoured Are Free Up To 16 Per Guest (The Leader's Second One While The First Stands, A Guest's That Does Not Lead), The 17th Is A Violation And The 24th Throws The Guest Out; Honoured Ones Count For Nothing") {
-        {   // a guest that does not lead
-            Room room(lobby_room_config(97));
-            room.join_seat("Ann");
-            const size_t bob = room.join_seat("Bob");
-            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
-            const std::vector<uint8_t> wish = encode(StartRequestMsg{});
-            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) room.guests[bob].client_end->send(wish);
-            room.run(10);
-            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed);
-            ASSERT_TRUE(room.host.occupied(bob_seat));
-            for (int i = 0; i < 7; ++i) room.guests[bob].client_end->send(wish);          // the 17th to the 23rd: violations one to seven
-            room.run(10);
-            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed + 7u);
-            ASSERT_TRUE(room.host.occupied(bob_seat));
-            room.guests[bob].client_end->send(wish);                                     // the 24th: the eighth
-            room.run(10);
-            ASSERT_FALSE(room.host.occupied(bob_seat));
-        }
-        {   // the leader: one START stands (it is not ignored), every one while it stands is
-            HostLobby::Config hc = lobby_room_config(98);
-            hc.start_wait_ms = 3600u * 1000u;
-            Room room(hc);
-            const size_t ann = room.join_seat("Ann");
-            join_with(room, page_config("Pia"));
-            room.run(100);
-            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
-            const std::vector<uint8_t> wish = encode(StartRequestMsg{});
-            room.guests[ann].client_end->send(wish);                                     // the one that stands (a page is no game: it waits)
-            room.run(100);
-            ASSERT_TRUE(room.host.starting());
-            ASSERT_EQ(room.host.ignored_start_requests(), 0u);
-            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) room.guests[ann].client_end->send(wish);
-            room.run(10);
-            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed);
-            ASSERT_TRUE(room.host.occupied(ann_seat));
-            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send(wish);
-            room.run(10);
-            ASSERT_TRUE(room.host.occupied(ann_seat));
-            room.guests[ann].client_end->send(wish);
-            room.run(10);
-            ASSERT_FALSE(room.host.occupied(ann_seat));                                  // the leader is thrown out like anybody (the lead goes to the next)
-        }
-    } TEST_END();
-
     TEST_CASE("N4.34 Forgiveness (Protocol 16): A Lobby Room Lives As Long As Its People Stay, So Every Minute A Guest Is Forgiven One Violation And One Ignored Request Of Each Kind (START, Colour Move, Plan, Rename); What Is Forgiven Makes Room In The Free Allowance Again, A Flood That Is Faster Than That Is Thrown Out As Ever, And A Room That Is No Lobby Room Forgives Nothing") {
         ASSERT_EQ(HostLobby::Config{}.forgive_ms, kLobbyForgiveMs);
         ASSERT_EQ(kLobbyForgiveMs, 60000u);
@@ -4812,6 +4767,135 @@ int main() {
                 slow.run(2000);
             }
             ASSERT_TRUE(slow.host.occupied(cat_seat));
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.35 A Flood Of STARTs In A Lobby Room (Protocol 16): Those That Cannot Be Honoured Are Free Up To 16 Per Guest (The Leader's Second One While The First Stands, A Guest's That Does Not Lead), The 17th Is A Violation And The 24th Throws The Guest Out; Honoured Ones Count For Nothing") {
+        {   // a guest that does not lead
+            Room room(lobby_room_config(97));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            const std::vector<uint8_t> wish = encode(StartRequestMsg{});
+            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) room.guests[bob].client_end->send(wish);
+            room.run(10);
+            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed);
+            ASSERT_TRUE(room.host.occupied(bob_seat));
+            for (int i = 0; i < 7; ++i) room.guests[bob].client_end->send(wish);          // the 17th to the 23rd: violations one to seven
+            room.run(10);
+            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed + 7u);
+            ASSERT_TRUE(room.host.occupied(bob_seat));
+            room.guests[bob].client_end->send(wish);                                     // the 24th: the eighth
+            room.run(10);
+            ASSERT_FALSE(room.host.occupied(bob_seat));
+        }
+        {   // the leader: one START stands (it is not ignored), every one while it stands is
+            HostLobby::Config hc = lobby_room_config(98);
+            hc.start_wait_ms = 3600u * 1000u;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            join_with(room, page_config("Pia"));
+            room.run(100);
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            const std::vector<uint8_t> wish = encode(StartRequestMsg{});
+            room.guests[ann].client_end->send(wish);                                     // the one that stands (a page is no game: it waits)
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_EQ(room.host.ignored_start_requests(), 0u);
+            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) room.guests[ann].client_end->send(wish);
+            room.run(10);
+            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed);
+            ASSERT_TRUE(room.host.occupied(ann_seat));
+            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send(wish);
+            room.run(10);
+            ASSERT_TRUE(room.host.occupied(ann_seat));
+            room.guests[ann].client_end->send(wish);
+            room.run(10);
+            ASSERT_FALSE(room.host.occupied(ann_seat));                                  // the leader is thrown out like anybody (the lead goes to the next)
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.36 The Activity Of A Lobby Room (Protocol 16): activity() Counts What The People Do With The Room (A Welcome, A Colour Move, A Plan Or A Name That Changed, A Line Of Chat, A START That Stands) And Nothing Else: Not A Ping, A Request That Was Ignored Or Changed Nothing, A Link That Ends, Comes Back Or Gives Up") {
+        {
+            HostLobby::Config hc = lobby_room_config(99);
+            hc.hold_ms = 5000;
+            hc.start_wait_ms = 3600u * 1000u;                                          // (the START below stands for as long as the test goes on)
+            Room room(hc);
+            ASSERT_EQ(room.host.activity(), 0u);
+            const size_t ann = room.join_seat("Ann");
+            ASSERT_EQ(room.host.activity(), 1u);                                       // a welcome
+            const size_t bob = room.join_seat("Bob");
+            const size_t pia = join_with(room, page_config("Pia"));
+            room.run(100);
+            ASSERT_EQ(room.host.activity(), 3u);
+            const uint32_t seated = room.host.activity();
+            room.run(30000);                                                           // half a minute of pings and pongs, and nobody does a thing
+            ASSERT_EQ(room.host.activity(), seated);
+            // a colour move and a plan of a guest that does not lead are ignored, the leader's colour move is not
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            ASSERT_EQ(bob_seat, 1);
+            room.guests[bob].client_end->send(encode(SeatMoveMsg{bob_seat, 3, seating_hash(room.host.room())}));
+            room.guests[bob].client_end->send(encode(plan_of({PlanKind::Easy, PlanKind::Easy, PlanKind::Easy, PlanKind::Easy})));
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_seat_moves(), 1u);
+            ASSERT_EQ(room.host.ignored_plans(), 1u);
+            ASSERT_EQ(room.host.activity(), seated);
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(bob_seat, 3));
+            room.run(100);
+            ASSERT_EQ(room.host.seat_moves(), 1u);
+            ASSERT_EQ(room.host.room().slots[3].name, std::string("Bob"));
+            ASSERT_EQ(room.host.activity(), seated + 1u);
+            // a plan that changed something, and the same plan again
+            const PlanMsg plan = plan_of({PlanKind::Open, PlanKind::Hard, PlanKind::Open, PlanKind::Open});
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan));
+            room.run(100);
+            ASSERT_EQ(room.host.plan_changes(), 1u);
+            ASSERT_EQ(room.host.activity(), seated + 2u);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan));
+            room.run(100);
+            ASSERT_EQ(room.host.plan_changes(), 1u);
+            ASSERT_EQ(room.host.activity(), seated + 2u);
+            // a name that changed, the same name again, and one that looks like a bot's (nothing changes)
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Bobby"));
+            room.run(1100);
+            ASSERT_EQ(room.host.renames(), 1u);
+            ASSERT_EQ(room.host.activity(), seated + 3u);
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Bobby"));
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Bot (Hard)"));
+            room.run(1100);
+            ASSERT_EQ(room.host.renames(), 1u);
+            ASSERT_EQ(room.host.activity(), seated + 3u);
+            // a line of chat (an empty one is not even sent)
+            ASSERT_FALSE(room.guests[pia].lobby->chat(""));
+            ASSERT_TRUE(room.guests[pia].lobby->chat("hello"));
+            room.run(100);
+            ASSERT_EQ(room.host.chat_total(), uint64_t{1});
+            ASSERT_EQ(room.host.activity(), seated + 4u);
+            // a link that ends is a held seat, its key takes the seat back, and another hold runs out: none of it is something that a person does with the room
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            room.guests[bob].client_end->close();
+            room.run(100);
+            ASSERT_TRUE(room.host.held(3));
+            ASSERT_EQ(room.host.activity(), seated + 4u);
+            const size_t bob2 = join_keyed(room, "Bobby", bob_key);
+            room.run(300);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_EQ(room.guests[bob2].lobby->my_seat(), 3);
+            ASSERT_EQ(room.host.activity(), seated + 4u);
+            room.guests[pia].client_end->close();
+            room.run(hc.hold_ms + 1000);
+            ASSERT_EQ(room.host.hold_expiries(), 1u);
+            ASSERT_FALSE(room.host.occupied(2));
+            ASSERT_EQ(room.host.activity(), seated + 4u);
+            // a START that stands, and a second one while it stands (which is ignored)
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_EQ(room.host.activity(), seated + 5u);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+            ASSERT_EQ(room.host.activity(), seated + 5u);
         }
     } TEST_END();
 
