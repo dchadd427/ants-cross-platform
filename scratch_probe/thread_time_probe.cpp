@@ -57,6 +57,37 @@ uint64_t thread_cycles() {
     return c;
 }
 
+// ---- the clock of the fix: a copy of thread_cycles_per_ms() and thread_cpu_ms() of tests/test_server/test_server.cpp -----------------------------------------------------------------
+
+double thread_cycles_per_ms() {
+    static const double rate = []() {
+        double best = 0.0;
+        for (int i = 0; i < 8; ++i) {
+            ULONG64 begin = 0;
+            ULONG64 end = 0;
+            const auto t0 = std::chrono::steady_clock::now();
+            if (!QueryThreadCycleTime(GetCurrentThread(), &begin)) return 0.0;
+            volatile uint64_t spin = 0;
+            while (std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(6)) spin = spin + 1;
+            if (!QueryThreadCycleTime(GetCurrentThread(), &end)) return 0.0;
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            best = std::max(best, static_cast<double>(end - begin) / ms);
+        }
+        return best;
+    }();
+    return rate;
+}
+
+double fix_cpu_ms() {
+    const double cycles_per_ms = thread_cycles_per_ms();
+    ULONG64 cycles = 0;
+    if (cycles_per_ms > 0.0 && QueryThreadCycleTime(GetCurrentThread(), &cycles)) return static_cast<double>(cycles) / cycles_per_ms;
+    FILETIME created, exited, kernel, user;
+    if (!GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user)) return -1.0;
+    const auto hundred_ns = [](const FILETIME& t) { return static_cast<double>((static_cast<uint64_t>(t.dwHighDateTime) << 32) | t.dwLowDateTime); };
+    return (hundred_ns(kernel) + hundred_ns(user)) / 10000.0;
+}
+
 volatile uint32_t g_sink = 0;
 
 void spin_for_ms(double ms) {
@@ -124,6 +155,8 @@ struct Stats {
     double max_charged[2]{}, max_wall[2]{};
     double min_nonzero{1e9};
     long phantom{0}, stalls{0}, migrations{0};
+    double fix_total[2]{}, fix_max[2]{};
+    long fix_phantom{0};
 };
 
 int bucket_of(double charged_ms) {
@@ -157,6 +190,7 @@ int run_measure(const std::string& name, int round, double seconds) {
     Resolution r_mid = r0;
     while (true) {
         for (int timed = 0; timed < 2; ++timed) {
+            const double f0 = fix_cpu_ms();
             const double c0 = thread_ms();
             const uint64_t y0 = thread_cycles();
             const double t0 = qpc_ms();
@@ -166,10 +200,15 @@ int run_measure(const std::string& name, int round, double seconds) {
             const uint64_t y1 = thread_cycles();
             const double t1 = qpc_ms();
             const unsigned p1 = GetCurrentProcessorNumber();
+            const double f1 = fix_cpu_ms();
             const int kind = 1 - timed;                    // timed section: index 1 (the loop starts with the untimed one)
             const double charged = c1 - c0;
             const double cyc_ms = static_cast<double>(y1 - y0) / cycles_per_ms;
             const double wall_ms = t1 - t0;
+            const double fixed_charge = f1 - f0;
+            st.fix_total[kind] += fixed_charge;
+            st.fix_max[kind] = std::max(st.fix_max[kind], fixed_charge);
+            if (fixed_charge >= 30.0 && wall_ms < 5.0) ++st.fix_phantom;
             ++st.sections[kind];
             st.charged[kind] += charged;
             st.cycles[kind] += cyc_ms;
@@ -214,8 +253,38 @@ int run_measure(const std::string& name, int round, double seconds) {
     }
     std::printf("RESULT %s round=%d phantom=%ld stalls=%ld migrations=%ld timed_16plus=%ld untimed_16plus=%ld timer_resolution_100ns min/max/cur at start %lu/%lu/%lu, at 5 s %lu/%lu/%lu, at end %lu/%lu/%lu\n",
                 name.c_str(), round, st.phantom, st.stalls, st.migrations, lumps16[1], lumps16[0], r0.min, r0.max, r0.cur, r_mid.min, r_mid.max, r_mid.cur, r1.min, r1.max, r1.cur);
+    std::printf("RESULT %s round=%d FIX timed: total=%.1f ms max=%.3f ms | untimed: total=%.1f ms max=%.3f ms | fix_phantom=%ld\n", name.c_str(), round, st.fix_total[1], st.fix_max[1], st.fix_total[0], st.fix_max[0], st.fix_phantom);
     std::fflush(stdout);
     return 0;
+}
+
+
+// the checks that S3.71 now makes of its clock (a copy)
+int run_fixed_check() {
+    const double calib0 = qpc_ms();
+    const double cpu_start = fix_cpu_ms();
+    const double calibration_ms = qpc_ms() - calib0;
+    const bool start_ok = cpu_start >= 0.0;
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    const double slept = fix_cpu_ms() - cpu_start;
+    volatile uint64_t spin = 0;
+    const auto give_up = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (fix_cpu_ms() - cpu_start < 30.0 && std::chrono::steady_clock::now() < give_up) spin = spin + 1;
+    const double spun = fix_cpu_ms() - cpu_start;
+    double finest_step_ms = 1.0e9;
+    int steps = 0;
+    const auto give_up_steps = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (double before = fix_cpu_ms(); steps < 20 && std::chrono::steady_clock::now() < give_up_steps;) {
+        const double now = fix_cpu_ms();
+        if (now > before) {
+            finest_step_ms = std::min(finest_step_ms, now - before);
+            before = now;
+            ++steps;
+        }
+    }
+    const bool ok = start_ok && slept < 30.0 && spun >= 30.0 && steps == 20 && finest_step_ms < 1.0;
+    std::printf("CHECK %s: first call %.1f ms (rate %.0f cycles/ms), slept 60 ms reads %.3f ms, spun reads %.1f ms, %d steps, finest %.6f ms\\n", ok ? "OK" : "FAILED", calibration_ms, thread_cycles_per_ms(), slept, spun, steps, finest_step_ms);
+    return ok ? 0 : 1;
 }
 
 // ---- the scenarios ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -271,6 +340,18 @@ int main(int argc, char** argv) {
     if (mode == "hires") return run_hires(std::atof(argv[2]));
     if (mode == "sleep") return run_sleep(std::atof(argv[2]));
     if (mode == "scenario" && argc >= 4) return run_scenario(argv[2], 1, std::atof(argv[3]));
+    if (mode == "fixedall") {
+        const double seconds = std::atof(argv[2]);
+        int rc = run_fixed_check();
+        const char* order[2][3] = {{"alone", "burn3", "mix"}, {"mix", "burn3", "alone"}};
+        for (int round = 0; round < 2; ++round) {
+            for (const char* name : order[round]) {
+                if (run_scenario(name, round + 1, seconds) != 0) return 1;
+            }
+        }
+        rc |= run_fixed_check();
+        return rc;
+    }
     if (mode == "all") {
         const double seconds = std::atof(argv[2]);
         const char* order[3][5] = {{"alone", "burn3", "hires3", "sleep3", "mix"}, {"mix", "sleep3", "hires3", "burn3", "alone"}, {"hires3", "alone", "mix", "burn3", "sleep3"}};

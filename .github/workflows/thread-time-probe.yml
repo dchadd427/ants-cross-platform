@@ -17,8 +17,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, windows-latest]
-        n: [1, 2, 3, 4, 5, 6]
+        os: [windows-2022]
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@v7
 
@@ -40,5 +40,5 @@ jobs:
       - name: Compile
         run: cl /nologo /O2 /EHsc /std:c++17 scratch_probe/thread_time_probe.cpp /Fe:probe.exe
 
-      - name: Probe (15 seconds a scenario, 5 scenarios, 3 rounds)
-        run: ./probe.exe all 15
+      - name: Probe with the fixed clock beside the old one (15 seconds a scenario, 3 scenarios, 2 rounds)
+        run: ./probe.exe fixedall 15
