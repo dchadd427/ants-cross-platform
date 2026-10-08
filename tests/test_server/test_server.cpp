@@ -10843,6 +10843,12 @@ void run_lobby_room_tests() {
             ASSERT_EQ(answer_of(w, lobby_game), net::RejectReason::BadRequest);
             Client& bare_page = w.connect_page("Pam", "zzzz0003", std::nullopt);          // no block: nothing to make the room from
             ASSERT_EQ(answer_of(w, bare_page), net::RejectReason::NoSuchRoom);
+            Client& loud = w.connect_page("Lou", "ROOM-9", lobby_block_of());             // a code with a capital is the control interface's: a visitor's block never takes it
+            ASSERT_EQ(answer_of(w, loud), net::RejectReason::NoSuchRoom);
+            w.next_key = pia.lobby->key();                                                // a Hello with a key is a person who comes back, never a newcomer: it makes no room (its page makes the room again without the key)
+            Client& stale = w.connect_page("Pia", "zzzz0004", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            ASSERT_EQ(answer_of(w, stale), net::RejectReason::NoSuchRoom);
             Client& gus = w.connect_creating("Gus", "gus00001", block_of("TINY.LVL", 4)); // a plain public room, and a page that comes to it
             w.run(300);
             ASSERT_EQ(gus.lobby->phase(), net::ClientLobby::Phase::InRoom);
@@ -11247,6 +11253,7 @@ void run_lobby_room_tests() {
         { RoomSpec s = lobby_spec("ctl-l009"); s.start_wait_ms = 0; ASSERT_TRUE(refused(s)); }
         { RoomSpec s = lobby_spec("ctl-l010"); s.silence_ms = 4000000; ASSERT_TRUE(refused(s)); }
         { RoomSpec s = lobby_spec("ctl-l011"); s.empty_close_ms = 999; ASSERT_TRUE(refused(s)); }
+        { RoomSpec s = lobby_spec("ctl-l013"); s.silence_ms = 999; ASSERT_TRUE(refused(s)); }
         ASSERT_EQ(w.mgr.room_count(), size_t{0});
         ASSERT_TRUE(w.mgr.create_room(lobby_spec("ctl-l012"), w.now).ok);
         Client& pia = w.connect_page("Pia", "ctl-l012", lobby_block_of());
@@ -11265,6 +11272,16 @@ void run_lobby_room_tests() {
             ASSERT_TRUE(json.find("\"plan\":\"omne 0+1\"") != std::string::npos);
             ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-plain", 2), w.now).ok);
             ASSERT_TRUE(ctl::to_json(status_to_json(w.status("ctl-plain"))).find("\"lobby\"") == std::string::npos);
+        }
+        {   // visitors' lobbies are off (--demo-lobbies 0): a page's block makes nothing, and the lobby that the operator made keeps its place (no room is pushed out for a visitor's)
+            ServerLimits off = lobby_limits();
+            off.demo_lobbies = 0;
+            World wo(off);
+            ASSERT_TRUE(wo.mgr.create_room(lobby_spec("ctl-l020"), wo.now).ok);
+            Client& pam = wo.connect_page("Pam", "pool0001", lobby_block_of());
+            ASSERT_EQ(answer_of(wo, pam), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(wo.mgr.room_count(), size_t{1});
+            ASSERT_TRUE(wo.status("ctl-l020").lobby);
         }
     } TEST_END();
 

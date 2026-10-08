@@ -4279,6 +4279,22 @@ int main() {
             room.run(100);
             ASSERT_TRUE(room.host.starting());
         }
+        {   // only the leader's START is heard: anybody else's (a client that is not the game's sends it anyway) waits for nothing, is ignored and counted, and no request is given to the owner
+            Room room(lobby_room_config(190));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.run(100);
+            room.host.take_events();
+            room.guests[bob].client_end->send(encode(StartRequestMsg{}));
+            room.run(100);
+            ASSERT_FALSE(room.host.starting() || room.guests[ann].lobby->room().starting() || room.guests[bob].lobby->room().starting());
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+            ASSERT_TRUE(leader_starts(room.host).empty());
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());                  // (the leader's own works as ever)
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_EQ(room.host.ignored_start_requests(), 1u);
+        }
     } TEST_END();
 
     TEST_CASE("N4.31 What A Hello Is (Protocol 16): A Page Is Seated In A Lobby Room Only, And Is No Game There; The Game That Takes The Seat Back Is One; The Door Tells The Lobby That The Hello Made The Room, And The Welcome Of The New Seat Says So") {
