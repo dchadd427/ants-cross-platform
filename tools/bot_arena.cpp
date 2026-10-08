@@ -676,6 +676,11 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "gate") return flag(p.gate);
     if (key == "gatepred") return flag(p.gate_predictive);
     if (key == "gatelat") { p.gate_latency = static_cast<uint32_t>(v); return true; }
+    if (key == "gatehold") {                                                                           // the ticks that the gate's click waits for an ant that leaves over the ramp (0: no wait)
+        if (v < 0 || v > 1000) { err = "gatehold is the number of ticks (0 to 1000) that the gate's click waits for an ant that leaves over the ramp"; return false; }
+        p.gate_leaver_ticks = static_cast<uint32_t>(v);
+        return true;
+    }
     if (key == "gatestaged") { p.gate_max_staged = static_cast<uint32_t>(v); return true; }
     if (key == "gatefails") { p.gate_user_fails = static_cast<uint32_t>(v); return true; }
     if (key == "stall") { p.stall_ticks = static_cast<uint32_t>(v); return true; }                 // the stall detector (0: off): ticks without a point banked
@@ -2067,6 +2072,9 @@ int selftest() {
         t.check(cg.raid_min_free == 1u && apply_tune(cg, "raidfree", 2, tune_err) && cg.raid_min_free == 2u && apply_tune(cg, "raidfree", 1, tune_err) && cg.raid_min_free == 1u &&
                     !apply_tune(cg, "raidfree", 0, tune_err) && !apply_tune(cg, "raidfree", 4, tune_err) && cg.raid_min_free == 1u,
                 "the key raidfree sets the free tiles in front of a hole that a raid needs (1 by default, 1 to 3 allowed)");
+        t.check(cg.gate_leaver_ticks == 60u && apply_tune(cg, "gatehold", 0, tune_err) && cg.gate_leaver_ticks == 0u && apply_tune(cg, "gatehold", 7, tune_err) && cg.gate_leaver_ticks == 7u &&
+                    !apply_tune(cg, "gatehold", -1, tune_err) && !apply_tune(cg, "gatehold", 1001, tune_err) && cg.gate_leaver_ticks == 7u,
+                "the key gatehold sets the ticks that the gate's click waits for an ant that leaves over the ramp (60 at Hard, 0: no wait, 0 to 1000 allowed)");
     }
 
     t.section("the table of baselines (tests/test_ai/baselines.inc)");

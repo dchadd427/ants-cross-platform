@@ -150,6 +150,7 @@ private:
         p.max_staged = plan.gate_max_staged;
         p.predictive = plan.gate_predictive;
         p.user_fail_limit = plan.gate_user_fails;
+        p.leaver_wait_ticks = plan.gate_leaver_ticks;
         p.cantgo_aware = plan.cantgo_aware;
         return p;
     }
