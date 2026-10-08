@@ -110,7 +110,8 @@ ants-cross-platform/
 │   └── ants_app/                       # The program ants: windowing, input (mouse, keyboard, touch), the map view,
 │                                       # rendering, HUD, audio, the start menu, setup, options and results screens
 ├── tests/                              # Automated verification test suites
-│   ├── common/                         # Shared test code: where the checkout is (ants_test_paths.hpp) and the pinned
+│   ├── common/                         # Shared test code: where the checkout is (ants_test_paths.hpp), the short pause
+│   │                                   # of the network tests' pump loops (ants_test_pause.hpp) and the pinned
 │   │                                   # SHA-256 digests of the bytes of Ants.exe that suites 1.1 and 2.15 read
 │   │                                   # (original_program_bytes.hpp)
 │   ├── e2e/                            # Standalone opaque-box E2E test runner
