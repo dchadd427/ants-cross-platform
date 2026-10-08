@@ -10273,7 +10273,7 @@ void run_protocol15_tests() {
                 bytes.push_back(0);
                 ASSERT_TRUE(decode(bytes, back) && back.room == ok);
             }
-            for (const std::string& bad : {std::string("k7m 2xq"), std::string("k7m2.xq9p"), std::string(33, 'z'), std::string("k7m2/xq9p")}) {
+            for (const std::string& bad : {std::string("k7m 2xq"), std::string("k7m2.xq"), std::string(33, 'z'), std::string("k7m2/xq")}) {
                 std::vector<uint8_t> bytes = hello_prefix(bad);
                 bytes.push_back(0);
                 ASSERT_FALSE(decode(bytes, back));

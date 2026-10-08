@@ -692,7 +692,7 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
     same('... in words that name the letters, digits, - and _ of a code, its 32 characters and the way it is shown', env4.$('join-hint').textContent, 'A room code has letters, digits, - and _ only (up to 32), like k7m 2xq.');
     check('... in a notice (the class bad), and typing the code again takes the notice away', env4.$('join-hint').classList.contains('bad') && (env4.type('join-code', 'ABC'), !env4.$('join-hint').classList.contains('bad') && env4.$('join-hint').textContent === ''));
     // the blanks of what is typed or pasted are dropped before the code is checked (a code is shown as "k7m 2xq"; a paste may bring a blank or a line end at either end), and nothing else is made of the text
-    for (const [typed, want] of [['k7m2xq', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], ['  k7m 2xq  ', 'k7m2xq'], ['k7m2\txq9p\n', 'k7m2xq'], ['k7m2 xq9p', 'k7m2xq'], [' k 7 m 2 x q 9 p ', 'k7m2xq'], ['K7M 2XQ', 'K7M2XQ'],
+    for (const [typed, want] of [['k7m2xq', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], ['  k7m 2xq  ', 'k7m2xq'], ['k7m\t2xq\n', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], [' k 7 m 2 x q ', 'k7m2xq'], ['K7M 2XQ', 'K7M2XQ'],
                                  ['my_room-1', 'my_room-1'], ['a', 'a'], ['a'.repeat(32), 'a'.repeat(32)], ['demo-small-2p-x7k2', 'demo-small-2p-x7k2'], ['demo-tiny-2p-t01-abcdef', 'demo-tiny-2p-t01-abcdef'], ['abc def ghi', 'abcdefghi']]) {
         const j = runLobby('', {});
         j.type('join-code', typed);
@@ -700,7 +700,7 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
         check('Join drops the blanks of ' + JSON.stringify(typed) + ' and joins ' + want + ' (a code of any other kind that is valid is a name too: nothing is made of it, no create block)',
               j.assigned.length === 1 && j.param(j.assigned[0], 'room') === want && noBlockOf(j, j.assigned[0]) && j.$('join-hint').textContent === '' && !/\s/.test(j.assigned[0]), j.assigned[0]);
     }
-    for (const bad of ['', '   ', '\n', 'not a code!', 'k7m2/xq9p', 'k7m2.xq9p', 'abé', 'x'.repeat(33), 'k7m 2xq ' + 'x'.repeat(30), 'a b!', '?room=x&seat=1']) {
+    for (const bad of ['', '   ', '\n', 'not a code!', 'k7m2/xq', 'k7m2.xq', 'abé', 'x'.repeat(33), 'k7m 2xq ' + 'x'.repeat(30), 'a b!', '?room=x&seat=1']) {
         const j = runLobby('', {});
         j.type('join-code', bad);
         j.$('join-go').click();
@@ -796,7 +796,7 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobb
 {
     const env = runLobby('?room=a%20b', {});
     check('an address that is no room code is the plain page (nothing is asked)', !env.$('cards').hidden && !env.$('how').hidden && env.$('who-go').hidden && !env.roomStarted());
-    for (const shown of ['?room=k7m2%20xq9p', '?room=k7m2+xq9p', '?room=k7m2%2Bxq9p', '?room=', '?room=' + 'x'.repeat(33), '?room=k7m2xq%00', '?room=..%2Fx']) {
+    for (const shown of ['?room=k7m%202xq', '?room=k7m+2xq', '?room=k7m%2B2xq', '?room=', '?room=' + 'x'.repeat(33), '?room=k7m2xq%00', '?room=..%2Fx']) {
         const e = runLobby(shown + '&roommap=small&roomseats=2', {});
         check('an address with the code as a screen shows it (a blank in the middle) or with no code that a room can have is no room: ' + shown + ' is the plain page, even with a create block', !e.$('cards').hidden && !e.$('how').hidden && e.$('who-go').hidden && !e.roomStarted() && e.replaced.length === 0);
     }

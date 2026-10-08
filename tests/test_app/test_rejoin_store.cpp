@@ -240,7 +240,7 @@ void run_file_tests() {
         b.written_ms = kT0;
         entries = {a, b};
         const std::string text = FileRejoinStore::serialise(entries);
-        ASSERT_EQ(text, "10.0.0.5:4001\tROOM-1\t2\t" + rejoin_key_hex(key_of(3)) + "\t" + std::to_string(kT0 / kSecond + 5) + "\n" + "wss://play.example.org/game\tk7m2xq9p\t0\t" +
+        ASSERT_EQ(text, "10.0.0.5:4001\tROOM-1\t2\t" + rejoin_key_hex(key_of(3)) + "\t" + std::to_string(kT0 / kSecond + 5) + "\n" + "wss://play.example.org/game\tk7m2xq\t0\t" +
                             rejoin_key_hex(key_of(4)) + "\t" + std::to_string(kT0 / kSecond) + "\n");
         const std::vector<RejoinEntry> back = FileRejoinStore::parse(text, kT0 + 10 * kSecond);
         ASSERT_EQ(back.size(), size_t{2});

@@ -6948,9 +6948,14 @@ void run_one_card_tests() {
             app.map_select().handle_mouse_up(x, y, 1);
         };
         Server server(limits);
-        const std::string code = "demo-tiny-4p-abcdef";
+        const std::string code = "abcdef";
+        net::CreateBlock block;                                                                    // (this Hello makes the room: TINY, four seats)
+        block.map_name = "TINY.LVL";
+        block.seats = 4;
         Application app;
-        ASSERT_TRUE(app.init(join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::None, L::None}), 1)));       // Green, one Medium bot at Red
+        ApplicationConfig cfg = join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::None, L::None}), 1);       // Green, one Medium bot at Red
+        cfg.net_create = block;
+        ASSERT_TRUE(app.init(cfg));
         Hall hall{server, &app, {}};
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
         hall.step(kDialogMs + 500);
@@ -6977,10 +6982,15 @@ void run_one_card_tests() {
     TEST_CASE("N5.86b A Match Of A Room That Is Left On Purpose (The Browser's Menu Button, The Quit Dialog's Yes) Tells The Site Statistics Nothing, Also In The Frames That The Old Page Runs Until The New One Is There: It Is Not A Game On This Computer") {
         int told = 0;
         Server server(limits);
-        const std::string code = "demo-tiny-4p-abcdef";
+        const std::string code = "abcdef";
+        net::CreateBlock block;                                                                    // (this Hello makes the room: TINY, four seats)
+        block.map_name = "TINY.LVL";
+        block.seats = 4;
         Application app;
         app.set_on_local_match_started([&told]() { ++told; });
-        ASSERT_TRUE(app.init(join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::Medium, L::Medium}), 1)));       // Green and three Medium bots: the Yes of the dialog leaves, it does not end the match
+        ApplicationConfig cfg = join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::Medium, L::Medium}), 1);       // Green and three Medium bots: the Yes of the dialog leaves, it does not end the match
+        cfg.net_create = block;
+        ASSERT_TRUE(app.init(cfg));
         Hall hall{server, &app, {}};
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
         hall.step(kDialogMs + 500);

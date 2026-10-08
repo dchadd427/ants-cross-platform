@@ -1867,7 +1867,7 @@ constexpr Golden kGolden[] = {
     // so its draw calls (224 -> 296), its pixels outside the text (the mock-up's digest above is the panel as it is now), its notice state and the control under every pixel changed.
     {"screen.wide.pages.menu_host", 0xa96cf288b285f6c6, 296ull},
     {"screen.wide.pages.menu_connecting", 0x9baf3e53f92d4060, 128ull},
-    {"screen.wide.pages.menu_room", 0x2e25645a53ee1772, 164ull},
+    {"screen.wide.pages.menu_room", 0x06c87b0b905546b1, 164ull},
     {"px.wide.pages.loading.t0", 0xc849e041f5dc9132, 518400ull},
     {"px.wide.pages.loading.t14", 0x94eabba28aea947e, 518400ull},
     {"px.wide.pages.loading.t25", 0x059faca4c56039ba, 518400ull},

@@ -313,7 +313,7 @@ void Application::pump_menu_connection() {
 // The player is in the server's room (the first Room message arrived)
 void Application::menu_connected() {
     if (menu_conn_.hosting && !net_->is_leader()) {
-        // The server had a room with this code already (a one in ~850 billion chance): the player joined somebody else's room instead of making one. Leave it.
+        // The server had a room with this code already (a one in ~890 million chance): the player joined somebody else's room instead of making one. Leave it.
         menu_connection_failed("That room code was taken already. Please try again.");
         return;
     }

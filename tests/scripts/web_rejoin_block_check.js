@@ -106,7 +106,7 @@ same('the server of an https page is wss://<host>/ws, of an http page ws://<host
 same('an entry as the game page writes it', R.rejoinParse(nameOf('k7m2xq', 1), entryText(NOW - 5000)), { room: 'k7m2xq', seat: 1, server: SERVER, t: NOW - 5000 });
 same('the parts that are read: the room, the seat 0 .. 3, the server and the time (never the key)', Object.keys(R.rejoinParse(nameOf('r', 0), entryText(5))).sort(), ['room', 'seat', 'server', 't']);
 for (const seat of [0, 1, 2, 3]) check('seat ' + seat + ' is a seat', R.rejoinParse(nameOf('r', seat), entryText(5)) !== null && R.rejoinParse(nameOf('r', seat), entryText(5)).seat === seat);
-for (const room of ['a', 'A', '_', '-', 'k7m2xq', 'k7m2-xq9p', 'x'.repeat(32), 'Room_1-B', '0']) check('the room code ' + JSON.stringify(room) + ' is one by the page\'s own rule', R.rejoinParse(nameOf(room, 0), entryText(5)) !== null);
+for (const room of ['a', 'A', '_', '-', 'k7m2xq', 'k7m2-xq', 'x'.repeat(32), 'Room_1-B', '0']) check('the room code ' + JSON.stringify(room) + ' is one by the page\'s own rule', R.rejoinParse(nameOf(room, 0), entryText(5)) !== null);
 const BAD_NAMES = ['ants.rejoin.r.4', 'ants.rejoin.r.-1', 'ants.rejoin.r.01', 'ants.rejoin.r.10', 'ants.rejoin.r.', 'ants.rejoin.r', 'ants.rejoin..0', 'ants.rejoin.a.b.0', 'ants.rejoin.' + 'x'.repeat(33) + '.0', 'ants.rejoin.r s.0', 'ants.rejoin.r/s.0',
                    'ants.rejoin.é.0', 'ants.rejoin.r.0 ', ' ants.rejoin.r.0', 'ants.rejoin.r.0.0', 'ants.rejoin.r.a', 'ants.rejoin.r.٠', 'Ants.rejoin.r.0', 'ants.rejoin2.r.0', 'ants.name', 'ants.rejoin.r.0\n', '', 'rejoin.r.0', null, undefined, 5, {}];
 for (const name of BAD_NAMES) check('the storage name ' + JSON.stringify(name) + ' is no entry of the game', R.rejoinParse(name, entryText(5)) === null);

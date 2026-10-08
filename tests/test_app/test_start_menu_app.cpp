@@ -1535,10 +1535,10 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(app.net() == nullptr);
     } TEST_END();
 
-    TEST_CASE("A4.4 Host: when the server holds a room with the very code that the menu made (one in 850 billion), the player would be a guest of somebody else's room, not its leader: the menu says so, leaves the room again and nothing stays") {
+    TEST_CASE("A4.4 Host: when the server holds a room with the very code that the menu made (one in 890 million), the player would be a guest of somebody else's room, not its leader: the menu says so, leaves the room again and nothing stays") {
         TempDir temp;
         Server server;
-        const std::string taken = "aaaaaaaa";                                                // the code that a random source of all zeros makes: 'a' is the first character of the alphabet
+        const std::string taken = "aaaaaa";                                                  // the code that a random source of all zeros makes: 'a' is the first character of the alphabet
         ASSERT_TRUE(server.make_room(taken, 4));
         Peer owner;
         Application app;

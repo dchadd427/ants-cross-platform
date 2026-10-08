@@ -1216,16 +1216,16 @@ int main(int argc, char* argv[]) {
         // a clipboard that cannot be written
         Rig bad;
         bad.clipboard.writable = false;
-        bad.menu.show_room("qqqq7777", 1, 2);
+        bad.menu.show_room("qqq777", 1, 2);
         bad.click(MenuId::Copy);
         ASSERT_EQ(bad.clipboard.writes.size(), static_cast<size_t>(1));
         ASSERT_FALSE(bad.menu.copied());
-        ASSERT_TRUE(has_text(bad.menu.elements(), "Copy failed") && element_text(bad.menu.elements(), MenuKind::Code) == "qqqq 7777");   // (the code stands in full in its box)
+        ASSERT_TRUE(has_text(bad.menu.elements(), "Copy failed") && element_text(bad.menu.elements(), MenuKind::Code) == "qqq 777");   // (the code stands in full in its box)
         bad.clipboard.writable = true;                                                      // the clipboard comes back: the failure line goes with the next copy that works
         bad.click(MenuId::Copy);
         ASSERT_TRUE(bad.menu.copied());
         ASSERT_FALSE(has_text(bad.menu.elements(), "Copy failed"));
-        bad.menu.show_room("rrrr7777", 1, 2);                                               // a new room: "Copied!" of the old one is not carried over
+        bad.menu.show_room("rrr777", 1, 2);                                               // a new room: "Copied!" of the old one is not carried over
         ASSERT_FALSE(bad.menu.copied());
         ASSERT_EQ(bad.element(MenuId::Copy).text, std::string("Copy"));
         // no clipboard at all
@@ -1825,7 +1825,7 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(check_room_code("", clean, why));
         ASSERT_TRUE(why.find("code") != std::string::npos);
         ASSERT_TRUE(check_room_code("k7m 2xq", clean, why) && clean == "k7m2xq");       // the grouped form that the screens show comes back as the plain code
-        ASSERT_TRUE(check_room_code(" k7m2  xq9p ", clean, why) && clean == "k7m2xq");
+        ASSERT_TRUE(check_room_code(" k7m  2xq ", clean, why) && clean == "k7m2xq");
         ASSERT_FALSE(check_room_code("   ", clean, why));
         ASSERT_TRUE(why.find("code") != std::string::npos);
         ASSERT_FALSE(check_room_code("a.b", clean, why));
@@ -2581,7 +2581,7 @@ int main(int argc, char* argv[]) {
         r.type("\x01");                                                                    // a control character is refused as well
         ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
         // a paste: an accent in the clipboard says it, a line end or a tab does not
-        r.clipboard.text = "k7m2\xC3\xA9xq9p";
+        r.clipboard.text = "k7m2\xC3\xA9xq";
         r.key(SDLK_a, KMOD_CTRL);
         r.key(SDLK_v, KMOD_CTRL);
         ASSERT_EQ(r.menu.code(), std::string("k7m2xq"));
