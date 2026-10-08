@@ -1,0 +1,74 @@
+# A probe, on a scratch branch only: RJ1.13 of test_rejoin on hosted macOS runners with four variants of its third block, and what a TCP reset does to the bytes that the receiver has not read.
+name: macOS rejoin probe 2
+
+on:
+  push:
+    branches: [claude/project-thread-q475cj-probe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rst:
+    name: rst ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compile and run
+        run: |
+          uname -a
+          c++ -std=c++17 -O1 -Wall -o rst_probe scratch_probe/rst_probe.cpp
+          ./rst_probe 100
+
+  variants:
+    name: variant ${{ matrix.variant }} ${{ matrix.n }}
+    runs-on: macos-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        variant: [sleep50, both50]
+        n: [1, 2]
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 400M
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install ccache and Ninja
+        run: brew install ccache ninja
+
+      # restore only: the probe must not push the caches of the real checks out of the repository's quota
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ccache-probe2-${{ matrix.variant }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+
+      - name: The variant of the third block of RJ1.13
+        run: |
+          if [ "${{ matrix.variant }}" != "cur" ]; then cp scratch_probe/rejoin_${{ matrix.variant }}.cpp tests/test_server/test_rejoin.cpp; fi
+          git diff --stat
+
+      - name: Configure and build test_rejoin
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DANTS_BUILD_APP=OFF -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --target test_rejoin
+          sw_vers | head -3
+
+      - name: One run
+        run: ANTS_TEST_FILTER=RJ1.13 build/tests/test_server/test_rejoin 2>&1 | tail -6
+
+      - name: RJ1.13 in 4 parallel loops (the load of ctest --parallel 4), 540 seconds
+        run: scratch_probe/loops.sh A 4 540
+
+      - name: RJ1.13 in 12 parallel loops (heavy load), 240 seconds
+        run: scratch_probe/loops.sh B 12 240
