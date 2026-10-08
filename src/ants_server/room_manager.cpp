@@ -757,6 +757,7 @@ size_t RoomManager::shutdown(uint32_t now_ms) {
     }
     parked_.clear();                                              // (the Hellos that waited for them: their connections close with the server)
     if (restart_ != nullptr) restart_->retry_stale();             // (a record whose delete failed: one more try before the server goes)
+    if (replays_ != nullptr) replays_->report_repeats();          // (the count of a line that kept coming: told before the server goes)
     return kept;
 }
 

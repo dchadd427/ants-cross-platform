@@ -589,8 +589,8 @@ void Room::replay_begin(const net::StartMsg& start) {
     });
 }
 
-// The match is over, or the room failed or was closed (it may never have started): a match that was recorded is written as a file and handed to the store when the rules ended it or it ran 600 turns
-// (kReplayMinTurns); the status says what became of it. The recorder and its tap go in any case.
+// The match is over, or the room failed or was closed (it may never have started): a match that was recorded is written as a file and handed to the store when it ran 600 turns (kReplayMinTurns),
+// however it ended (a Quit ends a match of two at once: a loop of starts and Quits must not fill the store); the status says what became of it. The recorder and its tap go in any case.
 void Room::replay_end() {
     if (recorder_ == nullptr) {
         if (replay_file_.empty() && replay_note_.empty()) replay_note_ = "no match was played";
@@ -603,8 +603,8 @@ void Room::replay_end() {
         replay_note_ = "no match was played";
         return;
     }
-    if (!sim_->is_match_over() && recorder->turns() < kReplayMinTurns) {
-        replay_note_ = "the match was left before it ran " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
+    if (recorder->turns() < kReplayMinTurns) {
+        replay_note_ = "the match ran less than " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
         return;
     }
     std::string error;
@@ -618,7 +618,6 @@ void Room::replay_end() {
     if (saved.kept) {
         replay_file_ = saved.file;
         replay_bytes_ = saved.bytes;
-        replay_note_.clear();
     } else {
         replay_note_ = saved.note;
     }
@@ -662,6 +661,7 @@ std::unique_ptr<Room> Room::refused(const RestartHead& head, const std::string& 
     room->ended_ms_ = now_ms;
     room->connections_closed_ = true;
     room->from_record_ = true;
+    room->replay_note_ = "the room was not brought back from its restart record: no match of it was recorded";
     room->roster_ = head.start.roster;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((head.start.roster & (1u << seat)) != 0) room->names_[seat] = head.start.names[seat];
@@ -716,8 +716,7 @@ Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((bot_mask & (1u << seat)) != 0) session_->add_bot_seat(seat);
     }
-    replay_store_ = nullptr;                                     // (a room that was brought back does not record: the part of its match before the restart was not seen)
-    replay_note_ = "the room was brought back from a restart record: the part of its match before the restart was not recorded";
+    replay_note_ = "the room was brought back from a restart record: the part of its match before the restart was not recorded";   // (it never calls replay_begin, so nothing of it is recorded)
     replay_rec_ = &rec;
     replay_reader_ = std::make_unique<RestartTurnReader>(rec);
     replay_next_check_ = 0;

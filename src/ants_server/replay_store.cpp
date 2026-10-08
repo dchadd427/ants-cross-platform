@@ -18,7 +18,7 @@ namespace {
 
 constexpr int64_t kSecondsPerDay = 86400;
 constexpr size_t kMaxStemChars = 24;
-constexpr unsigned kMaxSameSecond = 9999;                // "-2" ... "-9999": the matches of one map that end in one second
+constexpr unsigned kMaxSameSecond = 9999;                // "-2" ... "-9999": the matches of one map that end in one second (parse_name reads at most four digits, which is this)
 constexpr size_t kStampChars = 16;                       // "YYYYMMDD-HHMMSSZ"
 
 int64_t floor_div(int64_t a, int64_t b) noexcept {
@@ -108,7 +108,7 @@ bool parse_name(const std::string& name, ParsedName& out) {
         const size_t dash = base.rfind('-');
         if (dash == std::string::npos || dash + 1 >= base.size() || base.size() - dash - 1 > 4 || base[dash + 1] == '0' || !all_digits(base, dash + 1, base.size())) return false;
         same_second = static_cast<unsigned>(number_of(base, dash + 1, base.size()));
-        if (same_second < 2 || same_second > kMaxSameSecond) return false;
+        if (same_second < 2) return false;                                 // (and at most 9999: four digits, as above)
         base.erase(dash);
         if (base.empty() || base.back() != 'Z') return false;
     }
@@ -201,24 +201,24 @@ int64_t ReplayStore::now_s() const { return cfg_.clock_s(); }
 std::string ReplayStore::path_of(const std::string& file) const { return (fs::path(cfg_.dir) / file).string(); }
 
 void ReplayStore::note(const std::string& line) {
-    if (line == last_note_) {                                                    // (a disk that refuses every match says it once, then counts)
-        ++repeats_;
+    if (line == last_note_) {                                                    // (a disk that refuses every match says it once, then counts: the server's loop takes the notes at every pass)
+        if (repeats_++ == 0) repeat_report_s_ = now_s() + kRepeatReportEveryS;
         return;
     }
-    if (repeats_ > 0) notes_.push_back("replays: the last line was repeated " + std::to_string(repeats_) + " more time(s)");
-    repeats_ = 0;
+    report_repeats();
     last_note_ = line;
     notes_.push_back(line);
+}
+
+void ReplayStore::report_repeats() {
+    if (repeats_ == 0) return;
+    notes_.push_back("replays: the last line was repeated " + std::to_string(repeats_) + " more time(s)");
+    repeats_ = 0;                                                                // (last_note_ stays: the next repeat is counted too)
 }
 
 std::vector<std::string> ReplayStore::take_notes() {
     std::vector<std::string> out;
     out.swap(notes_);
-    if (repeats_ > 0) {
-        out.push_back("replays: the last line was repeated " + std::to_string(repeats_) + " more time(s)");
-        repeats_ = 0;
-        last_note_.clear();
-    }
     return out;
 }
 
@@ -247,6 +247,7 @@ bool ReplayStore::prepare(std::string& why) {
     ready_ = false;
     entries_.clear();
     total_ = 0;
+    readable_ = 0;
     if (cfg_.dir.empty()) {
         why = "no folder for the replays";
         return false;
@@ -290,6 +291,8 @@ bool ReplayStore::prepare(std::string& why) {
         if (!read_whole(path_of(name), size, bytes) || !summarize(bytes, entry, reason)) {
             entry.readable = false;
             ++unreadable;
+        } else {
+            ++readable_;
         }
         total_ += entry.bytes;
         entries_.push_back(std::move(entry));
@@ -297,6 +300,7 @@ bool ReplayStore::prepare(std::string& why) {
     if (ec) {
         entries_.clear();
         total_ = 0;
+        readable_ = 0;
         why = "the replays folder '" + cfg_.dir + "' cannot be read: " + ec.message();
         return false;
     }
@@ -312,11 +316,12 @@ bool ReplayStore::prepare(std::string& why) {
     return true;
 }
 
-bool ReplayStore::delete_file(ReplayEntry& entry) {
+bool ReplayStore::delete_file(ReplayEntry& entry, bool say) {
     std::error_code ec;
-    fs::remove(path_of(entry.file), ec);                                             // (false and no error: the file was gone already, which is what is wanted)
+    if (cfg_.remove_file) cfg_.remove_file(path_of(entry.file), ec);
+    else fs::remove(path_of(entry.file), ec);                                        // (false and no error: the file was gone already, which is what is wanted)
     if (ec) {
-        note("replays: " + entry.file + " could not be deleted: " + ec.message());
+        if (say) note("replays: " + entry.file + " could not be deleted: " + ec.message());
         return false;
     }
     return true;
@@ -326,19 +331,25 @@ bool ReplayStore::delete_file(ReplayEntry& entry) {
 // and is tried again at the next purge.
 size_t ReplayStore::trim(uint64_t incoming) {
     size_t deleted = 0;
+    size_t failed = 0;                                                               // (the first file that cannot be deleted is told, the others are counted: a volume that refuses every delete must not fill the log)
     const int64_t now = now_s();
     const int64_t limit = static_cast<int64_t>(cfg_.keep_days) * kSecondsPerDay;
-    for (size_t i = 0; i < entries_.size();) {
+    size_t kept = 0;                                                                 // (one pass, the files that stay move down: an erase from the front for every file would take as long as the index is long, every time)
+    for (size_t i = 0; i < entries_.size(); ++i) {
         const bool expired = now - entries_[i].ended_s >= limit;
         const bool over = total_ + incoming > cfg_.max_bytes;
-        if ((expired || over) && delete_file(entries_[i])) {
+        if ((expired || over) && delete_file(entries_[i], failed == 0)) {
             total_ -= entries_[i].bytes;
-            entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(i));
+            if (entries_[i].readable) --readable_;
             ++deleted;
-        } else {
-            ++i;
+            continue;
         }
+        if (expired || over) ++failed;
+        if (kept != i) entries_[kept] = std::move(entries_[i]);
+        ++kept;
     }
+    entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(kept), entries_.end());
+    if (failed > 1) note("replays: " + std::to_string(failed - 1) + " more file(s) could not be deleted either");
     return deleted;
 }
 
@@ -353,6 +364,7 @@ size_t ReplayStore::purge() {
 void ReplayStore::update() {
     if (!ready_) return;
     const int64_t now = now_s();
+    if (repeats_ > 0 && (now >= repeat_report_s_ || now + kRepeatReportEveryS < repeat_report_s_)) report_repeats();     // (a clock that went back a long way: now)
     if (now >= next_purge_s_ || now + kPurgeEveryS < next_purge_s_) {              // (a clock that went back a long way is looked at again)
         purge();
         next_purge_s_ = now + kPurgeEveryS;
@@ -378,6 +390,8 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
     saved_at_.erase(std::remove_if(saved_at_.begin(), saved_at_.end(), [now](int64_t t) { return now - t >= 3600 || t > now; }), saved_at_.end());
     if (saved_at_.size() >= cfg_.max_saves_per_hour) return refuse("the limit of " + std::to_string(cfg_.max_saves_per_hour) + " kept matches an hour is reached");
     if (bytes.size() > cfg_.max_bytes) return refuse("the match is bigger than the whole store may be");
+    // The limits come before the disk: the files that go make room for the new one, which also helps a disk that is nearly full. A match that the disk then refuses has cost at most the old files that
+    // the size limit deletes for it (never more than one pass of trim(): the next match finds the room already made).
     trim(bytes.size());
     if (total_ + bytes.size() > cfg_.max_bytes) return refuse("the older replays could not be deleted to make room");
     if (cfg_.min_free_bytes > 0) {
@@ -414,7 +428,8 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
             return refuse("the disk refused the write");
         }
     }
-    fs::rename(temp, path_of(name), ec);
+    if (cfg_.rename_file) cfg_.rename_file(temp, path_of(name), ec);
+    else fs::rename(temp, path_of(name), ec);
     if (ec) {
         std::error_code ignored;
         fs::remove(temp, ignored);
@@ -426,6 +441,7 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
     entry.ended_s = parse_name(name, parsed) ? parsed.seconds : now;             // (the time of the name, as it will be read again: a clock that is far off is held to the calendar)
     entry.sequence = sequence;
     total_ += entry.bytes;
+    ++readable_;                                                                 // (summarize() accepted it)
     entries_.insert(std::upper_bound(entries_.begin(), entries_.end(), entry, older), entry);
     saved_at_.push_back(now);
     result.kept = true;
@@ -436,11 +452,16 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
 
 std::vector<ReplayEntry> ReplayStore::list() const { return std::vector<ReplayEntry>(entries_.rbegin(), entries_.rend()); }
 
+// The index is in the order of older(), which a name carries all of (its time, its "-n" and itself): a name is found by a bisection, however many files there are
 const ReplayEntry* ReplayStore::find(const std::string& file) const {
-    for (const ReplayEntry& e : entries_) {
-        if (e.file == file) return &e;
-    }
-    return nullptr;
+    ParsedName parsed;
+    if (!parse_name(file, parsed)) return nullptr;                               // (a name that the store could not have made is not in the index)
+    ReplayEntry key;
+    key.file = file;
+    key.ended_s = parsed.seconds;
+    key.sequence = parsed.same_second;
+    const auto at = std::lower_bound(entries_.begin(), entries_.end(), key, older);
+    return at != entries_.end() && at->file == file ? &*at : nullptr;
 }
 
 bool ReplayStore::read(const std::string& file, std::vector<uint8_t>& out) const {
@@ -450,14 +471,14 @@ bool ReplayStore::read(const std::string& file, std::vector<uint8_t>& out) const
 }
 
 bool ReplayStore::remove(const std::string& file) {
-    for (size_t i = 0; i < entries_.size(); ++i) {
-        if (entries_[i].file != file) continue;
-        if (!delete_file(entries_[i])) return false;
-        total_ -= entries_[i].bytes;
-        entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(i));
-        return true;
-    }
-    return false;
+    const ReplayEntry* found = find(file);
+    if (found == nullptr) return false;
+    const size_t i = static_cast<size_t>(found - entries_.data());
+    if (!delete_file(entries_[i])) return false;
+    total_ -= entries_[i].bytes;
+    if (entries_[i].readable) --readable_;
+    entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(i));
+    return true;
 }
 
 }  // namespace ants::server

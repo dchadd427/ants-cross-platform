@@ -131,7 +131,7 @@ class TheLocations(unittest.TestCase):
 
     def test_each_has_a_rate_limit_of_its_own_declared_outside_the_server(self):
         zones = dict((m.group(1), (int(m.group(2)), int(m.group(3)), m.group(4))) for m in re.finditer(r"limit_req_zone \$binary_remote_addr zone=(\w+):(\d+)m rate=(\d+)r/([sm]);", CONF))
-        self.assertEqual(sorted(zones), ["ants_busy", "ants_local", "ants_replays", "ants_stats"])           # (four zones, none shared: a flood of one never uses up another's allowance; ants_replays is tests/scripts/test_nginx_replays.py's)
+        self.assertTrue({"ants_busy", "ants_local", "ants_stats"} <= set(zones))                             # (its own three, none shared with another location: a flood of one never uses up another's allowance; the zones of /replays are tests/scripts/test_nginx_replays.py's, which lists all of them)
         for zone in zones:
             self.assertLess(CONF.index("zone=%s:" % zone), CONF.index("server {"))           # http context: before the server block
         # behind a reverse proxy every visitor may have the proxy's address: these are limits of the whole site, sized for it (the server's own cap of 120 a minute is the bound that matters)
@@ -373,6 +373,11 @@ class Rig:
                 one["len"] = int(one["len"])
                 found.append(one)
         return found
+
+    def stub_lines(self):
+        """How many lines the stand-in has written so far, whatever they are (a request that reached it is at least one): a test that says "nothing reached the server" compares two of these"""
+        done = subprocess.run(["docker", "logs", self.stub], capture_output=True, text=True)
+        return len(done.stdout.splitlines()) + len(done.stderr.splitlines())
 
     def names(self, headers, name):
         return [v for k, v in headers if k == name]

@@ -17,7 +17,9 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <set>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #if defined(_WIN32)
@@ -123,8 +125,10 @@ std::vector<std::string> names_in(const fs::path& dir) {
 
 // A small replay as the game server writes one: a map, the seats that play, `turns` turns and, when `padding` says so, enough orders to make the file at least that many bytes long. `seed` makes
 // two files differ.
-std::vector<uint8_t> make_file(const std::string& map = "TREASURE.LVL", uint32_t turns = 700, bool over = true, size_t at_least = 0, uint32_t seed = 1, uint8_t roster = 0x05, bool complete = true) {
+std::vector<uint8_t> make_file(const std::string& map = "TREASURE.LVL", uint32_t turns = 700, bool over = true, size_t at_least = 0, uint32_t seed = 1, uint8_t roster = 0x05, bool complete = true,
+                               uint16_t rules = net::kProtocolVersion) {
     replay::Replay r;
+    r.head.engine_rules = rules;
     r.head.game_version = "v0.0.0";
     r.head.build_id = "test";
     r.head.venue = "game server";
@@ -153,6 +157,39 @@ std::vector<uint8_t> make_file(const std::string& map = "TREASURE.LVL", uint32_t
         bytes = replay::encode(r, error);
     }
     return bytes;
+}
+
+// A file of exactly `size` bytes (a limit is a limit of bytes, and its edge is one byte): a hash is 8 bytes of the file (one per 100 turns) and an order 9, so some mix of the two makes the size. Empty when none does.
+std::vector<uint8_t> make_file_of_size(size_t size, uint32_t seed = 1) {
+    for (uint32_t hashes = 1; hashes < 60; ++hashes) {
+        for (uint32_t orders = 0; orders < 100; ++orders) {
+            replay::Replay r;
+            r.head.game_version = "v0.0.0";
+            r.head.build_id = "test";
+            r.head.venue = "game server";
+            r.head.map_name = "TREASURE.LVL";
+            r.head.map_hash = 0x1122334455667788ull;
+            r.head.seed = seed;
+            r.head.roster = 0x05;
+            r.head.names[2] = "Bot (Medium)";
+            r.complete = true;
+            r.total_turns = hashes * replay::kHashPeriodTurns;
+            r.match_over = true;
+            r.final_hash = 77;
+            r.hashes.assign(hashes, 0xABCDu);
+            for (uint32_t i = 0; i < orders; ++i) {
+                sim::Command c;
+                c.type = sim::CommandType::Hatch;
+                c.issuer = 0;
+                r.commands.push_back(replay::TimedCommand{i, c});
+            }
+            std::string error;
+            std::vector<uint8_t> bytes = replay::encode(r, error);
+            if (bytes.size() == size) return bytes;
+            if (bytes.size() > size) break;
+        }
+    }
+    return std::vector<uint8_t>();
 }
 
 // A store in a folder of the test, on the test's clock and disk
@@ -312,10 +349,41 @@ int main() {
         const ReplaySave early = store.save(make_file());
         ASSERT_TRUE(early.kept && ReplayStore::valid_file_name(early.file));
         ASSERT_EQ(early.file, std::string("ants-TREASURE-19700101-000000Z.antsrep"));
+        ASSERT_TRUE(store.find(early.file) != nullptr && store.find(early.file)->ended_s == 0);         // (the index holds the time that the name says, which is what the store reads again, not the clock's)
+        {
+            ReplayStore again(f.config());
+            ASSERT_TRUE(again.prepare(why));
+            ASSERT_TRUE(again.find(early.file) != nullptr && again.find(early.file)->ended_s == 0);
+        }
         f.now = 400000000000ll;
         const ReplaySave late = store.save(make_file("TREASURE.LVL", 700, true, 0, 2));
         ASSERT_TRUE(late.kept && ReplayStore::valid_file_name(late.file));
         ASSERT_EQ(late.file, std::string("ants-TREASURE-99991231-235959Z.antsrep"));
+        ASSERT_TRUE(store.find(late.file) != nullptr && store.find(late.file)->ended_s == 253402300799ll);        // 9999-12-31 23:59:59 UTC
+        f.now = 0;
+        ReplayStore again2(f.config());
+        ASSERT_TRUE(again2.prepare(why));
+        ASSERT_TRUE(again2.find(late.file) != nullptr && again2.find(late.file)->ended_s == 253402300799ll);
+    } TEST_END();
+
+    TEST_CASE("RS2.5 The Matches Of One Map That End In One Second Can Have The Names Up To -9999; When Every One Of Them Is Taken The Match Is Refused With The Reason, And Nothing Is Replaced") {
+        Fixture f;
+        fs::create_directories(f.dir);
+        const std::string base = "ants-TREASURE-20261008-143209Z";
+        write_text(f.dir / (base + ".antsrep"), "x");
+        for (int n = 2; n <= 9998; ++n) write_text(f.dir / (base + "-" + std::to_string(n) + ".antsrep"), "x");       // (bytes that are no replay, under names that are the store's own: kept, not readable)
+        ReplayStore store(f.config());
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        ASSERT_EQ(store.count(), size_t{9998});
+        const std::vector<uint8_t> last = make_file("TREASURE.LVL", 700, true, 0, 5);
+        const ReplaySave kept = store.save(last);                                         // (-9999 is the last name that is free)
+        ASSERT_TRUE(kept.kept && kept.file == base + "-9999.antsrep");
+        ASSERT_TRUE(slurp(f.dir / kept.file) == last);
+        const ReplaySave refused = store.save(make_file("TREASURE.LVL", 700, true, 0, 6));
+        ASSERT_TRUE(!refused.kept && contains(refused.note, "every name for a match of this second is taken"));
+        ASSERT_TRUE(slurp(f.dir / kept.file) == last);                                    // (the file with the last name is still the one that was kept)
+        ASSERT_EQ(store.count(), size_t{9999});
     } TEST_END();
 
     // ---- refusals -----------------------------------------------------------------------------------------------------------------
@@ -343,8 +411,41 @@ int main() {
         ASSERT_TRUE(contains(store.save(unfinished).note, "no end"));
         ASSERT_TRUE(names_in(f.dir).empty() && store.count() == 0 && store.total_bytes() == 0);
         const std::vector<std::string> notes = store.take_notes();
-        ASSERT_TRUE(any_line_has(notes, "a match was not kept") && any_line_has(notes, "repeated"));
-        ASSERT_TRUE(notes.size() < 9);                                                   // (nine refusals were not nine lines)
+        ASSERT_TRUE(any_line_has(notes, "a match was not kept") && any_line_has(notes, "repeated"));         // (the huge file and the empty one are refused with one text: the count came with the line that followed)
+        // The same refusal again and again, as a disk that refuses every match would have it, while the server's loop takes the notes at every pass: told once, and then only counted
+        // (the last line told so far is that of the file without an end, which the cut file has too: the damaged file is a line of its own)
+        store.report_repeats();
+        store.take_notes();
+        for (int pass = 0; pass < 3; ++pass) {
+            ASSERT_FALSE(store.save(flipped).kept);
+            const std::vector<std::string> told = store.take_notes();
+            ASSERT_EQ(told.size(), pass == 0 ? size_t{1} : size_t{0});
+        }
+        f.now += kHour - 1;
+        store.update();
+        ASSERT_TRUE(store.take_notes().empty());                                         // (the count waits for the hour: it is told an hour after the first repeat)
+        f.now += 1;
+        store.update();
+        std::vector<std::string> counted = store.take_notes();
+        ASSERT_TRUE(counted.size() == 1 && contains(counted[0], "repeated 2 more time(s)"));
+        ASSERT_FALSE(store.save(flipped).kept);                                          // (and the line is still the last one told: one more repeat is counted, not told again)
+        ASSERT_TRUE(store.take_notes().empty());
+        ASSERT_FALSE(store.save(huge).kept);                                             // (another line comes: the count first, then the line)
+        counted = store.take_notes();
+        ASSERT_TRUE(counted.size() == 2 && contains(counted[0], "repeated 1 more time(s)") && contains(counted[1], "a match was not kept"));
+        ASSERT_FALSE(store.save(huge).kept);                                             // (a repeat at the stop: told by report_repeats)
+        ASSERT_TRUE(store.take_notes().empty());
+        store.report_repeats();
+        counted = store.take_notes();
+        ASSERT_TRUE(counted.size() == 1 && contains(counted[0], "repeated 1 more time(s)"));
+        store.report_repeats();
+        ASSERT_TRUE(store.take_notes().empty());                                         // (nothing counted: nothing told)
+        // a clock that was set back a long way does not keep the count for longer than the hour: it is told at once
+        ASSERT_FALSE(store.save(huge).kept);
+        f.now -= 5 * kHour;
+        store.update();
+        counted = store.take_notes();
+        ASSERT_TRUE(counted.size() == 1 && contains(counted[0], "repeated 1 more time(s)"));
         ASSERT_TRUE(store.save(good).kept);                                              // (and a good file is still kept after them)
     } TEST_END();
 
@@ -381,6 +482,40 @@ int main() {
     } TEST_END();
 
     // ---- the age limit -------------------------------------------------------------------------------------------------------------
+
+    TEST_CASE("RS3.4 A Disk That Refuses The Write, Or The Name, Costs The Match And Nothing Else: The Match Is Refused With The Reason, No Half File Is Left, The Index And The Count Stay As They Were, And The Next Match Is Kept") {
+        Fixture f;
+        bool refuse_rename = false;
+        ReplayConfig cfg = f.config();
+        cfg.rename_file = [&refuse_rename](const std::string& from, const std::string& to, std::error_code& ec) {
+            if (refuse_rename) ec = std::make_error_code(std::errc::permission_denied);
+            else fs::rename(from, to, ec);
+        };
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        store.take_notes();
+        const std::vector<uint8_t> good = make_file();
+        // the write: a folder is where the temporary file would be (the portable way to make a file that cannot be made), and it holds something so that it cannot be removed
+        fs::create_directories(f.dir / (kName0 + ".tmp") / "inside");
+        ReplaySave refused = store.save(good);
+        ASSERT_TRUE(!refused.kept && refused.file.empty() && contains(refused.note, "refused the write"));
+        ASSERT_TRUE(store.count() == 0 && store.total_bytes() == 0 && store.readable_count() == 0);
+        ASSERT_TRUE(fs::is_directory(f.dir / (kName0 + ".tmp")) && !fs::exists(f.dir / kName0));
+        ASSERT_TRUE(any_line_has(store.take_notes(), "refused the write"));
+        fs::remove_all(f.dir / (kName0 + ".tmp"));
+        // the name: the file was written whole, the disk will not give it its name; the temporary file is removed again
+        refuse_rename = true;
+        refused = store.save(good);
+        ASSERT_TRUE(!refused.kept && refused.file.empty() && contains(refused.note, "could not be given its name"));
+        ASSERT_TRUE(names_in(f.dir).empty() && store.count() == 0 && store.total_bytes() == 0 && store.readable_count() == 0);
+        ASSERT_TRUE(any_line_has(store.take_notes(), "could not be given its name"));
+        // the disk comes right: the same match is kept under the same name, and the refusals did not use the hour's allowance
+        refuse_rename = false;
+        const ReplaySave kept = store.save(good);
+        ASSERT_TRUE(kept.kept && kept.file == kName0);
+        ASSERT_TRUE(names_in(f.dir) == std::vector<std::string>{kName0} && store.count() == 1 && store.readable_count() == 1);
+    } TEST_END();
 
     TEST_CASE("RS4.1 A File Is Deleted keep_days After The Match Ended: Not A Second Before, At That Second On; The Age Is Looked At Once An Hour") {
         Fixture f;
@@ -435,6 +570,24 @@ int main() {
         ASSERT_FALSE(fs::exists(f.dir / "ants-OLD-20260101-000000Z.antsrep"));
         ASSERT_TRUE(fs::exists(f.dir / "ants-NEW-20261008-143000Z.antsrep") && store.count() == 1);
         ASSERT_TRUE(any_line_has(store.take_notes(), "1 file(s) deleted"));
+    } TEST_END();
+
+    TEST_CASE("RS4.3 A Clock That Was Set Back A Long Way Does Not Keep The Next Look Away For As Long: The Hour Is Counted From The Clock's New Time") {
+        Fixture f;
+        ReplayConfig cfg = f.config();
+        cfg.keep_days = 1;
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));                                                 // (the first look is due at T0 + 1 hour)
+        const int64_t back = kT0 - 100 * kDay;
+        f.now = back;
+        store.update();                                                                  // (the due time is far ahead of this clock: looked at now, the next look is an hour from now)
+        ASSERT_TRUE(store.save(make_file("TREASURE.LVL", 700, true, 0, 1)).kept);       // F: ended at `back`
+        ASSERT_EQ(store.count(), size_t{1});
+        f.now = back + kDay + kHour;                                                     // (F is a day old, and an hour has passed since the look)
+        store.update();
+        ASSERT_EQ(store.count(), size_t{0});
+        ASSERT_TRUE(names_in(f.dir).empty());
     } TEST_END();
 
     // ---- the size limit ------------------------------------------------------------------------------------------------------------
@@ -492,7 +645,142 @@ int main() {
         ASSERT_EQ(ReplayStore(days).config().keep_days, uint32_t{3650});
     } TEST_END();
 
+    TEST_CASE("RS5.3 A File That Cannot Be Deleted Stays In The Index And On The Disk And Is Tried Again At The Next Purge, The Others Behind It Still Go, The Log Names The First And Counts The Rest; A Match Is Refused Only When No Room Can Be Made; A DELETE Of Such A File Says No") {
+        Fixture f;
+        std::set<std::string> stuck;                                                     // the names that the "disk" refuses to delete
+        const auto config_with_stuck = [&]() {
+            ReplayConfig c = f.config();
+            c.remove_file = [&stuck](const std::string& path, std::error_code& ec) {
+                if (stuck.count(fs::path(path).filename().string()) != 0) ec = std::make_error_code(std::errc::permission_denied);
+                else fs::remove(path, ec);
+            };
+            return c;
+        };
+        // the age limit: four matches ended 10 s apart; at the purge the first three are a day old, the fourth is not; the first two cannot be deleted
+        ReplayConfig cfg = config_with_stuck();
+        cfg.keep_days = 1;
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        std::vector<std::string> names;
+        for (uint32_t i = 0; i < 4; ++i) {
+            f.now = kT0 + static_cast<int64_t>(i) * 10;
+            const ReplaySave saved = store.save(make_file("TREASURE.LVL", 700, true, 0, 10 + i));
+            ASSERT_TRUE(saved.kept);
+            names.push_back(saved.file);
+        }
+        store.take_notes();
+        stuck = {names[0], names[1]};
+        f.now = kT0 + kDay + 25;
+        ASSERT_EQ(store.purge(), size_t{1});                                             // (only the third could go: the stuck ones do not stop it)
+        ASSERT_TRUE(fs::exists(f.dir / names[0]) && fs::exists(f.dir / names[1]) && !fs::exists(f.dir / names[2]) && fs::exists(f.dir / names[3]));
+        ASSERT_TRUE(store.count() == 3 && store.find(names[0]) != nullptr && store.find(names[1]) != nullptr && store.find(names[2]) == nullptr);
+        uint64_t on_disk = 0;
+        for (const std::string& n : names_in(f.dir)) on_disk += fs::file_size(f.dir / n);
+        ASSERT_EQ(store.total_bytes(), on_disk);                                         // (the index still counts what is still there)
+        const std::vector<std::string> notes = store.take_notes();
+        ASSERT_TRUE(any_line_has(notes, names[0] + " could not be deleted") && !any_line_has(notes, names[1] + " could not be deleted"));
+        ASSERT_TRUE(any_line_has(notes, "1 more file(s) could not be deleted either") && any_line_has(notes, "1 file(s) deleted"));
+        stuck.clear();                                                                   // the disk gives way: the next purge deletes them
+        ASSERT_EQ(store.purge(), size_t{2});
+        ASSERT_TRUE(store.count() == 1 && store.find(names[3]) != nullptr && names_in(f.dir).size() == 1);
+
+        // the size limit: the oldest file is stuck, so the next one is deleted instead, and the new match fits behind it
+        Fixture g;
+        ReplayConfig size_cfg = g.config();
+        size_cfg.max_bytes = 1024;
+        size_cfg.remove_file = [&stuck](const std::string& path, std::error_code& ec) {
+            if (stuck.count(fs::path(path).filename().string()) != 0) ec = std::make_error_code(std::errc::permission_denied);
+            else fs::remove(path, ec);
+        };
+        ReplayStore small(size_cfg);
+        ASSERT_TRUE(small.prepare(why));
+        const ReplaySave a = small.save(make_file("TREASURE.LVL", 700, true, 400, 1));
+        g.now += 1;
+        const ReplaySave b = small.save(make_file("TREASURE.LVL", 700, true, 400, 2));
+        ASSERT_TRUE(a.kept && b.kept && small.count() == 2);
+        stuck = {a.file};
+        g.now += 1;
+        const ReplaySave c = small.save(make_file("TREASURE.LVL", 700, true, 400, 3));
+        ASSERT_TRUE(c.kept);
+        ASSERT_TRUE(small.find(a.file) != nullptr && small.find(b.file) == nullptr && small.find(c.file) != nullptr && small.total_bytes() <= 1024);
+        // nothing can be deleted: the match is refused, with the reason, and nothing is written
+        stuck = {a.file, c.file};
+        g.now += 1;
+        const std::vector<std::string> before = names_in(g.dir);
+        const ReplaySave d = small.save(make_file("TREASURE.LVL", 700, true, 400, 4));
+        ASSERT_TRUE(!d.kept && contains(d.note, "older replays could not be deleted to make room"));
+        ASSERT_EQ(names_in(g.dir), before);
+        // an explicit delete (the control interface's DELETE) of a file that is stuck says no and keeps it; once the disk allows it, it goes
+        ASSERT_FALSE(small.remove(a.file));
+        ASSERT_TRUE(small.find(a.file) != nullptr && fs::exists(g.dir / a.file));
+        stuck.clear();
+        ASSERT_TRUE(small.remove(a.file));
+        ASSERT_TRUE(small.find(a.file) == nullptr && !fs::exists(g.dir / a.file) && small.count() == 1);
+    } TEST_END();
+
     // ---- the hour's limit and the disk ----------------------------------------------------------------------------------------------
+
+    TEST_CASE("RS5.4 The Limit Is The Limit Itself: A File As Big As The Whole Store Is Kept, Files That Together Are Exactly The Limit Are All Kept (Nothing Goes For Them), A File One Byte Bigger Than The Store Is Refused") {
+        Fixture f;
+        ReplayConfig cfg = f.config();
+        cfg.max_bytes = 1024;                                                            // (the smallest)
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const std::vector<uint8_t> whole = make_file_of_size(1024, 1);
+        ASSERT_EQ(whole.size(), size_t{1024});
+        const ReplaySave alone = store.save(whole);
+        ASSERT_TRUE(alone.kept && store.count() == 1 && store.total_bytes() == 1024);
+        const std::vector<uint8_t> one_more = make_file_of_size(1025, 2);
+        ASSERT_EQ(one_more.size(), size_t{1025});
+        f.now += 1;
+        const ReplaySave refused = store.save(one_more);
+        ASSERT_TRUE(!refused.kept && contains(refused.note, "bigger than the whole store"));
+        ASSERT_TRUE(store.count() == 1 && fs::exists(f.dir / alone.file));
+        // two files that fill the store to the byte
+        Fixture g;
+        ReplayConfig cfg2 = g.config();
+        cfg2.max_bytes = 1024;
+        ReplayStore pair(cfg2);
+        ASSERT_TRUE(pair.prepare(why));
+        const std::vector<uint8_t> first = make_file("TREASURE.LVL", 700, true, 400, 1);
+        const std::vector<uint8_t> second = make_file_of_size(1024 - first.size(), 2);
+        ASSERT_TRUE(first.size() > 100 && first.size() < 1024 && second.size() == 1024 - first.size());
+        const ReplaySave a = pair.save(first);
+        g.now += 1;
+        const ReplaySave b = pair.save(second);
+        ASSERT_TRUE(a.kept && b.kept);
+        ASSERT_TRUE(pair.count() == 2 && pair.total_bytes() == 1024);
+        ASSERT_TRUE(fs::exists(g.dir / a.file) && fs::exists(g.dir / b.file));           // (the sum is the limit, not over it: nothing was deleted)
+        g.now += 1;
+        ASSERT_TRUE(pair.save(make_file("TREASURE.LVL", 700, true, 0, 3)).kept);        // (one more does push the oldest out)
+        ASSERT_FALSE(fs::exists(g.dir / a.file));
+    } TEST_END();
+
+    TEST_CASE("RS5.5 The Oldest Go First By The Time Of Their Match, Not By The Order In Which They Were Kept: A File Kept Later That Ended Earlier (A Clock Set Back) Is The First To Go") {
+        Fixture f;
+        ReplayConfig cfg = f.config();
+        cfg.max_bytes = 1024;
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const std::vector<uint8_t> a = make_file("TREASURE.LVL", 700, true, 400, 1);
+        const std::vector<uint8_t> b = make_file("TREASURE.LVL", 700, true, 400, 2);
+        const std::vector<uint8_t> c = make_file("TREASURE.LVL", 700, true, 400, 3);
+        ASSERT_TRUE(a.size() <= 512 && b.size() <= 512 && c.size() <= 512 && a.size() >= 400 && b.size() >= 400 && c.size() >= 400);
+        const ReplaySave newer = store.save(a);                                          // ended at T0
+        f.now = kT0 - 1000;
+        const ReplaySave older = store.save(b);                                          // kept second, but it ended 1000 s before the first
+        ASSERT_TRUE(newer.kept && older.kept);
+        const std::vector<ReplayEntry> list = store.list();
+        ASSERT_TRUE(list.size() == 2 && list[0].file == newer.file && list[1].file == older.file);          // (newest first, by the time of the match)
+        f.now = kT0 + 5;
+        const ReplaySave third = store.save(c);                                          // the limit needs one out
+        ASSERT_TRUE(third.kept);
+        ASSERT_FALSE(fs::exists(f.dir / older.file));
+        ASSERT_TRUE(fs::exists(f.dir / newer.file) && fs::exists(f.dir / third.file) && store.count() == 2);
+    } TEST_END();
 
     TEST_CASE("RS6.1 No More Than max_saves_per_hour Matches Are Kept In A Rolling Hour (A Flood Of Short Matches Cannot Push The Others Out): The Next Is Refused With The Reason, Writes And Deletes Nothing, And The Hour Rolls On") {
         Fixture f;
@@ -514,6 +802,9 @@ int main() {
         f.now = kT0 + kHour;                                                             // (3600 s: it has left the hour)
         ASSERT_TRUE(store.save(make_file("TREASURE.LVL", 700, true, 0, 9)).kept);
         ASSERT_FALSE(store.save(make_file("TREASURE.LVL", 700, true, 0, 10)).kept);      // (three are in the hour again: the second, the third and the one just kept)
+        // a clock that was set back: what was kept "later" than now is forgotten, so that the hour does not stay full until the clock catches up
+        f.now = kT0 - 7 * kDay;
+        ASSERT_TRUE(store.save(make_file("TREASURE.LVL", 700, true, 0, 11)).kept);
     } TEST_END();
 
     TEST_CASE("RS6.2 The Disk Is Asked Before A Write: A Match Is Kept Only When The Disk Would Keep min_free_bytes Free After It; An Answer That Cannot Be Had Does Not Stop The Store; With min_free_bytes 0 The Disk Is Not Asked") {
@@ -571,13 +862,14 @@ int main() {
         const ReplayEntry* junk = store.find("ants-JUNK-20261008-100000Z.antsrep");
         ASSERT_TRUE(good != nullptr && good->readable && good->map == "TREASURE.LVL");
         ASSERT_TRUE(junk != nullptr && !junk->readable && junk->bytes == 20 && junk->turns == 0 && junk->players.empty());
+        ASSERT_TRUE(store.readable_count() == 1 && store.entries().size() == 2 && store.entries()[0].file == good->file && store.entries()[1].file == junk->file);        // (oldest first)
         ASSERT_TRUE(store.find("notes.txt") == nullptr && store.find("ants-bad-name.antsrep") == nullptr && store.find("other.tmp") == nullptr);
         const std::vector<std::string> notes = store.take_notes();
         ASSERT_TRUE(any_line_has(notes, "2 file(s)") && any_line_has(notes, "1 half-written") && any_line_has(notes, "1 file(s) that this build cannot read"));
         // the junk is old after a month, like every file
         f.now = kT0 + 31 * kDay;
         ASSERT_EQ(store.purge(), size_t{2});
-        ASSERT_TRUE(store.count() == 0 && !fs::exists(f.dir / "ants-JUNK-20261008-100000Z.antsrep") && fs::exists(f.dir / "notes.txt"));
+        ASSERT_TRUE(store.count() == 0 && store.readable_count() == 0 && !fs::exists(f.dir / "ants-JUNK-20261008-100000Z.antsrep") && fs::exists(f.dir / "notes.txt"));
     } TEST_END();
 
     TEST_CASE("RS7.2 A Store Opened Again Finds The Same Files In The Same Order With The Same Facts; A File Of A Match With Other Rules Is Listed As What It Is") {
@@ -592,12 +884,14 @@ int main() {
             ASSERT_TRUE(store.save(make_file("SMALL.LVL", 1500, false, 0, 2)).kept);
             f.now += 5;
             ASSERT_TRUE(store.save(make_file("TINY.LVL", 800, true, 0, 3)).kept);
+            f.now += 5;
+            ASSERT_TRUE(store.save(make_file("ISLANDS.LVL", 900, true, 0, 4, 0x05, true, static_cast<uint16_t>(net::kProtocolVersion - 1))).kept);      // (a match of the rules of the build before this one)
             before = store.list();
         }
         ReplayStore again(f.config());
         ASSERT_TRUE(again.prepare(why));
         const std::vector<ReplayEntry> after = again.list();
-        ASSERT_EQ(after.size(), size_t{3});
+        ASSERT_EQ(after.size(), size_t{4});
         ASSERT_EQ(before.size(), after.size());
         uint64_t sum = 0;
         for (size_t i = 0; i < after.size(); ++i) {
@@ -607,8 +901,10 @@ int main() {
             sum += after[i].bytes;
         }
         ASSERT_EQ(again.total_bytes(), sum);
-        ASSERT_TRUE(after[0].map == "TINY.LVL" && after[1].map == "SMALL.LVL" && after[2].map == "TREASURE.LVL");      // newest first
-        ASSERT_TRUE(!after[1].finished && after[1].turns == 1500 && after[2].finished);
+        ASSERT_TRUE(after[0].map == "ISLANDS.LVL" && after[1].map == "TINY.LVL" && after[2].map == "SMALL.LVL" && after[3].map == "TREASURE.LVL");      // newest first
+        ASSERT_TRUE(!after[2].finished && after[2].turns == 1500 && after[3].finished);
+        ASSERT_TRUE(after[0].readable && after[0].rules == net::kProtocolVersion - 1 && after[1].rules == net::kProtocolVersion);       // (listed as what it is: readable, and the rules it was played by)
+        ASSERT_EQ(again.readable_count(), size_t{4});
     } TEST_END();
 
     // ---- looking a file up --------------------------------------------------------------------------------------------------------
@@ -658,6 +954,52 @@ int main() {
         fs::remove(f.dir / kName0);
         ASSERT_FALSE(store.read(kName0, out));
         ASSERT_TRUE(store.remove(kName0) && store.count() == 0 && store.total_bytes() == 0);
+    } TEST_END();
+
+    TEST_CASE("RS8.3 A Name Is Found Among Many By Bisection: Every File Of A Store With Matches That Ended In One Second (Of One Map, Of Several), Old And New, Is Found At Itself; A Name That Is Valid And Not In The Index Is Not, Wherever It Would Stand") {
+        Fixture f;
+        ReplayConfig cfg = f.config();
+        cfg.max_saves_per_hour = 100000;                                                 // (the hour's allowance is not what this is about)
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        std::vector<std::string> names;
+        const char* const maps[] = {"TREASURE.LVL", "ISLANDS.LVL", "TINY.LVL"};
+        for (uint32_t second = 0; second < 40; ++second) {
+            for (uint32_t i = 0; i < 7; ++i) {                                           // seven matches in the second: two maps with more than one, so "-2", "-3" ... and different stems
+                const ReplaySave saved = store.save(make_file(maps[i % 4 == 3 ? 0 : (i % 3)], 700, true, 0, second * 10 + i + 1));       // (TREASURE four times, ISLANDS and TINY twice)
+                ASSERT_TRUE(saved.kept);
+                names.push_back(saved.file);
+            }
+            f.now += second % 5 == 0 ? 0 : 1;                                            // (some seconds hold the matches of the one before)
+            f.now -= second == 20 ? 30 : 0;                                              // (and a clock that was set back: a later file that ended earlier)
+        }
+        ASSERT_EQ(store.count(), size_t{280});
+        const std::vector<ReplayEntry>& index = store.entries();
+        for (size_t i = 1; i < index.size(); ++i) ASSERT_TRUE(index[i - 1].ended_s < index[i].ended_s || (index[i - 1].ended_s == index[i].ended_s && (index[i - 1].sequence < index[i].sequence || (index[i - 1].sequence == index[i].sequence && index[i - 1].file < index[i].file))));
+        for (const std::string& name : names) {
+            const ReplayEntry* e = store.find(name);
+            ASSERT_TRUE(e != nullptr && e->file == name && e >= index.data() && e < index.data() + index.size());
+        }
+        // names that are valid and not there: the second before the first, between two, after the last; another map in a second that holds others; a "-n" that does not exist
+        for (const std::string& absent : std::vector<std::string>{"ants-TREASURE-19700101-000000Z.antsrep", "ants-ZZZ-20261008-143200Z.antsrep", "ants-TREASURE-20261008-143209Z-9999.antsrep", "ants-TREASURE-29990101-000000Z.antsrep",
+                                                                  "ants-UNKNOWN-20261008-143209Z.antsrep", "ants-TREASURE-20261008-143209Z-9000.antsrep", "ants-AAA-20261008-143209Z-2.antsrep"}) {
+            ASSERT_TRUE(ReplayStore::valid_file_name(absent) && store.find(absent) == nullptr);
+        }
+        for (const std::string& invalid : std::vector<std::string>{"", "x", names.front() + ".tmp", "../" + names.front(), names.front() + "/"}) ASSERT_TRUE(store.find(invalid) == nullptr);
+        // after files went (the oldest by age: half of them) the rest is still found, and what went is not
+        std::vector<int64_t> ended_at;
+        for (const std::string& name : names) {
+            int64_t ended = 0;
+            ASSERT_TRUE(ReplayStore::time_of_name(name, ended));
+            ended_at.push_back(ended);
+        }
+        std::vector<int64_t> sorted = ended_at;
+        std::sort(sorted.begin(), sorted.end());
+        f.now = sorted[sorted.size() / 2] + 30 * kDay;
+        const size_t gone = store.purge();
+        ASSERT_TRUE(gone > 20 && gone < 260 && store.count() == names.size() - gone && store.readable_count() == store.count());
+        for (size_t i = 0; i < names.size(); ++i) ASSERT_EQ(store.find(names[i]) != nullptr, f.now - ended_at[i] < 30 * kDay);
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures

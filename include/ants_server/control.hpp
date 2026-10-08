@@ -20,8 +20,9 @@
 //   GET    /replays[?limit=N]    -> 200 {"enabled": bool, "count", "bytes", "keep_days", "max_bytes", "replays": [{"file", "bytes", "ended" (seconds since 1970 UTC), "readable", "map", "players": ["Green", "Red (Bot (Medium))"],
 //                                    "turns", "seconds", "finished", "game", "rules"}, ...]} the newest N (default 200, at most 1000) of the matches that the server keeps (replay_store.hpp)
 //   GET    /replays/<file> -> 200 the .antsrep file (application/octet-stream); 404
-//   DELETE /replays/<file> -> 200 {"deleted": "<file>"}; 404
-//   (the same two GETs, without the secret and read only, answer on --replay-port when the server is started with it: handle_public_replays)
+//   DELETE /replays/<file> -> 200 {"deleted": "<file>"}; 404; 500 (the file is in the list but could not be deleted)
+//   (with --replay-port the server also has a PUBLIC, read-only door with no secret: GET /replays -> 200 {"replays": [...], "count", "keep_days"}, the newest 200 files that this build can read, each as above
+//   but without "readable", and "count" is the number of those files; GET /replays/<file> -> the file of one of them; 404 for everything else: handle_public_replays)
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "expected", "joined", "early_start", "leader": seat | null (while the room waits or
 // loads), "ignored_start_requests", "seat_moves" (the colours the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
@@ -46,7 +47,9 @@
 
 namespace ants::server {
 
-ctl::JsonValue status_to_json(const RoomStatus& status);
+/// The status of a room as JSON. `in_list`: the entry of GET /rooms, which leaves out the room's `replay` object unless the match was kept (an answer is at most HttpServer::kMaxResponseBytes, 1 MiB, and a
+/// list of a thousand rooms, the restore check of tests/scripts/test_ants_server.sh, has little to spare: the note of a room that is not kept is in its own status).
+ctl::JsonValue status_to_json(const RoomStatus& status, bool in_list = false);
 /// Reads a RoomSpec from the JSON body of POST /rooms; false with a reason when a field is missing, of the wrong kind or out of its range. `out` holds the defaults when it is called (the
 /// server's own, RoomManager::default_spec; a fresh RoomSpec is the built-in ones): only what the body says is changed, and on failure `out` is left as it was.
 bool spec_from_json(const ctl::JsonValue& body, RoomSpec& out, std::string& error);

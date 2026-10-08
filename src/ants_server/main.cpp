@@ -53,15 +53,15 @@
 //   --restart-budget-mb N
 //                      the disk that all the restart records together may take (1 - 4096, default 256); one record is at most 48 MiB (3 times the turn log's limit); a record that the disk or
 //                      the budget refuses is deleted and its room plays on without one (its status says why)
-//   --replays-dir DIR  where the server keeps the REPLAYS of the matches that are played in its rooms (replay_store.hpp, docs/REPLAYS.md "On the game server"): when a match is over its .antsrep file is kept
+//   --replays-dir DIR  where the server keeps the REPLAYS of the matches that are played in its rooms (replay_store.hpp, docs/REPLAYS.md "On the game server"): when a match that ran 30 seconds or more is over, its .antsrep file is kept
 //                      here (a person's seat has no name in it, only the colour). Default: the folder "replays" in --results-dir; without a results folder the server keeps none
 //   --no-replays       keep no replays, whatever --results-dir says
 //   --replay-demo      keep the matches of the demo rooms too (the games of the front page, bots only included); off by default, so that only the rooms of the control interface are kept
 //   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
-//   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); the folder is on the volume that also holds the control secret and the restart
-//                      records, so a match is also not kept when the disk has less than 256 MiB free, or when 120 matches were kept in the last hour
+//   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
+//                      restart records, so a match is also not kept when the disk has less than 256 MiB free, or when 120 matches were kept in the last hour
 //   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays (GET /replays, GET /replays/<file>; no secret, nothing else answers): 0 = off, the default. This machine only;
-//                      the site's reverse proxy passes the two paths to it (docker/nginx.conf). The control interface has the same two GETs, and DELETE, behind its secret whatever this says
+//                      the site's reverse proxy passes the two paths to it (docker/nginx.conf). The control interface lists and gives the files too (all of them), and deletes them, behind its secret whatever this says
 //   --replay-any-interface
 //                      the replay port listens on every interface (for a container only, like --ws-any-interface)
 //   --version, --help
@@ -502,9 +502,9 @@ int main(int argc, char** argv) {
             log("replays are off: " + why);
         }
         for (const std::string& line : rooms.take_notices()) log(line);                 // (what the store found in its folder)
-        if (rooms.replay_store() != nullptr) {
-            log("replays kept in " + rc.dir + " for " + std::to_string(o.replays_days) + " days, at most " + std::to_string(o.replays_max_mb) + " MiB; " +
-                (o.replay_demo ? "the matches of demo rooms are kept too (--replay-demo)" : "the matches of demo rooms are not kept (--replay-demo keeps them)"));
+        if (const ants::server::ReplayStore* kept = rooms.replay_store()) {                      // (the log says what the store was given, not what was asked for)
+            log("replays kept in " + kept->config().dir + " for " + std::to_string(kept->config().keep_days) + " days, at most " + std::to_string(kept->config().max_bytes / (1024 * 1024)) + " MiB; " +
+                (rooms.replays_include_demo() ? "the matches of demo rooms are kept too (--replay-demo)" : "the matches of demo rooms are not kept (--replay-demo keeps them)"));
         } else if (o.no_replays) {
             log("replays are off (--no-replays): no match is kept");
         } else if (rc.dir.empty()) {

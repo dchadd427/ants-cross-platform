@@ -43,7 +43,7 @@
 //
 // Replays (replay_store.hpp, docs/REPLAYS.md "On the game server"). A room of a server that keeps replays records its match: ants_replay's Recorder watches every turn that the referee's own runner
 // executes (LockstepRunner::set_on_executed), from the first, and when the match is over, or the room fails or is closed while it runs, the recording is written as a .antsrep file and handed to the
-// server's ReplayStore. A match is kept when the rules ended it or it ran 600 turns (30 seconds); a person's seat is never given a name in the file (the readers show the colour), a computer player's seat has its
+// server's ReplayStore. A match is kept when it ran 600 turns (30 seconds), however it ended; a person's seat is never given a name in the file (the readers show the colour), a computer player's seat has its
 // display name. A room that was brought back from a restart record does not record (the part of its match before the restart is not seen). The status says whether the match was kept, under what
 // name and, if not, why. A room made with `"record": false` records nothing.
 

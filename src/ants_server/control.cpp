@@ -24,7 +24,7 @@ ctl::HttpResponse error_response(int status, const std::string& message) {
 
 }  // namespace
 
-JsonValue status_to_json(const RoomStatus& s) {
+JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     JsonValue o = JsonValue::make_object();
     o.set("code", JsonValue::make_string(s.code));
     o.set("state", JsonValue::make_string(room_state_name(s.state)));
@@ -121,13 +121,15 @@ JsonValue status_to_json(const RoomStatus& s) {
     record.set("bytes", JsonValue::make_int(static_cast<int64_t>(s.record_bytes)));
     record.set("note", JsonValue::make_string(s.record_note));
     o.set("record", std::move(record));
-    // Replays (replay_store.hpp): whether the match is kept on the server, under what name, and if not why not. Never a name of a person.
-    JsonValue replay = JsonValue::make_object();
-    replay.set("kept", JsonValue::make_bool(s.replay_kept));
-    replay.set("file", JsonValue::make_string(s.replay_file));
-    replay.set("bytes", JsonValue::make_int(static_cast<int64_t>(s.replay_bytes)));
-    replay.set("note", JsonValue::make_string(s.replay_note));
-    o.set("replay", std::move(replay));
+    // Replays (replay_store.hpp): whether the match is kept on the server, under what name, and if not why not. Never a name of a person. In the list of rooms only a match that was kept has it (see the header).
+    if (!in_list || s.replay_kept) {
+        JsonValue replay = JsonValue::make_object();
+        replay.set("kept", JsonValue::make_bool(s.replay_kept));
+        replay.set("file", JsonValue::make_string(s.replay_file));
+        replay.set("bytes", JsonValue::make_int(static_cast<int64_t>(s.replay_bytes)));
+        replay.set("note", JsonValue::make_string(s.replay_note));
+        o.set("replay", std::move(replay));
+    }
     if (s.restored) {
         static const char kHex[] = "0123456789abcdef";
         std::string hex(16, '0');
@@ -285,7 +287,8 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
 
 namespace {
 
-// How a stored replay is described to the owner and to the public (the same fields; the owner also sees the files that this build cannot read)
+// How a stored replay is described. The owner's entry also says "readable" and may be a file that this build cannot read (then it has only file, bytes, ended and readable: false); the public entry is always
+// a file that this build can read, and has no "readable"
 JsonValue replay_entry_json(const ReplayEntry& e, bool owner) {
     JsonValue o = JsonValue::make_object();
     o.set("file", JsonValue::make_string(e.file));
@@ -341,10 +344,8 @@ ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& req
         o.set("enabled", JsonValue::make_bool(store != nullptr));
         JsonValue list = JsonValue::make_array();
         if (store != nullptr) {
-            for (const ReplayEntry& e : store->list()) {
-                if (list.items().size() >= limit) break;
-                list.push_back(replay_entry_json(e, true));
-            }
+            const std::vector<ReplayEntry>& index = store->entries();                    // (oldest first: read from the end, as far as the limit says, without a copy of the index)
+            for (auto it = index.rbegin(); it != index.rend() && list.items().size() < limit; ++it) list.push_back(replay_entry_json(*it, true));
             o.set("count", JsonValue::make_int(static_cast<int64_t>(store->count())));
             o.set("bytes", JsonValue::make_int(static_cast<int64_t>(store->total_bytes())));
             o.set("keep_days", JsonValue::make_int(store->config().keep_days));
@@ -375,15 +376,13 @@ ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::Htt
     if (request.method != "GET" || store == nullptr || !request.query.empty()) return error_response(404, "not found");
     if (request.path == "/replays") {
         JsonValue list = JsonValue::make_array();
-        size_t readable = 0;
-        for (const ReplayEntry& e : store->list()) {
-            if (!e.readable) continue;
-            ++readable;
-            if (list.items().size() < kDefaultReplayList) list.push_back(replay_entry_json(e, false));
+        const std::vector<ReplayEntry>& index = store->entries();                        // (oldest first: the newest that can be read, from the end, as many as the list holds; no copy, no pass over all)
+        for (auto it = index.rbegin(); it != index.rend() && list.items().size() < kDefaultReplayList; ++it) {
+            if (it->readable) list.push_back(replay_entry_json(*it, false));
         }
         JsonValue o = JsonValue::make_object();
         o.set("replays", std::move(list));
-        o.set("count", JsonValue::make_int(static_cast<int64_t>(readable)));
+        o.set("count", JsonValue::make_int(static_cast<int64_t>(store->readable_count())));
         o.set("keep_days", JsonValue::make_int(store->config().keep_days));
         return json_response(200, o);
     }
@@ -397,7 +396,7 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
     if (path == "/rooms") {
         if (request.method == "GET") {
             JsonValue list = JsonValue::make_array();
-            for (const RoomStatus& s : rooms.list(now_ms)) list.push_back(status_to_json(s));
+            for (const RoomStatus& s : rooms.list(now_ms)) list.push_back(status_to_json(s, true));
             JsonValue o = JsonValue::make_object();
             o.set("rooms", std::move(list));
             return json_response(200, o);

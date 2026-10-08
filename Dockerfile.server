@@ -8,7 +8,7 @@
 # (it replaces them): -v /path/to/maps:/maps:ro. The control interface (4010) and the WebSocket port (4002) are meant to be
 # reached from this machine only: publish them on 127.0.0.1 and let a reverse proxy (TLS) or the lobby's backend talk to them; only the TCP game port is public.
 # The replay port (--replay-port, off unless a command gives it; docker-compose.stack.yml starts the server with 4020) is the read-only list and download of the kept matches: it needs no secret, so
-# do not publish it either: the site's nginx reaches it over the network of the stack (and passes /replays on), nothing else should.
+# do not publish it either: the site's nginx reaches it over the network of the stack, and its rate limits and its five-second cache of the list stand in front of it (docker/nginx.conf).
 # =============================================================================
 FROM debian:12-slim AS builder
 

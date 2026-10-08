@@ -2608,6 +2608,15 @@ int main() {
         Client c;
         ASSERT_TRUE(rig.connect(c));                                                                            // (the loopback address answers)
         ASSERT_TRUE(rig.wait_count(1));
+        const std::string other = other_local_address();
+        if (other.empty()) {
+            std::cout << "(no other network interface here, the check of the other address skipped) " << std::flush;
+            return;
+        }
+        Client remote;                                                                                          // (not `far`: that is an empty macro in the Windows headers)
+        ASSERT_FALSE(remote.connect_to(rig.port(), other.c_str()));                                             // the default door: the machine's other address is refused ...
+        Client reach;
+        ASSERT_TRUE(reach.connect_to(open_door->port(), other.c_str()));                                        // ... and the door that was opened to the network answers on it
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

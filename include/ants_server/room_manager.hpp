@@ -140,6 +140,8 @@ public:
     /// The server's replays (null when it keeps none)
     ReplayStore* replay_store() noexcept { return replays_.get(); }
     const ReplayStore* replay_store() const noexcept { return replays_.get(); }
+    /// The rooms that a Hello makes ("demo-...") are recorded too (false when the server keeps no replays)
+    bool replays_include_demo() const noexcept { return replays_ != nullptr && replay_demo_; }
     /// Reads the records of the folder, newest first (by the time of their last write), and judges each one: a record that cannot be read is a line in the log and is deleted; one that cannot be restored
     /// (another network protocol, a map that is gone or has changed, too old, no room for it, ...) becomes a FAILED room with the reason and is moved to `refused`; every other record is QUEUED (its code is
     /// taken: create_room answers 409). update() replays the queue in slices of RestartConfig::restore_slice_ms a pass (a room for which a Hello waits first, then the newest record), so the server serves

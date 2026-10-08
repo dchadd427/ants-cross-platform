@@ -7,23 +7,25 @@
 //
 // The store only touches files that it could have made itself: `ants-<MAP>-<YYYYMMDD>-<HHMMSS>Z.antsrep` (the UTC time when the match ended, a "-2", "-3" ... when two matches of one map end in the
 // same second) in its folder. Any other file in the folder is left alone and is not counted. A file is found, read and deleted by NAME from its index, never by a path that came from outside.
-// A file is written whole to `<name>.tmp` and renamed, so a crash leaves a whole file or none; a `.tmp` that is found at the start is a crash's and is deleted.
+// A file is written whole to `<name>.tmp` and renamed, so a crash of the server leaves a whole file or none (a power cut may leave a short one: it is listed as a file that cannot be read, shown to the
+// owner only, and deleted when it is old); a `.tmp` that is found at the start is a crash's and is deleted. The ages are the times in the names, so they are as right as the server's clock.
 //
 // What the files say about the players: nothing that a person typed. A person's seat has no name in the file (the readers show the colour: "Green"), a computer player's seat has its display name
 // ("Bot (Medium)"). So a copy of a file that is made public (ReplayStore is also what the public list reads) holds no name, address or room code.
 //
-// Single threaded like the server's loop; nothing blocks for more than one small file write.
+// Single threaded like the server's loop. Opening the store reads every file once; after that nothing takes longer than one small file write or one pass over the index (the hourly purge).
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace ants::server {
 
-/// A match is kept when its rules ended it, or when it ran at least this many turns (30 seconds: the matches that the front page counts, SiteStats::kMinTicks); a shorter one that was left is not
+/// A match is kept when it ran at least this many turns (30 seconds: the matches that the front page counts, SiteStats::kMinTicks), however it ended; a shorter one is not
 inline constexpr uint32_t kReplayMinTurns = 600;
 
 struct ReplayConfig {
@@ -38,6 +40,10 @@ struct ReplayConfig {
     std::function<int64_t()> clock_s;
     /// The free bytes of the disk that holds `dir` (empty: std::filesystem::space); false when it cannot be asked (then the disk is not checked)
     std::function<bool(const std::string& dir, uint64_t& available)> free_bytes;
+    /// Deletes a file of the store, `ec` set when it cannot (empty: std::filesystem::remove); the tests make a delete fail
+    std::function<void(const std::string& path, std::error_code& ec)> remove_file;
+    /// Gives a finished temporary file its name, `ec` set when it cannot (empty: std::filesystem::rename); the tests make a rename fail
+    std::function<void(const std::string& from, const std::string& to, std::error_code& ec)> rename_file;
 };
 
 /// What the store knows about one file: from its name, and from its head and end (read once, when the file was made or the store was opened)
@@ -67,7 +73,8 @@ public:
     static constexpr size_t kMaxNameChars = 100;
     static constexpr const char* kExtension = ".antsrep";
     static constexpr const char* kTempExtension = ".tmp";
-    static constexpr int64_t kPurgeEveryS = 3600;    // the age limit is looked at this often (and after every save, the size limit is)
+    static constexpr int64_t kPurgeEveryS = 3600;    // the age limit is looked at this often (and before every save, together with the size limit)
+    static constexpr int64_t kRepeatReportEveryS = 3600;   // a line that keeps coming (a disk that refuses every match) is told once, and how often it came again at most this often
 
     explicit ReplayStore(ReplayConfig config);
 
@@ -87,8 +94,12 @@ public:
     /// Deletes the files that are older than keep_days and, when the files together pass max_bytes, the oldest ones. Returns how many files it deleted.
     size_t purge();
 
-    /// The files, newest first (matches that ended in the same second: the one that was kept last first)
+    /// The files, newest first (matches of one map that ended in the same second: the one that was kept last first; of two maps: by name), as a copy
     std::vector<ReplayEntry> list() const;
+    /// The index itself, OLDEST first (the newest are at the end), for a reader that goes through it without a copy; valid until the store is changed
+    const std::vector<ReplayEntry>& entries() const noexcept { return entries_; }
+    /// How many of the files this build can read (ReplayEntry::readable)
+    size_t readable_count() const noexcept { return readable_; }
     const ReplayEntry* find(const std::string& file) const;
     /// The bytes of a file of the index. False for a name that is not in the index (nothing is opened for it) and for a file that cannot be read.
     bool read(const std::string& file, std::vector<uint8_t>& out) const;
@@ -97,8 +108,11 @@ public:
 
     size_t count() const noexcept { return entries_.size(); }
     uint64_t total_bytes() const noexcept { return total_; }
-    /// Lines for the server's log, once each (a repeat of the last line is counted, not repeated): what prepare() found, files that were purged, a file that was refused or could not be written
+    /// Lines for the server's log, once each: what prepare() found, files that were purged, a file that was refused or could not be written. A repeat of the last line is counted, not repeated: the count
+    /// comes as one line when another line follows, every kRepeatReportEveryS (update()) and when the server stops (report_repeats()).
     std::vector<std::string> take_notes();
+    /// Puts the count of the repeats of the last line (if there is one) among the notes now
+    void report_repeats();
     /// A line for that log from outside the store (a room that could not make a file of its match)
     void report(const std::string& line) { note(line); }
 
@@ -108,7 +122,7 @@ public:
     static bool time_of_name(const std::string& name, int64_t& seconds);
 
 private:
-    bool delete_file(ReplayEntry& entry);
+    bool delete_file(ReplayEntry& entry, bool say = true);       // `say`: a file that cannot be deleted is a line in the log
     size_t trim(uint64_t incoming);                  // deletes what is too old, then the oldest until `incoming` more bytes fit; returns how many files went
     void note(const std::string& line);
     int64_t now_s() const;
@@ -119,11 +133,13 @@ private:
     bool ready_{false};
     std::vector<ReplayEntry> entries_;               // oldest first
     uint64_t total_{0};
+    size_t readable_{0};
     std::vector<int64_t> saved_at_;                  // when the last files were kept (the hour's budget)
     int64_t next_purge_s_{0};
     std::vector<std::string> notes_;
     std::string last_note_;
-    size_t repeats_{0};
+    size_t repeats_{0};                              // how often last_note_ came again since it was told
+    int64_t repeat_report_s_{0};                     // when the repeats are told if no other line comes first
 };
 
 }  // namespace ants::server

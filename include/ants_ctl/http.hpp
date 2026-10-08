@@ -94,8 +94,8 @@ public:
     static std::unique_ptr<HttpServer> listen(uint16_t port, std::string bearer_secret, bool loopback_only = true);
 
     /// A door that needs no secret and can only read, for the pages of the game server that are public (the list of the replays that it keeps, behind the site's reverse proxy). It has the same parser, limits and
-    /// timeouts as listen(), but a request is answered by the handler whoever sends it: only GET is allowed (anything else is 405, `Allow: GET`), a request with a body is refused (400, the body is never read),
-    /// and `GET /healthz` is answered by the server itself as before. The handler has no authority to check: it must decide for itself what may be seen, and change nothing. nullptr on failure.
+    /// timeouts as listen(), but a request is answered by the handler whoever sends it: only GET is allowed (anything else is 405, `Allow: GET`), a request with a body is refused and the body is never read (400
+    /// for a Content-Length above 0; 411 for a chunked one, 413 for one that is too large, 417 for an `Expect` that is not 100-continue), and `GET /healthz` is answered by the server itself as before. The handler has no authority to check: it must decide for itself what may be seen, and change nothing. nullptr on failure.
     static std::unique_ptr<HttpServer> listen_public(uint16_t port, bool loopback_only = true);
 
     ~HttpServer();

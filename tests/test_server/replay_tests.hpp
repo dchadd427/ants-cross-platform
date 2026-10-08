@@ -59,8 +59,9 @@ void start_pair(World& w, const std::string& code, uint32_t play_ms, const char*
 }
 
 // A small synthetic replay (what the store keeps): the same shape as the server's files, no match behind it
-std::vector<uint8_t> synthetic_replay(uint32_t seed, uint32_t turns = 700) {
+std::vector<uint8_t> synthetic_replay(uint32_t seed, uint32_t turns = 700, uint16_t rules = net::kProtocolVersion) {
     replay::Replay r;
+    r.head.engine_rules = rules;
     r.head.game_version = "v0.0.0-test";
     r.head.build_id = "abc123";
     r.head.venue = "game server";
@@ -149,6 +150,15 @@ void run_replay_tests() {
         const ctl::JsonValue j = status_to_json(s);
         ASSERT_TRUE(j.get("replay").is_object() && j.get("replay").get("kept").as_bool_or(false) && j.get("replay").get("file").str() == s.replay_file);
         ASSERT_TRUE(j.get("replay").get("bytes").as_int_or(0) == static_cast<int64_t>(s.replay_bytes) && j.get("replay").get("note").str().empty());
+        // in the list of rooms (GET /rooms) a kept match has its replay too, and the room's own call (GET /rooms/<code>) is the same as the status above
+        {
+            const ctl::JsonValue rooms_json = replay_json_of(replay_call(w.mgr, "GET", "/rooms"));
+            ASSERT_TRUE(rooms_json.get("rooms").size() == 1 && rooms_json.get("rooms").at(0).get("code").str() == "REC-1");
+            const ctl::JsonValue& entry = rooms_json.get("rooms").at(0);
+            ASSERT_TRUE(entry.get("replay").is_object() && entry.get("replay").get("kept").as_bool_or(false) && entry.get("replay").get("file").str() == s.replay_file);
+            ASSERT_TRUE(entry.get("replay").get("bytes").as_int_or(0) == static_cast<int64_t>(s.replay_bytes));
+            ASSERT_EQ(ctl::to_json(replay_json_of(replay_call(w.mgr, "GET", "/rooms/REC-1")).get("replay")), ctl::to_json(j.get("replay")));
+        }
         // the log does not say anything about a match that was kept as it should
         ASSERT_TRUE(w.mgr.take_notices().size() == 1);                                                   // (what the store found when it opened: no files)
     } TEST_END();
@@ -181,7 +191,7 @@ void run_replay_tests() {
         ASSERT_TRUE(played.complete && !played.match_over && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
     } TEST_END();
 
-    TEST_CASE("S3.162 A Match That Was Left Before It Ran 30 Seconds Is Not Kept, And A Room That Never Began Has No Match: The Status Says So, Nothing Is Written; A Match Of Exactly The Length That Counts Is Kept") {
+    TEST_CASE("S3.162 A Match That Ran Less Than 30 Seconds Is Not Kept Whatever Ended It (Closed, Or Quit So That The Rules End It), And A Room That Never Began Has No Match: The Status Says So, Nothing Is Written; A Match Of Exactly The Length That Counts Is Kept") {
         ReplayClock clock;
         World w;
         std::string why;
@@ -192,9 +202,24 @@ void run_replay_tests() {
         ASSERT_TRUE(s.state == RoomState::Running && s.turns > 100 && s.turns < 600);
         ASSERT_TRUE(w.mgr.close_room("SHORT-1", w.now));
         s = w.status("SHORT-1");
-        ASSERT_TRUE(!s.replay_kept && s.replay_file.empty() && s.replay_note.find("left before it ran 30 seconds") != std::string::npos);
+        ASSERT_TRUE(!s.replay_kept && s.replay_file.empty() && s.replay_note.find("ran less than 30 seconds") != std::string::npos);
         ASSERT_EQ(status_to_json(s).get("replay").get("kept").as_bool_or(true), false);
         ASSERT_TRUE(status_to_json(s).get("replay").get("note").str().find("30 seconds") != std::string::npos);
+        // a Quit ends a match of two at once, by the rules: one that is quit after a few seconds is over and is still not kept (a loop of starts and Quits must not fill the store)
+        ASSERT_TRUE(w.mgr.create_room(spec_of("QUIT-1", 2), w.now).ok);
+        Client& leaver = w.connect("Fay", "QUIT-1");
+        w.connect("Gus", "QUIT-1");
+        for (int guard = 0; guard < 600 && !(w.status("QUIT-1").state == RoomState::Running && w.status("QUIT-1").ticks > 20); ++guard) w.run(100);
+        ASSERT_TRUE(w.status("QUIT-1").state == RoomState::Running && w.status("QUIT-1").ticks > 20);
+        sim::Command quit;
+        quit.type = sim::CommandType::Quit;
+        quit.issuer = leaver.lobby->my_seat();
+        ASSERT_TRUE(leaver.session->submit(quit));
+        for (int guard = 0; guard < 400 && w.status("QUIT-1").state != RoomState::Finished; ++guard) w.run(100);
+        s = w.status("QUIT-1");
+        ASSERT_MSG(s.state == RoomState::Finished && s.ticks > 20 && s.ticks < 600, "state " + std::string(room_state_name(s.state)) + " ticks " + std::to_string(s.ticks));
+        ASSERT_TRUE(!s.replay_kept && s.replay_file.empty() && s.replay_note.find("ran less than 30 seconds") != std::string::npos);
+        ASSERT_EQ(w.mgr.replay_store()->count(), size_t{0});
         // a room that never started
         ASSERT_TRUE(w.mgr.create_room(spec_of("NEVER-1", 2), w.now).ok);
         w.connect("Cy", "NEVER-1");
@@ -214,7 +239,7 @@ void run_replay_tests() {
         s = w.status("EDGE-A");
         ASSERT_TRUE(s.state == RoomState::Running && s.ticks == 599);
         ASSERT_TRUE(w.mgr.close_room("EDGE-A", w.now));
-        ASSERT_TRUE(!w.status("EDGE-A").replay_kept && w.status("EDGE-A").replay_note.find("left before it ran 30 seconds") != std::string::npos);
+        ASSERT_TRUE(!w.status("EDGE-A").replay_kept && w.status("EDGE-A").replay_note.find("ran less than 30 seconds") != std::string::npos);
         for (int guard = 0; guard < 100 && w.status("EDGE-B").ticks < 600; ++guard) w.run(10);
         s = w.status("EDGE-B");
         ASSERT_TRUE(s.state == RoomState::Running && s.ticks >= 600 && s.ticks < 610);
@@ -296,6 +321,14 @@ void run_replay_tests() {
             ASSERT_TRUE(w.mgr.close_room("CTL-REC", w.now));
             ASSERT_TRUE(w.status("CTL-REC").replay_kept);
             ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{2} : size_t{1});
+            // a room that the control interface makes with a "demo-" code is a demo room for this option: it is the code that says so (the front page's rooms are made from the codes that its visitors ask for)
+            clock.now += 10;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("demo-ctl", 2), w.now).ok);
+            ASSERT_EQ(w.status("demo-ctl").replay_note.empty(), include_demo);
+            start_pair(w, "demo-ctl", 38000, "Ed", "Flo");
+            ASSERT_TRUE(w.mgr.close_room("demo-ctl", w.now));
+            ASSERT_EQ(w.status("demo-ctl").replay_kept, include_demo);
+            ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{3} : size_t{1});
         }
     } TEST_END();
 
@@ -340,6 +373,12 @@ void run_replay_tests() {
         s = w.status("RST-1");
         ASSERT_TRUE(s.state == RoomState::Running && s.restored);
         ASSERT_TRUE(!s.replay_kept && s.replay_note.find("restart record") != std::string::npos);
+        {   // the list of rooms leaves out the replay of a room that is not kept (a thousand restored rooms are ONE answer of at most 1 MiB: the restore check of tests/scripts/test_ants_server.sh), the room's own call has it
+            const ctl::JsonValue list = replay_json_of(replay_call(*w.mgr, "GET", "/rooms"));
+            ASSERT_TRUE(list.get("rooms").size() == 1 && list.get("rooms").at(0).get("code").str() == "RST-1" && !list.get("rooms").at(0).has("replay"));
+            ASSERT_TRUE(replay_json_of(replay_call(*w.mgr, "GET", "/rooms/RST-1")).get("replay").get("note").str().find("restart record") != std::string::npos);
+            ASSERT_TRUE(ctl::to_json(list.get("rooms").at(0)).size() * 1000 < ctl::HttpServer::kMaxResponseBytes);       // (and the thousand of the script fit)
+        }
         ASSERT_TRUE(w.until([&]() { return !w.status("RST-1").paused; }, 90000));
         w.play_to_the_end("RST-1");
         const RoomStatus end = w.status("RST-1");
@@ -372,13 +411,26 @@ void run_replay_tests() {
         size_t told = 0;
         for (const std::string& n : notices) told += n.find("a match was not kept") != std::string::npos ? 1u : 0u;
         ASSERT_EQ(told, size_t{1});
+        // the server's loop (RoomManager::update) is what makes the age limit work: two days later the files are past their 30 days
+        clock.now += 31ll * 86400;
+        w.run(100);
+        ASSERT_EQ(w.mgr.replay_store()->count(), size_t{0});
+        size_t purged = 0;
+        for (const std::string& n : w.mgr.take_notices()) purged += n.find("2 file(s) deleted") != std::string::npos ? 1u : 0u;
+        ASSERT_EQ(purged, size_t{1});
     } TEST_END();
 
     TEST_CASE("S3.168 The Control Interface Lists, Gives And Deletes The Files: The List Is The Newest First With What The Head Says (Colours, Never A Name), \"limit\" Is 1 To 1000, A File Is Given Byte For Byte, A Name That Is No File Of The Store Is 404 Whatever It Holds, DELETE Takes The File Away") {
         ReplayClock clock;
         World w;
         std::string why;
-        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-routes", &clock), false, why));
+        std::string stuck;                                                                                      // the one file that the "disk" will not let go (the test sets it)
+        ReplayConfig routes_config = replay_config("replay-routes", &clock);
+        routes_config.remove_file = [&stuck](const std::string& path, std::error_code& ec) {
+            if (!stuck.empty() && fs::path(path).filename().string() == stuck) ec = std::make_error_code(std::errc::permission_denied);
+            else fs::remove(path, ec);
+        };
+        ASSERT_TRUE(w.mgr.enable_replays(routes_config, false, why));
         std::vector<std::string> files;
         for (int i = 0; i < 2; ++i) {
             const std::string code = "ROUTE-" + std::to_string(i);
@@ -438,6 +490,15 @@ void run_replay_tests() {
         ASSERT_EQ(replay_call(w.mgr, "GET", "/replays/" + files[0]).status, 404);
         ASSERT_EQ(replay_call(w.mgr, "DELETE", "/replays/" + files[0]).status, 404);
         ASSERT_EQ(replay_json_of(replay_call(w.mgr, "GET", "/replays")).get("count").as_int_or(0), 1);
+        // a file that the disk will not let go: DELETE says 500, the file stays on the disk, in the list and given out; once the disk allows it, it goes
+        stuck = files[1];
+        r = replay_call(w.mgr, "DELETE", "/replays/" + files[1]);
+        ASSERT_TRUE(r.status == 500 && replay_json_of(r).get("error").str().find("could not be deleted") != std::string::npos);
+        ASSERT_TRUE(fs::exists(fs::path(store.config().dir) / files[1]) && store.count() == 1);
+        ASSERT_TRUE(replay_call(w.mgr, "GET", "/replays/" + files[1]).status == 200 && replay_json_of(replay_call(w.mgr, "GET", "/replays")).get("count").as_int_or(0) == 1);
+        stuck.clear();
+        ASSERT_EQ(replay_call(w.mgr, "DELETE", "/replays/" + files[1]).status, 200);
+        ASSERT_TRUE(store.count() == 0 && !fs::exists(fs::path(store.config().dir) / files[1]));
     } TEST_END();
 
     TEST_CASE("S3.169 The Public Door Answers Two Calls And Nothing Else: The List (The Newest 200 Of The Files That This Build Can Read, With No Name) And A File; Every Other Method, Path Or Query Is 404; A File That Cannot Be Read Is Not Listed Or Given, Though The Control Interface Gives It To Its Owner") {
@@ -491,5 +552,95 @@ void run_replay_tests() {
         RoomManager none{MapStore(maps_dir())};
         ASSERT_EQ(public_call(none, "GET", "/replays").status, 404);
         ASSERT_EQ(public_call(none, "GET", "/replays/" + names[3]).status, 404);
+    } TEST_END();
+
+    TEST_CASE("S3.170 The Teams And The Fog Of War Of A Match Are In The Head Of Its File, And The File Plays Out On A Fresh Engine To Every Hash (A File That Lacked Them Would Diverge At The First Check)") {
+        ReplayClock clock;
+        {   // one person and three bots, Green + Blue against Red + Black (as S3.126): the Start of the match has the teams, so has the head, and the bots have their names
+            World w;
+            std::string why;
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-teams", &clock), false, why));
+            ASSERT_TRUE(w.mgr.create_room(spec_of("RT-1", 4), w.now).ok);
+            Client& ann = w.connect("Ann", "RT-1");
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(net::StartRequestMsg::all(net::FillLevel::Medium).fill, sim::StartTeams{true, 0, 2}));
+            w.run(1500);
+            for (int guard = 0; guard < 4000 && w.status("RT-1").state == RoomState::Running; ++guard) w.run(250);
+            const RoomStatus s = w.status("RT-1");
+            ASSERT_TRUE(s.state == RoomState::Finished && s.replay_kept && s.ticks >= 600);
+            ASSERT_EQ(s.teams, std::string("0+2"));
+            const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
+            ASSERT_TRUE(f.ok && f.rep.complete && f.rep.match_over && f.rep.head.roster == 0x0F && !f.rep.head.fog);
+            ASSERT_TRUE(f.rep.head.teams == sim::StartTeams({true, 0, 2}));
+            ASSERT_TRUE(f.rep.head.names[0].empty() && f.rep.head.names[1] == "Bot (Medium)" && f.rep.head.names[2] == "Bot (Medium)" && f.rep.head.names[3] == "Bot (Medium)");
+            replay::Outcome played;
+            ASSERT_TRUE(plays_out(f.rep, played));
+            ASSERT_TRUE(played.complete && played.match_over && played.turns == f.rep.total_turns && played.hashes_checked > 5 && played.hash == s.referee_hash);
+        }
+        {   // Fog of War (no bots with it): two people
+            World w;
+            std::string why;
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-fog", &clock), false, why));
+            RoomSpec spec = spec_of("RT-2", 2);
+            spec.fog = true;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            start_pair(w, "RT-2", 38000);
+            ASSERT_TRUE(w.status("RT-2").state == RoomState::Running && w.status("RT-2").fog && w.status("RT-2").turns >= 600);
+            ASSERT_TRUE(w.mgr.close_room("RT-2", w.now));
+            const RoomStatus s = w.status("RT-2");
+            ASSERT_TRUE(s.replay_kept);
+            const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
+            ASSERT_TRUE(f.ok && f.rep.complete && f.rep.head.fog && !f.rep.head.teams.set);
+            replay::Outcome played;
+            ASSERT_TRUE(plays_out(f.rep, played));
+            ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.171 A File Of Another Protocol Is Listed As What It Is, On The Public Door As Well (Every Release That Moves The Protocol Leaves Such Files): Its Rules Number Is In The Entry, The File Is Given, And It Is Not Hidden As One That Cannot Be Read") {
+        ReplayClock clock;
+        RoomManager mgr{MapStore(maps_dir())};
+        std::string why;
+        ASSERT_TRUE(mgr.enable_replays(replay_config("replay-rules", &clock), false, why));
+        const uint16_t older = static_cast<uint16_t>(net::kProtocolVersion - 1);
+        const ReplaySave before = mgr.replay_store()->save(synthetic_replay(1, 700, older));
+        clock.now += 60;
+        const ReplaySave now = mgr.replay_store()->save(synthetic_replay(2));
+        ASSERT_TRUE(before.kept && now.kept);
+        const ctl::JsonValue j = replay_json_of(public_call(mgr, "GET", "/replays"));
+        ASSERT_TRUE(j.get("replays").size() == 2 && j.get("count").as_int_or(0) == 2);
+        ASSERT_TRUE(j.get("replays").at(0).get("file").str() == now.file && j.get("replays").at(0).get("rules").as_int_or(0) == net::kProtocolVersion);
+        ASSERT_TRUE(j.get("replays").at(1).get("file").str() == before.file && j.get("replays").at(1).get("rules").as_int_or(0) == older);
+        ASSERT_EQ(public_call(mgr, "GET", "/replays/" + before.file).status, 200);
+    } TEST_END();
+
+    TEST_CASE("S3.172 A Refusal That Keeps Coming Is Told Once In The Server's Log And Then Counted, And The Count Is Told When The Server Stops (Matches Past The Hour's Limit Must Not Fill The Log)") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ReplayConfig config = replay_config("replay-repeat", &clock);
+        config.max_saves_per_hour = 1;
+        ASSERT_TRUE(w.mgr.enable_replays(config, false, why));
+        for (int i = 0; i < 4; ++i) {                                                                      // (the first match is kept, the three after it are past the hour's limit)
+            const std::string code = "REP-" + std::to_string(i);
+            ASSERT_TRUE(w.mgr.create_room(spec_of(code, 2), w.now).ok);
+            start_pair(w, code, 38000, "Ann", "Bob");
+            ASSERT_TRUE(w.mgr.close_room(code, w.now));
+            clock.now += 10;
+            ASSERT_TRUE(w.status(code).replay_kept == (i == 0));
+        }
+        size_t told = 0;
+        size_t counted = 0;
+        for (const std::string& n : w.mgr.take_notices()) {
+            told += n.find("a match was not kept") != std::string::npos ? 1u : 0u;
+            counted += n.find("repeated") != std::string::npos ? 1u : 0u;
+        }
+        ASSERT_EQ(told, size_t{1});                                                                        // the line comes once ...
+        ASSERT_EQ(counted, size_t{0});                                                                     // ... and its two repeats are only counted
+        ASSERT_EQ(w.mgr.shutdown(w.now), size_t{0});
+        size_t at_stop = 0;
+        for (const std::string& n : w.mgr.take_notices()) at_stop += n.find("repeated 2 more time(s)") != std::string::npos ? 1u : 0u;
+        ASSERT_EQ(at_stop, size_t{1});                                                                     // the count comes when the server stops ...
+        ASSERT_EQ(w.mgr.take_notices().size(), size_t{0});                                                 // ... once
     } TEST_END();
 }
