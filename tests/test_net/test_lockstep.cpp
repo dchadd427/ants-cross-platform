@@ -11007,6 +11007,31 @@ void run_protocol16_tests() {
             ASSERT_FALSE(decode(encode(PlanMsg{}), back) || decode(encode(ChatMsg{1, false, "Ann"}), back) || decode(encode(SeatMoveMsg{0, 1, 7}), back));
         }
     } TEST_END();
+
+    TEST_CASE("N2.109 The Server's Sentences (Protocol 16): The Words That The Room Says To A Player Are Printed As They Are By The Front Page (Its Picture Of Every Message Shows Them), So They Are Pinned Word For Word; Each Whole Sentence Fits In A Line Of Chat (100 Printable Characters) And Survives The Wire") {
+        const std::vector<std::pair<std::string, std::string>> words = {
+            {kNoticeFillFog, "Bots cannot play with Fog of War."},
+            {kNoticeFillMap, "This map cannot be played by every seat: no bots in the empty seats."},
+            {kNoticeNoTeams, "No teams: "},                                                    // (the start of a line: the reason follows)
+            {kNoticeGameLate, "'s game did not come in time."},                                  // (the end of a line: a name comes before it)
+            {kNoticeGamesLate, "These games did not come in time: "},                            // (the start of a line: the names follow)
+            {kNoticeMapLost, "This map could not be loaded: choose another map."},
+            {kNoticeMapColours, "This map cannot be played with these colours."},
+            {kNoticeNoPlace, "The server has no place for another match right now: try again in a minute."},
+            {kNoticeStartsFailed, "The match could not start a few times in a row: try again in a minute."},
+        };
+        for (const auto& w : words) {
+            ASSERT_TRUE(w.first == w.second);
+            ASSERT_TRUE(w.first.size() <= kMaxChatChars);
+            ASSERT_TRUE(w.first.find_first_not_of(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~") == std::string::npos);
+            if (w.first.back() != '.') continue;                                                // (a whole sentence: one that the room says as it is)
+            ChatMsg notice;
+            notice.sender = kRoomSender;
+            notice.text = w.first;
+            ChatMsg back;
+            ASSERT_TRUE(decode(encode(notice), back) && back.sender == kRoomSender && !back.team && back.text == w.first);
+        }
+    } TEST_END();
 }
 
 void run_restart_tests() {
