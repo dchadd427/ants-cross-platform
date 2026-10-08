@@ -929,6 +929,17 @@ if command -v node > /dev/null 2>&1; then
     [ "$PAGE_RC" -ne 0 ] && echo "$PAGE_OUT" | sed 's/^/    /'
     check "the lobby page's client (web/front/lobby_net.js, run with node) against a real server over a WebSocket: two pages in one lobby, a move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a stale key, a second window, START that waits, GET /busy" "$PAGE_RC"
     stop_server
+    # ... and the hand-over to the game, with the native game: two pages in a lobby, the plan for the two of them and START; the START waits for the games, the pages go (in one run they are gone first and their
+    # seats are held, in the other they are still connected and the games supersede them), a game of each name takes its seat over with the key of its page (read from a rejoin file, as the game page reads
+    # the browser's storage), and the match loads, starts and runs (tests/scripts/web_lobby_handoff_check.js)
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 12 > "$WORK/lobbyh.log" 2>&1 &
+    SERVER_PID=$!
+    for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+    HAND_OUT="$(ANTS_E2E_SECRET="$SECRET" ANTS_HANDOFF_WAIT_MS=$((60000 * TIME_SCALE)) node "$ROOT/tests/scripts/web_lobby_handoff_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_CTL" "127.0.0.1:$LOBBY_PORT" "$GAME" "$ROOT" "$WORK" 2>&1)"
+    HAND_RC=$?
+    [ "$HAND_RC" -ne 0 ] && echo "$HAND_OUT" | sed 's/^/    /'
+    check "two lobby pages hand their room over to two real games (web/front/lobby_net.js and the native game): START waits for the games, each game takes the seat of its page with the page's key (the page gone first, or still connected and superseded), and the match starts and runs" "$HAND_RC"
+    stop_server
 else
     echo "  SKIP: node is not installed: the lobby page's client was NOT run against a server (tests/scripts/web_lobby_server_check.js)"
 fi

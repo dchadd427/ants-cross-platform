@@ -9,7 +9,8 @@ screen: the codec of every message of the protocol and the client that keeps the
     to the server's pings, what changed between two Room messages (who joined, left, was renamed, was moved, changed places, leads now), the requests that only the leader may make and the bytes they
     put on the wire (a colour move's guard is the room's seating hash), the way back with the key after a lost link (the waits grow, a link that says nothing is given up), what each refusal means, and
     the entry that the game page reads to take the seat over;
-  - the client against a real server is run by tests/scripts/test_ants_server.sh (tests/scripts/web_lobby_server_check.js), which starts the servers.
+  - the client against a real server is run by tests/scripts/test_ants_server.sh (tests/scripts/web_lobby_server_check.js), which starts the servers; the same script hands a lobby over to two real games
+    (tests/scripts/web_lobby_handoff_check.js: START, the pages go, a game of each name takes its seat with the page's key, the match runs).
 The node checks need node; without it these tests are skipped and say so.
 """
 import os
