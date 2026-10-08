@@ -164,7 +164,7 @@ Firewalls: the host needs TCP 4001 open (it only sends the announcements); the m
   shows it only when it is the sender or an ally of the sender by its own alliance table (`HUD::receive_chat_message`), in the sender's team colour. `drop_player` also clears the offers to and from the dropped team.
   Tests: `N5.9` / `N5.10` of `test_network_app` (an offer from another machine reaches the application as the question, Accept makes the team on all three machines, a team message reaches only the ally, a
   refusal closes the waiting dialog, Withdraw takes the offer back everywhere, equal state hashes at the end).
-* **Limits of this release**: no NAT traversal (raw TCP: a LAN, a VPN or a forwarded port), Leave on the results screen of a network match ends the program as in the original (or returns to the start menu when the game came from it; the browser build returns to the local setup screen), a player has one pending team offer at a time
+* **Limits of this release**: no NAT traversal (raw TCP: a LAN, a VPN or a forwarded port), Leave on the results screen of a network match ends the program as in the original (or returns to the start menu when the game came from it; the browser build goes back to the site's front page, see [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#the-game-page-and-its-addresses)), a player has one pending team offer at a time
   (the original queues several). Since v0.0.47 the host may leave and the match goes on (see Host migration: `HostChanged` reports it, `HostLeft` only says that no
   new host could be agreed).
 

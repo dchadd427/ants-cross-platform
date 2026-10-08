@@ -21,6 +21,10 @@ protocol is spoken with the client of web_hidden_check.py, standard library only
              goes back to the front page in the same tab, which remembers its choices;
   * solo     START with every other seat Nobody takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
              with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs (a room of the server needs two people), at Green whatever seat was You;
+  * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game
+             button takes THIS tab back to the front page (no new tab); the same for a match in a room of the server (one Medium bot); the quit dialog's Yes with three opponents left (the quit
+             ends a match only when one is left) takes the tab to the front page at once, and the server drops the seat now (a room with nobody left ends); the front page does not offer to
+             rejoin a match that was left on purpose;
   * friend   two people, each a browser of their own: the host sits at Blue, a Friend at Black, nobody else; START takes the host to the room and the room WAITS (the server's status: waiting, one
              player); the friend opens the invitation link (asked for a name first), joins the seat that the link names, and the match starts by itself, with no START pressed after that, for both;
              the server's status lists both seats and the empty ones, no START of a game that does not lead was heard, and the two games' state hashes agree;
@@ -55,8 +59,8 @@ from web_aspect_check import Browser, NotReachable, Tab                    # noq
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("front", "seats", "play", "solo", "friend", "old", "room", "game")
-NEEDS_SERVER = ("play", "friend")                                            # (the parts that play a match need the site's /ws to lead to a game server)
+PARTS = ("front", "seats", "play", "solo", "leave", "friend", "old", "room", "game")
+NEEDS_SERVER = ("play", "leave", "friend")                                   # (the parts that play a match in a room need the site's /ws to lead to a game server)
 
 # The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05); a text that is faded by an opacity is mixed with what lies behind it, its face too); text on the clay tile is measured against the tile's two ends (its deepest and its lightest broad shade: CLAY_DEEP
 # and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1) and text in the footer against the ends of its gradient, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
@@ -187,7 +191,7 @@ def main():
     work = None
     if plays:
         if not args.ws_port:
-            note("no --ws-port: the parts that play (%s) are left out" % ", ".join(NEEDS_SERVER))
+            note("no --ws-port: the games in a room of the game server (parts %s) are left out" % ", ".join(NEEDS_SERVER))
         elif not os.path.isfile(args.server) or not os.access(args.server, os.X_OK):
             print("  SKIP: the game server program is not there (build the target ants_server, or give --server)")
             return 3
@@ -691,6 +695,106 @@ def main():
                     shot("home_solo_running")
             else:
                 check(False, "the game page of a game on this computer is ready")
+
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        if wanted("leave"):
+            print("[web home] Leave game: the results' button and the quit dialog's Yes take this tab back to the front page")
+            if not can_play:
+                note("leave: the games in a room of the game server are left out (no game server: give --ws-port)")
+
+            def press(name, code, vk, text="", modifiers=0):
+                for kind in ("keyDown", "keyUp"):
+                    tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": code, "windowsVirtualKeyCode": vk, "text": text if kind == "keyDown" else "", "modifiers": modifiers})
+
+            def quit_dialog_yes():
+                """Ctrl+Q opens the game's quit dialog (the Control key goes down first, as on a keyboard) and Y answers Yes. Whether the dialog was up."""
+                tab.ev("document.getElementById('canvas').focus(); 1")
+                tab.call("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Control", "code": "ControlLeft", "windowsVirtualKeyCode": 17, "modifiers": 2})
+                press("q", "KeyQ", 81, modifiers=2)
+                tab.call("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Control", "code": "ControlLeft", "windowsVirtualKeyCode": 17, "modifiers": 0})
+                opened = bool(wait_for(lambda: tab.ev("Module._ants_probe(5)") == 1, 5))
+                press("y", "KeyY", 89, "y")
+                return opened
+
+            def leave_button(shape):
+                """Where a person clicks Leave Game on the results, in the canvas's own pixels (the middle of the button): the original's rectangle (ScorecardModal::QUIT_BTN_*, read from the source, so
+                that the check follows the layout) moved right by the extra width of the wide page."""
+                with open(os.path.join(REPO, "include", "ants_app", "scorecard.hpp"), encoding="utf-8") as f:
+                    header = f.read()
+                found = {n: re.search(r"QUIT_BTN_%s\s*=\s*(\d+);" % n, header) for n in "XYWH"}
+                missing = [n for n, m in found.items() if m is None]
+                if missing:
+                    raise RuntimeError("include/ants_app/scorecard.hpp has no QUIT_BTN_%s: this check reads the Leave Game button from it" % ", QUIT_BTN_".join(missing))
+                x, y, w, h = (int(found[n].group(1)) for n in "XYWH")
+                return x + (shape[0] - 640) + w / 2, y + h / 2
+
+            def at_front_page():
+                """The tab is on the front page itself: its path "/" with no arguments, and its name field."""
+                return bool(wait_for(lambda: tab.ev("location.pathname") == "/" and tab.ev("location.search") == "" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20))
+
+            def leave_from_results(shape, what):
+                """The quit dialog's Yes with one opponent left ends the match and the results are up; a click on Leave Game. Whether the tab is on the front page after it."""
+                check(quit_dialog_yes(), "%s: Ctrl+Q opens the quit dialog" % what)
+                ended = bool(wait_for(lambda: tab.ev("Module._ants_match_running()") == 0, 15))
+                check(ended, "%s: Yes, with one opponent left, ends the match: the results are up" % what)
+                if not ended:
+                    return False
+                time.sleep(1.5)                                                       # (the results build their rows 250 ms later, and the Leave Game button comes with them)
+                shot("home_leave_results_%s" % what.replace(" ", "_").replace(":", "x"))
+                lx, ly = leave_button(shape)
+                x, y = aspect.screen_of_canvas(tab.geometry(), lx, ly, shape[0], shape[1])
+                before = pages()
+                tab.click(x, y)
+                went = at_front_page()
+                check(went and pages() == before, "%s: Leave Game takes this tab back to the front page, the menu of the site (no new tab; now %s)" % (what, tab.ev("location.pathname + location.search") if went else "elsewhere"))
+                return went
+
+            for shape_name, shape in (("16:9", (960, 540)), ("4:3", (640, 480))):             # a game on this computer against one Easy bot, each shape of the picture (the button is in another place)
+                clear_storage()
+                load(web + "play.html?map=tiny&bots=easy,none,none&name=Bob&aspect=" + shape_name, ready=True, settle=1.5)
+                started = start_by_enter()
+                check(started, "a game on this computer against one bot (%s) starts" % shape_name)
+                if started:
+                    leave_from_results(shape, "game on this computer %s" % shape_name)
+
+            if can_play:
+                # a match in a room of the game server: the card's START with one Medium bot (the other seats Nobody)
+                clear_storage()
+                load(web, settle=1.5)
+                type_name("Bob")
+                tab.ev("document.getElementById('seat-1-medium').click(); document.getElementById('seat-2-nobody').click(); document.getElementById('seat-3-nobody').click(); 1")
+                tab.ev("document.getElementById('play').click(); 1")
+                ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20) and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout)
+                check(ok, "START with one bot takes this tab to the game page of a room")
+                if ok:
+                    code = tab.ev("(function () { var a = ANTS_ARGS; return a[a.indexOf('--room') + 1]; })()")
+                    started = bool(close_quick_help() and wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 30) and wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 60, 0.5))
+                    check(started, "the match against the bot starts by itself (room %s)" % code)
+                    if started and leave_from_results((960, 540), "match in a room"):
+                        offered = tab.ev("document.getElementById('rejoin') ? !document.getElementById('rejoin').hidden : false")
+                        check(not offered, "... and the front page does not offer to rejoin the match that was left")
+                # the quit dialog's Yes with three opponents left (a match goes on without the player): the game leaves for the front page at once, and the seat is dropped, not held
+                clear_storage()
+                load(web, settle=1.5)
+                type_name("Bob")
+                tab.ev("[1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-medium').click(); }); 1")
+                tab.ev("document.getElementById('play').click(); 1")
+                ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20) and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout)
+                check(ok, "START with three bots takes this tab to the game page of a room")
+                if ok:
+                    code = tab.ev("(function () { var a = ANTS_ARGS; return a[a.indexOf('--room') + 1]; })()")
+                    started = bool(close_quick_help() and wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 30) and wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 60, 0.5))
+                    check(started, "the match against three bots starts by itself (room %s)" % code)
+                    if started:
+                        check((server.room(code) or {}).get("joined") == 4, "the room lists the player and the three bots")
+                        before = pages()
+                        check(quit_dialog_yes(), "match in a room with three bots: Ctrl+Q opens the quit dialog")
+                        went = at_front_page()
+                        check(went and pages() == before, "... and Yes takes this tab back to the front page at once (no new tab)")
+                        dropped = bool(wait_for(lambda: (server.room(code) or {}).get("state") == "finished", 10))
+                        status = server.room(code) or {}
+                        check(dropped and status.get("reason") == "everybody left", "... the seat is dropped on the server at once, not held for a page that is gone: with nobody left the room ends (%s: %s)" % (status.get("state"), status.get("reason")))
+                        check(went and not tab.ev("document.getElementById('rejoin') ? !document.getElementById('rejoin').hidden : false"), "... and the front page does not offer to rejoin it")
 
         if wanted("friend") and not can_play:
             note("friend: left out (no game server: give --ws-port)")
