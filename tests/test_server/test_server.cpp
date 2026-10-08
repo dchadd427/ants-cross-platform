@@ -11777,6 +11777,42 @@ void run_lobby_room_tests() {
             ASSERT_EQ(w.mgr.room_count(), size_t{2});
         }
     } TEST_END();
+
+    TEST_CASE("S3.161 A Server That Is Still Replaying Its Records Counts Them Among Its Rooms When A New Lobby Needs A Place: With Two Records In The Queue And Three Places, The Lobby That Nobody Is In Gives Its Place Up To The Next One") {
+        ServerLimits limits = lobby_limits();
+        limits.max_rooms = 3;
+        limits.lobby_empty_close_ms = 600000;
+        PWorld w("restore-161", limits);
+        w.start_server(500);
+        crash_with_record_of(w, "RQ-1", 6000, 2);
+        lengthen_record(w, "RQ-1", 40000);                                                // (a long replay: the queue stands for the length of this test)
+        copy_record_as(w, "RQ-1", "RQ-2", std::chrono::seconds(0));
+        age_record(w, "RQ-1", 10);
+        age_record(w, "RQ-2", 20);
+        w.restart.restore_slice_ms = 0;
+        w.start_server(500, false);
+        ASSERT_EQ(w.mgr->restoring_count(), size_t{2});
+        const auto page_hello = [&w](const std::string& code) {                         // what a front page says: Hello with the lobby block
+            net::Connection* link = w.open_link();
+            net::HelloMsg hello;
+            hello.name = "Raw";
+            hello.room = code;
+            hello.client_kind = net::kClientPage;
+            hello.create = lobby_block_of();
+            link->send(net::encode(hello));
+            return link;
+        };
+        net::Connection* first = page_hello("lobq0001");                                   // two records and one room: the three places
+        w.run(100);
+        ASSERT_TRUE(w.status("lobq0001").lobby && w.mgr->room_count() == size_t{1} && w.mgr->restoring_count() == size_t{2});
+        first->send(net::encode_leave());                                                 // nobody is in it now
+        w.run(100);
+        page_hello("lobq0002");
+        w.run(100);
+        ASSERT_TRUE(w.status("lobq0002").lobby && w.status("lobq0002").state == RoomState::Waiting);
+        ASSERT_TRUE(w.status("lobq0001").code.empty());
+        ASSERT_TRUE(w.mgr->room_count() == size_t{1} && w.mgr->restoring_count() == size_t{2});
+    } TEST_END();
 }
 
 int main() {
