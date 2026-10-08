@@ -230,6 +230,15 @@ class TheLocations(unittest.TestCase):
             for needle in needles:
                 self.assertIn(needle, read("docs", document), document + ": " + needle)           # (each document says its own part, not all of them together)
 
+    def test_the_pages_that_ask_for_a_name_tell_players_the_days_that_the_stack_keeps_the_matches(self):
+        # the owner chose "Add the line" (2026-10-08): the front page and the game page's name card say that online matches are recorded, kept for N days and public with the players' names. The pages are
+        # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so)
+        days = re.search(r'"--replays-days", "\$\{ANTS_REPLAY_DAYS:-(\d+)\}"', read("docker-compose.stack.yml")).group(1)
+        for page in ("lobby.html", "shell.html"):
+            self.assertIn("Online matches are recorded and kept for %s days. The recordings are public and show the players&rsquo; names." % days, read("web", page), page)
+        self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
+        self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
+
     def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_who_can_reach_the_door(self):
         for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "the replay port (read only, no secret)", "do not put a container there that you do not trust")),
                               ("docker-compose.server.yml", ("ran 30 seconds or more", "the replay port when it is switched on (read only, no secret", "do not put a container there that you do not trust")),
