@@ -1893,12 +1893,16 @@ void run_seat_move_tests() {
                     net.update(now);
                     if (!server) server = listener->accept();
                     read();
-                    std::this_thread::sleep_for(std::chrono::microseconds(300));
+                    ants_test::short_pause();
                 }
             };
             const auto run_until = [&](const std::function<bool()>& cond) {
                 for (int i = 0; i < 3000 && !cond(); ++i) run_for(10);
-                return cond();
+                return ants_test::real_time_tail(cond, [&]() {                      // (real time for a late kernel, the game clock standing still: see run_until of N3.39)
+                    net.update(now);
+                    if (!server) server = listener->accept();
+                    read();
+                });
             };
             const auto shows = [&](const std::string& kinds) {
                 for (size_t seat = 0; seat < 4; ++seat) {
