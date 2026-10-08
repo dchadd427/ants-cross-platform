@@ -5864,8 +5864,8 @@ void run_bot_tests() {
     TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog), 12 (The Release Before The Teams), 13 (The Release Before The Colour Moves), 14 (The Release Before The Create Block) Or 16 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
         {   // the door's own check of the protocol, for a code that no room has
             World w;
-            ASSERT_EQ(net::kProtocolVersion, uint16_t{15});                  // (14 was the protocol of v0.10.0: a Hello without a platform byte and a create block; 13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
-            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{16}, uint16_t{1}, uint16_t{0}}) {
+            ASSERT_EQ(net::kProtocolVersion, uint16_t{16});                  // (15 was the protocol of v0.11.0: a Hello without a client kind; 14 was the protocol of v0.10.0: a Hello without a platform byte and a create block; 13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
+            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{17}, uint16_t{1}, uint16_t{0}}) {
                 auto ends = w.net.connect({20, 10});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
                 net::HelloMsg hello;
@@ -5885,9 +5885,25 @@ void run_bot_tests() {
                 old.room = "NO-SUCH-ROOM";
                 std::vector<uint8_t> bytes = net::encode(old);
                 ASSERT_TRUE(!bytes.empty());
-                bytes.pop_back();                                                                // (the platform byte ends a Hello that has no block: what is left is the layout of 14)
+                bytes.pop_back();                                                                // (the client kind ends a Hello that has no block, and the platform byte before it: what is left is the layout of 14)
+                bytes.pop_back();
                 net::HelloMsg again;
-                ASSERT_FALSE(net::decode(bytes, again));                                          // (a protocol 15 reader takes it for no Hello at all)
+                ASSERT_FALSE(net::decode(bytes, again));                                          // (a protocol 16 reader takes it for no Hello at all)
+                old_ends.second->send(bytes);
+                w.run(300);
+                ASSERT_EQ(reject_on(old_ends.second), static_cast<int>(net::RejectReason::VersionMismatch));
+            }
+            {   // the very bytes that v0.11.0 sent (protocol 15 has the platform byte, and no client kind): the same answer
+                auto old_ends = w.net.connect({20, 10});
+                w.mgr.add_connection(std::make_unique<Borrowed>(old_ends.first), "127.0.0.1", w.now);
+                net::HelloMsg old;
+                old.version = 15;
+                old.name = "Old";
+                old.room = "NO-SUCH-ROOM";
+                std::vector<uint8_t> bytes = net::encode(old);
+                bytes.pop_back();                                                                // (the client kind ends a Hello that has no block: what is left is the layout of 15)
+                net::HelloMsg again;
+                ASSERT_FALSE(net::decode(bytes, again));
                 old_ends.second->send(bytes);
                 w.run(300);
                 ASSERT_EQ(reject_on(old_ends.second), static_cast<int>(net::RejectReason::VersionMismatch));

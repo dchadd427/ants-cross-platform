@@ -696,9 +696,10 @@ int main() {
         // dialog in simulation ticks and be blocked for 100 ticks of the running match after the host's late first turn (the match clock waits for the dialog since 12). Protocol 12 (v0.2.0 to v0.4.0) is
         // refused by a host of 13 the same way: its leader's StartRequest is two bytes and its Start has no team bytes, and the Hello does not tell. Protocol 13 (v0.8.0 to v0.8.2) is refused by a host of 14 by
         // the number alone: a client of 13 cannot send a SeatMove, and a host of 14 must not take a client that cannot be told "the leader moved you" for one that can. Protocol 14 (v0.10.0) is refused
-        // by a host of 15 the same way: its Hello has no platform byte and no create block, and it cannot read the platform bytes and the room's teams and rules of the Room message.
-        ASSERT_EQ(kProtocolVersion, 15);
-        for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}}) {
+        // by a host of 15 the same way: its Hello has no platform byte and no create block, and it cannot read the platform bytes and the room's teams and rules of the Room message. Protocol 15 (v0.11.0)
+        // is refused by a host of 16 by the number: its Hello has no client kind and its Room message no plan, and a lobby room's people could not be told from a game's.
+        ASSERT_EQ(kProtocolVersion, 16);
+        for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}}) {
             Room r8;
             auto e8 = r8.net.connect({10, 0});
             r8.host.add_connection(e8.first, 0);

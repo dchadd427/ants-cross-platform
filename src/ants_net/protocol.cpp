@@ -97,7 +97,8 @@ bool valid_room_code(const std::string& code) noexcept {
 bool valid_create_block(const CreateBlock& block) noexcept {
     if (!block.map_name.empty() && !valid_map_name(block.map_name)) return false;
     if (block.seats < 2 || block.seats > sim::MAX_PLAYERS) return false;
-    if ((block.flags & ~kCreateLeaderStarts) != 0) return false;
+    if ((block.flags & ~(kCreateLeaderStarts | kCreateLobby)) != 0) return false;
+    if (block.lobby() && (!block.leader_starts() || block.seats != sim::MAX_PLAYERS)) return false;      // a lobby room (protocol 16) is started by its leader and has all four colours
     if (block.team_a == kNoTeam && block.team_b == kNoTeam) return true;
     return block.team_a < block.team_b && block.team_b < sim::MAX_PLAYERS;             // two different seats, the lower first: a pair has one spelling
 }
@@ -169,6 +170,7 @@ std::vector<uint8_t> encode(const HelloMsg& m) {
     w.bytes(m.key.data(), m.key.size());
     w.u32(m.have_turns);
     w.u8(m.platform);
+    w.u8(m.client_kind);
     if (m.create) {                                                                    // the create block ends the message
         w.str8(m.create->map_name);
         w.u8(m.create->seats);
@@ -192,6 +194,7 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
     m.key = get_key(*r);
     m.have_turns = r->u32();
     m.platform = r->u8();
+    m.client_kind = r->u8();
     if (r->ok() && r->left() > 0) {                                                    // a create block, strictly: whatever it is, it is the end of the message
         CreateBlock block;
         block.map_name = r->str8();
@@ -202,7 +205,7 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
         if (!r->ok() || !valid_create_block(block)) return false;
         m.create = std::move(block);
     }
-    if (!r->done() || !valid_platform(m.platform) || m.name.size() > kMaxNameChars || m.token.size() > kMaxTokenChars || !valid_room_code(m.room)) return false;
+    if (!r->done() || !valid_platform(m.platform) || m.client_kind > kClientPage || m.name.size() > kMaxNameChars || m.token.size() > kMaxTokenChars || !valid_room_code(m.room)) return false;
     if (key_is_zero(m.key) && m.have_turns != 0) return false;                  // a new player has no turns: a count needs the key that it belongs to
     for (char c : m.name) {
         if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
@@ -248,7 +251,7 @@ bool decode(const uint8_t* data, size_t size, WelcomeMsg& out) {
     m.key = get_key(*r);
     m.flags = r->u8();
     if (!r->done() || m.player >= sim::MAX_PLAYERS || m.players < 2 || m.players > sim::MAX_PLAYERS) return false;
-    if (m.flags > kWelcomeRejoin || (m.flags == kWelcomeRejoin && key_is_zero(m.key))) return false;       // 0 or 1 only; a rejoin is of a seat that has a key
+    if (m.flags > kWelcomeCreated || (m.flags != 0 && key_is_zero(m.key))) return false;       // 0, 1 (a rejoin) or 2 (the room was made by this Hello) only, never both; a rejoin and a made room are of a seat that has a key
     out = m;
     return true;
 }
@@ -431,6 +434,8 @@ std::vector<uint8_t> encode(const RoomMsg& m) {
     w.u8(m.team_a);
     w.u8(m.team_b);
     w.u8(m.flags);
+    for (const PlanKind kind : m.plan) w.u8(static_cast<uint8_t>(kind));
+    w.u8(m.in_game);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
@@ -455,13 +460,25 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
     m.team_a = r->u8();
     m.team_b = r->u8();
     m.flags = r->u8();
+    std::array<uint8_t, sim::MAX_PLAYERS> plan{};
+    for (uint8_t& kind : plan) kind = r->u8();
+    m.in_game = r->u8();
     // an empty map name = the host has not chosen a map yet
     if (!r->done() || fog > 1 || (!m.map_name.empty() && !valid_map_name(m.map_name)) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
     // the leader: nobody (255), or a seat that a person holds as a guest (a server's room has no host in a seat; a bot, an empty seat or the host of a LAN room never leads)
     if (m.leader != kNoLeader && (m.leader >= sim::MAX_PLAYERS || m.slots[m.leader].state != SlotState::Client)) return false;
     // the room's own teams (protocol 15): none, or two seats, the lower first; and no rule bit that this build does not know
     if ((m.team_a != kNoTeam || m.team_b != kNoTeam) && (m.team_a >= m.team_b || m.team_b >= sim::MAX_PLAYERS)) return false;
-    if ((m.flags & ~kRoomLeaderStarts) != 0) return false;
+    if ((m.flags & ~(kRoomLeaderStarts | kRoomLobby | kRoomStarting)) != 0) return false;
+    // the lobby room's fields (protocol 16): a kind of each colour (0 - 4), a game only for a seat that a person holds, "starting" only in a lobby room; no room that is not a lobby room has a plan or a game
+    if (m.starting() && !m.lobby()) return false;
+    if (m.lobby() && !m.leader_starts()) return false;                    // (a lobby room is made with kCreateLeaderStarts: its leader starts it)
+    for (size_t seat = 0; seat < plan.size(); ++seat) {
+        if (plan[seat] > kPlanKindLast || (plan[seat] != 0 && !m.lobby())) return false;
+        m.plan[seat] = static_cast<PlanKind>(plan[seat]);
+        if (m.seat_in_game(static_cast<uint8_t>(seat)) && (!m.lobby() || m.slots[seat].state != SlotState::Client)) return false;
+    }
+    if ((m.in_game & ~((1u << sim::MAX_PLAYERS) - 1u)) != 0) return false;
     m.fog = fog == 1;
     out = std::move(m);
     return true;
@@ -711,6 +728,36 @@ bool decode(const uint8_t* data, size_t size, SeatMoveMsg& out) {
     m.guard = r->u32();
     if (!r->done() || m.from >= sim::MAX_PLAYERS || m.to >= sim::MAX_PLAYERS || m.from == m.to || m.guard == 0) return false;     // two seats of the room (a player cannot be moved to where it is) and a guard that was computed
     out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode(const PlanMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Plan));
+    w.str8(m.map_name);
+    for (const PlanKind kind : m.plan) w.u8(static_cast<uint8_t>(kind));
+    w.u8(m.team_a);
+    w.u8(m.team_b);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, PlanMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Plan, r, storage)) return false;
+    PlanMsg m;
+    m.map_name = r->str8();
+    std::array<uint8_t, sim::MAX_PLAYERS> plan{};
+    for (uint8_t& kind : plan) kind = r->u8();
+    m.team_a = r->u8();
+    m.team_b = r->u8();
+    if (!r->done() || (!m.map_name.empty() && !valid_map_name(m.map_name))) return false;      // exactly the type, a map, four kinds and two team bytes
+    for (size_t seat = 0; seat < plan.size(); ++seat) {
+        if (plan[seat] > kPlanKindLast) return false;
+        m.plan[seat] = static_cast<PlanKind>(plan[seat]);
+    }
+    if ((m.team_a != kNoTeam || m.team_b != kNoTeam) && (m.team_a >= m.team_b || m.team_b >= sim::MAX_PLAYERS)) return false;      // none, or two seats, the lower first (a pair has one spelling)
+    out = std::move(m);
     return true;
 }
 
