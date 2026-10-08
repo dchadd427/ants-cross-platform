@@ -45,6 +45,7 @@
 #include "ants_app/rejoin_store.hpp"
 #include "ants_app/host_lookup.hpp"
 #include "ants_app/start_menu.hpp"
+#include "ants_app/replay_view.hpp"
 #include "ants_app/touch_control.hpp"
 #include "ants_app/room_chat.hpp"
 #include "ants_app/setup_layout.hpp"
@@ -172,6 +173,10 @@ struct ApplicationConfig {
     /// with --bot (the web page's START with every other seat on Nobody). Without it a game of this machine that has no --bot plays all four colonies, the original's single-player game,
     /// whose other colours stand still. Not together with --bot (parse_arguments says so); it does nothing in a room, as --play does not.
     bool alone{false};
+    /// --replay FILE (docs/REPLAYS.md "Watching"): the game shows the match that FILE (a .antsrep) holds instead of playing one: its map is found in `maps_dir`, the orders go in at their turns and the HUD's orders are
+    /// discarded. The whole map is shown (no fog). The match is played from the start at 1x; replay_control() pauses, changes the speed, jumps. A file that cannot be shown (damaged, other rules, no such map) leaves the
+    /// game idle with replay_failure() saying why. The web page hands the file over through the in-memory file system (web/shell.html `?replay=`). Empty: a game as before.
+    std::string replay_path;
     /// --teams ffa | A+B (docs/BOTS.md, "Alliances"): ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the match start with the
     /// original's commands: in a game on this computer by Application::form_start_teams (a pair that cannot be made starts the game without teams and says why), in a room (protocol 13) by every machine
     /// from the Start message, which the room's START puts them into: this player's START (the leader of a server's room, the host of a room on the local network) carries the choice.
@@ -265,6 +270,16 @@ public:
     const std::vector<uint8_t>& last_replay() const noexcept { return last_replay_; }
     /// What that file is called when it is saved or downloaded ("ants-TREASURE-20261006-143209.antsrep")
     const std::string& last_replay_name() const noexcept { return last_replay_name_; }
+    /// Watching a replay (ApplicationConfig::replay_path; docs/REPLAYS.md "Watching"). The page's bar asks and reads through these (ants_replay_do and ants_replay_get).
+    bool replay_mode() const noexcept { return replay_mode_; }
+    ReplayState replay_state() const noexcept;
+    ReplayFailure replay_failure() const noexcept { return replay_failure_; }
+    const std::string& replay_failure_text() const noexcept { return replay_failure_text_; }
+    /// The turns that the picture shows, the turns of the recording, the speed times 100 and how far a jump is (0 .. 100)
+    int replay_value(ReplayValue what) const noexcept;
+    void replay_control(ReplayControl what, int value);
+    /// The recording as the file says it (null when there is none)
+    const replay::Replay* replay_file() const noexcept { return replay_file_.get(); }
     /// The recording of the match that is being played (null: none is made, or the match has ended)
     const replay::Recorder* recorder() const noexcept { return recorder_.get(); }
     /// The engine that the match screen SHOWS and that the HUD asks (the picture, the minimap, the panel, the selection, the pointer's cursor, what a click picks): `sim()`, the confirmed
@@ -618,6 +633,19 @@ private:
     uint8_t local_player_id_{0};
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::unique_ptr<replay::Recorder> recorder_;          // the recording of the match that is on (replay.hpp; empty: none is made, or the match has ended); the sinks below hold a reference to it
+    bool replay_mode_{false};                             // --replay: the game shows a recording
+    std::unique_ptr<replay::Replay> replay_file_;         // its file (null: it could not be read)
+    ants::assets::LevelData replay_level_;                // its map, as the file names it
+    ReplayFailure replay_failure_{ReplayFailure::None};
+    std::string replay_failure_text_;
+    size_t replay_next_{0};                               // the next order of the file to give
+    float replay_speed_{1.0f};
+    bool replay_paused_{false};
+    bool replay_cut_{false};                              // the end of a recording that stops before its match did is reached
+    bool replay_jumping_{false};
+    uint32_t replay_jump_target_{0};
+    uint32_t replay_jump_from_{0};                        // the turn that the jump began at (0 after a restart)
+    std::unique_ptr<sim::CommandSink> discard_sink_;      // where the HUD's orders go while a replay is watched: nowhere
     std::unique_ptr<sim::CommandSink> local_sink_;        // where the HUD's orders of a game on this computer go: into the engine and into the recording (a network game's go to net_)
     std::vector<uint8_t> last_replay_;                    // the file of the match that ended last, and its name (finish_recording)
     std::string last_replay_name_;
@@ -766,6 +794,16 @@ private:
     std::string declined_team_up_note(const sim::NewsEvent& event) const;   // the line that says why a bot declined the local player's invitation (the HUD's news note); "" for any other event
 
     // Replays (replay.hpp, docs/REPLAYS.md; application_replay.cpp): every match is recorded as it is played, and the file is made when it ends
+    // Watching a replay (application_replay.cpp)
+    void prepare_replay();                                             // init: the file is read, its rules and its map are checked (replay_failure_ says what is wrong)
+    void start_replay();                                               // the match of the file is set up on the engine and the screen, at its first turn
+    void run_replay(float dt);                                         // a frame of it: the turns that the clock and the speed allow, or a step of a jump
+    bool replay_turn(bool picture);                                    // one turn: the orders due, the tick; false when the recording is at its end (the end is handled)
+    void replay_ends();                                                // the last turn is played: the results (the match was over) or the note (it was not)
+    void replay_jump_to(uint32_t turn);
+    void replay_diverged(uint32_t turn);
+    void report_replay_to_page();                                      // the web page learns what the game knows of the file (names, length, why not)
+    void leave_replay();                                               // Quit and Leave Game: back to the page's list
     void use_local_sink();                                             // the HUD's orders of a game on this computer go through local_sink_, which the recording sees (they went straight into the engine)
     void begin_local_recording(uint32_t seed, bool teams_made);        // a match on this computer began: the engine is initialised and the teams are made, no command was given yet
     void begin_net_recording();                                        // the Start of a network match was loaded (net_load_match)

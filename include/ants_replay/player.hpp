@@ -24,6 +24,13 @@ namespace ants::replay {
 /// and loads it. False with `error` otherwise: a missing map is refused by name, a map of the same name that is another file with both hashes.
 bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData& level, std::string& error);
 
+/// Why this build does not play `head`'s match (its rules number and the game that made it): "recorded by v0.10.0 with simulation rules 0 ...". Only for a head that plays_here() says no to.
+std::string rules_refusal(const Header& head);
+
+/// Sets `engine` up as the match began: the Fog of War setting that the caller wants (a viewer shows the whole map: false; it is not part of any hash), the seed, the seats that play, their names and
+/// the teams that the match started with. `level` is the map that load_match found (a viewer may hand the one that has no hill art for the seats that do not play: the match is the same).
+void begin_match(sim::SimulationEngine& engine, const Replay& replay, const assets::LevelData& level, bool fog);
+
 /// What play() calls while it plays; both are optional
 struct Hooks {
     /// Before a command is applied: its turn, the command, and the engine as it stands then (the ants that the command names can be looked up)
@@ -45,8 +52,7 @@ struct Outcome {
     std::array<int32_t, sim::MAX_PLAYERS> scores{};     // the score box of each seat when the replay ended (own score plus the ally's; 0 for a seat that does not play)
 };
 
-/// Plays `replay` on `level` (the map that load_map found). A file of other rules than this build's (head.engine_rules against net::kProtocolVersion) is refused: it would play out
-/// differently, and `error` names both numbers.
+/// Plays `replay` on `level` (the map that load_map found). A file of other simulation rules than this build's (plays_here) is refused: it would play out differently, and `error` names both numbers.
 Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& hooks = Hooks{});
 
 /// One order of the match as it was given

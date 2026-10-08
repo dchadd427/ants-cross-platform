@@ -45,10 +45,16 @@ inline constexpr size_t kMaxChunkCommands = 4096;      // commands in a CMDS chu
 inline constexpr uint32_t kChunkTurns = 30 * net::kTurnsPerSecond;   // turns that a CMDS chunk spans at most
 inline constexpr uint8_t kNoSeat = 255;
 
+/// The rules number of the simulation: it changes ONLY when a match plays out differently (a golden hash moves: the engine, the map reader, the original's tables). A file says the number of the build that
+/// recorded it (the head's field `sim_rules`) and plays on a build with the same number, whatever the network protocol did meanwhile: a protocol bump that leaves the simulation alone strands no file.
+/// tests/test_replay (RP7.x) fail when the reference match's final hash changes and this number does not.
+inline constexpr uint16_t kSimRules = 1;
+
 /// What the start of the match was: with the commands it is the whole match.
 struct Header {
     uint16_t format_version{kFormatVersion};
-    uint16_t engine_rules{net::kProtocolVersion};
+    uint16_t engine_rules{net::kProtocolVersion};      // net::kProtocolVersion of the recorder (what the room spoke; kept for information: a file plays on its sim_rules)
+    uint16_t sim_rules{kSimRules};                     // kSimRules of the recorder; 0 in a file that does not say (made before the field: sim_rules_of() asks the table below)
     std::string game_version;                          // "v0.9.2": the game that wrote the file
     std::string build_id;
     std::string venue;                                 // "local game" or "network game": where it was played
@@ -77,6 +83,12 @@ struct Replay {
     bool match_over{false};                            // the engine's rules ended the match
     uint64_t final_hash{0};                            // the engine's state hash (StateHash::total) after the last turn and the last command; complete files only
 };
+
+/// The rules number of the simulation that `head` needs: its own `sim_rules`, else (a file made before the field) the one that the table of protocol numbers gives, else 0 (unknown: no build claims
+/// it). The table (replay.cpp) holds the protocol numbers that are known to play a match out the same way, each proved with a reference file played under the newer engine.
+uint16_t sim_rules_of(const Header& head) noexcept;
+/// True when this build plays `head`'s match exactly as it was played: sim_rules_of(head) == kSimRules
+bool plays_here(const Header& head) noexcept;
 
 /// CRC-32 (IEEE 802.3, the one of zlib and PNG: CRC-32 of "123456789" is 0xCBF43926); `crc` is the value so far (0 to start)
 uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc = 0) noexcept;

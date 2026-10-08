@@ -26,6 +26,7 @@ IMAGE = "nginx:alpine"
 
 LOBBY_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998)</title></head><body><input type="text" id="player-name"><p>the stand-in lobby</p></body></html>\n'
 CLASSIC_PAGE = '<!DOCTYPE html><html><head><title>a stand-in page</title><link rel="stylesheet" href="/front/classic.css"></head><body><p>a stand-in page of the site</p></body></html>\n'
+WATCH_PAGE = '<!DOCTYPE html><html><head><title>Watch replays - stand-in</title></head><body><div id="list-body"></div></body></html>\n'
 GAME_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998) - game</title></head><body><div id="game-stage" data-aspect="16:9"></div><p>the stand-in game page</p></body></html>\n'
 
 
@@ -93,7 +94,7 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(html)
         os.makedirs(os.path.join(html, "front"))
         os.makedirs(os.path.join(html, "asset_catalog"))
-        for name, text in (("lobby.html", LOBBY_PAGE), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("changelog_archive.html", CLASSIC_PAGE),
+        for name, text in (("lobby.html", LOBBY_PAGE), ("watch.html", WATCH_PAGE), ("replay_page.js", "window.AntsReplay = {};\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("changelog_archive.html", CLASSIC_PAGE),
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)

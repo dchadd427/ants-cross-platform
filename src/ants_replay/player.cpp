@@ -68,12 +68,30 @@ bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData
     return true;
 }
 
+std::string rules_refusal(const Header& head) {
+    const uint16_t needs = sim_rules_of(head);
+    const std::string made_by = head.game_version.empty() ? std::string("a game of unknown version") : head.game_version;
+    if (needs == 0) {
+        return "recorded by " + made_by + " with network protocol " + std::to_string(head.engine_rules) + ", whose simulation this build does not know; this build plays simulation rules " + std::to_string(kSimRules) +
+               ": open it with the game that made it";
+    }
+    return "recorded by " + made_by + " with simulation rules " + std::to_string(needs) + "; this build plays simulation rules " + std::to_string(kSimRules) + ": open it with the game that made it";
+}
+
+void begin_match(sim::SimulationEngine& engine, const Replay& replay, const assets::LevelData& level, bool fog) {
+    engine.set_fog_of_war_enabled(fog);
+    engine.init(level, replay.head.seed, replay.head.roster);
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        engine.set_player_name(seat, ((replay.head.roster >> seat) & 1u) != 0 ? replay.head.names[seat] : std::string());
+    }
+    if (replay.head.teams.set) sim::apply_start_teams(engine, replay.head.teams);
+}
+
 Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& hooks) {
     Outcome out;
     out.complete = replay.complete;
-    if (replay.head.engine_rules != net::kProtocolVersion) {
-        out.error = "recorded with network protocol " + std::to_string(replay.head.engine_rules) + " (" + (replay.head.game_version.empty() ? std::string("a game of unknown version") : replay.head.game_version) +
-                    "); this build plays protocol " + std::to_string(net::kProtocolVersion) + ": open it with the game that made it";
+    if (!plays_here(replay.head)) {
+        out.error = rules_refusal(replay.head);
         return out;
     }
     if (replay.head.hash_period == 0 || replay.total_turns > kMaxTurns) {      // (what encode and decode refuse; a replay made by hand could hold them)
@@ -81,12 +99,7 @@ Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& 
         return out;
     }
     sim::SimulationEngine engine;
-    engine.set_fog_of_war_enabled(replay.head.fog);
-    engine.init(level, replay.head.seed, replay.head.roster);
-    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
-        engine.set_player_name(seat, ((replay.head.roster >> seat) & 1u) != 0 ? replay.head.names[seat] : std::string());
-    }
-    if (replay.head.teams.set) sim::apply_start_teams(engine, replay.head.teams);
+    begin_match(engine, replay, level, replay.head.fog);
 
     size_t next = 0;
     const auto give = [&](const TimedCommand& tc) {

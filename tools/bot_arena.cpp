@@ -72,7 +72,13 @@
 #include "ants_ai/bot_view.hpp"
 #include "ants_ai/rng.hpp"
 #include "ants_ai/standard_bot.hpp"
+#include "ants_app/version.hpp"
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_net/netgame.hpp"
+#include "ants_net/protocol.hpp"
+#include "ants_replay/player.hpp"
+#include "ants_replay/recorder.hpp"
+#include "ants_server/replay_store.hpp"
 #include "bench_aggressor.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
@@ -91,6 +97,9 @@ namespace fs = std::filesystem;
 namespace ai = ants::ai;
 namespace sim = ants::sim;
 namespace assets = ants::assets;
+namespace net = ants::net;
+namespace replay = ants::replay;
+namespace server = ants::server;
 
 namespace {
 
@@ -438,6 +447,7 @@ struct Options {
     bool rotate{false};
     uint32_t repeat{1};
     bool replay_check{false};
+    std::string save_replays;                      // a folder: every match is kept there as a replay (the server's store names and keeps them; the site's list shows them)
     unsigned threads{1};
     std::string out;
     bool quiet{false};
@@ -452,7 +462,7 @@ struct Options {
 void print_usage(std::FILE* to) {
     std::fprintf(to,
         "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
-        "                 [--replay-check] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs]\n"
+        "                 [--replay-check] [--save-replays DIR] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs]\n"
         "       bot_arena --selftest\n"
         "       bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc\n"
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
@@ -468,6 +478,8 @@ void print_usage(std::FILE* to) {
         "  --ally-pairs       every two seats that have the same standard spec team up (2 + 2 for [A, A, B, B]; the lower seat of a pair invites; test-only)\n"
         "  --repeat N         play every match N times and require identical results\n"
         "  --replay-check     replay the applied commands into a fresh engine without any bot: same hash at every 20th tick and at the end\n"
+        "  --save-replays DIR keep every match that was played as a replay file (.antsrep) in DIR, named as the game server names its own (ants-MAP-DATE-TIMEZ.antsrep; docs/REPLAYS.md): the\n"
+        "                     players are \"Bot (Level)\". Pointed at the replay folder of a game server, the matches show in the site's list of replays (Watch replays) like any other\n"
         "  --threads N        matches at the same time (default 1)\n"
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
@@ -846,6 +858,11 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--ally-standard") o.ally_standard = true;
         else if (s == "--ally-pairs") o.ally_pairs = true;
         else if (s == "--replay-check") o.replay_check = true;
+        else if (s == "--save-replays") {
+            if (!value("--save-replays", v)) return false;
+            if (v.empty()) { err = "--save-replays needs a folder"; return false; }
+            o.save_replays = v;
+        }
         else if (s == "--quiet") o.quiet = true;
         else if (s == "--no-wall-time") o.wall_time = false;
         else if (s == "--map") {
@@ -926,6 +943,8 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
 
 struct LoadedMap {
     std::string name;                // what the report calls it: the file's name without folder and extension, in capitals for a shipped map
+    std::string file_name;           // the map's file as a replay names it ("TREASURE.LVL"), and the FNV-1a hash of the file (net::hash_file): another file under the same name is another map
+    uint64_t file_hash{0};
     assets::LevelData level;
     bool ok{false};
     std::string error;
@@ -982,6 +1001,8 @@ std::vector<LoadedMap> load_maps(const Options& o) {
             m.error = "map '" + stem + "' does not load";
             continue;
         }
+        m.file_name = p.filename().string();
+        if (!net::hash_file(p.string(), m.file_hash)) m.file_name.clear();           // (no hash: the matches of this map are not saved)
         m.ok = true;
     }
     return maps;
@@ -1131,6 +1152,70 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     return s;
 }
 
+// --save-replays: the matches that were played are kept as replay files through the game server's own store (ants_server::ReplayStore: the names, the age and size limits, the way a file is written
+// whole), so that a folder that a server reads shows them in its list like the matches of its rooms. The store is single threaded: one lock. A file is the match played again into a fresh engine
+// with a recorder (the bots' commands as the arena applied them, at the step they were applied), which is also the proof that the match is nothing but its commands.
+struct ReplaySink {
+    std::mutex lock;
+    std::unique_ptr<server::ReplayStore> store;
+    std::vector<std::string> saved;
+    std::vector<std::string> notes;
+    size_t too_short{0};                           // matches that ran under server::kReplayMinTurns (the server keeps none of those either: the site's list is of matches of 30 seconds or more)
+};
+ReplaySink* g_replay_sink = nullptr;
+
+void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, const ai::ArenaResult& played) {
+    if (g_replay_sink == nullptr || !played.error.empty() || m.file_name.empty() || !net::valid_map_name(m.file_name)) return;
+    if (played.steps < server::kReplayMinTurns) {
+        std::lock_guard<std::mutex> guard(g_replay_sink->lock);
+        ++g_replay_sink->too_short;
+        return;
+    }
+    replay::Header head;
+    head.game_version = std::string(ants::VERSION_STRING);
+    head.build_id = std::string(ants::BUILD_ID).substr(0, replay::kMaxTextBytes);
+    head.venue = "bot arena";
+    head.map_name = m.file_name;
+    head.map_hash = m.file_hash;
+    head.seed = spec.seed;
+    head.fog = false;
+    for (const ai::BotSpec& b : job.bots) {
+        if (b.seat >= sim::MAX_PLAYERS) return;
+        head.roster = static_cast<uint8_t>(head.roster | (1u << b.seat));
+        head.names[b.seat] = ai::bot_display_name(b);          // ("Bot (Medium)": the name the rooms of the server show)
+    }
+    sim::SimulationEngine sim;
+    sim.set_fog_of_war_enabled(false);
+    sim.init(m.level, spec.seed, head.roster);
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) sim.set_player_name(seat, ((head.roster >> seat) & 1u) != 0 ? head.names[seat] : std::string());
+    replay::Recorder rec(head);
+    size_t next = 0;
+    const auto give = [&](uint64_t step) {
+        for (; next < played.log.size() && played.log[next].step == step; ++next) {
+            rec.on_command(played.log[next].command);
+            sim.apply_command(played.log[next].command);
+        }
+    };
+    give(0);
+    for (uint64_t step = 1; step <= played.steps; ++step) {
+        sim.tick();
+        sim.clear_news_events();
+        sim.clear_audio_events();
+        rec.on_tick(sim);
+        give(step);
+    }
+    std::string error;
+    const std::vector<uint8_t> bytes = rec.finish(sim, error);
+    std::lock_guard<std::mutex> guard(g_replay_sink->lock);
+    if (bytes.empty()) {
+        g_replay_sink->notes.push_back("not saved: " + (error.empty() ? std::string("nothing to write") : error));
+        return;
+    }
+    const server::ReplaySave result = g_replay_sink->store->save(bytes);
+    if (result.kept) g_replay_sink->saved.push_back(result.file);
+    else g_replay_sink->notes.push_back("not saved: " + result.note);
+}
+
 MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const Job& job, std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> factory) {
     MatchReport r;
     r.job = job;
@@ -1140,7 +1225,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
         return r;
     }
     const Clock::time_point started = Clock::now();
-    ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check);
+    ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check || g_replay_sink != nullptr);
     spec.factory = factory ? factory : o.ally_pairs ? ally_pairs_factory(job) : o.ally_standard ? ally_factory(job) : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
     r.result = ai::play_match(spec);
     r.plays = 1;
@@ -1148,6 +1233,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
         r.replay_checked = true;
         r.replay = ai::replay_commands(spec, r.result);
     }
+    if (r.result.error.empty()) save_replay(m, job, spec, r.result);
     for (uint32_t again = 1; again < o.repeat && r.result.error.empty(); ++again) {
         ai::ArenaSpec s2 = spec_of(o, m, job, false);
         s2.factory = spec.factory;
@@ -1434,6 +1520,25 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         std::fprintf(g_err, "bot_arena: %s\n", why.c_str());
         return 2;
     }
+    ReplaySink sink;
+    if (!o.save_replays.empty()) {                    // (opened before the first match, like the report file: a folder that cannot be used is found in a moment)
+        server::ReplayConfig rc;
+        rc.dir = o.save_replays;
+        rc.keep_days = 3650;                          // (the arena's store never deletes: the folder may be the server's, whose own limits are its own to apply)
+        rc.max_bytes = 4096ull * 1024ull * 1024ull;
+        rc.max_saves_per_hour = 1000000;              // (a run of many matches is one person's doing, not a flood of the server's rooms)
+        rc.game_version = std::string(ants::VERSION_STRING);
+        rc.build_id = std::string(ants::BUILD_ID).substr(0, replay::kMaxTextBytes);
+        sink.store = std::make_unique<server::ReplayStore>(rc);
+        std::string reason;
+        if (!sink.store->prepare(reason)) {
+            std::fprintf(g_err, "bot_arena: --save-replays: %s\n", reason.c_str());
+            return 2;
+        }
+        for (const std::string& note : sink.store->take_notes()) std::fprintf(g_out, "bot_arena: %s\n", note.c_str());      // (what the folder held)
+        g_replay_sink = &sink;
+    }
+    struct SinkOff { ~SinkOff() { g_replay_sink = nullptr; } } sink_off;
     std::string kinds;
     for (const ai::BotSpec& s : o.seats) kinds += (kinds.empty() ? "" : ", ") + std::to_string(static_cast<unsigned>(s.seat)) + "=" + spec_text(s);
     std::fprintf(g_out, "bot_arena: %zu match(es): maps %zu, seeds %s, %zu arrangement(s) of [%s], ticks %s, latency %u%s%s\n", jobs.size(), maps.size(), seeds_text(o.seeds).c_str(),
@@ -1453,6 +1558,15 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
     const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
     std::fprintf(g_out, "bot_arena: %zu match(es), %llu ticks, %.2f s%s\n", reports.size(), static_cast<unsigned long long>(ticks), seconds, failures == 0 ? ", every check passed" : "");
     if (failures != 0) std::fprintf(g_out, "bot_arena: %zu match(es) FAILED (not played, replay or repeat differs)\n", failures);
+    if (g_replay_sink != nullptr) {
+        std::fprintf(g_out, "bot_arena: %zu replay(s) saved in %s\n", sink.saved.size(), o.save_replays.c_str());
+        if (!o.quiet) {
+            for (const std::string& file : sink.saved) std::fprintf(g_out, "  %s\n", file.c_str());
+        }
+        if (sink.too_short > 0) std::fprintf(g_out, "bot_arena: %zu match(es) not saved: they ran under 30 seconds (%u turns), which the server's list does not show either\n", sink.too_short, static_cast<unsigned>(server::kReplayMinTurns));
+        for (const std::string& note : sink.notes) std::fprintf(g_out, "bot_arena: %s\n", note.c_str());
+        for (const std::string& note : sink.store->take_notes()) std::fprintf(g_out, "bot_arena: %s\n", note.c_str());
+    }
     {
         // what the seats' ants said "Can't go there." (docs/BOTS.md, "The can't-go loop"): all reactions, the first of each, the orders given and the orders that were refused
         uint64_t cantgo = 0, began = 0, orders = 0, refused = 0;
@@ -2052,6 +2166,57 @@ void selftest_tool(SelfTest& t) {
     }
     t.check(fields_ok, "every field of the report equals the match it describes (scores, counts, hash, replay)");
     t.check(played.seats.size() == 3 && played.seats[0].score > 0 && played.seats[0].banked == static_cast<uint32_t>(played.seats[0].score) && played.seats[2].score == 0, "(and the harvesting seats really scored, so the fields above are not all zero)");
+    // --save-replays: the match is kept as a replay of the server's kind (the site's list shows it), and the file plays back to the match's own hash
+    {
+        Options saving = o;
+        saving.replay_check = false;
+        saving.out = "";
+        saving.save_replays = dir.file("kept");
+        const ToolRun kept = run_tool_quietly(saving, dir, factory);
+        t.check(kept.code == 0 && kept.out.find("1 replay(s) saved") != std::string::npos, "--save-replays: the run passes and says that one replay was saved");
+        std::vector<std::string> files;
+        std::error_code listing;
+        for (const auto& entry : fs::directory_iterator(dir.path / "kept", listing)) files.push_back(entry.path().filename().string());
+        t.check(files.size() == 1 && files[0].rfind("ants-TINY-", 0) == 0 && files[0].size() > 8 && files[0].compare(files[0].size() - 8, 8, ".antsrep") == 0,
+                "... as one file named like the server's (ants-TINY-<date>-<time>Z.antsrep)");
+        replay::Replay back;
+        std::string why;
+        const std::string bytes = files.size() == 1 ? read_file((dir.path / "kept" / files[0]).string()) : std::string();
+        const bool decoded = !bytes.empty() && replay::decode(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), back, why);
+        t.check(decoded && back.head.map_name == "TINY.LVL" && back.head.seed == 1 && back.head.roster == 7 && !back.head.fog && back.head.venue == "bot arena" && replay::plays_here(back.head),
+                "... that reads back: the map, the seed, the three seats, no fog of war, and this build's rules");
+        t.check(decoded && back.head.names[0] == ai::bot_display_name(o.seats[0]) && back.head.names[1] == ai::bot_display_name(o.seats[1]) && back.head.names[2] == ai::bot_display_name(o.seats[2]),
+                "... with the names that the server's rooms show for bots (\"Bot (Hard)\")");
+        assets::LevelData level;
+        const bool mapped = decoded && replay::load_map(back.head, std::string(ORIGINAL_ASSETS_DIR) + "/Maps", level, why);
+        const replay::Outcome outcome = mapped ? replay::play(back, level) : replay::Outcome{};
+        t.check(mapped && outcome.ran && outcome.ok && outcome.complete && outcome.hash == played.hash && outcome.turns == played.steps,
+                "... and plays back to the very hash and length of the match that the arena played (" + why + outcome.error + ")");
+        // the arena's store deletes nothing: an old file of somebody else's (the server's folder) is still there afterwards
+        {
+            Options shared = saving;
+            shared.save_replays = dir.file("shared");
+            std::error_code made;
+            fs::create_directories(dir.path / "shared", made);
+            std::ofstream(dir.path / "shared" / "ants-TINY-20200101-000000Z.antsrep") << "an old file of the server's own";
+            const ToolRun shared_run = run_tool_quietly(shared, dir, factory);
+            t.check(shared_run.code == 0 && fs::exists(dir.path / "shared" / "ants-TINY-20200101-000000Z.antsrep", made), "a folder with an old file of the server's: the run does not delete it (the arena's store keeps everything)");
+        }
+        // a match under 30 seconds is not kept (the server keeps none, its list is of matches of 30 seconds or more)
+        Options brief = saving;
+        brief.ticks = 500;
+        brief.save_replays = dir.file("brief");
+        const ToolRun brief_run = run_tool_quietly(brief, dir, factory);
+        size_t brief_files = 0;
+        for (const auto& entry : fs::directory_iterator(dir.path / "brief", listing)) brief_files += entry.path().extension() == ".antsrep" ? size_t{1} : size_t{0};
+        t.check(brief_run.code == 0 && brief_files == 0 && brief_run.out.find("0 replay(s) saved") != std::string::npos && brief_run.out.find("ran under 30 seconds") != std::string::npos,
+                "a match of 500 turns is not saved (under 30 seconds), and the run says so");
+        // a folder that cannot be used is found before the first match: exit 2
+        Options blocked = saving;
+        blocked.save_replays = dir.file("report.json");                  // (a file, not a folder)
+        const ToolRun refused_dir = run_tool_quietly(blocked, dir, factory);
+        t.check(refused_dir.code == 2 && refused_dir.err.find("--save-replays") != std::string::npos && refused_dir.out.find("match(es), ") == std::string::npos, "--save-replays on a file: exit 2 and nothing was played");
+    }
     // a map with flowers: the landings are counted, and every kind is written under its own name (TINY has no flower, so every value above is 0)
     Options flowers = o;
     flowers.maps = {"SMALL"};

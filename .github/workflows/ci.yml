@@ -343,8 +343,8 @@ jobs:
       - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html index.js index.wasm index.data changelog.html changelog_archive.html front/logo.png front/LibreFranklin-Medium.ttf front/classic.css && cmp index.html play.html'
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html watch.html replay_page.js index.js index.wasm index.data changelog.html changelog_archive.html front/logo.png front/LibreFranklin-Medium.ttf front/classic.css && cmp index.html play.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html watch.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
 
       # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=, ?embed=1), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has
       # the revalidation headers (tests/scripts/web_routes_check.py). The game server is not needed: nginx starts without it.
@@ -368,8 +368,8 @@ jobs:
           docker compose -f docker-compose.stack.yml config --quiet
           docker compose -f docker-compose.staging.yml config --quiet
           docker build --build-arg ANTS_SITE_LABEL=staging -t ants-beta-staging .
-          docker run --rm ants-beta-staging sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html; do grep -q "(staging)</title>" $page && grep -q "id=\"site-label\">staging<" $page || exit 1; done'
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ! grep -qi staging index.html play.html lobby.html'
+          docker run --rm ants-beta-staging sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html watch.html; do grep -q "(staging)</title>" $page && grep -q "id=\"site-label\">staging<" $page || exit 1; done'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ! grep -qi staging index.html play.html lobby.html watch.html'
 
   deploy:
     name: Deploy (Portainer webhook)

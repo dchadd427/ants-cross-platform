@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "ants_replay/replay.hpp"
+
 namespace ants::server {
 
 using ctl::JsonValue;
@@ -310,6 +312,7 @@ JsonValue replay_entry_json(const ReplayEntry& e, bool owner) {
         o.set("finished", JsonValue::make_bool(e.finished));
         o.set("game", JsonValue::make_string(e.game));
         o.set("rules", JsonValue::make_int(e.rules));
+        o.set("sim_rules", JsonValue::make_int(e.sim_rules));
     }
     return o;
 }
@@ -354,6 +357,7 @@ ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& req
             o.set("count", JsonValue::make_int(static_cast<int64_t>(store->count())));
             o.set("bytes", JsonValue::make_int(static_cast<int64_t>(store->total_bytes())));
             o.set("keep_days", JsonValue::make_int(store->config().keep_days));
+            o.set("sim_rules", JsonValue::make_int(replay::kSimRules));
             o.set("max_bytes", JsonValue::make_int(static_cast<int64_t>(store->config().max_bytes)));
         }
         o.set("replays", std::move(list));
@@ -389,6 +393,7 @@ ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::Htt
         o.set("replays", std::move(list));
         o.set("count", JsonValue::make_int(static_cast<int64_t>(store->readable_count())));
         o.set("keep_days", JsonValue::make_int(store->config().keep_days));
+        o.set("sim_rules", JsonValue::make_int(replay::kSimRules));             // (the server's own build: the list page marks the files of other rules)
         return json_response(200, o);
     }
     static const std::string kPrefix = "/replays/";
