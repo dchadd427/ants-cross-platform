@@ -1,0 +1,44 @@
+# A probe, on a scratch branch only: how a Windows runner charges CPU time to a thread that works in short passes (GetThreadTimes), beside other processes that spin, sleep or wait on timers.
+name: Thread time probe
+
+on:
+  push:
+    branches: [claude/project-thread-q475cj-probe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: probe ${{ matrix.os }} ${{ matrix.n }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-latest]
+        n: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The host
+        shell: pwsh
+        run: |
+          $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+          "OS: $($cv.ProductName) build $($cv.CurrentBuild).$($cv.UBR) display $($cv.DisplayVersion)"
+          Get-CimInstance Win32_Processor | ForEach-Object { "CPU: $($_.Name), $($_.NumberOfCores) cores, $($_.NumberOfLogicalProcessors) logical, $($_.MaxClockSpeed) MHz" }
+          Get-CimInstance Win32_ComputerSystem | ForEach-Object { "System: $($_.Manufacturer) $($_.Model), $([math]::Round($_.TotalPhysicalMemory / 1GB, 1)) GB" }
+          "Power plan: $(powercfg /getactivescheme)"
+          bcdedit /enum '{current}' 2>&1 | Select-String -Pattern 'dynamictick|platformclock|platformtick|hypervisor|tscsync|useplatform' | ForEach-Object { "bcd: $($_.Line.Trim())" }
+          "Boot config lines above (none means the setting is not set)"
+
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+
+      - name: Compile
+        run: cl /nologo /O2 /EHsc /std:c++17 scratch_probe/thread_time_probe.cpp /Fe:probe.exe
+
+      - name: Probe (15 seconds a scenario, 5 scenarios, 3 rounds)
+        run: ./probe.exe all 15
