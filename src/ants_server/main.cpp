@@ -18,7 +18,7 @@
 //   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
 //   --max-rooms N      the most rooms at a time (default 256)
 //   --demo-rooms N     for a public test page: a Hello that carries a create block (network protocol 15: the map, the seats 2 - 4, the teams and whether a full room waits for its leader's
-//                      START) for a room that does not exist makes it, at most N public rooms at a time. The code is only a name (the game makes 8 random letters and numbers). N is 1 to
+//                      START) for a room that does not exist makes it, at most N public rooms at a time. The code is only a name (the game makes 6 random letters and numbers). N is 1 to
 //                      --max-rooms - 1 (255 by default); the option is left out to switch public rooms off (the default): 0 and more than that stop the server at startup
 //   --demo-map NAME    the map of the public rooms whose block names none that the server offers (a file name of the maps folder; required with --demo-rooms)
 //   --demo-maps LIST   the maps a create block may choose, file names of the maps folder separated by commas (blanks around a name are dropped; the block's map is compared

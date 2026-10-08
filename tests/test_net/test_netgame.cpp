@@ -930,7 +930,7 @@ void run_reject_tests() {
         for (const Case& c : cases) for (const int variant : {0, 1, 2, 3}) {
             const bool with_block = variant == 1 || variant == 3;
             const uint8_t told = variant == 1 ? static_cast<uint8_t>(kPlatformBrowser | kOsMacos) : native_platform();
-            const std::string room = variant == 3 ? "Party-1" : "k7m2xq9p";
+            const std::string room = variant == 3 ? "Party-1" : "k7m2xq";
             auto listener = TcpListener::listen(0, true);
             ASSERT_TRUE(listener != nullptr);
             sim::SimulationEngine sim;
@@ -1579,7 +1579,7 @@ void run_team_tests() {
             ASSERT_FALSE(lan.net.room_teams().set);                                               // the host of a room on the local network has no code and no block
             ASSERT_TRUE(lan.net.effective_teams() == sim::StartTeams({true, 0, 3}));
             Machine& zed = t.add("Zed");
-            ASSERT_TRUE(zed.net.join("127.0.0.1", 1, "Zed", 255, "k7m2xq9p"));                    // (no server answers: no Room message has come)
+            ASSERT_TRUE(zed.net.join("127.0.0.1", 1, "Zed", 255, "k7m2xq"));                    // (no server answers: no Room message has come)
             zed.net.set_start_teams(sim::StartTeams{true, 1, 2});
             ASSERT_FALSE(zed.net.room_teams().set);
             ASSERT_TRUE(zed.net.effective_teams() == sim::StartTeams({true, 1, 2}));

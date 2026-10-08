@@ -357,7 +357,7 @@ bool check_room_code(const std::string& raw, std::string& clean, std::string& wh
         if (printable_char(c)) printable.push_back(c);
     }
     clean = trim_blanks(printable);
-    clean.erase(std::remove(clean.begin(), clean.end(), ' '), clean.end());           // (a code has no blank: the screens show it in groups of four, and what was copied from there comes back as it was)
+    clean.erase(std::remove(clean.begin(), clean.end(), ' '), clean.end());           // (a code has no blank: the screens show it in two groups of three, and what was copied from there comes back as it was)
     if (clean.empty()) {
         why = "Type the room code first.";
         return false;

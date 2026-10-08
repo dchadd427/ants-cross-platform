@@ -30,13 +30,13 @@ RoomSpec RoomManager::default_spec() const {
 }
 
 std::string draw_room_code(std::mt19937& rng) {
-    // eight characters without the look-alikes (no 0 / O, 1 / I / L): easy to read out and to type. The first is a letter, so that every code of the control interface has a capital and a visitor's
+    // six characters (as the game's own codes) without the look-alikes (no 0 / O, 1 / I / L): easy to read out and to type. The first is a letter, so that every code of the control interface has a capital and a visitor's
     // block can never take its name (make_public_room: a visitor's room takes a code with no capital)
     static const char kLetters[] = "ABCDEFGHJKMNPQRSTUVWXYZ";
     static const char kAlphabet[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
     std::string code;
     code.push_back(kLetters[rng() % (sizeof(kLetters) - 1)]);
-    for (int i = 1; i < 8; ++i) code.push_back(kAlphabet[rng() % (sizeof(kAlphabet) - 1)]);
+    for (size_t i = 1; i < kDrawnRoomCodeChars; ++i) code.push_back(kAlphabet[rng() % (sizeof(kAlphabet) - 1)]);
     return code;
 }
 

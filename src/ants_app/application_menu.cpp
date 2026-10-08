@@ -159,7 +159,7 @@ void Application::process_menu_request(const MenuRequest& request) {
             set_start_teams(LocalTeams{});                                // (the Teams choice is not the START's: it is in the room's create block, below, and the room makes the teams every time)
             static std::random_device entropy;
             const std::function<uint32_t()> random = config_.room_code_random ? config_.room_code_random : std::function<uint32_t()>([]() { return static_cast<uint32_t>(entropy()); });
-            const std::string code = make_room_code(random);              // (only a name: 8 random letters and numbers)
+            const std::string code = make_room_code(random);              // (only a name: 6 random letters and numbers)
             const net::CreateBlock block = make_create_block(menu_map(static_cast<size_t>(request.map)), request.players, request.teams);
             begin_menu_connection(true, code, request.name, request.players, request.map, nullptr, nullptr, &block);
             break;

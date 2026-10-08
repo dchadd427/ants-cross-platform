@@ -203,7 +203,7 @@ void run_text_tests() {
 
     TEST_CASE("RS1.3 What Can Be Stored: A Room Of The Server's Own Rules, A Seat 0 - 3, A Key That Is Not Zero, A Server Of 1 - 255 Printable Characters") {
         ASSERT_TRUE(rejoin_storable(rk("RA-1", 0, kServer, 1)));
-        ASSERT_TRUE(rejoin_storable(rk("k7m2xq9p", 3, kServer, 1)));
+        ASSERT_TRUE(rejoin_storable(rk("k7m2xq", 3, kServer, 1)));
         ASSERT_TRUE(rejoin_storable(rk(std::string(32, 'x'), 1, kServer, 1)));
         ASSERT_FALSE(rejoin_storable(rk("", 0, kServer, 1)));                                     // a room of the server has a code
         ASSERT_FALSE(rejoin_storable(rk(std::string(33, 'x'), 0, kServer, 1)));
@@ -234,7 +234,7 @@ void run_file_tests() {
         a.written_ms = kT0 + 5 * kSecond;
         RejoinEntry b = a;
         b.server = "wss://play.example.org/game";
-        b.room = "k7m2xq9p";
+        b.room = "k7m2xq";
         b.seat = 0;
         b.key = key_of(4);
         b.written_ms = kT0;
@@ -514,19 +514,19 @@ void run_other_store_tests() {
         Clock clock;
         LocalStorageRejoinStore store(storage, clock.fn());
         ASSERT_TRUE(store.entries().empty());
-        ASSERT_TRUE(store.put(rk("k7m2xq9p", 1, "wss://play.example.org/game", 5)));
+        ASSERT_TRUE(store.put(rk("k7m2xq", 1, "wss://play.example.org/game", 5)));
         ASSERT_EQ(storage.items().size(), size_t{2});
-        ASSERT_TRUE(storage.items().count("ants.rejoin.k7m2xq9p.1") == 1);
-        ASSERT_EQ(storage.items()["ants.rejoin.k7m2xq9p.1"],
+        ASSERT_TRUE(storage.items().count("ants.rejoin.k7m2xq.1") == 1);
+        ASSERT_EQ(storage.items()["ants.rejoin.k7m2xq.1"],
                   "{\"k\":\"" + rejoin_key_hex(key_of(5)) + "\",\"s\":\"wss://play.example.org/game\",\"t\":" + std::to_string(kT0) + "}");
         clock.now += 5 * kSecond;
-        ASSERT_TRUE(store.put(rk("k7m2xq9p", 2, "wss://play.example.org/game", 6)));
-        ASSERT_TRUE(store.put(rk("k7m2xq9p", 1, "wss://play.example.org/game", 7)));      // the same seat: the item is replaced
+        ASSERT_TRUE(store.put(rk("k7m2xq", 2, "wss://play.example.org/game", 6)));
+        ASSERT_TRUE(store.put(rk("k7m2xq", 1, "wss://play.example.org/game", 7)));      // the same seat: the item is replaced
         ASSERT_EQ(storage.items().size(), size_t{3});
         std::vector<RejoinEntry> all = store.entries();
         ASSERT_TRUE(all.size() == 2 && all[0].seat == 1 && net::key_matches(all[0].key, key_of(7)) && all[1].seat == 2 && all[0].server == "wss://play.example.org/game");
-        ASSERT_TRUE(all[0].written_ms == kT0 + 5 * kSecond && all[0].room == "k7m2xq9p");
-        ASSERT_TRUE(store.find("wss://play.example.org/game", "k7m2xq9p", 2) && !store.find("wss://other.example/game", "k7m2xq9p"));
+        ASSERT_TRUE(all[0].written_ms == kT0 + 5 * kSecond && all[0].room == "k7m2xq");
+        ASSERT_TRUE(store.find("wss://play.example.org/game", "k7m2xq", 2) && !store.find("wss://other.example/game", "k7m2xq"));
         ASSERT_TRUE(store.newest() && store.newest()->seat == 1);
         ASSERT_EQ(storage.items()["ants.settings"], std::string("zoom=1\n"));
         ASSERT_FALSE(store.put(rk("a.b", 0, "wss://x/y", 1)));                                      // (a room that is none)

@@ -46,7 +46,7 @@ struct ServerLimits {
     uint32_t park_timeout_ms{60000};        // a Hello for a room that waits for its replay (a restart record) waits this long for the room, then its connection is dropped (no hello timeout applies meanwhile)
     // Public rooms (off by default; for a public test page that has no secret to make rooms with; the server's --demo-rooms, --demo-map, --demo-maps): a Hello that carries a CREATE BLOCK (protocol 15: the map,
     // the seats, the teams and the leader-starts flag that the room should have) for a room that does not exist makes it, at most `demo_rooms` of them at a time (0 = off). The code is only a name: whatever
-    // 8 letters and numbers the first player's game made. The block chooses the seats (2 to 4), the teams and whether a full room waits for its leader's START; the map is the block's when the server offers
+    // 6 letters and numbers the first player's game made. The block chooses the seats (2 to 4), the teams and whether a full room waits for its leader's START; the map is the block's when the server offers
     // it (`demo_maps`) and `demo_map` when it does not (a page that offers a map this server does not allow still gets the room it asked for). A public room waits `demo_wait_ms` (ten minutes) for its players and is
     // forgotten half a minute after it ended; a Hello with a block for the code of one that is over makes a new room at once, and a Hello without a block is NoSuchRoom (a Hello for a room that is not there is, too). Whoever can
     // reach the door can fill these rooms and hold them for a match: that is the price of a page that works without a secret; rooms of the control interface are made by the control interface and are never public.
@@ -76,9 +76,10 @@ inline constexpr uint32_t kDemoMaxPauseMs = 10u * 60u * 1000u;
 /// restarts) from costing a match.
 inline constexpr uint32_t kDemoAbandonedMs = 60u * 1000u;
 
-/// A room code as the control interface draws it when a room is made without one (RoomManager::new_code): eight characters without the look-alikes (no 0 / O, 1 / I / L), the first an upper-case letter, so
-/// that a code of the control interface always has a capital and a visitor's block never takes its name (net::public_room_code). `rng` is the generator to draw from (the manager's own, seeded from the
-/// operating system; a test passes its own).
+/// A room code as the control interface draws it when a room is made without one (RoomManager::new_code): kDrawnRoomCodeChars (six, as many as the game's own codes have) characters without the look-alikes
+/// (no 0 / O, 1 / I / L), the first an upper-case letter, so that a code of the control interface always has a capital and a visitor's block never takes its name (net::public_room_code). `rng` is the
+/// generator to draw from (the manager's own, seeded from the operating system; a test passes its own).
+inline constexpr size_t kDrawnRoomCodeChars = 6;
 std::string draw_room_code(std::mt19937& rng);
 
 /// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running with a person in it (a room that a restart brought back also for its first minutes: Room::busy),

@@ -234,7 +234,7 @@ struct Variant {
 };
 
 std::string long_message() {
-    return "This is a very long message that goes on and on, much longer than any box of the screen could hold, with a room code like k7m2xq9p and a server "
+    return "This is a very long message that goes on and on, much longer than any box of the screen could hold, with a room code like k7m2xq and a server "
            "like a-host-with-a-very-long-name.example.org:4001 in it, so that the cut has something to cut. It does not stop here either, and neither does this sentence.";
 }
 
@@ -337,18 +337,18 @@ std::vector<Variant> all_variants() {
         r.click(MenuId::HostSeat3);
         r.click(MenuId::HostSeat3);
         r.click(MenuId::HostTeams);
-        r.menu.show_room("k7m2xq9p", 1, 4);
+        r.menu.show_room("k7m2xq", 1, 4);
     }});
     v.push_back({"connecting, a long server", [](Rig& r) {
         r.menu.set_server(ServerAddress{std::string(60, 'h') + ".example.org", 4001});
         r.to_panel(MenuId::JoinWithCode);
         r.key(SDLK_RETURN);
     }});
-    v.push_back({"the room's code", [](Rig& r) { r.menu.show_room("k7m2xq9p", 1, 4); }});
+    v.push_back({"the room's code", [](Rig& r) { r.menu.show_room("k7m2xq", 1, 4); }});
     v.push_back({"the room's longest code", [](Rig& r) { r.menu.show_room(std::string(32, 'W'), 4, 4); }});
     v.push_back({"the room, copy failed", [](Rig& r) {
         r.clipboard.writable = false;
-        r.menu.show_room("k7m2xq9p", 2, 4);
+        r.menu.show_room("k7m2xq", 2, 4);
         r.key(SDLK_c, KMOD_GUI);
     }});
     return v;
@@ -964,7 +964,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(bare.code().empty());
     } TEST_END();
 
-    TEST_CASE("M3.3 Join: a name that looks like a computer player's is refused on the panel with the reason, whatever its blanks and case; so are an empty name and a bad or empty code; nothing is asked of the application, the panel stays, the can't-go cue plays; a code typed as it is shown (two groups of four, with a blank between) is the same code without the blank") {
+    TEST_CASE("M3.3 Join: a name that looks like a computer player's is refused on the panel with the reason, whatever its blanks and case; so are an empty name and a bad or empty code; nothing is asked of the application, the panel stays, the can't-go cue plays; a code typed as it is shown (two groups of three, with a blank between) is the same code without the blank") {
         const std::vector<std::string> bot_names = {"Bot (Hard)", "bot (x)", "BOT (Easy)", " Bot (x)", "B o t (x)", "bot(x)", "Bot (", "  bOt(  "};
         for (const std::string& name : bot_names) {
             Rig r;
@@ -1029,18 +1029,18 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(r.menu.selected(), MenuId::Code);
             ASSERT_EQ(r.sounds.count(sim::SoundID::CantGo), 1);
         }
-        {   // the code as the screens show it (two groups of four) is typed or pasted with its blank, and is read without it (protocol 15); the blank is the only thing that is dropped
+        {   // the code as the screens show it (two groups of three) is typed or pasted with its blank, and is read without it (protocol 15); the blank is the only thing that is dropped
             Rig r;
             r.to_panel(MenuId::JoinWithCode);
             r.key(SDLK_UP);
             r.type("Ann");
             r.key(SDLK_TAB);
-            r.type(" k7m2 xq9p ");
+            r.type(" k7m 2xq ");
             r.key(SDLK_RETURN);
             ASSERT_TRUE(r.menu.has_request());
             const MenuRequest request = r.take();
             ASSERT_TRUE(request.type == MenuRequest::Type::Join);
-            ASSERT_EQ(request.room, std::string("k7m2xq9p"));
+            ASSERT_EQ(request.room, std::string("k7m2xq"));
             ASSERT_EQ(request.name, std::string("Ann"));
         }
     } TEST_END();
@@ -1095,7 +1095,7 @@ int main(int argc, char* argv[]) {
         e.key(SDLK_UP);
         e.type("Dave");
         e.key(SDLK_TAB);
-        e.type("k7m2 xq9p");                                                               // (the code as the screens show it, in two groups of four)
+        e.type("k7m 2xq");                                                               // (the code as the screens show it, in two groups of three)
         e.key(SDLK_UP);                                                                    // back to the name, with a code written already
         ASSERT_EQ(e.menu.selected(), MenuId::Name);
         e.key(SDLK_RETURN);
@@ -1104,7 +1104,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(e.menu.panel(), MenuPanel::Join);
         e.key(SDLK_RETURN);
         const MenuRequest joined = e.take();
-        ASSERT_TRUE(joined.type == MenuRequest::Type::Join && joined.room == "k7m2xq9p" && joined.name == "Dave");
+        ASSERT_TRUE(joined.type == MenuRequest::Type::Join && joined.room == "k7m2xq" && joined.name == "Dave");
     } TEST_END();
 
     TEST_CASE("M4.1 Host: the map goes round the six maps of the original game in the page's order and the players round 2, 3, 4 (Left, Right, Enter, click); the request carries the map, the players and the cleaned name") {
@@ -1177,9 +1177,9 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("M4.2 Host: the room's panel shows the code in large letters and the players that are in; Copy puts the code on the clipboard (the call is checked) and says Copied! for two seconds; Ctrl+C / Cmd+C copies too; a clipboard that fails says so and shows the code to write down") {
         Rig r;
-        r.menu.show_room("k7m2xq9p", 1, 3);
+        r.menu.show_room("k7m2xq", 1, 3);
         ASSERT_EQ(r.menu.panel(), MenuPanel::Room);
-        ASSERT_EQ(element_text(r.menu.elements(), MenuKind::Code), std::string("k7m2 xq9p"));                // (in two groups of four: it is read out and typed)
+        ASSERT_EQ(element_text(r.menu.elements(), MenuKind::Code), std::string("k7m 2xq"));                // (in two groups of three: it is read out and typed)
         ASSERT_TRUE(has_text(r.menu.elements(), "Your room:"));
         ASSERT_TRUE(has_text(r.menu.elements(), "Players in the room: 1 of 3"));
         r.menu.set_room_players(2, 3);
@@ -1189,7 +1189,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(control_ids(r.menu) == expected);
         ASSERT_EQ(r.element(MenuId::Copy).text, std::string("Copy"));
         r.click(MenuId::Copy);
-        ASSERT_TRUE(r.clipboard.writes.size() == 1 && r.clipboard.writes[0] == "k7m2xq9p");                  // (the plain code is what is copied)
+        ASSERT_TRUE(r.clipboard.writes.size() == 1 && r.clipboard.writes[0] == "k7m2xq");                  // (the plain code is what is copied)
         ASSERT_EQ(r.element(MenuId::Copy).text, std::string("Copied!"));
         r.menu.update(1.0f);
         ASSERT_EQ(r.element(MenuId::Copy).text, std::string("Copied!"));
@@ -1345,10 +1345,10 @@ int main(int argc, char* argv[]) {
         r.click(MenuId::HostPlayers);                                                      // back to 4: the Black seat's choice was kept all along
         ASSERT_EQ(r.element(MenuId::HostSeat3).value, std::string("Easy bot"));
         // the room's panel says what START will do
-        r.menu.show_room("k7m2xq9p", 1, 4);
+        r.menu.show_room("k7m2xq", 1, 4);
         ASSERT_TRUE(has_text(r.menu.elements(), "At START: Red Medium, Blue Hard, Black Easy."));
         ASSERT_FALSE(has_text(r.menu.elements(), "Empty seats stay empty."));
-        r.menu.show_room("k7m2xq9p", 1, 2);
+        r.menu.show_room("k7m2xq", 1, 2);
         ASSERT_TRUE(has_text(r.menu.elements(), "Empty seats will be Medium bots."));      // (the room of two has the Red seat only)
         Rig uniform;
         uniform.to_panel(MenuId::HostOnline);
@@ -1356,10 +1356,10 @@ int main(int argc, char* argv[]) {
             uniform.click(id);
             uniform.click(id);
         }
-        uniform.menu.show_room("k7m2xq9p", 1, 4);
+        uniform.menu.show_room("k7m2xq", 1, 4);
         ASSERT_TRUE(has_text(uniform.menu.elements(), "Empty seats will be Medium bots."));
         Rig none;
-        none.menu.show_room("k7m2xq9p", 1, 4);
+        none.menu.show_room("k7m2xq", 1, 4);
         ASSERT_TRUE(has_text(none.menu.elements(), "Empty seats stay empty.") && !has_text(none.menu.elements(), "bots."));
         // the settings file: written under `host_fill` (one word when every seat is the same, else four), read back; an old file's one word is every seat after the leader's; anything else is the default
         {
@@ -1404,7 +1404,7 @@ int main(int argc, char* argv[]) {
                     if (g.exists(id)) g.click(id);
                 }
                 if (g.exists(MenuId::HostTeams)) g.click(MenuId::HostTeams);
-                if (panel == MenuPanel::Room) g.menu.show_room("k7m2xq9p", 1, players);
+                if (panel == MenuPanel::Room) g.menu.show_room("k7m2xq", 1, players);
                 const std::vector<MenuElement> all = g.menu.elements();
                 for (size_t i = 0; i < all.size(); ++i) {
                     ASSERT_TRUE(all[i].rect.x >= 16 && all[i].rect.y >= 16 && all[i].rect.x + all[i].rect.w <= 624 && all[i].rect.y + all[i].rect.h <= 464);
@@ -1460,7 +1460,7 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(caption_drawn);
         }
         Rig room_panel;
-        room_panel.menu.show_room("k7m2xq9p", 1, 4);
+        room_panel.menu.show_room("k7m2xq", 1, 4);
         ASSERT_FALSE(has_text(room_panel.menu.elements(), fill_choice_caption()));                                                       // (only the panel that has the choice)
     } TEST_END();
 
@@ -1538,17 +1538,17 @@ int main(int argc, char* argv[]) {
         room.to_panel(MenuId::HostOnline);
         room.click(MenuId::HostTeams);
         room.click(MenuId::HostTeams);                                                         // Green + Blue against Red + Black
-        room.menu.show_room("k7m2xq9p", 1, 4);
+        room.menu.show_room("k7m2xq", 1, 4);
         const size_t with_teams = room.menu.elements().size();
         ASSERT_TRUE(has_text(room.menu.elements(), "Room teams: Green + Blue against Red + Black."));
-        room.menu.show_room("k7m2xq9p", 1, 2);                                      // (a room of two has no teams)
+        room.menu.show_room("k7m2xq", 1, 2);                                      // (a room of two has no teams)
         ASSERT_FALSE(has_text(room.menu.elements(), "Room teams:"));
         ASSERT_EQ(room.menu.elements().size() + 1, with_teams);
         Rig plain;
-        plain.menu.show_room("k7m2xq9p", 1, 4);
+        plain.menu.show_room("k7m2xq", 1, 4);
         ASSERT_EQ(plain.menu.elements().size() + 1, with_teams);                               // free for all: the panel is what it was
         room.clipboard.writable = false;
-        room.menu.show_room("k7m2xq9p", 1, 4);
+        room.menu.show_room("k7m2xq", 1, 4);
         room.key(SDLK_c, KMOD_GUI);
         ASSERT_TRUE(has_text(room.menu.elements(), "Copy failed") && !has_text(room.menu.elements(), "Room teams:"));
         // the settings file: written under `host_teams` (ffa or the pair), read back, anything else is free for all
@@ -1758,7 +1758,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(why.find("blank") != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("M5.2 Room codes of a hosted match (protocol 15): eight characters of the page's alphabet (read from web/lobby.html), no map, no seats and no teams in them, a valid room code every time, different every time; the screens show them in two groups of four and a code of another length as it is") {
+    TEST_CASE("M5.2 Room codes of a hosted match (protocol 15): six characters of the page's alphabet (read from web/lobby.html), no map, no seats and no teams in them, a valid room code every time, different every time; the screens show them in two groups of three and a code of another length as it is") {
         std::string page_alphabet;
         {
             std::ifstream page(std::string(ANTS_SOURCE_DIR) + "/web/lobby.html");           // (by the source folder, not the working directory: it is read wherever the test is run from)
@@ -1773,7 +1773,7 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(page_alphabet.empty());
         ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));                          // the same alphabet as web/lobby.html (the page is in the repository)
         ASSERT_EQ(std::string(kRoomCodeAlphabet).size(), static_cast<size_t>(31));
-        ASSERT_EQ(kRoomCodeChars, static_cast<size_t>(8));
+        ASSERT_EQ(kRoomCodeChars, static_cast<size_t>(6));
         for (const char look_alike : {'i', 'l', 'o', '0', '1'}) ASSERT_TRUE(std::string(kRoomCodeAlphabet).find(look_alike) == std::string::npos);      // (nothing to mistake when it is read out)
         uint32_t counter = 12345u;
         const std::function<uint32_t()> next = [&counter]() {                              // (a linear congruential generator: a counter that steps by a constant makes a code that repeats after 31 of them)
@@ -1792,13 +1792,15 @@ int main(int argc, char* argv[]) {
         // the map index of a key, any case
         ASSERT_TRUE(menu_map_index("ISLANDS") == 5 && menu_map_index("tiny") == 0 && menu_map_index("nope") == -1);
         // random bits that are all ones and all zeros: the first and the last character of the alphabet, never one beyond
-        ASSERT_EQ(make_room_code([]() { return 0u; }), std::string("aaaaaaaa"));
+        ASSERT_EQ(make_room_code([]() { return 0u; }), std::string("aaaaaa"));
         ASSERT_EQ(make_room_code([]() { return 0xFFFFFFFFu; }).back(), kRoomCodeAlphabet[0xFFFFFFFFu % 31u]);
-        // what the screens show: two groups of four (read out, typed); the code that is copied is the plain one
-        ASSERT_EQ(room_code_display("k7m2xq9p"), std::string("k7m2 xq9p"));
+        // what the screens show: two groups of three (read out, typed); the code that is copied is the plain one
+        ASSERT_EQ(room_code_display("k7m2xq"), std::string("k7m 2xq"));
         ASSERT_EQ(room_code_display("RP-1"), std::string("RP-1"));                         // a code of another length (a room of the control interface) as it is
         ASSERT_EQ(room_code_display(""), std::string());
         ASSERT_EQ(room_code_display("abcdefghi"), std::string("abcdefghi"));
+        ASSERT_EQ(room_code_display("abcdefgh"), std::string("abcdefgh"));                 // (and so are seven or eight: only six characters are two groups of three)
+        ASSERT_EQ(room_code_display("abcdef"), std::string("abc def"));
     } TEST_END();
 
     TEST_CASE("M5.3 Names and codes: a name is cleaned (blanks at both ends, printable ASCII, 32 characters) and refused when empty or when it looks like a bot's; a code is cleaned and refused when empty, too long or not letters, digits, - and _; the case of a code is never touched") {
@@ -1822,8 +1824,8 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(why.find("at most 32") != std::string::npos);                          // the reason names the limit, not the alphabet
         ASSERT_FALSE(check_room_code("", clean, why));
         ASSERT_TRUE(why.find("code") != std::string::npos);
-        ASSERT_TRUE(check_room_code("k7m2 xq9p", clean, why) && clean == "k7m2xq9p");       // the grouped form that the screens show comes back as the plain code
-        ASSERT_TRUE(check_room_code(" k7m2  xq9p ", clean, why) && clean == "k7m2xq9p");
+        ASSERT_TRUE(check_room_code("k7m 2xq", clean, why) && clean == "k7m2xq");       // the grouped form that the screens show comes back as the plain code
+        ASSERT_TRUE(check_room_code(" k7m2  xq9p ", clean, why) && clean == "k7m2xq");
         ASSERT_FALSE(check_room_code("   ", clean, why));
         ASSERT_TRUE(why.find("code") != std::string::npos);
         ASSERT_FALSE(check_room_code("a.b", clean, why));
@@ -2052,12 +2054,12 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("M8.2 Drawing: the code of a room is drawn in the largest size that fits its box (35 px for the page's codes, smaller for the longest ones), the buttons carry their words, the selected one is lit, the title is the panel's") {
         Rig r;
-        r.menu.show_room("k7m2xq9p", 1, 4);
+        r.menu.show_room("k7m2xq", 1, 4);
         Recorder a;
         render_start_menu(a, archive(), r.menu);
         bool big = false;
         for (const Recorder::Text& t : a.texts) {
-            if (t.text == "k7m2 xq9p") big = t.size == FontSize::Px35;
+            if (t.text == "k7m 2xq") big = t.size == FontSize::Px35;
         }
         ASSERT_TRUE(big);
         r.menu.show_room(std::string(32, 'W'), 1, 4);
@@ -2461,7 +2463,7 @@ int main(int argc, char* argv[]) {
             ASSERT_FALSE(r.menu.has_request());                                            // (no new attempt)
             r.key(SDLK_RETURN);
             ASSERT_TRUE(r.take().type == MenuRequest::Type::Join);
-            r.menu.show_room("k7m2xq9p", 1, 2);
+            r.menu.show_room("k7m2xq", 1, 2);
             r.quick_key(SDLK_RETURN);
             ASSERT_FALSE(r.menu.has_request());
             r.key(SDLK_RETURN);
@@ -2582,7 +2584,7 @@ int main(int argc, char* argv[]) {
         r.clipboard.text = "k7m2\xC3\xA9xq9p";
         r.key(SDLK_a, KMOD_CTRL);
         r.key(SDLK_v, KMOD_CTRL);
-        ASSERT_EQ(r.menu.code(), std::string("k7m2xq9p"));
+        ASSERT_EQ(r.menu.code(), std::string("k7m2xq"));
         ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
         r.clipboard.text = "room-9\r\n";
         r.key(SDLK_a, KMOD_CTRL);
@@ -2676,7 +2678,7 @@ int main(int argc, char* argv[]) {
         const int32_t y = quit.rect.y + quit.rect.h / 2;
         r.menu.on_mouse_move(x, y);
         ASSERT_TRUE(r.menu.on_mouse_down(x, y, SDL_BUTTON_LEFT));
-        r.menu.show_room("k7m2xq9p", 1, 2);                                    // the room appears while the button is down ...
+        r.menu.show_room("k7m2xq", 1, 2);                                    // the room appears while the button is down ...
         MenuElement copy;
         ASSERT_TRUE(r.menu.find_element(MenuId::Copy, copy) && copy.rect.contains(x, y));  // ... and its Copy button lies where Quit was
         ASSERT_FALSE(r.element(MenuId::Copy).pressed);

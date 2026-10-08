@@ -4201,7 +4201,7 @@ void run_room_bot_tests() {
             args = std::move(a);
             return Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         };
-        const std::vector<std::string> join = {"ants", "--join", "127.0.0.1:4001", "--room", "k7m2xq9p"};
+        const std::vector<std::string> join = {"ants", "--join", "127.0.0.1:4001", "--room", "k7m2xq"};
         const auto with = [&](std::vector<std::string> more) {
             std::vector<std::string> all = join;
             all.insert(all.end(), more.begin(), more.end());
@@ -4756,7 +4756,7 @@ void run_room_bot_tests() {
         };
         {   // a room of four that its create block gives Green + Red; the leader's own choice (--teams) is Red + Blue, and its START seats two bots
             Server server(limits);
-            const std::string code = "k7m2xq9p";
+            const std::string code = "k7m2xq";
             ApplicationConfig lead_cfg = join_config(server, code, "Leader");
             lead_cfg.net_create = tiny_block(4, 0, 1);
             lead_cfg.fill_bots = net::FillPlan(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});
@@ -6836,26 +6836,26 @@ void run_one_card_tests() {
     };
 
     TEST_CASE("N5.83 One Card, The Game's Arguments: --seat, --fill-bots (Four Words: A Level For A Bot Row, none For You / Friend / Nobody) And --start-when N Together; The Seat Is Any Of The Four Colours And The Plan Keeps A Bot At Green") {
-        std::vector<std::string> args = {"ants", "--join-url", "wss://play.example.org/ws", "--room", "k7m2xq9p", "--seat", "2", "--fill-bots", "easy,medium,none,none", "--start-when", "1", "--name", "Ann", "--aspect", "16:9"};
+        std::vector<std::string> args = {"ants", "--join-url", "wss://play.example.org/ws", "--room", "k7m2xq", "--seat", "2", "--fill-bots", "easy,medium,none,none", "--start-when", "1", "--name", "Ann", "--aspect", "16:9"};
         std::vector<char*> st;
         ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_TRUE(c.startup_error.empty());
-        ASSERT_TRUE(c.net_url == "wss://play.example.org/ws" && c.net_room == "k7m2xq9p" && c.net_seat == 2 && c.net_start_when == 1 && c.player_name == "Ann");
+        ASSERT_TRUE(c.net_url == "wss://play.example.org/ws" && c.net_room == "k7m2xq" && c.net_seat == 2 && c.net_start_when == 1 && c.player_name == "Ann");
         ASSERT_TRUE(c.fill_bots == net::FillPlan(std::array<L, 4>{L::Easy, L::Medium, L::None, L::None}));        // (a bot at Green: the plan's seat 0 is a seat like the others)
         for (int seat = 0; seat < 4; ++seat) {                                                                   // every colour can be the person's
             const std::string text = std::to_string(seat);
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq9p", "--seat", text, "--start-when", "3"};
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--seat", text, "--start-when", "3"};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_seat == seat && c.net_start_when == 3 && c.startup_error.empty());
         }
         for (int people = 1; people <= 4; ++people) {                                                            // You and up to three friends: one to four people to wait for
             const std::string text = std::to_string(people);
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq9p", "--start-when", text};
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--start-when", text};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_start_when == people && c.startup_error.empty());
         }
         for (const char* text : {"0", "5", "40", "-1", "x", ""}) {                                               // anything else is no hook (and no error: the page only ever passes 1 - 4)
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq9p", "--start-when", text};
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--start-when", text};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_start_when == 0 && c.startup_error.empty());
         }

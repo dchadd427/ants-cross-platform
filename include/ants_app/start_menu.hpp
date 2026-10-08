@@ -98,13 +98,13 @@ std::string fill_choice_sentence(const net::FillPlan& plan, int players = 4);
 /// create block, so the room makes them for every start); "" for free for all
 std::string room_teams_sentence(const LocalTeams& teams, int players);
 
-/// The room code of a hosted match (protocol 15), made as web/lobby.html makes it: kRoomCodeChars (8) characters of kRoomCodeAlphabet (lower case letters without i, l and o, and the digits 2 - 9: no
-/// look-alikes), 31 symbols, 8.5e11 codes. `random` gives 32 random bits at each call. The code is only a name: the map, the seats and the teams of the room are in the create block that the first
+/// The room code of a hosted match (protocol 15), made as web/lobby.html makes it: kRoomCodeChars (6) characters of kRoomCodeAlphabet (lower case letters without i, l and o, and the digits 2 - 9: no
+/// look-alikes), 31 symbols, 8.9e8 codes. `random` gives 32 random bits at each call. The code is only a name: the map, the seats and the teams of the room are in the create block that the first
 /// Hello carries (make_create_block), and the server makes the room from that block when it has none of the code.
 inline constexpr const char* kRoomCodeAlphabet = "abcdefghjkmnpqrstuvwxyz23456789";
-inline constexpr size_t kRoomCodeChars = 8;
+inline constexpr size_t kRoomCodeChars = 6;
 std::string make_room_code(const std::function<uint32_t()>& random);
-/// A code as the screens show it, in groups of four so that it can be read out and typed ("k7m2xq9p" is "k7m2 xq9p"); a code of another length (a room that the control interface made) as it is.
+/// A code as the screens show it, in two groups of three so that it can be read out and typed ("k7m2xq" is "k7m 2xq"); a code of another length (a room that the control interface made) as it is.
 /// check_room_code reads the grouped form back (it drops the blanks inside a code), and "Copy" copies the plain code.
 std::string room_code_display(const std::string& code);
 /// The create block of a hosted match (protocol 15): what the Host panel chose, which the server makes the room from when it has none of the code: the map's file ("TREASURE.LVL": the key in capitals),
@@ -119,8 +119,8 @@ std::string clean_player_name(const std::string& raw);
 bool looks_like_bot_name(const std::string& name);
 /// True when `raw` can be sent as a player's name (`clean` holds it); else false with the reason in `why`
 bool check_player_name(const std::string& raw, std::string& clean, std::string& why);
-/// True when `raw` (blanks at both ends and inside cut away into `clean`: a code has none, and the screens show it in groups of four, "k7m2 xq9p") is a room code of the server: 1 - 32 letters,
-/// digits, '-' and '_'. The case is NEVER changed: the server's codes are case sensitive ("k7m2xq9p" and "K7M2XQ9P" are two different rooms).
+/// True when `raw` (blanks at both ends and inside cut away into `clean`: a code has none, and the screens show it in two groups of three, "k7m 2xq") is a room code of the server: 1 - 32 letters,
+/// digits, '-' and '_'. The case is NEVER changed: the server's codes are case sensitive ("k7m2xq" and "K7M2XQ" are two different rooms).
 bool check_room_code(const std::string& raw, std::string& clean, std::string& why);
 
 /// Which of the remembered values changed (the owner stores that one: one file write per change)

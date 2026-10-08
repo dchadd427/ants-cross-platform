@@ -1131,11 +1131,11 @@ void run_manager_tests() {
         RoomManager junk{MapStore(dir)};
         ASSERT_EQ(junk.create_room(spec_of("J-1", 2, "junk.lvl"), 0).http_status, 422);
         fs::remove_all(dir);
-        // generated codes: eight characters, valid, different
+        // generated codes: six characters, valid, different
         RoomSpec anon = spec_of("");
         const CreateResult a = mgr.create_room(anon, 0);
         const CreateResult b = mgr.create_room(anon, 0);
-        ASSERT_TRUE(a.ok && b.ok && a.code.size() == 8 && b.code.size() == 8 && a.code != b.code && net::valid_room_code(a.code));
+        ASSERT_TRUE(a.ok && b.ok && a.code.size() == kDrawnRoomCodeChars && b.code.size() == kDrawnRoomCodeChars && a.code != b.code && net::valid_room_code(a.code));
         ASSERT_TRUE(mgr.create_room(spec_of("ROOM-3"), 0).ok);                          // the fourth room
         ASSERT_EQ(mgr.create_room(spec_of("ROOM-4"), 0).http_status, 503);              // no room for a fifth
         ASSERT_EQ(mgr.room_count(), size_t{4});
@@ -1238,7 +1238,7 @@ void run_demo_tests() {
         };
         {
             World w;                                                                      // the default: no public rooms
-            Client& a = w.connect_creating("Ann", "k7m2xq9p", block_of());
+            Client& a = w.connect_creating("Ann", "k7m2xq", block_of());
             ASSERT_EQ(reject_of(w, a), net::RejectReason::NoSuchRoom);
             ASSERT_EQ(w.mgr.room_count(), size_t{0});
         }
@@ -1259,7 +1259,7 @@ void run_demo_tests() {
             World wc(limits);
             Client& loud = wc.connect_creating("Loud", "ROOM-1", block_of());
             ASSERT_EQ(reject_of(wc, loud), net::RejectReason::NoSuchRoom);
-            Client& mixed = wc.connect_creating("Mixed", "k7m2Xq9p", block_of());
+            Client& mixed = wc.connect_creating("Mixed", "k7m2Xq", block_of());
             ASSERT_EQ(reject_of(wc, mixed), net::RejectReason::NoSuchRoom);
             ASSERT_EQ(wc.mgr.room_count(), size_t{0});
             ASSERT_TRUE(wc.mgr.create_room(spec_of("ROOM-1", 2), wc.now).ok);              // so the operator's POST /rooms is not met by a 409, and its room is not a public one
@@ -1312,12 +1312,13 @@ void run_demo_tests() {
         ASSERT_EQ(w.mgr.room_count(), size_t{2});
     } TEST_END();
 
-    TEST_CASE("S3.10c The Codes That The Control Interface Draws Always Have A Capital (The Review's Second Round: About One Draw In 50,800 Had None), Eight Characters Of The Alphabet Without The Look-Alikes, So That A Visitor's Block, Which Takes Only A Code With No Capital, Never Takes The Name Of A Room That Is Yet To Be Made; net::public_room_code Is That Rule") {
+    TEST_CASE("S3.10c The Codes That The Control Interface Draws Always Have A Capital (The First Character Is A Letter), Six Characters Of The Alphabet Without The Look-Alikes, So That A Visitor's Block, Which Takes Only A Code With No Capital, Never Takes The Name Of A Room That Is Yet To Be Made; net::public_room_code Is That Rule") {
         std::mt19937 rng(20261008);
         const std::string alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
         for (int i = 0; i < 20000; ++i) {
             const std::string code = draw_room_code(rng);
-            ASSERT_EQ(code.size(), size_t{8});
+            ASSERT_EQ(code.size(), kDrawnRoomCodeChars);
+            ASSERT_EQ(kDrawnRoomCodeChars, size_t{6});                                    // (as many as the codes that the game makes: the front page and the menu)
             ASSERT_TRUE(net::valid_room_code(code));
             ASSERT_TRUE(code[0] >= 'A' && code[0] <= 'Z');                                // the first is a letter: a capital in every code, not in all but a few
             for (const char c : code) ASSERT_TRUE(alphabet.find(c) != std::string::npos);
@@ -1329,8 +1330,8 @@ void run_demo_tests() {
             ASSERT_TRUE(seen.size() > 190);
         }
         // the rule: a valid code of one or more characters with no upper-case letter
-        for (const char* open : {"k7m2xq9p", "a", "room_7", "a-b", "0123456789", "demo-treasure-4p-t01-k7m2xq"}) ASSERT_TRUE(net::public_room_code(open));
-        for (const char* closed : {"", "ROOM-1", "k7m2Xq9p", "Aa", "a b", "a.b", "caf\xC3\xA9", "r\n"}) ASSERT_FALSE(net::public_room_code(closed));
+        for (const char* open : {"k7m2xq", "a", "room_7", "a-b", "0123456789", "demo-treasure-4p-t01-k7m2xq"}) ASSERT_TRUE(net::public_room_code(open));
+        for (const char* closed : {"", "ROOM-1", "k7m2Xq", "Aa", "a b", "a.b", "caf\xC3\xA9", "r\n"}) ASSERT_FALSE(net::public_room_code(closed));
         ASSERT_TRUE(net::public_room_code(std::string(net::kMaxRoomCodeChars, 'r')));
         ASSERT_FALSE(net::public_room_code(std::string(net::kMaxRoomCodeChars + 1, 'r')));
     } TEST_END();
@@ -2600,7 +2601,7 @@ void run_control_tests() {
         r = call("POST", "/rooms", R"({"map":"SMALL.LVL"})");                           // the code is drawn
         ASSERT_EQ(r.status, 201);
         const std::string drawn = json_of(r).get("code").str();
-        ASSERT_TRUE(drawn.size() == 8 && net::valid_room_code(drawn));
+        ASSERT_TRUE(drawn.size() == kDrawnRoomCodeChars && net::valid_room_code(drawn));
         r = call("GET", "/rooms");
         ASSERT_TRUE(r.status == 200 && json_of(r).get("rooms").size() == 2);
         r = call("GET", "/stats");

@@ -10167,17 +10167,17 @@ void run_protocol15_tests() {
         ASSERT_TRUE(kCreateLeaderStarts == 1 && kRoomLeaderStarts == kCreateLeaderStarts && kNoTeam == 255);
         // the layout, byte by byte, without a block: the platform byte is the last one (Linux in a browser: 3 + 0x10)
         {
-            HelloMsg h = hello_of("k7m2xq9p", static_cast<uint8_t>(kOsLinux | kPlatformBrowser));
-            std::vector<uint8_t> want = hello_prefix("k7m2xq9p");
+            HelloMsg h = hello_of("k7m2xq", static_cast<uint8_t>(kOsLinux | kPlatformBrowser));
+            std::vector<uint8_t> want = hello_prefix("k7m2xq");
             want.push_back(0x13);
             ASSERT_TRUE(encode(h) == want);
             HelloMsg back;
-            ASSERT_TRUE(decode(want, back) && back.platform == 0x13 && !back.create && back.room == "k7m2xq9p" && back.name == "Ann" && back.have_turns == 5 && back.version == 15);
+            ASSERT_TRUE(decode(want, back) && back.platform == 0x13 && !back.create && back.room == "k7m2xq" && back.name == "Ann" && back.have_turns == 5 && back.version == 15);
             ASSERT_TRUE(encode(back) == want);
         }
         // with a block: the map's name, the seats, team_a, team_b, the flags
         {
-            HelloMsg h = hello_of("k7m2xq9p", kOsWindows);
+            HelloMsg h = hello_of("k7m2xq", kOsWindows);
             CreateBlock block;
             block.map_name = "TREASURE.LVL";
             block.seats = 3;
@@ -10185,7 +10185,7 @@ void run_protocol15_tests() {
             block.team_b = 2;
             block.flags = kCreateLeaderStarts;
             h.create = block;
-            std::vector<uint8_t> want = hello_prefix("k7m2xq9p");
+            std::vector<uint8_t> want = hello_prefix("k7m2xq");
             want.push_back(1);
             want.push_back(12);
             for (const char c : std::string("TREASURE.LVL")) want.push_back(static_cast<uint8_t>(c));
@@ -10196,7 +10196,7 @@ void run_protocol15_tests() {
             ASSERT_TRUE(encode(back) == want);
             ASSERT_TRUE(back.create->leader_starts() && back.create->teams() == sim::StartTeams({true, 0, 2}));
             // every strict prefix of the whole message is refused except the one that ends after the platform byte (a Hello without a block); one byte more is refused
-            const size_t without_block = hello_prefix("k7m2xq9p").size() + 1;
+            const size_t without_block = hello_prefix("k7m2xq").size() + 1;
             for (size_t cut = 0; cut < want.size(); ++cut) {
                 HelloMsg keep;
                 keep.name = "keep";
@@ -10268,12 +10268,12 @@ void run_protocol15_tests() {
         // the room's code in a Hello: 1 .. 32 letters, digits, '_' and '-', as before; the 8 random characters of the game's own codes are such a code
         {
             HelloMsg back;
-            for (const std::string& ok : {std::string("k7m2xq9p"), std::string("ROOM-1"), std::string("a"), std::string(32, 'z')}) {
+            for (const std::string& ok : {std::string("k7m2xq"), std::string("ROOM-1"), std::string("a"), std::string(32, 'z')}) {
                 std::vector<uint8_t> bytes = hello_prefix(ok);
                 bytes.push_back(0);
                 ASSERT_TRUE(decode(bytes, back) && back.room == ok);
             }
-            for (const std::string& bad : {std::string("k7m2 xq9p"), std::string("k7m2.xq9p"), std::string(33, 'z'), std::string("k7m2/xq9p")}) {
+            for (const std::string& bad : {std::string("k7m 2xq"), std::string("k7m2.xq9p"), std::string(33, 'z'), std::string("k7m2/xq9p")}) {
                 std::vector<uint8_t> bytes = hello_prefix(bad);
                 bytes.push_back(0);
                 ASSERT_FALSE(decode(bytes, back));
@@ -10281,7 +10281,7 @@ void run_protocol15_tests() {
         }
         // the layout of protocol 14 (no platform byte) is no Hello of this protocol, whatever the version byte says, but its version and its name are read, so that a server can tell the player
         {
-            std::vector<uint8_t> old_layout = hello_prefix("k7m2xq9p");
+            std::vector<uint8_t> old_layout = hello_prefix("k7m2xq");
             old_layout[1] = 14;
             HelloMsg back;
             ASSERT_FALSE(decode(old_layout, back));
