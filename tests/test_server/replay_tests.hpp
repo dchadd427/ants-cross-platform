@@ -280,6 +280,14 @@ void run_replay_tests() {
             ASSERT_TRUE(w.mgr.replay_store() == nullptr);
             ASSERT_TRUE(w.mgr.create_room(spec_of("NONE-1", 2), w.now).ok);
             ASSERT_EQ(w.status("NONE-1").replay_note, std::string("this server keeps no replays"));
+            {   // the server's own reason comes first: neither "record": false nor a demo room's code hides it
+                RoomSpec off = spec_of("NONE-2", 2);
+                off.record_replay = false;
+                ASSERT_TRUE(w.mgr.create_room(off, w.now).ok);
+                ASSERT_EQ(w.status("NONE-2").replay_note, std::string("this server keeps no replays"));
+                ASSERT_TRUE(w.mgr.create_room(spec_of("demo-none", 2), w.now).ok);
+                ASSERT_EQ(w.status("demo-none").replay_note, std::string("this server keeps no replays"));
+            }
             start_pair(w, "NONE-1", 38000);
             ASSERT_TRUE(w.mgr.close_room("NONE-1", w.now));
             const RoomStatus s = w.status("NONE-1");
@@ -329,6 +337,14 @@ void run_replay_tests() {
             ASSERT_TRUE(w.mgr.close_room("demo-ctl", w.now));
             ASSERT_EQ(w.status("demo-ctl").replay_kept, include_demo);
             ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{3} : size_t{1});
+            // the prefix alone is no demo room's code (a Hello makes a demo room from a code with something after the prefix): a room of that code is an ordinary room, kept either way
+            clock.now += 10;
+            ASSERT_TRUE(w.mgr.create_room(spec_of("demo-", 2), w.now).ok);
+            ASSERT_TRUE(w.status("demo-").replay_note.empty());
+            start_pair(w, "demo-", 38000, "Gus", "Hal");
+            ASSERT_TRUE(w.mgr.close_room("demo-", w.now));
+            ASSERT_TRUE(w.status("demo-").replay_kept);
+            ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{4} : size_t{2});
         }
     } TEST_END();
 
@@ -387,6 +403,26 @@ void run_replay_tests() {
         ASSERT_EQ(w.mgr->replay_store()->count(), size_t{0});
         ASSERT_TRUE(fs::is_empty(config.dir));
         (void)m;
+        {   // a record that this server cannot bring back (it was written under another network protocol) makes a failed room: it says that no match of it was recorded, and the store holds nothing
+            PWorld r("replay-refused");
+            const ReplayConfig refused_config = replay_config("replay-refused-folder", &clock);
+            r.configure = [&](RoomManager& mgr) {
+                std::string why;
+                if (!mgr.enable_replays(refused_config, false, why)) throw std::runtime_error("enable_replays: " + why);
+            };
+            r.start_server(500);
+            std::vector<RClient*> p = play_room(r, held_spec("RST-2", 2), 8000);
+            for (RClient* c : p) c->reconnects = false;
+            r.stop_server(false);                                                                          // (a crash: the record stays where it is)
+            r.restart.identity.protocol = static_cast<uint16_t>(net::kProtocolVersion + 1);
+            r.start_server(500);
+            ASSERT_TRUE(r.report.items.size() == 1 && r.report.items[0].outcome == RestoreItem::Outcome::Ended);
+            const RoomStatus f = r.status("RST-2");
+            ASSERT_TRUE(f.state == RoomState::Failed && !f.restored && !f.replay_kept && f.replay_file.empty());
+            ASSERT_TRUE(f.replay_note.find("not brought back from its restart record") != std::string::npos);
+            ASSERT_TRUE(replay_json_of(replay_call(*r.mgr, "GET", "/rooms/RST-2")).get("replay").get("note").str().find("not brought back") != std::string::npos);
+            ASSERT_EQ(r.mgr->replay_store()->count(), size_t{0});
+        }
     } TEST_END();
 
     TEST_CASE("S3.167 The Limits Show Where They Are Met: A Match That The Hour's Limit Refuses Is Not Kept, Its Status Says Why And The Server's Log Has The Line Once; The Next Hour Keeps Matches Again") {
@@ -507,7 +543,8 @@ void run_replay_tests() {
         std::string why;
         ReplayConfig config = replay_config("replay-public", &clock);
         fs::create_directories(config.dir);
-        write_bytes(fs::path(config.dir) / "ants-JUNK-20261008-143000Z.antsrep", 40, 'j');                    // a file of the store's own name that no build can read
+        const std::string junk = "ants-JUNK-20261008-160000Z.antsrep";                                      // (dated in the middle of the saves below: among the newest 200)
+        write_bytes(fs::path(config.dir) / junk, 40, 'j');                                                    // a file of the store's own name that no build can read
         ASSERT_TRUE(mgr.enable_replays(config, false, why));
         ASSERT_EQ(mgr.replay_store()->count(), size_t{1});
         std::vector<std::string> names;
@@ -534,9 +571,21 @@ void run_replay_tests() {
         ASSERT_TRUE(r.status == 200 && r.content_type == "application/octet-stream" && r.body.size() == on_disk.size());
         ASSERT_TRUE(std::equal(on_disk.begin(), on_disk.end(), r.body.begin(), [](uint8_t x, char y) { return x == static_cast<uint8_t>(y); }));
         // the junk: the owner has it, the public has not
-        ASSERT_EQ(replay_call(mgr, "GET", "/replays/ants-JUNK-20261008-143000Z.antsrep").status, 200);
-        ASSERT_EQ(public_call(mgr, "GET", "/replays/ants-JUNK-20261008-143000Z.antsrep").status, 404);
-        ASSERT_TRUE(replay_json_of(replay_call(mgr, "GET", "/replays", "limit=1000")).get("replays").size() == 206);
+        ASSERT_EQ(replay_call(mgr, "GET", "/replays/" + junk).status, 200);
+        ASSERT_EQ(public_call(mgr, "GET", "/replays/" + junk).status, 404);
+        {   // the owner's list has every file of the folder (the junk says readable: false and has no more than its size and end), and counts them all; the public count is the files that can be read
+            const ctl::JsonValue owner = replay_json_of(replay_call(mgr, "GET", "/replays", "limit=1000"));
+            ASSERT_TRUE(owner.get("replays").size() == 206 && owner.get("count").as_int_or(0) == 206);
+            size_t junk_entries = 0;
+            for (size_t i = 0; i < owner.get("replays").size(); ++i) {
+                const ctl::JsonValue& entry = owner.get("replays").at(i);
+                const bool is_junk = entry.get("file").str() == junk;
+                junk_entries += is_junk ? 1u : 0u;
+                ASSERT_EQ(entry.get("readable").as_bool_or(is_junk), !is_junk);                       // (the default is the wrong answer: a missing key fails)
+                ASSERT_EQ(entry.get("map").is_null(), is_junk);
+            }
+            ASSERT_EQ(junk_entries, size_t{1});
+        }
         // nothing else
         for (const char* method : {"POST", "DELETE", "PUT", "HEAD", "OPTIONS", "PATCH", ""}) {
             ASSERT_EQ(public_call(mgr, method, "/replays").status, 404);

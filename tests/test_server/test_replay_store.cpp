@@ -515,6 +515,20 @@ int main() {
         const ReplaySave kept = store.save(good);
         ASSERT_TRUE(kept.kept && kept.file == kName0);
         ASSERT_TRUE(names_in(f.dir) == std::vector<std::string>{kName0} && store.count() == 1 && store.readable_count() == 1);
+#if defined(__linux__)
+        // a write that fails after the file was made (the disk fills up while it is written): /dev/full takes the open and refuses every byte; the half file must not stay behind
+        Fixture g;
+        ReplayStore full(g.config());
+        ASSERT_TRUE(full.prepare(why));
+        std::error_code link_ec;
+        fs::create_symlink("/dev/full", g.dir / (kName0 + ".tmp"), link_ec);
+        if (!link_ec && fs::exists("/dev/full")) {
+            const ReplaySave refused_full = full.save(good);
+            ASSERT_TRUE(!refused_full.kept && contains(refused_full.note, "refused the write"));
+            ASSERT_TRUE(fs::symlink_status(g.dir / (kName0 + ".tmp")).type() == fs::file_type::not_found);        // (what stood for the half file is gone)
+            ASSERT_TRUE(full.count() == 0 && full.readable_count() == 0 && full.total_bytes() == 0);
+        }
+#endif
     } TEST_END();
 
     TEST_CASE("RS4.1 A File Is Deleted keep_days After The Match Ended: Not A Second Before, At That Second On; The Age Is Looked At Once An Hour") {
@@ -916,6 +930,7 @@ int main() {
         ASSERT_TRUE(store.prepare(why));
         const std::vector<uint8_t> bytes = make_file();
         ASSERT_TRUE(store.save(bytes).kept);
+        ASSERT_EQ(store.readable_count(), size_t{1});
         write_text(f.dir / "notes.txt", "private notes");
         write_text(f.temp.path / "outside.antsrep", "outside the folder");
         std::vector<uint8_t> out{1, 2, 3};
@@ -931,6 +946,7 @@ int main() {
         ASSERT_TRUE(fs::exists(f.dir / "notes.txt") && fs::exists(f.temp.path / "outside.antsrep") && fs::exists(f.dir / kName0));
         ASSERT_TRUE(store.remove(kName0));
         ASSERT_TRUE(!fs::exists(f.dir / kName0) && store.count() == 0 && store.total_bytes() == 0);
+        ASSERT_EQ(store.readable_count(), size_t{0});                                    // (the count of the files that can be read goes down with the file)
         ASSERT_FALSE(store.remove(kName0));
     } TEST_END();
 
