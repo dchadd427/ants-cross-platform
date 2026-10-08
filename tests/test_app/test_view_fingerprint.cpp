@@ -1201,7 +1201,7 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         key(m, SDLK_DOWN);
         key(m, SDLK_RETURN);
         menu_frame("screen.menu.join.empty", m);
-        m.on_text("demo-small-2p-x7k2");
+        m.on_text("k7m2xq");
         menu_frame("screen.menu.join.typed", m);
         m.update(0.15f);
         menu_frame("screen.menu.join.caret_off", m);
@@ -1214,7 +1214,7 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         key(m, SDLK_DOWN);
         key(m, SDLK_RETURN);
         menu_frame("screen.menu.connecting", m);
-        m.connection_failed("There is no room with the code demo-small-2p-x7k2 on beta.playants.org:4001. Check the code (capital letters matter).");
+        m.connection_failed("There is no room with the code k7m2xq on beta.playants.org:4001. Check the code (capital letters matter).");
         menu_frame("screen.menu.join.error", m);
     }
     {
@@ -1228,7 +1228,7 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         key(m, SDLK_DOWN);
         key(m, SDLK_RIGHT);
         menu_frame("screen.menu.host.map_and_players", m);
-        m.show_room("demo-medium-2p-k3n7pq", 1, 2);
+        m.show_room("k3n7pq", 1, 2);
         menu_frame("screen.menu.room.code", m);
         m.set_room_players(2, 2);
         menu_frame("screen.menu.room.full", m);
@@ -1249,7 +1249,7 @@ void menu_scenarios(const assets::AssetArchive& arc) {
             key(m, SDLK_DOWN);                                                                                   // the next seat
         }
         menu_frame("screen.menu.host.fill_medium", m);
-        m.show_room("demo-small-4p-b7x2qk", 1, 4);
+        m.show_room("b7x2qk", 1, 4);
         menu_frame("screen.menu.room.fill_medium", m);
     }
     {   // a level for each seat and the teams (protocol 13): Easy in the Red seat, nobody in the Blue seat, Hard in the Black seat, Green and Red against Blue and Black; the room's panel says both
@@ -1266,7 +1266,7 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         key(m, SDLK_DOWN);                                                                                       // the teams
         key(m, SDLK_RIGHT);                                                                                      // Green + Red against Blue + Black
         menu_frame("screen.menu.host.seats_and_teams", m);
-        m.show_room("demo-small-4p-b7x2qk", 1, 4);
+        m.show_room("b7x2qk", 1, 4);
         menu_frame("screen.menu.room.seats_and_teams", m);
     }
     {   // a room of three players: two seat rows and the teams of three (Red + Blue against Green); the room of two (one seat row, no teams) is screen.menu.host.map_and_players
@@ -1284,7 +1284,7 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         key(m, SDLK_DOWN);                                                                                       // (the Blue seat stays empty) the teams
         for (int i = 0; i < 3; ++i) key(m, SDLK_RIGHT);                                                          // Red + Blue against Green
         menu_frame("screen.menu.host.three_players", m);
-        m.show_room("demo-small-3p-b7x2qk", 1, 3);
+        m.show_room("b7x2q3", 1, 3);
         menu_frame("screen.menu.room.three_players", m);
     }
 }
@@ -4006,27 +4006,31 @@ const Golden kGoldens[] = {
     {"screen.menu.single.two_bots", 0xc7548f9283cdd916, 242},
     {"screen.menu.single.own_seat_2", 0xb2edf0250758b271, 218},
     {"screen.menu.join.empty", 0xa3719b0cf65673ec, 148},
-    {"screen.menu.join.typed", 0x97292172383f912c, 149},
-    {"screen.menu.join.caret_off", 0xffc1932a3464e20d, 148},
-    {"screen.menu.join.name_refused", 0x654e9cdadc7be96a, 160},
+    {"screen.menu.join.typed", 0xee59ae3037c1cc35, 149},
+    {"screen.menu.join.caret_off", 0x02f6dbba4e83ab42, 148},
+    {"screen.menu.join.name_refused", 0xa4d022926ae89c6f, 160},
     {"screen.menu.connecting", 0xa95f45bb91fe2012, 114},
-    {"screen.menu.join.error", 0x902ef842457399e8, 158},
+    {"screen.menu.join.error", 0xdffb5d28277afaa0, 158},
     // The host-panel rows below moved deliberately in bot games part B (network protocol 13: the owner asked for a level for each bot and for teams chosen before the start): the panel has a row for
     // each seat after the leader's (the bot that START puts there) and, with three or four players, the Teams row, in rows of 18 px text, with the caption under them (the line says what the standard bot
     // does: "Bots gather food, raid and fight back."). screen.menu.room.fill_medium did NOT move: the room's panel for the same level in every seat is what it was; the rows with seats_and_teams and
-    // three_players are new. The two room panels with teams moved once more in the review fixes of part B, deliberately: the teams are a word of the room's code now (the room makes them for every
-    // start), so the sentence says "Room teams: Green + Red against Blue + Black." where it said "Teams: ..." (same draw calls, one string longer).
+    // three_players are new. The two room panels with teams moved once more in the review fixes of part B, deliberately: the teams are the room's own now (a word of its code in protocol 13, its create
+    // block's since 15: the room makes them for every start), so the sentence says "Room teams: Green + Red against Blue + Black." where it said "Teams: ..." (same draw calls, one string longer).
+    // Nine of the menu rows moved again in v0.11.0 (protocol 15): join.typed, join.caret_off, join.name_refused, join.error, room.code, room.full, room.fill_medium, room.seats_and_teams and
+    // room.three_players. Their scenarios now type and show the codes that the menu makes ("k7m2xq", "b7x2qk", where they had "demo-small-2p-x7k2" and the like), and the room panel shows a
+    // code of six characters in two groups of three ("b7x 2qk"; room_code_display). The draw calls are the same (the counts did not move), the string in them is another; a code of another length
+    // is shown as it is, so screen.menu.room.longest_code did not move.
     {"screen.menu.host.default", 0x18b4d4169368ccd1, 282},
     {"screen.menu.host.map_and_players", 0x3a08eeb197374920, 210},
-    {"screen.menu.room.code", 0xb4b079b2a4d20074, 150},
-    {"screen.menu.room.full", 0x4b46383209d2e157, 150},
+    {"screen.menu.room.code", 0x007724f8d78c993d, 150},
+    {"screen.menu.room.full", 0x4acdd352530ed1be, 150},
     {"screen.menu.room.longest_code", 0x02e344112faca6ac, 150},
-    {"screen.menu.room.fill_medium", 0xc27d15c0f5fe2c7f, 150},
+    {"screen.menu.room.fill_medium", 0x1544abeb764d9c2a, 150},
     {"screen.menu.host.fill_medium", 0x3a6b94fd4d05862f, 282},
     {"screen.menu.host.seats_and_teams", 0x4f4c7690d7c20560, 282},
-    {"screen.menu.room.seats_and_teams", 0xf4c8368e078770d0, 151},
+    {"screen.menu.room.seats_and_teams", 0x143c01485ed43d61, 151},
     {"screen.menu.host.three_players", 0x30fe4a8bffb71fdf, 258},
-    {"screen.menu.room.three_players", 0xb0a34eae0bebf315, 151},
+    {"screen.menu.room.three_players", 0x815f9e2122cf3d67, 151},
     // ---- the wide match screen (milestone M3, 960 x 540), computed at the commit that introduced it (the classic numbers above did not move); regenerate only deliberately, see the notes at the top.
     //      The review fixes of M3 moved 105 of these deliberately (all of the wide ones that draw the bottom strip or the options window and quick help, none of the classic): the score boxes are
     //      spread over the strip (seven draw calls for the strip instead of three, the boxes at x 213, 468 and 722), and the in-match options window and quick help are drawn over the map view

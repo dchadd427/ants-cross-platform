@@ -85,6 +85,7 @@ public:
             looks.push_back(now);
             for (const Intent& in : orders.intents()) {
                 proposed.emplace_back(now, in.command);
+                proposed_priority.push_back(in.priority);
                 waiting_.push_back(Waiting{now + profile_.reaction_delay, in.command});
             }
         }
@@ -105,6 +106,7 @@ public:
     }
     std::vector<std::pair<uint64_t, Command>> sent;        // (tick it left, command)
     std::vector<std::pair<uint64_t, Command>> proposed;    // (tick of the look, command): every intent of the bot
+    std::vector<Priority> proposed_priority;               // the priority of each of those intents, in the same order
     std::vector<uint64_t> looks;
 
 private:

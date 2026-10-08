@@ -3,8 +3,8 @@
 
 Needs a running stack (the web page and the game server with demo rooms: docker-compose.stack.yml), a Chromium-based browser and Python 3; nothing else (the DevTools
 protocol is spoken over a WebSocket written here with the standard library). It starts the browser with a throwaway profile on a free port (headless; nothing of yours is
-touched), opens two seats of a demo room for two players in two tabs, puts the second tab in front so that the first one is hidden for real, and watches the room through the
-control interface for the given time:
+touched), opens two seats of a public room for two players (the room that the create block of the first Hello makes: Small, two seats) in two tabs, puts the second tab in front so that the first
+one is hidden for real, and watches the room through the control interface for the given time:
 
   * the room keeps running at 20 ticks a second (the hidden seat is driven by the server's messages, not by its frames), with both players in it;
   * the state hashes that both games report (the page posts one every 100 ticks on the broadcast channel "ants-sync") are equal, tick for tick;
@@ -290,7 +290,8 @@ def main():
         print("  SKIP: no Chromium-based browser found (give one with --browser or CHROME)")
         return 3
     web = args.web if args.web.endswith("/") else args.web + "/"
-    code = "demo-small-2p-hid%d" % random.randint(10000, 99999)
+    code = "hid%d" % random.randint(10000, 99999)                  # (a code is only a name: the room is what the create block of its first Hello says)
+    block = "&roommap=small&roomseats=2"                          # (protocol 15: two seats on Small; every link of a room that the front page made carries it right after the code)
     profile = tempfile.mkdtemp(prefix="ants_hidden_profile.")
     port = free_port()
     process = subprocess.Popen(
@@ -318,7 +319,7 @@ def main():
         devtools.front(tab_blank)
         tab_a, session_a = devtools.new_tab(HOOK, background=True)       # seat 0: opened in the background, so it is hidden the whole time
         tabs.append(tab_a)
-        devtools.open(session_a, web + "?join=/ws&room=%s&seat=0&name=Hidden" % code)
+        devtools.open(session_a, web + "?join=/ws&room=%s%s&seat=0&name=Hidden" % (code, block))
         room = None
         deadline = time.time() + 120                                # the game data is about 9 MB: a cold start takes a while
         while time.time() < deadline:
@@ -333,7 +334,7 @@ def main():
         music_before = devtools.evaluate(session_a, "window.__music.length")      # (the files that the game opened until now: the intro of the setup screen)
         tab_b, session_b = devtools.new_tab(HOOK)                          # seat 1 joins in front: the match starts while seat 0 is hidden
         tabs.append(tab_b)
-        devtools.open(session_b, web + "?join=/ws&room=%s&seat=1&name=Shown" % code)
+        devtools.open(session_b, web + "?join=/ws&room=%s%s&seat=1&name=Shown" % (code, block))
         devtools.front(tab_b)
         room = None
         deadline = time.time() + 120                                # the game data is about 9 MB: a cold start takes a while

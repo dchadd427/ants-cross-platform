@@ -166,7 +166,10 @@ std::vector<int32_t> MapInfo::cost_field_onto(const sim::Grid& grid, const std::
 
 // ---- construction ----------------------------------------------------------------------------------------------------------------------------------------
 
-MapInfo::MapInfo(const sim::SimulationEngine& sim) { build(sim.grid()); }
+MapInfo::MapInfo(const sim::SimulationEngine& sim) {
+    build(sim.grid());
+    add_flowers(sim.grid(), sim.get_world_state().flower_droppers);
+}
 
 MapInfo::MapInfo(const sim::Grid& grid) { build(grid); }
 
@@ -283,6 +286,27 @@ void MapInfo::build(const sim::Grid& grid) {
             powerups_.push_back(pu);
         }
     }
+}
+
+void MapInfo::add_flowers(const sim::Grid& grid, const std::vector<sim::FlowerDropperSnapshot>& droppers) {
+    if (w_ <= 0 || h_ <= 0) return;
+    const WalkContext start_ctx;
+    for (const sim::FlowerDropperSnapshot& d : droppers) {
+        FlowerInfo f;
+        f.plant = sim::TileCoord{d.x, d.y};
+        f.drop = sim::TileCoord{d.drop_x, d.drop_y};
+        if (inside(f.drop)) {
+            for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) f.approach[t] = approach_in(grid, cost_[t], std::vector<sim::TileCoord>{f.drop}, t, start_ctx);
+        }
+        flowers_.push_back(f);
+    }
+}
+
+const FlowerInfo* MapInfo::flower_at(sim::TileCoord tile) const noexcept {
+    for (const FlowerInfo& f : flowers_) {
+        if (f.drop == tile) return &f;
+    }
+    return nullptr;
 }
 
 // ---- queries ---------------------------------------------------------------------------------------------------------------------------------------------

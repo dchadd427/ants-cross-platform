@@ -512,7 +512,7 @@
                 </div>
                 <div class="havecode">
                     <label class="lab" for="join-code">Have a code?</label>
-                    <input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
+                    <input type="text" id="join-code" placeholder="k7m 2xq" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
                     <button id="join-go" type="button" class="btn">Join</button>
                     <p class="hint" id="join-hint"></p>
                 </div>
@@ -553,7 +553,7 @@
                     <p>With three or four players every colour has a <b>Team 1</b> and a <b>Team 2</b> switch: put two colours on the same team and they start allied (with four players the other two are the other team).</p>
                     <p><b>START!</b> takes this tab into the match. With bots only it starts at once, and with every other seat on <b>Nobody</b> it is a game for one on this computer: only your colony is on the map. With <b>Friend</b> seats it opens the room and waits: send each friend the link under <b>Invite your friends</b> (<b>Copy link</b>, or <b>Share</b> on a phone). The match starts when they are all in. Until then the first player in the room can start it with START in the waiting room, with the players who are in (that is you, unless a friend connected first); a Friend seat that is still empty then stays empty. Changing the map, the teams or the seats makes new links.</p>
                     <h4>Have a code?</h4>
-                    <p>Paste the code of a match that somebody else made and press <b>Join</b>: you take the first free seat in this tab. The first player in the room can start the match early with START once at least 2 players are in.</p>
+                    <p>Type or paste the code of a match that somebody else made, as it is shown (<code>k7m 2xq</code>), and press <b>Join</b>: you take the first free seat in this tab. A code works once somebody is in the room; the match's link works at any time. The first player in the room can start the match early with START once at least 2 players are in.</p>
                     <h4>On the map</h4>
                     <p>Gather food for your hill, pick up power-ups and keep your ants alive. The original's own help sheets are shown with this text.</p>
                 </div>
@@ -594,7 +594,7 @@ their music and their sound: only the window you are in is heard). The match is 
             { name: 'Green', css: 'green' }, { name: 'Red', css: 'red' },
             { name: 'Blue', css: 'blue' }, { name: 'Black', css: 'black' }
         ];
-        // The maps of the original game; the server must allow them (--demo-maps). The room code carries the choice: demo-<map>-<random>
+        // The maps of the original game; the server must allow them (--demo-maps). The room's create block carries the choice (roommap=<key>, see roomBlockQuery in the block LOBBY below)
         var MAPS = [
             { key: 'tiny', name: 'Tiny' }, { key: 'small', name: 'Small' }, { key: 'medium', name: 'Medium' },
             { key: 'gauntlet', name: 'Gauntlet' }, { key: 'treasure', name: 'Treasure' }, { key: 'islands', name: 'Islands' }
@@ -693,6 +693,8 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         nameInput.addEventListener('input', function () { nameMsg.textContent = ''; nameInput.removeAttribute('aria-invalid'); });
         var seatNames = makeSeatNames(function () { var checked = nameCheck(nameInput.value); return checked.ok ? checked.name : ''; }, names);
+        // The code of a room that this page makes: six characters of an alphabet without look-alikes (31 symbols: no i, l, o, 0 or 1) from the browser's random numbers. It is a name and nothing more:
+        // what the room is (its map, seats and teams) is its create block, which every link of the room carries (roomBlockQuery below). Screens show it in two groups of three (codeText below).
         function randomCode() {
             var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';
             var buf = new Uint32Array(6);
@@ -720,9 +722,10 @@ their music and their sound: only the window you are in is heard). The match is 
         // FILL_END
 
         // LOBBY_BEGIN (tests/scripts/web_lobby_check.js runs this block on a table)
-        // What the addresses of the old pages mean, and what the old pages left in the browser. A match is a room on the game server that this page makes (demo-<map>-<n>p-<random>: the card makes four seats, an
-        // address may ask for 2 to 4); with &players=1 an address plays a game on THIS computer (no game server and no room: the game page at its own path, LOCAL_PAGE, with its local parameters, which
-        // web/shell.html's ANTS_PAGE.localArguments reads through a whitelist). The card makes rooms, and a game on this computer when nobody else is in the match (the block CARD below).
+        // What the addresses of the old pages mean, and what the old pages left in the browser. A match is a room on the game server that this page makes: a random code (a name, nothing more) and a create block
+        // (the map, the seats and the teams: roomBlockQuery; the card makes four seats, an address may ask for 2 to 4); with &players=1 an address plays a game on THIS computer (no game server and no room: the game
+        // page at its own path, LOCAL_PAGE, with its local parameters, which web/shell.html's ANTS_PAGE.localArguments reads through a whitelist). The card makes rooms, and a game on this computer when nobody else
+        // is in the match (the block CARD below).
         var LOCAL_PAGE = 'play.html';
         // 1 .. 4 from a text (a remembered value, the address's &players=), else `fallback`
         function playersChoice(text, fallback) { return text === '1' || text === '2' || text === '3' || text === '4' ? Number(text) : fallback; }
@@ -790,26 +793,54 @@ their music and their sound: only the window you are in is heard). The match is 
             for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
             return 'ffa';
         }
-        // The teams of an address (?teams=): two different seats 0 - 3 as A+B (a "+" that came as a blank is one), else none ('' : free for all). The tested text comes back, never the address's.
+        // The teams of a room as the page shows them. With four seats a pair that has no Green is the same two teams as the pair of the other two seats, which has ("1+2" is Red + Blue against Green + Black, "0+3":
+        // the game's room_team_choices lists the pairs with Green); a block of a hand-made address or of the command line can name either, and the room plays both. Any other pair, and a pair that its seats cannot
+        // make, comes back as it is (`teams` is validRoomTeams's text or '': the lower seat first).
+        function shownRoomTeams(teams, players) {
+            var m = /^([1-3])\+([1-3])$/.exec(teams);
+            if (!m || players !== 4) return teams;
+            var rest = [0, 1, 2, 3].filter(function (s) { return String(s) !== m[1] && String(s) !== m[2]; });
+            return rest[0] + '+' + rest[1];
+        }
+        // The teams of an address (?teams= and ?roomteams=): two different seats 0 - 3 as A+B (a "+" that came as a blank is one), the lower seat first (a pair has one spelling, as in the create block: "1+0" is "0+1"),
+        // else none ('' : free for all). The tested text comes back, never the address's.
         function validRoomTeams(value) {
             var m = typeof value === 'string' ? /^([0-3])[+ ]([0-3])$/.exec(value) : null;
-            return m && m[1] !== m[2] ? m[1] + '+' + m[2] : '';
+            if (!m || m[1] === m[2]) return '';
+            return m[1] < m[2] ? m[1] + '+' + m[2] : m[2] + '+' + m[1];
         }
-        // The team word of a room code (the server's room_code_team_word): t01 for the pair 0+1, two different seats 0 - 3, the lower first; '' for free for all and for anything else.
-        function roomTeamWord(team) {
-            var m = typeof team === 'string' ? /^([0-3])\+([0-3])$/.exec(team) : null;
-            return m && Number(m[1]) < Number(m[2]) ? 't' + m[1] + m[2] : '';
+        // A room code as a screen shows it (the room panel, the Rejoin button, the name step of a Join): six characters in two groups of three, "k7m2xq" as "k7m 2xq", which is easier to read out and to copy by
+        // eye; any other length as it is. Only screens show it so: a link, a field's value and the game's arguments keep the plain code (the Join box drops the blank that a typed or pasted code has).
+        function codeText(code) {
+            var text = typeof code === 'string' ? code : '';
+            return text.length === 6 ? text.slice(0, 3) + ' ' + text.slice(3) : text;
         }
-        // The teams that a code names (the server's room_code_teams, the same reading): the first word t<a><b> after the first word of a demo code, a < b, in any case; as A+B, '' when there is none.
-        // "demo-treasure-4p-t01-k7m2xq" names 0+1. The room makes them for every start.
-        function codeTeams(code) {
-            if (typeof code !== 'string' || code.length <= 5 || code.slice(0, 5) !== 'demo-') return '';
-            var words = code.slice(5).split('-');
-            for (var i = 1; i < words.length; i++) {
-                var m = /^[tT]([0-3])([0-3])$/.exec(words[i]);
-                if (m && Number(m[1]) < Number(m[2])) return m[1] + '+' + m[2];
-            }
-            return '';
+        // The CREATE BLOCK of a room (protocol 15), as the page holds it: { map: one of the six keys, or '' for the server's own, seats: 2 - 4, teams: A+B or '' for free for all, leaderStart: a full room waits for its
+        // leader's START instead of starting by itself }. It is what the game server makes the room of when it has none of the code, and the first Hello of a code is the one that is read, so EVERY link that this page
+        // makes for a room that it made carries the block (the invitations and START, the room panel's links, the address of a Join and of the panel itself): a room that has ended is made again by the next Hello
+        // that brings one. A room that was made some other way has none (null): its links carry none and the game sends none, so a code that no room has is answered "There is no such room on this server."
+        // The text that goes after &room=<code> in a link: &roommap=<key>&roomseats=<n>[&roomteams=<A%2BB>][&roomleaderstart=1] (a "+" is encoded: an address reads a bare one as a blank; no &roommap= when the
+        // block has no map). web/shell.html's joinArguments reads each part through its own whitelist and gives the game --room-map, --room-seats, --room-teams and --room-leader-start.
+        function roomBlockQuery(block) {
+            if (!block || typeof block !== 'object') return '';
+            var map = typeof block.map === 'string' && mapByKey(block.map) ? block.map : '';
+            var seats = block.seats === 2 || block.seats === 3 || block.seats === 4 ? block.seats : 4;
+            var teams = validRoomTeams(block.teams);
+            return (map ? '&roommap=' + map : '') + '&roomseats=' + seats + (teams ? '&roomteams=' + encodeURIComponent(teams) : '') + (block.leaderStart === true ? '&roomleaderstart=1' : '');
+        }
+        // The create block that an address carries (the links of this page make them: ?room=<code>&roommap=<key>&roomseats=<2-4>[&roomteams=A+B][&roomleaderstart=1]), read as the game page reads it: each part through
+        // its own test (the map by its key in any case, the seats 2 - 4, the teams as validRoomTeams, the flag exactly "1"), the tested text and never the address's. null when none of the four says anything (a room
+        // that was made some other way: the page sends no block); else a block of tested parts, what is missing or no good being the server's own (no map, four seats, free for all, not the leader's start).
+        function roomBlockOf(search) {
+            var q;
+            try { q = new URLSearchParams(search); } catch (e) { return null; }
+            var key = (q.get('roommap') || '').toLowerCase();
+            var map = mapByKey(key) ? key : '';
+            var seats = /^[2-4]$/.test(q.get('roomseats') || '') ? Number(q.get('roomseats')) : 0;
+            var teams = validRoomTeams(q.get('roomteams'));
+            var leaderStart = q.get('roomleaderstart') === '1';
+            if (!map && !seats && !teams && !leaderStart) return null;
+            return { map: map, seats: seats || 4, teams: teams, leaderStart: leaderStart };
         }
         // What a plan of START says in words: "Medium bots" (one level for every seat) or "Red Easy, Black Hard" (the seats that the room has and that get a bot). `plan` is the tested text of validFillPlan.
         function hostPlanText(plan, players) {
@@ -827,10 +858,10 @@ their music and their sound: only the window you are in is heard). The match is 
         // THE CARD, "New match": the four seats of a room, Green, Red, Blue and Black (seats 0 - 3). Exactly one is YOU (state.you). Every other seat has one choice: Friend (a seat for a person that you invite), Easy,
         // Medium or Hard (a bot of that level) or Nobody (the seat stays out of the match); the seat that is You keeps its choice for the day that You sits somewhere else. The state is
         // { map, you, seats: [four words], sides: [four numbers], teams } and is what the browser remembers (CARD_KEY, as JSON). sides is what the Team 1 and Team 2 switches say (see below) and teams is what they
-        // make (ffa, or A+B for two of the seats that play). The room is always one of four seats ("demo-<map>-4p-"), so that any colour can be taken, and its code names the teams, so that they hold whether the
-        // room starts by itself or by START. Nothing here touches the page: these are plain functions.
+        // make (ffa, or A+B for two of the seats that play). The room is always one of four seats, so that any colour can be taken, and its create block (cardBlock) holds the map and the teams, so that the teams
+        // hold whether the room starts by itself or by START. Nothing here touches the page: these are plain functions.
         var CARD_KEY = 'ants-match';
-        var CARD_ROOM_KEY = 'ants-match-room';                 // (the room that the links and START use: kept by the tab until START, so that a reload does not change the links that were sent)
+        var CARD_ROOM_KEY = 'ants-match-room';                 // (the room that the links and START use: { code, map, teams, used }, kept by the tab until START, so that a reload does not change the links that were sent)
         var CARD_WORDS = ['friend', 'easy', 'medium', 'hard', 'nobody'];
         function cardCopy(state) { return { map: state.map, you: state.you, seats: state.seats.slice(), sides: Array.isArray(state.sides) ? state.sides.slice() : undefined, teams: state.teams }; }
         // The seats that play: You and every seat that is not Nobody
@@ -841,7 +872,7 @@ their music and their sound: only the window you are in is heard). The match is 
         // THE TEAMS. Every seat that plays has two switches, Team 1 and Team 2 (state.sides: a number for each seat, 0 for neither, 1 for Team 1, 2 for Team 2) when three or four seats play (two would be the whole
         // match, which the original ends at once). A team is two seats on the same switch (the original's alliances are pairs): with three players the third plays alone, with four the other two seats are the other
         // team and the page shows their switch on although nobody pressed it. A seat that does not play has neither switch on, and a third seat on one switch is not made (a team is two seats at most).
-        // state.teams is what the switches make, the value that the code's team word and the game's --teams take: ffa, or A+B, the lower seat first (with four players the team that Green is in).
+        // state.teams is what the switches make, the value that the room's create block (roomteams) and the game's --teams take: ffa, or A+B, the lower seat first (with four players the team that Green is in).
         // `playing` is the seats that play (cardPlaying); `sides` is any list: what is no 1 or 2 is neither, a list that crowds a switch is no list.
         function cardSidesFix(sides, playing) {
             var out = [0, 0, 0, 0];
@@ -972,22 +1003,19 @@ their music and their sound: only the window you are in is heard). The match is 
             var words = [0, 1, 2, 3].map(function (s) { var w = state.seats[s]; return s !== state.you && (w === 'easy' || w === 'medium' || w === 'hard') ? w : 'none'; });
             return words.every(function (w) { return w === 'none'; }) ? '' : words.join(',');
         }
-        // The code of the room: demo-<map>-4p-[<team word>-]<random> (the server reads the map, the four seats and the team word from it). `random` is the six characters that the page makes.
-        function cardCode(state, random) {
-            var word = roomTeamWord(state.teams);
-            return 'demo-' + state.map + '-4p-' + (word ? word + '-' : '') + random;
+        // The create block of the card's room (the code is only a name; see roomBlockQuery): the card's map, always four seats, the card's teams (ffa is none: '') and not the leader-starts flag (a full room starts by itself)
+        function cardBlock(state) { return { map: state.map, seats: 4, teams: state.teams === 'ffa' ? '' : state.teams, leaderStart: false }; }
+        // Does the room that the tab kept, { code, map, teams, used }, hold what the card has chosen? Its code is one that this page makes (six characters of its alphabet) and its map and teams are the card's (ffa for
+        // none): the create block that its links carry is made of them. A room of other choices does not fit, and neither does one that an earlier page kept in another shape: the card makes another.
+        function cardRoomFits(room, state) {
+            return !!room && typeof room === 'object' && typeof room.code === 'string' && /^[a-z2-9]{6}$/.test(room.code) && room.map === state.map && room.teams === state.teams;
         }
-        // Does this code hold what the card has chosen (its map, four seats and its team)? A code that does not is the room of other choices: the card makes another.
-        function cardRoomFits(code, state) {
-            var m = typeof code === 'string' ? /^demo-([a-z]+)-4p-(?:t([0-3])([0-3])-)?[a-z2-9]{6}$/.exec(code) : null;
-            return !!m && m[1] === state.map && (m[2] === undefined ? 'ffa' : m[2] + '+' + m[3]) === state.teams;
-        }
-        // The address of a game of the room: ?join=/ws&room=<code>&seat=<seat>[&fill=<plan>][&name=<name>]&aspect=<shape>&start=<people>. The same plan and the same number of people are in every link of the room (the
-        // invitations and START), because whoever connects first leads the room and only the leader's game presses START. `name`: null in an invitation (whoever opens it is asked), the player's own in START.
-        // No key and no team: a seat has no key yet, and the teams are in the code.
+        // The address of a game of the room: ?join=/ws&room=<code><the create block>&seat=<seat>[&fill=<plan>][&name=<name>]&aspect=<shape>&start=<people>. The same block, plan and number of people are in every link
+        // of the room (the invitations and START): the first Hello of a code makes the room from the block, and whoever connects first leads the room and only the leader's game presses START. `name`: null in an
+        // invitation (whoever opens it is asked), the player's own in START. No key: a seat has none yet. No &teams=: the room's teams are in its block.
         function cardQuery(state, code, seat, name, shape) {
             var plan = cardFill(state);
-            return '?join=/ws&room=' + encodeURIComponent(code) + '&seat=' + seat + (plan ? '&fill=' + plan : '') + (name === null ? '' : '&name=' + encodeURIComponent(name)) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9') + '&start=' + cardPeople(state);
+            return '?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(cardBlock(state)) + '&seat=' + seat + (plan ? '&fill=' + plan : '') + (name === null ? '' : '&name=' + encodeURIComponent(name)) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9') + '&start=' + cardPeople(state);
         }
         // Does nobody else play (every other seat is Nobody)? START then plays a game for one on this computer, the original's single player: a room of the game server needs two people to start, and
         // the game page's own game has no other colony to end it (the match goes on until its clock does). That game is always Green's.
@@ -1070,13 +1098,14 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // REJOINKEY_END
 
-        // REJOIN_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block, after the one above)
+        // REJOIN_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block, after the one above and the block LOBBY, whose codeText the words use)
         // THE WAY BACK to a match that is still running (the Rejoin button at the top of the front page): where the keys are looked for, what the button says and where it goes.
         // This site's game server as the game page joins it (web/shell.html, ANTS_PAGE.joinArguments: the scheme of the page, its host, the door /ws): what an entry's "s" says when the game page wrote it
         function rejoinServer(secure, host) { return (secure ? 'wss://' : 'ws://') + host + '/ws'; }
-        // The words of the button and of the note under it (text only: a room code has letters, digits, - and _)
+        // The words of the button and of the note under it (text only: a room code has letters, digits, - and _), with the code as a screen shows it (codeText: "k7m 2xq"); the query below keeps the plain code
         function rejoinWords(offer) {
-            return { button: 'Rejoin your match (' + offer.room + ')', note: 'Your match in room ' + offer.room + ' is still running: go back to your seat.' };
+            var code = codeText(offer.room);
+            return { button: 'Rejoin your match (' + code + ')', note: 'Your match in room ' + code + ' is still running: go back to your seat.' };
         }
         // The query of the game page that the button opens, as the page's other join links make it (the door /ws, the room, the name always present, empty or not: it was chosen on this page, and the
         // picture's shape) with the seat of the entry. No key: the game page looks it up.
@@ -1107,10 +1136,11 @@ their music and their sound: only the window you are in is heard). The match is 
         window.addEventListener('storage', refreshRejoin);
 
         var room = '';
+        var roomBlock = null;               // the room's create block (roomBlockQuery) when this page made the room or its address carries one: every link of the room carries it; null for a room that was made some other way (no block is sent)
         var fill = '';                      // the bots that the leader's START seats in the empty seats: '', one level for every seat, or four words for the seats 0 - 3 (every link of the room carries it: the page cannot know who connects first)
-        var roomTeams = '';                 // the room's teams: '' (free for all) or A+B, two seats 0 - 3: the ones that its code names, else what the address asked for (the leader's START makes those)
-        var teamsInCode = false;            // the room's code names them (a team word, t01): the room makes them every time and the links carry no &teams= (the code is enough)
-        var seatCount = 4;                  // the seats of this room (the code of a page-made room says how many: demo-<map>-<n>p-...)
+        var roomTeams = '';                 // the room's teams: '' (free for all) or A+B, two seats 0 - 3: the ones that its create block names, else what the address asked for (the leader's START makes those)
+        var teamsInBlock = false;           // the create block names them: the room makes them every time and the links carry &roomteams= and no &teams= (the block is enough)
+        var seatCount = 4;                  // the seats of this room (its create block says how many; a room that was made some other way is shown with four)
         var roomMap = '';
         var inFrame = [false, false, false, false];
         var frames = [null, null, null, null];          // the iframe of each seat that plays on this page
@@ -1196,9 +1226,9 @@ their music and their sound: only the window you are in is heard). The match is 
         // page asks whoever opens it what they want to be called. `nameSeat` (a game that the leader put in another colour, protocol 14): the seat whose NAME the game keeps, the one of its row; the link
         // asks for `seat`, where its key is.
         function gameUrl(seat, own, nameSeat) {
-            var q = '?join=/ws&room=' + encodeURIComponent(room);
+            var q = '?join=/ws&room=' + encodeURIComponent(room) + roomBlockQuery(roomBlock);       // (the create block of a room that this page made is in every link: a room that has ended is made again by it)
             if (fill) q += '&fill=' + fill;                // (the game takes it as --fill-bots; it matters for the leader only)
-            if (roomTeams && !teamsInCode) q += '&teams=' + encodeURIComponent(roomTeams);       // (and --teams: the same; the teams that the code names need no parameter, the game reads the code)
+            if (roomTeams && !teamsInBlock) q += '&teams=' + encodeURIComponent(roomTeams);       // (and --teams: the same; the teams that the block names need no parameter, the room makes them itself)
             if (seat >= 0) q += '&seat=' + seat;
             if (own && seat >= 0) q += '&name=' + encodeURIComponent(seatNames.start(nameSeat === undefined ? seat : nameSeat));
             if (own || aspectFromAddress) q += '&aspect=' + aspect;
@@ -1311,17 +1341,23 @@ their music and their sound: only the window you are in is heard). The match is 
             }, 0);
         });
 
-        function startRoom(code, mapName, play, n, fillPlan, teams) {
+        // The panel of a room. `block` is its create block ({ map, seats, teams, leaderStart }: a room that this page made, or one that its address's block names), or null for a room that was made some other way (the
+        // panel shows four seats and trusts nothing else of it; the page sends no block and no link carries one); `play` 'here' plays every seat on this page; `fillPlan` and `teams` are the choices that the leader's
+        // START makes (the bots, and the teams of a room whose block has none), which every link of the room carries.
+        function startRoom(code, block, play, fillPlan, teams) {
             room = code;
+            roomBlock = block;
             fill = validFillPlan(fillPlan);
-            seatCount = n >= 2 && n <= SEATS.length ? n : SEATS.length;
-            // The room's teams: the ones that its code names (the server reads them the same way and makes them for every start), else what the address asked for. A code that names teams that its seats cannot make
-            // is the server's to refuse at the start ("No teams: ..."): the address's teams do not replace them, and the page does not announce them.
-            var named = codeTeams(code);
-            teamsInCode = named !== '' && hostTeam(named, seatCount) === named;
-            roomTeams = teamsInCode ? named : (named ? '' : validRoomTeams(teams));
-            try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it
-                history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + (fill ? '&fill=' + fill : '') + (roomTeams && !teamsInCode ? '&teams=' + encodeURIComponent(roomTeams) : '') + (aspectFromAddress ? '&aspect=' + aspect : ''));
+            seatCount = block ? block.seats : SEATS.length;
+            var mapName = block && mapByKey(block.map) ? mapByKey(block.map).name : '';
+            // The room's teams: the ones that its create block names (the server makes them for every start), else what the address asked for. A block that names teams that its seats cannot make is the
+            // server's to judge at the start (the match starts without teams and the room says "No teams: ..."): the address's teams do not replace them, and the page does not announce them.
+            var named = block ? block.teams : '';
+            var shown = shownRoomTeams(named, seatCount);
+            teamsInBlock = shown !== '' && hostTeam(shown, seatCount) === shown;
+            roomTeams = teamsInBlock ? shown : (named ? '' : validRoomTeams(teams));
+            try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it (with its create block, so that a room that has ended is made again)
+                history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fill ? '&fill=' + fill : '') + (roomTeams && !teamsInBlock ? '&teams=' + encodeURIComponent(roomTeams) : '') + (aspectFromAddress ? '&aspect=' + aspect : ''));
             } catch (e) { /* not essential */ }
             roomMap = mapName;
             var seats = SEATS.slice(0, seatCount);
@@ -1330,19 +1366,19 @@ their music and their sound: only the window you are in is heard). The match is 
             $('how').hidden = true;
             document.body.classList.add('in-room');   // (and the header is a smaller one)
             $('room-panel').hidden = false;
-            $('room-code').textContent = room;
-            $('room-map').textContent = (mapName ? mapName + ' map' : 'a room made some other way') + ', ' + seatCount + ' players';
-            $('subtitle').textContent = 'One match, ' + seatCount + ' seats (' + seats.map(function (x) { return x.name; }).join(', ') + '), all connected to the game server through /ws. Share the code or a link; the match starts when every seat is taken, or earlier: the first player in the room can start it with START once at least 2 players are in.';
+            $('room-code').textContent = codeText(room);        // (the code as a screen shows it: two groups of three; the links and the fields keep the plain code)
+            $('room-map').textContent = (mapName ? mapName + ' map' : block ? 'the server\'s own map' : 'a room made some other way') + ', ' + seatCount + ' players';
+            $('subtitle').textContent = 'One match, ' + seatCount + ' seats (' + seats.map(function (x) { return x.name; }).join(', ') + '), all connected to the game server through /ws. Share a link (the code alone works once somebody is in the room); the match starts when every seat is taken, or earlier: the first player in the room can start it with START once at least 2 players are in.';
             var fillHint = $('fill-hint');
             fillHint.hidden = !fill && !roomTeams;
             var hint = '';
             if (fill) hint += 'Empty seats at START: ' + hostPlanText(fill, seatCount) + '. When the leader presses START, every seat that is still empty gets a bot of its level (shown as "Bot (Easy)", "Bot (Medium)" or "Bot (Hard)") and the match begins, even if the leader is alone. ';
             if (roomTeams) {
                 var teamText = hostTeamText([Number(roomTeams.charAt(0)), Number(roomTeams.charAt(2))], seatCount);
-                hint += teamsInCode ? 'Teams of this room: ' + teamText + '. They are in the room code, so the match starts with them every time: when the room fills up as well as at START. '
-                                    : 'Teams at START: ' + teamText + '. ';
+                hint += teamsInBlock ? 'Teams of this room: ' + teamText + '. They are part of the room (set when it was made), so the match starts with them every time: when the room fills up as well as at START. '
+                                     : 'Teams at START: ' + teamText + '. ';
             }
-            if (fill || (roomTeams && !teamsInCode)) hint += 'Every link of this room carries ' + (fill && roomTeams && !teamsInCode ? 'the bots and the teams' : fill ? 'the bots' : 'the teams') + '; only the leader\'s START uses them.';
+            if (fill || (roomTeams && !teamsInBlock)) hint += 'Every link of this room carries ' + (fill && roomTeams && !teamsInBlock ? 'the bots and the teams' : fill ? 'the bots' : 'the teams') + '; only the leader\'s START uses them.';
             fillHint.textContent = hint;
             $('any-link').value = gameUrl(-1);
             copyButton($('copy-any'), function () { return gameUrl(-1); });
@@ -1383,11 +1419,13 @@ their music and their sound: only the window you are in is heard). The match is 
         }
 
         // ---- what the address says ----
-        // ?room=<code>  a room that was made elsewhere (a shared code, the lobby, the control interface): its panel at once; a page-made code says its map and players
-        // ?map=<name>   host a match on that map at once (&players=2|3|4, default 4; &fill=easy|medium|hard seats bots of that level in every empty seat at the leader's START, or four words for the seats 0 - 3
-        //               (none,none,easy,hard); &teams=A+B (two seats 0 - 3) makes them a team; &play=here plays every seat on this page, as the page used to do);
-        //               with &players=1 a game on this computer (&fill= is then the level of all three opponents)
-        // ?fill=... &teams=...   with ?room=: the same choices for a room that was made elsewhere (its links carry them)
+        // ?room=<code>  a room: its panel at once. With the create block that the links of this page carry (&roommap=<key>&roomseats=<2-4>[&roomteams=A+B][&roomleaderstart=1]: roomBlockOf) it is a room that this page
+        //               made: the panel says its map and seats and every link carries the block. With none of those it is a room that was made some other way (a shared code, the control interface): the panel shows four
+        //               seats, the page sends no block and no link carries one
+        // ?map=<name>   host a match on that map at once, in a room of a new code and a create block of its own (&players=2|3|4, default 4; &fill=easy|medium|hard seats bots of that level in every empty seat at the
+        //               leader's START, or four words for the seats 0 - 3 (none,none,easy,hard); &teams=A+B (two seats 0 - 3) makes them a team, in the room's block, for every start; &play=here plays every seat on
+        //               this page, as the page used to do); with &players=1 a game on this computer (&fill= is then the level of all three opponents)
+        // ?fill=... &teams=...   with ?room=: the same choices for the leader's START (its links carry them); &teams= is for a room whose block names no teams of its own, which is every room that was made some other way
         // nothing       the card: the seats, then START takes this tab into the match (an invitation for each Friend seat), or the code of a match that somebody else made
         // (the old addresses work as they did; the card plays a game on this computer only when nobody else is in the match)
         var params = new URLSearchParams(window.location.search);
@@ -1405,13 +1443,13 @@ their music and their sound: only the window you are in is heard). The match is 
                                                               players: recall('ants-four-players'), fill: recall('ants-four-fill'), teams: recall('ants-four-teams') });
         // The name under You: the typed name, else a random one (the field says so: "Leave it empty for a random name")
         function youName() { var checked = nameCheck(nameInput.value); return checked.ok && checked.name ? checked.name : names[0]; }
-        // The room that the invitations and START use, made when the page first needs one (a Friend seat, or START) and kept while the map and the teams stay, since the code holds them: another map or other teams
-        // are another room, and the invitations change with it. The tab keeps it until START, so that a reload (the picture's selector reloads the page; a phone may discard a page that was left for the
-        // messages) does not change the links that were sent. Once the tab has left the page for the match (START) it is let go: the next match is another room. `used` is the link of each seat as it was when
-        // that seat's was last copied or shared ({ seat: link }, nothing for a seat that was never sent; kept when the code no longer fits, e.g. the map was changed in another tab): a link that is shown
-        // now is not the one that was sent when they differ (the plan and the number of people are in every link, and a friend who leads the room starts with what the link says), and the note under
-        // them asks for the links to be copied again until every link that was sent is the one that is shown.
-        var cardRoom = null;                       // { code, used }
+        // The room that the invitations and START use, made when the page first needs one (a Friend seat, or START) and kept while the map and the teams stay, since its create block holds them: another map or other
+        // teams are another room, and the invitations change with it (the room remembers the map and the teams that it was made for: cardRoomFits). The tab keeps it until START, so that a reload (the picture's
+        // selector reloads the page; a phone may discard a page that was left for the messages) does not change the links that were sent. Once the tab has left the page for the match (START) it is let go: the next
+        // match is another room. `used` is the link of each seat as it was when that seat's was last copied or shared ({ seat: link }, nothing for a seat that was never sent; kept when the room no longer fits, e.g.
+        // the map was changed in another tab): a link that is shown now is not the one that was sent when they differ (the plan and the number of people are in every link, and a friend who leads the room starts with
+        // what the link says), and the note under them asks for the links to be copied again until every link that was sent is the one that is shown.
+        var cardRoom = null;                       // { code, map, teams, used }
         var linksNow = {};                         // the links that are shown: { seat: link }
         // What the tab remembers of the links that were sent: an object with a text for the seats 0 - 3 (nothing else is believed: the first versions of the page kept the links in one text)
         function usedParse(raw) {
@@ -1429,11 +1467,11 @@ their music and their sound: only the window you are in is heard). The match is 
         (function () {
             var stored = null;
             try { stored = JSON.parse(window.sessionStorage.getItem(CARD_ROOM_KEY)); } catch (e) { stored = null; }
-            if (stored && typeof stored === 'object') cardRoom = { code: stored.code, used: usedParse(stored.used) };       // (the code is judged where it is used)
+            if (stored && typeof stored === 'object') cardRoom = { code: stored.code, map: stored.map, teams: stored.teams, used: usedParse(stored.used) };       // (the room is judged where it is used: one of an earlier page's shape does not fit)
         })();
         function cardEnsureRoom() {
-            if (cardRoom && cardRoomFits(cardRoom.code, card)) return cardRoom.code;
-            cardRoom = { code: cardCode(card, randomCode()), used: cardRoom ? cardRoom.used : {} };
+            if (cardRoom && cardRoomFits(cardRoom, card)) return cardRoom.code;
+            cardRoom = { code: randomCode(), map: card.map, teams: card.teams, used: cardRoom ? cardRoom.used : {} };
             cardRoomSave();
             return cardRoom.code;
         }
@@ -1594,7 +1632,8 @@ their music and their sound: only the window you are in is heard). The match is 
             window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, youName(), aspect), window.location.href).href);
         }
         // What an address that names a map makes: a game on this computer with &players=1 (&fill= is then the level of all three opponents), else a room of 2 to 4 seats with the plan (&fill=) and the teams
-        // (&teams=) as text. The code carries the choice (the server reads it: demo-<map>-<n>p-[<team word>-]<random>). Nothing is remembered: the choices that the card remembers are the card's own.
+        // (&teams=) as text. The room has a new code (a name, nothing more) and a create block of the map, the seats and the teams, which every link of it carries; the teams are the block's, so that the room makes them
+        // for every start, the one when it fills up too. Nothing is remembered: the choices that the card remembers are the card's own.
         function create(mapKey, play, n, fillPlan, teams) {
             var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
             var players = playersChoice(String(n), 4);
@@ -1605,19 +1644,10 @@ their music and their sound: only the window you are in is heard). The match is 
             }
             var seats = hostSeats(validFillPlan(fillPlan));
             var roomTeam = hostTeam(validRoomTeams(teams), players);
-            var word = roomTeamWord(roomTeam);                   // (the teams are a word of the code: the room makes them for every start, the one when it fills up too)
-            startRoom('demo-' + m.key + '-' + players + 'p-' + (word ? word + '-' : '') + randomCode(), m.name, play, players, hostFillText(seats, players), roomTeam === 'ffa' ? '' : roomTeam);
-        }
-        // What a page-made code says (only for the panel: the server decides). `named`: the code says its player count (a room that it does not name may have any: the page shows four seats and trusts nothing else of it)
-        function describeCode(code) {
-            var keys = MAPS.map(function (m) { return m.key; }).join('|');
-            var withMap = new RegExp('^demo-(' + keys + ')-(?:([2-4])[pP]-)?', 'i').exec(code);
-            var withoutMap = /^demo-([2-4])[pP]-/i.exec(code);
-            if (withMap) return { map: mapByKey(withMap[1].toLowerCase()).name, players: withMap[2] ? Number(withMap[2]) : 4, named: !!withMap[2] };
-            if (withoutMap) return { map: '', players: Number(withoutMap[1]), named: true };
-            return { map: '', players: 4, named: false };
+            startRoom(randomCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');
         }
         var wanted = params.get('room');
+        var wantedBlock = roomBlockOf(window.location.search);            // (null when the address carries no create block: the room was made some other way)
         var wantedMap = params.get('map');
         var wantedPlayersText = params.get('players');
         var wantedPlayers = playersChoice(wantedPlayersText, 4);          // (an address that names no players hosts 4, as it always did; &players=1 plays on this computer)
@@ -1627,11 +1657,10 @@ their music and their sound: only the window you are in is heard). The match is 
         var asksMap = !asksRoom && !!(wantedMap && mapByKey(wantedMap.toLowerCase()));
         function fromAddress() {                    // what the address asks for, once the name step (if there is one) is done
             if (wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted)) {
-                var d = describeCode(wanted);
-                // &teams= is for a room that has no teams of its own: narrowed to the room's player count (hostTeam) when the code says it (a pair that three seats cannot make is
-                // free for all); a room that the page did not make is the game's to judge. The teams that the code names win in startRoom.
-                var askedTeams = d.named ? hostTeam(wantedTeams, d.players).replace('ffa', '') : wantedTeams;
-                startRoom(wanted, d.map, params.get('play') === 'here' ? 'here' : '', d.players, wantedFill, askedTeams);
+                // &teams= is for a room that has no teams of its own: narrowed to the room's seat count (hostTeam) when its block says it (a pair that three seats cannot make is
+                // free for all); a room that the page did not make is the game's to judge. The teams that the block names win in startRoom.
+                var askedTeams = wantedBlock ? hostTeam(wantedTeams, wantedBlock.seats).replace('ffa', '') : wantedTeams;
+                startRoom(wanted, wantedBlock, params.get('play') === 'here' ? 'here' : '', wantedFill, askedTeams);
             } else if (wantedMap && mapByKey(wantedMap.toLowerCase())) {
                 create(wantedMap.toLowerCase(), params.get('play') === 'here' ? 'here' : '', wantedPlayers, wantedFill, wantedTeams);
             } else {
@@ -1644,7 +1673,7 @@ their music and their sound: only the window you are in is heard). The match is 
         // from somebody else, it should ask you first what you want your name to be"), and nothing starts before. The test mode ?play=here starts every seat at once and asks nobody.
         if ((asksRoom || asksMap) && params.get('play') !== 'here') {
             var asksSolo = asksMap && wantedPlayers === 1;
-            $('who-title').textContent = asksRoom ? 'Join the match ' + wanted : asksSolo ? 'Play a game on this computer' : 'Host a match';
+            $('who-title').textContent = asksRoom ? 'Join the match ' + codeText(wanted) : asksSolo ? 'Play a game on this computer' : 'Host a match';
             $('who-go').textContent = asksRoom ? 'Join' : asksSolo ? 'Play' : 'Host';
             runNameStep({
                 input: nameInput, button: $('who-go'), message: nameMsg,
@@ -1679,29 +1708,30 @@ their music and their sound: only the window you are in is heard). The match is 
         });
 
         // Join: the code that somebody else made (or any room of the server), typed or pasted; the game opens in this window and takes the first free seat, under the name of the field above (the game
-        // page gets the name's parameter even when it is empty: the name was chosen here, so it is not asked for again)
+        // page gets the name's parameter even when it is empty: the name was chosen here, so it is not asked for again). The blanks of the typed text are dropped first (a code is shown in two groups of three,
+        // "k7m 2xq", and is typed or pasted as it is shown). The page does not know what such a room is, so it sends no create block: a code that no room has is answered "There is no such room on this server."
         function joinNow() {
-            var code = $('join-code').value.trim();
+            var code = $('join-code').value.replace(/\s+/g, '');
             var hint = $('join-hint');
             if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {
-                hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like demo-small-x7k2.';
+                hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like k7m 2xq.';
                 hint.classList.add('bad');
                 return;
             }
             var checked = readName();
             if (!checked.ok) return;                  // the field says why
-            window.location.assign(joinUrl(code, checked.name, '', ''));
+            window.location.assign(joinUrl(code, null, checked.name, '', ''));
         }
-        // The game page of a seat that plays in THIS tab: the first free seat of the room, under the name of the field (the game page does not ask for it again), with the bots that the leader's START seats and the
-        // teams of a room whose code names none (the room's own teams are in its code: the game reads them there)
-        function joinUrl(code, name, fillPlan, teams) {
-            var q = '?join=/ws&room=' + encodeURIComponent(code) + (fillPlan ? '&fill=' + fillPlan : '') + (teams ? '&teams=' + encodeURIComponent(teams) : '') + '&name=' + encodeURIComponent(name) + (aspectFromAddress ? '&aspect=' + aspect : '');
+        // The game page of a seat that plays in THIS tab: the first free seat of the room, under the name of the field (the game page does not ask for it again), with the room's create block when this page made the
+        // room or its address carries one (null: a code that somebody else made, which gets none), the bots that the leader's START seats and the teams of a room whose block names none
+        function joinUrl(code, block, name, fillPlan, teams) {
+            var q = '?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fillPlan ? '&fill=' + fillPlan : '') + (teams ? '&teams=' + encodeURIComponent(teams) : '') + '&name=' + encodeURIComponent(name) + (aspectFromAddress ? '&aspect=' + aspect : '');
             return new URL('./' + q, window.location.href).href;
         }
         $('play-tab').addEventListener('click', function () {
             var checked = readName();
             if (!checked.ok || !room) return;         // a bad name starts nothing (the field says why)
-            window.location.assign(joinUrl(room, checked.name, fill, teamsInCode ? '' : roomTeams));       // (the teams that the code names travel in the code)
+            window.location.assign(joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams));       // (the teams that the block names travel in the block)
         });
         $('join-go').addEventListener('click', joinNow);
         $('join-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinNow(); });

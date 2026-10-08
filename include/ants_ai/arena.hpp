@@ -96,6 +96,27 @@ private:
     std::vector<uint8_t> order_seat_;          // by order number: the seat it was for
 };
 
+/// What the arena counts of the flowers (docs/BOTS.md, "The flowers"): per match `landings` (the end of every droplet's fall; a landing replaces an untaken power-up) and `landed` (them by the
+/// kind of ant they make); per seat `took` (the ants that changed type, by the kind they became) and `took_at_flowers` (those that stood within one tile of a drop tile). The arena scans every 4th tick and once when the match ends.
+class FlowerTally {
+public:
+    struct Seat {
+        std::array<uint32_t, 6> took{};        // by sim::AntType of the new type: 1 Bomber, 2 Fire, 3 Thief, 4 Combat, 5 Swimmer (index 0 is never used)
+        uint32_t at_flowers{0};
+    };
+    void scan(const sim::SimulationEngine& sim);
+    uint32_t landings() const noexcept { return landings_; }
+    uint32_t landed(sim::AntType kind) const noexcept { return static_cast<size_t>(kind) < landed_.size() ? landed_[static_cast<size_t>(kind)] : 0u; }
+    const Seat& seat(uint8_t s) const noexcept { return seats_[s < sim::MAX_PLAYERS ? s : 0]; }
+
+private:
+    std::array<Seat, sim::MAX_PLAYERS> seats_{};
+    uint32_t landings_{0};
+    std::array<uint32_t, 6> landed_{};
+    std::vector<uint8_t> dropping_;            // by dropper: it dropped at the last scan
+    std::vector<uint8_t> raw_type_;            // by ant id: the ant's own type at the last scan, 255 before it was seen
+};
+
 struct ArenaSpec {
     const assets::LevelData* level{nullptr};   // the map (must outlive the call)
     uint32_t seed{1};                          // the engine's seed AND the controller's match seed
@@ -137,6 +158,8 @@ struct ArenaSeatResult {
     uint32_t cantgo_began{0};                  // of them, the ones that began from another state: the rest are the repeats of a can't-go loop
     uint32_t orders{0};                        // the orders (group moves, specials, attacks) that the engine was given for the seat
     uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
+    std::array<uint32_t, 6> took{};            // the power-ups that the seat's ants took, by the kind of ant they became (FlowerTally::Seat::took)
+    uint32_t took_at_flowers{0};               // of them, the ones taken at a flower's drop tile
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {
@@ -154,6 +177,8 @@ struct ArenaResult {
     /// Units still lying on the piles that the hill of some playing seat can walk to (MapInfo's analysis of the start), the object whose units a bite takes counted once: 0 when
     /// the whole reachable pot was taken
     uint32_t reachable_units_left{0};
+    uint32_t landings{0};                      // the droplets of the flower droppers that landed (FlowerTally)
+    std::array<uint32_t, 6> landed{};          // ... by the kind of ant they make (index = sim::AntType)
     std::vector<ArenaSeatResult> seats;        // in seat order
     std::vector<uint64_t> checkpoints;         // the state hash after tick 20, 40, 60, ... (while the match lasted)
     std::vector<RecordedCommand> log;          // with ArenaSpec::record
