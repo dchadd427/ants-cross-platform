@@ -12,6 +12,8 @@ target_include_directories(test_lockstep PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
+target_link_libraries(test_lockstep PRIVATE ants_test_paths)
+
 add_test(NAME test_lockstep COMMAND test_lockstep)
 # COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
 set_tests_properties(test_lockstep PROPERTIES COST 170)

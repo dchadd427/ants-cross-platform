@@ -917,6 +917,22 @@ LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET
 check "without the option a server with public rooms makes lobby rooms (the default pool has a place for the third lobby that the pool of two refused)" "$([ "$(lobby_value page_makes_lobby)" = "yes" ] && [ "$(lobby_value pool_full)" = "welcome" ]; echo $?)"
 stop_server
 
+# the lobby page's own client (web/front/lobby_net.js: the codec, the reconnect with the key, what each refusal means), run by node over a WebSocket against this server, as a browser behind the
+# site's proxy reaches it: the lobby made by one code and joined by the same link, a colour move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a
+# key for a room that is gone, a second window, START that waits, and the pages in GET /busy (tests/scripts/web_lobby_server_check.js)
+if command -v node > /dev/null 2>&1; then
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
+    SERVER_PID=$!
+    for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+    PAGE_OUT="$(node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS" 2>&1)"
+    PAGE_RC=$?
+    [ "$PAGE_RC" -ne 0 ] && echo "$PAGE_OUT" | sed 's/^/    /'
+    check "the lobby page's client (web/front/lobby_net.js, run with node) against a real server over a WebSocket: two pages in one lobby, a move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a stale key, a second window, START that waits, GET /busy" "$PAGE_RC"
+    stop_server
+else
+    echo "  SKIP: node is not installed: the lobby page's client was NOT run against a server (tests/scripts/web_lobby_server_check.js)"
+fi
+
 # the stack's own defaults: docker-compose.stack.yml, read as the stack starts it with nothing set in its environment (tests/scripts/stack_command.py), gives the demo options of the
 # public site. A block that names no map is made on its --demo-map, TREASURE.LVL (the map that is played most); a block that names another map of the six is made on that one
 STACK_OPTS="$(python3 "$ROOT/tests/scripts/stack_command.py" "$ROOT/docker-compose.stack.yml" --demo 2> /dev/null)"
