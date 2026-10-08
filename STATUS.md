@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-05 22:27 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-07 21:10 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
@@ -12,16 +12,18 @@ Small fixes merge as soon as their five checks are green and carry no version nu
 A release has seven steps, each a seventh of its bar: built, tested here, reviewed, review fixes done, checks green on all five platforms, merged, live. The bots' gate fix and flower play are small fixes that merge as soon as their checks are green. After these releases: the fire-in ring of 8, mines on the enemy's food path, recordings and replays (version numbers may move).
 
 ## In progress
-- Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
+- Work was paused from 2026-10-05 22:40 PDT to 2026-10-07 21:00 PDT and has resumed.
+- Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come); next: a bot walks over power-ups on its way (one ant takes several), noticed by the owner on the islands map on 2026-10-07
 - Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
 - Bots: the gate sometimes sends the next ant into the hill while the last one is still leaving, and the game answers "Can't go there." (the owner heard it); a small fix with no version number is being measured, then its own PR
 - **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): started; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
-- Replays: a match can be saved as a replay file and a tool plays it back to the same result, with a Download replay button under the game after a match; built, waiting for the owner to see the button; no number.
+- **Replays**: every match is recorded (PR #31 open, review done). On 2026-10-06 the owner asked for replays to be kept on the server and cleared after about 30 days instead of a Download replay button, so the button comes out and the server part is being planned; no number.
 - Watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- Seat drop-down, Human label and blinking ant: built; waiting for the owner to see the pictures; no number.
-- Faster checks: the test waits that crawl on Windows and macOS are shortened and the longest tests start first, which should cut a full run from about 14 minutes to 9 or 10 (PR #30); in review, tests and tooling only, no release.
+- **Front page as a game lobby**: on 2026-10-07 the owner asked for a simpler page that opens in your own room, with an invite link, drag and drop to change a colour, no top bar and a better red ant; the built seat drop-down folds into it. Mockups first, nothing is built before the owner approves them; no number.
+- **Faster checks** (PR #30): five green checks in about 9 to 10 minutes instead of 13.6, independent review running; then the next 10 to 15 runs are watched; no number, no redeploy.
+- **Leave game on the scorecard** (web version): it lands on the map selection screen and then no new game can start; the fix sends the player to the front page; reported by the owner on 2026-10-07; no number.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
