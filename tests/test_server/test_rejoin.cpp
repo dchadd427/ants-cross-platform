@@ -1637,6 +1637,9 @@ void run_way_back_tests() {
             c.net.leave();                                                               // in the middle of the catch-up: the server is told
             ASSERT_EQ(c.net.phase(), NetGame::Phase::Off);
             ASSERT_TRUE(c.keys_forgotten.size() == 1 && c.count(NetGame::Event::Type::Rejoined) == 0);
+            // Cat's CaughtUp is usually out already when the test sees it catch up (the stream is short) and the Leave follows it: the server must read both in one pass, so that the Leave ends the attempt before the states are compared.
+            // A Mac's loopback can hand it the CaughtUp a pass earlier: the seat is given back, then a send to the closed link holds it as lost (the wait below fails) or the Leave drops it with a rejoin counted (the last check fails).
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));                  // the kernel delivers both before the server's next pass
             ASSERT_TRUE(w.run_until([&]() { return !w.status("RJ-13C").paused; }, 20000));      // the seat is dropped, so nobody waits for it
             w.run(500);
             for (Machine* m : {&a, &b}) {
