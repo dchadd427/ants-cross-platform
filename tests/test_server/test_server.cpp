@@ -1253,6 +1253,19 @@ void run_demo_tests() {
         w.run(300);
         ASSERT_TRUE(dotted.lobby->phase() != net::ClientLobby::Phase::InRoom);
         ASSERT_EQ(w.mgr.room_count(), size_t{0});
+        {   // a Hello that shows a key makes no room, whatever block it carries: a key is of a seat in a room that was, and that room is gone (RJ1.6 and RJ1.21 have it through a real client)
+            auto ends = w.net.connect({20, 10});
+            w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
+            net::HelloMsg hello;
+            hello.name = "Keyed";
+            hello.room = "eeee5555";
+            for (uint8_t& v : hello.key) v = 7;
+            hello.create = block_of();
+            ends.second->send(net::encode(hello));
+            w.run(300);
+            ASSERT_EQ(reject_on(ends.second), static_cast<int>(net::RejectReason::NoSuchRoom));
+            ASSERT_EQ(w.mgr.room_count(), size_t{0});
+        }
         Client& ann = w.connect_creating("Ann", "aaaa1111", block_of());
         w.run(300);
         ASSERT_EQ(ann.lobby->phase(), net::ClientLobby::Phase::InRoom);
@@ -5777,6 +5790,22 @@ void run_bot_tests() {
                 ends.second->send(net::encode(hello));
                 w.run(300);
                 ASSERT_EQ(reject_on(ends.second), static_cast<int>(net::RejectReason::VersionMismatch));
+            }
+            {   // the very bytes that v0.10.0 sent (protocol 14 has no platform byte and no create block): the door reads the version and the name, answers, and never reads the rest
+                auto old_ends = w.net.connect({20, 10});
+                w.mgr.add_connection(std::make_unique<Borrowed>(old_ends.first), "127.0.0.1", w.now);
+                net::HelloMsg old;
+                old.version = 14;
+                old.name = "Old";
+                old.room = "NO-SUCH-ROOM";
+                std::vector<uint8_t> bytes = net::encode(old);
+                ASSERT_TRUE(!bytes.empty());
+                bytes.pop_back();                                                                // (the platform byte ends a Hello that has no block: what is left is the layout of 14)
+                net::HelloMsg again;
+                ASSERT_FALSE(net::decode(bytes, again));                                          // (a protocol 15 reader takes it for no Hello at all)
+                old_ends.second->send(bytes);
+                w.run(300);
+                ASSERT_EQ(reject_on(old_ends.second), static_cast<int>(net::RejectReason::VersionMismatch));
             }
             auto ends = w.net.connect({20, 10});
             w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
