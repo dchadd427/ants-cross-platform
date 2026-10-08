@@ -25,6 +25,7 @@ add_executable(test_ai
     test_ai_island_small.cpp
     test_ai_merge.cpp
     test_ai_cantgo.cpp
+    test_ai_flowers.cpp
 )
 
 target_link_libraries(test_ai PRIVATE
