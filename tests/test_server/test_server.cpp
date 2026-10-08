@@ -11350,7 +11350,7 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(pia_game.lobby->request_start());
         w.run(4000);
         ASSERT_TRUE(w.status("retr0001").state == RoomState::Running);
-        {   // the count of cancels in a row is forgotten when fifteen minutes pass without one: the next cancel costs the pause of two seconds again, a START asked for in it stands
+        for (const bool forgets : {false, true}) {   // the count of cancels in a row is forgotten when fifteen minutes pass without one (not before: after fourteen it counts still)
             World f(lobby_limits());
             Client& ann = f.connect_page("Ann", "retr0002", lobby_block_of());
             Client& cat = f.connect_page("Cat", "retr0002", lobby_block_of());
@@ -11367,13 +11367,18 @@ void run_lobby_room_tests() {
             ASSERT_TRUE(ann_game.lobby->request_start());
             f.run(300);
             ASSERT_EQ(said(ann_game.room_chat).size(), size_t{1});                         // (the minute is on: it was answered)
-            f.run(15u * 60u * 1000u);                                                     // fifteen minutes without a cancel
+            f.run((forgets ? 15u : 14u) * 60u * 1000u);                                   // fifteen minutes without a cancel (or fourteen)
             ASSERT_TRUE(ann_game.lobby->request_start());
-            f.run(400);                                                                   // the start is tried and cancelled (the first of a new count): the pause is two seconds
+            f.run(400);                                                                   // the start is tried and cancelled: the first of a new count when forgotten (the pause is two seconds), else one more of the count
             ASSERT_TRUE(ann_game.lobby->request_start());
             f.run(300);
-            ASSERT_TRUE(f.status("retr0002").starting && ann_game.lobby->room().starting());      // it stands: the pause is short
-            ASSERT_EQ(said(ann_game.room_chat).size(), size_t{1});                         // (no new notice)
+            if (forgets) {
+                ASSERT_TRUE(f.status("retr0002").starting && ann_game.lobby->room().starting());      // it stands: the pause is short
+                ASSERT_EQ(said(ann_game.room_chat).size(), size_t{1});                     // (no new notice)
+            } else {
+                ASSERT_TRUE(!f.status("retr0002").starting && !ann_game.lobby->room().starting());     // the pause is a minute: told at once, and it does not stand
+                ASSERT_EQ(said(ann_game.room_chat).size(), size_t{2});
+            }
         }
     } TEST_END();
 
@@ -11473,7 +11478,9 @@ void run_lobby_room_tests() {
                 w.run(500);
                 for (int round = 0; round < 3; ++round) {
                     ASSERT_TRUE(pia_game.lobby->request_start());
-                    w.run(2500);
+                    w.run(500);
+                    ASSERT_MSG(w.status("clk00002").starting, "a START asked for in the pause waits for it (the end of the pause is a time to come, whichever side of the wrap it falls on)" + at);
+                    w.run(2000);
                 }
                 ASSERT_TRUE(pia_game.lobby->request_start());
                 w.run(300);
@@ -11681,6 +11688,79 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(w.status("age00001").code.empty());
         ASSERT_FALSE(a.server_end->is_open());
         ASSERT_EQ(waiting_lobbies(w), size_t{1});
+    } TEST_END();
+
+    TEST_CASE("S3.160 A Lobby Room's Idle Time, Read From The Room Itself: It Counts From The Making Of The Room, Stops Growing At A Day However Often The Room Is Looked At (The 32-Bit Clock Goes Round In 49.7 Days), And Is 0 For A Room That Is Not A Lobby That Waits; A Match That A Lobby Began Is Never Given Up As An Idle Lobby, However Long It Is Since The Lobby Was Used") {
+        const std::string maps = maps_dir();
+        MapEntry entry;
+        std::string problem;
+        ASSERT_MSG(MapStore(maps).find("TINY.LVL", entry, &problem), problem);
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(entry.path));
+        const uint64_t hour = 3600u * 1000u;
+        const uint64_t day = 24u * hour;
+        RoomSpec spec = spec_of("idle-r01", 4);
+        spec.lobby = true;
+        spec.early_start = true;
+        spec.leader_starts = true;
+        spec.reconnect = true;
+        spec.empty_close_ms = 0xFFFFFFFFu;                                               // (nobody comes into these rooms, and they are not forgotten for that)
+        {   // the age counts from the making of the room, and from the last thing that was done in it
+            Room room(spec, entry, level, 1u, 5000u);
+            ASSERT_TRUE(room.lobby_waiting());
+            ASSERT_EQ(room.idle_ms(5000), 0u);
+            room.update(5010);
+            ASSERT_EQ(room.idle_ms(5010), 10u);
+            room.update(65000);
+            ASSERT_EQ(room.idle_ms(65000), 60000u);
+        }
+        {   // looked at every hour for fifty days: the age is what it is until a day, and a day after that, whatever the 32-bit clock reads
+            Room room(spec, entry, level, 1u, 5000u);
+            for (uint64_t t = 65000; t <= (uint64_t{1} << 32) + 30 * hour; t += hour) {
+                const uint32_t now = static_cast<uint32_t>(t);
+                room.update(now);
+                ASSERT_EQ(uint64_t{room.idle_ms(now)}, std::min<uint64_t>(t - 5000u, day));
+            }
+        }
+        {   // a room that is not a lobby that waits has no age: one that was forgotten, and one that is no lobby
+            Room room(spec, entry, level, 1u, 5000u);
+            room.update(65000);
+            ASSERT_EQ(room.idle_ms(65000), 60000u);
+            room.forget(65000);
+            ASSERT_TRUE(!room.lobby_waiting());
+            ASSERT_EQ(room.idle_ms(165000), 0u);
+            Room plain(spec_of("idle-r02", 2), entry, level, 1u, 5000u);
+            plain.update(65000);
+            ASSERT_TRUE(!plain.lobby_waiting());
+            ASSERT_EQ(plain.idle_ms(65000), 0u);
+        }
+        {   // a match that a lobby began holds its room however long it is since the lobby was used: it is no idle lobby, and a server that is full refuses a new lobby rather than end it
+            ServerLimits l = lobby_limits();
+            l.max_rooms = 2;
+            l.lobby_idle_evict_ms = 3000;
+            l.lobby_empty_close_ms = 600000;
+            World w(l);
+            Client& pia = w.connect_page("Pia", "keep0001", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "keep0001", lobby_block_of());
+            const net::SeatKey pia_key = pia.lobby->key();
+            const net::SeatKey bob_key = bob.lobby->key();
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(300);
+            w.connect_game("Pia", "keep0001", pia_key);
+            w.connect_game("Bob", "keep0001", bob_key);
+            w.run(4000);
+            ASSERT_TRUE(w.status("keep0001").state == RoomState::Running);
+            Client& dan = w.connect_page("Dan", "keep0002", lobby_block_of());
+            w.run(300);
+            ASSERT_TRUE(dan.lobby->created() && w.mgr.room_count() == size_t{2});
+            w.run(10000);                                                                 // the match has been going on for fifteen seconds; nothing has been done in the first lobby since its START
+            ASSERT_TRUE(dan.lobby->chat("anybody here?"));                                // (the second lobby is used a moment before the third is asked for)
+            w.run(1000);
+            Client& eve = w.connect_page("Eve", "keep0003", lobby_block_of());
+            ASSERT_EQ(answer_of(w, eve), net::RejectReason::NoSuchRoom);
+            ASSERT_TRUE(w.status("keep0001").state == RoomState::Running && w.status("keep0002").state == RoomState::Waiting);
+            ASSERT_EQ(w.mgr.room_count(), size_t{2});
+        }
     } TEST_END();
 }
 

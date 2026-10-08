@@ -4696,25 +4696,45 @@ int main() {
                 ASSERT_MSG(!room.host.occupied(seat), what);
             }
         };
+        // The count of ignored requests of a kind comes down too, not only the violations: one past the free allowance is one violation, and two (or three) minutes later it is gone and the count stands at 15 (or 14), so the
+        // first of eight more is free (and the second) and the guest is not thrown out. With the count left at 17 these would be eight violations. Eleven in all end it, whoever it is: forgiveness is not immunity.
+        const auto allowance_of = [&send](const char* what, Room& room, size_t who, const std::vector<uint8_t>& wish) {
+            const uint8_t seat = room.guests[who].lobby->my_seat();
+            send(room, who, wish, 16);
+            send(room, who, wish, 1);
+            ASSERT_MSG(room.host.occupied(seat), what);
+            room.run(130 * 1000);
+            send(room, who, wish, 8);
+            ASSERT_MSG(room.host.occupied(seat), what);
+            send(room, who, wish, 3);
+            ASSERT_MSG(!room.host.occupied(seat), what);
+        };
         const std::vector<uint8_t> start_wish = encode(StartRequestMsg{});
         const std::vector<uint8_t> plan_wish = encode(PlanMsg{});
         {   // a guest that is not the leader: its START, its colour move and its plan are ignored
             Room room(lobby_room_config(90));
             room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
             case_of("START", room, bob, start_wish, true);
+            allowance_of("START", room, cat, start_wish);
         }
         {
             Room room(lobby_room_config(91));
             room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
-            case_of("colour move", room, bob, encode(SeatMoveMsg{2, 3, seating_hash(room.host.room())}), true);
+            const size_t cat = room.join_seat("Cat");
+            const std::vector<uint8_t> move_wish = encode(SeatMoveMsg{2, 3, seating_hash(room.host.room())});
+            case_of("colour move", room, bob, move_wish, true);
+            allowance_of("colour move", room, cat, move_wish);
         }
         {
             Room room(lobby_room_config(92));
             room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
             case_of("plan", room, bob, plan_wish, true);
+            allowance_of("plan", room, cat, plan_wish);
         }
         {   // a rename while the leader's START waits for a page's game (the wait is longer than the test)
             HostLobby::Config hc = lobby_room_config(93);
@@ -4722,11 +4742,13 @@ int main() {
             Room room(hc);
             const size_t ann = room.join_seat("Ann");
             const size_t pia = join_with(room, page_config("Pia"));
+            const size_t pat = join_with(room, page_config("Pat"));
             room.run(100);
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
             ASSERT_TRUE(room.host.starting());
             case_of("rename", room, pia, encode(NameMsg{"Pia Two"}), true);
+            allowance_of("rename", room, pat, encode(NameMsg{"Pat Two"}));
         }
         {   // a room that is no lobby room forgives nothing, whatever its setting says
             HostLobby::Config hc = lobby_room_config(94);
@@ -4744,6 +4766,13 @@ int main() {
             room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
             case_of("forgive_ms 0", room, bob, start_wish, false);
+        }
+        {   // a server that has run for more than 24.8 days (its 32-bit clock is past the signed half): a guest that comes in now is forgiven a minute later, not at the end of the clock's round
+            Room room(lobby_room_config(98));
+            room.now = 0x80000100u;
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            case_of("a clock past the signed half", room, bob, start_wish, true);
         }
         {   // a flood that is faster than the forgiving is thrown out as ever: ten a second against one forgiven a second
             HostLobby::Config hc = lobby_room_config(96);
