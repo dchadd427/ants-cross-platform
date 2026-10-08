@@ -24,9 +24,11 @@
 #                                                   rooms) included. A value out of range makes the server exit at its start, and with restart: unless-stopped it then restarts again and again
 #                                                   (docs/REPLAYS.md "On the game server")
 #   ANTS_REPLAY_PORT=4020                           the port, inside the container, where the server answers GET /replays and GET /replays/<file> for the site's nginx: the list and the files of the
-#                                                   recorded matches are PUBLIC here, read only, with no secret and no name that a person typed in them. The port is not published on the host.
-#                                                   Leave it at 4020, the one that docker/nginx.conf passes to, or set 0, which switches the public list off. Any other number leaves the server
-#                                                   listening where nginx does not look, and the site answers 404 for both addresses as if the list were off.
+#                                                   recorded matches are PUBLIC here, read only, with no secret. They hold the names that the players typed (plain ASCII, 32 characters at most; a
+#                                                   player with no name shows as a colour, a computer player as "Bot (Medium)"), so everybody can read those names; no address, room code or chat is
+#                                                   in them. The port is not published on the host. Leave it at 4020, the one that docker/nginx.conf passes to, or set 0, which switches the public
+#                                                   list off. Any other number leaves the server listening where nginx does not look, and the site answers 404 for both addresses as if the list
+#                                                   were off.
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
@@ -69,7 +71,8 @@ services:
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).
     # Replays: a match that ran 30 seconds or more is kept for ANTS_REPLAY_DAYS days (default 30), all of them together at most ANTS_REPLAY_MAX_MB MiB (100), in /results/replays; --replay-demo keeps the
     # matches of the demo rooms too (the front page's games). --replay-port opens the PUBLIC, read-only door of the list and the files (GET /replays, GET /replays/<file>; the site's nginx passes both to it
-    # over the network below): ON here, with the port that docker/nginx.conf uses; ANTS_REPLAY_PORT=0 switches it off. The program's own default is off. No name that a person typed is in a file or the list.
+    # over the network below): ON here, with the port that docker/nginx.conf uses; ANTS_REPLAY_PORT=0 switches it off. The program's own default is off.
+    # The files and the list hold the names that the players typed (a player with no name shows as a colour), so those names are public here; no address, room code or chat is in them.
     command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}

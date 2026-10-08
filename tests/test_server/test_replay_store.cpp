@@ -287,7 +287,7 @@ int main() {
         ASSERT_EQ(e.rules, net::kProtocolVersion);
         ASSERT_EQ(e.game, std::string("v0.0.0"));
         ASSERT_EQ(e.turns, uint32_t{700});
-        ASSERT_EQ(e.players, (std::vector<std::string>{"Green", "Blue (Bot (Medium))"}));      // a person is a colour, a computer player has its name
+        ASSERT_EQ(e.players, (std::vector<std::string>{"Green", "Blue (Bot (Medium))"}));      // a seat without a name is its colour, a computer player has its name
         const ReplayEntry* found = store.find(kName0);
         ASSERT_TRUE(found != nullptr && found->bytes == bytes.size() && found->ended_s == kT0);
         ASSERT_TRUE(any_line_has(store.take_notes(), "0 file(s)"));                      // (what prepare found, said once)
@@ -384,6 +384,40 @@ int main() {
         ASSERT_TRUE(!refused.kept && contains(refused.note, "every name for a match of this second is taken"));
         ASSERT_TRUE(slurp(f.dir / kept.file) == last);                                    // (the file with the last name is still the one that was kept)
         ASSERT_EQ(store.count(), size_t{9999});
+    } TEST_END();
+
+    TEST_CASE("RS2.6 The List Says A Seat's Colour With The Name That The File Holds (\"Green (Ann)\"), The Colour Alone For A Seat Without One, A Computer Player's Name As It Is, And Gives A Name With Quotes And Brackets As Typed; Opening The Store Again Reads The Same") {
+        Fixture f;
+        ReplayStore store(f.config());
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        replay::Replay r;                                                                 // a match of four, as the server writes it, with the names that its room showed
+        r.head.game_version = "v0.0.0";
+        r.head.build_id = "test";
+        r.head.venue = "game server";
+        r.head.map_name = "TREASURE.LVL";
+        r.head.map_hash = 0x1122334455667788ull;
+        r.head.seed = 5;
+        r.head.roster = 0x0F;
+        r.head.names = {"Ann", "", "Bot (Medium)", "Q\"x\\y <b>"};
+        r.complete = true;
+        r.total_turns = 700;
+        r.match_over = true;
+        r.final_hash = 77;
+        r.hashes.assign(7, 0xABCDu);
+        std::string error;
+        const std::vector<uint8_t> bytes = replay::encode(r, error);
+        ASSERT_FALSE(bytes.empty());
+        const std::vector<std::string> shown = {"Green (Ann)", "Red", "Blue (Bot (Medium))", "Black (Q\"x\\y <b>)"};
+        ASSERT_TRUE(store.save(bytes).kept);
+        ASSERT_EQ(store.list().at(0).players, shown);
+        ReplayStore again(f.config());                                                    // (the list is read from the file's head again when the store is opened)
+        ASSERT_TRUE(again.prepare(why));
+        ASSERT_TRUE(again.count() == 1 && again.list().at(0).readable);
+        ASSERT_EQ(again.list().at(0).players, shown);
+        std::vector<uint8_t> read;
+        ASSERT_TRUE(again.read(kName0, read) && read == bytes);
+        for (const std::string name : {"Ann", "Bot (Medium)"}) ASSERT_TRUE(std::search(read.begin(), read.end(), name.begin(), name.end()) != read.end());
     } TEST_END();
 
     // ---- refusals -----------------------------------------------------------------------------------------------------------------

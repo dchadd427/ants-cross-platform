@@ -121,7 +121,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     record.set("bytes", JsonValue::make_int(static_cast<int64_t>(s.record_bytes)));
     record.set("note", JsonValue::make_string(s.record_note));
     o.set("record", std::move(record));
-    // Replays (replay_store.hpp): whether the match is kept on the server, under what name, and if not why not. Never a name of a person. In the list of rooms only a match that was kept has it (see the header).
+    // Replays (replay_store.hpp): whether the match is kept on the server, under what file name (the map and the end time: never the name of a person), and if not why not. In the list of rooms only a match that was kept has it (see the header).
     if (!in_list || s.replay_kept) {
         JsonValue replay = JsonValue::make_object();
         replay.set("kept", JsonValue::make_bool(s.replay_kept));
@@ -369,8 +369,8 @@ ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& req
     return error_response(405, "method not allowed");
 }
 
-// The public door (ants_server --replay-port): the list and the files of the replays, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read; nothing in it or in a
-// file is a name that a person typed, an address or a room code.
+// The public door (ants_server --replay-port): the list and the files of the replays, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read. The players' names are
+// public here (the names that were typed, "Green (Ann)"); no address or room code is in the list or in a file.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request) {
     const ReplayStore* store = rooms.replay_store();
     if (request.method != "GET" || store == nullptr || !request.query.empty()) return error_response(404, "not found");

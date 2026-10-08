@@ -54,7 +54,7 @@
 //                      the disk that all the restart records together may take (1 - 4096, default 256); one record is at most 48 MiB (3 times the turn log's limit); a record that the disk or
 //                      the budget refuses is deleted and its room plays on without one (its status says why)
 //   --replays-dir DIR  where the server keeps the REPLAYS of the matches that are played in its rooms (replay_store.hpp, docs/REPLAYS.md "On the game server"): when a match that ran 30 seconds or more is over, its .antsrep file is kept
-//                      here (a person's seat has no name in it, only the colour). Default: the folder "replays" in --results-dir; without a results folder the server keeps none
+//                      here (the names that the players typed are in it, with no address or room code). Default: the folder "replays" in --results-dir; without a results folder the server keeps none
 //   --no-replays       keep no replays, whatever --results-dir says
 //   --replay-demo      keep the matches of the demo rooms too (the games of the front page, bots only included); off by default, so that only the rooms of the control interface are kept
 //   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
@@ -568,7 +568,7 @@ int main(int argc, char** argv) {
                 held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.rejoins_refused) +
                        " refused by a budget";
             }
-            if (s.replay_kept) held += ", kept as " + s.replay_file;                       // (the replay of the match: its name has no code and no name of a person)
+            if (s.replay_kept) held += ", kept as " + s.replay_file;                       // (the replay of the match: its file name is the map and the end time, no code and no name of a person)
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {
                 std::ofstream out(std::filesystem::path(o.results_dir) / (s.code + ".json"), std::ios::binary | std::ios::trunc);

@@ -428,6 +428,7 @@ bool make_sample(const assets::LevelData& level, uint64_t map_hash, uint32_t tur
     head.seed = 7;
     head.roster = 0x0F;
     head.names[1] = "Bot (Hard)";
+    head.names[2] = "Ann";                                       // (a person who typed a name; the other two seats have none and are their colours)
     Recorder recorder(head);
     for (uint32_t turn = 0; turn < turns; ++turn) {
         std::vector<sim::Command> commands;
@@ -539,7 +540,7 @@ int selftest() {
         const Run r = run_words({"info", file});
         t.check(r.status == 0 && r.err.empty(), "info succeeds");
         t.check(has(r.out, "Map:       TINY.LVL (hash " + hex64(map_hash) + "), seed 7, Fog of War off"), "info names the map, its hash and the seed");
-        t.check(has(r.out, "Seats:     Green, Red (Bot (Hard)), Blue, Black"), "info lists the seats, with the name that was typed");
+        t.check(has(r.out, "Seats:     Green, Red (Bot (Hard)), Blue (Ann), Black"), "info lists the seats, with the names that were typed (a seat without one is its colour)");
         t.check(has(r.out, "Length:    450 turns (0:22.5)") && has(r.out, "Commands:  " + count) && has(r.out, "Hashes:    4 (one every 100 turns)"), "info gives the length, the commands and the hashes");
         t.check(has(r.out, "End:       the match was not over, final state hash " + hex64(sample.final_hash)), "info gives the end");
         t.check(has(r.out, "network protocol " + std::to_string(net::kProtocolVersion) + " (the one this build plays)") && has(r.out, "Made by:   v0.0.0 (build selftest)"), "info says which rules and which game");
@@ -549,7 +550,7 @@ int selftest() {
     {
         const Run r = run_words({"verify", file});
         t.check(r.status == 0 && r.err.empty() && has(r.out, "OK: 450 turns (0:22.5), 4 hashes and the final state match"), "verify plays the match and every hash is right");
-        t.check(has(r.out, "scores: Green ") && has(r.out, "Red (Bot (Hard)) ") && has(r.out, "Black "), "verify prints the scores");
+        t.check(has(r.out, "scores: Green ") && has(r.out, "Red (Bot (Hard)) ") && has(r.out, "Blue (Ann) ") && has(r.out, "Black "), "verify prints the scores");
         t.check(run_words({"verify", file, "--maps-dir", maps}).status == 0, "--maps-dir with the folder of the shipped maps works");
         fs::create_directories(dir.path / "nomaps");
         const Run none = run_words({"verify", file, "--maps-dir", dir.file("nomaps")});
@@ -562,9 +563,9 @@ int selftest() {
     {
         const Run all = run_words({"orders", file});
         t.check(all.status == 0 && all.err.empty(), "orders succeeds");
-        t.check(has(all.out, "TINY.LVL, seed 7: Green, Red (Bot (Hard)), Blue, Black; 450 turns (0:22.5)\n"), "orders opens with the match");
+        t.check(has(all.out, "TINY.LVL, seed 7: Green, Red (Bot (Hard)), Blue (Ann), Black; 450 turns (0:22.5)\n"), "orders opens with the match");
         t.check(has(all.out, "time  turn  seat") && has(all.out, "order") && has(all.out, "place") && has(all.out, "ants") && has(all.out, "from") && has(all.out, "result"), "orders has the columns");
-        t.check(has(all.out, "\n" + count + " orders: Green ") && has(all.out, ", Red (Bot (Hard)) ") && has(all.out, ", Blue ") && has(all.out, ", Black "), "orders counts the orders of each seat");
+        t.check(has(all.out, "\n" + count + " orders: Green ") && has(all.out, ", Red (Bot (Hard)) ") && has(all.out, ", Blue (Ann) ") && has(all.out, ", Black "), "orders counts the orders of each seat");
         t.check(has(all.out, "0:00.2") && has(all.out, "move") && has(all.out, "2 Worker") && has(all.out, "with Red") && has(all.out, "team offer"), "a move of 2 workers and the team offer are in the list with their words");
         t.check(has(all.out, "special") && has(all.out, "1 Worker") && has(all.out, "special orders by ant type: Worker 1"), "the special order is listed, with the type of the ant that got it");
         // every order is one line between the columns' line and the totals
@@ -592,6 +593,7 @@ int selftest() {
         bool fields_ok = true;
         bool saw_move = false;
         bool saw_name = false;
+        bool saw_person = false;
         size_t rows = 0;
         while (std::getline(lines, line)) {
             ++rows;
@@ -599,8 +601,9 @@ int selftest() {
             fields_ok = fields_ok && f.size() == 11 && !f[0].empty() && !f[1].empty();
             if (f.size() == 11 && f[4] == "move" && f[7] == "2 Worker" && !f[5].empty() && !f[8].empty()) saw_move = true;
             if (f.size() == 11 && f[2] == "Red (Bot (Hard))" && f[3] == "Bot (Hard)") saw_name = true;
+            if (f.size() == 11 && f[2] == "Blue (Ann)" && f[3] == "Ann") saw_person = true;
         }
-        t.check(rows == commands && fields_ok && saw_move && saw_name, "every line has its 11 fields, a move has its tile, its ants and where they stood, a name is given with its seat");
+        t.check(rows == commands && fields_ok && saw_move && saw_name && saw_person, "every line has its 11 fields, a move has its tile, its ants and where they stood, a name is given with its seat");
         const Run seat = run_words({"orders", file, "--seat", "1", "--csv"});
         t.check(seat.status == 0 && lines_of(seat.out) == 1 + red, "--csv with --seat keeps one seat's lines");
 

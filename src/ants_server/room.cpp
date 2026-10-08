@@ -72,6 +72,19 @@ std::string ascii_text(const std::string& raw, size_t limit) {
 
 }  // namespace
 
+// (see room.hpp) A name that the game itself gives to a seat without one is not what a person typed, and a file that kept it would show "Green (Player 1)" for a person who gave no name.
+std::string replay_person_name(const std::string& shown) {
+    const std::string text = ascii_text(shown, replay::kMaxTextBytes / 2);
+    const size_t first = text.find_first_not_of(' ');
+    if (first == std::string::npos) return std::string();                   // (nothing, or only blanks)
+    const std::string name = text.substr(first, text.find_last_not_of(' ') - first + 1);
+    if (name == "Player") return std::string();
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if (name == "Player " + std::to_string(static_cast<unsigned>(seat) + 1u)) return std::string();
+    }
+    return name;
+}
+
 // Where a bot's commands go: into the sequencer of the room's session for the bot's seat, as the commands of a person do from its connection (the verdict arrives with the turn, like every
 // command's: a bot never sees it). While the match is paused for an absent player the session refuses them (a bot waits like everybody): the controller counts that as a command sent, and the
 // bot finds out in its next look.
@@ -565,7 +578,8 @@ void Room::set_replay_store(ReplayStore* store, const std::string& why_not) {
 }
 
 // The recorder of the match, made from the Start message that every machine of the match got, and the tap on the referee's runner: it sees every turn that the referee executes, with the commands as they were
-// sealed (the bots' too), and only watches. The file says "Green" for a person: what a person typed is not in it. A computer player's seat has its display name ("Bot (Medium)").
+// sealed (the bots' too), and only watches. The names are the Start's, what the room showed everybody: a person's seat has what was typed (replay_person_name: a seat that was given no name is left empty, and the
+// readers show the colour), a computer player's seat has its display name ("Bot (Medium)"). Nothing else of the room is in the file: no address, room code, key or chat.
 void Room::replay_begin(const net::StartMsg& start) {
     recorder_.reset();
     if (replay_store_ == nullptr || session_ == nullptr) return;
@@ -579,7 +593,8 @@ void Room::replay_begin(const net::StartMsg& start) {
     head.roster = start.roster;
     head.fog = start.fog;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
-        if ((start.roster & (1u << seat)) != 0 && lobby_.room().slots[seat].state == net::SlotState::Bot) head.names[seat] = ascii_text(lobby_.room().slots[seat].name, replay::kMaxTextBytes / 2);
+        if ((start.roster & (1u << seat)) == 0) continue;
+        head.names[seat] = lobby_.room().slots[seat].state == net::SlotState::Bot ? ascii_text(start.names[seat], replay::kMaxTextBytes / 2) : replay_person_name(start.names[seat]);
     }
     head.teams = start.teams();
     head.recorder_seat = replay::kNoSeat;                        // (the server plays nobody)

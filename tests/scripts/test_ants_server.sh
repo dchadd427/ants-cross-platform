@@ -12,8 +12,8 @@
 # comes back with its code, paused, every seat held, the two real games (stopped meanwhile, so that they do not come back before the room is looked at) wake up and find the room by themselves, and the
 # record goes when the owner closes the room; a thousand records of a long match are replayed while the server answers /busy within 2 s of its launch and takes a new room's player at once
 # (the restore does not block it); the options of the records are refused or accepted in the options part. The last part, replays, is the matches that the server keeps (docs/REPLAYS.md "On the
-# game server"): two real games play 32 seconds in a room, the owner closes it, and the match is kept as a file that the control interface and the public replay door list and give out (no name that
-# a person typed is in either), that survives a restart of the server, that replay_tool plays out to the same hashes, and that the owner can delete; the door is off unless it is asked for.
+# game server"): two real games play 32 seconds in a room, the owner closes it, and the match is kept as a file that the control interface and the public replay door list and give out (with the names
+# that the two games typed, and without the room's code), that survives a restart of the server, that replay_tool plays out to the same hashes, and that the owner can delete; the door is off unless it is asked for.
 # The sections below are PARTS: they run one after the other (the default), or alone with `--part NAME` (repeatable), each with its own server on its own ports and its own
 # scratch folder, so that ./run_tests.sh and the CI can run them at the same time. `--list-parts` prints the names.
 PART_NAMES="options rooms secret demo reconnect replays"
@@ -1258,8 +1258,9 @@ fi
 
 # ---- part replays: the matches that the server keeps (docs/REPLAYS.md "On the game server", docs/SERVER.md "Replays") ---------------------------------------------
 # Two real games play a match on a room of the control interface; after 32 seconds of play (640 ticks: the server keeps a match from 600 turns, 30 seconds, however it ended) the owner closes the room. The match is kept
-# as a file in the results folder, and the control interface (with the secret) and the public replay door (without) list it and give it out; no name that a person typed ("Typed1", "Typed2") is in the list
-# or in the file; replay_tool plays the downloaded file out to the same hashes; the file is still there after a restart of the server; the door is not there when the server is started without it; the owner deletes the file.
+# as a file in the results folder, and the control interface (with the secret) and the public replay door (without) list it and give it out; the names that the two games typed ("Typed1", "Typed2") are in
+# the list and in the file, the room's code and the address are not; replay_tool plays the downloaded file out to the same hashes and shows the names; the file is still there after a restart of the server; the
+# door is not there when the server is started without it; the owner deletes the file.
 if part_enabled replays; then
 RP_PUB="$(free_port)"
 RP_RESULTS="$WORK/rp_results"
@@ -1276,26 +1277,27 @@ rp_server() {      # rp_server [options]: the server over the results folder, wi
     return 1
 }
 rp_auth() { curl -s -m 5 -H "Authorization: Bearer $SECRET" "$@"; }
-rp_list_ok() {      # rp_list_ok FILE [URL-and-headers]: the control interface's list holds this one replay of TINY.LVL and says the colours: nothing that a person typed
+rp_list_ok() {      # rp_list_ok FILE: the control interface's list holds this one replay of TINY.LVL and says the colours with the names that the two games typed (the game whose Hello came first has Green: either order is right), not the room's code
     rp_auth "$CTL/replays" | python3 -c '
 import sys, json
 d = json.load(sys.stdin)
 r = d["replays"][0] if d["replays"] else {}
 ok = d["enabled"] is True and d["count"] == 1 and len(d["replays"]) == 1 and d["keep_days"] == 30 and d["max_bytes"] == 100 * 1024 * 1024
-ok = ok and r.get("file") == sys.argv[1] and r.get("readable") is True and r.get("map") == "TINY.LVL" and r.get("players") == ["Green", "Red"] and r.get("finished") is False and r.get("turns", 0) >= 600 and r.get("bytes", 0) > 0
-ok = ok and "Typed" not in json.dumps(d)
-sys.exit(0 if ok else 1)' "$1"
+ok = ok and r.get("file") == sys.argv[1] and r.get("readable") is True and r.get("map") == "TINY.LVL" and r.get("players") in (["Green (Typed1)", "Red (Typed2)"], ["Green (Typed2)", "Red (Typed1)"]) and r.get("finished") is False
+ok = ok and r.get("turns", 0) >= 600 and r.get("bytes", 0) > 0
+ok = ok and sys.argv[2] not in json.dumps(d)
+sys.exit(0 if ok else 1)' "$1" "$RP_CODE"
 }
-rp_public_ok() {      # rp_public_ok FILE: the public list holds the same replay, with exactly the keys of the public answer
+rp_public_ok() {      # rp_public_ok FILE: the public list holds the same replay, with exactly the keys of the public answer and the same players
     curl -s -m 5 "$RP_PUBURL/replays" | python3 -c '
 import sys, json
 d = json.load(sys.stdin)
 r = d["replays"][0] if d["replays"] else {}
 ok = sorted(d) == ["count", "keep_days", "replays"] and d["count"] == 1 and len(d["replays"]) == 1 and d["keep_days"] == 30
 ok = ok and sorted(r) == ["bytes", "ended", "file", "finished", "game", "map", "players", "rules", "seconds", "turns"]
-ok = ok and r["file"] == sys.argv[1] and r["map"] == "TINY.LVL" and r["players"] == ["Green", "Red"] and r["finished"] is False and r["turns"] >= 600
-ok = ok and "Typed" not in json.dumps(d)
-sys.exit(0 if ok else 1)' "$1"
+ok = ok and r["file"] == sys.argv[1] and r["map"] == "TINY.LVL" and r["players"] in (["Green (Typed1)", "Red (Typed2)"], ["Green (Typed2)", "Red (Typed1)"]) and r["finished"] is False and r["turns"] >= 600
+ok = ok and sys.argv[2] not in json.dumps(d)
+sys.exit(0 if ok else 1)' "$1" "$RP_CODE"
 }
 # the address of this machine on its network (the one a connection to elsewhere would leave from; empty where there is none): the public door must not answer there unless it is asked to
 RP_HOST_IP="$(python3 -c '
@@ -1351,12 +1353,12 @@ RP_FILE="$(echo "$RP_CLOSED" | python3 -c 'import sys, json; d = json.load(sys.s
 check "closing the room (state failed, closed by the owner) keeps its match as ants-TINY-<date>-<time>Z.antsrep: the answer says so [$RP_FILE]" "$(echo "$RP_FILE" | grep -qE '^ants-TINY-[0-9]{8}-[0-9]{6}Z\.antsrep$'; echo $?)"
 check "the file is in the replays folder of the results folder, and its status in the room list says kept and how big it is" "$([ -s "$RP_RESULTS/replays/$RP_FILE" ] && rp_auth "$CTL/rooms/$RP_CODE" | python3 -c 'import sys, json; r = json.load(sys.stdin)["replay"]; sys.exit(0 if r["kept"] and r["bytes"] > 0 and r["note"] == "" else 1)'; echo $?)"
 check "the server's log line of the ended room says kept as that file" "$(grep -q "kept as $RP_FILE" "$WORK/rp_server.log"; echo $?)"
-check "the control interface lists it: TINY.LVL, Green and Red (no name that a person typed), not finished, 600 turns or more, readable" "$(rp_list_ok "$RP_FILE"; echo $?)"
-check "the public door lists the same replay, with the keys of the public answer and no 'readable'" "$(rp_public_ok "$RP_FILE"; echo $?)"
+check "the control interface lists it: TINY.LVL, Green and Red with the names that the two games typed (and not the room's code), not finished, 600 turns or more, readable" "$(rp_list_ok "$RP_FILE"; echo $?)"
+check "the public door lists the same replay, with the keys of the public answer, the same names and no 'readable'" "$(rp_public_ok "$RP_FILE"; echo $?)"
 rp_auth -o "$WORK/rp_control.antsrep" "$CTL/replays/$RP_FILE"
 curl -s -m 5 -o "$WORK/rp_public.antsrep" -D "$WORK/rp_public.head" "$RP_PUBURL/replays/$RP_FILE"
 check "both give the file: the same bytes as on disk, application/octet-stream and no-store from the public door" "$(cmp -s "$WORK/rp_control.antsrep" "$RP_RESULTS/replays/$RP_FILE" && cmp -s "$WORK/rp_public.antsrep" "$RP_RESULTS/replays/$RP_FILE" && tr -d '\r' < "$WORK/rp_public.head" | grep -qi '^content-type: application/octet-stream$' && tr -d '\r' < "$WORK/rp_public.head" | grep -qi '^cache-control: no-store$'; echo $?)"
-check "the file is a replay file (its first eight bytes are the signature) and holds no name that a person typed" "$(python3 -c 'import sys; sys.exit(0 if open(sys.argv[1], "rb").read(8) == bytes([0x89, 0x41, 0x52, 0x50, 0x4C, 0x0D, 0x0A, 0x1A]) else 1)' "$WORK/rp_public.antsrep" && ! grep -qa 'Typed' "$WORK/rp_public.antsrep"; echo $?)"
+check "the file is a replay file (its first eight bytes are the signature), holds the names that the two games typed, and holds neither the room's code nor an address" "$(python3 -c 'import sys; sys.exit(0 if open(sys.argv[1], "rb").read(8) == bytes([0x89, 0x41, 0x52, 0x50, 0x4C, 0x0D, 0x0A, 0x1A]) else 1)' "$WORK/rp_public.antsrep" && grep -qa 'Typed1' "$WORK/rp_public.antsrep" && grep -qa 'Typed2' "$WORK/rp_public.antsrep" && ! grep -qa "$RP_CODE" "$WORK/rp_public.antsrep" && ! grep -qa '127\.0\.0\.1' "$WORK/rp_public.antsrep"; echo $?)"
 RT="$ROOT/$BUILD/replay_tool"
 if [ -x "$RT" ]; then
     "$RT" info "$WORK/rp_public.antsrep" > "$WORK/rp_info.log" 2>&1
@@ -1364,7 +1366,7 @@ if [ -x "$RT" ]; then
     "$RT" verify "$WORK/rp_public.antsrep" --maps-dir "$ROOT/Original-Ants/Maps" > "$WORK/rp_verify.log" 2>&1
     RP_VERIFY=$?
     [ "$RP_VERIFY" -ne 0 ] && sed 's/^/    /' "$WORK/rp_verify.log"
-    check "replay_tool info reads the downloaded file (TINY.LVL, no typed name) and verify plays the match out to every hash in it (exit 0)" "$([ "$RP_INFO" = "0" ] && [ "$RP_VERIFY" = "0" ] && grep -q 'TINY' "$WORK/rp_info.log" && ! grep -q 'Typed' "$WORK/rp_info.log" "$WORK/rp_verify.log"; echo $?)"
+    check "replay_tool info reads the downloaded file (TINY.LVL, the seats with the typed names, no room code) and verify plays the match out to every hash in it (exit 0) and names the players too" "$([ "$RP_INFO" = "0" ] && [ "$RP_VERIFY" = "0" ] && grep -q 'TINY' "$WORK/rp_info.log" && grep -q '^Seats:     Green (Typed[12]), Red (Typed[12])$' "$WORK/rp_info.log" && grep -q 'Typed1' "$WORK/rp_info.log" && grep -q 'Typed2' "$WORK/rp_info.log" && grep -q 'Typed' "$WORK/rp_verify.log" && ! grep -q "$RP_CODE" "$WORK/rp_info.log" "$WORK/rp_verify.log"; echo $?)"
 else
     echo "  SKIP: replay_tool is not built ($RT): the downloaded file was NOT played again"
 fi

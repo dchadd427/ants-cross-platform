@@ -10,8 +10,9 @@
 // A file is written whole to `<name>.tmp` and renamed, so a crash of the server leaves a whole file or none (a power cut may leave a short one: it is listed as a file that cannot be read, shown to the
 // owner only, and deleted when it is old); a `.tmp` that is found at the start is a crash's and is deleted. The ages are the times in the names, so they are as right as the server's clock.
 //
-// What the files say about the players: nothing that a person typed. A person's seat has no name in the file (the readers show the colour: "Green"), a computer player's seat has its display name
-// ("Bot (Medium)"). So a copy of a file that is made public (ReplayStore is also what the public list reads) holds no name, address or room code.
+// What the files say about the players: the names that the room showed everybody. A person's seat has the name that was typed (printable ASCII, at most 32 characters: "Green (Ann)"; replay_person_name in room.hpp)
+// and none when nothing was typed (the readers show the colour: "Green"), a computer player's seat has its display name ("Bot (Medium)"). That is all a file says of the people: no address, room code,
+// key or chat. The names are public when the server's public door is on (ReplayStore is also what the public list reads).
 //
 // Single threaded like the server's loop. Opening the store reads every file once; after that nothing takes longer than one small file write or one pass over the index (the hourly purge).
 
@@ -58,7 +59,7 @@ struct ReplayEntry {
     std::string game;                                // "v0.10.1"
     uint32_t turns{0};
     bool finished{false};                            // the rules ended the match (false: it was left, or it ran into the room's time limit)
-    std::vector<std::string> players;                // the seats that played, "Green" or "Red (Bot (Medium))", in seat order
+    std::vector<std::string> players;                // the seats that played, "Green (Ann)", "Green" (no name) or "Red (Bot (Medium))", in seat order
 };
 
 struct ReplaySave {

@@ -1,5 +1,6 @@
 // The tests of the replays that the server keeps (ants_server/replay_store.hpp, Room, RoomManager::enable_replays and the control calls GET /replays, GET and DELETE /replays/<file>): a whole match
-// through the door is kept and plays out to the same state on a fresh engine, nothing a person typed is in it, a bot has its name, short and unrecorded matches are not kept (and the status says why),
+// through the door is kept and plays out to the same state on a fresh engine, the people's typed names are in it (and a seat that was given none is the colour), a bot has its name, no address or
+// room code is, short and unrecorded matches are not kept (and the status says why),
 // a server that is stopped keeps the match that runs, a room that came back from a restart record does not record, the limits show in the status and the log, and the two doors (the secret's and the
 // public one) answer as they should. The store's own rules (names, ages, sizes, a folder with other things in it) are test_replay_store.cpp. Included by test_server.cpp, which holds the harness
 // (TEST_CASE, ASSERT_*, World, PWorld, Client) and calls run_replay_tests().
@@ -58,7 +59,7 @@ void start_pair(World& w, const std::string& code, uint32_t play_ms, const char*
     w.run(1500 + kPre + play_ms);
 }
 
-// A small synthetic replay (what the store keeps): the same shape as the server's files, no match behind it
+// A small synthetic replay (what the store keeps): the same shape as the server's files, no match behind it. Seat 0 has a name, seat 1 has none (it is "Red" in the lists).
 std::vector<uint8_t> synthetic_replay(uint32_t seed, uint32_t turns = 700, uint16_t rules = net::kProtocolVersion) {
     replay::Replay r;
     r.head.engine_rules = rules;
@@ -69,6 +70,7 @@ std::vector<uint8_t> synthetic_replay(uint32_t seed, uint32_t turns = 700, uint1
     r.head.map_hash = 0x1122334455667788ull;
     r.head.seed = seed;
     r.head.roster = 0x03;
+    r.head.names[0] = "Ann";
     r.complete = true;
     r.total_turns = turns;
     r.match_over = true;
@@ -105,7 +107,7 @@ ctl::HttpResponse public_call(const RoomManager& mgr, const char* method, const 
 }  // namespace
 
 void run_replay_tests() {
-    TEST_CASE("S3.160 A Whole Match Is Kept On The Server When It Ends: One File Under A Name With The Map And The End Time, Listed By The Status, The Control Interface And The Store; It Plays Out On A Fresh Engine To Every Hash And To The State The Referee And The Players Ended In; Nothing A Person Typed Is In It, Nor The Room's Code") {
+    TEST_CASE("S3.160 A Whole Match Is Kept On The Server When It Ends: One File Under A Name With The Map And The End Time, Listed By The Status, The Control Interface And The Store; It Plays Out On A Fresh Engine To Every Hash And To The State The Referee And The Players Ended In; The Names The People Typed Are In It, Seat By Seat, And Nothing Of The Room's Code Or Of Their Addresses") {
         ReplayClock clock;
         World w;
         std::string why;
@@ -130,7 +132,7 @@ void run_replay_tests() {
         // (a match that the rules ended has one turn more than the engine counts ticks: the call of tick() that finds the end does not count one)
         ASSERT_MSG(list[0].turns >= s.ticks && list[0].turns <= s.ticks + 2, "turns " + std::to_string(list[0].turns) + " ticks " + std::to_string(s.ticks));
         ASSERT_TRUE(list[0].game == "v0.0.0-test" && list[0].rules == net::kProtocolVersion);
-        ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green", "Blue", "Black"}));               // seats 0, 2 and 3: a colour each, no name
+        ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green (Bob)", "Blue (Ann)", "Black (Cat)"}));      // seats 0, 2 and 3 (Ann asked for 2, Bob took the first free seat, Cat asked for 3): a colour each, with its player's name
         // the file: it is what the server says, and it is the whole match
         const StoredReplay f = load_stored(store, s.replay_file);
         ASSERT_TRUE(f.ok && f.rep.complete && f.rep.match_over);
@@ -138,8 +140,11 @@ void run_replay_tests() {
         ASSERT_TRUE(f.rep.head.game_version == "v0.0.0-test" && f.rep.head.build_id == "abc123" && f.rep.head.recorder_seat == replay::kNoSeat);
         ASSERT_EQ(f.rep.total_turns, list[0].turns);
         ASSERT_TRUE(f.rep.commands.size() > 5);
-        for (const std::string& name : f.rep.head.names) ASSERT_TRUE(name.empty());
-        for (const char* typed : {"Ann", "Bob", "Cat", "REC-1"}) ASSERT_FALSE(bytes_contain(f.bytes, typed));
+        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{"Bob", "", "Ann", "Cat"}}));     // (by seat: seat 1 does not play and has none)
+        for (const char* typed : {"Ann", "Bob", "Cat"}) ASSERT_TRUE(bytes_contain(f.bytes, typed));
+        for (const char* never : {"REC-1", "127.0.0.1"}) ASSERT_FALSE(bytes_contain(f.bytes, never));         // (the room's code, and the address that its players came from)
+        std::string again;
+        ASSERT_TRUE(replay::encode(f.rep, again) == f.bytes);                                            // (the reader gives back what the writer wrote, the names with it)
         ASSERT_EQ(f.rep.final_hash, s.referee_hash);
         ASSERT_EQ(f.rep.final_hash, a.sim.state_hash().total);                                           // the state the players ended in
         ASSERT_TRUE(a.sim.state_hash().total == b.sim.state_hash().total && b.sim.state_hash().total == c.sim.state_hash().total);
@@ -163,7 +168,7 @@ void run_replay_tests() {
         ASSERT_TRUE(w.mgr.take_notices().size() == 1);                                                   // (what the store found when it opened: no files)
     } TEST_END();
 
-    TEST_CASE("S3.161 A Computer Player Keeps Its Name In The File (\"Bot (Medium)\"), A Person Is A Colour; A Match That The Owner Closes After 30 Seconds Of Play Is Kept (Not Finished) And Plays Out To The Same Hashes") {
+    TEST_CASE("S3.161 A Computer Player Keeps Its Name In The File (\"Bot (Medium)\") Next To The People's; A Match That The Owner Closes After 30 Seconds Of Play Is Kept (Not Finished) And Plays Out To The Same Hashes") {
         ReplayClock clock;
         World w;
         std::string why;
@@ -181,11 +186,12 @@ void run_replay_tests() {
         const ReplayStore& store = *w.mgr.replay_store();
         const StoredReplay f = load_stored(store, s.replay_file);
         ASSERT_TRUE(f.ok && f.rep.complete && !f.rep.match_over && f.rep.head.roster == 0x07 && f.rep.total_turns >= 600);
-        ASSERT_TRUE(f.rep.head.names[0].empty() && f.rep.head.names[1].empty() && f.rep.head.names[2] == "Bot (Medium)" && f.rep.head.names[3].empty());
-        for (const char* typed : {"Ann", "Bob", "REC-BOT"}) ASSERT_FALSE(bytes_contain(f.bytes, typed));
+        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", "Bob", "Bot (Medium)", ""}}));
+        for (const char* kept : {"Ann", "Bob", "Bot (Medium)"}) ASSERT_TRUE(bytes_contain(f.bytes, kept));
+        ASSERT_FALSE(bytes_contain(f.bytes, "REC-BOT"));
         const std::vector<ReplayEntry> list = store.list();
         ASSERT_TRUE(list.size() == 1 && !list[0].finished);
-        ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green", "Red", "Blue (Bot (Medium))"}));
+        ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green (Ann)", "Red (Bob)", "Blue (Bot (Medium))"}));
         replay::Outcome played;
         ASSERT_TRUE(plays_out(f.rep, played));
         ASSERT_TRUE(played.complete && !played.match_over && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
@@ -456,7 +462,7 @@ void run_replay_tests() {
         ASSERT_EQ(purged, size_t{1});
     } TEST_END();
 
-    TEST_CASE("S3.168 The Control Interface Lists, Gives And Deletes The Files: The List Is The Newest First With What The Head Says (Colours, Never A Name), \"limit\" Is 1 To 1000, A File Is Given Byte For Byte, A Name That Is No File Of The Store Is 404 Whatever It Holds, DELETE Takes The File Away") {
+    TEST_CASE("S3.168 The Control Interface Lists, Gives And Deletes The Files: The List Is The Newest First With What The Head Says (Colours With The Names That Were Typed), \"limit\" Is 1 To 1000, A File Is Given Byte For Byte, A Name That Is No File Of The Store Is 404 Whatever It Holds, DELETE Takes The File Away") {
         ReplayClock clock;
         World w;
         std::string why;
@@ -487,11 +493,12 @@ void run_replay_tests() {
         ASSERT_TRUE(j.get("keep_days").as_int_or(0) == 30 && j.get("max_bytes").as_int_or(0) == 100 * 1024 * 1024 && j.get("replays").size() == 2);
         const ctl::JsonValue& first = j.get("replays").at(0);
         ASSERT_TRUE(first.get("file").str() == files[1] && j.get("replays").at(1).get("file").str() == files[0]);           // newest first
-        ASSERT_TRUE(first.get("readable").as_bool_or(false) && first.get("map").str() == "TINY.LVL" && first.get("players").size() == 2 && first.get("players").at(0).str() == "Green");
+        ASSERT_TRUE(first.get("readable").as_bool_or(false) && first.get("map").str() == "TINY.LVL" && first.get("players").size() == 2 && first.get("players").at(0).str() == "Green (Ann)" && first.get("players").at(1).str() == "Red (Bob)");
         ASSERT_TRUE(first.get("turns").as_int_or(0) >= 600 && first.get("seconds").as_int_or(0) == first.get("turns").as_int_or(0) / 20 && !first.get("finished").as_bool_or(true));
         ASSERT_TRUE(first.get("game").str() == "v0.0.0-test" && first.get("rules").as_int_or(0) == net::kProtocolVersion && first.get("ended").as_int_or(0) == kReplayT0 + 60);
         ASSERT_TRUE(first.get("bytes").as_int_or(0) == static_cast<int64_t>(store.find(files[1])->bytes));
-        for (const char* typed : {"Ann", "Bob", "ROUTE"}) ASSERT_TRUE(r.body.find(typed) == std::string::npos);
+        for (const char* typed : {"Ann", "Bob"}) ASSERT_TRUE(r.body.find(typed) != std::string::npos);
+        for (const char* never : {"ROUTE", "127.0.0.1"}) ASSERT_TRUE(r.body.find(never) == std::string::npos);        // (the names are in the list, the room's code and the address are not)
         // limit
         r = replay_call(w.mgr, "GET", "/replays", "limit=1");
         ASSERT_TRUE(r.status == 200 && replay_json_of(r).get("replays").size() == 1 && replay_json_of(r).get("count").as_int_or(0) == 2 && replay_json_of(r).get("replays").at(0).get("file").str() == files[1]);
@@ -537,7 +544,7 @@ void run_replay_tests() {
         ASSERT_TRUE(store.count() == 0 && !fs::exists(fs::path(store.config().dir) / files[1]));
     } TEST_END();
 
-    TEST_CASE("S3.169 The Public Door Answers Two Calls And Nothing Else: The List (The Newest 200 Of The Files That This Build Can Read, With No Name) And A File; Every Other Method, Path Or Query Is 404; A File That Cannot Be Read Is Not Listed Or Given, Though The Control Interface Gives It To Its Owner") {
+    TEST_CASE("S3.169 The Public Door Answers Two Calls And Nothing Else: The List (The Newest 200 Of The Files That This Build Can Read, With The Players' Names) And A File; Every Other Method, Path Or Query Is 404; A File That Cannot Be Read Is Not Listed Or Given, Though The Control Interface Gives It To Its Owner") {
         ReplayClock clock;
         RoomManager mgr{MapStore(maps_dir())};
         std::string why;
@@ -562,6 +569,7 @@ void run_replay_tests() {
         ASSERT_TRUE(j.get("replays").at(0).get("file").str() == names.back() && j.get("replays").at(199).get("file").str() == names[5]);       // the newest 200
         const ctl::JsonValue& e = j.get("replays").at(0);
         ASSERT_TRUE(e.get("readable").is_null() && e.get("map").str() == "TINY.LVL" && e.get("players").size() == 2 && e.get("turns").as_int_or(0) == 700 && e.get("seconds").as_int_or(0) == 35);
+        ASSERT_TRUE(e.get("players").at(0).str() == "Green (Ann)" && e.get("players").at(1).str() == "Red");                // (the public list gives the names: a seat with none is its colour)
         ASSERT_TRUE(e.get("finished").as_bool_or(false) && e.get("game").str() == "v0.0.0-test" && e.get("ended").as_int_or(0) == clock.now && e.get("bytes").as_int_or(0) > 100);
         ASSERT_TRUE(r.body.find("JUNK") == std::string::npos && r.body.find("enabled") == std::string::npos && r.body.find("max_bytes") == std::string::npos);
         // a file
@@ -605,7 +613,7 @@ void run_replay_tests() {
 
     TEST_CASE("S3.170 The Teams And The Fog Of War Of A Match Are In The Head Of Its File, And The File Plays Out On A Fresh Engine To Every Hash (A File That Lacked Them Would Diverge At The First Check)") {
         ReplayClock clock;
-        {   // one person and three bots, Green + Blue against Red + Black (as S3.126): the Start of the match has the teams, so has the head, and the bots have their names
+        {   // one person and three bots, Green + Blue against Red + Black (as S3.126): the Start of the match has the teams, so has the head, and the person and the bots have their names
             World w;
             std::string why;
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-teams", &clock), false, why));
@@ -621,7 +629,7 @@ void run_replay_tests() {
             const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
             ASSERT_TRUE(f.ok && f.rep.complete && f.rep.match_over && f.rep.head.roster == 0x0F && !f.rep.head.fog);
             ASSERT_TRUE(f.rep.head.teams == sim::StartTeams({true, 0, 2}));
-            ASSERT_TRUE(f.rep.head.names[0].empty() && f.rep.head.names[1] == "Bot (Medium)" && f.rep.head.names[2] == "Bot (Medium)" && f.rep.head.names[3] == "Bot (Medium)");
+            ASSERT_TRUE(f.rep.head.names[0] == "Ann" && f.rep.head.names[1] == "Bot (Medium)" && f.rep.head.names[2] == "Bot (Medium)" && f.rep.head.names[3] == "Bot (Medium)");
             replay::Outcome played;
             ASSERT_TRUE(plays_out(f.rep, played));
             ASSERT_TRUE(played.complete && played.match_over && played.turns == f.rep.total_turns && played.hashes_checked > 5 && played.hash == s.referee_hash);
@@ -691,5 +699,133 @@ void run_replay_tests() {
         for (const std::string& n : w.mgr.take_notices()) at_stop += n.find("repeated 2 more time(s)") != std::string::npos ? 1u : 0u;
         ASSERT_EQ(at_stop, size_t{1});                                                                     // the count comes when the server stops ...
         ASSERT_EQ(w.mgr.take_notices().size(), size_t{0});                                                 // ... once
+    } TEST_END();
+
+    TEST_CASE("S3.173 The Words The Game Uses For A Seat Without A Name Are Not Kept As A Name: A Person Who Typed Nothing, One Whose Name The Lobby Replaced With \"Player 4\", Are Their Colours In The File, The Owner's List, The Store's And The Public One; The Person Who Typed A Name And The Bot Have Theirs") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-names", &clock), false, why));
+        RoomSpec spec = spec_of("NAMES-1", 4);
+        spec.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+        ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+        Client& ann = w.connect("Ann", "NAMES-1", 0);
+        w.connect("", "NAMES-1", 2);                                                                           // typed nothing
+        w.connect("Bot (Hard)", "NAMES-1", 3);                                                                 // a name that looks like a bot's: the lobby calls this person "Player 4"
+        w.run(1500 + kPre + 38000);
+        RoomStatus s = w.status("NAMES-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.turns >= 600 && s.bot_controller);
+        ASSERT_EQ(ann.lobby->start_info().names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", "Bot (Medium)", "", "Player 4"}}));      // (what the room showed everybody)
+        ASSERT_TRUE(w.mgr.close_room("NAMES-1", w.now));
+        s = w.status("NAMES-1");
+        ASSERT_TRUE(s.replay_kept && s.replay_note.empty());
+        const ReplayStore& store = *w.mgr.replay_store();
+        const StoredReplay f = load_stored(store, s.replay_file);
+        ASSERT_TRUE(f.ok && f.rep.complete && f.rep.head.roster == 0x0F);
+        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", "Bot (Medium)", "", ""}}));
+        for (const char* kept : {"Ann", "Bot (Medium)"}) ASSERT_TRUE(bytes_contain(f.bytes, kept));
+        for (const char* never : {"Player", "Bot (Hard)", "NAMES-1", "127.0.0.1"}) ASSERT_FALSE(bytes_contain(f.bytes, never));
+        const std::vector<std::string> shown = {"Green (Ann)", "Red (Bot (Medium))", "Blue", "Black"};
+        ASSERT_EQ(store.list().at(0).players, shown);                                                            // the store's list
+        for (const bool owner : {true, false}) {                                                               // the owner's list and the public one
+            const ctl::HttpResponse r = owner ? replay_call(w.mgr, "GET", "/replays") : public_call(w.mgr, "GET", "/replays");
+            ASSERT_EQ(r.status, 200);
+            const ctl::JsonValue j = replay_json_of(r);
+            ASSERT_TRUE(j.get("replays").size() == 1 && j.get("replays").at(0).get("players").size() == 4);
+            for (size_t i = 0; i < shown.size(); ++i) ASSERT_EQ(j.get("replays").at(0).get("players").at(i).str(), shown[i]);
+            ASSERT_TRUE(r.body.find("Player") == std::string::npos && r.body.find("NAMES-1") == std::string::npos);
+        }
+        replay::Outcome played;
+        ASSERT_TRUE(plays_out(f.rep, played));
+        ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
+    } TEST_END();
+
+    TEST_CASE("S3.174 A Name With A Quote, A Backslash And Angle Brackets Is Kept As Typed, And Both Lists Stay Valid JSON That Gives It Back") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-quotes", &clock), false, why));
+        ASSERT_TRUE(w.mgr.create_room(spec_of("QUOTE-1", 2), w.now).ok);
+        const std::string first = "Q\"x\\y";                                                                    // Q"x\y
+        const std::string second = "<b>&'</b>";
+        start_pair(w, "QUOTE-1", 38000, first.c_str(), second.c_str());
+        ASSERT_TRUE(w.mgr.close_room("QUOTE-1", w.now));
+        const RoomStatus s = w.status("QUOTE-1");
+        ASSERT_TRUE(s.replay_kept);
+        const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
+        ASSERT_TRUE(f.ok && f.rep.head.names[0] == first && f.rep.head.names[1] == second);
+        ASSERT_TRUE(bytes_contain(f.bytes, first) && bytes_contain(f.bytes, second));
+        for (const bool owner : {true, false}) {
+            const ctl::HttpResponse r = owner ? replay_call(w.mgr, "GET", "/replays") : public_call(w.mgr, "GET", "/replays");
+            ASSERT_EQ(r.status, 200);
+            ctl::JsonValue j;
+            std::string parse_error;
+            ASSERT_MSG(ctl::parse_json(r.body, j, &parse_error), parse_error + ": " + r.body);                 // (valid JSON: the quote and the backslash are escaped)
+            ASSERT_TRUE(j.get("replays").size() == 1 && j.get("replays").at(0).get("players").size() == 2);
+            ASSERT_EQ(j.get("replays").at(0).get("players").at(0).str(), "Green (" + first + ")");
+            ASSERT_EQ(j.get("replays").at(0).get("players").at(1).str(), "Red (" + second + ")");
+        }
+        // and the reader shows them as typed
+        ASSERT_EQ(replay::seat_label(f.rep.head, 0), "Green (" + first + ")");
+        ASSERT_EQ(replay::seat_label(f.rep.head, 1), "Red (" + second + ")");
+    } TEST_END();
+
+    TEST_CASE("S3.175 The Name That A File Keeps For A Person (replay_person_name): The Name As It Is In Printable ASCII, At Most 32 Characters And Without Blanks At Its Ends; \"Player\" And \"Player 1\" To \"Player 4\" And Nothing At All Give Nothing; A Name That Only Starts Like Them Is A Name; Whatever Comes In, A File Can Be Written With It") {
+        const std::string c32 = "0123456789abcdefghijklmnopqrstuv";                                            // 32 characters
+        ASSERT_EQ(c32.size(), size_t{32});
+        const std::vector<std::pair<std::string, std::string>> table = {
+            // nothing typed, or only blanks
+            {"", ""}, {" ", ""}, {"   ", ""},
+            // the words of the game for a seat without a name (the blanks around them do not make them a name)
+            {"Player", ""}, {" Player", ""}, {"Player ", ""}, {"   Player   ", ""}, {"Player 1", ""}, {"Player 2", ""}, {"Player 3", ""}, {"Player 4", ""}, {"  Player 3  ", ""}, {"Player 1 ", ""},
+            // names that only start like them, or differ in case, blanks or digits
+            {"Player 5", "Player 5"}, {"Player 0", "Player 0"}, {"Player 10", "Player 10"}, {"Player 11", "Player 11"}, {"Players", "Players"}, {"player", "player"}, {"PLAYER", "PLAYER"},
+            {"Player  2", "Player  2"}, {"Player2", "Player2"}, {"Player 2x", "Player 2x"}, {"Player-2", "Player-2"}, {"Player 04", "Player 04"}, {"My Player", "My Player"}, {"Player One", "Player One"},
+            {"player 1", "player 1"}, {"Playe", "Playe"},
+            // a name is kept as it is, the blanks at its ends cut and those inside left
+            {"Ann", "Ann"}, {"  Ann  ", "Ann"}, {"Ann Lee", "Ann Lee"}, {"A  B", "A  B"}, {"x", "x"}, {"~", "~"}, {" !", "!"},
+            // the signs of a text and of a page
+            {"Q\"x\\y", "Q\"x\\y"}, {"<b>&'</b>", "<b>&'</b>"}, {"\\", "\\"}, {"\"", "\""}, {"a,b;c", "a,b;c"}, {"=SUM(1+1)", "=SUM(1+1)"},
+            // at most 32 characters
+            {c32, c32}, {c32 + "w", c32}, {c32 + std::string(20, 'z'), c32}, {" " + c32.substr(0, 31), c32.substr(0, 31)},
+            // anything but the space to the tilde becomes a '?' (a letter with an accent is two bytes of UTF-8, a tab and a line end are control characters, DEL is one too)
+            {"Zo\xC3\xAB", "Zo??"}, {"Ann\tBob", "Ann?Bob"}, {"Ann\nBob", "Ann?Bob"}, {std::string("a\0b", 3), "a?b"}, {"\x7F", "?"}, {"\x1F", "?"}, {"\x80\xFF", "??"}, {" \xC3\xAB ", "??"},
+        };
+        for (const auto& row : table) ASSERT_MSG(replay_person_name(row.first) == row.second, "'" + row.first + "' gave '" + replay_person_name(row.first) + "', not '" + row.second + "'");
+        // the display names that a computer player can have ("Bot (Easy)", "Bot (Idle)" ...) are plain ASCII, short, with no blank at an end and none of the words of the game: the rule for a person's name leaves them as they
+        // are, so a seat's name does not depend on which rule made it
+        for (const char* kind : {"idle", "worker", "standard"}) {
+            for (const ai::Level level : {ai::Level::Easy, ai::Level::Medium, ai::Level::Hard}) {
+                const std::string bot = ai::bot_display_name(ai::BotSpec{0, kind, level});
+                ASSERT_MSG(bot.rfind("Bot (", 0) == 0 && bot.size() <= 32 && replay_person_name(bot) == bot, "'" + bot + "' is not kept as it is");
+            }
+        }
+        // whatever the bytes are, the name can be written into a file and read back as it is: printable, at most 32, no blank at an end, none of the words of the game
+        uint32_t rng = 12345;
+        const auto next = [&rng]() {
+            rng = rng * 1664525u + 1013904223u;
+            return rng >> 8;
+        };
+        for (int round = 0; round < 3000; ++round) {
+            std::string raw;
+            const uint32_t length = next() % 90;
+            for (uint32_t i = 0; i < length; ++i) raw.push_back(next() % 5 == 0 ? ' ' : static_cast<char>(next() % 256));
+            if (round % 7 == 0) raw = "Player " + std::string(1, static_cast<char>('0' + next() % 8)) + std::string(next() % 3, ' ');
+            const std::string name = replay_person_name(raw);
+            ASSERT_TRUE(name.size() <= 32 && name == replay_person_name(name));                               // (and it is its own fixed point)
+            for (const char ch : name) ASSERT_TRUE(ch >= 0x20 && ch <= 0x7E);
+            ASSERT_TRUE(name.empty() || (name.front() != ' ' && name.back() != ' '));
+            ASSERT_TRUE(name != "Player" && name != "Player 1" && name != "Player 2" && name != "Player 3" && name != "Player 4");
+            if (round % 50 == 0) {
+                replay::Replay r;
+                r.head.map_name = "TINY.LVL";
+                r.head.roster = 0x0F;
+                r.head.names = {name, name, name, name};
+                r.complete = true;
+                r.total_turns = 1;
+                std::string error;
+                ASSERT_MSG(!replay::encode(r, error).empty(), error);
+            }
+        }
     } TEST_END();
 }

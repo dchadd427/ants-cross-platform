@@ -17,7 +17,7 @@
 //   GET    /rooms          -> 200 {"rooms": [status, ...]}
 //   DELETE /rooms/<code>   -> 200 the status after the close; 404
 //   GET    /stats          -> 200 {"rooms": n, "pending": n, "created": n, "refused": n, "log_bytes": n, "log_budget_bytes": n}
-//   GET    /replays[?limit=N]    -> 200 {"enabled": bool, "count", "bytes", "keep_days", "max_bytes", "replays": [{"file", "bytes", "ended" (seconds since 1970 UTC), "readable", "map", "players": ["Green", "Red (Bot (Medium))"],
+//   GET    /replays[?limit=N]    -> 200 {"enabled": bool, "count", "bytes", "keep_days", "max_bytes", "replays": [{"file", "bytes", "ended" (seconds since 1970 UTC), "readable", "map", "players": ["Green (Ann)", "Red", "Blue (Bot (Medium))"],
 //                                    "turns", "seconds", "finished", "game", "rules"}, ...]} the newest N (default 200, at most 1000) of the matches that the server keeps (replay_store.hpp)
 //   GET    /replays/<file> -> 200 the .antsrep file (application/octet-stream); 404
 //   DELETE /replays/<file> -> 200 {"deleted": "<file>"}; 404; 500 (the file is in the list but could not be deleted)
@@ -60,7 +60,7 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
 ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& request);
 
 /// The public door of the replays (ants_server --replay-port, ctl::HttpServer::listen_public): GET /replays (the newest 200 files that this build can read) and GET /replays/<file>, nothing else, no query. Every
-/// other request is 404. What a file or the list says of the players is a colour, or "Bot (Medium)": never a name that a person typed.
+/// other request is 404. What a file or the list says of the players is a colour with the name that the player typed ("Green (Ann)"; the colour alone when nothing was typed) or a computer player's "Bot (Medium)": never an address or a room code.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request);
 
 }  // namespace ants::server
