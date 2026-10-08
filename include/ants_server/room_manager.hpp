@@ -14,6 +14,11 @@
 // told so and lets the key go). A Hello with a key for a room that still waits is the lobby's. A Hello for a room whose restart
 // record still waits for its replay is PARKED (the connection and the Hello wait in the manager, a minute at the most) and goes through this door as soon as the room is restored. The server's
 // own defaults for what the rooms hold (reconnect, the vote, the cap, the limit of the log) and the budget that all the logs share are ServerLimits.
+//
+// Lobby rooms (protocol 16). A PAGE's Hello (client kind kClientPage) with a lobby create block for a room that does not exist makes a lobby room (make_lobby_room: at most ServerLimits::demo_lobbies of them wait at a
+// time; the Welcome of its first seat says that this very Hello made it), and a game's Hello with a plain block makes a public room as before: a page never makes the one and a game never the other (BadRequest).
+// A page's Hello with a key for a match that runs is MatchRunning (only a game plays: it takes the seat back). A lobby room holds no place among the public rooms while it waits; its leader's START asks the manager for one
+// (LobbyServices::match_place: a place that is free, or one that an abandoned public match gives up) and the manager serves the room its maps (--demo-maps) and loads them for it.
 
 #include <cstdint>
 #include <functional>
@@ -52,6 +57,17 @@ struct ServerLimits {
     // reach the door can fill these rooms and hold them for a match: that is the price of a page that works without a secret; rooms of the control interface are made by the control interface and are never public.
     size_t demo_rooms{0};
     std::string demo_map;
+    // Lobby rooms (protocol 16; the server's --demo-lobbies, which needs --demo-rooms, the demo maps and reconnect): see the paragraph at the top. A waiting lobby is forgotten `lobby_empty_close_ms` after the last person
+    // has gone, without a word in the log; a seat whose connection ended is held `lobby_hold_ms`; a leader's START waits `lobby_start_wait_ms` for every person's game; a link that says nothing for `lobby_silence_ms` is
+    // closed. When all `demo_lobbies` are taken (or the server has no place for another room), the lobby that has been empty the longest is forgotten for a new one; when none is empty, the lobby in which nothing has been
+    // done for `lobby_idle_evict_ms` (the longest idle first; its people are dropped and their pages make a room again); and when there is none of those either, the new page is told NoSuchRoom (the page tells its
+    // player to try again). A lobby that is used is never given up. 0 (the default is ten minutes): idle lobbies are never given up.
+    size_t demo_lobbies{0};
+    uint32_t lobby_idle_evict_ms{10u * 60u * 1000u};
+    uint32_t lobby_empty_close_ms{60u * 1000u};
+    uint32_t lobby_hold_ms{net::kLobbyHoldMs};
+    uint32_t lobby_start_wait_ms{net::kLobbyStartWaitMs};
+    uint32_t lobby_silence_ms{net::kLobbySilenceMs};
     // How long a public room waits for its players, from the first Hello (the page's link goes to friends on other computers: they need time to arrive)
     uint32_t demo_wait_ms{10u * 60u * 1000u};
     // The maps that a create block may choose (file names of the maps folder, e.g. "SMALL.LVL"; the block's map_name is compared with them in any case)
@@ -230,6 +246,16 @@ private:
     /// Makes the public room that a Hello with a create block names, when public rooms are on, the code is a valid one, the block is valid and there is a free place (or one can be had:
     /// evict_abandoned_public); false otherwise
     bool make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
+    /// The same for a page's lobby block (protocol 16): the lobby room, when the server offers lobbies and one can be had (the pool has a free place, or the lobby that has been empty the longest gives its place up)
+    bool make_lobby_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
+    bool evict_empty_lobby(uint32_t now_ms);
+    bool evict_idle_lobby(uint32_t now_ms);
+    /// The places of the public rooms that are taken: public rooms that are not a lobby that waits, and the records that wait for their replay
+    size_t public_places() const;
+    /// A place for one more public match, for the START of a lobby room: free, or made free by ending the public match that has been abandoned the longest (evict_abandoned_public)
+    bool take_match_place(uint32_t now_ms);
+    /// What a lobby room asks of this server (room.hpp: LobbyServices): the maps of --demo-maps by name, loading a map, a place for a match
+    LobbyServices lobby_services();
     /// Ends the public room that has been abandoned the longest (at least kDemoAbandonedMs: every seat of a person held absent, nobody back): its clients are dropped, its record is deleted, its log is
     /// freed, its end is reported, and it is forgotten at once so that its place can be taken. False when no public room qualifies (a room with a person present never does).
     bool evict_abandoned_public(uint32_t now_ms);

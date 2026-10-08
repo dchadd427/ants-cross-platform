@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.0 - 2026-10-08 - The server's lobby rooms (network protocol 16; no page uses them yet)
+
+**For players:**
+- **Nothing on screen changes in this release.** It teaches the game server to keep a room open before a match starts, which the lobby page that comes next will use: you will land in a room the moment the front page opens, send one link, and the host will set the colours, the computer players, the teams and the map while everybody waits. No page or menu uses it yet.
+
+**Rules / network:** network protocol 16, so a game of an earlier release cannot join (reload the page once after the update); no rule of the game changes. A lobby page can now ask the server for a lobby room, which holds no match yet: the player who has been in it the longest leads (the next player when the leader goes, never a computer player), and the leader's plan (the map, what each colour is, the teams) and every player's name are shown to everybody. The leader can swap two players' colours, take a player out of the room, and press START, which waits (up to 90 seconds) until every player's game has opened. A colour is kept for a minute after a lost connection, and a room that nobody is in closes a minute later. Three messages are new (the plan, a player's own new name, the removal); the full text is [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4a536a9...305ccb9)
+
 ## v0.11.0 - 2026-10-08 - Six-character room codes and one link that makes the room (the colour swap is in the game, no page uses it yet)
 
 **For players:**
