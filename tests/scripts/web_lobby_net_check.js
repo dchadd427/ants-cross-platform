@@ -214,6 +214,31 @@ check('person names', N.validPersonName('Priya') && N.validPersonName('A b') && 
     && !N.validPersonName('Samé') && !N.validPersonName('S\tm'));
 check('teams', N.validTeams(255, 255) && N.validTeams(0, 1) && N.validTeams(2, 3) && !N.validTeams(1, 0) && !N.validTeams(0, 0) && !N.validTeams(0, 4) && !N.validTeams(0, 255) && !N.validTeams(255, 1));
 check('platforms', N.validPlatform(0) && N.validPlatform(0x16) && N.validPlatform(0x10) && !N.validPlatform(7) && !N.validPlatform(0x20) && !N.validPlatform(0x17));
+check('teams are whole numbers (a number that is none, a string, null and NaN are refused)', !N.validTeams(-1, 2) && !N.validTeams('0', '2') && !N.validTeams(null, 2) && !N.validTeams(0.5, 2) && !N.validTeams(0, 2.5)
+    && !N.validTeams(undefined, undefined) && !N.validTeams(NaN, NaN) && !N.validTeams(0, Infinity));
+check('a platform is one byte that is a whole number (1.5, a string, NaN, -1, 256 and 300 are refused; 0x13 and 0x00 are not)', !N.validPlatform(1.5) && !N.validPlatform('3') && !N.validPlatform(NaN) && !N.validPlatform(null) && !N.validPlatform(undefined)
+    && !N.validPlatform(-1) && !N.validPlatform(256) && !N.validPlatform(300) && N.validPlatform(0x13) && N.validPlatform(0));
+
+// ---- the Hello says only what the server's decoder takes -----------------------------------------------------------------------------------------------------------------------------------------------
+// (the C++ decoder refuses a Hello whose name is not printable ASCII or is longer than 32, and a create block whose map is no map name: the page would be refused with BadRequest for a name it was given)
+
+{
+    const hello = (h) => N.hexOf(N.encodeHello(Object.assign({ name: 'Priya', room: 'k7m2xq', create: { map: 'TREASURE.LVL' } }, h)));
+    const zero = hello({});
+    check('the name of a Hello is printable ASCII: the other characters are left out, as the game\'s own client leaves them out', hello({ name: 'José' }) === hello({ name: 'Jos' }) && hello({ name: 'Łukasz' }) === hello({ name: 'ukasz' })
+        && hello({ name: '你好' }) === hello({ name: '' }) && hello({ name: 'a\tb' }) === hello({ name: 'ab' }) && hello({ name: 'a\u007fb' }) === hello({ name: 'ab' }) && hello({ name: 'a\u{1F600}b' }) === hello({ name: 'ab' }));
+    check('... at most 32 of them, counted after the others were left out', hello({ name: 'x'.repeat(40) }) === hello({ name: 'x'.repeat(32) }) && hello({ name: '\u00e9'.repeat(5) + 'y'.repeat(40) }) === hello({ name: 'y'.repeat(32) }));
+    check('... and a name with spaces at its ends is left as it is (the server trims what it takes)', hello({ name: '  Pri  ' }) !== hello({ name: 'Pri' }) && hello({ name: '' }) !== zero && hello({ name: 5 }) === hello({ name: '' }) && hello({ name: null }) === hello({ name: '' }));
+    const bytes = N.encodeHello({ name: 'Jos\u00e9\u00e9 and 40 more', room: 'k7m2xq' });
+    check('(the name length byte is the length of the name that was written)', bytes[3] === 'Jos and 40 more'.length && Array.from(bytes.slice(4, 4 + bytes[3])).every((b) => b >= 0x20 && b <= 0x7e));
+    check('a map that is no map name is left out of the block: the room is made with the server\'s own map', hello({ create: { map: 'tiny' } }) === hello({ create: { map: '' } }) && hello({ create: { map: 'caf\u00e9.LVL' } }) === hello({ create: { map: '' } })
+        && hello({ create: { map: '../x.LVL' } }) === hello({ create: { map: '' } }) && hello({ create: { map: 5 } }) === hello({ create: { map: '' } }) && hello({ create: { map: 'ISLANDS.LVL' } }) !== hello({ create: { map: '' } }));
+    check('a platform that is none is "not told"; one that fits is kept', hello({ platform: 7 }) === hello({ platform: 0 }) && hello({ platform: 1.5 }) === hello({ platform: 0 }) && hello({ platform: '3' }) === hello({ platform: 0 }) && hello({ platform: NaN }) === hello({ platform: 0 })
+        && hello({ platform: 300 }) === hello({ platform: 0 }) && hello({ platform: N.PLATFORM_BROWSER | N.OS.Linux }) !== hello({ platform: 0 }));
+    const key = Uint8Array.from(seq(1));
+    check('a key that is no key (15 bytes, 17 bytes, zeros, a string, a list, a number) is a new player\'s Hello; a key of 16 bytes is kept', [key.slice(0, 15), new Uint8Array(17), new Uint8Array(16), 'abcdefghijklmnop', Array.from(key), 5, {}, null].every((k) => hello({ key: k }) === zero)
+        && hello({ key }) !== zero && hello({ key }).includes(N.hexOf(key)));
+}
 
 // ---- the guard is made from the state and the name of each seat, nothing else ---------------------------------------------------------------------------------------------------------------------------
 

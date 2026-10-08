@@ -59,6 +59,14 @@ async function scenario(title, fn) {
     try { await fn(); } catch (e) { check('scenario ' + title + ' ran to its end', false, e && e.message); }
 }
 
+// A link that is slow: every word of the server reaches the page `ms` milliseconds late (the page's own words go at once)
+function delayedWebSocket(ms) {
+    return class extends MiniWebSocket {
+        get onmessage() { return this.handler ? (event) => setTimeout(() => { if (this.handler) this.handler(event); }, ms) : null; }
+        set onmessage(handler) { this.handler = handler; }
+    };
+}
+
 const ALL = [];
 function page(name, code, extra) {
     const c = new N.LobbyClient(Object.assign({ url: wsUrl, code: code, map: 'TINY.LVL', name: name, WebSocket: WS }, extra || {}));
@@ -251,6 +259,42 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const A = page('Ada', code('h').toUpperCase());
         A.connect();
         await step('a code with a capital letter makes no room (the server says NoSuchRoom)', () => () => A.status === 'refused' && A.of('refused')[0].reason === N.REJECT.NoSuchRoom);
+    });
+
+    // ---- 9. a name with characters outside the table is cut to what the server takes ---------------------------------------------------------------------------------------------------------------
+    await scenario('9. a name with characters outside the table is cut to what the server takes', async () => {
+        const A = page('José', code('i'));
+        const B = page('ÀÉ', code('i'));
+        A.connect();
+        await step('a page named "José" is seated (the Hello did not break the decoder)', () => online(A));
+        check('(the room and the page say "Jos": the accent is left out, not the person)', A.room.slots[0].name === 'Jos' && A.name === 'Jos', JSON.stringify(A.room.slots[0].name));
+        B.connect();
+        await step('a page whose name is nothing but accents is seated too', () => online(B));
+        check('(it has no name yet: the room shows an empty one)', B.room.slots[1].name === '' && B.name === '', JSON.stringify(B.room.slots[1].name));
+        check('(and it can give itself a name)', B.rename('Bea') === true);
+        await step('both pages see "Bea"', () => () => B.name === 'Bea' && names(A) === 'Jos|Bea|-|-' && names(B) === 'Jos|Bea|-|-');
+        A.leave();
+        B.leave();
+    });
+
+    // ---- 10. Leave between the Hello and the Welcome gives the seat up at once ------------------------------------------------------------------------------------------------------------------
+    await scenario('10. Leave between the Hello and the Welcome gives the seat up at once', async () => {
+        const A = page('Ada', code('j'));
+        A.connect();
+        await step('A makes the room', () => online(A));
+        // a page whose link is slow: the server's words reach it 600 ms late, so the Hello has gone and the Welcome has not come
+        const B = page('Bea', code('j'), { WebSocket: delayedWebSocket(600) });
+        B.connect();
+        await step('the Hello of B is out and no Welcome is in', () => () => B.ws !== null && B.ws.readyState === 1 && B.status === 'connecting');
+        check('B leaves now (it has no key: the Leave goes after the Hello and the server has the person)', B.leave() === true && B.status === 'closed');
+        await step('A sees B come and go (the server had seated her, and gave the seat up at the Leave)', () => () => A.count('joined') === 1 && A.count('left') === 1 && names(A) === 'Ada|-|-|-');
+        const C = page('Cy', code('j'));
+        C.connect();
+        await step('a page that comes next is seated in colour 1: the seat was not held', () => online(C));
+        check('(colour 1, not colour 2)', C.seat === 1, 'seat ' + C.seat);
+        check('(B holds no key and wrote no entry for a game)', B.key === null && B.rejoinEntry() === null);
+        A.leave();
+        C.leave();
     });
 
     for (const c of ALL) { try { c.leave(); } catch (e) { /* closed already */ } }

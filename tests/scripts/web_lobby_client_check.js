@@ -61,7 +61,7 @@ function world() {
         this.readyState = 0;
         w.sockets.push(this);
     };
-    w.WebSocket.prototype.send = function (bytes) { if (this.closed) throw new Error('send on a closed socket'); this.sent.push(Uint8Array.from(bytes)); };
+    w.WebSocket.prototype.send = function (bytes) { if (this.closed || this.readyState !== 1) throw new Error('send on a socket that is not open'); this.sent.push(Uint8Array.from(bytes)); };      // (a browser throws too: InvalidStateError)
     w.WebSocket.prototype.close = function () { this.closed = true; };
     w.WebSocket.prototype.open = function () { this.readyState = 1; if (this.onopen) this.onopen(); };
     w.WebSocket.prototype.receive = function (bytes) { if (this.onmessage) this.onmessage({ data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) }); };
@@ -211,9 +211,9 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     same('a joiner', N.diffRooms(a, r([[C, 'Priya'], [C, 'Sam'], [C, 'Juniper'], [E, '']], { leader: 0 })), [{ type: 'joined', seat: 2, name: 'Juniper' }]);
     same('a person who leaves', N.diffRooms(a, r([[C, 'Priya'], [E, ''], [E, ''], [E, '']], { leader: 0 })), [{ type: 'left', seat: 1, name: 'Sam' }]);
     same('a person who is dragged to an empty colour is moved, not gone and new', N.diffRooms(a, r([[C, 'Priya'], [E, ''], [C, 'Sam'], [E, '']], { leader: 0 })), [{ type: 'moved', from: 1, to: 2, name: 'Sam' }]);
-    same('two persons who changed places are swapped', N.diffRooms(a, r([[C, 'Sam'], [C, 'Priya'], [E, ''], [E, '']], { leader: 1 })), [{ type: 'swapped', a: 0, b: 1, names: ['Sam', 'Priya'] }]);
+    same('two persons who changed places are swapped (the page of the leader: its own seat moved with it)', N.diffRooms(a, r([[C, 'Sam'], [C, 'Priya'], [E, ''], [E, '']], { leader: 1, you: 1 })), [{ type: 'swapped', a: 0, b: 1, names: ['Sam', 'Priya'] }]);
     same('a name that changed', N.diffRooms(a, r([[C, 'Priya'], [C, 'Samuel'], [E, ''], [E, '']], { leader: 0 })), [{ type: 'renamed', seat: 1, from: 'Sam', to: 'Samuel' }]);
-    same('the leader dragged to another colour leads still: no host event', N.diffRooms(a, r([[E, ''], [C, 'Sam'], [C, 'Priya'], [E, '']], { leader: 2 })).map((e) => e.type), ['moved']);
+    same('the leader dragged to another colour leads still: no host event', N.diffRooms(a, r([[E, ''], [C, 'Sam'], [C, 'Priya'], [E, '']], { leader: 2, you: 2 })).map((e) => e.type), ['moved']);
     same('the leader leaves, the next one leads', N.diffRooms(a, r([[E, ''], [C, 'Sam'], [E, ''], [E, '']], { leader: 1 })).map((e) => e.type), ['left', 'host']);
     same('the leader leaves, nobody is left to lead', N.diffRooms(r([[C, 'Priya'], [E, ''], [E, ''], [E, '']], { leader: 0 }), r([[E, ''], [E, ''], [E, ''], [E, '']], { leader: 255, you: 255 })).map((e) => e.type), ['left']);
     same('a player of the same name as the leader leads after the leader left', N.diffRooms(r([[C, 'Player'], [C, 'Player'], [E, ''], [E, '']], { leader: 0 }), r([[E, ''], [C, 'Player'], [E, ''], [E, '']], { leader: 1 })).map((e) => e.type), ['left', 'host']);
@@ -222,6 +222,14 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
         N.diffRooms(a, r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, plan: [0, 0, 1, 0] })).map((e) => e.type),
         N.diffRooms(a, r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, teamA: 0, teamB: 1 })).map((e) => e.type)
     ], [['plan'], ['plan'], ['plan']]);
+    // the host as the page's own seat tells it (every Room message says which seat is the page's: you)
+    same('a host who came back after the hold ran out is a player now: another leads, and the page hears of the new host', N.diffRooms(r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, you: 0 }), r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 1, you: 0 })),
+        [{ type: 'host', seat: 1, name: 'Sam', you: false, before: 'Priya' }]);
+    same('a player who is the host now, though the seat that led is still held by somebody (the page gained the role)', N.diffRooms(r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, you: 1 }), r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 1, you: 1 })),
+        [{ type: 'host', seat: 1, name: 'Sam', you: true, before: 'Priya' }]);
+    same('two players of one name swap and the host is one of them: the same host, no event', N.diffRooms(r([[C, 'Player'], [C, 'Player'], [E, ''], [E, '']], { leader: 0, you: 0 }), r([[C, 'Player'], [C, 'Player'], [E, ''], [E, '']], { leader: 1, you: 1 })), []);
+    same('the same, seen by a third player', N.diffRooms(r([[C, 'Player'], [C, 'Player'], [C, 'Tess'], [E, '']], { leader: 0, you: 2 }), r([[C, 'Player'], [C, 'Player'], [C, 'Tess'], [E, '']], { leader: 1, you: 2 })), []);
+    same('a host who is dragged to another colour and a joiner at once: the host is still the host', N.diffRooms(a, r([[C, 'Juniper'], [C, 'Sam'], [C, 'Priya'], [E, '']], { leader: 2, you: 2 })).map((e) => e.type).filter((t) => t === 'host'), []);
 }
 
 // ---- a lost link: the way back with the key, the waits, the link that says nothing -----------------------------------------------------------------------------------------------------------------------
@@ -261,11 +269,32 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     check('(the sixth failure waits eight seconds too)', w.sockets.length === 7);
     w.last().open();
     w.last().receive(welcome(0, key, 0));
-    check('the Welcome of the same seat puts the page back online and the waits start again', c.status === 'online' && c.failures === 0 && c.seat === 0);
+    check('the Welcome of the same seat puts the page back online', c.status === 'online' && c.seat === 0);
     check('the key is still the same', hex(c.key) === hex(key));
     w.last().drop();
+    w.advance(7999);
+    check('a link that goes at once after its Welcome has not proved itself: the wait is still eight seconds', w.sockets.length === 7, String(w.sockets.length));
+    w.advance(1);
+    check('(it tries again after them)', w.sockets.length === 8);
+    w.last().open();
+    w.last().receive(welcome(0, key, 0));
+    w.advance(7000);
+    w.last().receive(ping(2, 2));
+    w.advance(7000);
+    w.last().receive(ping(3, 3));
+    w.last().drop();
+    w.advance(499);
+    check('a link that stayed up for 14 seconds has proved itself', w.sockets.length === 8);
+    w.advance(1);
+    check('after a success the next wait is half a second again', w.sockets.length === 9);
+    w.last().open();
+    w.last().receive(welcome(0, key, 0));
+    w.last().drop();
+    w.advance(499);
+    w.advance(1);
+    check('(and it is the first wait only: the next failure after a short Welcome waits a second)', w.sockets.length === 9);
     w.advance(500);
-    check('after a success the next wait is half a second again', w.sockets.length === 8);
+    check('(a second, to be exact)', w.sockets.length === 10);
     // sockets that were given up do not speak any more
     const old = w.sockets[w.sockets.length - 2];
     const before = c.log.length;
@@ -464,6 +493,318 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     check('a seat beyond 3 makes no entry', N.rejoinEntry('k7m2xq', 4, seq(1), 'wss://x/ws', 1) === null);
     check('an empty code makes no entry', N.rejoinEntry('', 0, seq(1), 'wss://x/ws', 1) === null);
     check('a code with a space makes no entry', N.rejoinEntry('k7m 2xq', 0, seq(1), 'wss://x/ws', 1) === null);
+}
+
+// ---- what the independent review of the client found ---------------------------------------------------------------------------------------------------------------------------------------------------
+// (a name the server would refuse, a handler that throws, a socket that never opens, a seat that moved, a Leave that was not said, a key that anybody could scrub, a request that was no number, a page that spams)
+
+const attempt = (fn) => { try { return { value: fn() }; } catch (e) { return { threw: String(e && e.message || e) }; } };
+const online = (w, c, seats, o) => {            // a client that is in its room: Welcome (seat 0, created) and the Room message of `seats`
+    c.connect();
+    w.last().open();
+    w.last().receive(welcome(0, seq(0x30), 2));
+    w.last().receive(room(seats || [[C, 'Priya'], [E, ''], [E, ''], [E, '']], Object.assign({ you: 0, leader: 0 }, o || {})));
+};
+
+{   // the Hello says only what a server reads: a name of printable ASCII (the characters that are none are left out, as the game's own client leaves them out), a code, a map, a platform and a key that fit
+    const sent = (extra) => { const w = world(); const c = client(w, extra); c.connect(); if (w.sockets.length > 0) w.last().open(); return { w, c, hello: w.sockets.length > 0 && w.last().sent.length > 0 ? hex(w.last().sent[0]) : '' }; };
+    const hello = (o) => hex(N.encodeHello(Object.assign({ name: 'Priya', room: 'k7m2xq', create: { map: 'TREASURE.LVL' } }, o)));
+    for (const [typed, shown] of [['José', 'Jos'], ['Łukasz', 'ukasz'], ['你好', ''], ['a\tb', 'ab'], ['x'.repeat(40), 'x'.repeat(32)], ['é'.repeat(5) + 'y'.repeat(40), 'y'.repeat(32)], ['  Pri  ', '  Pri  ']]) {
+        const s = sent({ name: typed });
+        same('the Hello of the name ' + JSON.stringify(typed) + ' says ' + JSON.stringify(shown), s.hello, hello({ name: shown }));
+        const bytes = s.w.sockets.length > 0 && s.w.last().sent.length > 0 ? s.w.last().sent[0] : new Uint8Array(4);
+        check('... and its bytes are printable ASCII, at most 32 (the C++ decoder refuses anything else)', bytes[3] <= 32 && Array.from(bytes.slice(4, 4 + bytes[3])).every((b) => b >= 0x20 && b <= 0x7e));
+        check('... and the client goes by that name until the room says another', s.c.name === shown);
+    }
+    for (const code of ['', 'k7m 2xq', 'a'.repeat(33), 'k7m.2xq', undefined, null, 42, 'ké']) {
+        const w = world();
+        const c = client(w, { code });
+        const r = attempt(() => c.connect());
+        check('a code that no server takes (' + JSON.stringify(code) + ') is refused here: an error text, reason 0, no socket, nothing thrown', !r.threw && c.status === 'refused' && events(c, 'refused').length === 1 && events(c, 'refused')[0].reason === 0
+            && typeof events(c, 'refused')[0].error === 'string' && events(c, 'refused')[0].error !== '' && w.sockets.length === 0, JSON.stringify(r) + ' ' + c.status);
+    }
+    check('a code with capitals is a code (the server decides on it)', sent({ code: 'K7M2XQ' }).hello === hello({ room: 'K7M2XQ' }));
+    for (const map of ['tiny', 'café.LVL', '../x.LVL', 'a'.repeat(70) + '.LVL', 5, {}]) {
+        same('a map that is no map name (' + JSON.stringify(map) + ') is left out of the block: the room is made with the server\'s own map, as the game\'s client does', sent({ map }).hello, hello({ create: { map: '' } }));
+    }
+    same('a map name that is one is kept', sent({ map: 'ISLANDS.LVL' }).hello, hello({ create: { map: 'ISLANDS.LVL' } }));
+    for (const platform of [7, 0x20, 0x17, 1.5, -1, '3', NaN, 300]) {
+        same('a platform that is none (' + JSON.stringify(platform) + ') is told as not told', sent({ platform }).hello, hello({ platform: 0 }));
+    }
+    same('a platform that fits is kept', sent({ platform: N.PLATFORM_BROWSER | N.OS.Linux }).hello, hello({ platform: N.PLATFORM_BROWSER | N.OS.Linux }));
+    for (const key of [seq(1).slice(0, 15), new Uint8Array(17), new Uint8Array(16), 'abcdefghijklmnop', 5, {}]) {
+        same('a key that is no key (' + (key.length === undefined ? JSON.stringify(key) : key.length + ' entries') + ') is no key: the Hello is a new player\'s', sent({ key }).hello, hello({}));
+    }
+    {
+        const w = world();
+        const k = seq(0x11);
+        const c = client(w, { key: k });
+        k.fill(0);
+        c.connect();
+        w.last().open();
+        same('a key that is given is copied: the caller\'s array is the caller\'s', hex(w.last().sent[0]), hello({ key: seq(0x11) }));
+    }
+}
+
+{   // a handler that throws takes nothing else down with it: the other handlers hear the event, the client goes on (status, socket, timers), the error goes to onError
+    const w = world();
+    const errors = [];
+    const c = client(w, { onError: (e, event) => errors.push(event + ': ' + String(e && e.message || e)) });
+    const late = [];
+    c.on('status', (s) => { if (s === 'connecting') throw new Error('boom'); });
+    c.on('status', (s) => late.push(s));
+    const r = attempt(() => c.connect());
+    check('a handler that throws on "connecting" does not stop the socket from being made', !r.threw && w.sockets.length === 1 && c.status === 'connecting', JSON.stringify(r));
+    check('... the handler after it hears the status, and the error is handed to onError', late.join() === 'connecting' && errors.join() === 'status: boom', late.join() + ' / ' + errors.join());
+    w.last().open();
+    w.last().receive(welcome(0, seq(0x30), 2));
+    const joined = [];
+    c.on('room', () => { throw new Error('boom room'); });
+    c.on('joined', (e) => joined.push(e.name));
+    w.last().receive(room([[C, 'Priya'], [E, ''], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    check('a handler that throws on a Room message does not take the events of that message with it', joined.join() === 'Sam' && c.room !== null && c.room.slots[1].name === 'Sam' && errors.filter((e) => e === 'room: boom room').length === 2, joined.join() + ' / ' + errors.join());
+    c.on('status', (s) => { if (s === 'offline') throw new Error('boom offline'); });
+    w.last().drop();
+    check('a handler that throws on "offline" does not stop the way back', c.status === 'offline' && w.timers.length === 1);
+    w.advance(500);
+    check('(the way back is made)', w.sockets.length === 2 && c.status === 'connecting');
+    // the 'gone' path
+    const w2 = world();
+    const d = client(w2, { key: seq(0x11), onError: () => {} });
+    d.on('gone', () => { throw new Error('boom gone'); });
+    d.connect();
+    w2.last().open();
+    w2.last().receive(reject(N.REJECT.NoSuchRoom));
+    check('a handler that throws on "gone" does not stop the room from being made again', w2.sockets.length === 2 && d.status === 'connecting' && d.key === null);
+    // without onError the error is written to the console, not thrown
+    const w3 = world();
+    const e = client(w3);
+    const logged = [];
+    const consoleError = console.error;
+    console.error = (...args) => logged.push(args.map(String).join(' '));
+    try {
+        e.on('status', () => { throw new Error('boom default'); });
+        const r3 = attempt(() => e.connect());
+        check('without onError a throwing handler is reported on the console, and nothing is thrown', !r3.threw && logged.length === 1 && /boom default/.test(logged[0]) && w3.sockets.length === 1, JSON.stringify(r3) + ' ' + logged.join('|'));
+    } finally { console.error = consoleError; }
+    check('on() takes functions only', attempt(() => c.on('room', 5)).threw !== undefined && attempt(() => c.on('room', null)).threw !== undefined);
+    check('an event named like a member of Object is an event like the others', attempt(() => c.on('__proto__', () => {})).threw === undefined && attempt(() => c.on('constructor', () => {})).threw === undefined && attempt(() => c.on('hasOwnProperty', () => {})).threw === undefined);
+}
+
+{   // a handler that leaves while the message is still being handed out stops the rest of it: no event reaches a page that has left
+    const w = world();
+    const c = client(w);
+    online(w, c);
+    c.on('room', () => c.leave());
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    check('leave() in the handler of a Room message: the events of that message (joined) are not handed out', c.status === 'closed' && events(c, 'joined').length === 0);
+}
+
+{   // a socket that is made but never opens is given up after connectMs and tried again; a page that wakes after a long sleep does not wait for the timer
+    const w = world();
+    const c = client(w);
+    c.connect();
+    w.advance(19999);
+    check('a socket that is still opening after 19.999 seconds is waited for', c.status === 'connecting' && w.sockets.length === 1 && !w.sockets[0].closed);
+    w.advance(1);
+    check('after 20 seconds it is given up and closed', c.status === 'offline' && w.sockets[0].closed);
+    w.advance(500);
+    check('and the way back is tried', w.sockets.length === 2 && c.status === 'connecting');
+    w.advance(14000);
+    w.last().open();
+    w.advance(7999);
+    check('once the socket is open, the limit is the silence limit of a link (8 seconds from the Hello), whatever the opening took', c.status === 'connecting' && w.sockets.length === 2);
+    w.advance(1);
+    check('(8 seconds without a Welcome: given up)', c.status === 'offline' && w.sockets[1].closed);
+    const d = world();
+    const e = client(d);
+    e.connect();
+    d.clock += 30 * 60 * 1000;                                           // (a phone that slept: the timers did not run)
+    e.wake();
+    check('wake gives up a socket that has been opening for half an hour', e.status === 'offline' && d.sockets[0].closed);
+    e.wake();
+    check('and tries again at once', d.sockets.length === 2 && e.status === 'connecting');
+    const f = world();
+    const g = client(f, { connectMs: 0 });
+    g.connect();
+    f.advance(600000);
+    check('connectMs 0 waits for the browser (no timer)', g.status === 'connecting' && f.timers.length === 0 && f.sockets.length === 1);
+    const h = world();
+    const i = client(h, { connectMs: 3000 });
+    i.connect();
+    h.advance(2999);
+    check('connectMs is an option', i.status === 'connecting');
+    h.advance(1);
+    check('(3 seconds)', i.status === 'offline');
+}
+
+{   // the seat of a page is the seat that the last Room message says (the leader may have moved it to another colour): the entry for the game page names that seat
+    const w = world();
+    const c = client(w, { name: 'Sam' });
+    c.connect();
+    w.last().open();
+    w.last().receive(welcome(1, seq(0x50), 0));
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0 }));
+    check('the Welcome gives the seat', c.seat === 1 && c.rejoinEntry(1).name === 'ants.rejoin.k7m2xq.1');
+    w.last().receive(room([[C, 'Priya'], [E, ''], [C, 'Sam'], [E, '']], { you: 2, leader: 0 }));
+    check('the leader moves the page to the colour 2: the seat is 2', c.seat === 2);
+    check('... and so is the entry that the game page reads', c.rejoinEntry(1).name === 'ants.rejoin.k7m2xq.2', c.rejoinEntry(1).name);
+    w.last().receive(room([[C, 'Priya'], [E, ''], [C, 'Sam'], [E, '']], { you: 255, leader: 0 }));
+    check('a Room message that does not say who we are leaves the seat as it was', c.seat === 2);
+}
+
+{   // leaving between the Hello and the Welcome: the server has the person already, so the Leave is said (else the seat is held for a minute with nobody in it)
+    const w = world();
+    const c = client(w);
+    c.connect();
+    const s = w.last();
+    check('before the socket is open there is nobody to say Leave to: leave() sends nothing and the client is closed', c.leave() === false && c.status === 'closed' && s.sent.length === 0 && s.closed);
+    const w2 = world();
+    const d = client(w2);
+    d.connect();
+    w2.last().open();
+    const s2 = w2.last();
+    check('between the Hello and the Welcome leave() says Leave, then closes the link', d.leave() === true && s2.sent.length === 2 && hex(s2.sent[1]) === hex(N.encodeLeave()) && s2.closed && d.status === 'closed');
+    // the Welcome is slow: the link is given up after the silence limit; the Hello went, the key is not known: a Leave goes before the close, so the retry does not seat the name twice
+    const w3 = world();
+    const e = client(w3);
+    e.connect();
+    w3.last().open();
+    w3.advance(8000);
+    const s3 = w3.sockets[0];
+    check('a Welcome that does not come in 8 seconds: the link is given up, and the seat that it may have is given up with a Leave', e.status === 'offline' && s3.closed && s3.sent.length === 2 && hex(s3.sent[1]) === hex(N.encodeLeave()), s3.sent.map(hex).join('|'));
+    w3.advance(500);
+    check('(and the retry is a new socket)', w3.sockets.length === 2 && e.status === 'connecting');
+    // a page that comes with a key is rejoining: its seat is held for it, no Leave
+    const w4 = world();
+    const f = client(w4, { key: seq(0x11) });
+    f.connect();
+    w4.last().open();
+    w4.advance(8000);
+    check('a page that rejoins with a key does not give its seat up when a Welcome is slow', f.status === 'offline' && w4.sockets[0].sent.length === 1);
+    // a link that was online and goes silent: the key is known, the seat is held for the way back
+    const w5 = world();
+    const g = client(w5);
+    online(w5, g);
+    w5.advance(8000);
+    check('an online link that goes silent keeps its seat: no Leave', g.status === 'offline' && w5.sockets[0].sent.length === 1);
+}
+
+{   // a handler that leaves while the client opens stops the opening
+    const w = world();
+    const c = client(w);
+    c.on('status', (s) => { if (s === 'connecting') c.leave(); });
+    c.connect();
+    check('leave() in the handler of "connecting": no socket is made and the client stays closed', w.sockets.length === 0 && c.status === 'closed');
+    const w2 = world();
+    const d = client(w2, { key: seq(0x11) });
+    d.on('gone', () => d.leave());
+    d.connect();
+    w2.last().open();
+    w2.last().receive(reject(N.REJECT.NoSuchRoom));
+    check('leave() in the handler of "gone": the room is not made again', w2.sockets.length === 1 && d.status === 'closed');
+    w2.advance(100000);
+    check('(and nothing comes later)', w2.sockets.length === 1 && w2.timers.length === 0);
+}
+
+{   // the key leaves the client for the server and for the entry of the game page, nowhere else
+    const w = world();
+    const c = client(w);
+    let seen = null;
+    c.on('welcome', (ev) => { seen = ev; });
+    c.connect();
+    w.last().open();
+    w.last().receive(welcome(0, seq(0x30), 2));
+    check('the welcome payload has no key (the page reaches it through rejoinEntry only)', seen !== null && !('key' in seen) && seen.seat === 0 && seen.created === true && seen.rejoin === false, JSON.stringify(seen));
+    const copy = c.key;
+    copy.fill(0xee);
+    check('client.key is a copy: scrubbing it changes nothing', hex(c.key) === hex(seq(0x30)) && c.rejoinEntry(1).text.indexOf(hex(seq(0x30))) > 0);
+    w.last().receive(room([[C, 'Priya'], [E, ''], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    w.last().drop();
+    w.advance(500);
+    w.last().open();
+    check('the Hello of the way back has the key', hex(w.last().sent[0]) === hex(N.encodeHello({ name: 'Priya', room: 'k7m2xq', key: seq(0x30), create: { map: 'TREASURE.LVL' } })));
+    check('the key is a property that cannot be set from outside', attempt(() => { c.key = seq(1); }).threw === undefined && hex(c.key) === hex(seq(0x30)));
+}
+
+{   // every number of a request is a whole number in its range; anything else is false, never an exception, nothing sent
+    const w = world();
+    const c = client(w);
+    online(w, c, [[C, 'Priya'], [C, 'Sam'], [C, 'Tess'], [E, '']]);
+    const base = w.last().sent.length;
+    const plan = (o) => Object.assign({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }, o);
+    const bad = [
+        ['move(0, 1.5)', () => c.move(0, 1.5)], ['move(1.5, 0)', () => c.move(1.5, 0)], ['move(0, null)', () => c.move(0, null)], ['move("1", "3")', () => c.move('1', '3')], ['move(1, "3")', () => c.move(1, '3')],
+        ['move(NaN, 1)', () => c.move(NaN, 1)], ['move(1, Infinity)', () => c.move(1, Infinity)], ['move()', () => c.move()],
+        ['remove(null)', () => c.remove(null)], ['remove("1")', () => c.remove('1')], ['remove(1.5)', () => c.remove(1.5)], ['remove(NaN)', () => c.remove(NaN)], ['remove()', () => c.remove()],
+        ['setPlan(null)', () => c.setPlan(null)], ['setPlan()', () => c.setPlan()], ['setPlan({})', () => c.setPlan({})], ['setPlan with kinds null', () => c.setPlan(plan({ kinds: null }))],
+        ['setPlan with kinds of strings', () => c.setPlan(plan({ kinds: ['0', '0', '0', '0'] }))], ['setPlan with a kind of 1.5', () => c.setPlan(plan({ kinds: [0, 1.5, 0, 0] }))], ['setPlan with a kind of -1', () => c.setPlan(plan({ kinds: [0, -1, 0, 0] }))],
+        ['setPlan with teams (-1, 2)', () => c.setPlan(plan({ teamA: -1, teamB: 2 }))], ['setPlan with teams ("0", "2")', () => c.setPlan(plan({ teamA: '0', teamB: '2' }))], ['setPlan with teams (null, 2)', () => c.setPlan(plan({ teamA: null, teamB: 2 }))],
+        ['setPlan with teams (0.5, 2)', () => c.setPlan(plan({ teamA: 0.5, teamB: 2 }))], ['setPlan with a map of 5', () => c.setPlan(plan({ map: 5 }))],
+        ['rename(null)', () => c.rename(null)], ['rename(5)', () => c.rename(5)], ['rename({})', () => c.rename({})], ['rename()', () => c.rename()]
+    ];
+    for (const [label, fn] of bad) {
+        const r = attempt(fn);
+        check(label + ' is false: no exception, nothing sent', r.value === false && !r.threw, JSON.stringify(r));
+    }
+    check('nothing was sent by any of them', w.last().sent.length === base, String(w.last().sent.length - base));
+    check('the validators say the same: teams are whole numbers a < b < 4 or two 255', !N.validTeams(-1, 2) && !N.validTeams('0', '2') && !N.validTeams(null, 2) && !N.validTeams(0.5, 2) && !N.validTeams(0, 2.5) && !N.validTeams(undefined, undefined) && N.validTeams(0, 2) && N.validTeams(255, 255));
+    check('a platform is a whole number', !N.validPlatform(1.5) && !N.validPlatform('3') && !N.validPlatform(null) && !N.validPlatform(NaN) && !N.validPlatform(-1) && !N.validPlatform(256) && N.validPlatform(0x13));
+}
+
+{   // a page that sends too fast is held back here (the server's budgets: names 3 then 1 a second, plans and colour moves 6 then 4 a second, removals 3 then 1 a second), not thrown out of the room
+    const w = world();
+    const c = client(w, { silenceMs: 0 });                 // (a minute of rest without a ping from the scripted server is the budgets' business here, not the watchdog's)
+    online(w, c, [[C, 'Priya'], [C, 'Sam'], [C, 'Tess'], [E, '']]);
+    const base = w.last().sent.length;
+    const count = (fn, n) => { let ok = 0; for (let i = 0; i < n; i++) { if (fn(i)) ok++; } return ok; };
+    check('rename: a burst of 3, then no more', count((i) => c.rename('N' + i), 6) === 3 && w.last().sent.length === base + 3);
+    w.advance(999);
+    check('... not before the second is over', c.rename('Late') === false);
+    w.advance(1);
+    check('... one a second then', c.rename('Late') === true && c.rename('Later') === false);
+    check('the budget of a plan is another one (6 then 4 a second)', count(() => c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 9) === 6);
+    w.advance(249);
+    check('... a plan every 250 milliseconds', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false);
+    w.advance(1);
+    check('... (250)', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === true && c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false);
+    check('the budget of a colour move is another one (6 then 4 a second)', count(() => c.move(1, 3), 9) === 6);
+    w.advance(250);
+    check('... a move every 250 milliseconds', c.move(1, 3) === true && c.move(1, 3) === false);
+    check('the budget of a removal is another one (3 then 1 a second)', count(() => c.remove(1), 6) === 3);
+    w.advance(999);
+    check('... not before the second is over', c.remove(1) === false);
+    w.advance(1);
+    check('... one a second then', c.remove(1) === true && c.remove(1) === false);
+    w.advance(60000);
+    check('a long rest fills each budget again, to its burst and no further', count((i) => c.rename('M' + i), 6) === 3 && count(() => c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 9) === 6);
+    // a request that cannot be made costs nothing; one that could not be written costs nothing
+    const w2 = world();
+    const d = client(w2);
+    online(w2, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']]);
+    for (let i = 0; i < 10; i++) { d.rename('Pri '); d.rename(''); d.remove(0); d.remove(3); d.move(2, 3); }
+    const sock = w2.last();
+    const real = sock.send;
+    sock.send = function () { throw new Error('closing'); };
+    for (let i = 0; i < 10; i++) { d.rename('Zed'); d.remove(1); d.move(1, 2); d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }); }
+    sock.send = real;
+    check('requests that cannot be made, and ones whose write failed, spend nothing of the budgets', count((i) => d.rename('R' + i), 4) === 3 && count(() => d.remove(1), 4) === 3 && count(() => d.move(1, 2), 7) === 6 && count(() => d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 7) === 6);
+}
+
+{   // a link that does not have a WebSocket at all, a line of chat that no player said
+    const w = world();
+    const c = client(w, { WebSocket: null });
+    const r = attempt(() => c.connect());
+    check('no WebSocket in the browser: refused, with an error text and reason 0 (not idle for ever)', !r.threw && c.status === 'refused' && events(c, 'refused').length === 1 && events(c, 'refused')[0].reason === 0 && /WebSocket/.test(events(c, 'refused')[0].error));
+    const w2 = world();
+    const d = client(w2);
+    online(w2, d);
+    for (const bytes of [[9, 4, 0, 2, 104, 105], [9, 254, 0, 2, 104, 105], [9, 1, 0, 0], [9, 255, 0, 0]]) w2.last().receive(Uint8Array.from(bytes));
+    check('a line from a seat that no player holds (4 to 254) and an empty line are no chat and no notice (the game\'s own client drops them too)', events(d, 'chat').length === 0 && events(d, 'notice').length === 0);
+    w2.last().receive(Uint8Array.from([9, 3, 1, 2, 104, 105]));
+    w2.last().receive(Uint8Array.from([9, 255, 0, 2, 104, 105]));
+    same('a line from a player and a line of the room are heard', [events(d, 'chat'), events(d, 'notice')], [[{ sender: 3, team: true, text: 'hi' }], [{ text: 'hi' }]]);
 }
 
 console.log('LobbyClient: ' + checks + ' checks, ' + failures + ' failed');

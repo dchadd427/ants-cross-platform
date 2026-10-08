@@ -1,4 +1,5 @@
-// Hands a lobby over to real games, as the lobby page will: two pages (web/front/lobby_net.js, LobbyClient, over a WebSocket) in a lobby room of a REAL ants_server, the leader's plan for the two of them and START;
+// Hands a lobby over to real games, as the lobby page will: two pages (web/front/lobby_net.js, LobbyClient, over a WebSocket) in a lobby room of a REAL ants_server, the leader moving the second page to another
+// colour, the leader's plan for the two of them and START;
 // the START waits for the games (network protocol 16), the pages go, and a native game of each name takes its seat over with the key that its page was given (the game finds the key in the file of its rejoin
 // store, as the game page finds it in the browser's local storage); when both are games the match loads, starts and runs. The page goes the way a browser lets it go in either order:
 //   gone       the page is gone before the game comes (a tab that was closed or a page that was left): its seat is held, and the game's Hello with the key takes it back;
@@ -38,8 +39,11 @@ async function pages(modulePath, wsUrl, code) {
     await until('Ada online', () => A.status === 'online' && A.room !== null);
     B.connect();
     await until('Bea online', () => B.status === 'online' && B.room !== null && A.room.slots[1].state === N.SLOT.Client);
-    A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: 255, teamB: 255 });      // (two persons and nobody else: no bot to wait for)
-    await until('the plan', () => B.room.plan[2] === N.PLAN.Nobody && B.room.plan[3] === N.PLAN.Nobody);
+    // the leader moves Bea to the empty colour 2 before it asks for START: the seat that her game takes over is the one that her page was moved to, not the one it came in with
+    if (!A.move(1, 2)) throw new Error('the leader could not move Bea');
+    await until('Bea is in colour 2', () => B.seat === 2 && B.room.you === 2 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[1].state === N.SLOT.Empty);
+    A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobody], teamA: 255, teamB: 255 });      // (two persons and nobody else: no bot to wait for)
+    await until('the plan', () => B.room.plan[1] === N.PLAN.Nobody && B.room.plan[3] === N.PLAN.Nobody);
     if (!A.start()) throw new Error('the leader could not ask for START');
     await until('START waits', () => A.room.starting && B.room.starting);
     console.log('READY ' + JSON.stringify({ a: { seat: A.seat, key: N.hexOf(A.key) }, b: { seat: B.seat, key: N.hexOf(B.key) } }));
@@ -109,6 +113,7 @@ async function main() {
         try { await until(title + ': the pages are in the lobby and START waits', () => keys !== null || pagesLog.some((l) => l.startsWith('PAGES FAILED')), 20000); } catch (e) { check(title + ': the pages are in the lobby and START waits', false, e.message); }
         if (keys === null) { check(title + ': the pages are in the lobby and START waits', false, pagesLog.join(' | ')); page.kill('SIGKILL'); return; }
         check(title + ': the pages are in the lobby and START waits (the leader asked, both pages see it)', true);
+        check(title + ': the page that was moved holds its new colour (Ada colour 0, Bea colour 2, not the 1 she came in with)', keys.a.seat === 0 && keys.b.seat === 2, JSON.stringify(keys));
         const waiting = await room(code);
         check(title + ': the server says the lobby is waiting with START asked for and two people in it', waiting !== null && waiting.state === 'waiting' && waiting.starting === true && waiting.joined === 2 && waiting.lobby === true, JSON.stringify(waiting));
         if (pagesGoFirst) {
