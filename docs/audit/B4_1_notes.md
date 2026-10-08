@@ -174,7 +174,7 @@ The ladder: a Medium bot (drawn) against three Hard bots wins 0.7 percent (margi
 
 ## Fairness surfaces: what the standard bot reads and what the controller refuses
 
-The rule (project rule 8): a bot reads what a person of its seat sees and clicks what a person can click. B4-1 added these surfaces and checked each against the screen:
+The rule (project rule 5): a bot reads what a person of its seat sees and clicks what a person can click. B4-1 added these surfaces and checked each against the screen:
 
 | New | What it exposes | Why it is fair |
 |---|---|---|
@@ -400,7 +400,7 @@ The keys are those of `apply_tune` in `tools/bot_arena.cpp`; every one sets a fi
 
 The can't-go key (`docs/BOTS.md`, "The can't-go loop"): `cg` (0: the bot as it was before the can't-go fixes: it orders what the engine refuses; for the tournaments that ask what the fixes cost or win).
 
-The island keys (`docs/BOTS.md` "Islands"): `islands` (0: the standard bot as it was before the island machinery), `expedition`, `ferry`, `iswim` (Swimmers wanted), `ibuild` (Swimmers that dig; 0 in the level plans), `ibridge` (ants to a bridge), `iguard`, `iferrypile` (Swimmers of the ferry at one pile).
+The island keys (`docs/BOTS.md` "Islands"): `islands` (0: the standard bot as it was before the island machinery), `expedition`, `ferry`, `iswim` (Swimmers wanted), `ifly` (the expedition's Bomber flies on with the crew), `ibuild` (Swimmers that dig; 0 in the level plans), `ibridge` (ants to a bridge), `iguard`, `iferrypile` (Swimmers of the ferry at one pile).
 
 ## Draft of the CHANGELOG entry (the coordinator moves `VERSION`, `CHANGELOG.md`, `STATUS.md` and the README's version line)
 

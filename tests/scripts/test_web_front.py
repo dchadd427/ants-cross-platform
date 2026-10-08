@@ -63,11 +63,12 @@ def png_size(path):
     return struct.unpack(">II", head[16:24])
 
 
-def read_png_pixels(path):
-    """(width, height, rows) of a PNG that is not interlaced, each row a list of (r, g, b): a palette of any depth, or 8 bit RGB or RGBA (the standard library only)."""
+def read_png_pixels(path, alpha=False):
+    """(width, height, rows) of a PNG that is not interlaced, each row a list of (r, g, b), or of (r, g, b, alpha) with alpha=True: a palette of any depth (with its tRNS), or 8 bit RGB or RGBA
+    (the standard library only)."""
     data = read_bytes(os.path.relpath(path, REPO))
     assert data[:8] == b"\x89PNG\r\n\x1a\n", path
-    pos, idat, palette = 8, b"", []
+    pos, idat, palette, transparency = 8, b"", [], []
     width = height = depth = ctype = 0
     while pos < len(data):
         length, kind = struct.unpack(">I4s", data[pos:pos + 8])
@@ -78,10 +79,13 @@ def read_png_pixels(path):
             assert interlace == 0 and (ctype == 3 or (ctype in (2, 6) and depth == 8)), "a PNG that this reader does not read: " + path
         elif kind == b"PLTE":
             palette = [tuple(body[i:i + 3]) for i in range(0, len(body), 3)]
+        elif kind == b"tRNS":
+            transparency = list(body)                                         # (a palette's alpha, from its first entry on; the entries after the last one are opaque)
         elif kind == b"IDAT":
             idat += body
         elif kind == b"IEND":
             break
+    assert not alpha or ctype == 3 or not transparency, "a PNG with a colour key (tRNS), which this reader does not apply: " + path
     bits = depth * {3: 1, 2: 3, 6: 4}[ctype]                              # bits of a pixel
     stride = (bits * width + 7) // 8
     step = max(1, bits // 8)                                              # the bytes that a filter looks back (a palette of any depth: one)
@@ -106,10 +110,11 @@ def read_png_pixels(path):
         above = line
         if ctype == 3:
             mask = (1 << depth) - 1
-            rows.append([palette[(line[(x * depth) // 8] >> (8 - depth - (x * depth) % 8)) & mask] for x in range(width)])
+            picked = [(line[(x * depth) // 8] >> (8 - depth - (x * depth) % 8)) & mask for x in range(width)]
+            rows.append([palette[i] + ((transparency[i] if i < len(transparency) else 255,) if alpha else ()) for i in picked])
         else:
             n = 3 if ctype == 2 else 4
-            rows.append([tuple(line[x * n:x * n + 3]) for x in range(width)])
+            rows.append([tuple(line[x * n:x * n + 3]) + (((line[x * n + 3] if ctype == 6 else 255),) if alpha else ()) for x in range(width)])
     return width, height, rows
 
 
@@ -295,7 +300,86 @@ class TheTool(unittest.TestCase):
     def test_the_tool_reads_the_catalog_of_the_repository_and_names_no_path_of_anybodys_machine(self):
         text = read("tools", "front_page_art", "artlib.py")
         self.assertIn('CATALOG = ROOT / "asset_catalog"', text)
+        self.assertIn('CHD = ROOT / "Original-Ants" / "ants.chd"', text)
         self.assertNotIn("/home/", text)                                           # no path of anybody's machine
+
+
+class TheRosterAnts(unittest.TestCase):
+    """web/front/ant_<team>.png is the standing ant of the roster (sprite 1481 of Original-Ants/ants.chd) in the colours that the game gives each team. The game does not tint an ant: it adds a team's
+    offset to every palette index of the sprite (src/ants_app/renderer.cpp, TextureCache::compose_palette), so each team shows another stretch of the same 256 colours. The archive is read here by a
+    reader of this file's own (the tool's is artlib.chd_sprite) and every pixel of every picture is compared with what the game draws."""
+
+    SHIFT = {"green": 60, "red": 40, "blue": 20, "black": 0}
+    KEY = 254                                   # the palette index that is left transparent
+    SPRITE = 1481
+
+    @classmethod
+    def setUpClass(cls):
+        data = read_bytes("Original-Ants", "ants.chd")
+        version, _stamp, table, _sounds, _tags, _animations, palette_bytes = struct.unpack_from("<7I", data, 0)
+        assert version >= 9 and palette_bytes == 1024 and table == 28 + palette_bytes, "an ants.chd of another layout"
+        cls.palette = [tuple(data[28 + 4 * i:31 + 4 * i]) for i in range(256)]
+        (offset,) = struct.unpack_from("<I", data, table + 4 + 4 * cls.SPRITE)
+        pitch, cls.width, cls.height, length = struct.unpack_from("<4I", data, offset)
+        cls.name = data[offset + 16:offset + 16 + length].rstrip(b"\0").decode("ascii")
+        first = offset + 16 + length
+        cls.rows = [list(data[first + y * pitch:first + y * pitch + cls.width]) for y in range(cls.height)]
+
+    def drawn(self, team):
+        """The sprite as the game draws it for a team: an index is looked up `shift` entries further on (the transparent index, and a sprite named by a digit, are not moved)."""
+        shift = 0 if self.name[:1].isdigit() else self.SHIFT[team]
+        out = []
+        for row in self.rows:
+            line = []
+            for index in row:
+                source = index if index == self.KEY else (index + shift) & 0xFF
+                line.append(self.palette[source] + (0 if source == self.KEY else 255,))
+            out.append(line)
+        return out
+
+    def test_the_shifts_are_the_ones_of_the_games_renderer(self):
+        text = read("src", "ants_app", "renderer.cpp")
+        for table in ("kOffset", "kRampOffset"):                                  # (the ant branch of compose_palette, and the HUD branch that the setup screen's portrait of a seat takes)
+            found = re.search(table + r"\[4\]\s*=\s*\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}", text)
+            self.assertIsNotNone(found, "the renderer no longer says its %s as this test reads it" % table)
+            self.assertEqual([int(n) for n in found.groups()], [self.SHIFT[t] for t in ("green", "red", "blue", "black")], "%s: green, red, blue, black, the order of the players' colours" % table)
+        tool = read("tools", "front_page_art", "artlib.py")                      # (the tool, which this test does not run, says the same numbers)
+        self.assertIn("TEAMS = {%s}" % ", ".join('"%s": %d' % (t, n) for t, n in self.SHIFT.items()), tool)
+
+    def test_the_sprite_is_the_front_ant_of_the_picture_size(self):
+        self.assertEqual((self.name, self.width, self.height), ("agst301.bmp", 23, 40))
+        self.assertEqual(sorted(set(i for row in self.rows for i in row) - {self.KEY}), list(range(80, 94)), "the ant is one ramp of 14 colours: the indices that each team shifts")
+
+    def test_every_picture_is_what_the_game_draws_for_its_team_pixel_for_pixel(self):
+        for team in self.SHIFT:
+            width, height, rows = read_png_pixels(os.path.join(FRONT, "ant_%s.png" % team), alpha=True)
+            self.assertEqual((width, height), (self.width, self.height), team)
+            self.assertEqual(rows, self.drawn(team), "ant_%s.png is not the game's %s ant (python3 tools/front_page_art/make_art.py makes it)" % (team, team))
+
+    def test_the_teams_differ_in_their_colours_and_not_in_their_shape(self):
+        pictures = {team: read_png_pixels(os.path.join(FRONT, "ant_%s.png" % team), alpha=True)[2] for team in self.SHIFT}
+        shapes = {team: [[p[3] for p in row] for row in rows] for team, rows in pictures.items()}
+        self.assertEqual(len({str(s) for s in shapes.values()}), 1, "the same pixels are transparent for every team")
+        colours = {team: {p[:3] for row in rows for p in row if p[3]} for team, rows in pictures.items()}
+        for one in self.SHIFT:
+            for other in self.SHIFT:
+                if one < other:
+                    self.assertEqual(colours[one] & colours[other], set(), "%s and %s share no colour of their body" % (one, other))
+
+    def test_the_black_ant_is_the_catalogs_picture_of_the_sprite_as_it_is(self):
+        # the catalog's pictures are converted from the archive's paletted bitmaps (docs/ASSET_CATALOG.md): they show that the reader above, and the tool's, read the right indices and the right palette
+        width, height, ours = read_png_pixels(os.path.join(FRONT, "ant_black.png"), alpha=True)
+        cut = read_png_pixels(os.path.join(REPO, "asset_catalog", "sprites", "sprite_%04d.png" % self.SPRITE), alpha=True)
+        self.assertEqual((width, height, ours), cut)
+
+    def test_every_page_names_each_ant_by_its_content(self):
+        # docker/nginx.conf lets a browser keep a .png for a week without asking again, so a changed ant under the same address stays the old one for everybody who has been here: its address ends in
+        # ?v= and the first 8 hex digits of the file's sha256 (a new ant fails this until the page says so)
+        page = read("web", "lobby.html")
+        for team in self.SHIFT:
+            version = hashlib.sha256(read_bytes("web", "front", "ant_%s.png" % team)).hexdigest()[:8]
+            self.assertEqual(len(re.findall(r"front/ant_%s\.png" % team, page)), 1, "the page names the %s ant once" % team)
+            self.assertEqual(len(re.findall(r'src="front/ant_%s\.png\?v=%s"' % (team, version), page)), 1, "the %s ant's address ends in ?v=%s" % (team, version))
 
 
 class ThePageUsesTheArt(unittest.TestCase):
@@ -314,7 +398,9 @@ class ThePageUsesTheArt(unittest.TestCase):
         tags = re.findall(r"<img [^>]*>", self.page)
         self.assertGreaterEqual(len(tags), 11)                                               # (the logo, the picture of a match, the two labels of the map, its preview, the four ants and the two help sheets)
         for tag in tags:
-            source = re.search(r'src="front/([^"]+)"', tag).group(1)
+            found = re.search(r'src="front/([^"?]+)(?:\?v=[0-9a-f]{8})?"', tag)                  # (the ants' addresses end in ?v= and a hash: TheRosterAnts)
+            self.assertIsNotNone(found, "an address that is not front/<name> or front/<name>?v=<8 hex digits>: " + tag)
+            source = found.group(1)
             width = int(re.search(r'width="(\d+)"', tag).group(1))
             height = int(re.search(r'height="(\d+)"', tag).group(1))
             self.assertEqual(png_size(os.path.join(FRONT, source)), (width, height), source)

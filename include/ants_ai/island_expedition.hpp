@@ -3,10 +3,12 @@
 // The expedition of the standard bot (docs/BOTS.md, "Islands"): where no Swimmer lies within a walk of the hill (ISLANDS: the twelve are in rows of power-ups in the corners of the map, on the far
 // side of the water), a crew of plain workers is flown there bomb by bomb (island_info.hpp, Flight) and one worker takes one token of the row (Fire, Fire, Swimmer, ...) and walks out.
 //
-//   route   the fewest flights over islands that have a Bomber to take, to the row whose entrance is nearest to where the last flight lands
+//   route   the cheapest way by flights to the row whose entrance is nearest to where the last flight lands: a flight costs 2, and with `fly_on` one more from an island that has no Bomber to
+//           take (without it every island but the last needs one)
 //   leg     one flight (S, B, L) of the analysis, kept for every hop of the leg; the Bomber of the island plants on B from a tile beside it, the crew ant on S is clicked onto the bomb; a bomb
 //           that was a dud (a fifth) is planted again; nobody stands on L (an ant there is thrown into the water by the next one that lands); an ant with fewer than min_hp hit points does not hop
-//   row     the crew ant nearest to the end of the row takes the first token (a planned pick-up) and walks out, then the next one goes in
+//   fly on  when the crew is over, the Bomber flies on as the last of it (on a bomb of its own) if the next island has no Bomber, or if the crew that is left is one ant short of the tokens
+//   row     the crew ant nearest to the end of the row takes the first token (a planned pick-up) and walks out, then the next one goes in; the Bomber takes only the last Swimmer that is wanted
 //
 // Everything is read from the BotView and nothing is a promise: an ant that died, a bomb that is gone, an enemy on the shore are seen at the next look and the leg or the row is planned
 // again. Idle where a Swimmer lies within a walk (SMALL), where no row has a Swimmer left, and while the bot has the Swimmers it wants.
@@ -31,12 +33,13 @@ public:
         uint32_t crew_min{3};                // fewer plain ants than this for the crew (the Bomber of the first leg is another) and nobody goes: two Fire tokens and a Swimmer take three
         uint32_t crew_spare{1};              // ants beyond the number that the tokens need (a dud costs an ant 2 hit points, a blow more)
         uint32_t min_hp{4};                  // an ant with fewer hit points does not hop (each explosion costs 2, a dud as well)
-        uint32_t order_gap{60};              // no second order to the same ant within this many ticks (more at a level that is slow to act: twice its latency)
         uint32_t plant_wait{50};             // a plant order that has made no bomb after this many ticks (and the latency of the level) is given again
         uint32_t hop_wait{160};              // a hop order after which the ant is still on the island this long: the bomb was a dud
         uint32_t stuck_ticks{2400};          // no progress for this long: the expedition is given up (and tried again after retry_ticks)
+        uint32_t hopeless_ticks{200};        // the same when no plain ant of the crew can take a token any more (and at least two are left; one at Easy), as they would hold the other ants for stuck_ticks
         uint32_t retry_ticks{900};           // the pause after the first attempt that was given up; it doubles with each one in a row, up to eight times this
         uint32_t min_ticks_left{3600};       // nothing starts with less than this left on the clock
+        bool fly_on{true};                   // the Bomber of a leg flies on after the crew (an island with no Bomber to take can be on the route; a crew one ant short gets the Bomber as the last)
     };
 
     ExpeditionTask(TaskId id, Tactics& tactics) : ExpeditionTask(id, tactics, Params{}) {}
@@ -63,7 +66,7 @@ public:
     const std::vector<int32_t>& route() const noexcept { return route_; }
     int32_t group() const noexcept { return group_; }
     int32_t entrance() const noexcept { return entrance_; }
-    /// Bombs planted, hops ordered, landings seen (a crew ant that stands on a later island of the route), bombs that were duds, tokens taken by the crew, Swimmers among them
+    /// Bombs planted, hops ordered, landings seen (a crew ant that stands on a later island of the route), duds seen (an ant burning on B), tokens taken by the crew, Swimmers among them
     uint32_t planted() const noexcept { return planted_; }
     uint32_t hops() const noexcept { return hops_; }
     uint32_t landings() const noexcept { return landings_; }
@@ -77,7 +80,7 @@ public:
     uint64_t first_plant() const noexcept { return first_plant_; }
     uint64_t first_landing() const noexcept { return first_landing_; }
     uint64_t first_swimmer() const noexcept { return first_swimmer_; }
-    /// The ants that the task holds now (the crew, and the Bombers of the legs)
+    /// The ants of the crew (a Bomber is one once it has joined the crew to fly on)
     size_t crew_size() const noexcept { return crew_.size(); }
     /// The Bomber of the leg (0: none yet)
     uint32_t bomber_of(size_t leg) const noexcept { return leg < legs_.size() ? legs_[leg].bomber : 0u; }
@@ -95,6 +98,7 @@ private:
         uint64_t hop_ordered{0};
         uint32_t hopper{0};
         sim::TileCoord hopper_from{-1, -1};
+        bool flown{false};                   // the Bomber of this leg has flown on to the next island
     };
 
     /// The tiles round the end of the row where the crew goes in, by the steps of a walk from it (the tunnel itself left out): `park` three steps away (where the crew waits for its turn) and
@@ -117,6 +121,12 @@ private:
     void drive_row(TaskContext& context);
     bool choose_flight(TaskContext& context, size_t leg, const std::vector<const AntView*>& hoppers);
     bool bomber_source(const TaskContext& context, int32_t island, sim::TileCoord* token) const;
+    uint32_t swimmers_more(const BotView& view) const;
+    bool crew_to_come(const TaskContext& context, size_t leg) const;
+    uint32_t tokens_needed(const BotView& view) const;
+    bool able_to_take(const TaskContext& context, const AntView& ant) const;
+    bool crew_one_short(const TaskContext& context) const;
+    bool crew_hopeless(const TaskContext& context) const;
     void release_all(TaskContext& context);
     bool may_order(uint32_t ant, uint64_t now) const;
     uint32_t swimmers_wanted() const;
@@ -125,7 +135,7 @@ private:
     Params params_;
     const IslandTask* islands_{nullptr};
     int32_t hill_comp_{-1};
-    uint32_t gap_{60};                       // the order gap of this look (scaled by the latency of the level)
+    uint32_t gap_{0};                        // the ticks before a second order to one ant: the latency of the level and 20 (set at every look)
     std::vector<int32_t> route_;             // the islands of the route (empty: no expedition)
     std::vector<Leg> legs_;                  // legs_[i] flies from route_[i] to route_[i + 1]
     int32_t group_{-1};                      // the row (IslandInfo::token_groups index) and the end of it that the crew goes in at

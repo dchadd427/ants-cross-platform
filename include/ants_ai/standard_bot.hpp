@@ -72,7 +72,7 @@ private:
           harass_(kHarass, tactics_),
           sabotage_(kSabotage, tactics_),
           island_(kIslands, tactics_, island_params(plan)),
-          expedition_(kExpedition, tactics_),
+          expedition_(kExpedition, tactics_, expedition_params(plan)),
           ferry_(kFerry, ferry_params(plan)) {
         island_.attach(&harvest_);
         expedition_.attach(&island_);
@@ -180,6 +180,11 @@ private:
                 p.max_bridges = 4;
                 break;
         }
+        return p;
+    }
+    static ExpeditionTask::Params expedition_params(const LevelPlan& plan) {
+        ExpeditionTask::Params p;
+        p.fly_on = plan.island_fly_on;
         return p;
     }
     static FerryTask::Params ferry_params(const LevelPlan& plan) {

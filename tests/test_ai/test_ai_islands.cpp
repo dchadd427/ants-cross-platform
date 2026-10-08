@@ -38,7 +38,7 @@ Command order(CommandType type, uint8_t issuer, uint32_t ant, TileCoord tile) {
     c.issuer = issuer;
     c.tile_x = static_cast<int16_t>(tile.x);
     c.tile_y = static_cast<int16_t>(tile.y);
-    c.ants = {ant};
+    c.ants.assign(1u, ant);                                                                                 // (GCC 13 under AddressSanitizer reads `= {ant}` as an overrun)
     return c;
 }
 
@@ -103,15 +103,19 @@ int least_water_tiles(const MapInfo& map, const sim::Grid& grid, uint8_t team, i
 // ---- one flight against the engine -----------------------------------------------------------------------------------------------------------------------
 
 struct Trial {
-    bool skipped{false};     // no free tile for the bomber next to the bomb tile
+    bool skipped{false};     // no free tile for the bomber next to the bomb tile (or the planter could not walk round the bomb to S)
     bool planted{false};
     bool dud{false};         // the bomb went off and the ant stayed where the bomb was
     bool landed{false};
     TileCoord at{-1, -1};
     bool alive{true};
+    bool bomber{false};      // the ant that was thrown is still a Bomber
 };
 
-Trial fly(const Flight& f, uint32_t seed) {
+// who jumps: a plain ant that stands on S while a Bomber beside B plants, or the Bomber itself (planted from beside B, then walked to S)
+enum class Jumper { Plain, Bomber };
+
+Trial fly(const Flight& f, uint32_t seed, Jumper who = Jumper::Plain) {
     Trial r;
     sim::SimulationEngine sim;
     empty_match(sim, "ISLANDS", seed);
@@ -128,18 +132,32 @@ Trial fly(const Flight& f, uint32_t seed) {
         r.skipped = true;
         return r;
     }
-    const uint32_t jumper = sim.spawn_unit(0, sim::AntType::Worker, f.from);
     const uint32_t bomber = sim.spawn_unit(0, sim::AntType::Bomber, spot);
+    const uint32_t jumper = who == Jumper::Plain ? sim.spawn_unit(0, sim::AntType::Worker, f.from) : bomber;
     run_ticks(sim, 2);
     sim.apply_command(order(CommandType::GroupSpecial, 0, bomber, f.bomb));
     for (int i = 0; i < 400 && !grid.get_cell(f.bomb).has_bomb(); ++i) run_ticks(sim, 1);
     r.planted = grid.get_cell(f.bomb).has_bomb();
     if (!r.planted) return r;
+    if (who == Jumper::Bomber) {                                                                    // the planter walks to S (round the bomb, which it must not set off on the way)
+        sim.apply_command(order(CommandType::GroupMove, 0, bomber, f.from));
+        for (int i = 0; i < 300; ++i) {
+            const sim::AntSnapshot* a = snap_of(sim, bomber);
+            if (a != nullptr && tile_of(*a) == f.from && a->state == sim::UnitState::Idle) break;
+            run_ticks(sim, 1);
+        }
+        const sim::AntSnapshot* at_s = snap_of(sim, bomber);
+        if (at_s == nullptr || tile_of(*at_s) != f.from || !grid.get_cell(f.bomb).has_bomb()) {
+            r.skipped = true;
+            return r;
+        }
+    }
     sim.apply_command(order(CommandType::GroupMove, 0, jumper, f.bomb));
     run_ticks(sim, 150);
     const sim::AntSnapshot* a = snap_of(sim, jumper);
     r.alive = a != nullptr && a->hp > 0 && !a->is_drowning && a->state != sim::UnitState::Drowning && a->state != sim::UnitState::Dead;
     if (a != nullptr) r.at = tile_of(*a);
+    r.bomber = a != nullptr && a->type == sim::AntType::Bomber;
     r.dud = r.alive && r.at == f.bomb && !grid.get_cell(f.bomb).has_bomb();
     r.landed = r.alive && r.at == f.land;
     return r;
@@ -452,6 +470,28 @@ void run_island_tests() {
         ASSERT_TRUE(proven >= 270);                                                                         // (a flight whose bomb tile has no free neighbour of the island for the bomber is skipped: a handful at most)
         ASSERT_TRUE(skipped <= 15);
         (void)duds;                                                                                         // (a fifth of the bombs are duds, and an engine seed decides for every bomb it draws at the same point: the count says nothing)
+    } TEST_END();
+
+    TEST_CASE("AI14.11 The Bomber Flies On Its Own Bomb: Planted From A Tile Beside B And Walked To S, The Bomber Steps Onto B And Lands On L Like Any Other Ant, Still A Bomber (Every Flight Of ISLANDS Against The Engine)")
+    {
+        sim::SimulationEngine probe;
+        start_match(probe, "ISLANDS", 1, 0x0F);
+        MapInfo map(probe);
+        const IslandInfo info = IslandInfo::analyse(map, probe.grid(), 0);
+        for (const Flight& f : info.flights()) {
+            bool landed = false;
+            for (uint32_t seed = 1; seed <= 12 && !landed; ++seed) {
+                const Trial r = fly(f, seed, Jumper::Bomber);
+                ASSERT_FALSE(r.skipped);
+                ASSERT_TRUE(r.planted);
+                if (r.dud) continue;                                                                       // (a fifth of the bombs: the bomber burns on B, another engine seed is tried)
+                ASSERT_TRUE(r.alive);
+                ASSERT_TRUE(r.at == f.land);
+                ASSERT_TRUE(r.bomber);
+                landed = true;
+            }
+            ASSERT_TRUE(landed);
+        }
     } TEST_END();
 
     TEST_CASE("AI14.6 Every Channel Of At Most Three Tiles Against The Engine: A Swimmer Digs The Chain Tile By Tile From The Shore (Each Tile Becomes A Finished Bridge), Steps Off, And A Worker Walks Across To The Other Island")
