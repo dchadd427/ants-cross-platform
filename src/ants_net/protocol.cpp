@@ -769,6 +769,24 @@ bool decode(const uint8_t* data, size_t size, PlanMsg& out) {
     return true;
 }
 
+std::vector<uint8_t> encode(const NameMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Name));
+    w.str8(clip(m.name, kMaxNameChars));
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, NameMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Name, r, storage)) return false;
+    NameMsg m;
+    m.name = r->str8();
+    if (!r->done() || m.name.empty() || !printable_name(m.name, kMaxNameChars) || m.name.front() == ' ' || m.name.back() == ' ') return false;       // exactly the type and a name that has one spelling
+    out = std::move(m);
+    return true;
+}
+
 const char* fill_level_name(FillLevel level) noexcept {
     switch (level) {
         case FillLevel::None: return "none";

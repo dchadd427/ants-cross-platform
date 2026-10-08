@@ -4492,6 +4492,178 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("N4.33 The Name (Protocol 16): Any Person Of An Open Lobby Room Can Change The Name They Go By, The Room Is Shown To Everybody When It Changed, A Name That Looks Like A Bot's Is Not Taken, The Name Stays With The Seat When Its Key Takes It Back, And It Is Part Of What A Colour Move's Guard Is Made Of; A Room Whose START Waits Ignores It (Counted, No Offence At First), It Has A Budget Of Its Own, And A Room That Is No Lobby Room Takes It For Garbage") {
+        {   // what a rename sets: the person's own name, for the whole room; the leader and any other person alike
+            Room room(lobby_room_config(80));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            const uint8_t cat_seat = room.guests[cat].lobby->my_seat();
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Robert"));
+            room.run(100);
+            ASSERT_EQ(room.host.room().slots[bob_seat].name, std::string("Robert"));
+            for (const size_t g : {ann, bob, cat}) ASSERT_EQ(room.guests[g].lobby->room().slots[bob_seat].name, std::string("Robert"));
+            ASSERT_EQ(room.host.renames(), 1u);
+            ASSERT_TRUE(room.guests[ann].lobby->request_name("Annie Lee"));       // the leader too (a space inside a name is a name)
+            room.run(100);
+            ASSERT_EQ(room.guests[cat].lobby->room().slots[ann_seat].name, std::string("Annie Lee"));
+            ASSERT_EQ(room.host.renames(), 2u);
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Robert"));          // the name they have already: nothing changed, nothing is shown, nothing is ignored
+            room.run(100);
+            ASSERT_EQ(room.host.renames(), 2u);
+            ASSERT_EQ(room.host.ignored_names(), 0u);
+            // a client cleans a name as the Hello's encoder does (the characters that travel, no space at an end) and sends nothing for one that is empty
+            ASSERT_FALSE(room.guests[cat].lobby->request_name(""));
+            ASSERT_FALSE(room.guests[cat].lobby->request_name("   "));
+            ASSERT_FALSE(room.guests[cat].lobby->request_name("\t\n"));
+            ASSERT_TRUE(room.guests[cat].lobby->request_name("  Cat\tWalks  "));
+            room.run(100);
+            ASSERT_EQ(room.host.room().slots[cat_seat].name, std::string("CatWalks"));
+            ASSERT_TRUE(room.guests[cat].lobby->request_name(std::string(40, 'z')));                   // a longer name is cut to what a name may be
+            room.run(100);
+            ASSERT_EQ(room.host.room().slots[cat_seat].name, std::string(kMaxNameChars, 'z'));
+            ASSERT_EQ(room.host.renames(), 4u);
+            ASSERT_EQ(room.host.room().slots[ann_seat].name, std::string("Annie Lee"));              // (nobody else's name moved)
+            ASSERT_EQ(room.host.room().slots[bob_seat].name, std::string("Robert"));
+            ASSERT_EQ(room.host.ignored_names(), 0u);
+        }
+        {   // a name that looks like a bot's is not taken (a person is never shown as a bot): the person keeps the name they have, and no offence is made of it
+            Room room(lobby_room_config(81));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            for (const char* wish : {"Bot (Hard)", "bot(x)", "B o t (x)", "BOT(Easy)"}) {
+                ASSERT_TRUE(room.guests[bob].lobby->request_name(wish));
+                room.run(1100);                                                                   // (a second apart: the refused ones took from the budget too, and it must not be the budget that refuses the later ones)
+                ASSERT_EQ(room.host.room().slots[bob_seat].name, std::string("Bob"));
+            }
+            ASSERT_EQ(room.host.renames(), 0u);
+            ASSERT_EQ(room.host.ignored_names(), 0u);
+            ASSERT_TRUE(room.host.occupied(bob_seat) && room.guests[ann].lobby->is_leader());
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Botanist"));                           // (only the mark of a bot is refused, not a name that begins with the same letters)
+            room.run(100);
+            ASSERT_EQ(room.host.room().slots[bob_seat].name, std::string("Botanist"));
+        }
+        {   // the name stays with the seat: when the person's connection ends and their key takes the seat back (a page that goes to the game page), the room still calls them what they chose
+            Room room(lobby_room_config(82));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Robert"));
+            room.run(100);
+            room.guests[bob].client_end->close();
+            room.run(100);
+            ASSERT_TRUE(room.host.held(bob_seat));
+            ASSERT_EQ(room.host.room().slots[bob_seat].name, std::string("Robert"));
+            const size_t bob2 = join_keyed(room, "Player", bob_key);                                 // (a game that knows no name: the seat has one)
+            room.run(300);
+            ASSERT_EQ(room.guests[bob2].lobby->my_seat(), bob_seat);
+            ASSERT_EQ(room.host.room().slots[bob_seat].name, std::string("Robert"));
+            ASSERT_EQ(room.guests[ann].lobby->room().slots[bob_seat].name, std::string("Robert"));
+            ASSERT_EQ(room.host.takeovers(), 1u);
+        }
+        {   // a rename changes the seating that a colour move's guard is made of: a move that the leader made for the room as it was is ignored (counted), one made for the room as it shows now is done
+            Room room(lobby_room_config(83));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint32_t stale = seating_hash(room.guests[ann].lobby->room());
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Robert"));
+            room.run(100);
+            ASSERT_TRUE(seating_hash(room.guests[ann].lobby->room()) != stale);
+            room.guests[ann].client_end->send(encode(SeatMoveMsg{1, 2, stale}));
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_seat_moves(), 1u);
+            ASSERT_EQ(room.host.seat_moves(), 0u);
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 2));
+            room.run(100);
+            ASSERT_EQ(room.host.seat_moves(), 1u);
+            ASSERT_EQ(room.host.room().slots[2].name, std::string("Robert"));                        // (the name went with the person)
+        }
+        {   // while the leader's START waits for the games, nobody renames: the request is ignored and counted, free up to kIgnoredNamesAllowed times, and each one after those is a violation (eight throw the person out)
+            HostLobby::Config hc = lobby_room_config(84);
+            hc.start_wait_ms = 20000;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t pia = join_with(room, page_config("Pia"));
+            room.run(100);
+            const uint8_t pia_seat = room.guests[pia].lobby->my_seat();
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_TRUE(room.guests[pia].lobby->request_name("Pia Two"));                            // (the page does not know yet: it sends)
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_names(), 1u);
+            ASSERT_EQ(room.host.renames(), 0u);
+            ASSERT_EQ(room.host.room().slots[pia_seat].name, std::string("Pia"));
+            const std::vector<uint8_t> wish = encode(NameMsg{"Pia Two"});
+            for (uint32_t i = 1; i < kIgnoredNamesAllowed; ++i) room.guests[pia].client_end->send(wish);
+            room.run(300);
+            ASSERT_EQ(room.host.ignored_names(), kIgnoredNamesAllowed);
+            ASSERT_TRUE(room.host.occupied(pia_seat));
+            for (int i = 0; i < 7; ++i) room.guests[pia].client_end->send(wish);
+            room.run(300);
+            ASSERT_TRUE(room.host.occupied(pia_seat));                             // seven violations are not enough
+            room.guests[pia].client_end->send(wish);
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(pia_seat));                            // the eighth
+            ASSERT_EQ(room.host.renames(), 0u);
+        }
+        {   // a person's renames have a budget (a burst of 3, then 1 a second): one beyond it is dropped, 6 more are tolerated, every one after that is a violation
+            Room room(lobby_room_config(85));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            const auto type = [&](unsigned i) { room.guests[bob].client_end->send(encode(NameMsg{i % 2 == 0 ? "Bob A" : "Bob B"})); };
+            for (unsigned i = 0; i < kNameBurst + kNameExcessBurst; ++i) type(i);      // (every batch is read in the pass after it: the budget refills a name a second, so no pause between them)
+            room.run(10);
+            ASSERT_EQ(room.host.renames(), kNameBurst);                            // the first three were done: the last of them was "Bob A" (the third, i = 2)
+            ASSERT_EQ(room.host.room().slots[bob_seat].name, std::string("Bob A"));
+            ASSERT_TRUE(room.host.occupied(bob_seat));
+            for (unsigned i = 0; i < 7; ++i) type(i);                              // the excess is used up: each one is an offence
+            room.run(10);
+            ASSERT_TRUE(room.host.occupied(bob_seat));
+            type(0);
+            room.run(10);
+            ASSERT_FALSE(room.host.occupied(bob_seat));                            // the eighth throws the person out, as it does for any guest
+            ASSERT_EQ(room.host.renames(), kNameBurst);
+        }
+        {   // a room that is no lobby room has no renames: the message is garbage there (eight of them throw the sender out), and a client does not send it
+            HostLobby::Config hc = lobby_room_config(86);
+            hc.lobby_room = false;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            ASSERT_FALSE(room.guests[ann].lobby->request_name("Annie"));
+            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send(encode(NameMsg{"Annie"}));
+            room.run(300);
+            ASSERT_TRUE(room.host.occupied(ann_seat));
+            room.guests[ann].client_end->send(encode(NameMsg{"Annie"}));
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(ann_seat));
+            ASSERT_EQ(room.host.renames(), 0u);
+            ASSERT_EQ(room.host.ignored_names(), 0u);                              // (garbage is no rename)
+        }
+        {   // a match that loads or runs hears no rename either: the client does not send one, and a stray one is counted without offence
+            Room room(lobby_room_config(87));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            ASSERT_TRUE(room.host.start(5, 6, room.now));
+            room.run(100);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Loading);
+            ASSERT_FALSE(room.guests[bob].lobby->request_name("Robert"));
+            room.guests[bob].client_end->send(encode(NameMsg{"Robert"}));
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_names(), 1u);
+            ASSERT_EQ(room.host.renames(), 0u);
+            ASSERT_EQ(room.host.room().slots[room.guests[bob].lobby->my_seat()].name, std::string("Bob"));
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));
+        }
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

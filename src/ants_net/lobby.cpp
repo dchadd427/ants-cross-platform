@@ -608,6 +608,22 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             if (++guests_[seat].ignored_plans > kIgnoredPlansAllowed) violation(seat);
             return;
         }
+        case MsgType::Name: {                                             // (protocol 16) a person's own new name in a lobby room
+            NameMsg m;
+            if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room has no renames: the message is garbage there)
+            // Any person is heard, while the room is open and its START does not wait. As for the plans: one that cannot be heard is no offence at first, every one after kIgnoredNamesAllowed is a
+            // violation; one beyond the budget is dropped, and a connection that goes on beyond it is flooding.
+            if (phase_ == Phase::Room && !starting_.active) {
+                switch (guests_[seat].names.take(now_ms, kNameBurst, kNamesPerSecond, kNameExcessBurst)) {
+                    case ChatBudget::Verdict::Relay: rename(seat, m.name); return;
+                    case ChatBudget::Verdict::Drop: return;
+                    case ChatBudget::Verdict::Offence: return violation(seat);
+                }
+            }
+            ++ignored_names_;
+            if (++guests_[seat].ignored_names > kIgnoredNamesAllowed) violation(seat);
+            return;
+        }
         case MsgType::Chat: {                                             // (protocol 11) a line for the room: in the waiting room and while the map loads
             ChatMsg m;
             if (!decode(msg, m)) return violation(seat);                  // the match's rules: at most kMaxChatChars printable characters, a flag that is 0 or 1
@@ -759,6 +775,14 @@ bool HostLobby::everyone_in_game() const noexcept {
 }
 
 // A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each colour is, the teams. The room is shown to everybody when something changed.
+void HostLobby::rename(uint8_t seat, const std::string& raw) {
+    const std::string name = human_name(raw, room_.slots[seat].name);       // (a name that looks like a bot's is not taken: the person keeps the name they have)
+    if (name == room_.slots[seat].name) return;
+    room_.slots[seat].name = name;
+    ++renames_;
+    broadcast_room();
+}
+
 void HostLobby::apply_plan(const PlanMsg& plan) {
     bool changed = false;
     if (!plan.map_name.empty()) {                                // ("" keeps the map; a map that the server does not offer keeps it too)
@@ -868,6 +892,14 @@ bool ClientLobby::request_seat_move(uint8_t from, uint8_t to) {
 bool ClientLobby::request_plan(const PlanMsg& plan) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !room_.lobby() || !conn_->is_open()) return false;
     return conn_->send(encode(plan));
+}
+
+bool ClientLobby::request_name(const std::string& name) {
+    if (conn_ == nullptr || phase_ != Phase::InRoom || !room_.lobby() || !conn_->is_open()) return false;
+    NameMsg m;
+    m.name = trimmed(printable(name, kMaxNameChars));
+    if (m.name.empty()) return false;
+    return conn_->send(encode(m));
 }
 
 bool ClientLobby::chat(const std::string& text) {

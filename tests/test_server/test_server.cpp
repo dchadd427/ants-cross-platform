@@ -11320,6 +11320,36 @@ void run_lobby_room_tests() {
         w.run(4000);
         ASSERT_TRUE(w.status("retr0001").state == RoomState::Running);
     } TEST_END();
+
+    TEST_CASE("S3.154 A Rename Through A Real Lobby Room (Protocol 16): A Person's New Name Is In The Status And In Every Page's Room Message, A Name That Looks Like A Bot's Is Not Taken, And The Name Goes With The Seat When The Pages' Games Take Their Seats With The Keys: It Is The Name Of The Match") {
+        World w(lobby_limits());
+        Client& pia = w.connect_page("Pia", "name0001", lobby_block_of());
+        Client& bob = w.connect_page("Bob", "name0001", lobby_block_of());
+        const net::SeatKey pia_key = pia.lobby->key();
+        const net::SeatKey bob_key = bob.lobby->key();
+        w.run(300);
+        ASSERT_TRUE(bob.lobby->request_name("Robert"));
+        w.run(300);
+        RoomStatus s = w.status("name0001");
+        ASSERT_TRUE(s.names[0] == "Pia" && s.names[1] == "Robert" && s.names[2].empty());
+        for (const Client* c : {&pia, &bob}) ASSERT_TRUE(c->lobby->room().slots[0].name == "Pia" && c->lobby->room().slots[1].name == "Robert");
+        ASSERT_TRUE(pia.lobby->request_name("Pia Lee"));                                  // the leader's too
+        w.run(300);
+        ASSERT_EQ(w.status("name0001").names[0], std::string("Pia Lee"));
+        ASSERT_TRUE(bob.lobby->request_name("Bot (Hard)"));                               // a person is never shown as a bot: Robert stays Robert
+        w.run(300);
+        ASSERT_EQ(w.status("name0001").names[1], std::string("Robert"));
+        // START: the pages go to the game page and their games take the seats with the keys, saying the name that a game knows by default; the seats keep the names that the room shows
+        ASSERT_TRUE(pia.lobby->request_start());
+        w.run(300);
+        Client& pia_game = w.connect_game("Player", "name0001", pia_key);
+        Client& bob_game = w.connect_game("Player", "name0001", bob_key);
+        w.run(3000);
+        s = w.status("name0001");
+        ASSERT_TRUE(s.state == RoomState::Running);
+        ASSERT_TRUE(s.names[0] == "Pia Lee" && s.names[1] == "Robert");
+        ASSERT_TRUE(pia_game.lobby->start_info().names[0] == "Pia Lee" && bob_game.lobby->start_info().names[1] == "Robert");
+    } TEST_END();
 }
 
 int main() {

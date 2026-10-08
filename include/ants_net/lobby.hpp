@@ -254,6 +254,10 @@ public:
     void end_start(const std::string& notice);
     /// PlanMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room, the START waits): no offence up to kIgnoredPlansAllowed per guest, a violation each after those
     uint32_t ignored_plans() const noexcept { return ignored_plans_; }
+    /// NameMsgs that were heard and not acted on (the room is no open lobby room, the START waits): no offence up to kIgnoredNamesAllowed per guest, a violation each after those
+    uint32_t ignored_names() const noexcept { return ignored_names_; }
+    /// Names that changed (a NameMsg that gave a person a name that was not theirs already)
+    uint32_t renames() const noexcept { return renames_; }
     /// Plans that changed the room (a map, a kind, a team), seats that were held after their connection ended, and holds that ran out
     uint32_t plan_changes() const noexcept { return plan_changes_; }
     uint32_t holds() const noexcept { return holds_; }
@@ -288,6 +292,8 @@ private:
         uint32_t heard_ms{0};                    // a lobby room: when a message of this guest was last read (or it was welcomed): the silence of a link is counted from here
         ChatBudget plans;                        // the PlanMsgs of this guest that could be heard (flood.hpp: a burst of kPlanBurst, then kPlansPerSecond a second)
         uint32_t ignored_plans{0};               // ... and those that were ignored (the first kIgnoredPlansAllowed are free)
+        ChatBudget names;                        // the NameMsgs of this guest that could be heard (flood.hpp: a burst of kNameBurst, then kNamesPerSecond a second)
+        uint32_t ignored_names{0};               // ... and those that were ignored (the first kIgnoredNamesAllowed are free)
     };
     struct Starting {                            // the leader's START of a lobby room, while it waits for every person's game
         bool active{false};
@@ -322,6 +328,7 @@ private:
     bool person(uint8_t seat) const noexcept { return guests_[seat].conn != nullptr || guests_[seat].held; }
     void hold_guest(uint8_t seat, uint32_t now_ms);
     void apply_plan(const PlanMsg& plan);
+    void rename(uint8_t seat, const std::string& raw);                    // protocol 16: the person of `seat` goes by this name (a name that looks like a bot's is not taken)
     uint8_t joiner_seat(uint8_t want) const noexcept;
     bool plan_asks_bots() const noexcept;
     bool everyone_in_game() const noexcept;
@@ -347,6 +354,8 @@ private:
     uint32_t takeovers_{0};
     Starting starting_;
     uint32_t ignored_plans_{0};
+    uint32_t ignored_names_{0};
+    uint32_t renames_{0};
     uint32_t plan_changes_{0};
     uint32_t holds_{0};
     uint32_t hold_expiries_{0};
@@ -410,6 +419,10 @@ public:
     /// The leader of a lobby room (protocol 16) tells the server its plan: the map, what each colour is, the teams (PlanMsg). False (nothing is sent) unless this machine leads an open room that the last Room
     /// message shows as a lobby room. True means the request was sent, not that the server did it: the Room message shows the plan that the room has (it says nothing to a plan that it cannot hear).
     bool request_plan(const PlanMsg& plan);
+    /// A person of a lobby room (protocol 16) tells the server the name they go by from now on (NameMsg): printable ASCII, at most kMaxNameChars characters, no space at either end (a longer or
+    /// otherwise written name is cut or cleaned by the same rule as the Hello's, and an empty one sends nothing). False (nothing is sent) unless this machine sits in an open room that the last Room message shows as
+    /// a lobby room. True means the request was sent, not that the server did it: the Room message shows the name that the room has (it says nothing to a name that it cannot hear).
+    bool request_name(const std::string& name);
     /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
     /// (a longer line is cut), not empty. The room relays it to everybody, this machine included: the line comes back through take_chat(). False when nothing was sent.
     bool chat(const std::string& text);
