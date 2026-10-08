@@ -43,3 +43,18 @@ target_include_directories(test_rejoin PRIVATE
 )
 
 add_test(NAME test_rejoin COMMAND test_rejoin)
+
+# The store of the matches that the server keeps (ants_server/replay_store.hpp): the file names, the age and size limits, the free space, a folder that holds other things. No network and no match
+add_executable(test_replay_store
+    test_replay_store.cpp
+)
+
+target_link_libraries(test_replay_store PRIVATE
+    ants_server_core
+)
+
+target_include_directories(test_replay_store PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_replay_store COMMAND test_replay_store)

@@ -13,6 +13,7 @@
 //     curl -s -X DELETE http://127.0.0.1:4100/rooms/ABCD -H "Authorization: Bearer example-secret-0123456789"
 //
 // It is a door into the game server, so it is small and strict rather than complete:
+//  (listen_public() makes the same server without a secret, for pages that are public and read only: see there. Everything below is about the one with the secret.)
 //  - It listens on 127.0.0.1 only (`loopback_only`, the default); a deployment whose backend is on another machine or container says so explicitly.
 //    A server without a secret refuses to start: listen() returns nullptr for an empty secret, or one with spaces or control characters (it could
 //    not be sent in a header). Use a long random secret (32 or more characters); there is no rate limit, the loopback address and the secret are
@@ -92,6 +93,11 @@ public:
     /// `bearer_secret` is empty or contains anything but visible ASCII (no spaces, no control characters).
     static std::unique_ptr<HttpServer> listen(uint16_t port, std::string bearer_secret, bool loopback_only = true);
 
+    /// A door that needs no secret and can only read, for the pages of the game server that are public (the list of the replays that it keeps, behind the site's reverse proxy). It has the same parser, limits and
+    /// timeouts as listen(), but a request is answered by the handler whoever sends it: only GET is allowed (anything else is 405, `Allow: GET`), a request with a body is refused (400, the body is never read),
+    /// and `GET /healthz` is answered by the server itself as before. The handler has no authority to check: it must decide for itself what may be seen, and change nothing. nullptr on failure.
+    static std::unique_ptr<HttpServer> listen_public(uint16_t port, bool loopback_only = true);
+
     ~HttpServer();
     HttpServer(const HttpServer&) = delete;
     HttpServer& operator=(const HttpServer&) = delete;
@@ -114,6 +120,7 @@ public:
 private:
     struct Impl;
     explicit HttpServer(std::unique_ptr<Impl> impl);
+    static std::unique_ptr<HttpServer> open(uint16_t port, std::string bearer_secret, bool loopback_only, bool read_only);
     std::unique_ptr<Impl> impl_;
 };
 

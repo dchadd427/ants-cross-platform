@@ -7,6 +7,8 @@
 # The image holds the six maps of the original game in /maps, so a server runs at once. To use other maps (the .lvl files that rooms may use), mount a folder at /maps
 # (it replaces them): -v /path/to/maps:/maps:ro. The control interface (4010) and the WebSocket port (4002) are meant to be
 # reached from this machine only: publish them on 127.0.0.1 and let a reverse proxy (TLS) or the lobby's backend talk to them; only the TCP game port is public.
+# The replay port (--replay-port, off unless a command gives it; docker-compose.stack.yml starts the server with 4020) is the read-only list and download of the kept matches: it needs no secret, so
+# do not publish it either: the site's nginx reaches it over the network of the stack (and passes /replays on), nothing else should.
 # =============================================================================
 FROM debian:12-slim AS builder
 
@@ -52,12 +54,12 @@ COPY --from=builder /src/build/src/ants_server/ants_server /usr/local/bin/ants_s
 
 USER ants
 WORKDIR /results
-EXPOSE 4001 4002 4010
+EXPOSE 4001 4002 4010 4020
 
 # Alive = the game port accepts a connection (bash opens it; the image has no curl). The control interface is not used: it needs the secret.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/4001"]
 
 # Every interface inside the container (a published port does not reach the container's loopback address): the published ports decide who can reach it, see the header
-ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--results-dir", "/results"]
+ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--replay-any-interface", "--results-dir", "/results"]
 CMD ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010"]

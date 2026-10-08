@@ -43,6 +43,11 @@ std::string RoomManager::new_code() {
 
 namespace {
 
+bool is_demo_code(const std::string& code) {
+    const size_t n = std::char_traits<char>::length(kDemoRoomPrefix);
+    return code.size() > n && code.compare(0, n, kDemoRoomPrefix) == 0;
+}
+
 // The ranges of a room's specification (what create_room and the control interface refuse, and what a restart record's room must keep): "" when all is well, else what is wrong, as the sentence of a 400
 std::string spec_range_error(const RoomSpec& spec) {
     if (spec.wait_ms < 1000 || spec.wait_ms > 24u * 3600u * 1000u) return "wait_seconds must be 1 to 86400";
@@ -97,8 +102,13 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
         seed = rd();
     }
     const std::string code = spec.code;
+    const bool wants_replay = spec.record_replay;
     auto room = std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), seed, now_ms, &log_budget_);
     if (restart_ != nullptr && restart_->enabled()) room->set_restart_store(restart_.get());       // (a room that holds seats keeps a record from the start of its match: room.hpp)
+    if (replays_ == nullptr) room->set_replay_store(nullptr, "this server keeps no replays");
+    else if (!wants_replay) room->set_replay_store(nullptr, "the room was made with \"record\": false");
+    else if (is_demo_code(code) && !replay_demo_) room->set_replay_store(nullptr, "this server does not keep the matches of demo rooms (--replay-demo)");
+    else room->set_replay_store(replays_.get());
     rooms_.emplace(code, std::move(room));
     ++created_;
     r.ok = true;
@@ -126,11 +136,6 @@ struct DemoChoice {
     std::string map;
     uint8_t players;
 };
-
-bool is_demo_code(const std::string& code) {
-    const size_t n = std::char_traits<char>::length(kDemoRoomPrefix);
-    return code.size() > n && code.compare(0, n, kDemoRoomPrefix) == 0;
-}
 
 bool players_word(const std::string& rest, size_t at, uint8_t& players) {
     if (rest.size() < at + 3 || rest[at] < '2' || rest[at] > '4' || (rest[at + 1] != 'p' && rest[at + 1] != 'P') || rest[at + 2] != '-') return false;
@@ -371,6 +376,7 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
 }
 
 void RoomManager::update(uint32_t now_ms) {
+    if (replays_ != nullptr) replays_->update();                   // (the replays that are too old are deleted once an hour)
     // 0. a record whose delete failed is tried again every 10 s (its room is over: a restart before it is deleted would bring the room back)
     if (restart_ != nullptr) {
         constexpr uint32_t kStaleRetryMs = 10000;
@@ -460,8 +466,22 @@ bool RoomManager::enable_restart_records(RestartConfig config, std::string& why)
     return true;
 }
 
+bool RoomManager::enable_replays(ReplayConfig config, bool include_demo, std::string& why) {
+    replays_.reset();
+    replay_demo_ = include_demo;
+    if (config.dir.empty()) return true;
+    auto store = std::make_unique<ReplayStore>(std::move(config));
+    if (!store->prepare(why)) return false;
+    replays_ = std::move(store);
+    return true;
+}
+
 std::vector<std::string> RoomManager::take_notices() {
-    return restart_ != nullptr ? restart_->take_notes() : std::vector<std::string>();
+    std::vector<std::string> notes = restart_ != nullptr ? restart_->take_notes() : std::vector<std::string>();
+    if (replays_ != nullptr) {
+        for (std::string& line : replays_->take_notes()) notes.push_back(std::move(line));
+    }
+    return notes;
 }
 
 namespace {

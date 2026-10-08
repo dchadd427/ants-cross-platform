@@ -11,8 +11,11 @@
 #include "ants_net/tcp.hpp"
 #include "ants_net/wire.hpp"
 #include "ants_net/ws.hpp"
+#include "ants_replay/player.hpp"
+#include "ants_replay/replay.hpp"
 #include "ants_server/control.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/replay_store.hpp"
 #include "ants_server/room.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
@@ -892,6 +895,7 @@ struct PWorld : LinkSource {
     std::string maps;
     RestoreReport report;                                   // what the last start of the server decided about the records (start_server waits for the replays: finish_restore)
     std::function<bool()> restore_should_stop;              // the server's stop flag while its records are judged (empty: none)
+    std::function<void(RoomManager&)> configure;            // what a test sets up on every new manager before it reads the records (e.g. the replays), empty: nothing
     bool time_updates{false};                               // run() measures the CPU time of every update of the manager (the longest is kept)
     double longest_update_ms{0};
     uint64_t updates_timed{0};
@@ -915,6 +919,7 @@ struct PWorld : LinkSource {
         mgr = std::make_unique<RoomManager>(MapStore(maps), limits);
         std::string why;
         if (!mgr->enable_restart_records(restart, why)) throw std::runtime_error("enable_restart_records: " + why);
+        if (configure) configure(*mgr);
         report = mgr->restore_rooms(server_now(), restore_should_stop);
         collect();
         ++starts;
@@ -9046,6 +9051,7 @@ void run_persist_review_process_tests_2() {
 
 
 #include "site_stats_tests.hpp"      // (the site statistics: a file of its own, in this translation unit)
+#include "replay_tests.hpp"          // (the replays that the server keeps: likewise)
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The restore that never blocks the server (docs/NETWORK_PORT.md "Restart records", "Restoring"): S3.113 and on
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -10358,6 +10364,7 @@ int main() {
     run_persist_server_tests_6();
     run_persist_review_tests();
     run_site_stats_tests();
+    run_replay_tests();
     run_restore_tests();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();

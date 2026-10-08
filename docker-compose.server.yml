@@ -39,6 +39,10 @@ services:
     # "--no-restart-records" switches them off, "--restart-vote-seconds" (30 - 3600, default 90) is how long the others wait before they may vote on a seat that has not come back after a
     # restart, "--restart-budget-mb" (1 - 4096, default 256) the disk that all the records may take.
     # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--max-pause-seconds", "600"]
+    # Replays (docs/REPLAYS.md "On the game server"): the server keeps every match of its rooms, for 30 days and 100 MiB together, in /results/replays of the volume (--no-replays switches that off, --replay-demo keeps the demo
+    # rooms' matches too, "--replays-days" 1 - 3650 and "--replays-max-mb" 1 - 4096 change the two limits). Its owner can list and fetch them with the secret (GET /replays and GET /replays/<file> of the control interface). A public,
+    # read-only list and download without the secret is OFF unless the server is started with "--replay-port N" (the stack file docker-compose.stack.yml starts it with 4020, where docker/nginx.conf passes /replays to):
+    # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--replay-demo", "--replay-port", "4020"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:

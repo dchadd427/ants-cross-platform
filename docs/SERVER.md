@@ -42,7 +42,7 @@ A later start does not print the secret again. With demo rooms, a line "demo roo
 | `--ctl-port N` | 0 (none) | Control interface: HTTP + JSON on this machine only, `Authorization: Bearer <secret>`. The secret comes from the environment variable `ANTS_SERVER_SECRET`; without it the server makes one ("The control secret"). |
 | `--public` | off | The TCP game port accepts other machines. |
 | `--ws-any-interface`, `--ctl-any-interface` | off | For containers only (a published port does not reach a program on the container's loopback address): listen on every interface and let the host's port mapping decide who may connect. |
-| `--results-dir DIR` | none | An ended room (not a demo room) writes `<code>.json` there. The site statistics (`site-stats.json`), the control secret that the server makes (`control-secret`) and the restart records (the folder `restart`, see `--restart-dir`) are kept there too. The log has one line for every ended room (a demo room that never ran a tick has none). |
+| `--results-dir DIR` | none | An ended room (not a demo room) writes `<code>.json` there. The site statistics (`site-stats.json`), the control secret that the server makes (`control-secret`), the restart records (the folder `restart`, see `--restart-dir`) and the replays (the folder `replays`, see `--replays-dir`) are kept there too. The log has one line for every ended room (a demo room that never ran a tick has none). |
 | `--secret-file PATH` | `control-secret` in the results folder | Where the server keeps the control secret that it makes when `ANTS_SERVER_SECRET` is not set. An explicit `--secret-file` always wins over that default, also when `--results-dir` is given (the Docker image always gives `--results-dir /results`). A file that exists there is used as it is. |
 | `--max-rooms N` | 256 | The most rooms at a time. |
 | `--reconnect`, `--no-reconnect` | on | Rooms hold the seat of a player whose connection is lost ("Reconnect"). A room's own `"reconnect"` overrides it, and demo rooms follow it. On by default since v0.6.0. `--no-reconnect` turns it off: a lost player is dropped at once, and no restart record is kept except for a room that asks for `"reconnect": true`. The last of the two options wins. |
@@ -54,6 +54,11 @@ A later start does not print the secret again. With demo rooms, a line "demo roo
 | `--restart-dir DIR`, `--no-restart-records` | the folder `restart` in `--results-dir` | Where the restart records of the rooms that hold seats are kept, and the option that keeps none (a running match then ends with the server). Without a results folder the server keeps none and its log says so. A `--restart-dir` that cannot be used stops the server with status 1. The two options exclude each other (status 2). |
 | `--restart-vote-seconds N` | 90 | After a restart the others may vote on going on without a seat that has not come back once it has been away N seconds (30 - 3600; never less than the room's own vote time). |
 | `--restart-budget-mb N` | 256 | The disk that all the restart records together may take (1 - 4096; one record is at most 48 MiB). |
+| `--replays-dir DIR`, `--no-replays` | the folder `replays` in `--results-dir` | Where the server keeps the replays of the matches that its rooms play ("Replays"), and the option that keeps none. Without a results folder the server keeps none and its log says so. A `--replays-dir` that cannot be used stops the server with status 1. The two options exclude each other (status 2). |
+| `--replay-demo` | off | The matches of demo rooms, the games of the front page, are kept too (the rooms of the control interface always are, unless the room says `"record": false`). |
+| `--replays-days N` | 30 | A replay is deleted N days after its match ended (1 - 3650). |
+| `--replays-max-mb N` | 100 | All the replays together may take N MiB; past it the oldest are deleted first (1 - 4096). |
+| `--replay-port N`, `--replay-any-interface` | 0 (none) | A public, read-only door for the list and the files of the replays: `GET /replays` and `GET /replays/<file>`, no secret, nothing else answers ("Replays"). This machine only unless `--replay-any-interface` (for containers, like `--ws-any-interface`). The stack file starts it on 4020 and the site's nginx passes `/replays` to it. |
 | `--demo-rooms N`, `--demo-map NAME`, `--demo-maps A.LVL,B.LVL,...` | off | Demo rooms for a public page that has no secret (`web/lobby.html`): see "Demo rooms" below. |
 | `--help`, `-h`, `--version` | | `--help` prints the usage and exits. `--version` prints the version, the build id and the network protocol, for example `ants_server v0.8.0 build abc1234 (network protocol 13)`, and exits. The server's log says the same near its start. |
 
@@ -62,8 +67,8 @@ A value outside its range, or one that is no number, stops the server with statu
 ### Exit statuses
 
 - `0`: the server was stopped by `SIGTERM` or `SIGINT` (its log says "stopping"), or `--help` or `--version` was asked.
-- `1`: a port cannot be opened (the log says "cannot listen on ... port N"; the control port also refuses an `ANTS_SERVER_SECRET` that holds anything but visible ASCII characters), or an explicit `--restart-dir` cannot be used.
-- `2`: a mistake in the options (an unknown option, a missing or out-of-range value, `--maps` missing or not a folder, no game port, `--restart-dir` together with `--no-restart-records`, a demo-room mistake), a secret file that is no usable secret, or a control port with no secret and no place to keep one.
+- `1`: a port cannot be opened (the log says "cannot listen on ... port N"; the control port also refuses an `ANTS_SERVER_SECRET` that holds anything but visible ASCII characters), or an explicit `--restart-dir` or `--replays-dir` cannot be used.
+- `2`: a mistake in the options (an unknown option, a missing or out-of-range value, `--maps` missing or not a folder, no game port, `--restart-dir` together with `--no-restart-records`, `--replays-dir` together with `--no-replays`, a demo-room mistake), a secret file that is no usable secret, or a control port with no secret and no place to keep one.
 
 ### Demo rooms
 
@@ -99,6 +104,9 @@ HTTP + JSON on `--ctl-port`, on this machine only unless `--ctl-any-interface`. 
 | `GET /rooms/<code>` | 200 with the room's status, or 404. |
 | `DELETE /rooms/<code>` | Closes the room: 200 with its status after the close (a room that was not finished is `failed`, with the reason "closed by the owner"), or 404. |
 | `GET /stats` | 200 `{"rooms", "pending", "created", "refused", "log_bytes", "log_budget_bytes"}`: the rooms now, the connections that have not said Hello yet, the rooms made so far, the connections that the door refused, the bytes that the rooms' turn logs hold, and the bytes that they may hold together. This is the control interface's own `GET /stats`; the site statistics of the same name are on the WebSocket port (below). |
+| `GET /replays[?limit=N]` | 200 `{"enabled", "count", "bytes", "keep_days", "max_bytes", "replays": [...]}`: the newest N (default 200, at most 1000) of the replays that the server keeps ("Replays"). Each is `{"file", "bytes", "ended" (seconds since 1970, UTC), "readable", "map", "players" (colours and bot names: ["Green", "Red (Bot (Medium))"]), "turns", "seconds", "finished" (the rules ended the match), "game" (the version that recorded it), "rules" (its network protocol)}`; a file that this build cannot read (damaged, or made by a newer format) has only `file`, `bytes`, `ended` and `readable: false`. `enabled` is false and the list empty when the server keeps none. Another query is 400. |
+| `GET /replays/<file>` | 200 with the `.antsrep` file (`application/octet-stream`), or 404 (a name that is not in the list: no path ever comes from a request). |
+| `DELETE /replays/<file>` | 200 `{"deleted": "<file>"}`, or 404. |
 | `GET /healthz` | 200 `{"ok": true}`. It is the one call that needs no secret. |
 
 ### The room specification
@@ -129,6 +137,7 @@ The body of `POST /rooms` is a JSON object, and only `map` is required:
 | `max_pause_seconds` | 1800 | 60 - 86400, as `--max-pause-seconds`. |
 | `max_catch_up_seconds` | 300 | 10 - 3600, as `--max-catch-up-seconds`. |
 | `resume_countdown_seconds` | 10 | 0 - 60, as `--resume-countdown-seconds`. |
+| `record` | true | Whether the match is kept as a replay when the server keeps replays ("Replays"). `false`: this room's match is not. |
 
 When the body leaves a key out, the five reconnect keys take what the server was started with (`--reconnect` or `--no-reconnect`, and the four numbers); the table shows the defaults of a server started without those options. Any other key is left to the table's default.
 
@@ -155,6 +164,7 @@ When the body leaves a key out, the five reconnect keys take what the server was
 | `paused_seconds`, `rejoins`, `drops_by_vote`, `drops_by_cap`, `rejoins_refused`, `catch_up_expired`, `streamed_bytes` | What the pauses of the match came to. Never a key. |
 | `log` | `{"turns", "bytes", "usable"}`: the turn log that a returning player is given. |
 | `record` | `{"kept", "stale", "bytes", "note"}`: whether a restart of the server would bring this match back, and why not when it would not. |
+| `replay` | `{"kept", "file", "bytes", "note"}`: whether the match is kept as a replay and under which name; `note` says why not (the server keeps none, the room was made with `"record": false`, the match was left before 30 seconds, the disk or the limits refused, the room was brought back from a restart record) and is empty while the match may still be kept ("Replays"). |
 | `restored` | `{"turns", "replay_ms", "state_hash"}`, or null: the room came back from a record. |
 
 A room that a restart could not bring back (another network protocol, a changed map, ...) is a `failed` room whose `reason` says so.
@@ -250,6 +260,17 @@ Details, flows and limits: [`NETWORK_PORT.md`](NETWORK_PORT.md#reconnect-protoco
 
 The format, the limits, the measurements and the tests: [`NETWORK_PORT.md`](NETWORK_PORT.md#restart-records-a-running-match-survives-a-restart-of-the-server), "Restart records".
 
+## Replays
+
+The server keeps the matches that its rooms play, so that they can be watched again ([`REPLAYS.md`](REPLAYS.md) says what a replay is and what plays it). The referee's own runner is watched while the match runs (it changes no hash), and when the match is over the file goes to a folder of the results volume (`replays` in `--results-dir`; `--replays-dir` chooses another folder and `--no-replays` keeps none).
+
+- **What is kept.** A match that the rules ended, or that ran at least 600 turns (30 seconds) whatever ended it (the owner closed the room, its time limit, a desync); a shorter match that was left is not. A match that is running when the server is stopped is left in its restart record and not kept here, and a match that the server brought back from a record is not recorded from then on. Demo rooms are kept with `--replay-demo` (the stack file has it); a room of the control interface may say `"record": false`. A solo game in a browser tab is not played on the server and is not kept.
+- **Names.** A person's seat has no name in a file, only its colour; a computer player's seat has its name ("Bot (Medium)"). No address, room code, key or chat is in a file or in the list. The file's name is the map and the time the match ended: `ants-TREASURE-20261008-143209Z.antsrep` (UTC; `-2`, `-3`, ... when two matches of a map end in one second).
+- **Only its own files.** The server touches nothing in the folder but files with a name of that form: another file is left alone and is not counted. A file is written whole under a temporary name and renamed, and an existing file is never replaced. A name is looked up in the server's list, never opened as a path, and the age of a file is read from the time in its name.
+- **How long and how much.** A file is deleted `--replays-days` (30) days after its match ended, and all the files together stay under `--replays-max-mb` (100 MiB), the oldest first. The folder shares a volume with the control secret and the restart records, so a full disk must never stop the server: it keeps nothing new when the disk would be left with less than 256 MiB free, or when it has kept 120 matches in the last hour (a flood of short demo matches must not push the others out), and says so in its log once. The limits are applied when the server starts, after every file that is kept and once an hour. A file is 1 MiB at the most; a heavy half hour of four players is under 200 KiB.
+- **The public door.** `--replay-port N` opens a second door, read only, with no secret: `GET /replays` gives `{"replays": [...], "count", "keep_days"}` (the newest 200 files that this build can read, with the same fields as the control interface's list), `GET /replays/<file>` gives a file, and everything else is 404 (any other method is 405 with `Allow: GET`, a request with a body is 400, and `GET /healthz` is answered by the server itself as on the control port). It is off unless the option is given (the program's own default). **`docker-compose.stack.yml` gives it, on port 4020 of the container (not published on the host): the list and the files of the stack's site are public**; `ANTS_REPLAY_PORT=0` switches it off. `docker/nginx.conf` passes `/replays` and `/replays/<file>` of the site to it, like `/busy`: an exact location for the list and a prefix location for the files, GET only (405), no query (404), a file name that the server's store could not have made is 404 at once, nothing of the visitor's request but Host and Connection is passed on, two requests a second for each client address with a burst of 10 (503 beyond), a 3-second connect timeout and 10-second read and send timeouts, and the answer is never cached (the server's `Cache-Control: no-store` passes). When the server has no such door, or is not there, the site answers `404` with `{"error": ...}`, never a 502 page.
+- **In the log** the line of an ended room ends with `, kept as <file>` when its match was kept. The start prints where the replays are, for how long and how much, and (with the door) `public replays on port N`.
+
 ## Flood control
 
 A client that is no game can send valid messages as fast as its line allows, so every connection is limited.
@@ -271,7 +292,7 @@ A lock-step match is only as good as the agreement on the rules. The network pro
 
 ### The server image and the example service
 
-`Dockerfile.server` builds the program alone (no SDL, no game assets except the six maps: `-DANTS_BUILD_APP=OFF`) and runs it as an unprivileged user with a healthcheck (the game port accepts a connection). The image carries the six maps of the original game in `/maps`, and the server makes its control secret when none is given. Its entry point already passes `--maps /maps --public --ws-any-interface --ctl-any-interface --results-dir /results`, and its default command is `--port 4001 --ws-port 4002 --ctl-port 4010`.
+`Dockerfile.server` builds the program alone (no SDL, no game assets except the six maps: `-DANTS_BUILD_APP=OFF`) and runs it as an unprivileged user with a healthcheck (the game port accepts a connection). The image carries the six maps of the original game in `/maps`, and the server makes its control secret when none is given. Its entry point already passes `--maps /maps --public --ws-any-interface --ctl-any-interface --replay-any-interface --results-dir /results`, and its default command is `--port 4001 --ws-port 4002 --ctl-port 4010`.
 
 `docker-compose.server.yml` is an example service. A secret and a maps folder may come from a `.env` file next to it (`.gitignore` keeps that file out of the repository). Only the game port is public; the WebSocket and control ports are published on the host's loopback address only.
 
@@ -287,7 +308,7 @@ The service joins the external network `proxy-network`, which must exist: for a 
 
 In Portainer: Stacks, Add stack, Repository, this repository, reference `refs/heads/main`, compose path `docker-compose.stack.yml`. Let the stack's webhook do the updates and leave the stack's own Git polling off, or it deploys by itself: the deploy job of CI calls the webhook after the tests pass and the server is idle ([`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site), "Deploy from CI and the staging site"). The first deployment builds both images and takes several minutes.
 
-Nothing else has to be set. The server uses the maps of the image (a volume `ants-maps`, filled the first time), makes its control secret, and allows the demo rooms of `web/lobby.html`: 48 at a time, each waiting up to ten minutes for its players and each with a turn log of at most 4 MiB (`--log-mb 4`, so that the rooms cannot use up the 256 MiB that all the logs share). The page chooses the map among the six of the original, and every match that its card starts takes a demo room, a game against bots only too (since v0.8.0). Whoever reaches a game port, the site or TCP port 4001, can fill them.
+Nothing else has to be set. The server uses the maps of the image (a volume `ants-maps`, filled the first time), makes its control secret, and allows the demo rooms of `web/lobby.html`: 48 at a time, each waiting up to ten minutes for its players and each with a turn log of at most 4 MiB (`--log-mb 4`, so that the rooms cannot use up the 256 MiB that all the logs share). The page chooses the map among the six of the original, and every match that its card starts takes a demo room, a game against bots only too (since v0.8.0). Whoever reaches a game port, the site or TCP port 4001, can fill them. The server also keeps the matches that are played, the demo rooms' too, for 30 days and 100 MiB together, and the site lists them and gives them out: `/replays` is public, read only and holds no name that a person typed ("Replays").
 
 Optional environment variables, set in the stack's "Environment variables" (they are not part of the repository):
 
@@ -298,11 +319,13 @@ Optional environment variables, set in the stack's "Environment variables" (they
 | `ANTS_DEMO_ROOMS` | 48 | How many demo rooms the page may make at a time: 1 to 255. **0, or 256 and more, make the server exit at startup, and with `restart: unless-stopped` that is a restart loop.** Keep the number times the stack's `--log-mb` (4) under 256, the MiB that all the turn logs share. No variable switches the demo rooms off: delete the three demo options from the `command` in your copy of `docker-compose.stack.yml`. |
 | `ANTS_DEMO_MAP` | `TREASURE.LVL` | The map of a room whose code names none. |
 | `ANTS_DEMO_MAPS` | the six maps of the original | The maps a room code may choose: file names separated by commas, blanks around a name are dropped. The page offers the six maps of the original, so list them all: a page code with a map the server does not allow gets the default map, with the players the page asked for. |
+| `ANTS_REPLAY_DAYS`, `ANTS_REPLAY_MAX_MB` | 30, 100 | How long the server keeps the replays (1 to 3650 days) and how much room they may take together (1 to 4096 MiB, the oldest go first). A value out of range makes the server exit at startup. |
+| `ANTS_REPLAY_PORT` | 4020 | The port, inside the container, of the public list and files of the replays: 4020 is where `docker/nginx.conf` passes `/replays` to, and it is not published on the host. `0` switches the public list off (the site answers 404). |
 | `ANTS_PORT` | 19980 | The host port of the web page. |
 | `ANTS_SERVER_PORT` | 4001 | The host port of the game port: TCP only, and only native clients use it; the browser pages reach the server through `/ws` of the site. |
 | `ANTS_SERVER_WS_PORT`, `ANTS_SERVER_CTL_PORT` | 4002, 4010 | The host ports of the WebSocket port and the control interface, both on the host's loopback address only. |
 | `ANTS_BUILD_ID` | the commit of the clone's git files, else the UTC build time | The build id that the page's footer, the changelog pages and `ants_server --version` show. |
 
-The server's container is given **15 s to stop** (`stop_grace_period`, in the staging stack and the example service too; docker's default is 10 s). On `SIGTERM` it makes the restart records of its running rooms durable and exits within a moment. A redeploy recreates the container, and the server that starts again brings the matches back. **Keep the volume `ants-server-results`**, which holds the restart records and the control secret: a stack that is removed with its volumes loses them.
+The server's container is given **15 s to stop** (`stop_grace_period`, in the staging stack and the example service too; docker's default is 10 s). On `SIGTERM` it makes the restart records of its running rooms durable and exits within a moment. A redeploy recreates the container, and the server that starts again brings the matches back. **Keep the volume `ants-server-results`**, which holds the restart records, the replays and the control secret: a stack that is removed with its volumes loses them.
 
-The container is read-only, with no capabilities and no new privileges, and it may run at most 64 processes: it needs nothing but its sockets and the results folder. The WebSocket port is reached by the site's nginx over `proxy-network` (`/ws`, `/busy`, `/stats` and `/stats/local`).
+The container is read-only, with no capabilities and no new privileges, and it may run at most 64 processes: it needs nothing but its sockets and the results folder. The WebSocket port is reached by the site's nginx over `proxy-network` (`/ws`, `/busy`, `/stats` and `/stats/local`), and so is the replay port (`/replays`).

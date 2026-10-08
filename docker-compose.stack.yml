@@ -18,9 +18,17 @@
 #                                                   below (in your copy of this file).
 #   ANTS_DEMO_MAPS=TINY.LVL,SMALL.LVL,...           the maps a room code may choose (the six maps of the original game by default, which the page offers; comma
 #                                                   separated, blanks around a name are dropped; every one must be in the maps folder, or the server stops at startup)
+#   ANTS_REPLAY_DAYS=30 ANTS_REPLAY_MAX_MB=100      how long the server keeps the recorded matches (1 to 3650 days) and how much room they may take together (1 to 4096 MiB; the oldest go first past it). They are
+#                                                   in the folder replays of the volume ants-server-results, next to the control secret and the restart records, so the server also stops keeping
+#                                                   matches when the disk has less than 256 MiB free. Every match is kept, the games of the front page (demo rooms) included; a value out of range
+#                                                   makes the server exit at its start (docs/REPLAYS.md "On the game server")
+#   ANTS_REPLAY_PORT=4020                           the port, inside the container, where the server answers GET /replays and GET /replays/<file> for the site's nginx: the list and the files of the
+#                                                   recorded matches are PUBLIC here, read only, with no secret and no name that a person typed in them. The port is not published on the host.
+#                                                   4020 is the one that docker/nginx.conf passes to; 0 switches the public list off (the site then answers 404 for both addresses)
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
+# The replay port (the site's nginx passes /replays to it over the network below) is not published on the host at all.
 services:
   ants-beta:
     build:
@@ -56,7 +64,10 @@ services:
     # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least).
     # --log-mb 4: one room's turn log (what a returning player is given) is at most 4 MiB (a busy 30-minute match logs 0.65 MB), so that the demo rooms alone cannot use up the 256 MiB that
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4"]
+    # Replays: every match that ends is kept for ANTS_REPLAY_DAYS days (default 30), all of them together at most ANTS_REPLAY_MAX_MB MiB (100), in /results/replays; --replay-demo keeps the matches of
+    # the demo rooms too (the front page's games). --replay-port opens the PUBLIC, read-only door of the list and the files (GET /replays, GET /replays/<file>; the site's nginx passes both to it
+    # over the network below): ON here, with the port that docker/nginx.conf uses; ANTS_REPLAY_PORT=0 switches it off. The program's own default is off. No name that a person typed is in a file or the list.
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:

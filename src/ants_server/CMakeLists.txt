@@ -7,6 +7,7 @@ add_library(ants_server_core STATIC
     secret.cpp
     restart_record.cpp
     site_stats.cpp
+    replay_store.cpp
 )
 target_include_directories(ants_server_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include
@@ -17,6 +18,7 @@ target_link_libraries(ants_server_core PUBLIC
     ants_sim
     ants_assets
     ants_ctl
+    ants_replay      # the recorder of a room's match and the files that the server keeps (docs/REPLAYS.md "On the game server")
 )
 if(WIN32)
     target_link_libraries(ants_server_core PRIVATE bcrypt)      # the random number generator that makes the control secret

@@ -6,7 +6,7 @@
 #
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
 # application), then the self-tests of the three tools (map_sweep, bot_arena, replay_tool), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
-# (start_game.sh --dry-run; ants_server with headless clients, its five parts side by side) and the repository checks (the version and changelog consistency check and the python
+# (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
 # tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
 # --asan, locally) and the browser-based checks are opt-in (tests/TEST_INFRA.md).
 #
@@ -104,7 +104,7 @@ jobs:
         run: |
           status=0
           bash tests/scripts/test_start_game.sh || status=1
-          # the server end-to-end script is five parts (its own --list-parts names them) that need no port or folder in common: they run side by side
+          # the server end-to-end script is six parts (its own --list-parts names them) that need no port or folder in common: they run side by side, five at a time
           export BUILD_DIR=build
           bash tests/scripts/test_ants_server.sh --list-parts | xargs -P 5 -I{} bash tests/scripts/test_ants_server.sh --part {} || status=1
           exit $status
@@ -210,7 +210,7 @@ jobs:
         run: |
           status=0
           bash tests/scripts/test_start_game.sh || status=1
-          # the server end-to-end script is five parts (its own --list-parts names them) that need no port or folder in common: they run side by side
+          # the server end-to-end script is six parts (its own --list-parts names them) that need no port or folder in common: they run side by side, five at a time
           export BUILD_DIR=build
           bash tests/scripts/test_ants_server.sh --list-parts | xargs -P 5 -I{} bash tests/scripts/test_ants_server.sh --part {} || status=1
           exit $status

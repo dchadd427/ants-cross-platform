@@ -593,8 +593,8 @@ struct Rig {
     std::vector<HttpRequest> seen;
     std::function<HttpResponse(const HttpRequest&)> handler;
 
-    Rig() {
-        server = HttpServer::listen(0, kSecret, true);
+    explicit Rig(bool public_door = false) {
+        server = public_door ? HttpServer::listen_public(0, true) : HttpServer::listen(0, kSecret, true);
         handler = [this](const HttpRequest& r) {
             ++calls;
             seen.push_back(r);
@@ -2536,6 +2536,78 @@ int main() {
             ASSERT_MSG(h.body_status == 0 || h.body_status == 411 || h.body_status == 413 || h.body_status == 417, "body status: " + shown(head));
         }
         ASSERT_TRUE(accepted > 1000);
+    } TEST_END();
+
+    TEST_CASE("CTL2.22 HTTP public door (listen_public, the replays' list behind the site): no secret is asked, a plain GET reaches the handler whoever sends it, /healthz is the server's own answer, every other method gets 405 with Allow: GET, a request with a body is refused") {
+        Rig rig(true);
+        ASSERT_TRUE(rig.ok());
+        Reply r = rig.exchange("GET /replays HTTP/1.1\r\nHost: x\r\n\r\n");
+        ASSERT_TRUE(r.complete && r.status == 200 && r.body == "{\"handled\":true}");
+        ASSERT_TRUE(r.header("cache-control") != nullptr && *r.header("cache-control") == "no-store" && r.header("www-authenticate") == nullptr);
+        ASSERT_EQ(rig.calls, 1);
+        ASSERT_TRUE(rig.seen[0].method == "GET" && rig.seen[0].path == "/replays" && rig.seen[0].query.empty());
+        r = rig.exchange("GET /replays/ants-X-20261008-143209Z.antsrep?limit=5 HTTP/1.1\r\nAuthorization: Bearer nonsense\r\n\r\n");      // (a header that means nothing here)
+        ASSERT_EQ(r.status, 200);
+        ASSERT_TRUE(rig.calls == 2 && rig.seen[1].path == "/replays/ants-X-20261008-143209Z.antsrep" && rig.seen[1].query == "limit=5");
+        r = rig.exchange(make_request("GET", "/replays"));                                                      // (and the secret of the other door is no key to anything)
+        ASSERT_TRUE(r.status == 200 && rig.calls == 3);
+        // /healthz is answered by the server itself
+        r = rig.exchange("GET /healthz HTTP/1.1\r\n\r\n");
+        ASSERT_TRUE(r.status == 200 && r.body == "{\"ok\":true}" && rig.calls == 3);
+        // nothing but GET gets as far as the handler
+        for (const char* method : {"POST", "DELETE", "PUT", "PATCH", "HEAD", "OPTIONS", "TRACE", "CONNECT", "FOO"}) {
+            r = rig.exchange(std::string(method) + " /replays HTTP/1.1\r\nContent-Length: 0\r\n\r\n");
+            ASSERT_MSG(r.complete && r.status == 405, std::string("405 for ") + method + " (got " + std::to_string(r.status) + ")");
+            ASSERT_MSG(r.header("allow") != nullptr && *r.header("allow") == "GET", method);
+            ASSERT_MSG(r.body == "{\"error\":\"method not allowed\"}", method);
+            r = rig.exchange(std::string(method) + " /healthz HTTP/1.1\r\n\r\n");                              // (not even the server's own path, for a method that is not GET)
+            ASSERT_MSG(r.status == 405, method);
+        }
+        for (const char* method : {"G(T", "GE T", "get"}) ASSERT_EQ(rig.exchange(std::string(method) + " /replays HTTP/1.1\r\n\r\n").status, method == std::string("get") ? 405 : 400);
+        ASSERT_EQ(rig.calls, 3);
+        // a body: refused, never read, never handed over
+        ASSERT_EQ(rig.exchange("GET /replays HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello").status, 400);
+        ASSERT_EQ(rig.exchange("GET /replays HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n").status, 411);
+        ASSERT_EQ(rig.exchange("GET /replays HTTP/1.1\r\nContent-Length: 70000\r\n\r\n").status, 413);
+        ASSERT_EQ(rig.exchange("GET /replays HTTP/1.1\r\nContent-Length: x\r\n\r\n").status, 400);
+        ASSERT_EQ(rig.calls, 3);
+        ASSERT_EQ(rig.exchange("GET /replays HTTP/1.1\r\nContent-Length: 0\r\n\r\n").status, 200);           // (an empty body is none)
+        ASSERT_EQ(rig.calls, 4);
+        // a head that is not well formed is refused like at the other door
+        ASSERT_EQ(rig.exchange("GET /replays HTTP/2.0\r\n\r\n").status, 505);
+        ASSERT_EQ(rig.exchange("GET replays HTTP/1.1\r\n\r\n").status, 400);
+        ASSERT_EQ(rig.exchange("GET /replays HTTP/1.1\nHost: x\n\n").status, 400);
+        ASSERT_EQ(rig.calls, 4);
+        // a handler that throws, or answers with a status that is none, is an internal error here too
+        rig.handler = [](const HttpRequest&) -> HttpResponse { throw std::runtime_error("boom"); };
+        r = rig.exchange("GET /replays HTTP/1.1\r\n\r\n");
+        ASSERT_TRUE(r.status == 500 && r.body == "{\"error\":\"internal error\"}");
+        rig.handler = [](const HttpRequest&) {
+            HttpResponse resp;
+            resp.status = 99;
+            return resp;
+        };
+        ASSERT_EQ(rig.exchange("GET /replays HTTP/1.1\r\n\r\n").status, 500);
+        ASSERT_TRUE(rig.wait_count(0));
+    } TEST_END();
+
+    TEST_CASE("CTL2.23 HTTP public door: the port is exclusive like the other door's, the loopback address is the default and only that; a door open to the network says so explicitly") {
+        auto door = HttpServer::listen_public(0, true);
+        ASSERT_TRUE(door != nullptr && door->port() != 0);
+        const uint16_t port = door->port();
+        ASSERT_TRUE(HttpServer::listen_public(port, true) == nullptr);
+        ASSERT_TRUE(HttpServer::listen(port, "another-secret", true) == nullptr);
+        door.reset();
+        auto again = HttpServer::listen_public(port, true);
+        ASSERT_TRUE(again != nullptr && again->port() == port);
+        again.reset();
+        auto open_door = HttpServer::listen_public(0, false);
+        ASSERT_TRUE(open_door != nullptr && open_door->port() != 0);
+        Rig rig(true);
+        ASSERT_TRUE(rig.ok());
+        Client c;
+        ASSERT_TRUE(rig.connect(c));                                                                            // (the loopback address answers)
+        ASSERT_TRUE(rig.wait_count(1));
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
