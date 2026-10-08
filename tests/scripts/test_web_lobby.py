@@ -60,7 +60,7 @@ class TheFrontPageMarkup(PageCase):
         # five buttons: in the order that a person reads them and Tab goes through them (the page's grid puts them so on every width)
         seats = self.page[self.page.index('<ul class="roster seats4" id="seats"'):]
         seats = seats[:seats.index("</ul>")]
-        rows = re.findall(r'<li id="seat-row-(\d)" data-seat="(\d)"><img src="front/ant_(\w+)\.png" alt="" width="23" height="40">\s*<span class="nm"><span class="colour">(\w+)</span><span class="you" id="seat-you-(\d)" hidden> &middot; You</span><small class="seat-name" id="seat-name-(\d)" hidden></small></span>\s*'
+        rows = re.findall(r'<li id="seat-row-(\d)" data-seat="(\d)"><img src="front/ant_(\w+)\.png\?v=[0-9a-f]{8}" alt="" width="23" height="40">\s*<span class="nm"><span class="colour">(\w+)</span><span class="you" id="seat-you-(\d)" hidden> &middot; You</span><small class="seat-name" id="seat-name-(\d)" hidden></small></span>\s*'
                           r'<span class="teamset" id="team-set-(\d)" role="group" aria-label="(\w+)\'s team" hidden><button type="button" class="tbtn" id="team-(\d)-1" aria-label="Team 1 for (\w+)" aria-pressed="false">Team 1</button><button type="button" class="tbtn" id="team-(\d)-2" aria-label="Team 2 for (\w+)" aria-pressed="false">Team 2</button></span>\s*'
                           r'<button type="button" class="btn sm sit" id="sit-(\d)" aria-label="Sit here as (\w+)">Sit here</button>\s*'
                           r'<fieldset class="seatset" id="seat-set-(\d)"><legend class="sr">(\w+)</legend><span class="pair">(.*?)</span></fieldset></li>', seats, re.S)
