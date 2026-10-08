@@ -11566,6 +11566,21 @@ void run_lobby_room_tests() {
             ASSERT_TRUE(w.status("idle0011").code.empty() && w.status("idle0012").state == RoomState::Waiting);
             ASSERT_FALSE(a.server_end->is_open());
         }
+        {   // an empty lobby goes before an idle one with a person in it, however long that one has waited: nobody is dropped while a lobby is free
+            World w(l);
+            Client& a = w.connect_page("A", "idle0071", lobby_block_of());
+            w.run(20000);
+            Client& b = w.connect_page("B", "idle0072", lobby_block_of());
+            w.run(50000);                                                                 // idle0071 has been idle for 70 s, idle0072 for 50
+            b.lobby->leave();                                                             // ... and nobody is in it any more
+            w.run(1000);
+            Client& c = w.connect_page("C", "idle0073", lobby_block_of());
+            w.run(300);
+            ASSERT_TRUE(c.lobby->created() && c.lobby->phase() == net::ClientLobby::Phase::InRoom);
+            ASSERT_TRUE(w.status("idle0072").code.empty());
+            ASSERT_TRUE(w.status("idle0071").state == RoomState::Waiting && a.server_end->is_open());
+            ASSERT_EQ(waiting_lobbies(w), size_t{2});
+        }
         {   // two lobbies that have been idle for the same time (made in one pass): the first code goes, whichever was made first
             World w(l);
             w.next_kind = net::kClientPage;
