@@ -2100,6 +2100,7 @@ void run_leader_tests() {
         Peer bob;
         Peer cat;
         Hall hall{server, &app, {&bob, &cat}};
+        ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->is_leader(); }, 8000));       // (in, and the leader, before Bob connects: two Hellos over two sockets can be read in either order)
         ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "LEAD-HOOK"));
         ASSERT_TRUE(hall.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
         ASSERT_TRUE(app.net()->is_leader());                                                // (the application joined first)
