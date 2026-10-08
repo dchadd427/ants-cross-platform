@@ -1,16 +1,19 @@
-"""Helpers of make_art.py: the game's sprites, the clay key, the clay of the pages, the team colours of the ant, the mouse arrow, saving a small PNG.
+"""Helpers of make_art.py: the game's sprites, the clay key, the clay of the pages, the ant in the game's own team colours, the mouse arrow, saving a small PNG.
 
 A developer's tool (it needs Pillow: pip install pillow); not part of any build or test.
 """
-import colorsys
+import functools
 import random
 import re
+import struct
+import sys
 from pathlib import Path
 
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "asset_catalog"           # the sprites that the repository already ships, extracted from Original-Ants/ants.chd
+CHD = ROOT / "Original-Ants" / "ants.chd"  # the game's data archive: the 256 colours and the palette indices of every sprite (the catalog's pictures hold only the colours)
 CLAY = (0xDB, 0x4B, 0x13)                  # the orange of every menu screen of the game
 CLAY_DOT = (0xFB, 0x33, 0x5B)              # the pink dots that its dithering leaves in it
 
@@ -136,30 +139,52 @@ def dirty_clay(size=CLAY_SIZE, seed=1998, mottling=0.6, grain=0.8, specks=0.010)
     return image
 
 
-# The grey and dark purple body of the black team's ant is tinted to the colour of each team, (hue 0..1, saturation, value gain); the saturated parts (gold, pink) stay.
-TEAMS = {"green": (0.40, 0.55, 1.10), "red": (0.01, 0.72, 1.05), "blue": (0.62, 0.62, 1.10), "black": None}
+# The game does not tint its ants: it blits a sprite's palette indices with the team's offset added to each (the transparent index stays; a sprite named by a digit is left alone), so a team shows another stretch of
+# the same 256 colours (src/ants_app/renderer.cpp, TextureCache::compose_palette: green +60, red +40, blue +20, black +0). The catalog's pictures are the black team's, so the other teams' come from ants.chd.
+TEAMS = {"green": 60, "red": 40, "blue": 20, "black": 0}
+KEY = 254                                  # the palette index that is left transparent (magenta, alpha 0)
 
 
-def recolor_ant(image, team):
-    spec = TEAMS[team]
-    image = image.convert("RGBA")
-    if spec is None:
-        return image
-    hue, saturation, gain = spec
-    pixels = image.load()
-    for y in range(image.height):
-        for x in range(image.width):
-            r, g, b, a = pixels[x, y]
-            if a == 0:
-                continue
-            h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-            if s < 0.42 and not (v > 0.93 and s < 0.08):             # the body; pure white (eye whites, highlights) stays
-                v2 = min(1.0, v * gain + 0.04)
-                s2 = saturation * (0.35 + 0.65 * min(1.0, v2 * 1.15))
-                if v2 < 0.22:
-                    s2 *= 0.7
-                nr, ng, nb = colorsys.hsv_to_rgb(hue, s2, v2)
-                pixels[x, y] = (int(nr * 255), int(ng * 255), int(nb * 255), a)
+@functools.lru_cache(maxsize=None)
+def _archive():
+    """(the bytes of ants.chd, the offset of its sprite table, its palette as 256 (r, g, b, alpha)); the layout is src/ants_assets/chd_parser.cpp's: 28 bytes of header, 1024 of palette, then the table."""
+    data = CHD.read_bytes()
+    version, _stamp, table, _sounds, _tags, _animations, palette_bytes = struct.unpack_from("<7I", data, 0)
+    if version < 9 or palette_bytes != 1024 or table != 28 + palette_bytes:
+        sys.exit("%s is not the ants.chd that this tool reads (version %d, %d bytes of palette)" % (CHD, version, palette_bytes))
+    return data, table, [tuple(data[28 + 4 * i:31 + 4 * i]) + (0 if i == KEY else 255,) for i in range(256)]
+
+
+def chd_sprite(number):
+    """(file name, width, height, rows) of the sprite with this id of ants.chd, each row a list of palette indices."""
+    data, table, _palette = _archive()
+    (count,) = struct.unpack_from("<I", data, table)
+    if not 0 <= number < count:
+        sys.exit("ants.chd has no sprite %d (it has %d)" % (number, count))
+    (offset,) = struct.unpack_from("<I", data, table + 4 + 4 * number)
+    pitch, width, height, length = struct.unpack_from("<4I", data, offset)
+    name = data[offset + 16:offset + 16 + length].rstrip(b"\0").decode("ascii")
+    first = offset + 16 + length
+    return name, width, height, [list(data[first + y * pitch:first + y * pitch + width]) for y in range(height)]
+
+
+def team_palette(name, team):
+    """The 256 colours that a sprite of this file name is drawn with for this team: the ant branch of compose_palette, line for line (the setup screen's portrait takes the HUD branch, which gives this sprite the same colours)."""
+    _data, _table, base = _archive()
+    palette = list(base)
+    if TEAMS[team] and not name[:1].isdigit():
+        for index in range(256):
+            if index != KEY:
+                palette[index] = base[(index + TEAMS[team]) & 0xFF]
+    return palette
+
+
+def team_ant(number, team):
+    """The sprite with this id of ants.chd, as RGBA, in the colours that the game gives this team. For the black team it is the catalog's picture of the sprite, pixel for pixel."""
+    name, width, height, rows = chd_sprite(number)
+    palette = team_palette(name, team)
+    image = Image.new("RGBA", (width, height))
+    image.putdata([palette[index] for row in rows for index in row])
     return image
 
 
