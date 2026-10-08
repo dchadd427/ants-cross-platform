@@ -6,7 +6,7 @@ How this remake is tied to the 1998 game *Ants*: how its rules are found in the 
 
 This project is an educational remake and historical preservation effort.
 
-Its method is reverse engineering of the original 1998 program (`Ants.exe`): Capstone disassembly for the exact instructions, and a Ghidra C decompilation for readable logic and constants, always cross-referenced with each other. [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md#20-dual-primary-reference-methodology) section 2.0 ("Dual Primary Reference Methodology") describes it. Rule 4 of [`AGENTS.md`](../AGENTS.md#4-mandatory-capstone-reverse-engineering--original-logic-parity) requires that the game's logic, timings and behaviour are checked against the original this way.
+Its method is reverse engineering of the original 1998 program (`Ants.exe`): Capstone disassembly for the exact instructions, and a Ghidra C decompilation for readable logic and constants, always cross-referenced with each other. [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md#20-dual-primary-reference-methodology) section 2.0 ("Dual Primary Reference Methodology") describes it. Rule 4 of [`AGENTS.md`](../AGENTS.md) requires that the game's logic, timings and behaviour are checked against the original this way.
 
 ## What comes from the original and what does not
 
@@ -21,7 +21,7 @@ Its method is reverse engineering of the original 1998 program (`Ants.exe`): Cap
 
 Neither `Ants.exe` nor its Ghidra decompilation (`Ants.exe.c`) is in the repository. Comments and documents cite the decompilation as "Ants.exe.c line NNNN" and the program by address (virtual addresses, image base `0x01000000`).
 
-If you own the original game, put your own copy of `Ants.exe` in `Original-Ants/` (and a decompilation, if you have one, at `docs/legacy/Ants.exe.c`). `.gitignore` keeps both out of every commit, together with the other local files of an installation of the original (cnc-ddraw, its shaders, `chat.txt`). Rule 4 of [`AGENTS.md`](../AGENTS.md#4-mandatory-capstone-reverse-engineering--original-logic-parity) covers these local copies for contributors.
+If you own the original game, put your own copy of `Ants.exe` in `Original-Ants/` (and a decompilation, if you have one, at `docs/legacy/Ants.exe.c`). `.gitignore` keeps both out of every commit, together with the other local files of an installation of the original (cnc-ddraw, its shaders, `chat.txt`). Rule 4 of [`AGENTS.md`](../AGENTS.md) covers these local copies for contributors.
 
 A WebAssembly build made outside Docker (`build_web.sh`) packs the whole folder `Original-Ants/` into its data bundle, so it would carry your copy of `Ants.exe`. The Docker image build leaves the program out (`.dockerignore`).
 
@@ -52,7 +52,7 @@ The test suites do not need the program. The two that compare the remake with st
 
 ## Where the findings are
 
-- [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md): the specification, with the disassembly addresses, opcode traces and formulas, system by system. Older text there counts as unverified until it is checked against the program again (rule 5 of [`AGENTS.md`](../AGENTS.md)); a section whose heading says "Capstone-Verified" records such a check.
+- [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md): the specification, with the disassembly addresses, opcode traces and formulas, system by system. Older text there counts as unverified until it is checked against the program again; a section whose heading says "Capstone-Verified" records such a check.
 - [`ORIGINAL_BINARY_MAP.md`](ORIGINAL_BINARY_MAP.md): the function map that `tools/analyze_binary.py` writes, with the calls, strings and sound ids of each function. Its classification column is a guess, as the page says.
 - [`reverse_engineering/movement/README.md`](reverse_engineering/movement/README.md): the reports behind the movement ground truth (section 5.32 of the specification).
 - [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md): the audit of the remake against the original, made from static evidence (it did not run the original): what differed, what was fixed and, in section 6, what only the real game can settle.

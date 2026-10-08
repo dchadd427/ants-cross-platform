@@ -125,7 +125,7 @@ The prediction is **off by default**. Switch it on with `--prediction on`, the s
 
 A bot is a **virtual client**: a seat whose commands are produced by a program (the `ants_ai` library) instead of a person. It reads the world through a read-only copy of what a player of its seat can see and sends the same `Command`s that a mouse click makes, through the same door: the simulation of a local game, the sequencer of a room. The simulation validates every command, so a bot has a person's powers and cannot bend a rule. A game without bots runs no bot code, and no state hash changes.
 
-The 1:1 core has no computer players: bots live in `ants_ai` only (project rule 8 in [`AGENTS.md`](../AGENTS.md)). The only computer behaviour inside the simulation is the original's own auto-engage reflex of the Combat Ant ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.36).
+The 1:1 core has no computer players: bots live in `ants_ai` only (project rule 5 in [`AGENTS.md`](../AGENTS.md)). The only computer behaviour inside the simulation is the original's own auto-engage reflex of the Combat Ant ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.36).
 
 ### The rule
 
