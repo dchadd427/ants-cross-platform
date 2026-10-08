@@ -42,7 +42,7 @@ Two changes to the map view. Part 1 is finished. Part 2 is built, proven by muta
 
 ## Independent review (deep tier) and what was done with it
 
-**Verdict.** No critical and no high finding. Offering the zoom-out in network matches is acceptable under AGENTS.md rule 8: with Fog of War on, every level draws exactly what the zoom 1 draws, because one `render_world` pass serves all levels with the same culling and gating. The review's conditions are the items below.
+**Verdict.** No critical and no high finding. Offering the zoom-out in network matches is acceptable under AGENTS.md rule 5: with Fog of War on, every level draws exactly what the zoom 1 draws, because one `render_world` pass serves all levels with the same culling and gating. The review's conditions are the items below.
 
 | Finding | What was done |
 |---|---|

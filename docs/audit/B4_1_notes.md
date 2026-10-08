@@ -174,7 +174,7 @@ The ladder: a Medium bot (drawn) against three Hard bots wins 0.7 percent (margi
 
 ## Fairness surfaces: what the standard bot reads and what the controller refuses
 
-The rule (project rule 8): a bot reads what a person of its seat sees and clicks what a person can click. B4-1 added these surfaces and checked each against the screen:
+The rule (project rule 5): a bot reads what a person of its seat sees and clicks what a person can click. B4-1 added these surfaces and checked each against the screen:
 
 | New | What it exposes | Why it is fair |
 |---|---|---|

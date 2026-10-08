@@ -1,6 +1,6 @@
 # Bots: the flower batch (what was built, how it was checked, what was left out)
 
-On SMALL, MEDIUM and GAUNTLET no Fire power-up lies on the ground at the start: a Fire Ant there comes from a flower dropper or from nowhere, and the bots left the droppers to chance. The batch gives them eyes for the flowers, a rule for whose drop it is and what to fetch, two repairs of the pick-up trip and, for Hard, a watcher. This is a deep-tier change (what a bot sees and does, `AGENTS.md` rule 11). The rules as they are, and the headline numbers, are in [`docs/BOTS.md`](../BOTS.md) ("The flowers", and "The flower batch" in "Measurements"); this file holds what is specific to the check.
+On SMALL, MEDIUM and GAUNTLET no Fire power-up lies on the ground at the start: a Fire Ant there comes from a flower dropper or from nowhere, and the bots left the droppers to chance. The batch gives them eyes for the flowers, a rule for whose drop it is and what to fetch, two repairs of the pick-up trip and, for Hard, a watcher. This is a deep-tier change (what a bot sees and does, `AGENTS.md`, "How much checking"). The rules as they are, and the headline numbers, are in [`docs/BOTS.md`](../BOTS.md) ("The flowers", and "The flower batch" in "Measurements"); this file holds what is specific to the check.
 
 The simulation, the lock-step rules, the network protocol and every golden hash are unchanged. The batch has no release number of its own.
 
