@@ -2496,7 +2496,7 @@
         // The selector: the choice is remembered by the browser (under ANTS_ASPECT_KEY: nothing else writes it) and the page reloads with ?aspect= (the game's picture is made when it starts).
         // Other parts of the address (the room of a match, the seat) stay.
         // ANTS_SELECTOR_BEGIN (tests/scripts/web_aspect_key_check.js clicks the buttons of this block and sees what it stores and where it goes)
-        // The player leaves a joined match ON PURPOSE (the selector's yes below, the Menu button and the footer's Menu link): the game tells the server (Leave: the seat is dropped at once, the others do
+        // The player leaves a joined match ON PURPOSE (the Menu button and the footer's Menu link): the game tells the server (Leave: the seat is dropped at once, the others do
         // not wait for it) and lets go of the key, and the page navigates in the same breath. A closed tab and a reload do not come here: their seat is held and their key kept, which is how they come
         // back. Only once the game runs (index.js binds an export at its first call: a call while the program is still compiled leaves it undefined for good).
         function antsLeaveMatch() {
@@ -2508,12 +2508,13 @@
                 button.addEventListener('click', function () {
                     var value = button.getAttribute('data-aspect');
                     if (value === ANTS_ASPECT) { remember(value); return; }           // (the same picture: nothing to restart; the choice is remembered)
-                    // The game restarts to change its picture (it is made when the game starts): a match in a room (joined from the address, even before it starts: yes leaves it for good, Leave is
-                    // sent and the seat is dropped) or a match that is being played here (the game says so: ants_match_running) asks first
+                    // The game restarts to change its picture (it is made when the game starts). In a room (joined from the address) that is a reload: the seat is held and its key kept, so the page comes back
+                    // to the SAME match, and there is nothing to ask (the player does not leave: antsLeaveMatch would drop the seat and the page would join something else). A match that is being played HERE (the
+                    // game says so: ants_match_running) would be lost, so that asks first.
                     var joined = ANTS_ARGS.indexOf('--join-url') !== -1;
                     var playing = false;
                     try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (e) { /* the game does not answer: it is not running a match */ }
-                    if ((joined || playing) && !window.confirm('Leave the match to change the picture?')) return;
+                    if (!joined && playing && !window.confirm('Leave the match to change the picture?')) return;
                     remember(value);
                     var url;
                     try {
@@ -2521,7 +2522,6 @@
                         url.searchParams.set('aspect', value);
                         url.search = url.search.replace('aspect=' + encodeURIComponent(value), 'aspect=' + value);       // (the colon needs no escape in a query)
                     } catch (e) { return; }
-                    if (joined || playing) antsLeaveMatch();                          // (the player said yes: the seat is dropped now, not held for a page that is gone)
                     window.location.assign(url.href);
                 });
             });

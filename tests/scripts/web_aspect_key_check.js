@@ -206,44 +206,39 @@ try {
         expect('shell.html selector, 16:9 clicked: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
         expect('shell.html selector, 16:9 clicked: no reload', r.win.assigned.length, 0);
     }
-    {
-        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { decline: true });     // in a room the page asks first; No: nothing is written, nothing moves
-        r.buttons[1].listeners.click();
-        expect('shell.html selector in a room: it asks', r.win.asked.length, 1);
-        expect('shell.html selector in a room, answered No: nothing is written', JSON.stringify(r.storage.writes), '[]');
-        expect('shell.html selector in a room, answered No: no reload', r.win.assigned.length, 0);
+    // IN A ROOM THE SWITCH IS A RELOAD (the owner: switching 16:9 and 4:3 lost the game and joined another match): nothing is asked, the game is never told to leave (Leave drops the seat and
+    // lets go of the key; the page would come back as a stranger), and the address keeps the room and the seat, so the page takes the same seat with its key
+    for (const [what, search, module] of [
+        ['in a room, a match running', '?join=/ws&room=abc&seat=1', (win) => ({ _ants_match_running() { return 1; }, _ants_leave_match() { win.left = true; } })],
+        ['in a room, before the match', '?join=/ws&room=abc&seat=1', (win) => ({ _ants_match_running() { return 0; }, _ants_leave_match() { win.left = true; } })],
+        ['in a room, no seat in the address yet', '?join=/ws&room=abc', (win) => ({ _ants_match_running() { return 1; }, _ants_leave_match() { win.left = true; } })],
+    ]) {
+        for (const decline of [false, true]) {                                       // (a window.confirm that is never called cannot be answered: the answer changes nothing)
+            const r = runShell(shellPath, search, {}, { ready: true, decline, module });
+            r.buttons[1].listeners.click();
+            expect('shell.html selector ' + what + (decline ? ' (No ready)' : '') + ': nothing is asked, the game is not told to leave', r.win.asked.length + ' ' + (r.win.left === true), '0 false');
+            expect('shell.html selector ' + what + (decline ? ' (No ready)' : '') + ': the page reloads with the room and the seat kept and the new shape',
+                   r.win.assigned.length === 1 && /[?&]aspect=4:3(&|$)/.test(r.win.assigned[0]) && r.win.assigned[0].indexOf('join=%2Fws') !== -1
+                       && r.win.assigned[0].indexOf('room=abc') !== -1 && (search.indexOf('seat=1') === -1 || r.win.assigned[0].indexOf('seat=1') !== -1), true);
+            expect('shell.html selector ' + what + ': the choice is remembered', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '4:3']]));
+        }
     }
-    // LEAVING ON PURPOSE (the review's M2): a player who says yes in a joined match leaves it for good: the game is told once (ants_leave_match: Leave is sent, the key is let go of), before the page moves; a
-    // closed tab and a reload never come here (they hold the seat)
+    // A match that is being played on THIS computer (no room) would be lost: that still asks, and No stays
     {
-        const calls = [];
-        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, module: (win) => ({ _ants_match_running() { return 1; }, _ants_leave_match() { calls.push(win.assigned.length); } }) });
+        const r = runShell(shellPath, '', {}, { ready: true, decline: true, module: () => ({ _ants_match_running() { return 1; } }) });
         r.buttons[1].listeners.click();
-        expect('shell.html selector in a room, answered Yes: the game is told once, before the page moves', JSON.stringify(calls), '[0]');
-        expect('shell.html selector in a room, answered Yes: and the page moves', r.win.assigned.length, 1);
+        expect('shell.html selector in a game of this computer, a match running, answered No: asked once, nothing is written, no reload', r.win.asked.length + ' ' + r.storage.writes.length + ' ' + r.win.assigned.length, '1 0 0');
     }
     {
-        const calls = [];
-        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, decline: true, module: (win) => ({ _ants_leave_match() { calls.push('left'); } }) });
+        const r = runShell(shellPath, '', {}, { ready: true, module: () => ({ _ants_match_running() { return 1; } }) });
         r.buttons[1].listeners.click();
-        expect('shell.html selector in a room, answered No: the game is not told, nothing moves', calls.length + ' ' + r.win.assigned.length, '0 0');
+        expect('shell.html selector in a game of this computer, a match running, answered Yes: asked once, the page reloads', r.win.asked.length + ' ' + r.win.assigned.length, '1 1');
     }
     {
         const calls = [];
         const r = runShell(shellPath, '', {}, { ready: true, module: (win) => ({ _ants_match_running() { return 0; }, _ants_leave_match() { calls.push('left'); } }) });
         r.buttons[1].listeners.click();
         expect('shell.html selector in a game of this computer (no room, no match): no question, the game is not told', calls.length + ' ' + r.win.asked.length + ' ' + r.win.assigned.length, '0 0 1');
-    }
-    {
-        const calls = [];
-        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: false, module: (win) => ({ _ants_leave_match() { calls.push('left'); } }) });
-        r.buttons[1].listeners.click();
-        expect('shell.html selector in a room, the game not ready yet (an export that is called while the program compiles is undefined for good): not told, the page moves', calls.length + ' ' + r.win.assigned.length, '0 1');
-    }
-    for (const [what, module] of [['a game without the export', () => ({})], ['a game whose export throws', () => ({ _ants_leave_match() { throw new Error('the game is gone'); } })]]) {
-        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, module });
-        r.buttons[1].listeners.click();
-        expect('shell.html selector in a room, answered Yes with ' + what + ': the page moves all the same', r.win.assigned.length, 1);
     }
     {
         const r = runShell(shellPath, '', THROWS);                                  // a private window: the click still reloads with the address, nothing breaks
