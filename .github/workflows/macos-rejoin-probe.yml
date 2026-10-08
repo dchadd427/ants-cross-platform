@@ -1,0 +1,120 @@
+# A probe, on a scratch branch only: how often RJ1.13 of test_rejoin fails on a hosted macOS runner with the pause of the test programs of #30 (ants_test::short_pause, 0.3 to 0.5 ms) and with the
+# pause from before it (sleep_for 300 us, 1.5 to 2.7 ms on a macOS runner), under the load of parallel test programs.
+name: macOS rejoin probe
+
+on:
+  push:
+    branches: [claude/project-thread-q475cj-probe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rejoin:
+    name: rejoin ${{ matrix.variant }} ${{ matrix.n }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        variant: [new, old]
+        n: [1, 2, 3]
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 400M
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The host
+        run: |
+          sw_vers
+          sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          uname -a
+
+      - name: Install ccache and Ninja
+        run: brew install ccache ninja
+
+      # restore only: the probe must not push the caches of the real checks out of the repository's quota
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ccache-probe-${{ matrix.variant }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+
+      - name: The pause from before #30 (variant old)
+        if: matrix.variant == 'old'
+        run: |
+          cp scratch_probe/test_rejoin_old.cpp tests/test_server/test_rejoin.cpp
+          grep -n "sleep_for(std::chrono::microseconds(300))" tests/test_server/test_rejoin.cpp
+
+      - name: Configure and build test_rejoin
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DANTS_BUILD_APP=OFF -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --target test_rejoin
+          ccache -s | head -8
+          ls -la build/tests/test_server/test_rejoin
+
+      - name: One run
+        run: ANTS_TEST_FILTER=RJ1.13 build/tests/test_server/test_rejoin 2>&1 | tail -6
+
+      # N parallel loops of RJ1.13 for a number of seconds each; every failing run is printed with its assertion
+      - name: RJ1.13 in 4 parallel loops (the load of ctest --parallel 4), 300 seconds
+        run: |
+          deadline=$((SECONDS + 300))
+          for l in 1 2 3 4; do
+            (
+              runs=0; fails=0
+              while [ $SECONDS -lt $deadline ]; do
+                out=$(ANTS_TEST_FILTER=RJ1.13 build/tests/test_server/test_rejoin 2>&1) || true
+                runs=$((runs + 1))
+                if ! grep -q "Failed:           0" <<< "$out"; then
+                  fails=$((fails + 1))
+                  echo "FAIL phase=A loop=$l run=$runs :: $(grep -o 'Assertion failed.*' <<< "$out" | head -2 | cut -c1-210 | tr '\n' ' ')"
+                fi
+              done
+              echo "LOOPDONE phase=A loop=$l runs=$runs fails=$fails"
+            ) &
+          done
+          wait
+
+      - name: RJ1.13 in 12 parallel loops (heavy load), 300 seconds
+        run: |
+          deadline=$((SECONDS + 300))
+          for l in $(seq 1 12); do
+            (
+              runs=0; fails=0
+              while [ $SECONDS -lt $deadline ]; do
+                out=$(ANTS_TEST_FILTER=RJ1.13 build/tests/test_server/test_rejoin 2>&1) || true
+                runs=$((runs + 1))
+                if ! grep -q "Failed:           0" <<< "$out"; then
+                  fails=$((fails + 1))
+                  echo "FAIL phase=B loop=$l run=$runs :: $(grep -o 'Assertion failed.*' <<< "$out" | head -2 | cut -c1-210 | tr '\n' ' ')"
+                fi
+              done
+              echo "LOOPDONE phase=B loop=$l runs=$runs fails=$fails"
+            ) &
+          done
+          wait
+
+      - name: RJ1.13 in 4 parallel loops beside 3 busy programs, 300 seconds
+        run: |
+          deadline=$((SECONDS + 300))
+          for b in 1 2 3; do ( while [ $SECONDS -lt $deadline ]; do :; done ) & done
+          for l in 1 2 3 4; do
+            (
+              runs=0; fails=0
+              while [ $SECONDS -lt $deadline ]; do
+                out=$(ANTS_TEST_FILTER=RJ1.13 build/tests/test_server/test_rejoin 2>&1) || true
+                runs=$((runs + 1))
+                if ! grep -q "Failed:           0" <<< "$out"; then
+                  fails=$((fails + 1))
+                  echo "FAIL phase=C loop=$l run=$runs :: $(grep -o 'Assertion failed.*' <<< "$out" | head -2 | cut -c1-210 | tr '\n' ' ')"
+                fi
+              done
+              echo "LOOPDONE phase=C loop=$l runs=$runs fails=$fails"
+            ) &
+          done
+          wait
